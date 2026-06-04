@@ -9,22 +9,22 @@ Current scope is a desktop/laptop status shell for the local V1 backend API. Mob
 The requested scaffold command was attempted from `frontend/`:
 
 ```sh
-npx pnpm@latest create svelte@latest . -- --template skeleton --types ts --no-add-ons
+pnpm create svelte@latest . -- --template skeleton --types ts --no-add-ons
 ```
 
-It exited with the current Svelte CLI deprecation message: `'npm create svelte' has been replaced with 'npx sv create'`.
+It exited with the current Svelte CLI deprecation message that `create svelte` has been replaced by `sv create`.
 
 The successful replacement command was:
 
 ```sh
-npx sv@latest create . --template minimal --types ts --no-add-ons --no-dir-check --no-install
-npx pnpm@latest install
+pnpm dlx sv@latest create . --template minimal --types ts --no-add-ons --no-dir-check --no-install
+pnpm install
 ```
 
 Tauri was initialized with:
 
 ```sh
-npx pnpm@latest tauri init --ci --app-name "Hermes Hub" --window-title "Hermes Hub" --frontend-dist "../build" --dev-url "http://localhost:5173" --before-dev-command "pnpm dev" --before-build-command "pnpm build"
+pnpm tauri init --ci --app-name "Hermes Hub" --window-title "Hermes Hub" --frontend-dist "../build" --dev-url "http://localhost:5173" --before-dev-command "pnpm dev" --before-build-command "pnpm build"
 ```
 
 ## Commands
