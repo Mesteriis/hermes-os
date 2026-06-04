@@ -28,16 +28,16 @@ The first Version 2 slice is complete when Hermes Hub builds a deterministic, re
 
 ## Acceptance Gate Status
 
-- [ ] `backend/migrations/0010_create_graph_core.sql` creates graph tables and constraints.
-- [ ] Graph node upserts are idempotent.
-- [ ] Graph edge upserts are idempotent.
-- [ ] System-created graph edges require evidence.
-- [ ] V1 graph projection from contacts, messages and documents is idempotent.
-- [ ] Exact email rules do not create fuzzy person merges.
-- [ ] `GET /api/v2/graph/summary` has auth and response coverage.
-- [ ] `GET /api/v2/graph/neighborhood` has auth, not-found, unsupported-depth and happy-path coverage.
-- [ ] `GET /api/v2/graph/search` has auth, empty-query and happy-path coverage.
-- [ ] `make backend-graph-smoke-dev` passes against live PostgreSQL.
-- [ ] `make validate` includes the graph smoke target.
-- [ ] `pnpm --dir frontend check` passes after graph UI wiring.
-- [ ] `pnpm --dir frontend build` passes after graph UI wiring.
+- [x] `backend/migrations/0010_create_graph_core.sql` creates graph tables and constraints.
+- [x] Graph node upserts are idempotent.
+- [x] Graph edge upserts are idempotent.
+- [x] System-created graph edges require evidence.
+- [x] V1 graph projection from contacts, messages and documents is idempotent.
+- [x] Exact email rules do not create fuzzy person merges.
+- [x] `GET /api/v2/graph/summary` has auth and response coverage.
+- [x] `GET /api/v2/graph/neighborhood` has auth, not-found, unsupported-depth and happy-path coverage.
+- [x] `GET /api/v2/graph/search` has auth, empty-query and happy-path coverage.
+- [x] `make backend-graph-smoke-dev` passes against live PostgreSQL.
+- [x] `make validate` includes the graph smoke target.
+- [x] `pnpm --dir frontend check` passes after graph UI wiring.
+- [x] `pnpm --dir frontend build` passes after graph UI wiring.
