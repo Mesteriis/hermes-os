@@ -116,6 +116,6 @@ async fn readyz_reports_database_and_migrations_ok_against_postgres() {
     assert_eq!(value["checks"]["migrations"]["status"], "ok");
     assert_eq!(
         value["checks"]["migrations"]["message"],
-        "required database schema is present"
+        "required database migrations are applied"
     );
 }

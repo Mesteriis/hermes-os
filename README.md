@@ -94,6 +94,12 @@ X-Hermes-Actor-Id: local-cli
 make backend-smoke-dev
 ```
 
+Проверить storage readiness against PostgreSQL:
+
+```sh
+make backend-storage-smoke-dev
+```
+
 Проверить event log migration/store against PostgreSQL:
 
 ```sh

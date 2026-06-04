@@ -2,7 +2,7 @@ use serde::Serialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use thiserror::Error;
 
-use crate::event_log::{EventStoreError, run_migrations};
+use crate::event_log::{EventStoreError, expected_migration_summary, run_migrations};
 
 #[derive(Clone)]
 pub struct Database {
@@ -57,29 +57,45 @@ impl Database {
             return MigrationReadiness::not_configured();
         };
 
-        let result = sqlx::query_scalar::<_, i64>(
+        let expected = expected_migration_summary();
+        let result = sqlx::query_as::<_, AppliedMigrationSummary>(
             r#"
-            SELECT count(*)
-            FROM (
-                VALUES
-                    ('event_log'),
-                    ('projection_cursors'),
-                    ('api_audit_log')
-            ) AS required_tables(table_name)
-            WHERE to_regclass(required_tables.table_name) IS NOT NULL
+            SELECT
+                count(*) FILTER (WHERE success) AS applied_count,
+                COALESCE(max(version) FILTER (WHERE success), 0) AS latest_version,
+                count(*) FILTER (WHERE NOT success) AS failed_count
+            FROM _sqlx_migrations
             "#,
         )
         .fetch_one(pool)
         .await;
 
         match result {
-            Ok(3) => MigrationReadiness::ok(),
-            Ok(_) => MigrationReadiness::unavailable("required database schema is incomplete"),
+            Ok(summary) if summary.matches(expected) => MigrationReadiness::ok(),
+            Ok(summary) if summary.failed_count > 0 => {
+                MigrationReadiness::unavailable("database migrations contain failed entries")
+            }
+            Ok(_) => MigrationReadiness::unavailable("required database migrations are incomplete"),
             Err(error) => {
                 tracing::warn!(error = %error, "database migration readiness check failed");
                 MigrationReadiness::unavailable("database migration readiness query failed")
             }
         }
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct AppliedMigrationSummary {
+    applied_count: i64,
+    latest_version: i64,
+    failed_count: i64,
+}
+
+impl AppliedMigrationSummary {
+    fn matches(&self, expected: crate::event_log::MigrationSummary) -> bool {
+        self.failed_count == 0
+            && self.applied_count == expected.count
+            && self.latest_version == expected.latest_version
     }
 }
 
@@ -130,7 +146,7 @@ impl MigrationReadiness {
     fn ok() -> Self {
         Self {
             status: ReadinessStatus::Ok,
-            message: "required database schema is present",
+            message: "required database migrations are applied",
         }
     }
 

@@ -12,6 +12,7 @@ From the repository root:
 make backend-run
 make backend-run-dev
 make backend-smoke-dev
+make backend-storage-smoke-dev
 make backend-event-log-smoke-dev
 make backend-projection-smoke-dev
 make backend-projection-runner-smoke-dev
@@ -49,7 +50,7 @@ Authorized event API calls are recorded in `api_audit_log` with `actor_kind` and
 ## Migrations
 
 Backend startup applies local PostgreSQL migrations when `DATABASE_URL` is configured.
-Readiness checks verify that the required migrated tables are present.
+Readiness checks verify that the embedded SQLx migration ledger has the expected successful migration count and latest version.
 
 Current schema:
 
