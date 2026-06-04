@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
@@ -320,7 +321,7 @@ impl GraphProjectionService {
 }
 
 /// Counts deterministic projection operations attempted during a V1 graph projection run.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
 pub struct GraphProjectionReport {
     pub nodes_upserted: usize,
     pub edges_upserted: usize,

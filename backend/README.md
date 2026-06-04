@@ -20,6 +20,8 @@ make backend-communication-smoke-dev
 make backend-email-sync-smoke-dev
 make backend-email-provider-network-smoke-dev
 make backend-email-fixture-export-icloud-dev
+make backend-email-fixture-import-dev
+make backend-email-fixture-project-dev
 make backend-account-setup-smoke-dev
 make backend-email-import-smoke-dev
 make backend-messages-smoke-dev
@@ -63,12 +65,27 @@ make backend-email-fixture-export-icloud-dev
 
 The exporter uses `EXAMINE`, `UID SEARCH` and `BODY.PEEK[]` through the same IMAP network client as provider sync. It writes redacted fixture JSON by default, prints only a non-secret summary, and does not import into PostgreSQL. The default output path is under `tmp/`, which is ignored by git.
 
+Import a redacted fixture JSON sample into the local development database:
+
+```bash
+make backend-email-fixture-import-dev
+```
+
+Project that fixture through canonical messages, contacts and V2 graph projection:
+
+```bash
+make backend-email-fixture-project-dev
+```
+
+Both commands default to `tmp/email-fixtures/icloud-inbox-redacted.json`, create or update the local `dev-icloud-fixture` provider account, print JSON summaries and leave PostgreSQL running for the active development session. Override path and account metadata with `HERMES_EMAIL_FIXTURE_PATH`, `HERMES_EMAIL_FIXTURE_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_DISPLAY_NAME`, `HERMES_EMAIL_FIXTURE_EXTERNAL_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_IMPORT_BATCH_ID` and `HERMES_EMAIL_FIXTURE_PROVIDER`.
+
 Direct Cargo commands:
 
 ```sh
 cargo run --manifest-path backend/Cargo.toml
 cargo run --manifest-path backend/Cargo.toml --bin hermes-graph-project
 cargo run --manifest-path backend/Cargo.toml --bin hermes-email-fixture-export
+cargo run --manifest-path backend/Cargo.toml --bin hermes-email-fixture-dev
 cargo test --manifest-path backend/Cargo.toml
 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
 ```

@@ -7,7 +7,10 @@ use serde_json::json;
 use hermes_hub_backend::communications::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::email_import::{FixtureEmailImportRequest, import_fixture_email_messages};
+use hermes_hub_backend::email_import::{
+    FixtureEmailImportRequest, import_fixture_email_messages,
+    import_fixture_email_messages_with_records,
+};
 use hermes_hub_backend::email_sources::{FixtureEmailMessage, parse_fixture_email_messages};
 use hermes_hub_backend::storage::Database;
 
@@ -287,6 +290,55 @@ async fn fixture_email_import_preserves_missing_sent_at_as_null_against_postgres
     .await
     .expect("raw record occurred_at");
     assert!(occurred_at.is_none());
+}
+
+#[tokio::test]
+async fn fixture_email_import_returns_raw_records_for_projection_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live fixture email import records test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(pool);
+    let suffix = unique_suffix();
+    let account_id = format!("acct_fixture_records_{suffix}");
+    let provider_record_id = format!("fixture-records-{suffix}");
+    let fixture_json = format!(
+        r#"[{{"provider_record_id":"{provider_record_id}","subject":"Record import","from":"alice@example.com","to":["bob@example.com"],"sent_at":"2026-06-04T10:00:00Z","body_text":"Fixture body","source_fingerprint":"sha256:records-{suffix}"}}]"#
+    );
+
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &account_id,
+            EmailProviderKind::Gmail,
+            "Fixture records",
+            format!("fixture-records-{suffix}@example.com"),
+        ))
+        .await
+        .expect("store provider account");
+
+    let report = import_fixture_email_messages_with_records(
+        &communication_store,
+        &FixtureEmailImportRequest::new(
+            &account_id,
+            format!("batch_records_{suffix}"),
+            fixture_json,
+        ),
+    )
+    .await
+    .expect("fixture import with records");
+
+    assert_eq!(report.inserted_or_existing_records, 1);
+    assert_eq!(report.raw_records.len(), 1);
+    assert_eq!(report.raw_records[0].account_id, account_id);
+    assert_eq!(report.raw_records[0].provider_record_id, provider_record_id);
+    assert_eq!(report.raw_records[0].payload["subject"], "Record import");
 }
 
 fn unique_suffix() -> u128 {

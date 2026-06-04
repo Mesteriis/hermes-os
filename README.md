@@ -130,6 +130,22 @@ make backend-email-fixture-export-icloud-dev
 
 Exporter использует read-only IMAP path (`EXAMINE`, `UID SEARCH`, `BODY.PEEK[]`), берет latest-N сообщений, пишет redacted fixture JSON и не импортирует данные в PostgreSQL.
 
+Импортировать redacted fixture в локальную dev DB:
+
+```sh
+make backend-email-fixture-import-dev
+```
+
+По умолчанию команда читает `tmp/email-fixtures/icloud-inbox-redacted.json`, создает локальный fixture account `dev-icloud-fixture`, импортирует raw records и оставляет PostgreSQL запущенным.
+
+Прогнать fixture до сообщений, контактов и graph projection:
+
+```sh
+make backend-email-fixture-project-dev
+```
+
+Команда выполняет import, canonical message projection, contact projection, rebuild V2 graph projection и печатает JSON summary. Путь fixture и account metadata можно переопределить через `HERMES_EMAIL_FIXTURE_PATH`, `HERMES_EMAIL_FIXTURE_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_DISPLAY_NAME`, `HERMES_EMAIL_FIXTURE_EXTERNAL_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_IMPORT_BATCH_ID`, `HERMES_EMAIL_FIXTURE_PROVIDER`.
+
 `/api/events` и `/api/audit/events` требуют локальный API token и non-secret actor ID:
 
 ```sh

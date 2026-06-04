@@ -3,6 +3,7 @@ use thiserror::Error;
 
 use crate::communications::{
     CommunicationIngestionError, CommunicationIngestionStore, NewRawCommunicationRecord,
+    StoredRawCommunicationRecord,
 };
 use crate::email_sources::{FixtureEmailSourceError, parse_fixture_email_messages};
 
@@ -33,12 +34,30 @@ pub struct FixtureEmailImportReport {
     pub inserted_or_existing_records: usize,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FixtureEmailImportWithRecordsReport {
+    pub inserted_or_existing_records: usize,
+    pub raw_records: Vec<StoredRawCommunicationRecord>,
+}
+
 pub async fn import_fixture_email_messages(
     store: &CommunicationIngestionStore,
     request: &FixtureEmailImportRequest,
 ) -> Result<FixtureEmailImportReport, FixtureEmailImportError> {
+    let report = import_fixture_email_messages_with_records(store, request).await?;
+
+    Ok(FixtureEmailImportReport {
+        inserted_or_existing_records: report.inserted_or_existing_records,
+    })
+}
+
+pub async fn import_fixture_email_messages_with_records(
+    store: &CommunicationIngestionStore,
+    request: &FixtureEmailImportRequest,
+) -> Result<FixtureEmailImportWithRecordsReport, FixtureEmailImportError> {
     let messages = parse_fixture_email_messages(&request.fixture_json)?;
     let mut inserted_or_existing_records = 0;
+    let mut raw_records = Vec::new();
 
     for message in messages {
         let mut raw_record = NewRawCommunicationRecord::new(
@@ -65,12 +84,13 @@ pub async fn import_fixture_email_messages(
             raw_record = raw_record.occurred_at(sent_at);
         }
 
-        store.record_raw_source(&raw_record).await?;
+        raw_records.push(store.record_raw_source(&raw_record).await?);
         inserted_or_existing_records += 1;
     }
 
-    Ok(FixtureEmailImportReport {
+    Ok(FixtureEmailImportWithRecordsReport {
         inserted_or_existing_records,
+        raw_records,
     })
 }
 
