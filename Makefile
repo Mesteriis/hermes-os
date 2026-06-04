@@ -1,7 +1,7 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config validate dev up down restart logs ps shell db-up db-down db-shell clean reset-data backend-run backend-run-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
+.PHONY: help docker-env compose-config validate dev up down restart logs ps shell db-up db-down db-shell clean reset-data backend-run backend-run-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
@@ -30,6 +30,7 @@ help:
 	@printf '%s\n' '  make backend-email-import-smoke-dev Run fixture email import smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-messages-smoke-dev Run canonical message projection smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-contacts-smoke-dev Run contacts projection smoke test with dev PostgreSQL'
+	@printf '%s\n' '  make backend-documents-smoke-dev Run document import smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-search-smoke-dev Run Tantivy search boundary smoke test'
 	@printf '%s\n' '  make backend-projection-smoke-dev Run replay/projection cursor smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-projection-runner-smoke-dev Run projection runner smoke test with dev PostgreSQL'
@@ -60,7 +61,7 @@ docker-env:
 compose-config: docker-env
 	$(COMPOSE) config
 
-validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev
+validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev
 
 dev: docker-env
 	$(COMPOSE) up --build
@@ -219,6 +220,17 @@ backend-contacts-smoke-dev: docker-env
 		set -a; . docker/.env; set +a; \
 		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
 		cargo test --manifest-path $(BACKEND_MANIFEST) --test contacts -- --nocapture --test-threads=1
+
+backend-documents-smoke-dev: docker-env
+	@set -eu; \
+		cleanup() { \
+			$(MAKE) db-down >/dev/null 2>&1 || true; \
+		}; \
+		trap cleanup EXIT; \
+		$(MAKE) db-up; \
+		set -a; . docker/.env; set +a; \
+		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
+		cargo test --manifest-path $(BACKEND_MANIFEST) --test documents -- --nocapture --test-threads=1
 
 backend-search-smoke-dev:
 	cargo test --manifest-path $(BACKEND_MANIFEST) --test search search_index_returns_message_by_body_term -- --nocapture
