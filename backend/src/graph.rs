@@ -257,6 +257,13 @@ impl GraphStore {
         &self,
         node_id: &str,
     ) -> Result<Option<GraphNeighborhood>, GraphStoreError> {
+        let mut transaction = self.pool.begin().await?;
+        // Neighborhood assembles several query results; one read-only snapshot keeps edges,
+        // neighbor nodes, and evidence mutually consistent while projections commit.
+        sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            .execute(&mut *transaction)
+            .await?;
+
         let Some(selected_row) = sqlx::query(
             r#"
             SELECT node_id, node_kind, stable_key, label, properties, created_at, updated_at
@@ -265,9 +272,10 @@ impl GraphStore {
             "#,
         )
         .bind(node_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?
         else {
+            transaction.commit().await?;
             return Ok(None);
         };
         let selected_node = row_to_node(selected_row)?;
@@ -294,13 +302,15 @@ impl GraphStore {
             "#,
         )
         .bind(&selected_node.node_id)
-        .bind(GRAPH_NEIGHBORHOOD_EDGE_LIMIT)
-        .fetch_all(&self.pool)
+        .bind(GRAPH_NEIGHBORHOOD_EDGE_LIMIT + 1)
+        .fetch_all(&mut *transaction)
         .await?;
-        let edges = edge_rows
+        let mut edges = edge_rows
             .into_iter()
             .map(row_to_edge)
             .collect::<Result<Vec<_>, _>>()?;
+        let truncated = edges.len() > GRAPH_NEIGHBORHOOD_EDGE_LIMIT as usize;
+        edges.truncate(GRAPH_NEIGHBORHOOD_EDGE_LIMIT as usize);
 
         let mut node_ids = BTreeSet::new();
         for edge in &edges {
@@ -324,7 +334,7 @@ impl GraphStore {
                 "#,
             )
             .bind(&node_ids)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *transaction)
             .await?;
 
             node_rows
@@ -349,7 +359,7 @@ impl GraphStore {
                 "#,
             )
             .bind(&edge_ids)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *transaction)
             .await?;
 
             evidence_rows
@@ -358,11 +368,15 @@ impl GraphStore {
                 .collect::<Result<Vec<_>, _>>()?
         };
 
+        transaction.commit().await?;
+
         Ok(Some(GraphNeighborhood {
             selected_node,
             nodes,
             edges,
             evidence,
+            edge_limit: GRAPH_NEIGHBORHOOD_EDGE_LIMIT,
+            truncated,
         }))
     }
 }
@@ -623,6 +637,8 @@ pub struct GraphNeighborhood {
     pub nodes: Vec<GraphNode>,
     pub edges: Vec<GraphEdge>,
     pub evidence: Vec<GraphEvidenceSummary>,
+    pub edge_limit: i64,
+    pub truncated: bool,
 }
 
 #[derive(Debug, Error)]

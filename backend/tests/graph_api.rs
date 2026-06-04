@@ -271,6 +271,11 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
     let body = json_body(response).await;
     assert_eq!(body["selected_node"]["node_id"], json!(person.node_id));
     assert_eq!(body["selected_node"]["label"], json!(person.label));
+    assert_eq!(
+        body["edge_limit"],
+        json!(EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT)
+    );
+    assert_eq!(body["truncated"], json!(false));
 
     let nodes = body["nodes"].as_array().expect("node array");
     assert_eq!(nodes.len(), 1);
@@ -358,6 +363,11 @@ async fn graph_neighborhood_caps_depth_one_edges_nodes_and_evidence() {
     let nodes = body["nodes"].as_array().expect("node array");
     let edges = body["edges"].as_array().expect("edge array");
     let evidence = body["evidence"].as_array().expect("evidence array");
+    assert_eq!(
+        body["edge_limit"],
+        json!(EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT)
+    );
+    assert_eq!(body["truncated"], json!(true));
     assert_eq!(nodes.len(), EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT);
     assert!(nodes.iter().all(|node| node["node_id"] != person.node_id));
     assert_eq!(edges.len(), EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT);
