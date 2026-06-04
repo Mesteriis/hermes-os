@@ -1,6 +1,7 @@
 pub mod audit;
 pub mod communications;
 pub mod config;
+pub mod email_sources;
 pub mod event_log;
 pub mod projections;
 pub mod secrets;
