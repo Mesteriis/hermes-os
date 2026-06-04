@@ -21,6 +21,7 @@ impl MessageProjectionStore {
         message: &NewProjectedMessage,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
         message.validate()?;
+        let canonical_message_id = message_id(&message.account_id, &message.provider_record_id);
 
         let row = sqlx::query(
             r#"
@@ -35,9 +36,24 @@ impl MessageProjectionStore {
                 body_text,
                 occurred_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            SELECT
+                $1,
+                raw_record_id,
+                account_id,
+                provider_record_id,
+                $5,
+                $6,
+                $7,
+                $8,
+                $9
+            FROM communication_raw_records
+            WHERE raw_record_id = $2
+              AND account_id = $3
+              AND provider_record_id = $4
+              AND record_kind = 'email_message'
             ON CONFLICT (account_id, provider_record_id)
             DO UPDATE SET
+                message_id = EXCLUDED.message_id,
                 raw_record_id = EXCLUDED.raw_record_id,
                 subject = EXCLUDED.subject,
                 sender = EXCLUDED.sender,
@@ -58,7 +74,7 @@ impl MessageProjectionStore {
                 projected_at
             "#,
         )
-        .bind(&message.message_id)
+        .bind(&canonical_message_id)
         .bind(&message.raw_record_id)
         .bind(&message.account_id)
         .bind(&message.provider_record_id)
@@ -67,8 +83,16 @@ impl MessageProjectionStore {
         .bind(json!(message.recipients))
         .bind(&message.body_text)
         .bind(message.occurred_at)
-        .fetch_one(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
+
+        let Some(row) = row else {
+            return Err(MessageProjectionError::RawRecordTupleMismatch {
+                raw_record_id: message.raw_record_id.clone(),
+                account_id: message.account_id.clone(),
+                provider_record_id: message.provider_record_id.clone(),
+            });
+        };
 
         row_to_projected_message(row)
     }
@@ -89,7 +113,6 @@ pub struct NewProjectedMessage {
 
 impl NewProjectedMessage {
     fn validate(&self) -> Result<(), MessageProjectionError> {
-        validate_non_empty("message_id", &self.message_id)?;
         validate_non_empty("raw_record_id", &self.raw_record_id)?;
         validate_non_empty("account_id", &self.account_id)?;
         validate_non_empty("provider_record_id", &self.provider_record_id)?;
@@ -235,6 +258,15 @@ pub enum MessageProjectionError {
 
     #[error("{0} must not be empty")]
     EmptyField(&'static str),
+
+    #[error(
+        "raw communication record does not match projected message tuple: raw_record_id={raw_record_id}, account_id={account_id}, provider_record_id={provider_record_id}"
+    )]
+    RawRecordTupleMismatch {
+        raw_record_id: String,
+        account_id: String,
+        provider_record_id: String,
+    },
 
     #[error("stored communication message recipients must be a JSON array of strings")]
     InvalidStoredRecipients,
