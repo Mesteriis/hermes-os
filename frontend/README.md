@@ -1,11 +1,68 @@
 # Frontend
 
-Reserved for the future SvelteKit frontend running inside a Tauri desktop shell.
+SvelteKit desktop UI for Hermes Hub, packaged by Tauri.
 
-The frontend will own desktop-first workflows, command palette, communication timelines, contact/project/document views, graph exploration, search UX and embedded AI interactions. No implementation code is present at the documentation-foundation stage.
+Current scope is a desktop/laptop status shell for the local V1 backend API. Mobile UI is out of scope while ADR-0031 is active.
 
-Relevant design documents:
+## Scaffold
 
-- [UI Architecture](../docs/architecture/ui-architecture.md)
-- [Design System Vision](../docs/ui/design-system-vision.md)
-- [Product Scope](../docs/product/product-scope.md)
+The requested scaffold command was attempted from `frontend/`:
+
+```sh
+npx pnpm@latest create svelte@latest . -- --template skeleton --types ts --no-add-ons
+```
+
+It exited with the current Svelte CLI deprecation message: `'npm create svelte' has been replaced with 'npx sv create'`.
+
+The successful replacement command was:
+
+```sh
+npx sv@latest create . --template minimal --types ts --no-add-ons --no-dir-check --no-install
+npx pnpm@latest install
+```
+
+Tauri was initialized with:
+
+```sh
+npx pnpm@latest tauri init --ci --app-name "Hermes Hub" --window-title "Hermes Hub" --frontend-dist "../build" --dev-url "http://localhost:5173" --before-dev-command "pnpm dev" --before-build-command "pnpm build"
+```
+
+## Commands
+
+```sh
+pnpm install
+pnpm check
+pnpm build
+pnpm dev
+pnpm tauri dev
+pnpm tauri build
+```
+
+From the repository root, the same checks are available through Make:
+
+```sh
+make frontend-install
+make frontend-check
+make frontend-build
+make frontend-tauri-dev
+make frontend-tauri-build
+```
+
+## Backend Dependency
+
+The status screen calls:
+
+```sh
+GET http://127.0.0.1:8080/api/v1/status
+```
+
+The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_TOKEN=change-me-local-api-token`, or the frontend must be started with matching Vite public overrides:
+
+```sh
+VITE_HERMES_API_BASE_URL=http://127.0.0.1:8080 \
+VITE_HERMES_LOCAL_API_TOKEN=change-me-local-api-token \
+VITE_HERMES_ACTOR_ID=desktop-shell \
+pnpm dev
+```
+
+The placeholder token is for local development only and must match the backend local API token.

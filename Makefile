@@ -1,7 +1,7 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config validate dev up down restart logs ps shell db-up db-down db-shell clean reset-data backend-run backend-run-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
+.PHONY: help docker-env compose-config validate dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-check frontend-build frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
@@ -20,6 +20,11 @@ help:
 	@printf '%s\n' '  make db-shell        Open psql in the Postgres container'
 	@printf '%s\n' '  make clean           Stop services and remove Compose orphans'
 	@printf '%s\n' '  make reset-data      Delete docker/data contents; requires CONFIRM=yes'
+	@printf '%s\n' '  make frontend-install Install frontend dependencies with pnpm'
+	@printf '%s\n' '  make frontend-check  Run SvelteKit type checks'
+	@printf '%s\n' '  make frontend-build  Build the SvelteKit frontend'
+	@printf '%s\n' '  make frontend-tauri-dev Run the Tauri desktop shell in development'
+	@printf '%s\n' '  make frontend-tauri-build Build the Tauri desktop shell'
 	@printf '%s\n' '  make backend-run     Run the Rust backend locally'
 	@printf '%s\n' '  make backend-run-dev Run the Rust backend locally with docker/.env DATABASE_URL'
 	@printf '%s\n' '  make backend-smoke-dev Run health/readiness smoke test with dev PostgreSQL'
@@ -62,7 +67,7 @@ docker-env:
 compose-config: docker-env
 	$(COMPOSE) config
 
-validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev
+validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev frontend-check frontend-build
 
 dev: docker-env
 	$(COMPOSE) up --build
@@ -101,6 +106,21 @@ reset-data:
 	$(COMPOSE) down --remove-orphans
 	rm -rf docker/data/*
 	touch docker/data/.gitkeep
+
+frontend-install:
+	cd frontend && pnpm install
+
+frontend-check:
+	cd frontend && pnpm check
+
+frontend-build:
+	cd frontend && pnpm build
+
+frontend-tauri-dev:
+	cd frontend && pnpm tauri dev
+
+frontend-tauri-build:
+	cd frontend && pnpm tauri build
 
 backend-run:
 	cargo run --manifest-path $(BACKEND_MANIFEST)
