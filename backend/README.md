@@ -24,6 +24,7 @@ make backend-email-import-smoke-dev
 make backend-messages-smoke-dev
 make backend-contacts-smoke-dev
 make backend-documents-smoke-dev
+make backend-graph-smoke-dev
 make backend-search-smoke-dev
 make backend-projection-smoke-dev
 make backend-projection-runner-smoke-dev
@@ -31,6 +32,14 @@ make backend-events-api-smoke-dev
 make backend-v1-api-smoke-dev
 make backend-validate
 ```
+
+Graph core smoke:
+
+```bash
+make backend-graph-smoke-dev
+```
+
+This starts the local PostgreSQL container, runs graph store, projection and read API tests with `HERMES_TEST_DATABASE_URL`, then stops PostgreSQL.
 
 Direct Cargo commands:
 
