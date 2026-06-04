@@ -529,6 +529,18 @@ impl LiveGraphApiContext {
         drop(app);
         drop(store);
         pool.close().await;
+        sqlx::query(
+            r#"
+            SELECT pg_terminate_backend(pid)
+            FROM pg_stat_activity
+            WHERE datname = $1
+              AND pid <> pg_backend_pid()
+            "#,
+        )
+        .bind(&database_name)
+        .execute(&admin_pool)
+        .await
+        .expect("terminate graph API test database sessions");
         sqlx::query(&format!(
             "DROP DATABASE IF EXISTS {}",
             quote_identifier(&database_name)
