@@ -60,7 +60,7 @@ docker-env:
 compose-config: docker-env
 	$(COMPOSE) config
 
-validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-events-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev
+validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev
 
 dev: docker-env
 	$(COMPOSE) up --build

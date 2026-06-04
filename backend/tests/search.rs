@@ -122,6 +122,75 @@ fn search_index_replaces_existing_document_identity() {
 }
 
 #[test]
+fn search_index_replaces_committed_document_identity() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let index = SearchIndex::open_or_create(temp_dir.path()).expect("open search index");
+
+    index
+        .upsert_document(&SearchDocument {
+            object_id: "message-1".to_owned(),
+            object_kind: "message".to_owned(),
+            title: "Budget review".to_owned(),
+            body: "Please review the Q2 budget before Monday.".to_owned(),
+        })
+        .expect("index first document");
+    index.commit().expect("commit first version");
+
+    let old_results = index.search("budget", 10).expect("search old term");
+    assert_eq!(old_results.len(), 1);
+
+    index
+        .upsert_document(&SearchDocument {
+            object_id: "message-1".to_owned(),
+            object_kind: "message".to_owned(),
+            title: "Roadmap review".to_owned(),
+            body: "Please review the implementation roadmap before Monday.".to_owned(),
+        })
+        .expect("replace committed document");
+    index.commit().expect("commit second version");
+
+    let old_results = index.search("budget", 10).expect("search old term");
+    let new_results = index.search("roadmap", 10).expect("search new term");
+
+    assert_eq!(old_results, Vec::new());
+    assert_eq!(
+        new_results,
+        vec![hermes_hub_backend::search::SearchResult {
+            object_id: "message-1".to_owned(),
+            object_kind: "message".to_owned(),
+            title: "Roadmap review".to_owned(),
+        }]
+    );
+}
+
+#[test]
+fn search_index_accepts_blank_body_for_title_only_documents() {
+    let temp_dir = tempfile::tempdir().expect("tempdir");
+    let index = SearchIndex::open_or_create(temp_dir.path()).expect("open search index");
+
+    index
+        .upsert_document(&SearchDocument {
+            object_id: "document-1".to_owned(),
+            object_kind: "document".to_owned(),
+            title: "PDF metadata overview".to_owned(),
+            body: " ".to_owned(),
+        })
+        .expect("index title-only document");
+    index.commit().expect("commit index");
+
+    let results = index.search("metadata", 10).expect("search title term");
+
+    assert_eq!(
+        results,
+        vec![hermes_hub_backend::search::SearchResult {
+            object_id: "document-1".to_owned(),
+            object_kind: "document".to_owned(),
+            title: "PDF metadata overview".to_owned(),
+        }]
+    );
+}
+
+#[test]
 fn search_index_distinguishes_delimiter_bearing_document_identities() {
     let temp_dir = tempfile::tempdir().expect("tempdir");
     let index = SearchIndex::open_or_create(temp_dir.path()).expect("open search index");
