@@ -80,6 +80,9 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/api/v1/status", get(get_v1_status))
+        .route("/api/v2/graph/summary", get(get_graph_summary))
+        .route("/api/v2/graph/neighborhood", get(get_graph_neighborhood))
+        .route("/api/v2/graph/search", get(get_graph_search))
         .route(
             "/api/v1/email-accounts/gmail/oauth/start",
             post(post_gmail_oauth_start),
@@ -275,6 +278,53 @@ async fn get_v1_status(
     }))
 }
 
+async fn get_graph_summary(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<crate::graph::GraphSummary>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    Ok(Json(graph_store(&state)?.summary().await?))
+}
+
+async fn get_graph_neighborhood(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<GraphNeighborhoodQuery>,
+) -> Result<Json<crate::graph::GraphNeighborhood>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    if query.depth.unwrap_or(1) != 1 {
+        return Err(ApiError::InvalidGraphQuery("depth supports only 1"));
+    }
+    let Some(node_id) = query
+        .node_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+    else {
+        return Err(ApiError::NotFound);
+    };
+    let Some(neighborhood) = graph_store(&state)?.neighborhood(node_id).await? else {
+        return Err(ApiError::NotFound);
+    };
+    Ok(Json(neighborhood))
+}
+
+async fn get_graph_search(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<GraphSearchQuery>,
+) -> Result<Json<Vec<crate::graph::GraphNode>>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let search = query.q.trim();
+    if search.is_empty() {
+        return Err(ApiError::InvalidGraphQuery("q must not be empty"));
+    }
+    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    Ok(Json(
+        graph_store(&state)?.search_nodes(search, limit).await?,
+    ))
+}
+
 async fn post_gmail_oauth_start(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -378,6 +428,14 @@ fn event_store(state: &AppState) -> Result<EventStore, ApiError> {
     };
 
     Ok(EventStore::new(pool.clone()))
+}
+
+fn graph_store(state: &AppState) -> Result<crate::graph::GraphStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(crate::graph::GraphStore::new(pool.clone()))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
@@ -575,6 +633,18 @@ struct V1Surfaces {
     account_setup: bool,
 }
 
+#[derive(Deserialize)]
+struct GraphNeighborhoodQuery {
+    node_id: Option<String>,
+    depth: Option<u8>,
+}
+
+#[derive(Deserialize)]
+struct GraphSearchQuery {
+    q: String,
+    limit: Option<i64>,
+}
+
 enum ApiError {
     ApiTokenNotConfigured,
     InvalidApiToken,
@@ -583,6 +653,8 @@ enum ApiError {
     InvalidEnvelope(EventEnvelopeError),
     Audit(ApiAuditError),
     Store(EventStoreError),
+    Graph(crate::graph::GraphStoreError),
+    InvalidGraphQuery(&'static str),
     SecretVaultNotConfigured,
     AccountSetup(EmailAccountSetupError),
     AccountSetupState,
@@ -654,6 +726,21 @@ impl axum::response::IntoResponse for ApiError {
                     false,
                 )
             }
+            Self::Graph(error) => {
+                tracing::error!(error = %error, "graph store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "graph_store_error",
+                    "graph store operation failed".to_owned(),
+                    false,
+                )
+            }
+            Self::InvalidGraphQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_graph_query",
+                message.to_owned(),
+                false,
+            ),
             Self::AccountSetup(error) => {
                 let status = if matches!(
                     error,
@@ -721,6 +808,12 @@ impl From<EventEnvelopeError> for ApiError {
 impl From<EventStoreError> for ApiError {
     fn from(error: EventStoreError) -> Self {
         Self::Store(error)
+    }
+}
+
+impl From<crate::graph::GraphStoreError> for ApiError {
+    fn from(error: crate::graph::GraphStoreError) -> Self {
+        Self::Graph(error)
     }
 }
 

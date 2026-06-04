@@ -1,3 +1,5 @@
+use std::collections::BTreeSet;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -132,6 +134,188 @@ impl GraphStore {
 
         transaction.commit().await?;
         row_to_edge(row)
+    }
+
+    pub async fn summary(&self) -> Result<GraphSummary, GraphStoreError> {
+        let node_count_rows = sqlx::query(
+            r#"
+            SELECT node_kind AS key, count(*) AS count
+            FROM graph_nodes
+            GROUP BY node_kind
+            ORDER BY node_kind
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let node_counts = node_count_rows
+            .into_iter()
+            .map(row_to_count)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let edge_count_rows = sqlx::query(
+            r#"
+            SELECT relationship_type AS key, count(*) AS count
+            FROM graph_edges
+            GROUP BY relationship_type
+            ORDER BY relationship_type
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        let edge_counts = edge_count_rows
+            .into_iter()
+            .map(row_to_count)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let evidence_count = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM graph_evidence")
+            .fetch_one(&self.pool)
+            .await?;
+        let latest_projection_at = sqlx::query_scalar::<_, Option<DateTime<Utc>>>(
+            r#"
+            SELECT max(updated_at)
+            FROM (
+                SELECT updated_at FROM graph_nodes
+                UNION ALL
+                SELECT updated_at FROM graph_edges
+            ) graph_updates
+            "#,
+        )
+        .fetch_one(&self.pool)
+        .await?;
+        let total_nodes = node_counts.iter().map(|count| count.count).sum::<i64>();
+
+        Ok(GraphSummary {
+            node_counts,
+            edge_counts,
+            evidence_count,
+            latest_projection_at,
+            is_empty: total_nodes == 0,
+        })
+    }
+
+    pub async fn search_nodes(
+        &self,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<GraphNode>, GraphStoreError> {
+        let search_pattern = format!("%{query}%");
+        let rows = sqlx::query(
+            r#"
+            SELECT node_id, node_kind, stable_key, label, properties, created_at, updated_at
+            FROM graph_nodes
+            WHERE label ILIKE $1 OR stable_key ILIKE $1
+            ORDER BY node_kind, label
+            LIMIT $2
+            "#,
+        )
+        .bind(search_pattern)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_node).collect()
+    }
+
+    pub async fn neighborhood(
+        &self,
+        node_id: &str,
+    ) -> Result<Option<GraphNeighborhood>, GraphStoreError> {
+        let Some(selected_row) = sqlx::query(
+            r#"
+            SELECT node_id, node_kind, stable_key, label, properties, created_at, updated_at
+            FROM graph_nodes
+            WHERE node_id = $1
+            "#,
+        )
+        .bind(node_id)
+        .fetch_optional(&self.pool)
+        .await?
+        else {
+            return Ok(None);
+        };
+        let selected_node = row_to_node(selected_row)?;
+
+        let edge_rows = sqlx::query(
+            r#"
+            SELECT
+                edge_id,
+                source_node_id,
+                target_node_id,
+                relationship_type,
+                confidence::float8 AS confidence,
+                review_state,
+                properties,
+                valid_from,
+                valid_to,
+                created_at,
+                updated_at
+            FROM graph_edges
+            WHERE valid_to IS NULL
+              AND (source_node_id = $1 OR target_node_id = $1)
+            ORDER BY relationship_type, source_node_id, target_node_id
+            "#,
+        )
+        .bind(&selected_node.node_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let edges = edge_rows
+            .into_iter()
+            .map(row_to_edge)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut node_ids = BTreeSet::from([selected_node.node_id.clone()]);
+        for edge in &edges {
+            node_ids.insert(edge.source_node_id.clone());
+            node_ids.insert(edge.target_node_id.clone());
+        }
+        let node_ids = node_ids.into_iter().collect::<Vec<_>>();
+        let node_rows = sqlx::query(
+            r#"
+            SELECT node_id, node_kind, stable_key, label, properties, created_at, updated_at
+            FROM graph_nodes
+            WHERE node_id = ANY($1)
+            ORDER BY node_kind, label, node_id
+            "#,
+        )
+        .bind(&node_ids)
+        .fetch_all(&self.pool)
+        .await?;
+        let nodes = node_rows
+            .into_iter()
+            .map(row_to_node)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let edge_ids = edges
+            .iter()
+            .map(|edge| edge.edge_id.clone())
+            .collect::<Vec<_>>();
+        let evidence = if edge_ids.is_empty() {
+            Vec::new()
+        } else {
+            let evidence_rows = sqlx::query(
+                r#"
+                SELECT edge_id, source_kind, source_id, excerpt, metadata
+                FROM graph_evidence
+                WHERE edge_id = ANY($1)
+                ORDER BY edge_id, source_kind, source_id
+                "#,
+            )
+            .bind(&edge_ids)
+            .fetch_all(&self.pool)
+            .await?;
+
+            evidence_rows
+                .into_iter()
+                .map(row_to_evidence_summary)
+                .collect::<Result<Vec<_>, _>>()?
+        };
+
+        Ok(Some(GraphNeighborhood {
+            selected_node,
+            nodes,
+            edges,
+            evidence,
+        }))
     }
 }
 
@@ -361,6 +545,38 @@ pub struct GraphEdge {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct GraphCount {
+    pub key: String,
+    pub count: i64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct GraphSummary {
+    pub node_counts: Vec<GraphCount>,
+    pub edge_counts: Vec<GraphCount>,
+    pub evidence_count: i64,
+    pub latest_projection_at: Option<DateTime<Utc>>,
+    pub is_empty: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct GraphEvidenceSummary {
+    pub edge_id: String,
+    pub source_kind: GraphEvidenceSourceKind,
+    pub source_id: String,
+    pub excerpt: Option<String>,
+    pub metadata: Value,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+pub struct GraphNeighborhood {
+    pub selected_node: GraphNode,
+    pub nodes: Vec<GraphNode>,
+    pub edges: Vec<GraphEdge>,
+    pub evidence: Vec<GraphEvidenceSummary>,
+}
+
 #[derive(Debug, Error)]
 pub enum GraphStoreError {
     #[error(transparent)]
@@ -389,6 +605,9 @@ pub enum GraphStoreError {
 
     #[error("unknown graph review state stored in database: {0}")]
     UnknownReviewState(String),
+
+    #[error("unknown graph evidence source kind stored in database: {0}")]
+    UnknownEvidenceSourceKind(String),
 }
 
 pub fn node_id(kind: GraphNodeKind, stable_key: &str) -> String {
@@ -451,6 +670,23 @@ fn row_to_edge(row: PgRow) -> Result<GraphEdge, GraphStoreError> {
     })
 }
 
+fn row_to_count(row: PgRow) -> Result<GraphCount, GraphStoreError> {
+    Ok(GraphCount {
+        key: row.try_get("key")?,
+        count: row.try_get("count")?,
+    })
+}
+
+fn row_to_evidence_summary(row: PgRow) -> Result<GraphEvidenceSummary, GraphStoreError> {
+    Ok(GraphEvidenceSummary {
+        edge_id: row.try_get("edge_id")?,
+        source_kind: parse_evidence_source_kind(row.try_get("source_kind")?)?,
+        source_id: row.try_get("source_id")?,
+        excerpt: row.try_get("excerpt")?,
+        metadata: row.try_get("metadata")?,
+    })
+}
+
 fn parse_node_kind(value: String) -> Result<GraphNodeKind, GraphStoreError> {
     match value.as_str() {
         "person" => Ok(GraphNodeKind::Person),
@@ -479,6 +715,16 @@ fn parse_review_state(value: String) -> Result<GraphReviewState, GraphStoreError
         "user_confirmed" => Ok(GraphReviewState::UserConfirmed),
         "user_rejected" => Ok(GraphReviewState::UserRejected),
         _ => Err(GraphStoreError::UnknownReviewState(value)),
+    }
+}
+
+fn parse_evidence_source_kind(value: String) -> Result<GraphEvidenceSourceKind, GraphStoreError> {
+    match value.as_str() {
+        "contact" => Ok(GraphEvidenceSourceKind::Contact),
+        "message" => Ok(GraphEvidenceSourceKind::Message),
+        "document" => Ok(GraphEvidenceSourceKind::Document),
+        "raw_record" => Ok(GraphEvidenceSourceKind::RawRecord),
+        _ => Err(GraphStoreError::UnknownEvidenceSourceKind(value)),
     }
 }
 
