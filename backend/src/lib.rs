@@ -7,6 +7,7 @@ pub mod email_sources;
 pub mod event_log;
 pub mod messages;
 pub mod projections;
+pub mod search;
 pub mod secrets;
 pub mod storage;
 
