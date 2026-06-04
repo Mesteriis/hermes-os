@@ -21,6 +21,7 @@ Rules:
 - Supported initial email provider kinds are `gmail`, `icloud` and `imap`.
 - Provider account records store non-secret account metadata and non-secret adapter configuration only.
 - OAuth tokens, app passwords and mailbox passwords must stay behind the secret boundary from ADR-0016 and must not be stored in provider account config.
+- Provider account credentials are represented through secret references from ADR-0042.
 - Raw provider records are stored append-only in `communication_raw_records`.
 - Raw provider record identity is idempotent by `(account_id, record_kind, provider_record_id)`.
 - Raw records keep `source_fingerprint`, `import_batch_id`, provider payload and provenance for replay/debugging.

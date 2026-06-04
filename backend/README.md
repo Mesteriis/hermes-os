@@ -2,7 +2,7 @@
 
 Rust backend for Hermes Hub.
 
-Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, canonical event append/read API, event log storage, API access audit logging, communication ingestion storage, projection cursors and projection runner batch semantics. Provider adapters, graph/search integration and agent runtime are not implemented yet.
+Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, canonical event append/read API, event log storage, API access audit logging, secret reference metadata, communication ingestion storage, projection cursors and projection runner batch semantics. Provider adapters, graph/search integration and agent runtime are not implemented yet.
 
 ## Commands
 
@@ -13,6 +13,7 @@ make backend-run
 make backend-run-dev
 make backend-smoke-dev
 make backend-storage-smoke-dev
+make backend-secrets-smoke-dev
 make backend-event-log-smoke-dev
 make backend-communication-smoke-dev
 make backend-projection-smoke-dev
@@ -58,9 +59,11 @@ Current schema:
 - `event_log` - append-only canonical event log with JSONB envelope fields, replay ordering, idempotent source index and mutation-prevention triggers.
 - `projection_cursors` - monotonic per-projection replay cursor positions.
 - `api_audit_log` - append-only operational audit records for local event API access attempts, including non-secret local actor IDs.
+- `secret_references` - non-secret metadata pointers to external secret stores; secret values are never stored in PostgreSQL.
 - `communication_provider_accounts` - non-secret email provider account metadata for `gmail`, `icloud` and `imap`.
 - `communication_raw_records` - append-only raw provider records with idempotent provider identity, source fingerprints, import batches and provenance.
 - `communication_ingestion_checkpoints` - per-account provider stream checkpoints for retryable ingestion.
+- `communication_provider_account_secret_refs` - maps provider accounts to secret references by credential purpose.
 
 Relevant design documents:
 

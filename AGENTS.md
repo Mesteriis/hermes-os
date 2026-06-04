@@ -211,6 +211,7 @@ Use the repository-configured tool first. If no tool exists, report that validat
 - Protected local event API requests must include the temporary non-secret `X-Hermes-Actor-Id` identity from `ADR-0040`.
 - Email ingestion provider accounts must support `gmail`, `icloud` and `imap` per `ADR-0041`; account config must not store OAuth tokens, app passwords or mailbox passwords.
 - Raw communication provider records must remain append-only and preserve source provenance.
+- Secret references per `ADR-0042` store metadata only; never place secret values in PostgreSQL config, metadata, tests, logs or docs.
 
 ## 9. Security and Privacy
 

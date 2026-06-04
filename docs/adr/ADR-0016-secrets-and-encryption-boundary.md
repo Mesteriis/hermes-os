@@ -10,6 +10,8 @@ Provider tokens, app passwords, private keys and backup credentials are high-val
 
 Keep secrets outside ordinary application tables and access them through an OS-backed secret store or encrypted vault abstraction.
 
+Current implementation stores PostgreSQL `secret_references` metadata only. Secret values are not stored in PostgreSQL.
+
 ## Consequences
 
 - Database compromise does not automatically expose provider credentials.

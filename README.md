@@ -18,6 +18,7 @@ Hermes Hub - персональная локальная платформа ко
 - local API-token guard for event API reads and writes
 - append-only audit log for authorized event API access attempts
 - communication ingestion storage foundation for Gmail, iCloud Mail and generic IMAP
+- secret reference metadata boundary for provider credentials
 - Docker Compose окружение для локальной разработки
 
 ## Принципы
@@ -99,6 +100,12 @@ make backend-smoke-dev
 
 ```sh
 make backend-storage-smoke-dev
+```
+
+Проверить secret reference storage against PostgreSQL:
+
+```sh
+make backend-secrets-smoke-dev
 ```
 
 Проверить event log migration/store against PostgreSQL:

@@ -3,6 +3,7 @@ pub mod communications;
 pub mod config;
 pub mod event_log;
 pub mod projections;
+pub mod secrets;
 pub mod storage;
 
 use std::io;

@@ -36,6 +36,8 @@ Authorized local event API reads and writes require a non-secret `X-Hermes-Actor
 
 Secrets must never be hardcoded or committed. Provider tokens, passwords, app passwords, private keys and recovery material belong in an OS-backed secret store or encrypted local vault.
 
+Current implementation stores only non-secret `secret_references` metadata in PostgreSQL. Secret values must remain outside ordinary application tables.
+
 ## AI Tool Safety
 
 Agents may propose actions. Execution requires:

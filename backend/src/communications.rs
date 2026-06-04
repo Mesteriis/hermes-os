@@ -201,6 +201,68 @@ impl CommunicationIngestionStore {
 
         row.map(row_to_checkpoint).transpose()
     }
+
+    pub async fn bind_provider_account_secret(
+        &self,
+        binding: &NewProviderAccountSecretBinding,
+    ) -> Result<ProviderAccountSecretBinding, CommunicationIngestionError> {
+        binding.validate()?;
+
+        let row = sqlx::query(
+            r#"
+            INSERT INTO communication_provider_account_secret_refs (
+                account_id,
+                secret_purpose,
+                secret_ref,
+                updated_at
+            )
+            VALUES ($1, $2, $3, now())
+            ON CONFLICT (account_id, secret_purpose)
+            DO UPDATE SET
+                secret_ref = EXCLUDED.secret_ref,
+                updated_at = now()
+            RETURNING
+                account_id,
+                secret_purpose,
+                secret_ref,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(binding.account_id.trim())
+        .bind(binding.secret_purpose.as_str())
+        .bind(binding.secret_ref.trim())
+        .fetch_one(&self.pool)
+        .await?;
+
+        row_to_secret_binding(row)
+    }
+
+    pub async fn provider_account_secret_bindings(
+        &self,
+        account_id: &str,
+    ) -> Result<Vec<ProviderAccountSecretBinding>, CommunicationIngestionError> {
+        validate_non_empty("account_id", account_id)?;
+
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                account_id,
+                secret_purpose,
+                secret_ref,
+                created_at,
+                updated_at
+            FROM communication_provider_account_secret_refs
+            WHERE account_id = $1
+            ORDER BY secret_purpose ASC
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_secret_binding).collect()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -392,6 +454,74 @@ impl NewIngestionCheckpoint {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderAccountSecretPurpose {
+    OauthToken,
+    ImapPassword,
+    SmtpPassword,
+}
+
+impl ProviderAccountSecretPurpose {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::OauthToken => "oauth_token",
+            Self::ImapPassword => "imap_password",
+            Self::SmtpPassword => "smtp_password",
+        }
+    }
+}
+
+impl TryFrom<&str> for ProviderAccountSecretPurpose {
+    type Error = CommunicationIngestionError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.trim() {
+            "oauth_token" => Ok(Self::OauthToken),
+            "imap_password" => Ok(Self::ImapPassword),
+            "smtp_password" => Ok(Self::SmtpPassword),
+            other => Err(CommunicationIngestionError::UnsupportedSecretPurpose(
+                other.to_owned(),
+            )),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ProviderAccountSecretBinding {
+    pub account_id: String,
+    pub secret_purpose: ProviderAccountSecretPurpose,
+    pub secret_ref: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NewProviderAccountSecretBinding {
+    pub account_id: String,
+    pub secret_purpose: ProviderAccountSecretPurpose,
+    pub secret_ref: String,
+}
+
+impl NewProviderAccountSecretBinding {
+    pub fn new(
+        account_id: impl Into<String>,
+        secret_purpose: ProviderAccountSecretPurpose,
+        secret_ref: impl Into<String>,
+    ) -> Self {
+        Self {
+            account_id: account_id.into(),
+            secret_purpose,
+            secret_ref: secret_ref.into(),
+        }
+    }
+
+    fn validate(&self) -> Result<(), CommunicationIngestionError> {
+        validate_non_empty("account_id", &self.account_id)?;
+        validate_non_empty("secret_ref", &self.secret_ref)
+    }
+}
+
 fn row_to_provider_account(row: PgRow) -> Result<ProviderAccount, CommunicationIngestionError> {
     let provider_kind =
         EmailProviderKind::try_from(row.try_get::<String, _>("provider_kind")?.as_str())?;
@@ -433,6 +563,22 @@ fn row_to_checkpoint(row: PgRow) -> Result<IngestionCheckpoint, CommunicationIng
     })
 }
 
+fn row_to_secret_binding(
+    row: PgRow,
+) -> Result<ProviderAccountSecretBinding, CommunicationIngestionError> {
+    let secret_purpose = ProviderAccountSecretPurpose::try_from(
+        row.try_get::<String, _>("secret_purpose")?.as_str(),
+    )?;
+
+    Ok(ProviderAccountSecretBinding {
+        account_id: row.try_get("account_id")?,
+        secret_purpose,
+        secret_ref: row.try_get("secret_ref")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
 fn validate_non_empty(
     field_name: &'static str,
     value: &str,
@@ -462,6 +608,9 @@ pub enum CommunicationIngestionError {
 
     #[error("unsupported email provider kind: {0}")]
     UnsupportedProviderKind(String),
+
+    #[error("unsupported provider account secret purpose: {0}")]
+    UnsupportedSecretPurpose(String),
 
     #[error("{0} must not be empty")]
     EmptyField(&'static str),

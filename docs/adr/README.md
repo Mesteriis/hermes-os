@@ -50,3 +50,4 @@ ADR status vocabulary:
 - [ADR-0039 Local Event API Access Audit Log](ADR-0039-local-event-api-access-audit-log.md)
 - [ADR-0040 Local API Actor Identity](ADR-0040-local-api-actor-identity.md)
 - [ADR-0041 Email Provider Ingestion Foundation](ADR-0041-email-provider-ingestion-foundation.md)
+- [ADR-0042 Secret References for Provider Credentials](ADR-0042-secret-references-for-provider-credentials.md)

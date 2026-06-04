@@ -25,7 +25,7 @@ Initial email ingestion must support three provider kinds:
 - `icloud` - iCloud Mail over IMAP with app-specific credentials and mailbox UID checkpoints.
 - `imap` - generic raw IMAP with host/port/TLS metadata and mailbox UID checkpoints.
 
-Provider account records store non-secret metadata and adapter configuration only. Credentials and tokens belong behind the secret boundary.
+Provider account records store non-secret metadata and adapter configuration only. Credentials and tokens belong behind the secret boundary and are linked through secret references.
 
 Raw provider records are append-only and idempotent by provider account, record kind and provider record ID. They preserve provider payload and provenance before canonical message projections are built.
 

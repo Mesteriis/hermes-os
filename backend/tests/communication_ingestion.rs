@@ -6,7 +6,10 @@ use serde_json::json;
 
 use hermes_hub_backend::communications::{
     CommunicationIngestionStore, EmailProviderKind, NewIngestionCheckpoint, NewProviderAccount,
-    NewRawCommunicationRecord,
+    NewProviderAccountSecretBinding, NewRawCommunicationRecord, ProviderAccountSecretPurpose,
+};
+use hermes_hub_backend::secrets::{
+    NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
 use hermes_hub_backend::storage::Database;
 
@@ -237,6 +240,122 @@ async fn communication_ingestion_tracks_checkpoints_against_postgres() {
         .expect("load checkpoint")
         .expect("checkpoint exists");
     assert_eq!(loaded.checkpoint["last_seen_uid"], 1002);
+}
+
+#[tokio::test]
+async fn communication_ingestion_binds_provider_accounts_to_secret_refs_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live communication secret binding test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let secret_store = SecretReferenceStore::new(pool);
+    let suffix = unique_suffix();
+    let gmail_account_id = format!("acct_gmail_secret_{suffix}");
+    let icloud_account_id = format!("acct_icloud_secret_{suffix}");
+    let imap_account_id = format!("acct_imap_secret_{suffix}");
+
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &gmail_account_id,
+            EmailProviderKind::Gmail,
+            "Gmail secret binding",
+            format!("gmail-secret-{suffix}@example.com"),
+        ))
+        .await
+        .expect("store gmail account");
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &icloud_account_id,
+            EmailProviderKind::Icloud,
+            "iCloud secret binding",
+            format!("icloud-secret-{suffix}@icloud.com"),
+        ))
+        .await
+        .expect("store icloud account");
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &imap_account_id,
+            EmailProviderKind::Imap,
+            "IMAP secret binding",
+            format!("imap-secret-{suffix}@example.net"),
+        ))
+        .await
+        .expect("store imap account");
+
+    let gmail_secret_ref = format!("secret:gmail:oauth:{suffix}");
+    let icloud_secret_ref = format!("secret:icloud:app-password:{suffix}");
+    let imap_secret_ref = format!("secret:imap:password:{suffix}");
+
+    secret_store
+        .upsert_secret_reference(&NewSecretReference::new(
+            &gmail_secret_ref,
+            SecretKind::OauthToken,
+            SecretStoreKind::OsKeychain,
+            "Gmail OAuth credential",
+        ))
+        .await
+        .expect("store gmail secret reference");
+    secret_store
+        .upsert_secret_reference(&NewSecretReference::new(
+            &icloud_secret_ref,
+            SecretKind::AppPassword,
+            SecretStoreKind::OsKeychain,
+            "iCloud app-specific password",
+        ))
+        .await
+        .expect("store icloud secret reference");
+    secret_store
+        .upsert_secret_reference(&NewSecretReference::new(
+            &imap_secret_ref,
+            SecretKind::Password,
+            SecretStoreKind::OsKeychain,
+            "Generic IMAP password",
+        ))
+        .await
+        .expect("store imap secret reference");
+
+    let gmail_binding = communication_store
+        .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+            &gmail_account_id,
+            ProviderAccountSecretPurpose::OauthToken,
+            &gmail_secret_ref,
+        ))
+        .await
+        .expect("bind gmail oauth secret");
+    let icloud_binding = communication_store
+        .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+            &icloud_account_id,
+            ProviderAccountSecretPurpose::ImapPassword,
+            &icloud_secret_ref,
+        ))
+        .await
+        .expect("bind icloud imap secret");
+    let imap_binding = communication_store
+        .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+            &imap_account_id,
+            ProviderAccountSecretPurpose::ImapPassword,
+            &imap_secret_ref,
+        ))
+        .await
+        .expect("bind generic imap secret");
+
+    assert_eq!(gmail_binding.secret_ref, gmail_secret_ref);
+    assert_eq!(icloud_binding.secret_ref, icloud_secret_ref);
+    assert_eq!(imap_binding.secret_ref, imap_secret_ref);
+
+    let gmail_bindings = communication_store
+        .provider_account_secret_bindings(&gmail_account_id)
+        .await
+        .expect("load gmail secret bindings");
+    assert_eq!(gmail_bindings, vec![gmail_binding]);
 }
 
 fn unique_suffix() -> u128 {
