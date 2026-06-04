@@ -4,6 +4,7 @@ pub mod config;
 pub mod email_import;
 pub mod email_sources;
 pub mod event_log;
+pub mod messages;
 pub mod projections;
 pub mod secrets;
 pub mod storage;
