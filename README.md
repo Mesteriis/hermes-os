@@ -19,6 +19,8 @@ Hermes Hub - персональная локальная платформа ко
 - append-only audit log for authorized event API access attempts
 - communication ingestion storage foundation for Gmail, iCloud Mail and generic IMAP
 - secret reference metadata boundary for provider credentials
+- V1 status API for desktop shell bootstrapping
+- desktop-only SvelteKit/Tauri status shell
 - Docker Compose окружение для локальной разработки
 
 ## Принципы
@@ -51,7 +53,7 @@ Hermes Hub - персональная локальная платформа ко
 - [docs/roadmap](docs/roadmap) - план развития до версии 5.0.
 - [docs/research](docs/research) - вопросы исследования и открытые риски.
 - [backend](backend) - Rust backend.
-- [frontend](frontend) - будущий SvelteKit frontend.
+- [frontend](frontend) - desktop-only SvelteKit frontend packaged in a Tauri shell.
 - [infrastructure](infrastructure) - self-hosted и локальная инфраструктура.
 - [tools](tools) - будущие developer и data tools.
 - [examples](examples) - будущие спецификации примеров и тестовых сценариев.
@@ -89,6 +91,26 @@ make backend-run-dev
 Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
 X-Hermes-Actor-Id: local-cli
 ```
+
+`/api/v1/status` используется desktop shell и также требует локальный API token и non-secret actor ID:
+
+```sh
+GET /api/v1/status
+Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
+X-Hermes-Actor-Id: desktop-shell
+```
+
+Frontend/Tauri shell commands:
+
+```sh
+make frontend-install
+make frontend-check
+make frontend-build
+make frontend-tauri-dev
+make frontend-tauri-build
+```
+
+UI scope is desktop/laptop only while ADR-0031 is active; mobile UI is not implemented or validated.
 
 Выполнить smoke test backend + PostgreSQL:
 

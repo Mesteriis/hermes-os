@@ -13,7 +13,8 @@ export async function fetchV1Status(
 	token: string,
 	actorId: string
 ): Promise<V1Status> {
-	const response = await fetch(`${baseUrl}/api/v1/status`, {
+	const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+	const response = await fetch(`${normalizedBaseUrl}/api/v1/status`, {
 		headers: {
 			Authorization: `Bearer ${token}`,
 			'X-Hermes-Actor-Id': actorId
