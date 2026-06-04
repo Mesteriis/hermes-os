@@ -554,16 +554,21 @@
 
 	function visibleTimelineItems() {
 		const query = searchQuery.trim().toLowerCase();
-		if (!query) {
-			return timelineItems;
-		}
+		const activeFilter = selectedTimelineFilter === 'All Events' ? '' : selectedTimelineFilter;
 
-		return timelineItems.filter((item) =>
-			[item.title, item.description, item.meta, item.tag ?? '', item.details ?? '']
+		return timelineItems.filter((item) => {
+			if (activeFilter && item.meta !== activeFilter) {
+				return false;
+			}
+			if (!query) {
+				return true;
+			}
+
+			return [item.title, item.description, item.meta, item.tag ?? '', item.details ?? '']
 				.join(' ')
 				.toLowerCase()
-				.includes(query)
-		);
+				.includes(query);
+		});
 	}
 
 	async function startGmailSetup() {
