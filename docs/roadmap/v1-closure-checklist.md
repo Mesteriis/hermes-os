@@ -13,7 +13,7 @@ Version 1.0 is complete when a user can run Hermes Hub locally, import email fix
 - Fixture-based first email import path that preserves raw provider records.
 - Canonical message projection from raw email records.
 - Basic contact projection from message participants.
-- Tantivy full text search over messages and imported Markdown text.
+- Tantivy search boundary covered by message and document record tests.
 - Document import boundary for Markdown text and PDF metadata.
 - Desktop/laptop SvelteKit/Tauri status shell connected to `GET /api/v1/status`.
 
@@ -33,6 +33,6 @@ Version 1.0 is complete when a user can run Hermes Hub locally, import email fix
 - [x] Fixture email import preserves raw provider records idempotently.
 - [x] Canonical messages projection is covered by live PostgreSQL tests.
 - [x] Contacts projection is covered by live PostgreSQL tests.
-- [x] Tantivy search returns indexed message/document results.
+- [x] Tantivy search boundary is covered by message/document record tests.
 - [x] Document import stores Markdown text and PDF metadata.
 - [x] Desktop shell shows backend V1 status.

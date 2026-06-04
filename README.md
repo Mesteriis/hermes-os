@@ -62,11 +62,11 @@ Hermes Hub - персональная локальная платформа ко
 
 ```sh
 make docker-env
-make up
+make db-up
 make backend-run-dev
 ```
 
-Open the desktop shell from the frontend/Tauri command documented in `frontend/README.md`.
+Open the desktop shell with `make frontend-tauri-dev` or the frontend/Tauri command documented in `frontend/README.md`.
 
 ## Разработка
 
