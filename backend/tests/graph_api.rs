@@ -21,6 +21,7 @@ const LOCAL_API_TOKEN: &str = "graph-api-test-token";
 const LOCAL_API_ACTOR_ID: &str = "graph-api-test-client";
 const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 const EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT: usize = 100;
+const EXPECTED_GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT: usize = 100;
 
 #[tokio::test]
 async fn graph_summary_rejects_missing_local_api_token() {
@@ -276,6 +277,11 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
         json!(EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT)
     );
     assert_eq!(body["truncated"], json!(false));
+    assert_eq!(
+        body["evidence_limit"],
+        json!(EXPECTED_GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT)
+    );
+    assert_eq!(body["evidence_truncated"], json!(false));
 
     let nodes = body["nodes"].as_array().expect("node array");
     assert_eq!(nodes.len(), 1);
@@ -368,10 +374,89 @@ async fn graph_neighborhood_caps_depth_one_edges_nodes_and_evidence() {
         json!(EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT)
     );
     assert_eq!(body["truncated"], json!(true));
+    assert_eq!(
+        body["evidence_limit"],
+        json!(EXPECTED_GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT)
+    );
+    assert_eq!(body["evidence_truncated"], json!(false));
     assert_eq!(nodes.len(), EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT);
     assert!(nodes.iter().all(|node| node["node_id"] != person.node_id));
     assert_eq!(edges.len(), EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT);
     assert_eq!(evidence.len(), EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT);
+
+    context.cleanup().await;
+}
+
+#[tokio::test]
+async fn graph_neighborhood_caps_evidence_for_returned_edges() {
+    let Some(context) = live_graph_api_context("neighborhood evidence cap").await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let person = context
+        .store
+        .upsert_node(&NewGraphNode::new(
+            GraphNodeKind::Person,
+            format!("contact:alex-neighborhood-evidence-cap:{suffix}"),
+            format!("Alex Neighborhood Evidence Cap {suffix}"),
+        ))
+        .await
+        .expect("person node");
+    let email = context
+        .store
+        .upsert_node(&NewGraphNode::new(
+            GraphNodeKind::EmailAddress,
+            format!("alex-neighborhood-evidence-cap-{suffix}@example.com"),
+            format!("alex-neighborhood-evidence-cap-{suffix}@example.com"),
+        ))
+        .await
+        .expect("email node");
+    let evidence = (0..=EXPECTED_GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT)
+        .map(|index| {
+            NewGraphEvidence::new(
+                GraphEvidenceSourceKind::Contact,
+                format!("contact-source:{suffix}:{index:03}"),
+            )
+        })
+        .collect::<Vec<_>>();
+    context
+        .store
+        .upsert_edge_with_evidence(
+            &NewGraphEdge::new(
+                person.node_id.clone(),
+                email.node_id,
+                RelationshipType::PersonHasEmailAddress,
+                1.0,
+                GraphReviewState::SystemAccepted,
+            ),
+            &evidence,
+        )
+        .await
+        .expect("graph edge with over-limit evidence");
+
+    let response = context
+        .app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v2/graph/neighborhood?node_id={}", person.node_id),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = json_body(response).await;
+    let edges = body["edges"].as_array().expect("edge array");
+    let evidence = body["evidence"].as_array().expect("evidence array");
+    assert_eq!(body["truncated"], json!(false));
+    assert_eq!(
+        body["evidence_limit"],
+        json!(EXPECTED_GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT)
+    );
+    assert_eq!(body["evidence_truncated"], json!(true));
+    assert_eq!(edges.len(), 1);
+    assert_eq!(evidence.len(), EXPECTED_GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT);
 
     context.cleanup().await;
 }

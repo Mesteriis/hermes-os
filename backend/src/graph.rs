@@ -8,6 +8,7 @@ use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 pub const GRAPH_NEIGHBORHOOD_EDGE_LIMIT: i64 = 100;
+pub const GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT: i64 = 100;
 
 #[derive(Clone)]
 pub struct GraphStore {
@@ -347,8 +348,8 @@ impl GraphStore {
             .iter()
             .map(|edge| edge.edge_id.clone())
             .collect::<Vec<_>>();
-        let evidence = if edge_ids.is_empty() {
-            Vec::new()
+        let (evidence, evidence_truncated) = if edge_ids.is_empty() {
+            (Vec::new(), false)
         } else {
             let evidence_rows = sqlx::query(
                 r#"
@@ -356,16 +357,21 @@ impl GraphStore {
                 FROM graph_evidence
                 WHERE edge_id = ANY($1)
                 ORDER BY edge_id, source_kind, source_id
+                LIMIT $2
                 "#,
             )
             .bind(&edge_ids)
+            .bind(GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT + 1)
             .fetch_all(&mut *transaction)
             .await?;
 
-            evidence_rows
+            let mut evidence = evidence_rows
                 .into_iter()
                 .map(row_to_evidence_summary)
-                .collect::<Result<Vec<_>, _>>()?
+                .collect::<Result<Vec<_>, _>>()?;
+            let evidence_truncated = evidence.len() > GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT as usize;
+            evidence.truncate(GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT as usize);
+            (evidence, evidence_truncated)
         };
 
         transaction.commit().await?;
@@ -377,6 +383,8 @@ impl GraphStore {
             evidence,
             edge_limit: GRAPH_NEIGHBORHOOD_EDGE_LIMIT,
             truncated,
+            evidence_limit: GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT,
+            evidence_truncated,
         }))
     }
 }
@@ -639,6 +647,8 @@ pub struct GraphNeighborhood {
     pub evidence: Vec<GraphEvidenceSummary>,
     pub edge_limit: i64,
     pub truncated: bool,
+    pub evidence_limit: i64,
+    pub evidence_truncated: bool,
 }
 
 #[derive(Debug, Error)]
