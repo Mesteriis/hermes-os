@@ -58,9 +58,7 @@ export type GraphCount = {
 export type GraphSummary = {
 	node_counts: GraphCount[];
 	edge_counts: GraphCount[];
-	relationship_counts?: GraphCount[];
 	evidence_count: number;
-	evidence_counts?: GraphCount[];
 	latest_projection_at: string | null;
 	is_empty: boolean;
 };
@@ -174,16 +172,12 @@ export async function fetchGraphNeighborhood(
 	token: string,
 	actorId: string,
 	nodeId: string,
-	depth = 1,
-	limit?: number
+	depth = 1
 ): Promise<GraphNeighborhood> {
 	const params = new URLSearchParams({
 		node_id: nodeId,
 		depth: String(depth)
 	});
-	if (limit !== undefined) {
-		params.set('limit', String(Math.trunc(limit)));
-	}
 
 	return getJson(
 		baseUrl,

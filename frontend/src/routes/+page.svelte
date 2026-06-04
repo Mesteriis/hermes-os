@@ -1,6 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import {
 		completeGmailOAuthSetup,
 		fetchGraphNeighborhood,
@@ -87,6 +87,11 @@
 	let gmailAuthorizationCode = $state('');
 	let searchQuery = $state('');
 	let selectedTimelineFilter = $state('All Events');
+	let graphExplorerPanel = $state<HTMLElement | null>(null);
+	let graphSearchInput = $state<HTMLInputElement | null>(null);
+	let graphExplorerReturnFocus: HTMLElement | null = null;
+	let graphSearchRequestId = 0;
+	let graphNeighborhoodRequestId = 0;
 	let gmailForm = $state({
 		account_id: 'gmail-primary',
 		display_name: 'Primary Gmail',
@@ -200,15 +205,6 @@
 		}
 	];
 
-	const graphNodes = [
-		{ label: 'John Carter', caption: 'Person', icon: 'tabler:user', x: 47, y: 12 },
-		{ label: 'Acme Corp', caption: 'Organization', icon: 'tabler:building-bank', x: 82, y: 28 },
-		{ label: 'Project Plan', caption: 'Document', icon: 'tabler:file-text', x: 88, y: 54 },
-		{ label: 'Maria Petrova', caption: 'Person', icon: 'tabler:user', x: 74, y: 78 },
-		{ label: 'Budget', caption: 'Document', icon: 'tabler:file-text', x: 18, y: 70 },
-		{ label: 'Q2 Report', caption: 'Document', icon: 'tabler:file-text', x: 12, y: 38 }
-	];
-
 	const graphPreviewPositions = [
 		{ x: 47, y: 12 },
 		{ x: 82, y: 28 },
@@ -216,12 +212,6 @@
 		{ x: 74, y: 78 },
 		{ x: 18, y: 70 },
 		{ x: 12, y: 38 }
-	];
-
-	const discoveredItems = [
-		{ label: 'VAT Discussion', source: 'From Email', icon: 'tabler:mail' },
-		{ label: 'Acme Contract', source: 'From WhatsApp', icon: 'tabler:brand-whatsapp' },
-		{ label: 'Budget 2024', source: 'From Document', icon: 'tabler:file-text' }
 	];
 
 	const projects: ProjectItem[] = [
@@ -327,27 +317,17 @@
 		return graphSummary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 0;
 	}
 
-	function graphRelationshipCounts() {
-		return graphSummary?.relationship_counts ?? graphSummary?.edge_counts ?? [];
-	}
-
 	function graphRelationshipTotal() {
-		return graphRelationshipCounts().reduce((total, item) => total + item.count, 0);
+		return graphSummary?.edge_counts.reduce((total, item) => total + item.count, 0) ?? 0;
 	}
 
 	function graphEvidenceTotal() {
-		if (!graphSummary) {
-			return 0;
-		}
-		if (graphSummary.evidence_counts) {
-			return graphSummary.evidence_counts.reduce((total, item) => total + item.count, 0);
-		}
-		return graphSummary.evidence_count;
+		return graphSummary?.evidence_count ?? 0;
 	}
 
 	function graphPreviewNodes(): GraphPreviewNode[] {
 		if (!graphSummary || graphSummary.is_empty) {
-			return graphNodes;
+			return [];
 		}
 
 		return graphSummary.node_counts.slice(0, graphPreviewPositions.length).map((count, index) => ({
@@ -389,24 +369,81 @@
 		}
 	}
 
-	function openGraphExplorer() {
+	async function openGraphExplorer(event: MouseEvent) {
+		graphExplorerReturnFocus =
+			event.currentTarget instanceof HTMLElement
+				? event.currentTarget
+				: document.activeElement instanceof HTMLElement
+					? document.activeElement
+					: null;
 		isGraphExplorerOpen = true;
 		graphSearchError = '';
 		selectedGraphError = '';
 		if (graphSummary?.is_empty) {
 			graphSearchMessage = 'Graph is empty. Run projections before searching.';
 		}
+		await tick();
+		const initialFocus =
+			graphSearchInput ?? graphExplorerPanel?.querySelector<HTMLElement>(graphFocusableSelector());
+		initialFocus?.focus();
 	}
 
 	function closeGraphExplorer() {
 		isGraphExplorerOpen = false;
+		graphExplorerReturnFocus?.focus();
+		graphExplorerReturnFocus = null;
+	}
+
+	function graphFocusableSelector() {
+		return 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+	}
+
+	function graphFocusableElements() {
+		if (!graphExplorerPanel) {
+			return [];
+		}
+		return Array.from(graphExplorerPanel.querySelectorAll<HTMLElement>(graphFocusableSelector())).filter(
+			(element) => element.offsetParent !== null || element === document.activeElement
+		);
+	}
+
+	function handleGraphExplorerKeydown(event: KeyboardEvent) {
+		if (event.key === 'Escape') {
+			event.preventDefault();
+			closeGraphExplorer();
+			return;
+		}
+
+		if (event.key !== 'Tab') {
+			return;
+		}
+
+		const focusable = graphFocusableElements();
+		if (focusable.length === 0) {
+			event.preventDefault();
+			graphExplorerPanel?.focus();
+			return;
+		}
+
+		const first = focusable[0];
+		const last = focusable[focusable.length - 1];
+		if (event.shiftKey && document.activeElement === first) {
+			event.preventDefault();
+			last.focus();
+		} else if (!event.shiftKey && document.activeElement === last) {
+			event.preventDefault();
+			first.focus();
+		}
 	}
 
 	async function submitGraphSearch() {
+		const requestId = ++graphSearchRequestId;
+		graphNeighborhoodRequestId += 1;
 		const query = graphSearchQuery.trim();
 		graphSearchError = '';
 		selectedGraphError = '';
 		selectedGraphNeighborhood = null;
+		isGraphNeighborhoodLoading = false;
 
 		if (!query) {
 			graphSearchResults = [];
@@ -417,35 +454,53 @@
 		isGraphSearching = true;
 		graphSearchMessage = '';
 		try {
-			graphSearchResults = await searchGraphNodes(apiBaseUrl, apiToken, actorId, query, 20);
-			if (graphSearchResults.length === 0) {
+			const results = await searchGraphNodes(apiBaseUrl, apiToken, actorId, query, 20);
+			if (requestId !== graphSearchRequestId) {
+				return;
+			}
+			graphSearchResults = results;
+			if (results.length === 0) {
 				graphSearchMessage = 'No graph nodes matched that query.';
 			}
 		} catch (error) {
+			if (requestId !== graphSearchRequestId) {
+				return;
+			}
 			graphSearchError = error instanceof Error ? error.message : 'Graph search failed';
 			graphSearchResults = [];
 		} finally {
-			isGraphSearching = false;
+			if (requestId === graphSearchRequestId) {
+				isGraphSearching = false;
+			}
 		}
 	}
 
 	async function selectGraphNode(node: GraphNode) {
+		const requestId = ++graphNeighborhoodRequestId;
 		isGraphNeighborhoodLoading = true;
 		selectedGraphError = '';
 		try {
-			selectedGraphNeighborhood = await fetchGraphNeighborhood(
+			const neighborhood = await fetchGraphNeighborhood(
 				apiBaseUrl,
 				apiToken,
 				actorId,
 				node.node_id,
-				1,
-				50
+				1
 			);
+			if (requestId !== graphNeighborhoodRequestId) {
+				return;
+			}
+			selectedGraphNeighborhood = neighborhood;
 		} catch (error) {
+			if (requestId !== graphNeighborhoodRequestId) {
+				return;
+			}
 			selectedGraphError = error instanceof Error ? error.message : 'Graph neighborhood failed';
 			selectedGraphNeighborhood = null;
 		} finally {
-			isGraphNeighborhoodLoading = false;
+			if (requestId === graphNeighborhoodRequestId) {
+				isGraphNeighborhoodLoading = false;
+			}
 		}
 	}
 
@@ -795,7 +850,13 @@
 					<header class="panel-title-row">
 						<h2 id="graph-heading">Knowledge Graph</h2>
 						<div>
-							<button type="button" class="ghost-button" onclick={openGraphExplorer}>Explore Graph</button>
+							<button
+								type="button"
+								class="ghost-button"
+								onclick={(event) => {
+									void openGraphExplorer(event);
+								}}>Explore Graph</button
+							>
 							<button type="button" class="icon-button" disabled title="Graph fullscreen is not implemented yet">
 								<Icon icon="tabler:arrows-maximize" width="17" height="17" />
 							</button>
@@ -858,9 +919,9 @@
 					</div>
 
 					<div class="discovered">
-						<p>{graphSummary && !graphSummary.is_empty ? 'Node Types' : 'Recently Discovered'}</p>
+						<p>Node Types</p>
 						<div>
-							{#if graphSummary && !graphSummary.is_empty}
+							{#if graphSummary && !graphSummary.is_empty && graphSummary.node_counts.length > 0}
 								{#each graphSummary.node_counts.slice(0, 3) as item}
 									<button type="button" disabled>
 										<Icon icon={graphNodeKindIcon(item.key)} width="18" height="18" />
@@ -871,15 +932,15 @@
 									</button>
 								{/each}
 							{:else}
-								{#each discoveredItems as item}
-									<button type="button" disabled>
-										<Icon icon={item.icon} width="18" height="18" />
-										<span>
-											<strong>{item.label}</strong>
-											<small>{item.source}</small>
-										</span>
-									</button>
-								{/each}
+								<div class="graph-discovered-state">
+									{#if isGraphLoading}
+										<span>Loading projected node types.</span>
+									{:else if graphError}
+										<span>Graph API unavailable.</span>
+									{:else}
+										<span>No projected node types yet.</span>
+									{/if}
+								</div>
 							{/if}
 						</div>
 						<div class="graph-actions">
@@ -1236,7 +1297,15 @@
 		aria-label="Close graph explorer"
 		onclick={closeGraphExplorer}
 	></button>
-	<aside class="graph-drawer" aria-labelledby="graph-explorer-heading">
+	<div
+		class="graph-drawer"
+		role="dialog"
+		aria-modal="true"
+		aria-labelledby="graph-explorer-heading"
+		tabindex="-1"
+		bind:this={graphExplorerPanel}
+		onkeydown={handleGraphExplorerKeydown}
+	>
 		<header>
 			<div>
 				<p>Read-only Graph</p>
@@ -1296,6 +1365,7 @@
 				<label>
 					<Icon icon="tabler:search" width="18" height="18" />
 					<input
+						bind:this={graphSearchInput}
 						bind:value={graphSearchQuery}
 						placeholder="Search people, messages, emails, documents..."
 						aria-label="Search graph nodes"
@@ -1321,6 +1391,7 @@
 							<button
 								type="button"
 								class:active={selectedGraphNeighborhood?.selected_node.node_id === node.node_id}
+								disabled={isGraphNeighborhoodLoading}
 								onclick={() => selectGraphNode(node)}
 							>
 								<Icon icon={graphNodeKindIcon(node.node_kind)} width="18" height="18" />
@@ -1427,7 +1498,7 @@
 				</section>
 			</div>
 		{/if}
-	</aside>
+	</div>
 {/if}
 
 <style>
@@ -2377,6 +2448,18 @@
 		font-size: 9px;
 	}
 
+	.graph-discovered-state {
+		display: grid;
+		grid-column: 1 / -1;
+		place-items: center;
+		min-height: 48px;
+		border: 1px solid rgba(111, 205, 195, 0.13);
+		border-radius: 7px;
+		background: rgba(10, 42, 45, 0.38);
+		color: #91a8a8;
+		font-size: 11px;
+	}
+
 	.graph-actions {
 		display: grid !important;
 		grid-template-columns: repeat(3, 1fr) !important;
@@ -2933,6 +3016,11 @@
 		padding: 18px;
 	}
 
+	.graph-drawer:focus {
+		outline: 1px solid rgba(45, 240, 206, 0.28);
+		outline-offset: -3px;
+	}
+
 	.account-drawer > header,
 	.graph-drawer > header {
 		display: flex;
@@ -3086,9 +3174,20 @@
 		background: rgba(36, 207, 178, 0.14);
 	}
 
+	.graph-results button:disabled {
+		opacity: 0.64;
+	}
+
+	.graph-results button > span {
+		min-width: 0;
+	}
+
 	.graph-results button strong,
 	.graph-results button small {
 		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	.graph-results button strong {
