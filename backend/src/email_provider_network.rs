@@ -195,6 +195,7 @@ pub struct ImapFetchOptions {
     pub username: String,
     pub last_seen_uid: Option<u32>,
     pub max_messages: usize,
+    pub latest_messages: bool,
 }
 
 impl ImapFetchOptions {
@@ -214,6 +215,7 @@ impl ImapFetchOptions {
             username: username.into(),
             last_seen_uid: None,
             max_messages: 100,
+            latest_messages: false,
         }
     }
 
@@ -229,6 +231,11 @@ impl ImapFetchOptions {
 
     pub fn max_messages(mut self, max_messages: usize) -> Self {
         self.max_messages = max_messages;
+        self
+    }
+
+    pub fn latest_messages(mut self) -> Self {
+        self.latest_messages = true;
         self
     }
 
@@ -304,13 +311,12 @@ where
         .and_then(|uid| uid.checked_add(1))
         .unwrap_or(1);
     let search_query = format!("{first_uid}:*");
-    let mut uids: Vec<u32> = session
+    let uids: Vec<u32> = session
         .uid_search(search_query)
         .await?
         .into_iter()
         .collect();
-    uids.sort_unstable();
-    uids.truncate(options.max_messages);
+    let uids = select_uids_for_fetch(uids, options.max_messages, options.latest_messages);
 
     let mut messages = Vec::new();
     if !uids.is_empty() {
@@ -490,6 +496,20 @@ fn uid_set(uids: &[u32]) -> String {
         .join(",")
 }
 
+fn select_uids_for_fetch(
+    mut uids: Vec<u32>,
+    max_messages: usize,
+    latest_messages: bool,
+) -> Vec<u32> {
+    uids.sort_unstable();
+    if latest_messages && uids.len() > max_messages {
+        uids[uids.len() - max_messages..].to_vec()
+    } else {
+        uids.truncate(max_messages);
+        uids
+    }
+}
+
 fn sha256_fingerprint<'a>(parts: impl IntoIterator<Item = &'a [u8]>) -> String {
     let mut hasher = Sha256::new();
     for part in parts {
@@ -541,4 +561,25 @@ pub enum EmailProviderNetworkError {
 
     #[error(transparent)]
     Imap(#[from] async_imap::error::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::select_uids_for_fetch;
+
+    #[test]
+    fn select_uids_for_fetch_keeps_latest_window_when_requested() {
+        assert_eq!(
+            select_uids_for_fetch(vec![43, 41, 42], 2, true),
+            vec![42, 43]
+        );
+    }
+
+    #[test]
+    fn select_uids_for_fetch_keeps_oldest_window_for_sync_default() {
+        assert_eq!(
+            select_uids_for_fetch(vec![43, 41, 42], 2, false),
+            vec![41, 42]
+        );
+    }
 }

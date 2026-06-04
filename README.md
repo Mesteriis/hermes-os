@@ -118,6 +118,18 @@ make backend-graph-project-dev
 
 Команда поднимает PostgreSQL при необходимости, применяет backend migrations, печатает JSON summary и оставляет Postgres запущенным для dev-сессии. Она не подключается к Gmail, iCloud или raw IMAP mailbox.
 
+Снять redacted fixture из iCloud IMAP без мутаций mailbox:
+
+```sh
+HERMES_IMAP_FIXTURE_USERNAME=<icloud-email> \
+HERMES_IMAP_FIXTURE_PASSWORD=<app-password> \
+HERMES_IMAP_FIXTURE_MAX_MESSAGES=10 \
+HERMES_IMAP_FIXTURE_OUTPUT=tmp/email-fixtures/icloud-inbox-redacted.json \
+make backend-email-fixture-export-icloud-dev
+```
+
+Exporter использует read-only IMAP path (`EXAMINE`, `UID SEARCH`, `BODY.PEEK[]`), берет latest-N сообщений, пишет redacted fixture JSON и не импортирует данные в PostgreSQL.
+
 `/api/events` и `/api/audit/events` требуют локальный API token и non-secret actor ID:
 
 ```sh

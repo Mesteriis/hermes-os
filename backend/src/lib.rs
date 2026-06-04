@@ -4,6 +4,7 @@ pub mod config;
 pub mod contacts;
 pub mod documents;
 pub mod email_account_setup;
+pub mod email_fixture_export;
 pub mod email_import;
 pub mod email_provider_network;
 pub mod email_sources;

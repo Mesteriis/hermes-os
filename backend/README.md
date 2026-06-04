@@ -2,7 +2,7 @@
 
 Rust backend for Hermes Hub.
 
-Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, and read-only V2 graph core projection/read APIs backed by PostgreSQL. OS keychain resolver, full MIME parsing, graph editing, AI/entity extraction, richer graph inference and agent runtime are not implemented yet.
+Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, and read-only V2 graph core projection/read APIs backed by PostgreSQL. OS keychain resolver, full MIME parsing, graph editing, AI/entity extraction, richer graph inference and agent runtime are not implemented yet.
 
 ## Commands
 
@@ -19,6 +19,7 @@ make backend-event-log-smoke-dev
 make backend-communication-smoke-dev
 make backend-email-sync-smoke-dev
 make backend-email-provider-network-smoke-dev
+make backend-email-fixture-export-icloud-dev
 make backend-account-setup-smoke-dev
 make backend-email-import-smoke-dev
 make backend-messages-smoke-dev
@@ -50,11 +51,24 @@ make backend-graph-project-dev
 
 This starts the local PostgreSQL container if needed, applies migrations through the backend storage layer, runs `GraphProjectionService::project_from_v1()` against the current dev database and prints a JSON projection summary. It leaves PostgreSQL running for the active development session and does not connect to Gmail, iCloud or IMAP provider mailboxes.
 
+Export a redacted iCloud IMAP fixture sample from the latest read-only messages:
+
+```bash
+HERMES_IMAP_FIXTURE_USERNAME=<icloud-email> \
+HERMES_IMAP_FIXTURE_PASSWORD=<app-password> \
+HERMES_IMAP_FIXTURE_MAX_MESSAGES=10 \
+HERMES_IMAP_FIXTURE_OUTPUT=tmp/email-fixtures/icloud-inbox-redacted.json \
+make backend-email-fixture-export-icloud-dev
+```
+
+The exporter uses `EXAMINE`, `UID SEARCH` and `BODY.PEEK[]` through the same IMAP network client as provider sync. It writes redacted fixture JSON by default, prints only a non-secret summary, and does not import into PostgreSQL. The default output path is under `tmp/`, which is ignored by git.
+
 Direct Cargo commands:
 
 ```sh
 cargo run --manifest-path backend/Cargo.toml
 cargo run --manifest-path backend/Cargo.toml --bin hermes-graph-project
+cargo run --manifest-path backend/Cargo.toml --bin hermes-email-fixture-export
 cargo test --manifest-path backend/Cargo.toml
 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
 ```

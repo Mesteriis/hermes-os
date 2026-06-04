@@ -17,6 +17,10 @@ path = "src/main.rs"
 name = "hermes-graph-project"
 path = "src/bin/hermes_graph_project.rs"
 
+[[bin]]
+name = "hermes-email-fixture-export"
+path = "src/bin/hermes_email_fixture_export.rs"
+
 [dependencies]
 aes-gcm = "0.10"
 argon2 = "0.5"
