@@ -42,11 +42,14 @@ From the repository root, the same checks are available through Make:
 
 ```sh
 make frontend-install
+make frontend-dev
 make frontend-check
 make frontend-build
 make frontend-tauri-dev
 make frontend-tauri-build
 ```
+
+For the normal full-stack development loop, use `make dev` from the repository root. It starts PostgreSQL, the backend auto-restart watcher, and this frontend with Vite HMR. The default frontend URL is `http://127.0.0.1:5174`; override it with `HERMES_FRONTEND_PORT` in `docker/.env` when needed.
 
 ## Backend Dependency
 

@@ -11,6 +11,7 @@ From the repository root:
 ```sh
 make backend-run
 make backend-run-dev
+make backend-watch-dev
 make backend-smoke-dev
 make backend-storage-smoke-dev
 make backend-secrets-smoke-dev
@@ -38,6 +39,8 @@ cargo run --manifest-path backend/Cargo.toml
 cargo test --manifest-path backend/Cargo.toml
 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
 ```
+
+For the normal full-stack development loop, use `make dev` from the repository root. It starts PostgreSQL, runs this backend with auto-restart on Rust/TOML/SQL changes, and starts the SvelteKit frontend with Vite HMR. Backend auto-restart requires either `watchexec` or `cargo-watch`.
 
 ## Environment
 

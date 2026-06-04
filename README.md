@@ -64,11 +64,12 @@ Hermes Hub - персональная локальная платформа ко
 
 ```sh
 make docker-env
-make db-up
-make backend-run-dev
+make dev
 ```
 
-Open the desktop shell with `make frontend-tauri-dev` or the frontend/Tauri command documented in `frontend/README.md`.
+`make dev` starts PostgreSQL, the Rust backend with auto-restart on backend source changes, and the SvelteKit frontend with Vite HMR. The frontend is served on `http://127.0.0.1:5174` by default.
+
+Open the Tauri desktop shell with `make frontend-tauri-dev` or the frontend/Tauri command documented in `frontend/README.md`.
 
 ## Разработка
 
@@ -90,11 +91,23 @@ make backend-validate
 make backend-run
 ```
 
+Запустить полный dev loop с PostgreSQL, backend auto-restart и frontend HMR:
+
+```sh
+make dev
+```
+
 Запустить PostgreSQL и backend с `DATABASE_URL` из `docker/.env`:
 
 ```sh
 make db-up
 make backend-run-dev
+```
+
+Запустить только backend watcher:
+
+```sh
+make backend-watch-dev
 ```
 
 `/api/events` и `/api/audit/events` требуют локальный API token и non-secret actor ID:

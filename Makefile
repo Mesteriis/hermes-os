@@ -1,14 +1,15 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config validate dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-check frontend-build frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
+.PHONY: help docker-env compose-config validate dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-check frontend-build frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
 	@printf '%s\n' '  make docker-env      Create docker/.env from docker/.env.example if missing'
 	@printf '%s\n' '  make compose-config  Validate and render Docker Compose config'
 	@printf '%s\n' '  make validate        Run the full local/CI validation gate'
-	@printf '%s\n' '  make dev             Start development services in foreground'
+	@printf '%s\n' '  make dev             Start PostgreSQL, backend auto-restart, and frontend HMR'
+	@printf '%s\n' '  make compose-dev     Start Docker Compose development services in foreground'
 	@printf '%s\n' '  make up              Start development services in background'
 	@printf '%s\n' '  make down            Stop development services'
 	@printf '%s\n' '  make restart         Restart development services'
@@ -21,12 +22,14 @@ help:
 	@printf '%s\n' '  make clean           Stop services and remove Compose orphans'
 	@printf '%s\n' '  make reset-data      Delete docker/data contents; requires CONFIRM=yes'
 	@printf '%s\n' '  make frontend-install Install frontend dependencies with pnpm'
+	@printf '%s\n' '  make frontend-dev    Run the SvelteKit frontend with Vite HMR'
 	@printf '%s\n' '  make frontend-check  Run SvelteKit type checks'
 	@printf '%s\n' '  make frontend-build  Build the SvelteKit frontend'
 	@printf '%s\n' '  make frontend-tauri-dev Run the Tauri desktop shell in development'
 	@printf '%s\n' '  make frontend-tauri-build Build the Tauri desktop shell'
 	@printf '%s\n' '  make backend-run     Run the Rust backend locally'
 	@printf '%s\n' '  make backend-run-dev Run the Rust backend locally with docker/.env DATABASE_URL'
+	@printf '%s\n' '  make backend-watch-dev Run the Rust backend with auto-restart on code changes'
 	@printf '%s\n' '  make backend-smoke-dev Run health/readiness smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-storage-smoke-dev Run storage readiness smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-secrets-smoke-dev Run secret reference smoke test with dev PostgreSQL'
@@ -72,6 +75,14 @@ docker-env:
 			printf '\nHERMES_SECRET_VAULT_KEY=change-me-local-secret-vault-key\n' >> docker/.env; \
 			printf '%s\n' 'Added HERMES_SECRET_VAULT_KEY to docker/.env. Review it before running services.'; \
 		fi; \
+		if ! grep -q '^HERMES_FRONTEND_BIND=' docker/.env; then \
+			printf '\nHERMES_FRONTEND_BIND=127.0.0.1\n' >> docker/.env; \
+			printf '%s\n' 'Added HERMES_FRONTEND_BIND to docker/.env. Review it before running services.'; \
+		fi; \
+		if ! grep -q '^HERMES_FRONTEND_PORT=' docker/.env; then \
+			printf '\nHERMES_FRONTEND_PORT=5174\n' >> docker/.env; \
+			printf '%s\n' 'Added HERMES_FRONTEND_PORT to docker/.env. Review it before running services.'; \
+		fi; \
 		printf '%s\n' 'docker/.env already exists.'; \
 	fi
 
@@ -81,6 +92,78 @@ compose-config: docker-env
 validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev frontend-check frontend-build
 
 dev: docker-env
+	@set -eu; \
+		if ! command -v pnpm >/dev/null 2>&1; then \
+			printf '%s\n' 'pnpm is required for frontend dev. Install pnpm and re-run make dev.'; \
+			exit 1; \
+		fi; \
+		if ! command -v watchexec >/dev/null 2>&1 && ! cargo watch --version >/dev/null 2>&1; then \
+			printf '%s\n' 'Backend auto-restart requires watchexec or cargo-watch.'; \
+			printf '%s\n' 'Install one of:'; \
+			printf '%s\n' '  brew install watchexec'; \
+			printf '%s\n' '  cargo install cargo-watch'; \
+			exit 1; \
+		fi; \
+		set -a; . docker/.env; set +a; \
+		backend_bind="$${HERMES_BACKEND_BIND:-127.0.0.1}"; \
+		backend_port="$${HERMES_BACKEND_PORT:-8080}"; \
+		frontend_bind="$${HERMES_FRONTEND_BIND:-127.0.0.1}"; \
+		frontend_port="$${HERMES_FRONTEND_PORT:-5174}"; \
+		if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$$backend_port" -sTCP:LISTEN >/dev/null 2>&1; then \
+			printf '%s\n' "Backend port $$backend_port is already in use. Stop the existing process or change HERMES_BACKEND_PORT in docker/.env."; \
+			exit 1; \
+		fi; \
+		if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$$frontend_port" -sTCP:LISTEN >/dev/null 2>&1; then \
+			printf '%s\n' "Frontend port $$frontend_port is already in use. Stop the existing process or change HERMES_FRONTEND_PORT in docker/.env."; \
+			exit 1; \
+		fi; \
+		backend_pid=""; \
+		frontend_pid=""; \
+		cleanup() { \
+			status="$$?"; \
+			trap - EXIT INT TERM; \
+			if [ -n "$$backend_pid" ]; then \
+				kill "$$backend_pid" 2>/dev/null || true; \
+				wait "$$backend_pid" 2>/dev/null || true; \
+			fi; \
+			if [ -n "$$frontend_pid" ]; then \
+				kill "$$frontend_pid" 2>/dev/null || true; \
+				wait "$$frontend_pid" 2>/dev/null || true; \
+			fi; \
+			$(MAKE) db-down >/dev/null 2>&1 || true; \
+			exit "$$status"; \
+		}; \
+		trap cleanup EXIT INT TERM; \
+		$(MAKE) db-up; \
+		export DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}"; \
+		export HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}"; \
+		export HERMES_SECRET_VAULT_PATH="$${HERMES_SECRET_VAULT_PATH}"; \
+		export HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}"; \
+		export HERMES_HTTP_ADDR="$$backend_bind:$$backend_port"; \
+		if command -v watchexec >/dev/null 2>&1; then \
+			watchexec --restart --watch backend/src --watch backend/migrations --watch backend/Cargo.toml --watch backend/Cargo.lock --exts rs,toml,sql -- cargo run --manifest-path $(BACKEND_MANIFEST) & \
+		else \
+			cargo watch -w backend/src -w backend/migrations -w backend/Cargo.toml -w backend/Cargo.lock -x 'run --manifest-path backend/Cargo.toml' & \
+		fi; \
+		backend_pid="$$!"; \
+		( \
+			cd frontend && \
+			exec env \
+				VITE_HERMES_API_BASE_URL="http://$$backend_bind:$$backend_port" \
+				VITE_HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}" \
+				VITE_HERMES_ACTOR_ID="$${HERMES_FRONTEND_ACTOR_ID:-desktop-shell}" \
+				pnpm dev --host "$$frontend_bind" --port "$$frontend_port" --strictPort \
+		) & \
+		frontend_pid="$$!"; \
+		printf '%s\n' "Backend:  http://$$backend_bind:$$backend_port (auto-restart)"; \
+		printf '%s\n' "Frontend: http://$$frontend_bind:$$frontend_port (Vite HMR)"; \
+		printf '%s\n' 'Press Ctrl+C to stop frontend/backend and PostgreSQL.'; \
+		while kill -0 "$$backend_pid" 2>/dev/null && kill -0 "$$frontend_pid" 2>/dev/null; do \
+			sleep 1; \
+		done; \
+		wait "$$backend_pid" "$$frontend_pid"
+
+compose-dev: docker-env
 	$(COMPOSE) up --build
 
 up: docker-env
@@ -121,6 +204,20 @@ reset-data:
 frontend-install:
 	cd frontend && pnpm install
 
+frontend-dev: docker-env
+	@set -eu; \
+		set -a; . docker/.env; set +a; \
+		frontend_port="$${HERMES_FRONTEND_PORT:-5174}"; \
+		if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$$frontend_port" -sTCP:LISTEN >/dev/null 2>&1; then \
+			printf '%s\n' "Frontend port $$frontend_port is already in use. Stop the existing process or change HERMES_FRONTEND_PORT in docker/.env."; \
+			exit 1; \
+		fi; \
+		cd frontend && \
+		VITE_HERMES_API_BASE_URL="http://$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080}" \
+		VITE_HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}" \
+		VITE_HERMES_ACTOR_ID="$${HERMES_FRONTEND_ACTOR_ID:-desktop-shell}" \
+		pnpm dev --host "$${HERMES_FRONTEND_BIND:-127.0.0.1}" --port "$$frontend_port" --strictPort
+
 frontend-check:
 	cd frontend && pnpm check
 
@@ -143,6 +240,33 @@ backend-run-dev: docker-env
 		HERMES_SECRET_VAULT_PATH="$${HERMES_SECRET_VAULT_PATH}" \
 		HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}" \
 		cargo run --manifest-path $(BACKEND_MANIFEST)
+
+backend-watch-dev: docker-env
+	@set -eu; \
+		if ! command -v watchexec >/dev/null 2>&1 && ! cargo watch --version >/dev/null 2>&1; then \
+			printf '%s\n' 'Backend auto-restart requires watchexec or cargo-watch.'; \
+			printf '%s\n' 'Install one of:'; \
+			printf '%s\n' '  brew install watchexec'; \
+			printf '%s\n' '  cargo install cargo-watch'; \
+			exit 1; \
+		fi; \
+		$(MAKE) db-up; \
+		set -a; . docker/.env; set +a; \
+		backend_port="$${HERMES_BACKEND_PORT:-8080}"; \
+		if command -v lsof >/dev/null 2>&1 && lsof -nP -iTCP:"$$backend_port" -sTCP:LISTEN >/dev/null 2>&1; then \
+			printf '%s\n' "Backend port $$backend_port is already in use. Stop the existing process or change HERMES_BACKEND_PORT in docker/.env."; \
+			exit 1; \
+		fi; \
+		export DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}"; \
+		export HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}"; \
+		export HERMES_SECRET_VAULT_PATH="$${HERMES_SECRET_VAULT_PATH}"; \
+		export HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}"; \
+		export HERMES_HTTP_ADDR="$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080}"; \
+		printf '%s\n' "Backend: http://$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080} (auto-restart)"; \
+		if command -v watchexec >/dev/null 2>&1; then \
+			exec watchexec --restart --watch backend/src --watch backend/migrations --watch backend/Cargo.toml --watch backend/Cargo.lock --exts rs,toml,sql -- cargo run --manifest-path $(BACKEND_MANIFEST); \
+		fi; \
+		exec cargo watch -w backend/src -w backend/migrations -w backend/Cargo.toml -w backend/Cargo.lock -x 'run --manifest-path backend/Cargo.toml'
 
 backend-smoke-dev: docker-env
 	@set -eu; \
