@@ -29,6 +29,8 @@ Provider account records store non-secret metadata and adapter configuration onl
 
 The account model supports multiple records for the same provider kind, for example several Gmail or iCloud accounts. Adapter credential lookup is account-scoped through `ProviderCredentialReader`: resolve the provider account by `account_id`, load the binding for the required secret purpose, validate that the secret kind matches the purpose, then resolve that `secret_ref` through the secret boundary.
 
+Read-only email sync starts with a provider preflight plan before any network adapter runs. The plan selects the account-scoped credential purpose, validates non-secret adapter config, recursively rejects secret-like config keys, and derives delimiter-safe provider stream IDs such as `gmail:history` and `imap:INBOX`. This keeps Gmail OAuth and IMAP mailbox quirks at the adapter boundary instead of leaking into projections or API handlers.
+
 Raw provider records are append-only and idempotent by provider account, record kind and provider record ID. They preserve provider payload and provenance before canonical message projections are built.
 
 ## Canonical Objects

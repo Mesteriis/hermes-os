@@ -5,6 +5,7 @@ pub mod contacts;
 pub mod documents;
 pub mod email_import;
 pub mod email_sources;
+pub mod email_sync;
 pub mod event_log;
 pub mod messages;
 pub mod projections;
