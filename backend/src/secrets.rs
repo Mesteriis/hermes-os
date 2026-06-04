@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::fmt;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -175,6 +178,89 @@ pub struct SecretReference {
     pub updated_at: DateTime<Utc>,
 }
 
+pub trait SecretResolver {
+    fn resolve(&self, reference: &SecretReference)
+    -> Result<ResolvedSecret, SecretResolutionError>;
+}
+
+#[derive(Clone, Eq, PartialEq)]
+pub struct ResolvedSecret {
+    value: String,
+}
+
+impl ResolvedSecret {
+    pub fn new(value: impl Into<String>) -> Result<Self, SecretResolutionError> {
+        let value = value.into();
+        if value.trim().is_empty() {
+            return Err(SecretResolutionError::EmptySecretValue);
+        }
+
+        Ok(Self { value })
+    }
+
+    pub fn expose_for_runtime(&self) -> &str {
+        &self.value
+    }
+}
+
+impl fmt::Debug for ResolvedSecret {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ResolvedSecret")
+            .field("value", &"<redacted>")
+            .finish()
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct InMemorySecretResolver {
+    values: HashMap<String, ResolvedSecret>,
+}
+
+impl InMemorySecretResolver {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn insert(
+        &mut self,
+        secret_ref: impl Into<String>,
+        value: impl Into<String>,
+    ) -> Result<(), SecretResolutionError> {
+        let secret_ref = secret_ref.into();
+        validate_secret_resolution_ref(&secret_ref)?;
+        let resolved_secret = ResolvedSecret::new(value)?;
+
+        self.values
+            .insert(secret_ref.trim().to_owned(), resolved_secret);
+
+        Ok(())
+    }
+}
+
+impl SecretResolver for InMemorySecretResolver {
+    fn resolve(
+        &self,
+        reference: &SecretReference,
+    ) -> Result<ResolvedSecret, SecretResolutionError> {
+        if reference.store_kind != SecretStoreKind::TestDouble {
+            return Err(SecretResolutionError::UnsupportedStoreKind(
+                reference.store_kind.as_str().to_owned(),
+            ));
+        }
+
+        validate_secret_resolution_ref(&reference.secret_ref)?;
+        let secret_ref = reference.secret_ref.trim();
+
+        self.values
+            .get(secret_ref)
+            .cloned()
+            .ok_or_else(|| SecretResolutionError::MissingSecret {
+                secret_ref: secret_ref.to_owned(),
+            })
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewSecretReference {
     pub secret_ref: String,
@@ -243,6 +329,14 @@ fn validate_object(field_name: &'static str, value: &Value) -> Result<(), Secret
     Ok(())
 }
 
+fn validate_secret_resolution_ref(value: &str) -> Result<(), SecretResolutionError> {
+    if value.trim().is_empty() {
+        return Err(SecretResolutionError::EmptySecretRef);
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Error)]
 pub enum SecretReferenceError {
     #[error(transparent)]
@@ -259,4 +353,19 @@ pub enum SecretReferenceError {
 
     #[error("{0} must be a JSON object")]
     NonObjectJson(&'static str),
+}
+
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum SecretResolutionError {
+    #[error("secret_ref must not be empty")]
+    EmptySecretRef,
+
+    #[error("secret value must not be empty")]
+    EmptySecretValue,
+
+    #[error("secret reference was not found: {secret_ref}")]
+    MissingSecret { secret_ref: String },
+
+    #[error("secret store kind is not supported by in-memory resolver: {0}")]
+    UnsupportedStoreKind(String),
 }

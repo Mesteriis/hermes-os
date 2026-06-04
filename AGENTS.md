@@ -54,6 +54,8 @@
 - `ADR-0026` - desktop-first responsive UI.
 - `ADR-0031` - temporary desktop-only UI scope; no mobile UI design, implementation or validation until superseded.
 - `ADR-0032` - Docker Compose development environment under `docker/`.
+- `ADR-0041` - email provider ingestion foundation for Gmail, iCloud and generic IMAP.
+- `ADR-0042` - provider credential secret references and resolver boundary.
 
 ## 4. Implementation Phase
 
@@ -210,8 +212,11 @@ Use the repository-configured tool first. If no tool exists, report that validat
 - Local event API access must be recorded in append-only `api_audit_log` per `ADR-0039`; do not store tokens or secrets in audit records.
 - Protected local event API requests must include the temporary non-secret `X-Hermes-Actor-Id` identity from `ADR-0040`.
 - Email ingestion provider accounts must support `gmail`, `icloud` and `imap` per `ADR-0041`; account config must not store OAuth tokens, app passwords or mailbox passwords.
+- Multiple accounts for the same provider kind are required. Credential lookup must use `account_id` plus secret purpose, never provider kind alone.
+- Provider credential bindings must use compatible secret kinds: `oauth_token` -> `oauth_token`, `imap_password`/`smtp_password` -> `app_password` or `password`.
 - Raw communication provider records must remain append-only and preserve source provenance.
 - Secret references per `ADR-0042` store metadata only; never place secret values in PostgreSQL config, metadata, tests, logs or docs.
+- The in-memory secret resolver is allowed only for `test_double` references in tests and local adapter tests. Real provider adapters must use a real resolver for `os_keychain`, `encrypted_vault` or `external_vault`.
 
 ## 9. Security and Privacy
 

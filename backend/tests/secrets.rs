@@ -3,8 +3,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 
+use chrono::Utc;
+
 use hermes_hub_backend::secrets::{
-    NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
+    InMemorySecretResolver, NewSecretReference, SecretKind, SecretReference, SecretReferenceStore,
+    SecretResolutionError, SecretResolver, SecretStoreKind,
 };
 use hermes_hub_backend::storage::Database;
 
@@ -24,6 +27,76 @@ fn secret_reference_enums_reject_unsupported_values() {
     );
     assert!(SecretKind::try_from("plain_text").is_err());
     assert!(SecretStoreKind::try_from("postgres").is_err());
+}
+
+#[test]
+fn in_memory_secret_resolver_resolves_test_double_references_without_debug_leaking_value() {
+    let mut resolver = InMemorySecretResolver::new();
+    resolver
+        .insert("secret:test:oauth", "fake-runtime-secret")
+        .expect("insert in-memory secret");
+
+    let reference = test_secret_reference(
+        "secret:test:oauth",
+        SecretKind::OauthToken,
+        SecretStoreKind::TestDouble,
+    );
+    let resolved = resolver.resolve(&reference).expect("resolve test secret");
+
+    assert_eq!(resolved.expose_for_runtime(), "fake-runtime-secret");
+    assert!(!format!("{resolved:?}").contains("fake-runtime-secret"));
+}
+
+#[test]
+fn in_memory_secret_resolver_reports_missing_test_double_references() {
+    let resolver = InMemorySecretResolver::new();
+    let reference = test_secret_reference(
+        "secret:test:missing",
+        SecretKind::Password,
+        SecretStoreKind::TestDouble,
+    );
+
+    let error = resolver
+        .resolve(&reference)
+        .expect_err("missing in-memory secret should fail");
+
+    assert_eq!(
+        error,
+        SecretResolutionError::MissingSecret {
+            secret_ref: "secret:test:missing".to_owned()
+        }
+    );
+}
+
+#[test]
+fn in_memory_secret_resolver_rejects_non_test_double_store_kinds() {
+    let mut resolver = InMemorySecretResolver::new();
+    resolver
+        .insert("secret:os:keychain", "fake-runtime-secret")
+        .expect("insert in-memory secret");
+    let reference = test_secret_reference(
+        "secret:os:keychain",
+        SecretKind::Password,
+        SecretStoreKind::OsKeychain,
+    );
+
+    let error = resolver
+        .resolve(&reference)
+        .expect_err("non-test store kind should fail");
+
+    assert_eq!(
+        error,
+        SecretResolutionError::UnsupportedStoreKind("os_keychain".to_owned())
+    );
+}
+
+#[test]
+fn resolved_secret_rejects_empty_values() {
+    let error = InMemorySecretResolver::new()
+        .insert("secret:test:empty", " ")
+        .expect_err("empty secret value should fail");
+
+    assert_eq!(error, SecretResolutionError::EmptySecretValue);
 }
 
 #[tokio::test]
@@ -74,4 +147,22 @@ fn unique_suffix() -> u128 {
         .duration_since(UNIX_EPOCH)
         .expect("system clock after unix epoch")
         .as_nanos()
+}
+
+fn test_secret_reference(
+    secret_ref: &str,
+    secret_kind: SecretKind,
+    store_kind: SecretStoreKind,
+) -> SecretReference {
+    let now = Utc::now();
+
+    SecretReference {
+        secret_ref: secret_ref.to_owned(),
+        secret_kind,
+        store_kind,
+        label: "Test secret reference".to_owned(),
+        metadata: json!({}),
+        created_at: now,
+        updated_at: now,
+    }
 }

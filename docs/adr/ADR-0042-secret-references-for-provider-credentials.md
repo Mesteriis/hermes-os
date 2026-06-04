@@ -25,12 +25,18 @@ Rules:
 - Supported initial communication secret purposes are `oauth_token`, `imap_password` and `smtp_password`.
 - Gmail provider accounts should bind `oauth_token`.
 - iCloud and generic IMAP provider accounts should bind `imap_password`.
-- Secret values must be written to and read from the configured secret store through a future resolver.
+- `oauth_token` bindings require `secret_kind = oauth_token`; `imap_password` and `smtp_password` bindings require `secret_kind = app_password` or `password`.
+- Multiple accounts for the same provider kind are supported. Credential lookup must use the provider `account_id` and secret purpose, not provider kind alone.
+- Provider adapters should use the account-scoped `ProviderCredentialReader` path instead of reimplementing credential joins.
+- Secret values must be written to and read from the configured secret store through a `SecretResolver` boundary.
+- The in-memory resolver is valid only for `test_double` references in tests and local adapter tests. It must not resolve `os_keychain`, `encrypted_vault` or `external_vault` references.
 - Provider account config and secret reference metadata must not contain OAuth tokens, app passwords, mailbox passwords, private keys or API tokens.
 
 ## Consequences
 
 - PostgreSQL can express which credentials an adapter needs without storing credential values.
 - Provider adapters can resolve credentials explicitly at runtime.
+- Missing credential bindings, incompatible secret kinds and resolver failures are reported explicitly before provider network calls begin.
+- Provider adapters can support multiple Gmail, iCloud or IMAP accounts without shared global credentials.
 - Database backups still need secret reference metadata but do not automatically leak provider credentials.
 - A future implementation must add a secret resolver for OS keychain or encrypted vault access before real provider sync can run.

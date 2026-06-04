@@ -27,6 +27,8 @@ Initial email ingestion must support three provider kinds:
 
 Provider account records store non-secret metadata and adapter configuration only. Credentials and tokens belong behind the secret boundary and are linked through secret references.
 
+The account model supports multiple records for the same provider kind, for example several Gmail or iCloud accounts. Adapter credential lookup is account-scoped through `ProviderCredentialReader`: resolve the provider account by `account_id`, load the binding for the required secret purpose, validate that the secret kind matches the purpose, then resolve that `secret_ref` through the secret boundary.
+
 Raw provider records are append-only and idempotent by provider account, record kind and provider record ID. They preserve provider payload and provenance before canonical message projections are built.
 
 ## Canonical Objects

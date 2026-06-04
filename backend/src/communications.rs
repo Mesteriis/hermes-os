@@ -5,6 +5,11 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
+use crate::secrets::{
+    ResolvedSecret, SecretKind, SecretReference, SecretReferenceError, SecretReferenceStore,
+    SecretResolutionError, SecretResolver,
+};
+
 #[derive(Clone)]
 pub struct CommunicationIngestionStore {
     pool: PgPool,
@@ -263,6 +268,103 @@ impl CommunicationIngestionStore {
 
         rows.into_iter().map(row_to_secret_binding).collect()
     }
+
+    pub async fn provider_account_secret_binding(
+        &self,
+        account_id: &str,
+        secret_purpose: ProviderAccountSecretPurpose,
+    ) -> Result<Option<ProviderAccountSecretBinding>, CommunicationIngestionError> {
+        validate_non_empty("account_id", account_id)?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT
+                account_id,
+                secret_purpose,
+                secret_ref,
+                created_at,
+                updated_at
+            FROM communication_provider_account_secret_refs
+            WHERE account_id = $1
+              AND secret_purpose = $2
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(secret_purpose.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_secret_binding).transpose()
+    }
+}
+
+pub struct ProviderCredentialReader<'a, R: SecretResolver + ?Sized> {
+    communication_store: CommunicationIngestionStore,
+    secret_store: SecretReferenceStore,
+    resolver: &'a R,
+}
+
+impl<'a, R: SecretResolver + ?Sized> ProviderCredentialReader<'a, R> {
+    pub fn new(
+        communication_store: CommunicationIngestionStore,
+        secret_store: SecretReferenceStore,
+        resolver: &'a R,
+    ) -> Self {
+        Self {
+            communication_store,
+            secret_store,
+            resolver,
+        }
+    }
+
+    pub async fn read(
+        &self,
+        account_id: &str,
+        secret_purpose: ProviderAccountSecretPurpose,
+    ) -> Result<ProviderCredential, ProviderCredentialError> {
+        validate_non_empty("account_id", account_id)?;
+
+        let binding = self
+            .communication_store
+            .provider_account_secret_binding(account_id, secret_purpose)
+            .await?
+            .ok_or_else(|| ProviderCredentialError::MissingBinding {
+                account_id: account_id.trim().to_owned(),
+                secret_purpose,
+            })?;
+        let reference = self
+            .secret_store
+            .secret_reference(&binding.secret_ref)
+            .await?
+            .ok_or_else(|| ProviderCredentialError::MissingSecretReference {
+                secret_ref: binding.secret_ref.clone(),
+            })?;
+        if !binding
+            .secret_purpose
+            .accepts_secret_kind(reference.secret_kind)
+        {
+            return Err(ProviderCredentialError::IncompatibleSecretKind {
+                secret_ref: reference.secret_ref.clone(),
+                secret_purpose: binding.secret_purpose,
+                secret_kind: reference.secret_kind,
+            });
+        }
+
+        let secret = self.resolver.resolve(&reference)?;
+
+        Ok(ProviderCredential {
+            binding,
+            reference,
+            secret,
+        })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderCredential {
+    pub binding: ProviderAccountSecretBinding,
+    pub reference: SecretReference,
+    pub secret: ResolvedSecret,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -470,6 +572,15 @@ impl ProviderAccountSecretPurpose {
             Self::SmtpPassword => "smtp_password",
         }
     }
+
+    pub fn accepts_secret_kind(self, secret_kind: SecretKind) -> bool {
+        match self {
+            Self::OauthToken => secret_kind == SecretKind::OauthToken,
+            Self::ImapPassword | Self::SmtpPassword => {
+                matches!(secret_kind, SecretKind::AppPassword | SecretKind::Password)
+            }
+        }
+    }
 }
 
 impl TryFrom<&str> for ProviderAccountSecretPurpose {
@@ -617,4 +728,36 @@ pub enum CommunicationIngestionError {
 
     #[error("{0} must be a JSON object")]
     NonObjectJson(&'static str),
+}
+
+#[derive(Debug, Error)]
+pub enum ProviderCredentialError {
+    #[error(transparent)]
+    Communication(#[from] CommunicationIngestionError),
+
+    #[error(transparent)]
+    SecretReference(#[from] SecretReferenceError),
+
+    #[error(transparent)]
+    SecretResolution(#[from] SecretResolutionError),
+
+    #[error(
+        "provider account secret binding not found: account_id={account_id}, secret_purpose={secret_purpose:?}"
+    )]
+    MissingBinding {
+        account_id: String,
+        secret_purpose: ProviderAccountSecretPurpose,
+    },
+
+    #[error("provider account secret reference metadata was not found: {secret_ref}")]
+    MissingSecretReference { secret_ref: String },
+
+    #[error(
+        "provider account secret kind is incompatible: secret_ref={secret_ref}, secret_purpose={secret_purpose:?}, secret_kind={secret_kind:?}"
+    )]
+    IncompatibleSecretKind {
+        secret_ref: String,
+        secret_purpose: ProviderAccountSecretPurpose,
+        secret_kind: SecretKind,
+    },
 }
