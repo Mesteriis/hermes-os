@@ -187,14 +187,37 @@ async fn document_import_extracts_multiple_markdown_heading_levels_against_postg
 }
 
 #[tokio::test]
-async fn document_import_reimports_same_document_id_idempotently_against_postgres() {
-    let Some((pool, store)) = live_document_context("idempotent document import").await else {
+async fn document_import_preserves_hash_prefixed_non_headings_against_postgres() {
+    let Some(store) = live_document_store("markdown non-heading hash-prefixed lines").await else {
+        return;
+    };
+    let suffix = unique_suffix();
+
+    let imported = store
+        .import_document(&NewDocumentImport::markdown(
+            format!("doc_hash_prefixed_{suffix}"),
+            "hash-prefixed.md",
+            "# Heading\n\n#hashtag\n#include <x>\n###not heading\n####### Too many hashes",
+        ))
+        .await
+        .expect("import markdown hash-prefixed lines");
+
+    assert_eq!(
+        imported.extracted_text,
+        "Heading\n\n#hashtag\n#include <x>\n###not heading\n####### Too many hashes"
+    );
+}
+
+#[tokio::test]
+async fn document_import_reimports_same_kind_idempotently_against_postgres() {
+    let Some((pool, store)) = live_document_context("same-kind idempotent document import").await
+    else {
         return;
     };
     let suffix = unique_suffix();
     let document_id = format!("doc_idempotent_{suffix}");
 
-    store
+    let first = store
         .import_document(&NewDocumentImport::markdown(
             document_id.clone(),
             "draft.md",
@@ -203,19 +226,20 @@ async fn document_import_reimports_same_document_id_idempotently_against_postgre
         .await
         .expect("first import");
     let updated = store
-        .import_document(&NewDocumentImport::pdf_metadata(
+        .import_document(&NewDocumentImport::markdown(
             document_id.clone(),
-            "final.pdf",
-            "sha256:final",
+            "draft-renamed.md",
+            "# Draft\n\nUpdated text.",
         ))
         .await
         .expect("second import");
 
     assert_eq!(updated.document_id, document_id);
-    assert_eq!(updated.document_kind, "pdf");
-    assert_eq!(updated.title, "final.pdf");
-    assert_eq!(updated.source_fingerprint, "sha256:final");
-    assert_eq!(updated.extracted_text, "");
+    assert_eq!(updated.document_kind, "markdown");
+    assert_eq!(updated.title, "draft-renamed.md");
+    assert_ne!(updated.source_fingerprint, first.source_fingerprint);
+    assert_eq!(updated.extracted_text, "Draft\n\nUpdated text.");
+    assert_eq!(updated.imported_at, first.imported_at);
 
     let count =
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM documents WHERE document_id = $1")
@@ -224,6 +248,64 @@ async fn document_import_reimports_same_document_id_idempotently_against_postgre
             .await
             .expect("idempotent document count");
     assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn document_import_rejects_existing_document_kind_change_against_postgres() {
+    let Some((pool, store)) = live_document_context("document kind change rejection").await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let document_id = format!("doc_kind_change_{suffix}");
+
+    let first = store
+        .import_document(&NewDocumentImport::markdown(
+            document_id.clone(),
+            "notes.md",
+            "# Notes\n\nInitial text.",
+        ))
+        .await
+        .expect("first import");
+
+    let error = store
+        .import_document(&NewDocumentImport::pdf_metadata(
+            document_id.clone(),
+            "notes.pdf",
+            "sha256:notes-pdf",
+        ))
+        .await
+        .expect_err("document kind changes must fail");
+
+    assert!(
+        matches!(
+            error,
+            DocumentImportError::DocumentKindChange {
+                ref document_id,
+                ref existing_kind,
+                ref new_kind,
+            } if document_id == &first.document_id
+                && existing_kind == "markdown"
+                && new_kind == "pdf"
+        ),
+        "expected DocumentKindChange, got {error:?}"
+    );
+
+    let stored = sqlx::query_as::<_, (String, String, String, String)>(
+        r#"
+        SELECT document_kind, title, source_fingerprint, extracted_text
+        FROM documents
+        WHERE document_id = $1
+        "#,
+    )
+    .bind(&document_id)
+    .fetch_one(&pool)
+    .await
+    .expect("stored document after rejected kind change");
+
+    assert_eq!(stored.0, "markdown");
+    assert_eq!(stored.1, "notes.md");
+    assert_eq!(stored.2, first.source_fingerprint);
+    assert_eq!(stored.3, "Notes\n\nInitial text.");
 }
 
 async fn live_document_context(

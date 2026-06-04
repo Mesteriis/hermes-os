@@ -18,6 +18,9 @@ pub struct NewDocumentImport {
 }
 
 impl NewDocumentImport {
+    /// Creates a Markdown import with extracted text and a deterministic V1
+    /// local fingerprint of that extracted text. The fingerprint is for local
+    /// idempotence only and is not cryptographic evidence of source content.
     pub fn markdown(
         document_id: impl Into<String>,
         title: impl Into<String>,
@@ -108,11 +111,10 @@ impl DocumentImportStore {
             VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT (document_id)
             DO UPDATE SET
-                document_kind = EXCLUDED.document_kind,
                 title = EXCLUDED.title,
                 source_fingerprint = EXCLUDED.source_fingerprint,
-                extracted_text = EXCLUDED.extracted_text,
-                imported_at = now()
+                extracted_text = EXCLUDED.extracted_text
+            WHERE documents.document_kind = EXCLUDED.document_kind
             RETURNING
                 document_id,
                 document_kind,
@@ -127,10 +129,28 @@ impl DocumentImportStore {
         .bind(&document.title)
         .bind(&document.source_fingerprint)
         .bind(&document.extracted_text)
-        .fetch_one(&self.pool)
+        .fetch_optional(&self.pool)
         .await?;
 
-        row_to_imported_document(row)
+        if let Some(row) = row {
+            return row_to_imported_document(row);
+        }
+
+        let existing_kind = sqlx::query_scalar::<_, String>(
+            "SELECT document_kind FROM documents WHERE document_id = $1",
+        )
+        .bind(&document.document_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match existing_kind {
+            Some(existing_kind) => Err(DocumentImportError::DocumentKindChange {
+                document_id: document.document_id,
+                existing_kind,
+                new_kind: document.document_kind,
+            }),
+            None => Err(DocumentImportError::UpsertSkipped(document.document_id)),
+        }
     }
 }
 
@@ -179,21 +199,34 @@ fn validate_non_empty(
 fn extract_markdown_text(markdown: &str) -> String {
     markdown
         .lines()
-        .map(|line| {
-            let line = line.trim_end();
-            if !line.starts_with('#') {
-                return line;
-            }
-
-            let stripped_heading = line.trim_start_matches('#');
-            stripped_heading
-                .strip_prefix(' ')
-                .unwrap_or(stripped_heading)
+        .map(|line| match markdown_heading_text(line.trim_end()) {
+            Some(heading_text) => heading_text,
+            None => line.trim_end(),
         })
         .collect::<Vec<_>>()
         .join("\n")
         .trim_end()
         .to_owned()
+}
+
+fn markdown_heading_text(line: &str) -> Option<&str> {
+    let mut hash_count = 0;
+    for character in line.chars() {
+        if character == '#' {
+            hash_count += 1;
+            continue;
+        }
+        break;
+    }
+
+    if !(1..=6).contains(&hash_count) {
+        return None;
+    }
+
+    line.as_bytes()
+        .get(hash_count)
+        .filter(|byte| **byte == b' ')
+        .map(|_| &line[hash_count + 1..])
 }
 
 // V1 local boundary fingerprint only. This is deterministic for idempotence but
@@ -218,4 +251,16 @@ pub enum DocumentImportError {
 
     #[error("document_kind must be markdown or pdf: {0}")]
     InvalidDocumentKind(String),
+
+    #[error(
+        "document_kind change rejected for document_id={document_id}: existing={existing_kind}, new={new_kind}"
+    )]
+    DocumentKindChange {
+        document_id: String,
+        existing_kind: String,
+        new_kind: String,
+    },
+
+    #[error("document import upsert skipped unexpectedly for document_id={0}")]
+    UpsertSkipped(String),
 }
