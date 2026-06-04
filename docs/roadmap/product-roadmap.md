@@ -42,7 +42,7 @@ Key functions:
 - local app setup
 - PostgreSQL persistence
 - event ingestion pipeline
-- email import
+- fixture and read-only provider email import
 - basic contacts
 - full text search
 - document import for Markdown/PDF
@@ -56,7 +56,7 @@ Architectural changes:
 
 Risks:
 
-- email provider variability
+- provider account setup and OAuth token acquisition UX
 - projection replay complexity
 - local install and migration UX
 

@@ -39,4 +39,4 @@ Rules:
 - Missing credential bindings, incompatible secret kinds and resolver failures are reported explicitly before provider network calls begin.
 - Provider adapters can support multiple Gmail, iCloud or IMAP accounts without shared global credentials.
 - Database backups still need secret reference metadata but do not automatically leak provider credentials.
-- A future implementation must add a secret resolver for OS keychain or encrypted vault access before real provider sync can run.
+- A future implementation must add a secret resolver for OS keychain or encrypted vault access before production account setup can resolve non-test credentials.

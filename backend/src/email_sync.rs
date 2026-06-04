@@ -1,7 +1,14 @@
-use serde_json::Value;
+use chrono::{DateTime, Utc};
+use serde_json::{Value, json};
 use thiserror::Error;
 
-use crate::communications::{EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose};
+use crate::communications::{
+    CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind,
+    NewIngestionCheckpoint, NewRawCommunicationRecord, ProviderAccount,
+    ProviderAccountSecretPurpose,
+};
+
+const EMAIL_MESSAGE_RECORD_KIND: &str = "email_message";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EmailSyncPlan {
@@ -23,6 +30,28 @@ pub enum EmailSyncAdapterConfig {
         tls: bool,
         mailbox: String,
     },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FetchedEmailMessage {
+    pub provider_record_id: String,
+    pub source_fingerprint: String,
+    pub occurred_at: Option<DateTime<Utc>>,
+    pub payload: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmailSyncBatch {
+    pub provider_kind: EmailProviderKind,
+    pub stream_id: String,
+    pub checkpoint: Option<Value>,
+    pub messages: Vec<FetchedEmailMessage>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmailSyncImportReport {
+    pub inserted_or_existing_records: usize,
+    pub checkpoint_saved: bool,
 }
 
 pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, EmailSyncPlanError> {
@@ -52,7 +81,7 @@ pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, Email
                 optional_string(&account.config, "mailbox")?.unwrap_or_else(|| "INBOX".to_owned());
             validate_non_empty("mailbox", &mailbox)?;
             validate_no_control_chars("mailbox", &mailbox)?;
-            let stream_id = imap_stream_id(&mailbox);
+            let stream_id = imap_mailbox_stream_id(&mailbox);
 
             Ok(EmailSyncPlan {
                 account_id,
@@ -68,6 +97,78 @@ pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, Email
             })
         }
     }
+}
+
+pub async fn record_email_sync_batch(
+    store: &CommunicationIngestionStore,
+    account_id: &str,
+    import_batch_id: &str,
+    batch: &EmailSyncBatch,
+) -> Result<EmailSyncImportReport, EmailSyncRecordError> {
+    let account_id = validate_non_empty("account_id", account_id)?;
+    let import_batch_id = validate_non_empty("import_batch_id", import_batch_id)?;
+    validate_non_empty("stream_id", &batch.stream_id)?;
+
+    let mut inserted_or_existing_records = 0;
+    for message in &batch.messages {
+        let mut raw_record = NewRawCommunicationRecord::new(
+            raw_record_id(
+                &account_id,
+                EMAIL_MESSAGE_RECORD_KIND,
+                &message.provider_record_id,
+            ),
+            &account_id,
+            EMAIL_MESSAGE_RECORD_KIND,
+            &message.provider_record_id,
+            &message.source_fingerprint,
+            &import_batch_id,
+            message.payload.clone(),
+        )
+        .provenance(json!({
+            "source": "email_provider_sync",
+            "provider": batch.provider_kind.as_str(),
+            "stream_id": batch.stream_id
+        }));
+
+        if let Some(occurred_at) = message.occurred_at {
+            raw_record = raw_record.occurred_at(occurred_at);
+        }
+
+        store.record_raw_source(&raw_record).await?;
+        inserted_or_existing_records += 1;
+    }
+
+    let checkpoint_saved = if let Some(checkpoint) = &batch.checkpoint {
+        store
+            .save_checkpoint(&NewIngestionCheckpoint::new(
+                &account_id,
+                &batch.stream_id,
+                checkpoint.clone(),
+            ))
+            .await?;
+        true
+    } else {
+        false
+    };
+
+    Ok(EmailSyncImportReport {
+        inserted_or_existing_records,
+        checkpoint_saved,
+    })
+}
+
+pub fn imap_mailbox_stream_id(mailbox: &str) -> String {
+    let mut stream_id = String::from("imap:");
+
+    for character in mailbox.chars() {
+        match character {
+            '%' => stream_id.push_str("%25"),
+            ':' => stream_id.push_str("%3A"),
+            _ => stream_id.push(character),
+        }
+    }
+
+    stream_id
 }
 
 fn required_string(config: &Value, field: &'static str) -> Result<String, EmailSyncPlanError> {
@@ -118,20 +219,6 @@ fn required_port(config: &Value, field: &'static str) -> Result<u16, EmailSyncPl
     }
 
     Ok(port)
-}
-
-fn imap_stream_id(mailbox: &str) -> String {
-    let mut stream_id = String::from("imap:");
-
-    for character in mailbox.chars() {
-        match character {
-            '%' => stream_id.push_str("%25"),
-            ':' => stream_id.push_str("%3A"),
-            _ => stream_id.push(character),
-        }
-    }
-
-    stream_id
 }
 
 fn required_bool(config: &Value, field: &'static str) -> Result<bool, EmailSyncPlanError> {
@@ -219,6 +306,22 @@ fn validate_no_control_chars(field: &'static str, value: &str) -> Result<(), Ema
     Ok(())
 }
 
+fn raw_record_id(account_id: &str, record_kind: &str, provider_record_id: &str) -> String {
+    let mut encoded = String::from("raw:v1:");
+    append_raw_record_id_component(&mut encoded, account_id);
+    encoded.push(':');
+    append_raw_record_id_component(&mut encoded, record_kind);
+    encoded.push(':');
+    append_raw_record_id_component(&mut encoded, provider_record_id);
+    encoded
+}
+
+fn append_raw_record_id_component(encoded: &mut String, value: &str) {
+    encoded.push_str(&value.len().to_string());
+    encoded.push(':');
+    encoded.push_str(value);
+}
+
 #[derive(Debug, Error)]
 pub enum EmailSyncPlanError {
     #[error("invalid provider config field {field}: {message}")]
@@ -229,4 +332,13 @@ pub enum EmailSyncPlanError {
 
     #[error("provider account config must not contain secret-like key: {key}")]
     SecretLikeConfigKey { key: String },
+}
+
+#[derive(Debug, Error)]
+pub enum EmailSyncRecordError {
+    #[error(transparent)]
+    Plan(#[from] EmailSyncPlanError),
+
+    #[error(transparent)]
+    Communication(#[from] CommunicationIngestionError),
 }

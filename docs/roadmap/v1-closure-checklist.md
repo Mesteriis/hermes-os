@@ -2,7 +2,7 @@
 
 ## Release Goal
 
-Version 1.0 is complete when a user can run Hermes Hub locally, import email fixture data, inspect canonical messages and contacts, search local memory, import Markdown/PDF files into the document boundary, and open a desktop-first shell connected to backend V1 status.
+Version 1.0 is complete when a user can run Hermes Hub locally, import email fixture data or read-only provider email batches, inspect canonical messages and contacts, search local memory, import Markdown/PDF files into the document boundary, and open a desktop-first shell connected to backend V1 status.
 
 ## In Scope
 
@@ -11,6 +11,7 @@ Version 1.0 is complete when a user can run Hermes Hub locally, import email fix
 - Email provider account metadata for `gmail`, `icloud` and `imap`.
 - Account-scoped credential references and runtime credential resolution boundary.
 - Fixture-based first email import path that preserves raw provider records.
+- Read-only Gmail API and iCloud/raw IMAP provider networking that emits raw provider records.
 - Canonical message projection from raw email records.
 - Basic contact projection from message participants.
 - Tantivy search boundary covered by message and document record tests.
@@ -19,9 +20,9 @@ Version 1.0 is complete when a user can run Hermes Hub locally, import email fix
 
 ## Out of Scope For V1
 
-- Real Gmail OAuth sync.
-- Real iCloud IMAP sync.
-- Real generic IMAP networking.
+- OAuth grant/refresh UX and OS keychain/encrypted vault secret resolver.
+- Outbound email sending or mailbox mutation.
+- Full MIME parsing beyond raw provider payload preservation.
 - Mobile UI design, implementation or validation.
 - OCR, entity linking and AI summaries.
 - Backup/restore.
@@ -31,6 +32,7 @@ Version 1.0 is complete when a user can run Hermes Hub locally, import email fix
 
 - [x] `make validate` passes from a clean checkout with Docker available.
 - [x] Fixture email import preserves raw provider records idempotently.
+- [x] Read-only Gmail API and iCloud/raw IMAP provider networking is covered by local network tests and live PostgreSQL batch persistence.
 - [x] Canonical messages projection is covered by live PostgreSQL tests.
 - [x] Contacts projection is covered by live PostgreSQL tests.
 - [x] Tantivy search boundary is covered by message/document record tests.

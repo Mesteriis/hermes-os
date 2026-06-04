@@ -28,7 +28,7 @@ Rules:
 - Ingestion checkpoints are stored per `(account_id, stream_id)` with provider-specific JSON payloads.
 - Gmail adapters should checkpoint Gmail history streams, for example `stream_id = gmail:history`.
 - iCloud and generic IMAP adapters should checkpoint mailbox streams, for example `stream_id = imap:INBOX`, with UID validity and last seen UID data.
-- This decision does not implement real provider sync, OAuth, IMAP networking, MIME parsing or canonical message projections yet.
+- This decision establishes the storage boundary before provider networking. ADR-0043 adds read-only Gmail API and IMAP networking against this boundary.
 
 ## Consequences
 

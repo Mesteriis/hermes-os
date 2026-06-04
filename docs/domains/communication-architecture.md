@@ -31,6 +31,8 @@ The account model supports multiple records for the same provider kind, for exam
 
 Read-only email sync starts with a provider preflight plan before any network adapter runs. The plan selects the account-scoped credential purpose, validates non-secret adapter config, recursively rejects secret-like config keys, and derives delimiter-safe provider stream IDs such as `gmail:history` and `imap:INBOX`. This keeps Gmail OAuth and IMAP mailbox quirks at the adapter boundary instead of leaking into projections or API handlers.
 
+Provider networking is read-only. Gmail uses OAuth Bearer tokens with the Gmail API `messages.list` and `messages.get?format=raw` flow. iCloud and generic IMAP use app password/password credentials with `EXAMINE`, `UID SEARCH` and `UID FETCH`; adapters must not mutate flags, delete messages or write mailboxes. Both paths emit `EmailSyncBatch` records for raw storage and checkpoint persistence.
+
 Raw provider records are append-only and idempotent by provider account, record kind and provider record ID. They preserve provider payload and provenance before canonical message projections are built.
 
 ## Canonical Objects
