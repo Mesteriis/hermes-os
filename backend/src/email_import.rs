@@ -6,6 +6,8 @@ use crate::communications::{
 };
 use crate::email_sources::{FixtureEmailSourceError, parse_fixture_email_messages};
 
+const EMAIL_MESSAGE_RECORD_KIND: &str = "email_message";
+
 pub struct FixtureEmailImportRequest {
     pub account_id: String,
     pub import_batch_id: String,
@@ -39,32 +41,53 @@ pub async fn import_fixture_email_messages(
     let mut inserted_or_existing_records = 0;
 
     for message in messages {
-        store
-            .record_raw_source(
-                &NewRawCommunicationRecord::new(
-                    format!("raw:{}:{}", request.account_id, message.provider_record_id),
-                    &request.account_id,
-                    "email_message",
-                    &message.provider_record_id,
-                    &message.source_fingerprint,
-                    &request.import_batch_id,
-                    json!({
-                        "subject": message.subject,
-                        "from": message.from,
-                        "to": message.to,
-                        "body_text": message.body_text
-                    }),
-                )
-                .occurred_at(message.sent_at.unwrap_or_else(chrono::Utc::now))
-                .provenance(json!({"source": "fixture_email"})),
-            )
-            .await?;
+        let mut raw_record = NewRawCommunicationRecord::new(
+            raw_record_id(
+                &request.account_id,
+                EMAIL_MESSAGE_RECORD_KIND,
+                &message.provider_record_id,
+            ),
+            &request.account_id,
+            EMAIL_MESSAGE_RECORD_KIND,
+            &message.provider_record_id,
+            &message.source_fingerprint,
+            &request.import_batch_id,
+            json!({
+                "subject": message.subject,
+                "from": message.from,
+                "to": message.to,
+                "body_text": message.body_text
+            }),
+        )
+        .provenance(json!({"source": "fixture_email"}));
+
+        if let Some(sent_at) = message.sent_at {
+            raw_record = raw_record.occurred_at(sent_at);
+        }
+
+        store.record_raw_source(&raw_record).await?;
         inserted_or_existing_records += 1;
     }
 
     Ok(FixtureEmailImportReport {
         inserted_or_existing_records,
     })
+}
+
+fn raw_record_id(account_id: &str, record_kind: &str, provider_record_id: &str) -> String {
+    let mut encoded = String::from("raw:v1:");
+    append_raw_record_id_component(&mut encoded, account_id);
+    encoded.push(':');
+    append_raw_record_id_component(&mut encoded, record_kind);
+    encoded.push(':');
+    append_raw_record_id_component(&mut encoded, provider_record_id);
+    encoded
+}
+
+fn append_raw_record_id_component(encoded: &mut String, value: &str) {
+    encoded.push_str(&value.len().to_string());
+    encoded.push(':');
+    encoded.push_str(value);
 }
 
 #[derive(Debug, Error)]

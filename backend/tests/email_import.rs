@@ -101,6 +101,194 @@ async fn fixture_email_import_records_raw_messages_idempotently_against_postgres
     assert_eq!(count, 1);
 }
 
+#[tokio::test]
+async fn fixture_email_import_records_delimiter_bearing_identities_distinctly_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live fixture email import identity test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let suffix = unique_suffix();
+
+    let same_account_id = format!("acct_fixture_identity_same_{suffix}");
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &same_account_id,
+            EmailProviderKind::Gmail,
+            "Fixture identity same account",
+            format!("fixture-identity-same-{suffix}@example.com"),
+        ))
+        .await
+        .expect("store same-account provider account");
+
+    let same_account_fixture_json = format!(
+        r#"[
+            {{"provider_record_id":"thread:{suffix}:message","subject":"Delimiter import A","from":"alice@example.com","to":["bob@example.com"],"sent_at":"2026-06-04T10:00:00Z","body_text":"Fixture body A","source_fingerprint":"sha256:same-a-{suffix}"}},
+            {{"provider_record_id":"thread::{suffix}:message","subject":"Delimiter import B","from":"alice@example.com","to":["bob@example.com"],"sent_at":"2026-06-04T10:01:00Z","body_text":"Fixture body B","source_fingerprint":"sha256:same-b-{suffix}"}}
+        ]"#
+    );
+
+    let same_account_report = import_fixture_email_messages(
+        &communication_store,
+        &FixtureEmailImportRequest::new(
+            &same_account_id,
+            format!("batch_same_identity_{suffix}"),
+            same_account_fixture_json,
+        ),
+    )
+    .await
+    .expect("same-account delimiter import");
+    assert_eq!(same_account_report.inserted_or_existing_records, 2);
+
+    let same_account_raw_record_ids = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT raw_record_id
+        FROM communication_raw_records
+        WHERE account_id = $1
+        ORDER BY provider_record_id
+        "#,
+    )
+    .bind(&same_account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("same-account raw record IDs");
+    assert_eq!(same_account_raw_record_ids.len(), 2);
+    assert_ne!(
+        same_account_raw_record_ids[0],
+        same_account_raw_record_ids[1]
+    );
+
+    let ambiguous_account_id = format!("acct_fixture_identity_{suffix}");
+    let ambiguous_left_account_id = format!("{ambiguous_account_id}:left");
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &ambiguous_account_id,
+            EmailProviderKind::Gmail,
+            "Fixture identity base account",
+            format!("fixture-identity-base-{suffix}@example.com"),
+        ))
+        .await
+        .expect("store base provider account");
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &ambiguous_left_account_id,
+            EmailProviderKind::Gmail,
+            "Fixture identity left account",
+            format!("fixture-identity-left-{suffix}@example.com"),
+        ))
+        .await
+        .expect("store left provider account");
+
+    let base_fixture_json = format!(
+        r#"[{{"provider_record_id":"left:right","subject":"Ambiguous import base","from":"alice@example.com","to":["bob@example.com"],"sent_at":"2026-06-04T10:02:00Z","body_text":"Fixture body base","source_fingerprint":"sha256:base-{suffix}"}}]"#
+    );
+    let left_fixture_json = format!(
+        r#"[{{"provider_record_id":"right","subject":"Ambiguous import left","from":"alice@example.com","to":["bob@example.com"],"sent_at":"2026-06-04T10:03:00Z","body_text":"Fixture body left","source_fingerprint":"sha256:left-{suffix}"}}]"#
+    );
+
+    import_fixture_email_messages(
+        &communication_store,
+        &FixtureEmailImportRequest::new(
+            &ambiguous_account_id,
+            format!("batch_base_identity_{suffix}"),
+            base_fixture_json,
+        ),
+    )
+    .await
+    .expect("base ambiguous import");
+    import_fixture_email_messages(
+        &communication_store,
+        &FixtureEmailImportRequest::new(
+            &ambiguous_left_account_id,
+            format!("batch_left_identity_{suffix}"),
+            left_fixture_json,
+        ),
+    )
+    .await
+    .expect("left ambiguous import");
+
+    let ambiguous_raw_record_ids = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT raw_record_id
+        FROM communication_raw_records
+        WHERE account_id IN ($1, $2)
+        ORDER BY account_id, provider_record_id
+        "#,
+    )
+    .bind(&ambiguous_account_id)
+    .bind(&ambiguous_left_account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("ambiguous raw record IDs");
+    assert_eq!(ambiguous_raw_record_ids.len(), 2);
+    assert_ne!(ambiguous_raw_record_ids[0], ambiguous_raw_record_ids[1]);
+}
+
+#[tokio::test]
+async fn fixture_email_import_preserves_missing_sent_at_as_null_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live fixture email import missing sent_at test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let suffix = unique_suffix();
+    let account_id = format!("acct_fixture_missing_sent_at_{suffix}");
+    let provider_record_id = format!("fixture-missing-sent-at-{suffix}");
+    let fixture_json = format!(
+        r#"[{{"provider_record_id":"{provider_record_id}","subject":"Missing sent_at import","from":"alice@example.com","to":["bob@example.com"],"body_text":"Fixture body without sent_at","source_fingerprint":"sha256:missing-sent-at-{suffix}"}}]"#
+    );
+
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &account_id,
+            EmailProviderKind::Gmail,
+            "Fixture missing sent_at",
+            format!("fixture-missing-sent-at-{suffix}@example.com"),
+        ))
+        .await
+        .expect("store provider account");
+
+    import_fixture_email_messages(
+        &communication_store,
+        &FixtureEmailImportRequest::new(
+            &account_id,
+            format!("batch_missing_sent_at_{suffix}"),
+            fixture_json,
+        ),
+    )
+    .await
+    .expect("missing sent_at import");
+
+    let occurred_at = sqlx::query_scalar::<_, Option<chrono::DateTime<Utc>>>(
+        r#"
+        SELECT occurred_at
+        FROM communication_raw_records
+        WHERE account_id = $1
+          AND provider_record_id = $2
+        "#,
+    )
+    .bind(&account_id)
+    .bind(&provider_record_id)
+    .fetch_one(&pool)
+    .await
+    .expect("raw record occurred_at");
+    assert!(occurred_at.is_none());
+}
+
 fn unique_suffix() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
