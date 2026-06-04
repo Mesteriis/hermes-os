@@ -9,6 +9,7 @@ pub mod email_provider_network;
 pub mod email_sources;
 pub mod email_sync;
 pub mod event_log;
+pub mod graph;
 pub mod messages;
 pub mod projections;
 pub mod search;
