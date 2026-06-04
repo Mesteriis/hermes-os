@@ -77,6 +77,7 @@ Goals:
 
 Key functions:
 
+- first graph core projection from contacts, messages and documents
 - graph relationships with provenance
 - contact merge/split
 - document OCR and extraction
