@@ -1,0 +1,51 @@
+# OS and editor noise
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Rust
+/target/
+**/target/
+
+# Node / SvelteKit
+node_modules/
+.svelte-kit/
+.vite/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# Tauri
+src-tauri/target/
+
+# Python tooling that may be used for scripts later
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local data and generated artifacts
+.local/
+data/
+docker/.env
+docker/data/**
+!docker/data/
+!docker/data/.gitkeep
+tmp/
+temp/
+*.log
