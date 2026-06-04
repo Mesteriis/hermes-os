@@ -48,3 +48,4 @@ ADR status vocabulary:
 - [ADR-0037 Local Write Capability Token](ADR-0037-local-write-capability-token.md)
 - [ADR-0038 Local Event API Capability Token](ADR-0038-local-event-api-capability-token.md)
 - [ADR-0039 Local Event API Access Audit Log](ADR-0039-local-event-api-access-audit-log.md)
+- [ADR-0040 Local API Actor Identity](ADR-0040-local-api-actor-identity.md)

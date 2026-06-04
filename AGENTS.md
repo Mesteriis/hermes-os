@@ -208,6 +208,7 @@ Use the repository-configured tool first. If no tool exists, report that validat
 - Docker development infrastructure must stay under `docker/` per `ADR-0032`.
 - Local event API HTTP endpoints must enforce the temporary API capability token from `ADR-0038` until the full capability runtime replaces it.
 - Local event API access must be recorded in append-only `api_audit_log` per `ADR-0039`; do not store tokens or secrets in audit records.
+- Protected local event API requests must include the temporary non-secret `X-Hermes-Actor-Id` identity from `ADR-0040`.
 
 ## 9. Security and Privacy
 

@@ -23,6 +23,7 @@ impl ApiAuditLog {
             r#"
             INSERT INTO api_audit_log (
                 actor_kind,
+                actor_id,
                 operation,
                 method,
                 path_template,
@@ -30,11 +31,12 @@ impl ApiAuditLog {
                 target_id,
                 metadata
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             RETURNING audit_id
             "#,
         )
         .bind(&record.actor_kind)
+        .bind(&record.actor_id)
         .bind(&record.operation)
         .bind(&record.method)
         .bind(&record.path_template)
@@ -50,10 +52,12 @@ impl ApiAuditLog {
     pub async fn list_event_records(
         &self,
         target_id: Option<&str>,
+        actor_id: Option<&str>,
         after_audit_id: i64,
         limit: u32,
     ) -> Result<Vec<ApiAuditRecord>, ApiAuditError> {
         let target_id = target_id.map(str::trim).filter(|value| !value.is_empty());
+        let actor_id = actor_id.map(str::trim).filter(|value| !value.is_empty());
         let after_audit_id = after_audit_id.max(0);
         let limit = i64::from(limit.clamp(1, 500));
 
@@ -63,6 +67,7 @@ impl ApiAuditLog {
                 audit_id,
                 recorded_at,
                 actor_kind,
+                actor_id,
                 operation,
                 method,
                 path_template,
@@ -72,12 +77,14 @@ impl ApiAuditLog {
             FROM api_audit_log
             WHERE target_kind = 'event'
               AND ($1::text IS NULL OR target_id = $1)
-              AND audit_id > $2
+              AND ($2::text IS NULL OR actor_id = $2)
+              AND audit_id > $3
             ORDER BY audit_id ASC
-            LIMIT $3
+            LIMIT $4
             "#,
         )
         .bind(target_id)
+        .bind(actor_id)
         .bind(after_audit_id)
         .bind(limit)
         .fetch_all(&self.pool)
@@ -89,6 +96,7 @@ impl ApiAuditLog {
                     audit_id: row.try_get("audit_id")?,
                     recorded_at: row.try_get("recorded_at")?,
                     actor_kind: row.try_get("actor_kind")?,
+                    actor_id: row.try_get("actor_id")?,
                     operation: row.try_get("operation")?,
                     method: row.try_get("method")?,
                     path_template: row.try_get("path_template")?,
@@ -106,6 +114,7 @@ pub struct ApiAuditRecord {
     pub audit_id: i64,
     pub recorded_at: DateTime<Utc>,
     pub actor_kind: String,
+    pub actor_id: Option<String>,
     pub operation: String,
     pub method: String,
     pub path_template: String,
@@ -117,6 +126,7 @@ pub struct ApiAuditRecord {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewApiAuditRecord {
     actor_kind: String,
+    actor_id: String,
     operation: String,
     method: String,
     path_template: String,
@@ -126,9 +136,10 @@ pub struct NewApiAuditRecord {
 }
 
 impl NewApiAuditRecord {
-    pub fn event_append(event_id: impl Into<String>) -> Self {
+    pub fn event_append(actor_id: impl Into<String>, event_id: impl Into<String>) -> Self {
         Self {
             actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
             operation: "event.append".to_owned(),
             method: "POST".to_owned(),
             path_template: "/api/events".to_owned(),
@@ -138,9 +149,10 @@ impl NewApiAuditRecord {
         }
     }
 
-    pub fn event_get(event_id: impl Into<String>) -> Self {
+    pub fn event_get(actor_id: impl Into<String>, event_id: impl Into<String>) -> Self {
         Self {
             actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
             operation: "event.get".to_owned(),
             method: "GET".to_owned(),
             path_template: "/api/events/{event_id}".to_owned(),

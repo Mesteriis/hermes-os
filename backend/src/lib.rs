@@ -25,6 +25,9 @@ use crate::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
 
+const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
+const MAX_LOCAL_API_ACTOR_ID_LENGTH: usize = 128;
+
 #[derive(Clone)]
 struct AppState {
     config: AppConfig,
@@ -106,13 +109,16 @@ async fn post_event(
     headers: HeaderMap,
     Json(request): Json<AppendEventRequest>,
 ) -> Result<(StatusCode, Json<AppendEventResponse>), ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+    let actor = verify_local_api_capability(&state.config, &headers)?;
 
     let store = event_store(&state)?;
     let event = request.into_new_event()?;
     let audit_log = api_audit_log(&state)?;
     audit_log
-        .record(&NewApiAuditRecord::event_append(event.event_id.clone()))
+        .record(&NewApiAuditRecord::event_append(
+            actor.actor_id,
+            event.event_id.clone(),
+        ))
         .await?;
     let position = store.append(&event).await?;
 
@@ -130,12 +136,15 @@ async fn get_event(
     headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<EventEnvelope>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+    let actor = verify_local_api_capability(&state.config, &headers)?;
 
     let store = event_store(&state)?;
     let audit_log = api_audit_log(&state)?;
     audit_log
-        .record(&NewApiAuditRecord::event_get(event_id.clone()))
+        .record(&NewApiAuditRecord::event_get(
+            actor.actor_id,
+            event_id.clone(),
+        ))
         .await?;
     let Some(event) = store.get_by_id(&event_id).await? else {
         return Err(ApiError::NotFound);
@@ -155,6 +164,7 @@ async fn get_audit_events(
     let items = audit_log
         .list_event_records(
             query.target_id.as_deref(),
+            query.actor_id.as_deref(),
             query.after_audit_id.unwrap_or(0),
             query.limit.unwrap_or(100),
         )
@@ -179,7 +189,10 @@ fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
     Ok(ApiAuditLog::new(pool.clone()))
 }
 
-fn verify_local_api_capability(config: &AppConfig, headers: &HeaderMap) -> Result<(), ApiError> {
+fn verify_local_api_capability(
+    config: &AppConfig,
+    headers: &HeaderMap,
+) -> Result<LocalApiActor, ApiError> {
     let Some(expected_token) = config.local_api_token() else {
         return Err(ApiError::ApiTokenNotConfigured);
     };
@@ -195,11 +208,52 @@ fn verify_local_api_capability(config: &AppConfig, headers: &HeaderMap) -> Resul
         return Err(ApiError::InvalidApiToken);
     };
 
-    if scheme.eq_ignore_ascii_case("Bearer") && token == expected_token {
-        return Ok(());
+    if !scheme.eq_ignore_ascii_case("Bearer") || token != expected_token {
+        return Err(ApiError::InvalidApiToken);
     }
 
-    Err(ApiError::InvalidApiToken)
+    local_api_actor(headers)
+}
+
+fn local_api_actor(headers: &HeaderMap) -> Result<LocalApiActor, ApiError> {
+    let Some(raw_actor_id) = headers
+        .get(LOCAL_API_ACTOR_ID_HEADER)
+        .and_then(|value| value.to_str().ok())
+    else {
+        return Err(ApiError::InvalidActorId);
+    };
+
+    let actor_id = raw_actor_id.trim();
+    if actor_id.is_empty()
+        || actor_id.len() > MAX_LOCAL_API_ACTOR_ID_LENGTH
+        || !actor_id.bytes().all(is_valid_actor_id_byte)
+    {
+        return Err(ApiError::InvalidActorId);
+    }
+
+    Ok(LocalApiActor {
+        actor_id: actor_id.to_owned(),
+    })
+}
+
+fn is_valid_actor_id_byte(byte: u8) -> bool {
+    matches!(
+        byte,
+        b'a'..=b'z'
+            | b'A'..=b'Z'
+            | b'0'..=b'9'
+            | b'.'
+            | b'_'
+            | b'-'
+            | b':'
+            | b'@'
+            | b'/'
+    )
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct LocalApiActor {
+    actor_id: String,
 }
 
 #[derive(Serialize)]
@@ -277,6 +331,7 @@ struct ErrorResponse {
 #[derive(Deserialize)]
 struct AuditEventsQuery {
     target_id: Option<String>,
+    actor_id: Option<String>,
     after_audit_id: Option<i64>,
     limit: Option<u32>,
 }
@@ -289,6 +344,7 @@ struct AuditEventsResponse {
 enum ApiError {
     ApiTokenNotConfigured,
     InvalidApiToken,
+    InvalidActorId,
     DatabaseNotConfigured,
     InvalidEnvelope(EventEnvelopeError),
     Audit(ApiAuditError),
@@ -310,6 +366,12 @@ impl axum::response::IntoResponse for ApiError {
                 "invalid_api_token",
                 "missing or invalid bearer token".to_owned(),
                 true,
+            ),
+            Self::InvalidActorId => (
+                StatusCode::BAD_REQUEST,
+                "invalid_actor_id",
+                format!("missing or invalid {LOCAL_API_ACTOR_ID_HEADER} header"),
+                false,
             ),
             Self::DatabaseNotConfigured => (
                 StatusCode::SERVICE_UNAVAILABLE,

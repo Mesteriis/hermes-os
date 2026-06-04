@@ -40,11 +40,11 @@ Supported environment variables:
 
 - `GET /healthz` - returns backend health status and service name.
 - `GET /readyz` - returns readiness status; it is `503` when PostgreSQL is not configured, unavailable or missing required migrated tables.
-- `POST /api/events` - appends a canonical event through the application/API boundary. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>`.
-- `GET /api/events/{event_id}` - loads a canonical event by ID. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>`.
-- `GET /api/audit/events` - returns event API audit records. Supports `target_id`, `after_audit_id` and `limit` query parameters. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>`.
+- `POST /api/events` - appends a canonical event through the application/API boundary. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+- `GET /api/events/{event_id}` - loads a canonical event by ID. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+- `GET /api/audit/events` - returns event API audit records. Supports `target_id`, `actor_id`, `after_audit_id` and `limit` query parameters. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
 
-Authorized event API calls are recorded in `api_audit_log`. The API token value is never stored.
+Authorized event API calls are recorded in `api_audit_log` with `actor_kind` and `actor_id`. The API token value is never stored.
 
 ## Migrations
 
@@ -55,7 +55,7 @@ Current schema:
 
 - `event_log` - append-only canonical event log with JSONB envelope fields, replay ordering, idempotent source index and mutation-prevention triggers.
 - `projection_cursors` - monotonic per-projection replay cursor positions.
-- `api_audit_log` - append-only operational audit records for local event API access attempts.
+- `api_audit_log` - append-only operational audit records for local event API access attempts, including non-secret local actor IDs.
 
 Relevant design documents:
 

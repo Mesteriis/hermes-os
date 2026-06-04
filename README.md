@@ -81,10 +81,11 @@ make db-up
 make backend-run-dev
 ```
 
-`/api/events` и `/api/audit/events` требуют локальный API token:
+`/api/events` и `/api/audit/events` требуют локальный API token и non-secret actor ID:
 
 ```sh
 Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
+X-Hermes-Actor-Id: local-cli
 ```
 
 Выполнить smoke test backend + PostgreSQL:
