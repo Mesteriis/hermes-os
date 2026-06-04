@@ -58,6 +58,16 @@ Hermes Hub - персональная локальная платформа ко
 - [tools](tools) - будущие developer и data tools.
 - [examples](examples) - будущие спецификации примеров и тестовых сценариев.
 
+## V1 Local Run
+
+```sh
+make docker-env
+make up
+make backend-run-dev
+```
+
+Open the desktop shell from the frontend/Tauri command documented in `frontend/README.md`.
+
 ## Разработка
 
 Полная локальная/CI-проверка:

@@ -56,7 +56,7 @@ The status screen calls:
 GET http://127.0.0.1:8080/api/v1/status
 ```
 
-The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_TOKEN=change-me-local-api-token`, or the frontend must be started with matching Vite public overrides:
+The request uses `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_TOKEN=change-me-local-api-token`, or the frontend must be started with matching Vite public overrides:
 
 ```sh
 VITE_HERMES_API_BASE_URL=http://127.0.0.1:8080 \

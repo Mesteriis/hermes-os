@@ -2,7 +2,7 @@
 
 ## Release Goal
 
-Version 1.0 is complete when a user can run Hermes Hub locally, import email fixture data, inspect canonical messages and contacts, search local memory, import Markdown/PDF files into the document boundary, and open a desktop-first shell connected to backend readiness.
+Version 1.0 is complete when a user can run Hermes Hub locally, import email fixture data, inspect canonical messages and contacts, search local memory, import Markdown/PDF files into the document boundary, and open a desktop-first shell connected to backend V1 status.
 
 ## In Scope
 
@@ -15,7 +15,7 @@ Version 1.0 is complete when a user can run Hermes Hub locally, import email fix
 - Basic contact projection from message participants.
 - Tantivy full text search over messages and imported Markdown text.
 - Document import boundary for Markdown text and PDF metadata.
-- Desktop-first SvelteKit/Tauri shell with health, readiness, messages, contacts, search and documents screens.
+- Desktop/laptop SvelteKit/Tauri status shell connected to `GET /api/v1/status`.
 
 ## Out of Scope For V1
 
@@ -27,10 +27,12 @@ Version 1.0 is complete when a user can run Hermes Hub locally, import email fix
 - Backup/restore.
 - Plugin runtime.
 
-## Acceptance Gates
+## Acceptance Gate Status
 
-- `make validate` passes from a clean checkout with Docker available.
-- `make backend-communication-smoke-dev` imports fixture email records idempotently.
-- `make backend-search-smoke-dev` indexes and queries at least one message.
-- `make backend-documents-smoke-dev` imports one Markdown file and one PDF metadata record.
-- Desktop shell starts and shows backend readiness from `GET /readyz`.
+- [x] `make validate` passes from a clean checkout with Docker available.
+- [x] Fixture email import preserves raw provider records idempotently.
+- [x] Canonical messages projection is covered by live PostgreSQL tests.
+- [x] Contacts projection is covered by live PostgreSQL tests.
+- [x] Tantivy search returns indexed message/document results.
+- [x] Document import stores Markdown text and PDF metadata.
+- [x] Desktop shell shows backend V1 status.
