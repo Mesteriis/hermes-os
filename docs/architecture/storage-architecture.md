@@ -31,7 +31,7 @@
 - permissions and capability grants
 - audit trails
 
-Backend readiness verifies that required migrated PostgreSQL tables are present before reporting the service ready.
+Backend readiness verifies that the embedded SQLx migration ledger has the expected successful migration count and latest version before reporting the service ready.
 
 ## Object Storage Responsibilities
 

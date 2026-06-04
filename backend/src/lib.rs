@@ -1,4 +1,5 @@
 pub mod audit;
+pub mod communications;
 pub mod config;
 pub mod event_log;
 pub mod projections;

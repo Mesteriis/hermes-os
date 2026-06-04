@@ -17,6 +17,7 @@ Hermes Hub - персональная локальная платформа ко
 - Rust backend foundation с конфигурацией и `GET /healthz`
 - local API-token guard for event API reads and writes
 - append-only audit log for authorized event API access attempts
+- communication ingestion storage foundation for Gmail, iCloud Mail and generic IMAP
 - Docker Compose окружение для локальной разработки
 
 ## Принципы
@@ -104,6 +105,12 @@ make backend-storage-smoke-dev
 
 ```sh
 make backend-event-log-smoke-dev
+```
+
+Проверить communication ingestion storage against PostgreSQL:
+
+```sh
+make backend-communication-smoke-dev
 ```
 
 Проверить replay/projection cursors against PostgreSQL:

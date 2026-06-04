@@ -2,7 +2,7 @@
 
 Rust backend for Hermes Hub.
 
-Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, canonical event append/read API, event log storage, API access audit logging, projection cursors and projection runner batch semantics. Provider adapters, graph/search integration and agent runtime are not implemented yet.
+Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, canonical event append/read API, event log storage, API access audit logging, communication ingestion storage, projection cursors and projection runner batch semantics. Provider adapters, graph/search integration and agent runtime are not implemented yet.
 
 ## Commands
 
@@ -14,6 +14,7 @@ make backend-run-dev
 make backend-smoke-dev
 make backend-storage-smoke-dev
 make backend-event-log-smoke-dev
+make backend-communication-smoke-dev
 make backend-projection-smoke-dev
 make backend-projection-runner-smoke-dev
 make backend-events-api-smoke-dev
@@ -40,7 +41,7 @@ Supported environment variables:
 ## Endpoints
 
 - `GET /healthz` - returns backend health status and service name.
-- `GET /readyz` - returns readiness status; it is `503` when PostgreSQL is not configured, unavailable or missing required migrated tables.
+- `GET /readyz` - returns readiness status; it is `503` when PostgreSQL is not configured, unavailable or missing required SQLx migrations.
 - `POST /api/events` - appends a canonical event through the application/API boundary. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
 - `GET /api/events/{event_id}` - loads a canonical event by ID. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
 - `GET /api/audit/events` - returns event API audit records. Supports `target_id`, `actor_id`, `after_audit_id` and `limit` query parameters. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
@@ -57,6 +58,9 @@ Current schema:
 - `event_log` - append-only canonical event log with JSONB envelope fields, replay ordering, idempotent source index and mutation-prevention triggers.
 - `projection_cursors` - monotonic per-projection replay cursor positions.
 - `api_audit_log` - append-only operational audit records for local event API access attempts, including non-secret local actor IDs.
+- `communication_provider_accounts` - non-secret email provider account metadata for `gmail`, `icloud` and `imap`.
+- `communication_raw_records` - append-only raw provider records with idempotent provider identity, source fingerprints, import batches and provenance.
+- `communication_ingestion_checkpoints` - per-account provider stream checkpoints for retryable ingestion.
 
 Relevant design documents:
 
