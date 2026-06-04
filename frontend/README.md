@@ -2,7 +2,7 @@
 
 SvelteKit desktop UI for Hermes Hub, packaged by Tauri.
 
-Current scope is a desktop/laptop status shell for the local V1 backend API. Mobile UI is out of scope while ADR-0031 is active.
+Current scope is a desktop/laptop status shell for the local V1 backend API with provider account setup wizards for Gmail, iCloud and raw IMAP. Mobile UI is out of scope while ADR-0031 is active.
 
 ## Scaffold
 
@@ -50,13 +50,16 @@ make frontend-tauri-build
 
 ## Backend Dependency
 
-The status screen calls:
+The shell calls:
 
 ```sh
 GET http://127.0.0.1:8080/api/v1/status
+POST http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/start
+POST http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/complete
+POST http://127.0.0.1:8080/api/v1/email-accounts/imap
 ```
 
-The request uses `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_TOKEN=change-me-local-api-token`, or the frontend must be started with matching Vite public overrides:
+Requests use `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. Account setup also requires backend `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`. The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_TOKEN=change-me-local-api-token`, or the frontend must be started with matching Vite public overrides:
 
 ```sh
 VITE_HERMES_API_BASE_URL=http://127.0.0.1:8080 \

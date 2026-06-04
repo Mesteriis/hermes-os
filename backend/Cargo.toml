@@ -13,6 +13,8 @@ name = "hermes-hub-backend"
 path = "src/main.rs"
 
 [dependencies]
+aes-gcm = "0.10"
+argon2 = "0.5"
 async-imap = { version = "0.11.2", default-features = false, features = ["runtime-tokio"] }
 async-native-tls = { version = "0.6.0", default-features = false, features = ["runtime-tokio"] }
 axum = "0.8"
@@ -27,8 +29,10 @@ sqlx = { version = "0.8", default-features = false, features = ["chrono", "json"
 tantivy = "0.25.0"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread"] }
+tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+url = "2"
 
 [dev-dependencies]
 tempfile = "3.27.0"

@@ -368,4 +368,7 @@ pub enum SecretResolutionError {
 
     #[error("secret store kind is not supported by in-memory resolver: {0}")]
     UnsupportedStoreKind(String),
+
+    #[error("secret store operation failed: {message}")]
+    StoreFailure { message: String },
 }

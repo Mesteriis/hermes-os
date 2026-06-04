@@ -3,6 +3,7 @@ pub mod communications;
 pub mod config;
 pub mod contacts;
 pub mod documents;
+pub mod email_account_setup;
 pub mod email_import;
 pub mod email_provider_network;
 pub mod email_sources;
@@ -11,26 +12,38 @@ pub mod event_log;
 pub mod messages;
 pub mod projections;
 pub mod search;
+pub mod secret_vault;
 pub mod secrets;
 pub mod storage;
 
+use std::collections::HashMap;
 use std::io;
+use std::sync::{Arc, Mutex};
 
 use axum::extract::{Path, Query, State};
-use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
+use axum::response::Html;
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
+use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 
 use crate::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
+use crate::communications::{CommunicationIngestionStore, EmailProviderKind};
 use crate::config::AppConfig;
+use crate::email_account_setup::{
+    EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
+    GmailOAuthSetupRequest, ImapAccountSetupRequest,
+};
 use crate::event_log::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };
+use crate::secret_vault::EncryptedSecretVault;
+use crate::secrets::{SecretKind, SecretReferenceStore};
 use crate::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
@@ -42,6 +55,12 @@ const MAX_LOCAL_API_ACTOR_ID_LENGTH: usize = 128;
 struct AppState {
     config: AppConfig,
     database: Database,
+    account_setup: AccountSetupState,
+}
+
+#[derive(Clone, Default)]
+struct AccountSetupState {
+    pending_gmail_oauth: Arc<Mutex<HashMap<String, GmailOAuthPendingGrant>>>,
 }
 
 #[derive(Serialize)]
@@ -59,10 +78,28 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/api/v1/status", get(get_v1_status))
+        .route(
+            "/api/v1/email-accounts/gmail/oauth/start",
+            post(post_gmail_oauth_start),
+        )
+        .route(
+            "/api/v1/email-accounts/gmail/oauth/complete",
+            post(post_gmail_oauth_complete),
+        )
+        .route(
+            "/api/v1/email-accounts/gmail/oauth/callback",
+            get(get_gmail_oauth_callback),
+        )
+        .route("/api/v1/email-accounts/imap", post(post_imap_account_setup))
         .route("/api/audit/events", get(get_audit_events))
         .route("/api/events", post(post_event))
         .route("/api/events/{event_id}", get(get_event))
-        .with_state(AppState { config, database })
+        .with_state(AppState {
+            config,
+            database,
+            account_setup: AccountSetupState::default(),
+        })
+        .layer(local_frontend_cors_layer())
 }
 
 pub async fn run(config: AppConfig) -> Result<(), AppError> {
@@ -81,6 +118,37 @@ pub fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
+}
+
+fn local_frontend_cors_layer() -> CorsLayer {
+    CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(|origin, _| {
+            origin
+                .to_str()
+                .map(is_allowed_local_frontend_origin)
+                .unwrap_or(false)
+        }))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            HeaderName::from_static(LOCAL_API_ACTOR_ID_HEADER),
+        ])
+}
+
+fn is_allowed_local_frontend_origin(origin: &str) -> bool {
+    let Ok(url) = url::Url::parse(origin) else {
+        return false;
+    };
+
+    matches!(
+        (url.scheme(), url.host_str()),
+        (
+            "http" | "https",
+            Some("localhost" | "127.0.0.1" | "::1" | "[::1]")
+        ) | ("http" | "https", Some("tauri.localhost"))
+            | ("tauri", Some("localhost"))
+    )
 }
 
 async fn healthz(State(state): State<AppState>) -> Json<HealthResponse> {
@@ -200,8 +268,106 @@ async fn get_v1_status(
             contacts: true,
             search: true,
             documents: true,
+            account_setup: true,
         },
     }))
+}
+
+async fn post_gmail_oauth_start(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<GmailOAuthStartApiRequest>,
+) -> Result<Json<GmailOAuthStartApiResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let service = EmailAccountSetupService::new_for_vault_only(
+        encrypted_vault(&state.config).ok_or(ApiError::SecretVaultNotConfigured)?,
+    );
+    let pending = service.start_gmail_oauth(request.into_setup_request())?;
+    let response = GmailOAuthStartApiResponse {
+        setup_id: pending.setup_id.clone(),
+        authorization_url: pending.authorization_url.clone(),
+        state: pending.state.clone(),
+        redirect_uri: pending.request.redirect_uri.clone(),
+    };
+    let mut pending_map = state
+        .account_setup
+        .pending_gmail_oauth
+        .lock()
+        .map_err(|_| ApiError::AccountSetupState)?;
+    pending_map.insert(pending.setup_id.clone(), pending);
+
+    Ok(Json(response))
+}
+
+async fn post_gmail_oauth_complete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<GmailOAuthCompleteApiRequest>,
+) -> Result<Json<EmailAccountSetupApiResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pending = {
+        let mut pending_map = state
+            .account_setup
+            .pending_gmail_oauth
+            .lock()
+            .map_err(|_| ApiError::AccountSetupState)?;
+        pending_map
+            .remove(&request.setup_id)
+            .ok_or(ApiError::AccountSetupPendingGrantNotFound)?
+    };
+    if pending.state != request.state {
+        return Err(ApiError::AccountSetupStateMismatch);
+    }
+
+    let service = account_setup_service(&state)?;
+    let result = service
+        .complete_gmail_oauth(pending, &request.authorization_code)
+        .await?;
+
+    Ok(Json(result.into()))
+}
+
+async fn get_gmail_oauth_callback(Query(query): Query<GmailOAuthCallbackQuery>) -> Html<String> {
+    let code = html_escape(&query.code.unwrap_or_default());
+    let state = html_escape(&query.state.unwrap_or_default());
+
+    Html(format!(
+        r#"<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hermes Hub OAuth</title>
+  <style>
+    body {{ margin: 0; font-family: system-ui, sans-serif; color: #182033; background: #f5f6f8; }}
+    main {{ max-width: 720px; margin: 48px auto; background: #fff; border: 1px solid #d9dee7; border-radius: 8px; padding: 24px; }}
+    code {{ display: block; overflow-wrap: anywhere; background: #f8fafc; border: 1px solid #d9dee7; border-radius: 6px; padding: 10px; }}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Gmail OAuth callback</h1>
+    <p>Authorization code</p>
+    <code>{code}</code>
+    <p>State</p>
+    <code>{state}</code>
+  </main>
+</body>
+</html>"#
+    ))
+}
+
+async fn post_imap_account_setup(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<ImapAccountSetupApiRequest>,
+) -> Result<Json<EmailAccountSetupApiResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let service = account_setup_service(&state)?;
+    let result = service
+        .setup_imap_account(request.into_setup_request()?)
+        .await?;
+
+    Ok(Json(result.into()))
 }
 
 fn event_store(state: &AppState) -> Result<EventStore, ApiError> {
@@ -218,6 +384,26 @@ fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
     };
 
     Ok(ApiAuditLog::new(pool.clone()))
+}
+
+fn account_setup_service(state: &AppState) -> Result<EmailAccountSetupService, ApiError> {
+    let vault = encrypted_vault(&state.config).ok_or(ApiError::SecretVaultNotConfigured)?;
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(EmailAccountSetupService::new(
+        CommunicationIngestionStore::new(pool.clone()),
+        SecretReferenceStore::new(pool.clone()),
+        vault,
+    ))
+}
+
+fn encrypted_vault(config: &AppConfig) -> Option<EncryptedSecretVault> {
+    Some(EncryptedSecretVault::new(
+        config.secret_vault_path()?.to_path_buf(),
+        config.secret_vault_key()?.clone(),
+    ))
 }
 
 fn verify_local_api_capability(
@@ -384,6 +570,7 @@ struct V1Surfaces {
     contacts: bool,
     search: bool,
     documents: bool,
+    account_setup: bool,
 }
 
 enum ApiError {
@@ -394,6 +581,11 @@ enum ApiError {
     InvalidEnvelope(EventEnvelopeError),
     Audit(ApiAuditError),
     Store(EventStoreError),
+    SecretVaultNotConfigured,
+    AccountSetup(EmailAccountSetupError),
+    AccountSetupState,
+    AccountSetupPendingGrantNotFound,
+    AccountSetupStateMismatch,
     NotFound,
 }
 
@@ -422,6 +614,12 @@ impl axum::response::IntoResponse for ApiError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "database_not_configured",
                 "DATABASE_URL is not configured".to_owned(),
+                false,
+            ),
+            Self::SecretVaultNotConfigured => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "secret_vault_not_configured",
+                "HERMES_SECRET_VAULT_PATH and HERMES_SECRET_VAULT_KEY are required for account setup".to_owned(),
                 false,
             ),
             Self::InvalidEnvelope(error) => (
@@ -454,6 +652,46 @@ impl axum::response::IntoResponse for ApiError {
                     false,
                 )
             }
+            Self::AccountSetup(error) => {
+                let status = if matches!(
+                    error,
+                    EmailAccountSetupError::InvalidRequest { .. }
+                        | EmailAccountSetupError::MissingProviderField { .. }
+                ) {
+                    StatusCode::BAD_REQUEST
+                } else {
+                    tracing::error!(error = %error, "account setup failed");
+                    StatusCode::INTERNAL_SERVER_ERROR
+                };
+                (
+                    status,
+                    "account_setup_error",
+                    if status == StatusCode::BAD_REQUEST {
+                        error.to_string()
+                    } else {
+                        "account setup failed".to_owned()
+                    },
+                    false,
+                )
+            }
+            Self::AccountSetupState => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "account_setup_state_error",
+                "account setup state is unavailable".to_owned(),
+                false,
+            ),
+            Self::AccountSetupPendingGrantNotFound => (
+                StatusCode::NOT_FOUND,
+                "account_setup_pending_grant_not_found",
+                "pending Gmail OAuth setup was not found".to_owned(),
+                false,
+            ),
+            Self::AccountSetupStateMismatch => (
+                StatusCode::BAD_REQUEST,
+                "account_setup_state_mismatch",
+                "Gmail OAuth state does not match the pending setup".to_owned(),
+                false,
+            ),
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
                 "event_not_found",
@@ -490,12 +728,158 @@ impl From<ApiAuditError> for ApiError {
     }
 }
 
+impl From<EmailAccountSetupError> for ApiError {
+    fn from(error: EmailAccountSetupError) -> Self {
+        Self::AccountSetup(error)
+    }
+}
+
+#[derive(Deserialize)]
+struct GmailOAuthStartApiRequest {
+    account_id: String,
+    display_name: String,
+    external_account_id: String,
+    client_id: String,
+    client_secret: Option<String>,
+    redirect_uri: String,
+    authorization_endpoint: Option<String>,
+    token_endpoint: Option<String>,
+}
+
+impl GmailOAuthStartApiRequest {
+    fn into_setup_request(self) -> GmailOAuthSetupRequest {
+        let mut request = GmailOAuthSetupRequest::new(
+            self.account_id,
+            self.display_name,
+            self.external_account_id,
+            self.client_id,
+            self.redirect_uri,
+        );
+        if let Some(client_secret) = self.client_secret {
+            request = request.client_secret(client_secret);
+        }
+        if let Some(authorization_endpoint) = self.authorization_endpoint {
+            request = request.authorization_endpoint(authorization_endpoint);
+        }
+        if let Some(token_endpoint) = self.token_endpoint {
+            request = request.token_endpoint(token_endpoint);
+        }
+
+        request
+    }
+}
+
+#[derive(Serialize)]
+struct GmailOAuthStartApiResponse {
+    setup_id: String,
+    authorization_url: String,
+    state: String,
+    redirect_uri: String,
+}
+
+#[derive(Deserialize)]
+struct GmailOAuthCompleteApiRequest {
+    setup_id: String,
+    state: String,
+    authorization_code: String,
+}
+
+#[derive(Deserialize)]
+struct GmailOAuthCallbackQuery {
+    code: Option<String>,
+    state: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ImapAccountSetupApiRequest {
+    account_id: String,
+    provider_kind: String,
+    display_name: String,
+    external_account_id: String,
+    host: String,
+    port: u16,
+    tls: bool,
+    mailbox: String,
+    username: String,
+    password: String,
+    secret_kind: Option<String>,
+}
+
+impl ImapAccountSetupApiRequest {
+    fn into_setup_request(self) -> Result<ImapAccountSetupRequest, ApiError> {
+        let provider_kind = match self.provider_kind.trim() {
+            "icloud" => EmailProviderKind::Icloud,
+            "imap" => EmailProviderKind::Imap,
+            _ => {
+                return Err(EmailAccountSetupError::InvalidRequest {
+                    field: "provider_kind",
+                    message: "must be icloud or imap",
+                }
+                .into());
+            }
+        };
+        let secret_kind = match self.secret_kind.as_deref().unwrap_or("password").trim() {
+            "app_password" => SecretKind::AppPassword,
+            "password" => SecretKind::Password,
+            _ => {
+                return Err(EmailAccountSetupError::InvalidRequest {
+                    field: "secret_kind",
+                    message: "must be app_password or password",
+                }
+                .into());
+            }
+        };
+
+        Ok(ImapAccountSetupRequest::new(
+            self.account_id,
+            provider_kind,
+            self.display_name,
+            self.external_account_id,
+            self.host,
+            self.port,
+            self.tls,
+            self.mailbox,
+            self.username,
+            self.password,
+        )
+        .secret_kind(secret_kind))
+    }
+}
+
+#[derive(Serialize)]
+struct EmailAccountSetupApiResponse {
+    account_id: String,
+    secret_ref: String,
+    secret_kind: SecretKind,
+    store_kind: crate::secrets::SecretStoreKind,
+}
+
+impl From<crate::email_account_setup::EmailAccountSetupResult> for EmailAccountSetupApiResponse {
+    fn from(result: crate::email_account_setup::EmailAccountSetupResult) -> Self {
+        Self {
+            account_id: result.account_id,
+            secret_ref: result.secret_ref,
+            secret_kind: result.secret_kind,
+            store_kind: result.store_kind,
+        }
+    }
+}
+
 fn default_schema_version() -> i32 {
     1
 }
 
 fn empty_json_object() -> Value {
     json!({})
+}
+
+fn html_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }
 
 #[derive(Debug, thiserror::Error)]

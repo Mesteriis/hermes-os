@@ -39,4 +39,4 @@ Rules:
 - Missing credential bindings, incompatible secret kinds and resolver failures are reported explicitly before provider network calls begin.
 - Provider adapters can support multiple Gmail, iCloud or IMAP accounts without shared global credentials.
 - Database backups still need secret reference metadata but do not automatically leak provider credentials.
-- A future implementation must add a secret resolver for OS keychain or encrypted vault access before production account setup can resolve non-test credentials.
+- ADR-0044 adds encrypted vault storage and account setup for Gmail OAuth and IMAP credentials. A native OS keychain resolver can still be added later as another secret store implementation.

@@ -1,6 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fetchV1Status, type V1Status } from '$lib/api';
+	import {
+		completeGmailOAuthSetup,
+		fetchV1Status,
+		setupImapAccount,
+		startGmailOAuthSetup,
+		type GmailOAuthStartResponse,
+		type V1Status
+	} from '$lib/api';
 
 	const apiBaseUrl = import.meta.env.VITE_HERMES_API_BASE_URL ?? 'http://127.0.0.1:8080';
 	const apiToken = import.meta.env.VITE_HERMES_LOCAL_API_TOKEN ?? 'change-me-local-api-token';
@@ -9,6 +16,32 @@
 	let status = $state<V1Status | null>(null);
 	let errorMessage = $state('');
 	let isLoading = $state(true);
+	let selectedProvider = $state<'gmail' | 'icloud' | 'imap'>('gmail');
+	let setupMessage = $state('');
+	let setupError = $state('');
+	let isSetupSubmitting = $state(false);
+	let gmailPending = $state<GmailOAuthStartResponse | null>(null);
+	let gmailAuthorizationCode = $state('');
+	let gmailForm = $state({
+		account_id: 'gmail-primary',
+		display_name: 'Primary Gmail',
+		external_account_id: '',
+		client_id: '',
+		client_secret: '',
+		redirect_uri: `${apiBaseUrl.replace(/\/+$/, '')}/api/v1/email-accounts/gmail/oauth/callback`
+	});
+	let imapForm = $state({
+		account_id: 'icloud-primary',
+		display_name: 'Primary iCloud',
+		external_account_id: '',
+		host: 'imap.mail.me.com',
+		port: 993,
+		tls: true,
+		mailbox: 'INBOX',
+		username: '',
+		password: '',
+		secret_kind: 'app_password' as 'app_password' | 'password'
+	});
 
 	const surfaces: Array<{
 		key: keyof V1Status['surfaces'];
@@ -18,7 +51,8 @@
 		{ key: 'messages', label: 'Messages', description: 'Canonical communication timeline' },
 		{ key: 'contacts', label: 'Contacts', description: 'Projected contact identities' },
 		{ key: 'search', label: 'Search', description: 'Derived full-text index' },
-		{ key: 'documents', label: 'Documents', description: 'Imported local document records' }
+		{ key: 'documents', label: 'Documents', description: 'Imported local document records' },
+		{ key: 'account_setup', label: 'Accounts', description: 'Provider setup and secret vault' }
 	];
 
 	onMount(async () => {
@@ -30,6 +64,111 @@
 			isLoading = false;
 		}
 	});
+
+	function selectProvider(provider: 'gmail' | 'icloud' | 'imap') {
+		selectedProvider = provider;
+		setupMessage = '';
+		setupError = '';
+
+		if (provider === 'icloud') {
+			imapForm = {
+				...imapForm,
+				account_id: imapForm.account_id || 'icloud-primary',
+				display_name: imapForm.display_name || 'Primary iCloud',
+				host: 'imap.mail.me.com',
+				port: 993,
+				tls: true,
+				mailbox: imapForm.mailbox || 'INBOX',
+				secret_kind: 'app_password'
+			};
+		}
+		if (provider === 'imap') {
+			imapForm = {
+				...imapForm,
+				account_id: imapForm.account_id === 'icloud-primary' ? 'imap-primary' : imapForm.account_id,
+				display_name:
+					imapForm.display_name === 'Primary iCloud' ? 'Primary IMAP' : imapForm.display_name,
+				host: imapForm.host === 'imap.mail.me.com' ? '' : imapForm.host,
+				secret_kind: 'password'
+			};
+		}
+	}
+
+	async function startGmailSetup() {
+		isSetupSubmitting = true;
+		setupMessage = '';
+		setupError = '';
+
+		try {
+			gmailPending = await startGmailOAuthSetup(apiBaseUrl, apiToken, actorId, {
+				account_id: gmailForm.account_id,
+				display_name: gmailForm.display_name,
+				external_account_id: gmailForm.external_account_id,
+				client_id: gmailForm.client_id,
+				client_secret: gmailForm.client_secret || undefined,
+				redirect_uri: gmailForm.redirect_uri
+			});
+			setupMessage = 'Gmail OAuth grant started';
+		} catch (error) {
+			setupError = error instanceof Error ? error.message : 'Gmail setup failed';
+		} finally {
+			isSetupSubmitting = false;
+		}
+	}
+
+	async function completeGmailSetup() {
+		if (!gmailPending) {
+			setupError = 'Gmail OAuth grant has not been started';
+			return;
+		}
+
+		isSetupSubmitting = true;
+		setupMessage = '';
+		setupError = '';
+
+		try {
+			const result = await completeGmailOAuthSetup(apiBaseUrl, apiToken, actorId, {
+				setup_id: gmailPending.setup_id,
+				state: gmailPending.state,
+				authorization_code: gmailAuthorizationCode
+			});
+			setupMessage = `Gmail account ${result.account_id} saved`;
+			gmailAuthorizationCode = '';
+			gmailPending = null;
+		} catch (error) {
+			setupError = error instanceof Error ? error.message : 'Gmail setup failed';
+		} finally {
+			isSetupSubmitting = false;
+		}
+	}
+
+	async function saveImapAccount() {
+		isSetupSubmitting = true;
+		setupMessage = '';
+		setupError = '';
+
+		try {
+			const result = await setupImapAccount(apiBaseUrl, apiToken, actorId, {
+				account_id: imapForm.account_id,
+				provider_kind: selectedProvider === 'icloud' ? 'icloud' : 'imap',
+				display_name: imapForm.display_name,
+				external_account_id: imapForm.external_account_id,
+				host: imapForm.host,
+				port: Number(imapForm.port),
+				tls: imapForm.tls,
+				mailbox: imapForm.mailbox,
+				username: imapForm.username,
+				password: imapForm.password,
+				secret_kind: imapForm.secret_kind
+			});
+			setupMessage = `Mail account ${result.account_id} saved`;
+			imapForm = { ...imapForm, password: '' };
+		} catch (error) {
+			setupError = error instanceof Error ? error.message : 'Mail account setup failed';
+		} finally {
+			isSetupSubmitting = false;
+		}
+	}
 </script>
 
 <svelte:head>
@@ -93,6 +232,132 @@
 						</article>
 					{/each}
 				</div>
+			</section>
+
+			<section class="account-panel" aria-labelledby="account-setup-heading">
+				<header class="panel-header">
+					<div>
+						<p class="section-label">Provider Accounts</p>
+						<h2 id="account-setup-heading">Add Account</h2>
+					</div>
+					<div class="provider-tabs" aria-label="Account provider">
+						<button
+							type="button"
+							class:active={selectedProvider === 'gmail'}
+							onclick={() => selectProvider('gmail')}>Gmail</button
+						>
+						<button
+							type="button"
+							class:active={selectedProvider === 'icloud'}
+							onclick={() => selectProvider('icloud')}>iCloud</button
+						>
+						<button
+							type="button"
+							class:active={selectedProvider === 'imap'}
+							onclick={() => selectProvider('imap')}>IMAP</button
+						>
+					</div>
+				</header>
+
+				{#if selectedProvider === 'gmail'}
+					<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
+						<label>
+							<span>Account ID</span>
+							<input bind:value={gmailForm.account_id} autocomplete="off" />
+						</label>
+						<label>
+							<span>Display name</span>
+							<input bind:value={gmailForm.display_name} autocomplete="off" />
+						</label>
+						<label>
+							<span>Gmail address</span>
+							<input bind:value={gmailForm.external_account_id} autocomplete="email" />
+						</label>
+						<label>
+							<span>OAuth client ID</span>
+							<input bind:value={gmailForm.client_id} autocomplete="off" />
+						</label>
+						<label>
+							<span>OAuth client secret</span>
+							<input bind:value={gmailForm.client_secret} type="password" autocomplete="off" />
+						</label>
+						<label class="wide">
+							<span>Redirect URI</span>
+							<input bind:value={gmailForm.redirect_uri} autocomplete="off" />
+						</label>
+						<div class="form-actions wide">
+							<button type="button" onclick={startGmailSetup} disabled={isSetupSubmitting}>
+								Start OAuth
+							</button>
+						</div>
+					</form>
+
+					{#if gmailPending}
+						<div class="oauth-box">
+							<a href={gmailPending.authorization_url} target="_blank" rel="noreferrer">
+								Open Google consent
+							</a>
+							<label>
+								<span>Authorization code</span>
+								<input bind:value={gmailAuthorizationCode} autocomplete="off" />
+							</label>
+							<button type="button" onclick={completeGmailSetup} disabled={isSetupSubmitting}>
+								Complete Gmail
+							</button>
+						</div>
+					{/if}
+				{:else}
+					<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
+						<label>
+							<span>Account ID</span>
+							<input bind:value={imapForm.account_id} autocomplete="off" />
+						</label>
+						<label>
+							<span>Display name</span>
+							<input bind:value={imapForm.display_name} autocomplete="off" />
+						</label>
+						<label>
+							<span>Email address</span>
+							<input bind:value={imapForm.external_account_id} autocomplete="email" />
+						</label>
+						<label>
+							<span>Username</span>
+							<input bind:value={imapForm.username} autocomplete="username" />
+						</label>
+						<label>
+							<span>Host</span>
+							<input bind:value={imapForm.host} autocomplete="off" />
+						</label>
+						<label>
+							<span>Port</span>
+							<input bind:value={imapForm.port} type="number" min="1" max="65535" />
+						</label>
+						<label>
+							<span>Mailbox</span>
+							<input bind:value={imapForm.mailbox} autocomplete="off" />
+						</label>
+						<label>
+							<span>Password</span>
+							<input bind:value={imapForm.password} type="password" autocomplete="current-password" />
+						</label>
+						<label class="checkbox-row">
+							<input bind:checked={imapForm.tls} type="checkbox" />
+							<span>TLS</span>
+						</label>
+						<div class="form-actions">
+							<button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>
+								Save Account
+							</button>
+						</div>
+					</form>
+				{/if}
+
+				{#if setupMessage}
+					<p class="setup-state success">{setupMessage}</p>
+				{/if}
+				{#if setupError}
+					<p class="setup-state error">{setupError}</p>
+				{/if}
 			</section>
 		{:else if errorMessage}
 			<section class="notice error-notice" aria-label="Backend status error">
@@ -320,6 +585,167 @@
 
 	.error-notice h2,
 	.error-notice p {
+		color: #b42318;
+	}
+
+	.account-panel {
+		background: #ffffff;
+		border: 1px solid #d9dee7;
+		border-radius: 8px;
+		display: grid;
+		gap: 18px;
+		margin-top: 22px;
+		max-width: 980px;
+		padding: 18px;
+	}
+
+	.panel-header {
+		align-items: center;
+		display: flex;
+		gap: 20px;
+		justify-content: space-between;
+	}
+
+	.panel-header h2 {
+		font-size: 18px;
+		line-height: 1.25;
+		margin: 0;
+	}
+
+	.provider-tabs {
+		background: #eef2f7;
+		border-radius: 8px;
+		display: inline-grid;
+		gap: 2px;
+		grid-template-columns: repeat(3, minmax(72px, 1fr));
+		padding: 3px;
+	}
+
+	.provider-tabs button,
+	.form-actions button,
+	.oauth-box button {
+		border: 0;
+		border-radius: 6px;
+		cursor: pointer;
+		font: inherit;
+		font-size: 13px;
+		font-weight: 700;
+	}
+
+	.provider-tabs button {
+		background: transparent;
+		color: #475569;
+		padding: 7px 10px;
+	}
+
+	.provider-tabs button.active {
+		background: #ffffff;
+		color: #0f172a;
+	}
+
+	.setup-form {
+		display: grid;
+		gap: 12px;
+		grid-template-columns: repeat(2, minmax(240px, 1fr));
+	}
+
+	.setup-form label,
+	.oauth-box label {
+		display: grid;
+		gap: 6px;
+	}
+
+	.setup-form label span,
+	.oauth-box label span {
+		color: #475569;
+		font-size: 12px;
+		font-weight: 700;
+	}
+
+	.setup-form input,
+	.oauth-box input {
+		background: #ffffff;
+		border: 1px solid #cbd5e1;
+		border-radius: 6px;
+		color: #0f172a;
+		font: inherit;
+		font-size: 14px;
+		min-width: 0;
+		padding: 9px 10px;
+	}
+
+	.setup-form input:focus,
+	.oauth-box input:focus {
+		border-color: #2563eb;
+		outline: 2px solid #dbeafe;
+	}
+
+	.setup-form .wide,
+	.oauth-box {
+		grid-column: 1 / -1;
+	}
+
+	.checkbox-row {
+		align-content: end;
+		display: flex !important;
+		gap: 8px !important;
+		min-height: 64px;
+	}
+
+	.checkbox-row input {
+		height: 18px;
+		width: 18px;
+	}
+
+	.form-actions {
+		align-content: end;
+		display: grid;
+	}
+
+	.form-actions button,
+	.oauth-box button {
+		background: #1d4ed8;
+		color: #ffffff;
+		min-height: 38px;
+		padding: 9px 13px;
+	}
+
+	.form-actions button:disabled,
+	.oauth-box button:disabled {
+		background: #94a3b8;
+		cursor: not-allowed;
+	}
+
+	.oauth-box {
+		background: #f8fafc;
+		border: 1px solid #d9dee7;
+		border-radius: 8px;
+		display: grid;
+		gap: 12px;
+		padding: 14px;
+	}
+
+	.oauth-box a {
+		color: #1d4ed8;
+		font-size: 14px;
+		font-weight: 700;
+	}
+
+	.setup-state {
+		border-radius: 6px;
+		font-size: 13px;
+		font-weight: 700;
+		margin: 0;
+		padding: 10px 12px;
+	}
+
+	.setup-state.success {
+		background: #ecfdf3;
+		color: #067647;
+	}
+
+	.setup-state.error {
+		background: #fef3f2;
 		color: #b42318;
 	}
 </style>

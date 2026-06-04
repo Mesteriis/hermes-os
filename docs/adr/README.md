@@ -52,3 +52,4 @@ ADR status vocabulary:
 - [ADR-0041 Email Provider Ingestion Foundation](ADR-0041-email-provider-ingestion-foundation.md)
 - [ADR-0042 Secret References for Provider Credentials](ADR-0042-secret-references-for-provider-credentials.md)
 - [ADR-0043 Read-Only Email Provider Networking](ADR-0043-read-only-email-provider-networking.md)
+- [ADR-0044 Account Setup and Encrypted Secret Vault](ADR-0044-account-setup-and-encrypted-secret-vault.md)

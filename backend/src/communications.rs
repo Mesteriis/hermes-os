@@ -65,6 +65,33 @@ impl CommunicationIngestionStore {
         row_to_provider_account(row)
     }
 
+    pub async fn provider_account(
+        &self,
+        account_id: &str,
+    ) -> Result<Option<ProviderAccount>, CommunicationIngestionError> {
+        validate_non_empty("account_id", account_id)?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            FROM communication_provider_accounts
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_provider_account).transpose()
+    }
+
     pub async fn record_raw_source(
         &self,
         record: &NewRawCommunicationRecord,

@@ -1,5 +1,5 @@
 use axum::body::{Body, to_bytes};
-use axum::http::{HeaderValue, Request, StatusCode, header};
+use axum::http::{HeaderValue, Method, Request, StatusCode, header};
 use serde_json::json;
 use tower::ServiceExt;
 
@@ -58,6 +58,7 @@ async fn v1_status_returns_enabled_surfaces_against_postgres() {
     assert_eq!(value["surfaces"]["contacts"], json!(true));
     assert_eq!(value["surfaces"]["search"], json!(true));
     assert_eq!(value["surfaces"]["documents"], json!(true));
+    assert_eq!(value["surfaces"]["account_setup"], json!(true));
 }
 
 #[tokio::test]
@@ -78,6 +79,49 @@ async fn v1_status_rejects_missing_local_api_token_before_database_access() {
             "error": "invalid_api_token",
             "message": "missing or invalid bearer token"
         })
+    );
+}
+
+#[tokio::test]
+async fn v1_status_accepts_local_frontend_cors_preflight_before_auth() {
+    let app = build_router(config_with_api_token());
+
+    for origin in [
+        "http://127.0.0.1:5174",
+        "http://localhost:5173",
+        "http://tauri.localhost",
+        "tauri://localhost",
+    ] {
+        assert_local_cors_preflight(&app, origin).await;
+    }
+}
+
+async fn assert_local_cors_preflight(app: &axum::Router, origin: &'static str) {
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::OPTIONS)
+                .uri("/api/v1/status")
+                .header(header::ORIGIN, HeaderValue::from_static(origin))
+                .header(
+                    header::ACCESS_CONTROL_REQUEST_METHOD,
+                    HeaderValue::from_static("GET"),
+                )
+                .header(
+                    header::ACCESS_CONTROL_REQUEST_HEADERS,
+                    HeaderValue::from_static("authorization,x-hermes-actor-id"),
+                )
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers().get(header::ACCESS_CONTROL_ALLOW_ORIGIN),
+        Some(&HeaderValue::from_static(origin))
     );
 }
 

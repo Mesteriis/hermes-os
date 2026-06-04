@@ -1,7 +1,10 @@
 use std::env;
 use std::net::{AddrParseError, SocketAddr};
+use std::path::{Path, PathBuf};
 
 use thiserror::Error;
+
+use crate::secrets::{ResolvedSecret, SecretResolutionError};
 
 const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_SERVICE_NAME: &str = "hermes-hub-backend";
@@ -12,6 +15,8 @@ pub struct AppConfig {
     http_addr: SocketAddr,
     database_url: Option<String>,
     local_api_token: Option<String>,
+    secret_vault_path: Option<PathBuf>,
+    secret_vault_key: Option<ResolvedSecret>,
 }
 
 impl AppConfig {
@@ -62,6 +67,20 @@ impl AppConfig {
                         config.local_api_token = Some(raw_token.to_owned());
                     }
                 }
+                "HERMES_SECRET_VAULT_PATH" => {
+                    let raw_path = value.as_ref().trim();
+                    if raw_path.is_empty() {
+                        return Err(ConfigError::EmptySecretVaultPath);
+                    }
+                    config.secret_vault_path = Some(PathBuf::from(raw_path));
+                }
+                "HERMES_SECRET_VAULT_KEY" => {
+                    let raw_key = value.as_ref().trim();
+                    if raw_key.is_empty() {
+                        return Err(ConfigError::EmptySecretVaultKey);
+                    }
+                    config.secret_vault_key = Some(ResolvedSecret::new(raw_key)?);
+                }
                 _ => {}
             }
         }
@@ -84,6 +103,14 @@ impl AppConfig {
     pub fn local_api_token(&self) -> Option<&str> {
         self.local_api_token.as_deref()
     }
+
+    pub fn secret_vault_path(&self) -> Option<&Path> {
+        self.secret_vault_path.as_deref()
+    }
+
+    pub fn secret_vault_key(&self) -> Option<&ResolvedSecret> {
+        self.secret_vault_key.as_ref()
+    }
 }
 
 impl Default for AppConfig {
@@ -95,6 +122,8 @@ impl Default for AppConfig {
                 .expect("default HTTP bind address must be valid"),
             database_url: None,
             local_api_token: None,
+            secret_vault_path: None,
+            secret_vault_key: None,
         }
     }
 }
@@ -116,4 +145,13 @@ pub enum ConfigError {
 
     #[error("HERMES_LOCAL_WRITE_TOKEN is set but empty")]
     EmptyLocalWriteToken,
+
+    #[error("HERMES_SECRET_VAULT_PATH is set but empty")]
+    EmptySecretVaultPath,
+
+    #[error("HERMES_SECRET_VAULT_KEY is set but empty")]
+    EmptySecretVaultKey,
+
+    #[error(transparent)]
+    SecretResolution(#[from] SecretResolutionError),
 }

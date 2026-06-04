@@ -19,8 +19,10 @@ Hermes Hub - персональная локальная платформа ко
 - append-only audit log for authorized event API access attempts
 - communication ingestion storage foundation for Gmail, iCloud Mail and generic IMAP
 - secret reference metadata boundary for provider credentials
+- encrypted secret vault and account setup for Gmail, iCloud Mail and generic IMAP
+- read-only Gmail API and IMAP provider networking
 - V1 status API for desktop shell bootstrapping
-- desktop-only SvelteKit/Tauri status shell
+- desktop-only SvelteKit/Tauri status and account setup shell
 - Docker Compose окружение для локальной разработки
 
 ## Принципы
@@ -109,6 +111,8 @@ GET /api/v1/status
 Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
 X-Hermes-Actor-Id: desktop-shell
 ```
+
+Account setup endpoints additionally require `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`; `make docker-env` adds local development defaults to `docker/.env`.
 
 Frontend/Tauri shell commands:
 

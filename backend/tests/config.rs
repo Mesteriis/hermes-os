@@ -1,4 +1,5 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::path::Path;
 
 use hermes_hub_backend::config::{AppConfig, ConfigError};
 
@@ -13,6 +14,8 @@ fn default_config_binds_to_localhost_without_database_url() {
     assert_eq!(config.service_name(), "hermes-hub-backend");
     assert_eq!(config.database_url(), None);
     assert_eq!(config.local_api_token(), None);
+    assert_eq!(config.secret_vault_path(), None);
+    assert_eq!(config.secret_vault_key(), None);
 }
 
 #[test]
@@ -36,6 +39,34 @@ fn config_from_pairs_overrides_http_addr_database_url_and_local_api_token() {
         Some("postgres://hermes:local-dev-password@postgres:5432/hermes_hub")
     );
     assert_eq!(config.local_api_token(), Some("local-dev-api-token"));
+}
+
+#[test]
+fn config_from_pairs_accepts_secret_vault_path_and_key() {
+    let config = AppConfig::from_pairs([
+        (
+            "HERMES_SECRET_VAULT_PATH",
+            "docker/data/secrets/hermes.vault.json",
+        ),
+        ("HERMES_SECRET_VAULT_KEY", "local-vault-key"),
+    ])
+    .expect("valid secret vault config");
+
+    assert_eq!(
+        config.secret_vault_path(),
+        Some(Path::new("docker/data/secrets/hermes.vault.json"))
+    );
+    assert_eq!(
+        config
+            .secret_vault_key()
+            .expect("vault key")
+            .expose_for_runtime(),
+        "local-vault-key"
+    );
+    assert_eq!(
+        format!("{:?}", config.secret_vault_key().expect("vault key")),
+        "ResolvedSecret { value: \"<redacted>\" }"
+    );
 }
 
 #[test]
@@ -87,4 +118,20 @@ fn config_from_pairs_rejects_empty_local_api_token() {
         .expect_err("empty local API token must fail");
 
     assert!(matches!(error, ConfigError::EmptyLocalApiToken));
+}
+
+#[test]
+fn config_from_pairs_rejects_empty_secret_vault_path() {
+    let error = AppConfig::from_pairs([("HERMES_SECRET_VAULT_PATH", "   ")])
+        .expect_err("empty secret vault path must fail");
+
+    assert!(matches!(error, ConfigError::EmptySecretVaultPath));
+}
+
+#[test]
+fn config_from_pairs_rejects_empty_secret_vault_key() {
+    let error = AppConfig::from_pairs([("HERMES_SECRET_VAULT_KEY", "   ")])
+        .expect_err("empty secret vault key must fail");
+
+    assert!(matches!(error, ConfigError::EmptySecretVaultKey));
 }

@@ -23,7 +23,7 @@ Rules:
 - IMAP sync must not issue `STORE`, delete, flag mutation or mailbox mutation commands.
 - Provider network clients produce `EmailSyncBatch` values that are persisted through the existing raw record and checkpoint stores.
 - Secret values must not be stored in raw payloads, provenance, checkpoint JSON, logs or errors.
-- OAuth grant/refresh UX and OS keychain/encrypted vault resolvers are separate secret acquisition concerns, not provider networking concerns.
+- OAuth grant/refresh UX and encrypted vault storage are handled by ADR-0044 as account setup and secret acquisition concerns, not provider networking concerns.
 
 ## Consequences
 
@@ -31,4 +31,4 @@ Rules:
 - Provider networking remains isolated from canonical projections and HTTP handlers.
 - Multiple accounts are still handled through account-scoped plans and credentials.
 - Gmail API behavior and IMAP wire behavior are covered by local network tests without requiring real external credentials.
-- Future work can add OAuth consent/refresh and OS keychain resolution without changing raw ingestion storage.
+- Account setup can provide refreshed runtime access tokens without changing raw ingestion storage.

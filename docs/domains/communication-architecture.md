@@ -33,6 +33,8 @@ Read-only email sync starts with a provider preflight plan before any network ad
 
 Provider networking is read-only. Gmail uses OAuth Bearer tokens with the Gmail API `messages.list` and `messages.get?format=raw` flow. iCloud and generic IMAP use app password/password credentials with `EXAMINE`, `UID SEARCH` and `UID FETCH`; adapters must not mutate flags, delete messages or write mailboxes. Both paths emit `EmailSyncBatch` records for raw storage and checkpoint persistence.
 
+Account setup is local API driven. Gmail setup starts an OAuth authorization-code-with-PKCE grant, stores the resulting token bundle in the encrypted vault, and refreshes access tokens from that vault. iCloud and generic IMAP setup store app-password/password values in the encrypted vault. Provider account rows and secret reference rows contain only metadata and bindings.
+
 Raw provider records are append-only and idempotent by provider account, record kind and provider record ID. They preserve provider payload and provenance before canonical message projections are built.
 
 ## Canonical Objects
