@@ -20,6 +20,7 @@ use hermes_hub_backend::{build_router, build_router_with_database};
 const LOCAL_API_TOKEN: &str = "graph-api-test-token";
 const LOCAL_API_ACTOR_ID: &str = "graph-api-test-client";
 const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
+const EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT: usize = 100;
 
 #[tokio::test]
 async fn graph_summary_rejects_missing_local_api_token() {
@@ -62,6 +63,50 @@ async fn graph_summary_rejects_missing_local_api_actor_id() {
         json!({
             "error": "invalid_actor_id",
             "message": "missing or invalid x-hermes-actor-id header"
+        })
+    );
+}
+
+#[tokio::test]
+async fn graph_search_rejects_missing_local_api_token_before_missing_query_validation() {
+    let app = build_router(config_with_api_token());
+
+    let response = app
+        .oneshot(get_request("/api/v2/graph/search"))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let body = json_body(response).await;
+    assert_eq!(
+        body,
+        json!({
+            "error": "invalid_api_token",
+            "message": "missing or invalid bearer token"
+        })
+    );
+}
+
+#[tokio::test]
+async fn graph_neighborhood_rejects_missing_local_api_token_before_malformed_query_validation() {
+    let app = build_router(config_with_api_token());
+
+    let response = app
+        .oneshot(get_request(
+            "/api/v2/graph/neighborhood?node_id=graph:node:v1:person:alex&depth=not-a-number",
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+    let body = json_body(response).await;
+    assert_eq!(
+        body,
+        json!({
+            "error": "invalid_api_token",
+            "message": "missing or invalid bearer token"
         })
     );
 }
@@ -228,8 +273,8 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
     assert_eq!(body["selected_node"]["label"], json!(person.label));
 
     let nodes = body["nodes"].as_array().expect("node array");
-    assert_eq!(nodes.len(), 2);
-    assert!(nodes.iter().any(|node| node["node_id"] == person.node_id));
+    assert_eq!(nodes.len(), 1);
+    assert!(nodes.iter().all(|node| node["node_id"] != person.node_id));
     assert!(nodes.iter().any(|node| node["node_id"] == email.node_id));
 
     let edges = body["edges"].as_array().expect("edge array");
@@ -253,6 +298,75 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
 }
 
 #[tokio::test]
+async fn graph_neighborhood_caps_depth_one_edges_nodes_and_evidence() {
+    let Some(context) = live_graph_api_context("neighborhood cap").await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let person = context
+        .store
+        .upsert_node(&NewGraphNode::new(
+            GraphNodeKind::Person,
+            format!("contact:alex-neighborhood-cap:{suffix}"),
+            format!("Alex Neighborhood Cap {suffix}"),
+        ))
+        .await
+        .expect("person node");
+
+    for index in 0..=EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT {
+        let email = context
+            .store
+            .upsert_node(&NewGraphNode::new(
+                GraphNodeKind::EmailAddress,
+                format!("alex-neighborhood-cap-{suffix}-{index:03}@example.com"),
+                format!("alex-neighborhood-cap-{suffix}-{index:03}@example.com"),
+            ))
+            .await
+            .expect("email node");
+        context
+            .store
+            .upsert_edge_with_evidence(
+                &NewGraphEdge::new(
+                    person.node_id.clone(),
+                    email.node_id,
+                    RelationshipType::PersonHasEmailAddress,
+                    1.0,
+                    GraphReviewState::SystemAccepted,
+                ),
+                &[NewGraphEvidence::new(
+                    GraphEvidenceSourceKind::Contact,
+                    format!("contact-source:{suffix}:{index:03}"),
+                )],
+            )
+            .await
+            .expect("graph edge");
+    }
+
+    let response = context
+        .app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v2/graph/neighborhood?node_id={}", person.node_id),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = json_body(response).await;
+    let nodes = body["nodes"].as_array().expect("node array");
+    let edges = body["edges"].as_array().expect("edge array");
+    let evidence = body["evidence"].as_array().expect("evidence array");
+    assert_eq!(nodes.len(), EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT);
+    assert!(nodes.iter().all(|node| node["node_id"] != person.node_id));
+    assert_eq!(edges.len(), EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT);
+    assert_eq!(evidence.len(), EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT);
+
+    context.cleanup().await;
+}
+
+#[tokio::test]
 async fn graph_neighborhood_returns_not_found_when_node_id_is_missing() {
     let app = build_router(config_with_api_token());
 
@@ -265,6 +379,15 @@ async fn graph_neighborhood_returns_not_found_when_node_id_is_missing() {
         .expect("response");
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+    let body = json_body(response).await;
+    assert_eq!(
+        body,
+        json!({
+            "error": "graph_node_not_found",
+            "message": "graph node was not found"
+        })
+    );
 }
 
 #[tokio::test]

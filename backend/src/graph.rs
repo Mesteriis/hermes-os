@@ -3,9 +3,11 @@ use std::collections::BTreeSet;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
+
+pub const GRAPH_NEIGHBORHOOD_EDGE_LIMIT: i64 = 100;
 
 #[derive(Clone)]
 pub struct GraphStore {
@@ -48,20 +50,56 @@ impl GraphStore {
         edge: &NewGraphEdge,
         evidence: &[NewGraphEvidence],
     ) -> Result<GraphEdge, GraphStoreError> {
-        edge.validate()?;
-        if evidence.is_empty() {
-            return Err(GraphStoreError::SystemEdgeRequiresEvidence);
-        }
-        for item in evidence {
-            item.validate()?;
-        }
+        validate_edge_with_evidence(edge, evidence)?;
+        let mut transaction = self.pool.begin().await?;
+        let stored_edge =
+            Self::upsert_edge_with_evidence_in_transaction(&mut transaction, edge, evidence)
+                .await?;
+        transaction.commit().await?;
+        Ok(stored_edge)
+    }
+
+    pub(crate) async fn upsert_node_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        node: &NewGraphNode,
+    ) -> Result<GraphNode, GraphStoreError> {
+        node.validate()?;
+        let node_id = node_id(node.node_kind, &node.stable_key);
+        let row = sqlx::query(
+            r#"
+            INSERT INTO graph_nodes (node_id, node_kind, stable_key, label, properties)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (node_kind, stable_key)
+            DO UPDATE SET
+                label = EXCLUDED.label,
+                properties = EXCLUDED.properties,
+                updated_at = now()
+            RETURNING node_id, node_kind, stable_key, label, properties, created_at, updated_at
+            "#,
+        )
+        .bind(&node_id)
+        .bind(node.node_kind.as_str())
+        .bind(&node.stable_key)
+        .bind(&node.label)
+        .bind(&node.properties)
+        .fetch_one(&mut **transaction)
+        .await?;
+
+        row_to_node(row)
+    }
+
+    pub(crate) async fn upsert_edge_with_evidence_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        edge: &NewGraphEdge,
+        evidence: &[NewGraphEvidence],
+    ) -> Result<GraphEdge, GraphStoreError> {
+        validate_edge_with_evidence(edge, evidence)?;
 
         let edge_id = edge_id(
             &edge.source_node_id,
             edge.relationship_type,
             &edge.target_node_id,
         );
-        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO graph_edges (
@@ -107,7 +145,7 @@ impl GraphStore {
         .bind(&edge.properties)
         .bind(edge.valid_from)
         .bind(edge.valid_to)
-        .fetch_one(&mut *transaction)
+        .fetch_one(&mut **transaction)
         .await?;
 
         for item in evidence {
@@ -128,11 +166,10 @@ impl GraphStore {
             .bind(&item.source_id)
             .bind(&item.excerpt)
             .bind(&item.metadata)
-            .execute(&mut *transaction)
+            .execute(&mut **transaction)
             .await?;
         }
 
-        transaction.commit().await?;
         row_to_edge(row)
     }
 
@@ -253,9 +290,11 @@ impl GraphStore {
             WHERE valid_to IS NULL
               AND (source_node_id = $1 OR target_node_id = $1)
             ORDER BY relationship_type, source_node_id, target_node_id
+            LIMIT $2
             "#,
         )
         .bind(&selected_node.node_id)
+        .bind(GRAPH_NEIGHBORHOOD_EDGE_LIMIT)
         .fetch_all(&self.pool)
         .await?;
         let edges = edge_rows
@@ -263,27 +302,36 @@ impl GraphStore {
             .map(row_to_edge)
             .collect::<Result<Vec<_>, _>>()?;
 
-        let mut node_ids = BTreeSet::from([selected_node.node_id.clone()]);
+        let mut node_ids = BTreeSet::new();
         for edge in &edges {
-            node_ids.insert(edge.source_node_id.clone());
-            node_ids.insert(edge.target_node_id.clone());
+            if edge.source_node_id != selected_node.node_id {
+                node_ids.insert(edge.source_node_id.clone());
+            }
+            if edge.target_node_id != selected_node.node_id {
+                node_ids.insert(edge.target_node_id.clone());
+            }
         }
         let node_ids = node_ids.into_iter().collect::<Vec<_>>();
-        let node_rows = sqlx::query(
-            r#"
-            SELECT node_id, node_kind, stable_key, label, properties, created_at, updated_at
-            FROM graph_nodes
-            WHERE node_id = ANY($1)
-            ORDER BY node_kind, label, node_id
-            "#,
-        )
-        .bind(&node_ids)
-        .fetch_all(&self.pool)
-        .await?;
-        let nodes = node_rows
-            .into_iter()
-            .map(row_to_node)
-            .collect::<Result<Vec<_>, _>>()?;
+        let nodes = if node_ids.is_empty() {
+            Vec::new()
+        } else {
+            let node_rows = sqlx::query(
+                r#"
+                SELECT node_id, node_kind, stable_key, label, properties, created_at, updated_at
+                FROM graph_nodes
+                WHERE node_id = ANY($1)
+                ORDER BY node_kind, label, node_id
+                "#,
+            )
+            .bind(&node_ids)
+            .fetch_all(&self.pool)
+            .await?;
+
+            node_rows
+                .into_iter()
+                .map(row_to_node)
+                .collect::<Result<Vec<_>, _>>()?
+        };
 
         let edge_ids = edges
             .iter()
@@ -731,6 +779,21 @@ fn parse_evidence_source_kind(value: String) -> Result<GraphEvidenceSourceKind, 
 fn validate_non_empty(field_name: &'static str, value: &str) -> Result<(), GraphStoreError> {
     if value.trim().is_empty() {
         return Err(GraphStoreError::EmptyField(field_name));
+    }
+
+    Ok(())
+}
+
+fn validate_edge_with_evidence(
+    edge: &NewGraphEdge,
+    evidence: &[NewGraphEvidence],
+) -> Result<(), GraphStoreError> {
+    edge.validate()?;
+    if evidence.is_empty() {
+        return Err(GraphStoreError::SystemEdgeRequiresEvidence);
+    }
+    for item in evidence {
+        item.validate()?;
     }
 
     Ok(())

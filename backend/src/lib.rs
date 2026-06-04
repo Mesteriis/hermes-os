@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use axum::extract::{Path, Query, State};
+use axum::extract::{Path, Query, RawQuery, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::Html;
 use axum::routing::{get, post};
@@ -33,6 +33,7 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
+use url::form_urlencoded;
 
 use crate::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
 use crate::communications::{CommunicationIngestionStore, EmailProviderKind};
@@ -289,9 +290,10 @@ async fn get_graph_summary(
 async fn get_graph_neighborhood(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(query): Query<GraphNeighborhoodQuery>,
+    RawQuery(raw_query): RawQuery,
 ) -> Result<Json<crate::graph::GraphNeighborhood>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
+    let query = parse_graph_neighborhood_query(raw_query.as_deref())?;
     if query.depth.unwrap_or(1) != 1 {
         return Err(ApiError::InvalidGraphQuery("depth supports only 1"));
     }
@@ -301,10 +303,10 @@ async fn get_graph_neighborhood(
         .map(str::trim)
         .filter(|id| !id.is_empty())
     else {
-        return Err(ApiError::NotFound);
+        return Err(ApiError::GraphNotFound);
     };
     let Some(neighborhood) = graph_store(&state)?.neighborhood(node_id).await? else {
-        return Err(ApiError::NotFound);
+        return Err(ApiError::GraphNotFound);
     };
     Ok(Json(neighborhood))
 }
@@ -312,10 +314,11 @@ async fn get_graph_neighborhood(
 async fn get_graph_search(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(query): Query<GraphSearchQuery>,
+    RawQuery(raw_query): RawQuery,
 ) -> Result<Json<Vec<crate::graph::GraphNode>>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let search = query.q.trim();
+    let query = parse_graph_search_query(raw_query.as_deref())?;
+    let search = query.q.as_deref().unwrap_or_default().trim();
     if search.is_empty() {
         return Err(ApiError::InvalidGraphQuery("q must not be empty"));
     }
@@ -633,16 +636,65 @@ struct V1Surfaces {
     account_setup: bool,
 }
 
-#[derive(Deserialize)]
 struct GraphNeighborhoodQuery {
     node_id: Option<String>,
     depth: Option<u8>,
 }
 
-#[derive(Deserialize)]
 struct GraphSearchQuery {
-    q: String,
+    q: Option<String>,
     limit: Option<i64>,
+}
+
+fn parse_graph_neighborhood_query(
+    raw_query: Option<&str>,
+) -> Result<GraphNeighborhoodQuery, ApiError> {
+    let mut query = GraphNeighborhoodQuery {
+        node_id: None,
+        depth: None,
+    };
+
+    if let Some(raw_query) = raw_query {
+        for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
+            match key.as_ref() {
+                "node_id" => query.node_id = Some(value.into_owned()),
+                "depth" => {
+                    query.depth = Some(
+                        value
+                            .parse::<u8>()
+                            .map_err(|_| ApiError::InvalidGraphQuery("depth supports only 1"))?,
+                    );
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(query)
+}
+
+fn parse_graph_search_query(raw_query: Option<&str>) -> Result<GraphSearchQuery, ApiError> {
+    let mut query = GraphSearchQuery {
+        q: None,
+        limit: None,
+    };
+
+    if let Some(raw_query) = raw_query {
+        for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
+            match key.as_ref() {
+                "q" => query.q = Some(value.into_owned()),
+                "limit" => {
+                    query.limit =
+                        Some(value.parse::<i64>().map_err(|_| {
+                            ApiError::InvalidGraphQuery("limit must be an integer")
+                        })?);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(query)
 }
 
 enum ApiError {
@@ -660,6 +712,7 @@ enum ApiError {
     AccountSetupState,
     AccountSetupPendingGrantNotFound,
     AccountSetupStateMismatch,
+    GraphNotFound,
     NotFound,
 }
 
@@ -779,6 +832,12 @@ impl axum::response::IntoResponse for ApiError {
                 StatusCode::BAD_REQUEST,
                 "account_setup_state_mismatch",
                 "Gmail OAuth state does not match the pending setup".to_owned(),
+                false,
+            ),
+            Self::GraphNotFound => (
+                StatusCode::NOT_FOUND,
+                "graph_node_not_found",
+                "graph node was not found".to_owned(),
                 false,
             ),
             Self::NotFound => (

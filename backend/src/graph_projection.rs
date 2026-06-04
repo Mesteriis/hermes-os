@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
-use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 use crate::graph::{
@@ -140,30 +140,32 @@ impl GraphProjectionService {
     ) -> Result<(), GraphProjectionError> {
         debug_assert!(!message.body_text.trim().is_empty());
 
-        let message_node = self
-            .graph
-            .upsert_node(
-                &NewGraphNode::new(
-                    GraphNodeKind::Message,
-                    &message.message_id,
-                    &message.subject,
-                )
-                .properties(json!({
-                    "account_id": message.account_id,
-                    "provider_record_id": message.provider_record_id,
-                    "raw_record_id": message.raw_record_id,
-                    "occurred_at": message.occurred_at,
-                })),
+        let mut transaction = self.pool.begin().await?;
+        let message_node = GraphStore::upsert_node_in_transaction(
+            &mut transaction,
+            &NewGraphNode::new(
+                GraphNodeKind::Message,
+                &message.message_id,
+                &message.subject,
             )
-            .await?;
+            .properties(json!({
+                "account_id": message.account_id,
+                "provider_record_id": message.provider_record_id,
+                "raw_record_id": message.raw_record_id,
+                "occurred_at": message.occurred_at,
+            })),
+        )
+        .await?;
         report.nodes_upserted += 1;
 
-        self.delete_message_edges(&message.message_id).await?;
+        self.delete_message_edges(&mut transaction, &message.message_id)
+            .await?;
 
         let sender = self
-            .resolve_message_endpoint(&message.sender, report)
+            .resolve_message_endpoint(&mut transaction, &message.sender, report)
             .await?;
         self.project_message_endpoint(
+            &mut transaction,
             sender,
             &message_node.node_id,
             message,
@@ -173,8 +175,11 @@ impl GraphProjectionService {
         .await?;
 
         for recipient in &message.recipients {
-            let recipient = self.resolve_message_endpoint(recipient, report).await?;
+            let recipient = self
+                .resolve_message_endpoint(&mut transaction, recipient, report)
+                .await?;
             self.project_message_endpoint(
+                &mut transaction,
                 recipient,
                 &message_node.node_id,
                 message,
@@ -184,10 +189,16 @@ impl GraphProjectionService {
             .await?;
         }
 
+        transaction.commit().await?;
+
         Ok(())
     }
 
-    async fn delete_message_edges(&self, message_id: &str) -> Result<(), GraphProjectionError> {
+    async fn delete_message_edges(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        message_id: &str,
+    ) -> Result<(), GraphProjectionError> {
         sqlx::query(
             r#"
             DELETE FROM graph_edges
@@ -201,7 +212,7 @@ impl GraphProjectionService {
             "#,
         )
         .bind(message_id)
-        .execute(&self.pool)
+        .execute(&mut **transaction)
         .await?;
 
         Ok(())
@@ -209,11 +220,14 @@ impl GraphProjectionService {
 
     async fn resolve_message_endpoint(
         &self,
+        transaction: &mut Transaction<'_, Postgres>,
         email_address: &str,
         report: &mut GraphProjectionReport,
     ) -> Result<MessageEndpoint, GraphProjectionError> {
         let normalized_email = normalize_email_address(email_address);
-        let contact = self.contact_by_normalized_email(&normalized_email).await?;
+        let contact = self
+            .contact_by_normalized_email(transaction, &normalized_email)
+            .await?;
 
         if let Some(contact) = contact {
             return Ok(MessageEndpoint::Person {
@@ -221,14 +235,15 @@ impl GraphProjectionService {
             });
         }
 
-        let email = self
-            .graph
-            .upsert_node(&NewGraphNode::new(
+        let email = GraphStore::upsert_node_in_transaction(
+            transaction,
+            &NewGraphNode::new(
                 GraphNodeKind::EmailAddress,
                 &normalized_email,
                 &normalized_email,
-            ))
-            .await?;
+            ),
+        )
+        .await?;
         report.nodes_upserted += 1;
 
         Ok(MessageEndpoint::EmailAddress {
@@ -238,13 +253,14 @@ impl GraphProjectionService {
 
     async fn contact_by_normalized_email(
         &self,
+        transaction: &mut Transaction<'_, Postgres>,
         normalized_email: &str,
     ) -> Result<Option<ContactRow>, GraphProjectionError> {
         let row = sqlx::query(
             "SELECT contact_id, display_name, email_address FROM contacts WHERE email_address = $1",
         )
         .bind(normalized_email)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut **transaction)
         .await?;
 
         row.map(row_to_contact).transpose()
@@ -252,6 +268,7 @@ impl GraphProjectionService {
 
     async fn project_message_endpoint(
         &self,
+        transaction: &mut Transaction<'_, Postgres>,
         endpoint: MessageEndpoint,
         message_node_id: &str,
         message: &MessageRow,
@@ -259,18 +276,18 @@ impl GraphProjectionService {
         report: &mut GraphProjectionReport,
     ) -> Result<(), GraphProjectionError> {
         let relationship_type = endpoint.relationship_type(direction);
-        self.graph
-            .upsert_edge_with_evidence(
-                &NewGraphEdge::new(
-                    endpoint.node_id().to_owned(),
-                    message_node_id.to_owned(),
-                    relationship_type,
-                    1.0,
-                    GraphReviewState::SystemAccepted,
-                ),
-                &[message_evidence(message)],
-            )
-            .await?;
+        GraphStore::upsert_edge_with_evidence_in_transaction(
+            transaction,
+            &NewGraphEdge::new(
+                endpoint.node_id().to_owned(),
+                message_node_id.to_owned(),
+                relationship_type,
+                1.0,
+                GraphReviewState::SystemAccepted,
+            ),
+            &[message_evidence(message)],
+        )
+        .await?;
         report.edges_upserted += 1;
         report.evidence_upserted += 1;
 
