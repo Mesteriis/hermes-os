@@ -2,7 +2,7 @@
 
 Rust backend for Hermes Hub.
 
-Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import, message/contact/document projection boundaries, Tantivy search boundary, projection cursors and projection runner batch semantics. OS keychain resolver, full MIME parsing, knowledge graph integration and agent runtime are not implemented yet.
+Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, and read-only V2 graph core projection/read APIs backed by PostgreSQL. OS keychain resolver, full MIME parsing, graph editing, AI/entity extraction, richer graph inference and agent runtime are not implemented yet.
 
 ## Commands
 
@@ -39,7 +39,7 @@ Graph core smoke:
 make backend-graph-smoke-dev
 ```
 
-This starts the local PostgreSQL container, runs graph store, projection and read API tests with `HERMES_TEST_DATABASE_URL`, then stops PostgreSQL.
+This starts the local PostgreSQL container, runs graph store, projection and read API tests with `HERMES_TEST_DATABASE_URL`, then stops the Compose PostgreSQL service on exit. Do not run this while relying on the same Compose PostgreSQL service for an active development database session.
 
 Direct Cargo commands:
 
@@ -67,6 +67,9 @@ Supported environment variables:
 - `GET /healthz` - returns backend health status and service name.
 - `GET /readyz` - returns readiness status; it is `503` when PostgreSQL is not configured, unavailable or missing required SQLx migrations.
 - `GET /api/v1/status` - returns enabled V1 surfaces. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+- `GET /api/v2/graph/summary` - returns graph node, edge and evidence summary counts. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+- `GET /api/v2/graph/search` - searches graph nodes by `q` with optional `limit`. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+- `GET /api/v2/graph/neighborhood` - returns the depth-1 graph neighborhood for `node_id`, including neighboring nodes, edges and evidence. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
 - `POST /api/v1/email-accounts/gmail/oauth/start` - starts Gmail OAuth account setup and returns a PKCE authorization URL. Requires local API headers and encrypted vault config.
 - `GET /api/v1/email-accounts/gmail/oauth/callback` - displays OAuth callback code/state for the desktop setup flow.
 - `POST /api/v1/email-accounts/gmail/oauth/complete` - exchanges a Gmail authorization code, stores the encrypted token bundle and creates provider account bindings. Requires local API headers, PostgreSQL and encrypted vault config.
@@ -96,6 +99,9 @@ Current schema:
 - `communication_messages` - canonical message projection records derived from raw communication records.
 - `contacts` - contact projection records keyed by unique email address.
 - `documents` - imported document records with source fingerprints and extracted text.
+- `graph_nodes` - rebuildable graph projection nodes derived from contacts, messages and documents.
+- `graph_edges` - rebuildable graph projection relationships with confidence and review state.
+- `graph_evidence` - rebuildable graph projection evidence records that preserve edge provenance.
 
 Relevant design documents:
 
