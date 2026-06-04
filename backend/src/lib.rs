@@ -10,6 +10,7 @@ pub mod email_sources;
 pub mod email_sync;
 pub mod event_log;
 pub mod graph;
+pub mod graph_projection;
 pub mod messages;
 pub mod projections;
 pub mod search;
