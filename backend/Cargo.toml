@@ -3,6 +3,7 @@ name = "hermes-hub-backend"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
+default-run = "hermes-hub-backend"
 
 [lib]
 name = "hermes_hub_backend"
@@ -11,6 +12,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "hermes-hub-backend"
 path = "src/main.rs"
+
+[[bin]]
+name = "hermes-graph-project"
+path = "src/bin/hermes_graph_project.rs"
 
 [dependencies]
 aes-gcm = "0.10"

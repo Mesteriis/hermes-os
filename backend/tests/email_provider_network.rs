@@ -136,12 +136,17 @@ async fn imap_network_client_fetches_raw_messages_by_uid_without_mutating_mailbo
             .iter()
             .any(|command| command.contains("UID SEARCH 43:*"))
     );
-    assert!(
-        commands
-            .iter()
-            .any(|command| command.contains("UID FETCH 43 (UID RFC822 RFC822.SIZE INTERNALDATE)"))
-    );
-    assert!(!commands.iter().any(|command| command.contains("STORE")));
+    assert!(commands.iter().any(|command| {
+        command.contains("UID FETCH 43 (UID BODY.PEEK[] RFC822.SIZE INTERNALDATE)")
+    }));
+    for prohibited_command in ["SELECT", "STORE", "EXPUNGE", "COPY", "MOVE", "DELETE"] {
+        assert!(
+            !commands
+                .iter()
+                .any(|command| command.to_ascii_uppercase().contains(prohibited_command)),
+            "IMAP client must not send mutating command `{prohibited_command}`: {commands:?}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -388,7 +393,7 @@ impl MockImapServer {
                 } else if command.contains("UID FETCH") {
                     write!(
                         stream,
-                        "* 1 FETCH (UID 43 RFC822.SIZE 22 INTERNALDATE \"04-Jun-2026 12:00:00 +0000\" RFC822 {{22}}\r\nSubject: IMAP\r\n\r\nHello)\r\n{tag} OK FETCH completed\r\n"
+                        "* 1 FETCH (UID 43 RFC822.SIZE 22 INTERNALDATE \"04-Jun-2026 12:00:00 +0000\" BODY[] {{22}}\r\nSubject: IMAP\r\n\r\nHello)\r\n{tag} OK FETCH completed\r\n"
                     )
                     .expect("write FETCH response");
                 } else if command.contains("LOGOUT") {

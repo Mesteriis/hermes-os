@@ -25,6 +25,7 @@ make backend-messages-smoke-dev
 make backend-contacts-smoke-dev
 make backend-documents-smoke-dev
 make backend-graph-smoke-dev
+make backend-graph-project-dev
 make backend-search-smoke-dev
 make backend-projection-smoke-dev
 make backend-projection-runner-smoke-dev
@@ -41,10 +42,19 @@ make backend-graph-smoke-dev
 
 This starts the local PostgreSQL container, runs graph store, projection and read API tests with `HERMES_TEST_DATABASE_URL`, then stops the Compose PostgreSQL service on exit. Do not run this while relying on the same Compose PostgreSQL service for an active development database session.
 
+Project current V1 data into the V2 graph tables:
+
+```bash
+make backend-graph-project-dev
+```
+
+This starts the local PostgreSQL container if needed, applies migrations through the backend storage layer, runs `GraphProjectionService::project_from_v1()` against the current dev database and prints a JSON projection summary. It leaves PostgreSQL running for the active development session and does not connect to Gmail, iCloud or IMAP provider mailboxes.
+
 Direct Cargo commands:
 
 ```sh
 cargo run --manifest-path backend/Cargo.toml
+cargo run --manifest-path backend/Cargo.toml --bin hermes-graph-project
 cargo test --manifest-path backend/Cargo.toml
 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
 ```

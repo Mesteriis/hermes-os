@@ -316,7 +316,7 @@ where
     if !uids.is_empty() {
         let uid_set = uid_set(&uids);
         let fetched_messages = session
-            .uid_fetch(uid_set, "(UID RFC822 RFC822.SIZE INTERNALDATE)")
+            .uid_fetch(uid_set, "(UID BODY.PEEK[] RFC822.SIZE INTERNALDATE)")
             .await?
             .try_collect::<Vec<_>>()
             .await?;

@@ -110,6 +110,14 @@ make backend-run-dev
 make backend-watch-dev
 ```
 
+Пересобрать V2 graph projection из текущих V1 таблиц в локальной dev DB:
+
+```sh
+make backend-graph-project-dev
+```
+
+Команда поднимает PostgreSQL при необходимости, применяет backend migrations, печатает JSON summary и оставляет Postgres запущенным для dev-сессии. Она не подключается к Gmail, iCloud или raw IMAP mailbox.
+
 `/api/events` и `/api/audit/events` требуют локальный API token и non-secret actor ID:
 
 ```sh
