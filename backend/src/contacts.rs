@@ -32,7 +32,6 @@ impl ContactProjectionStore {
             VALUES ($1, $2, $3)
             ON CONFLICT (email_address)
             DO UPDATE SET
-                contact_id = EXCLUDED.contact_id,
                 display_name = EXCLUDED.display_name,
                 updated_at = now()
             RETURNING
@@ -66,17 +65,30 @@ pub async fn upsert_contacts_from_message_participants(
     store: &ContactProjectionStore,
     email_addresses: &[String],
 ) -> Result<Vec<Contact>, ContactProjectionError> {
-    let mut seen = HashSet::new();
+    let normalized_email_addresses = normalize_email_addresses(email_addresses)?;
     let mut contacts = Vec::new();
+
+    for email_address in normalized_email_addresses {
+        contacts.push(store.upsert_email_contact(&email_address).await?);
+    }
+
+    Ok(contacts)
+}
+
+fn normalize_email_addresses(
+    email_addresses: &[String],
+) -> Result<Vec<String>, ContactProjectionError> {
+    let mut seen = HashSet::new();
+    let mut normalized_email_addresses = Vec::new();
 
     for email_address in email_addresses {
         let normalized_email = normalize_email_address(email_address)?;
         if seen.insert(normalized_email.clone()) {
-            contacts.push(store.upsert_email_contact(&normalized_email).await?);
+            normalized_email_addresses.push(normalized_email);
         }
     }
 
-    Ok(contacts)
+    Ok(normalized_email_addresses)
 }
 
 fn row_to_contact(row: PgRow) -> Result<Contact, ContactProjectionError> {

@@ -80,6 +80,43 @@ async fn contacts_projection_rejects_blank_email_participant() {
 }
 
 #[tokio::test]
+async fn contacts_projection_rejects_invalid_batch_before_writing_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live contacts invalid batch atomicity test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let store = ContactProjectionStore::new(pool.clone());
+    let suffix = unique_suffix();
+    let valid_email = format!("valid-before-blank-{suffix}@example.com");
+
+    let error = upsert_contacts_from_message_participants(
+        &store,
+        &[valid_email.clone(), String::from("   ")],
+    )
+    .await
+    .expect_err("invalid participant batch must fail");
+
+    assert!(
+        matches!(error, ContactProjectionError::EmptyEmailAddress),
+        "expected EmptyEmailAddress, got {error:?}"
+    );
+
+    let count =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM contacts WHERE email_address = $1")
+            .bind(&valid_email)
+            .fetch_one(&pool)
+            .await
+            .expect("contact count after rejected batch");
+    assert_eq!(count, 0);
+}
+
+#[tokio::test]
 async fn contacts_projection_distinguishes_delimiter_bearing_email_identities_against_postgres() {
     let Some(store) = live_contacts_store("delimiter-bearing contact identities").await else {
         return;
