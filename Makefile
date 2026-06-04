@@ -1,7 +1,7 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config validate dev up down restart logs ps shell db-up db-down db-shell clean reset-data backend-run backend-run-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
+.PHONY: help docker-env compose-config validate dev up down restart logs ps shell db-up db-down db-shell clean reset-data backend-run backend-run-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
@@ -35,6 +35,7 @@ help:
 	@printf '%s\n' '  make backend-projection-smoke-dev Run replay/projection cursor smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-projection-runner-smoke-dev Run projection runner smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-events-api-smoke-dev Run event HTTP API smoke test with dev PostgreSQL'
+	@printf '%s\n' '  make backend-v1-api-smoke-dev Run V1 read API smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-check   Run cargo check for the backend'
 	@printf '%s\n' '  make backend-fmt     Format backend Rust code'
 	@printf '%s\n' '  make backend-clippy  Run clippy with warnings denied'
@@ -61,7 +62,7 @@ docker-env:
 compose-config: docker-env
 	$(COMPOSE) config
 
-validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev
+validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev
 
 dev: docker-env
 	$(COMPOSE) up --build
@@ -258,6 +259,17 @@ backend-events-api-smoke-dev: docker-env
 		set -a; . docker/.env; set +a; \
 		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
 		cargo test --manifest-path $(BACKEND_MANIFEST) --test events_api -- --nocapture --test-threads=1
+
+backend-v1-api-smoke-dev: docker-env
+	@set -eu; \
+		cleanup() { \
+			$(MAKE) db-down >/dev/null 2>&1 || true; \
+		}; \
+		trap cleanup EXIT; \
+		$(MAKE) db-up; \
+		set -a; . docker/.env; set +a; \
+		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
+		cargo test --manifest-path $(BACKEND_MANIFEST) --test v1_api -- --nocapture --test-threads=1
 
 backend-check:
 	cargo check --manifest-path $(BACKEND_MANIFEST) --all-targets --all-features

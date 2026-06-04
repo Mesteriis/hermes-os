@@ -56,6 +56,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
+        .route("/api/v1/status", get(get_v1_status))
         .route("/api/audit/events", get(get_audit_events))
         .route("/api/events", post(post_event))
         .route("/api/events/{event_id}", get(get_event))
@@ -179,6 +180,26 @@ async fn get_audit_events(
         .await?;
 
     Ok(Json(AuditEventsResponse { items }))
+}
+
+async fn get_v1_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<V1StatusResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let Some(_pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(Json(V1StatusResponse {
+        version: "1.0",
+        surfaces: V1Surfaces {
+            messages: true,
+            contacts: true,
+            search: true,
+            documents: true,
+        },
+    }))
 }
 
 fn event_store(state: &AppState) -> Result<EventStore, ApiError> {
@@ -347,6 +368,20 @@ struct AuditEventsQuery {
 #[derive(Serialize)]
 struct AuditEventsResponse {
     items: Vec<ApiAuditRecord>,
+}
+
+#[derive(Serialize)]
+struct V1StatusResponse {
+    version: &'static str,
+    surfaces: V1Surfaces,
+}
+
+#[derive(Serialize)]
+struct V1Surfaces {
+    messages: bool,
+    contacts: bool,
+    search: bool,
+    documents: bool,
 }
 
 enum ApiError {
