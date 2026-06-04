@@ -67,6 +67,73 @@ async fn graph_projection_is_idempotent_for_v1_sources_against_postgres() {
     assert_document_projected(&context.pool, suffix).await;
 }
 
+#[tokio::test]
+async fn graph_projection_replaces_stale_unknown_message_edges_against_postgres() {
+    let Some(context) =
+        live_projection_context("graph projection stale message edge replacement").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let sender_email = format!("identity-upgrade-{suffix}@example.com");
+    let provider_record_id = format!("provider-graph-identity-upgrade-{suffix}");
+    let subject = format!("Graph identity upgrade subject {suffix}");
+    let projected = seed_message(
+        &context,
+        suffix,
+        &sender_email,
+        &[format!("recipient-upgrade-{suffix}@example.com")],
+        &provider_record_id,
+        &subject,
+    )
+    .await;
+
+    context
+        .graph_projection
+        .project_from_v1()
+        .await
+        .expect("first graph projection before contact exists");
+    assert_message_edge_with_evidence(
+        &context.pool,
+        "email_address",
+        &sender_email,
+        &provider_record_id,
+        "email_address_sent_message",
+        &projected,
+    )
+    .await;
+
+    context
+        .contact_store
+        .upsert_email_contact(&sender_email)
+        .await
+        .expect("upsert exact sender contact");
+    context
+        .graph_projection
+        .project_from_v1()
+        .await
+        .expect("second graph projection after contact exists");
+
+    assert_message_edge_with_evidence(
+        &context.pool,
+        "person",
+        &sender_email,
+        &provider_record_id,
+        "person_sent_message",
+        &projected,
+    )
+    .await;
+    assert_message_edge_count(
+        &context.pool,
+        "email_address",
+        &sender_email,
+        &provider_record_id,
+        "email_address_sent_message",
+        0,
+    )
+    .await;
+}
+
 struct LiveProjectionContext {
     pool: PgPool,
     contact_store: ContactProjectionStore,
@@ -81,6 +148,13 @@ struct GraphCounts {
     nodes: i64,
     edges: i64,
     evidence: i64,
+}
+
+struct ProjectedMessageFixture {
+    message_id: String,
+    raw_record_id: String,
+    provider_record_id: String,
+    subject: String,
 }
 
 async fn live_projection_context(test_name: &str) -> Option<LiveProjectionContext> {
@@ -111,6 +185,38 @@ async fn seed_contact_message_and_document(context: &LiveProjectionContext, suff
         .await
         .expect("upsert known contact");
 
+    seed_message(
+        context,
+        suffix,
+        &format!("Unknown-{suffix}@Example.com"),
+        &[
+            format!("known-{suffix}@example.com"),
+            format!("unknown-recipient-{suffix}@example.com"),
+        ],
+        &format!("provider-graph-projection-{suffix}"),
+        &format!("Graph projection subject {suffix}"),
+    )
+    .await;
+
+    context
+        .document_store
+        .import_document(&NewDocumentImport::markdown(
+            format!("doc_graph_projection_{suffix}"),
+            format!("graph-projection-{suffix}.md"),
+            "# Graph Projection\n\nDocument body.",
+        ))
+        .await
+        .expect("import graph projection document");
+}
+
+async fn seed_message(
+    context: &LiveProjectionContext,
+    suffix: u128,
+    sender: &str,
+    recipients: &[String],
+    provider_record_id: &str,
+    subject: &str,
+) -> ProjectedMessageFixture {
     let account_id = format!("acct_graph_projection_{suffix}");
     context
         .communication_store
@@ -123,23 +229,21 @@ async fn seed_contact_message_and_document(context: &LiveProjectionContext, suff
         .await
         .expect("store graph projection provider account");
 
+    let raw_record_id = format!("raw_graph_projection_{suffix}_{provider_record_id}");
     let raw = context
         .communication_store
         .record_raw_source(
             &NewRawCommunicationRecord::new(
-                format!("raw_graph_projection_{suffix}"),
+                &raw_record_id,
                 &account_id,
                 "email_message",
-                format!("provider-graph-projection-{suffix}"),
-                format!("sha256:graph-projection-{suffix}"),
+                provider_record_id,
+                format!("sha256:graph-projection-{suffix}:{provider_record_id}"),
                 format!("batch_graph_projection_{suffix}"),
                 json!({
-                    "subject": format!("Graph projection subject {suffix}"),
-                    "from": format!("Unknown-{suffix}@Example.com"),
-                    "to": [
-                        format!("known-{suffix}@example.com"),
-                        format!("unknown-recipient-{suffix}@example.com")
-                    ],
+                    "subject": subject,
+                    "from": sender,
+                    "to": recipients,
                     "body_text": "Graph projection body"
                 }),
             )
@@ -149,19 +253,16 @@ async fn seed_contact_message_and_document(context: &LiveProjectionContext, suff
         .await
         .expect("record graph projection raw message");
 
-    project_raw_email_message(&context.message_store, &raw)
+    let projected = project_raw_email_message(&context.message_store, &raw)
         .await
         .expect("project raw graph projection message");
 
-    context
-        .document_store
-        .import_document(&NewDocumentImport::markdown(
-            format!("doc_graph_projection_{suffix}"),
-            format!("graph-projection-{suffix}.md"),
-            "# Graph Projection\n\nDocument body.",
-        ))
-        .await
-        .expect("import graph projection document");
+    ProjectedMessageFixture {
+        message_id: projected.message_id,
+        raw_record_id: projected.raw_record_id,
+        provider_record_id: projected.provider_record_id,
+        subject: projected.subject,
+    }
 }
 
 async fn graph_counts_for_suffix(pool: &PgPool, suffix: u128) -> GraphCounts {
@@ -210,26 +311,16 @@ async fn assert_unknown_email_endpoint_projected(
     provider_record_id: &str,
     relationship_type: &str,
 ) {
-    let edge_count = sqlx::query_scalar::<_, i64>(
-        r#"
-        SELECT count(*)
-        FROM graph_edges edge
-        JOIN graph_nodes source ON source.node_id = edge.source_node_id
-        JOIN graph_nodes target ON target.node_id = edge.target_node_id
-        WHERE source.node_kind = 'email_address'
-          AND source.stable_key = $1
-          AND target.node_kind = 'message'
-          AND target.properties->>'provider_record_id' = $2
-          AND edge.relationship_type = $3
-        "#,
+    let message = message_fixture_by_provider_record_id(pool, provider_record_id).await;
+    assert_message_edge_with_evidence(
+        pool,
+        "email_address",
+        email_address,
+        provider_record_id,
+        relationship_type,
+        &message,
     )
-    .bind(email_address)
-    .bind(provider_record_id)
-    .bind(relationship_type)
-    .fetch_one(pool)
-    .await
-    .expect("unknown email endpoint edge count");
-    assert_eq!(edge_count, 1);
+    .await;
 
     let person_count = sqlx::query_scalar::<_, i64>(
         r#"
@@ -247,26 +338,121 @@ async fn assert_unknown_email_endpoint_projected(
     assert_eq!(person_count, 0);
 }
 
-async fn assert_known_contact_endpoint_projected(pool: &PgPool, suffix: u128) {
+async fn assert_message_edge_with_evidence(
+    pool: &PgPool,
+    source_node_kind: &str,
+    source_email_address: &str,
+    provider_record_id: &str,
+    relationship_type: &str,
+    message: &ProjectedMessageFixture,
+) {
+    let evidence_count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT count(*)
+        FROM graph_edges edge
+        JOIN graph_nodes source ON source.node_id = edge.source_node_id
+        JOIN graph_nodes target ON target.node_id = edge.target_node_id
+        JOIN graph_evidence evidence ON evidence.edge_id = edge.edge_id
+        JOIN communication_messages message ON message.message_id = evidence.source_id
+        WHERE source.node_kind = $1
+          AND (
+              source.stable_key = $2
+              OR source.properties->>'email_address' = $2
+          )
+          AND target.node_kind = 'message'
+          AND target.properties->>'provider_record_id' = $3
+          AND edge.relationship_type = $4
+          AND evidence.source_kind = 'message'
+          AND evidence.source_id = $5
+          AND evidence.excerpt = $6
+          AND evidence.metadata->>'raw_record_id' = $7
+          AND evidence.metadata->>'provider_record_id' = $8
+        "#,
+    )
+    .bind(source_node_kind)
+    .bind(source_email_address)
+    .bind(provider_record_id)
+    .bind(relationship_type)
+    .bind(&message.message_id)
+    .bind(&message.subject)
+    .bind(&message.raw_record_id)
+    .bind(&message.provider_record_id)
+    .fetch_one(pool)
+    .await
+    .expect("message edge evidence count");
+    assert_eq!(evidence_count, 1);
+}
+
+async fn assert_message_edge_count(
+    pool: &PgPool,
+    source_node_kind: &str,
+    source_email_address: &str,
+    provider_record_id: &str,
+    relationship_type: &str,
+    expected_count: i64,
+) {
     let edge_count = sqlx::query_scalar::<_, i64>(
         r#"
         SELECT count(*)
         FROM graph_edges edge
         JOIN graph_nodes source ON source.node_id = edge.source_node_id
         JOIN graph_nodes target ON target.node_id = edge.target_node_id
-        WHERE source.node_kind = 'person'
-          AND source.properties->>'email_address' = $1
+        WHERE source.node_kind = $1
+          AND (
+              source.stable_key = $2
+              OR source.properties->>'email_address' = $2
+          )
           AND target.node_kind = 'message'
-          AND target.properties->>'provider_record_id' = $2
-          AND edge.relationship_type = 'person_received_message'
+          AND target.properties->>'provider_record_id' = $3
+          AND edge.relationship_type = $4
         "#,
     )
-    .bind(format!("known-{suffix}@example.com"))
-    .bind(format!("provider-graph-projection-{suffix}"))
+    .bind(source_node_kind)
+    .bind(source_email_address)
+    .bind(provider_record_id)
+    .bind(relationship_type)
     .fetch_one(pool)
     .await
-    .expect("known contact received message edge count");
-    assert_eq!(edge_count, 1);
+    .expect("message edge count");
+    assert_eq!(edge_count, expected_count);
+}
+
+async fn assert_known_contact_endpoint_projected(pool: &PgPool, suffix: u128) {
+    let provider_record_id = format!("provider-graph-projection-{suffix}");
+    let message = message_fixture_by_provider_record_id(pool, &provider_record_id).await;
+    assert_message_edge_with_evidence(
+        pool,
+        "person",
+        &format!("known-{suffix}@example.com"),
+        &provider_record_id,
+        "person_received_message",
+        &message,
+    )
+    .await;
+}
+
+async fn message_fixture_by_provider_record_id(
+    pool: &PgPool,
+    provider_record_id: &str,
+) -> ProjectedMessageFixture {
+    let row = sqlx::query_as::<_, (String, String, String, String)>(
+        r#"
+        SELECT message_id, raw_record_id, provider_record_id, subject
+        FROM communication_messages
+        WHERE provider_record_id = $1
+        "#,
+    )
+    .bind(provider_record_id)
+    .fetch_one(pool)
+    .await
+    .expect("communication message fixture");
+
+    ProjectedMessageFixture {
+        message_id: row.0,
+        raw_record_id: row.1,
+        provider_record_id: row.2,
+        subject: row.3,
+    }
 }
 
 async fn assert_document_projected(pool: &PgPool, suffix: u128) {

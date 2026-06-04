@@ -158,6 +158,8 @@ impl GraphProjectionService {
             .await?;
         report.nodes_upserted += 1;
 
+        self.delete_message_edges(&message.message_id).await?;
+
         let sender = self
             .resolve_message_endpoint(&message.sender, report)
             .await?;
@@ -181,6 +183,26 @@ impl GraphProjectionService {
             )
             .await?;
         }
+
+        Ok(())
+    }
+
+    async fn delete_message_edges(&self, message_id: &str) -> Result<(), GraphProjectionError> {
+        sqlx::query(
+            r#"
+            DELETE FROM graph_edges
+            WHERE edge_id IN (
+                SELECT edge.edge_id
+                FROM graph_edges edge
+                JOIN graph_evidence evidence ON evidence.edge_id = edge.edge_id
+                WHERE evidence.source_kind = 'message'
+                  AND evidence.source_id = $1
+            )
+            "#,
+        )
+        .bind(message_id)
+        .execute(&self.pool)
+        .await?;
 
         Ok(())
     }
@@ -280,6 +302,7 @@ impl GraphProjectionService {
     }
 }
 
+/// Counts deterministic projection operations attempted during a V1 graph projection run.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct GraphProjectionReport {
     pub nodes_upserted: usize,
