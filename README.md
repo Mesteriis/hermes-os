@@ -151,5 +151,6 @@ make compose-config
 - [Product Charter](docs/product/product-charter.md)
 - [Product Scope](docs/product/product-scope.md)
 - [Product Roadmap](docs/roadmap/product-roadmap.md)
+- [V1 Closure Checklist](docs/roadmap/v1-closure-checklist.md)
 - [Architecture Overview](docs/architecture/architecture-overview.md)
 - [ADR Index](docs/adr/README.md)
