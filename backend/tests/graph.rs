@@ -1,12 +1,14 @@
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::Utc;
 use hermes_hub_backend::graph::{
     GraphEvidenceSourceKind, GraphNodeKind, GraphReviewState, GraphStore, GraphStoreError,
-    NewGraphEdge, NewGraphEvidence, NewGraphNode, RelationshipType,
+    NewGraphEdge, NewGraphEvidence, NewGraphNode, RelationshipType, edge_id, evidence_id,
 };
 use hermes_hub_backend::storage::Database;
-use serde_json::json;
+use serde_json::{Value, json};
+use sqlx::Row;
 
 #[tokio::test]
 async fn graph_store_upserts_node_idempotently_against_postgres() {
@@ -31,7 +33,7 @@ async fn graph_store_upserts_node_idempotently_against_postgres() {
 
 #[tokio::test]
 async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() {
-    let Some(store) = live_graph_store("edge idempotence").await else {
+    let Some((pool, store)) = live_graph_context("edge idempotence").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -58,17 +60,22 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
         1.0,
         GraphReviewState::SystemAccepted,
     );
-    let evidence = NewGraphEvidence::new(
-        GraphEvidenceSourceKind::Contact,
-        format!("contact-{suffix}"),
-    );
+    let evidence_source_id = format!("contact-{suffix}");
+    let first_evidence =
+        NewGraphEvidence::new(GraphEvidenceSourceKind::Contact, evidence_source_id.clone())
+            .excerpt("initial contact evidence")
+            .metadata(json!({"projection": "first"}));
+    let second_evidence =
+        NewGraphEvidence::new(GraphEvidenceSourceKind::Contact, evidence_source_id.clone())
+            .excerpt("updated contact evidence")
+            .metadata(json!({"projection": "second", "source": "duplicate-upsert"}));
 
     let first = store
-        .upsert_edge_with_evidence(&edge, std::slice::from_ref(&evidence))
+        .upsert_edge_with_evidence(&edge, std::slice::from_ref(&first_evidence))
         .await
         .expect("first edge");
     let second = store
-        .upsert_edge_with_evidence(&edge, &[evidence])
+        .upsert_edge_with_evidence(&edge, &[second_evidence])
         .await
         .expect("second edge");
 
@@ -78,6 +85,38 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
         RelationshipType::PersonHasEmailAddress
     );
     assert_eq!(first.review_state, GraphReviewState::SystemAccepted);
+
+    let evidence_count =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM graph_evidence WHERE edge_id = $1")
+            .bind(&first.edge_id)
+            .fetch_one(&pool)
+            .await
+            .expect("evidence count");
+    assert_eq!(evidence_count, 1);
+
+    let evidence_row = sqlx::query(
+        r#"
+        SELECT excerpt, metadata
+        FROM graph_evidence
+        WHERE edge_id = $1
+          AND source_kind = $2
+          AND source_id = $3
+        "#,
+    )
+    .bind(&first.edge_id)
+    .bind(GraphEvidenceSourceKind::Contact.as_str())
+    .bind(&evidence_source_id)
+    .fetch_one(&pool)
+    .await
+    .expect("stored evidence row");
+
+    let excerpt: Option<String> = evidence_row.try_get("excerpt").expect("evidence excerpt");
+    let metadata: Value = evidence_row.try_get("metadata").expect("evidence metadata");
+    assert_eq!(excerpt.as_deref(), Some("updated contact evidence"));
+    assert_eq!(
+        metadata,
+        json!({"projection": "second", "source": "duplicate-upsert"})
+    );
 }
 
 #[tokio::test]
@@ -119,6 +158,25 @@ async fn graph_store_rejects_system_edge_without_evidence_against_postgres() {
 }
 
 #[tokio::test]
+async fn graph_store_rejects_suggested_edge_without_evidence_before_database_write() {
+    let store = disconnected_graph_store();
+    let edge = NewGraphEdge::new(
+        "graph:node:v1:person:left".to_owned(),
+        "graph:node:v1:email:right@example.com".to_owned(),
+        RelationshipType::PersonHasEmailAddress,
+        0.5,
+        GraphReviewState::Suggested,
+    );
+
+    let error = store
+        .upsert_edge_with_evidence(&edge, &[])
+        .await
+        .expect_err("suggested edge without evidence must fail");
+
+    assert!(matches!(error, GraphStoreError::SystemEdgeRequiresEvidence));
+}
+
+#[tokio::test]
 async fn graph_store_rejects_invalid_confidence_before_database_write() {
     let store = disconnected_graph_store();
     let edge = NewGraphEdge::new(
@@ -138,7 +196,48 @@ async fn graph_store_rejects_invalid_confidence_before_database_write() {
     assert!(matches!(error, GraphStoreError::InvalidConfidence(_)));
 }
 
+#[tokio::test]
+async fn graph_store_rejects_closed_temporal_edge_before_database_write() {
+    let store = disconnected_graph_store();
+    let mut edge = NewGraphEdge::new(
+        "graph:node:v1:person:left".to_owned(),
+        "graph:node:v1:email:right@example.com".to_owned(),
+        RelationshipType::PersonHasEmailAddress,
+        1.0,
+        GraphReviewState::SystemAccepted,
+    );
+    edge.valid_to = Some(Utc::now());
+    let evidence = NewGraphEvidence::new(GraphEvidenceSourceKind::Contact, "contact-id");
+
+    let error = store
+        .upsert_edge_with_evidence(&edge, &[evidence])
+        .await
+        .expect_err("closed temporal edge must fail");
+
+    assert!(matches!(error, GraphStoreError::TemporalEdgesUnsupported));
+}
+
+#[test]
+fn graph_deterministic_ids_distinguish_delimiter_bearing_components() {
+    let relationship_type = RelationshipType::PersonHasEmailAddress;
+
+    assert_ne!(
+        edge_id("a:b", relationship_type, "c"),
+        edge_id("a", relationship_type, "b:c")
+    );
+    assert_ne!(
+        evidence_id("edge:a:b", GraphEvidenceSourceKind::Contact, "c"),
+        evidence_id("edge:a", GraphEvidenceSourceKind::Contact, "b:c")
+    );
+}
+
 async fn live_graph_store(test_name: &str) -> Option<GraphStore> {
+    live_graph_context(test_name)
+        .await
+        .map(|(_pool, store)| store)
+}
+
+async fn live_graph_context(test_name: &str) -> Option<(sqlx::postgres::PgPool, GraphStore)> {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!("skipping live graph {test_name} test: HERMES_TEST_DATABASE_URL is not set");
         return None;
@@ -146,9 +245,8 @@ async fn live_graph_store(test_name: &str) -> Option<GraphStore> {
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
-    Some(GraphStore::new(
-        database.pool().expect("configured pool").clone(),
-    ))
+    let pool = database.pool().expect("configured pool").clone();
+    Some((pool.clone(), GraphStore::new(pool)))
 }
 
 fn disconnected_graph_store() -> GraphStore {

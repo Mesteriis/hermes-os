@@ -47,7 +47,7 @@ impl GraphStore {
         evidence: &[NewGraphEvidence],
     ) -> Result<GraphEdge, GraphStoreError> {
         edge.validate()?;
-        if edge.review_state == GraphReviewState::SystemAccepted && evidence.is_empty() {
+        if evidence.is_empty() {
             return Err(GraphStoreError::SystemEdgeRequiresEvidence);
         }
         for item in evidence {
@@ -294,6 +294,9 @@ impl NewGraphEdge {
         if !(0.0..=1.0).contains(&self.confidence) {
             return Err(GraphStoreError::InvalidConfidence(self.confidence));
         }
+        if self.valid_to.is_some() {
+            return Err(GraphStoreError::TemporalEdgesUnsupported);
+        }
         validate_json_object("edge properties", &self.properties)
     }
 }
@@ -372,8 +375,11 @@ pub enum GraphStoreError {
     #[error("graph edge confidence must be between 0.0 and 1.0: {0}")]
     InvalidConfidence(f64),
 
-    #[error("system-created graph edges require evidence")]
+    #[error("graph edges require evidence in the first graph slice")]
     SystemEdgeRequiresEvidence,
+
+    #[error("closed temporal graph edges are unsupported in the first graph slice")]
+    TemporalEdgesUnsupported,
 
     #[error("unknown graph node kind stored in database: {0}")]
     UnknownNodeKind(String),
