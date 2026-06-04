@@ -66,3 +66,4 @@ CREATE TRIGGER event_log_prevent_delete
     BEFORE DELETE ON event_log
     FOR EACH ROW
     EXECUTE FUNCTION prevent_event_log_mutation();
+

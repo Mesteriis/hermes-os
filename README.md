@@ -56,7 +56,13 @@ Hermes Hub - персональная локальная платформа ко
 
 ## Разработка
 
-Проверить backend:
+Полная локальная/CI-проверка:
+
+```sh
+make validate
+```
+
+Проверить только backend fmt/clippy/tests:
 
 ```sh
 make backend-validate

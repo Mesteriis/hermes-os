@@ -144,13 +144,14 @@ cargo test --all
 For the current backend crate, use the repository Makefile targets:
 
 ```sh
+make validate
 make backend-fmt-check
 make backend-clippy
 make backend-test
 make backend-validate
 ```
 
-Run `make backend-validate` before reporting backend implementation work as complete.
+Run `make validate` before reporting broad backend or development-infrastructure work as complete. Use `make backend-validate` for targeted backend-only changes.
 
 ### SvelteKit / TypeScript validation
 
@@ -243,6 +244,12 @@ Validate Compose configuration:
 
 ```sh
 make compose-config
+```
+
+Run the full local/CI validation gate:
+
+```sh
+make validate
 ```
 
 Start development services in foreground:

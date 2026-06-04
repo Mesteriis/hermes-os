@@ -9,3 +9,4 @@ CREATE TABLE IF NOT EXISTS projection_cursors (
 
 CREATE INDEX IF NOT EXISTS projection_cursors_updated_at_idx
     ON projection_cursors (updated_at);
+

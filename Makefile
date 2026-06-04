@@ -1,12 +1,13 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config dev up down restart logs ps shell db-up db-down db-shell clean reset-data backend-run backend-run-dev backend-smoke-dev backend-event-log-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
+.PHONY: help docker-env compose-config validate dev up down restart logs ps shell db-up db-down db-shell clean reset-data backend-run backend-run-dev backend-smoke-dev backend-event-log-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
 	@printf '%s\n' '  make docker-env      Create docker/.env from docker/.env.example if missing'
 	@printf '%s\n' '  make compose-config  Validate and render Docker Compose config'
+	@printf '%s\n' '  make validate        Run the full local/CI validation gate'
 	@printf '%s\n' '  make dev             Start development services in foreground'
 	@printf '%s\n' '  make up              Start development services in background'
 	@printf '%s\n' '  make down            Stop development services'
@@ -51,6 +52,8 @@ docker-env:
 
 compose-config: docker-env
 	$(COMPOSE) config
+
+validate: compose-config backend-validate backend-events-api-smoke-dev backend-projection-smoke-dev backend-smoke-dev
 
 dev: docker-env
 	$(COMPOSE) up --build
