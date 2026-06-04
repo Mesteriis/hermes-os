@@ -60,9 +60,14 @@ GET http://127.0.0.1:8080/api/v1/status
 POST http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/start
 POST http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/complete
 POST http://127.0.0.1:8080/api/v1/email-accounts/imap
+GET http://127.0.0.1:8080/api/v2/graph/summary
+GET http://127.0.0.1:8080/api/v2/graph/search?q=<query>&limit=<limit>
+GET http://127.0.0.1:8080/api/v2/graph/neighborhood?node_id=<node_id>&depth=1
 ```
 
-Requests use `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. Account setup also requires backend `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`. The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_TOKEN=change-me-local-api-token`, or the frontend must be started with matching Vite public overrides:
+Requests use `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. The graph dashboard reads `/api/v2/graph/summary`; the read-only graph explorer searches non-empty queries through `/api/v2/graph/search` and loads depth-1 neighborhoods through `/api/v2/graph/neighborhood`. Account setup also requires backend `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`.
+
+The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_TOKEN=change-me-local-api-token`, or the frontend must be started with matching Vite public overrides:
 
 ```sh
 VITE_HERMES_API_BASE_URL=http://127.0.0.1:8080 \
@@ -71,4 +76,4 @@ VITE_HERMES_ACTOR_ID=desktop-shell \
 pnpm dev
 ```
 
-The placeholder token is for local development only and must match the backend local API token.
+The placeholder token is for local development only and must match the backend local API token. `VITE_HERMES_ACTOR_ID` is a non-secret local client identity used by protected API requests and backend audit records.

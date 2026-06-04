@@ -3,9 +3,17 @@
 	import { onMount } from 'svelte';
 	import {
 		completeGmailOAuthSetup,
+		fetchGraphNeighborhood,
+		fetchGraphSummary,
 		fetchV1Status,
+		searchGraphNodes,
 		setupImapAccount,
 		startGmailOAuthSetup,
+		type GraphNeighborhood,
+		type GraphNode,
+		type GraphNodeKind,
+		type GraphRelationshipType,
+		type GraphSummary,
 		type GmailOAuthStartResponse,
 		type V1Status
 	} from '$lib/api';
@@ -43,6 +51,14 @@
 		tone: 'amber' | 'cyan' | 'purple' | 'mint';
 	};
 
+	type GraphPreviewNode = {
+		label: string;
+		caption: string;
+		icon: string;
+		x: number;
+		y: number;
+	};
+
 	const apiBaseUrl = import.meta.env.VITE_HERMES_API_BASE_URL ?? 'http://127.0.0.1:8080';
 	const apiToken = import.meta.env.VITE_HERMES_LOCAL_API_TOKEN ?? 'change-me-local-api-token';
 	const actorId = import.meta.env.VITE_HERMES_ACTOR_ID ?? 'desktop-shell';
@@ -50,6 +66,18 @@
 	let status = $state<V1Status | null>(null);
 	let errorMessage = $state('');
 	let isLoading = $state(true);
+	let graphSummary = $state<GraphSummary | null>(null);
+	let graphError = $state('');
+	let isGraphLoading = $state(true);
+	let isGraphExplorerOpen = $state(false);
+	let graphSearchQuery = $state('');
+	let graphSearchResults = $state<GraphNode[]>([]);
+	let graphSearchError = $state('');
+	let graphSearchMessage = $state('Enter a non-empty query to search graph nodes.');
+	let isGraphSearching = $state(false);
+	let selectedGraphNeighborhood = $state<GraphNeighborhood | null>(null);
+	let selectedGraphError = $state('');
+	let isGraphNeighborhoodLoading = $state(false);
 	let selectedProvider = $state<Provider>('gmail');
 	let setupMessage = $state('');
 	let setupError = $state('');
@@ -181,6 +209,15 @@
 		{ label: 'Q2 Report', caption: 'Document', icon: 'tabler:file-text', x: 12, y: 38 }
 	];
 
+	const graphPreviewPositions = [
+		{ x: 47, y: 12 },
+		{ x: 82, y: 28 },
+		{ x: 88, y: 54 },
+		{ x: 74, y: 78 },
+		{ x: 18, y: 70 },
+		{ x: 12, y: 38 }
+	];
+
 	const discoveredItems = [
 		{ label: 'VAT Discussion', source: 'From Email', icon: 'tabler:mail' },
 		{ label: 'Acme Contract', source: 'From WhatsApp', icon: 'tabler:brand-whatsapp' },
@@ -258,15 +295,159 @@
 		{ label: 'VAT', value: 32 }
 	];
 
-	onMount(async () => {
+	onMount(() => {
+		void Promise.all([loadV1Status(), loadGraphSummary()]);
+	});
+
+	async function loadV1Status() {
+		isLoading = true;
 		try {
 			status = await fetchV1Status(apiBaseUrl, apiToken, actorId);
+			errorMessage = '';
 		} catch (error) {
 			errorMessage = error instanceof Error ? error.message : 'Unknown status error';
 		} finally {
 			isLoading = false;
 		}
-	});
+	}
+
+	async function loadGraphSummary() {
+		isGraphLoading = true;
+		try {
+			graphSummary = await fetchGraphSummary(apiBaseUrl, apiToken, actorId);
+			graphError = '';
+		} catch (error) {
+			graphError = error instanceof Error ? error.message : 'Unknown graph summary error';
+		} finally {
+			isGraphLoading = false;
+		}
+	}
+
+	function graphNodeTotal() {
+		return graphSummary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 0;
+	}
+
+	function graphRelationshipCounts() {
+		return graphSummary?.relationship_counts ?? graphSummary?.edge_counts ?? [];
+	}
+
+	function graphRelationshipTotal() {
+		return graphRelationshipCounts().reduce((total, item) => total + item.count, 0);
+	}
+
+	function graphEvidenceTotal() {
+		if (!graphSummary) {
+			return 0;
+		}
+		if (graphSummary.evidence_counts) {
+			return graphSummary.evidence_counts.reduce((total, item) => total + item.count, 0);
+		}
+		return graphSummary.evidence_count;
+	}
+
+	function graphPreviewNodes(): GraphPreviewNode[] {
+		if (!graphSummary || graphSummary.is_empty) {
+			return graphNodes;
+		}
+
+		return graphSummary.node_counts.slice(0, graphPreviewPositions.length).map((count, index) => ({
+			label: formatGraphKind(count.key),
+			caption: `${formatNumber(count.count)} nodes`,
+			icon: graphNodeKindIcon(count.key),
+			x: graphPreviewPositions[index].x,
+			y: graphPreviewPositions[index].y
+		}));
+	}
+
+	function formatNumber(value: number) {
+		return new Intl.NumberFormat('en-US').format(value);
+	}
+
+	function formatGraphKind(kind: GraphNodeKind | string) {
+		return kind
+			.split('_')
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+			.join(' ');
+	}
+
+	function formatGraphRelationship(type: GraphRelationshipType) {
+		return formatGraphKind(type);
+	}
+
+	function graphNodeKindIcon(kind: GraphNodeKind | string) {
+		switch (kind) {
+			case 'person':
+				return 'tabler:user';
+			case 'email_address':
+				return 'tabler:mail';
+			case 'message':
+				return 'tabler:message';
+			case 'document':
+				return 'tabler:file-text';
+			default:
+				return 'tabler:circle-dot';
+		}
+	}
+
+	function openGraphExplorer() {
+		isGraphExplorerOpen = true;
+		graphSearchError = '';
+		selectedGraphError = '';
+		if (graphSummary?.is_empty) {
+			graphSearchMessage = 'Graph is empty. Run projections before searching.';
+		}
+	}
+
+	function closeGraphExplorer() {
+		isGraphExplorerOpen = false;
+	}
+
+	async function submitGraphSearch() {
+		const query = graphSearchQuery.trim();
+		graphSearchError = '';
+		selectedGraphError = '';
+		selectedGraphNeighborhood = null;
+
+		if (!query) {
+			graphSearchResults = [];
+			graphSearchMessage = 'Enter a non-empty query to search graph nodes.';
+			return;
+		}
+
+		isGraphSearching = true;
+		graphSearchMessage = '';
+		try {
+			graphSearchResults = await searchGraphNodes(apiBaseUrl, apiToken, actorId, query, 20);
+			if (graphSearchResults.length === 0) {
+				graphSearchMessage = 'No graph nodes matched that query.';
+			}
+		} catch (error) {
+			graphSearchError = error instanceof Error ? error.message : 'Graph search failed';
+			graphSearchResults = [];
+		} finally {
+			isGraphSearching = false;
+		}
+	}
+
+	async function selectGraphNode(node: GraphNode) {
+		isGraphNeighborhoodLoading = true;
+		selectedGraphError = '';
+		try {
+			selectedGraphNeighborhood = await fetchGraphNeighborhood(
+				apiBaseUrl,
+				apiToken,
+				actorId,
+				node.node_id,
+				1,
+				50
+			);
+		} catch (error) {
+			selectedGraphError = error instanceof Error ? error.message : 'Graph neighborhood failed';
+			selectedGraphNeighborhood = null;
+		} finally {
+			isGraphNeighborhoodLoading = false;
+		}
+	}
 
 	function openAccountDrawer() {
 		isAccountDrawerOpen = true;
@@ -614,7 +795,7 @@
 					<header class="panel-title-row">
 						<h2 id="graph-heading">Knowledge Graph</h2>
 						<div>
-							<button type="button" class="ghost-button" disabled>Explore Graph</button>
+							<button type="button" class="ghost-button" onclick={openGraphExplorer}>Explore Graph</button>
 							<button type="button" class="icon-button" disabled title="Graph fullscreen is not implemented yet">
 								<Icon icon="tabler:arrows-maximize" width="17" height="17" />
 							</button>
@@ -622,37 +803,98 @@
 					</header>
 
 					<div class="graph-canvas" aria-label="Knowledge graph preview">
-						<div class="graph-line one"></div>
-						<div class="graph-line two"></div>
-						<div class="graph-line three"></div>
-						<div class="graph-line four"></div>
-						<div class="graph-core">
-							<Icon icon="tabler:cube" width="32" height="32" />
-							<span>Hermes Project</span>
-						</div>
-						{#each graphNodes as node}
-							<div class="graph-node" style={`left: ${node.x}%; top: ${node.y}%;`}>
-								<span>
-									<Icon icon={node.icon} width="18" height="18" />
-								</span>
-								<strong>{node.label}</strong>
-								<small>{node.caption}</small>
+						{#if isGraphLoading}
+							<div class="graph-state">
+								<Icon icon="tabler:loader-2" width="30" height="30" />
+								<strong>Loading graph summary</strong>
+								<span>Reading the local graph API.</span>
 							</div>
-						{/each}
+						{:else if graphError}
+							<div class="graph-state error">
+								<Icon icon="tabler:alert-triangle" width="30" height="30" />
+								<strong>Graph API unavailable</strong>
+								<span>{graphError}</span>
+							</div>
+						{:else if graphSummary?.is_empty}
+							<div class="graph-state">
+								<Icon icon="tabler:circles" width="30" height="30" />
+								<strong>Graph is empty</strong>
+								<span>No projected nodes, relationships or evidence are available yet.</span>
+							</div>
+						{:else}
+							<div class="graph-line one"></div>
+							<div class="graph-line two"></div>
+							<div class="graph-line three"></div>
+							<div class="graph-line four"></div>
+							<div class="graph-core">
+								<Icon icon="tabler:cube" width="32" height="32" />
+								<span>{formatNumber(graphNodeTotal())} Nodes</span>
+							</div>
+							{#each graphPreviewNodes() as node}
+								<div class="graph-node" style={`left: ${node.x}%; top: ${node.y}%;`}>
+									<span>
+										<Icon icon={node.icon} width="18" height="18" />
+									</span>
+									<strong>{node.label}</strong>
+									<small>{node.caption}</small>
+								</div>
+							{/each}
+						{/if}
+					</div>
+
+					<div class="graph-summary-strip">
+						<article>
+							<span>Nodes</span>
+							<strong>{isGraphLoading ? '...' : formatNumber(graphNodeTotal())}</strong>
+						</article>
+						<article>
+							<span>Relationships</span>
+							<strong>{isGraphLoading ? '...' : formatNumber(graphRelationshipTotal())}</strong>
+						</article>
+						<article>
+							<span>Evidence</span>
+							<strong>{isGraphLoading ? '...' : formatNumber(graphEvidenceTotal())}</strong>
+						</article>
 					</div>
 
 					<div class="discovered">
-						<p>Recently Discovered</p>
+						<p>{graphSummary && !graphSummary.is_empty ? 'Node Types' : 'Recently Discovered'}</p>
 						<div>
-							{#each discoveredItems as item}
-								<button type="button" disabled>
-									<Icon icon={item.icon} width="18" height="18" />
-									<span>
-										<strong>{item.label}</strong>
-										<small>{item.source}</small>
-									</span>
-								</button>
-							{/each}
+							{#if graphSummary && !graphSummary.is_empty}
+								{#each graphSummary.node_counts.slice(0, 3) as item}
+									<button type="button" disabled>
+										<Icon icon={graphNodeKindIcon(item.key)} width="18" height="18" />
+										<span>
+											<strong>{formatGraphKind(item.key)}</strong>
+											<small>{formatNumber(item.count)} nodes</small>
+										</span>
+									</button>
+								{/each}
+							{:else}
+								{#each discoveredItems as item}
+									<button type="button" disabled>
+										<Icon icon={item.icon} width="18" height="18" />
+										<span>
+											<strong>{item.label}</strong>
+											<small>{item.source}</small>
+										</span>
+									</button>
+								{/each}
+							{/if}
+						</div>
+						<div class="graph-actions">
+							<button type="button" disabled title="Graph merge is not implemented yet">
+								<Icon icon="tabler:git-merge" width="16" height="16" />
+								Merge
+							</button>
+							<button type="button" disabled title="Graph split is not implemented yet">
+								<Icon icon="tabler:git-branch" width="16" height="16" />
+								Split
+							</button>
+							<button type="button" disabled title="Graph editing is not implemented yet">
+								<Icon icon="tabler:edit" width="16" height="16" />
+								Edit
+							</button>
 						</div>
 					</div>
 				</section>
@@ -983,6 +1225,207 @@
 		{/if}
 		{#if setupError}
 			<p class="setup-state error">{setupError}</p>
+		{/if}
+	</aside>
+{/if}
+
+{#if isGraphExplorerOpen}
+	<button
+		type="button"
+		class="drawer-backdrop"
+		aria-label="Close graph explorer"
+		onclick={closeGraphExplorer}
+	></button>
+	<aside class="graph-drawer" aria-labelledby="graph-explorer-heading">
+		<header>
+			<div>
+				<p>Read-only Graph</p>
+				<h2 id="graph-explorer-heading">Explore Graph</h2>
+			</div>
+			<button type="button" class="icon-button" onclick={closeGraphExplorer} aria-label="Close">
+				<Icon icon="tabler:x" width="18" height="18" />
+			</button>
+		</header>
+
+		<div class="graph-drawer-tabs" role="tablist" aria-label="Graph explorer modes">
+			<button type="button" class="active" role="tab" aria-selected="true">Search</button>
+			<button type="button" role="tab" disabled title="Merge review is not implemented yet">Merge</button>
+			<button type="button" role="tab" disabled title="Split review is not implemented yet">Split</button>
+			<button type="button" role="tab" disabled title="OCR evidence review is not implemented yet">OCR</button>
+			<button type="button" role="tab" disabled title="Task candidates are not implemented yet">Tasks</button>
+		</div>
+
+		<section class="graph-drawer-summary" aria-label="Graph totals">
+			<article>
+				<span>Nodes</span>
+				<strong>{formatNumber(graphNodeTotal())}</strong>
+			</article>
+			<article>
+				<span>Relationships</span>
+				<strong>{formatNumber(graphRelationshipTotal())}</strong>
+			</article>
+			<article>
+				<span>Evidence</span>
+				<strong>{formatNumber(graphEvidenceTotal())}</strong>
+			</article>
+		</section>
+
+		{#if isGraphLoading}
+			<div class="graph-empty-state">
+				<Icon icon="tabler:loader-2" width="28" height="28" />
+				<strong>Loading graph summary</strong>
+				<span>Waiting for the local graph API.</span>
+			</div>
+		{:else if graphError}
+			<div class="graph-empty-state error">
+				<Icon icon="tabler:alert-triangle" width="28" height="28" />
+				<strong>Graph API unavailable</strong>
+				<span>{graphError}</span>
+			</div>
+		{:else if graphSummary?.is_empty}
+			<div class="graph-empty-state">
+				<Icon icon="tabler:circles" width="28" height="28" />
+				<strong>Graph is empty</strong>
+				<span>There are no projected graph nodes to search yet.</span>
+			</div>
+		{:else}
+			<form class="graph-search-form" onsubmit={(event) => {
+				event.preventDefault();
+				void submitGraphSearch();
+			}}>
+				<label>
+					<Icon icon="tabler:search" width="18" height="18" />
+					<input
+						bind:value={graphSearchQuery}
+						placeholder="Search people, messages, emails, documents..."
+						aria-label="Search graph nodes"
+					/>
+				</label>
+				<button type="submit" disabled={isGraphSearching}>
+					{isGraphSearching ? 'Searching' : 'Search'}
+				</button>
+			</form>
+
+			<div class="graph-explorer-grid">
+				<section class="graph-results" aria-label="Graph search results">
+					<header>
+						<strong>Results</strong>
+						<span>{formatNumber(graphSearchResults.length)}</span>
+					</header>
+					{#if graphSearchError}
+						<p class="graph-inline-error">{graphSearchError}</p>
+					{:else if graphSearchMessage}
+						<p class="graph-inline-message">{graphSearchMessage}</p>
+					{:else}
+						{#each graphSearchResults as node}
+							<button
+								type="button"
+								class:active={selectedGraphNeighborhood?.selected_node.node_id === node.node_id}
+								onclick={() => selectGraphNode(node)}
+							>
+								<Icon icon={graphNodeKindIcon(node.node_kind)} width="18" height="18" />
+								<span>
+									<strong>{node.label}</strong>
+									<small>{formatGraphKind(node.node_kind)}</small>
+								</span>
+							</button>
+						{/each}
+					{/if}
+				</section>
+
+				<section class="graph-neighborhood" aria-label="Selected graph neighborhood">
+					{#if isGraphNeighborhoodLoading}
+						<div class="graph-empty-state compact">
+							<Icon icon="tabler:loader-2" width="24" height="24" />
+							<strong>Loading neighborhood</strong>
+						</div>
+					{:else if selectedGraphError}
+						<div class="graph-empty-state compact error">
+							<Icon icon="tabler:alert-triangle" width="24" height="24" />
+							<strong>Neighborhood unavailable</strong>
+							<span>{selectedGraphError}</span>
+						</div>
+					{:else if selectedGraphNeighborhood}
+						<header>
+							<span>{formatGraphKind(selectedGraphNeighborhood.selected_node.node_kind)}</span>
+							<h3>{selectedGraphNeighborhood.selected_node.label}</h3>
+							<small>{selectedGraphNeighborhood.selected_node.node_id}</small>
+						</header>
+
+						{#if selectedGraphNeighborhood.truncated || selectedGraphNeighborhood.evidence_truncated}
+							<p class="graph-truncation">
+								{#if selectedGraphNeighborhood.truncated}
+									Showing first {selectedGraphNeighborhood.edge_limit} edges.
+								{/if}
+								{#if selectedGraphNeighborhood.evidence_truncated}
+									Showing first {selectedGraphNeighborhood.evidence_limit} evidence records.
+								{/if}
+							</p>
+						{/if}
+
+						<div class="neighborhood-columns">
+							<section>
+								<strong>Neighbors</strong>
+								{#if selectedGraphNeighborhood.nodes.length === 0}
+									<p>No neighboring nodes.</p>
+								{:else}
+									<ul>
+										{#each selectedGraphNeighborhood.nodes as node}
+											<li>
+												<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
+												<span>{node.label}</span>
+												<em>{formatGraphKind(node.node_kind)}</em>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</section>
+
+							<section>
+								<strong>Edges</strong>
+								{#if selectedGraphNeighborhood.edges.length === 0}
+									<p>No relationships.</p>
+								{:else}
+									<ul>
+										{#each selectedGraphNeighborhood.edges as edge}
+											<li>
+												<Icon icon="tabler:line" width="16" height="16" />
+												<span>{formatGraphRelationship(edge.relationship_type)}</span>
+												<em>{Math.round(edge.confidence * 100)}%</em>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</section>
+						</div>
+
+						<section class="graph-evidence">
+							<strong>Evidence</strong>
+							{#if selectedGraphNeighborhood.evidence.length === 0}
+								<p>No evidence records returned for this neighborhood.</p>
+							{:else}
+								<ul>
+									{#each selectedGraphNeighborhood.evidence as evidence}
+										<li>
+											<span>{formatGraphKind(evidence.source_kind)}</span>
+											<strong>{evidence.source_id}</strong>
+											{#if evidence.excerpt}
+												<small>{evidence.excerpt}</small>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							{/if}
+						</section>
+					{:else}
+						<div class="graph-empty-state compact">
+							<Icon icon="tabler:hand-click" width="24" height="24" />
+							<strong>Select a node</strong>
+							<span>Search and choose a result to inspect its depth-1 neighborhood.</span>
+						</div>
+					{/if}
+				</section>
+			</div>
 		{/if}
 	</aside>
 {/if}
@@ -1829,6 +2272,71 @@
 		transform: rotate(147deg);
 	}
 
+	.graph-state,
+	.graph-empty-state {
+		display: grid;
+		place-items: center;
+		gap: 8px;
+		height: 100%;
+		color: #94adac;
+		text-align: center;
+		padding: 24px;
+	}
+
+	.graph-state strong,
+	.graph-empty-state strong {
+		color: #f4fffe;
+		font-size: 14px;
+		font-weight: 600;
+	}
+
+	.graph-state span,
+	.graph-empty-state span {
+		max-width: 340px;
+		color: #91a8a8;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+
+	.graph-state.error,
+	.graph-empty-state.error,
+	.graph-inline-error {
+		color: #ffabab;
+	}
+
+	.graph-summary-strip,
+	.graph-drawer-summary {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 8px;
+		padding: 12px 16px 0;
+	}
+
+	.graph-summary-strip article,
+	.graph-drawer-summary article {
+		border: 1px solid rgba(111, 205, 195, 0.12);
+		border-radius: 7px;
+		background: rgba(10, 42, 45, 0.38);
+		padding: 9px 10px;
+	}
+
+	.graph-summary-strip span,
+	.graph-drawer-summary span {
+		display: block;
+		color: #91a8a8;
+		font-size: 10px;
+		text-transform: uppercase;
+	}
+
+	.graph-summary-strip strong,
+	.graph-drawer-summary strong {
+		display: block;
+		margin-top: 5px;
+		color: #f4fffe;
+		font-size: 18px;
+		font-weight: 500;
+	}
+
 	.discovered {
 		padding: 13px 16px 12px;
 	}
@@ -1867,6 +2375,20 @@
 	.discovered small {
 		margin-top: 2px;
 		font-size: 9px;
+	}
+
+	.graph-actions {
+		display: grid !important;
+		grid-template-columns: repeat(3, 1fr) !important;
+		margin-top: 8px !important;
+	}
+
+	.graph-actions button {
+		display: inline-flex;
+		justify-content: center;
+		gap: 6px;
+		min-height: 32px;
+		color: #8fa8a7;
 	}
 
 	.projects-panel {
@@ -2391,25 +2913,346 @@
 		padding: 18px;
 	}
 
-	.account-drawer > header {
+	.graph-drawer {
+		position: fixed;
+		top: 18px;
+		right: 18px;
+		bottom: 18px;
+		z-index: 21;
+		display: grid;
+		grid-template-rows: auto auto auto 1fr;
+		gap: 14px;
+		width: min(920px, calc(100vw - 36px));
+		overflow: auto;
+		border: 1px solid rgba(45, 240, 206, 0.24);
+		border-radius: 14px;
+		background:
+			linear-gradient(180deg, rgba(8, 31, 35, 0.98), rgba(4, 18, 21, 0.98)),
+			#041215;
+		box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+		padding: 18px;
+	}
+
+	.account-drawer > header,
+	.graph-drawer > header {
 		display: flex;
 		justify-content: space-between;
 		gap: 18px;
 		align-items: start;
 	}
 
-	.account-drawer p {
+	.account-drawer p,
+	.graph-drawer > header p {
 		color: #37e8c9;
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
 	}
 
-	.account-drawer h2 {
+	.account-drawer h2,
+	.graph-drawer h2 {
 		margin-top: 6px;
 		color: #ffffff;
 		font-size: 22px;
 		font-weight: 500;
+	}
+
+	.graph-drawer > header p,
+	.graph-drawer h2 {
+		margin: 0;
+	}
+
+	.graph-drawer-tabs {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px;
+		border: 1px solid rgba(111, 205, 195, 0.14);
+		border-radius: 8px;
+		background: rgba(4, 21, 24, 0.72);
+	}
+
+	.graph-drawer-tabs button {
+		flex: 1;
+		height: 34px;
+		border-radius: 6px;
+		background: transparent;
+		color: #9bb1b0;
+	}
+
+	.graph-drawer-tabs button.active {
+		background: rgba(36, 207, 178, 0.16);
+		color: #39f0d0;
+	}
+
+	.graph-drawer-summary {
+		padding: 0;
+	}
+
+	.graph-search-form {
+		display: grid;
+		grid-template-columns: 1fr auto;
+		gap: 10px;
+	}
+
+	.graph-search-form label {
+		display: flex;
+		align-items: center;
+		min-width: 0;
+		height: 40px;
+		border: 1px solid rgba(111, 205, 195, 0.18);
+		border-radius: 8px;
+		background: rgba(4, 21, 24, 0.76);
+		color: #8ba4a5;
+		padding: 0 10px;
+	}
+
+	.graph-search-form input {
+		min-width: 0;
+		flex: 1;
+		border: 0;
+		outline: 0;
+		background: transparent;
+		color: #edfffc;
+		padding: 0 10px;
+	}
+
+	.graph-search-form button {
+		height: 40px;
+		border-radius: 8px;
+		background: #25d8bd;
+		color: #02201f;
+		font-weight: 700;
+		padding: 0 16px;
+	}
+
+	.graph-explorer-grid {
+		display: grid;
+		grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.2fr);
+		gap: 12px;
+		min-height: 0;
+	}
+
+	.graph-results,
+	.graph-neighborhood {
+		min-height: 440px;
+		border: 1px solid rgba(111, 205, 195, 0.13);
+		border-radius: 9px;
+		background: rgba(7, 28, 31, 0.58);
+		overflow: hidden;
+	}
+
+	.graph-results {
+		display: grid;
+		grid-template-rows: auto 1fr;
+		align-content: start;
+	}
+
+	.graph-results > header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		min-height: 40px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
+		padding: 0 12px;
+	}
+
+	.graph-results > header strong {
+		color: #f4fffe;
+		font-size: 12px;
+		font-weight: 600;
+	}
+
+	.graph-results > header span {
+		color: #2df0ce;
+		font-size: 11px;
+	}
+
+	.graph-results button {
+		display: grid;
+		grid-template-columns: 24px 1fr;
+		gap: 8px;
+		align-items: center;
+		width: 100%;
+		min-height: 54px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		background: transparent;
+		color: #35e9cc;
+		padding: 8px 12px;
+		text-align: left;
+	}
+
+	.graph-results button.active {
+		background: rgba(36, 207, 178, 0.14);
+	}
+
+	.graph-results button strong,
+	.graph-results button small {
+		display: block;
+	}
+
+	.graph-results button strong {
+		color: #eefefb;
+		font-size: 12px;
+		font-weight: 600;
+	}
+
+	.graph-results button small {
+		margin-top: 3px;
+		color: #91a8a8;
+		font-size: 10px;
+	}
+
+	.graph-inline-message,
+	.graph-inline-error {
+		margin: 0;
+		padding: 14px 12px;
+		font-size: 12px;
+		line-height: 1.4;
+	}
+
+	.graph-inline-message {
+		color: #91a8a8;
+	}
+
+	.graph-neighborhood {
+		overflow: auto;
+		padding: 14px;
+	}
+
+	.graph-neighborhood > header {
+		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
+		padding-bottom: 12px;
+	}
+
+	.graph-neighborhood > header span {
+		color: #37e8c9;
+		font-size: 10px;
+		font-weight: 700;
+		text-transform: uppercase;
+	}
+
+	.graph-neighborhood h3 {
+		margin: 6px 0 4px;
+		color: #ffffff;
+		font-size: 18px;
+		font-weight: 500;
+	}
+
+	.graph-neighborhood > header small {
+		color: #91a8a8;
+		font-size: 10px;
+		word-break: break-all;
+	}
+
+	.graph-truncation {
+		border: 1px solid rgba(236, 183, 70, 0.28);
+		border-radius: 8px;
+		background: rgba(236, 183, 70, 0.12);
+		color: #eeb84b;
+		font-size: 12px;
+		line-height: 1.4;
+		padding: 10px 12px;
+	}
+
+	.neighborhood-columns {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 12px;
+		margin-top: 12px;
+	}
+
+	.neighborhood-columns section,
+	.graph-evidence {
+		border: 1px solid rgba(111, 205, 195, 0.11);
+		border-radius: 8px;
+		background: rgba(5, 23, 26, 0.58);
+		padding: 12px;
+	}
+
+	.neighborhood-columns section > strong,
+	.graph-evidence > strong {
+		display: block;
+		color: #f4fffe;
+		font-size: 12px;
+		font-weight: 600;
+	}
+
+	.neighborhood-columns p,
+	.graph-evidence p {
+		margin: 10px 0 0;
+		color: #91a8a8;
+		font-size: 12px;
+	}
+
+	.neighborhood-columns ul,
+	.graph-evidence ul {
+		display: grid;
+		gap: 8px;
+		margin: 10px 0 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.neighborhood-columns li {
+		display: grid;
+		grid-template-columns: 18px 1fr auto;
+		gap: 7px;
+		align-items: center;
+		color: #dcefed;
+		font-size: 11px;
+	}
+
+	.neighborhood-columns li span {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.neighborhood-columns li em {
+		color: #91a8a8;
+		font-size: 10px;
+		font-style: normal;
+	}
+
+	.graph-evidence {
+		margin-top: 12px;
+	}
+
+	.graph-evidence li {
+		display: grid;
+		gap: 4px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		padding-bottom: 8px;
+	}
+
+	.graph-evidence li:last-child {
+		border-bottom: 0;
+		padding-bottom: 0;
+	}
+
+	.graph-evidence li span {
+		color: #37e8c9;
+		font-size: 10px;
+		text-transform: uppercase;
+	}
+
+	.graph-evidence li strong {
+		color: #eefefb;
+		font-size: 11px;
+		font-weight: 600;
+		word-break: break-all;
+	}
+
+	.graph-evidence li small {
+		color: #91a8a8;
+		font-size: 11px;
+		line-height: 1.35;
+	}
+
+	.graph-empty-state.compact {
+		min-height: 220px;
 	}
 
 	.provider-tabs {
