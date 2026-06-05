@@ -4,15 +4,22 @@
 		completeGmailOAuthSetup,
 		fetchCommunicationMessage,
 		fetchCommunicationMessages,
+		fetchGraphNeighborhood,
 		fetchGraphSummary,
 		fetchV1Status,
+		searchGraphNodes,
 		setupImapAccount,
 		startGmailOAuthSetup,
 		type CommunicationMessageDetail,
 		type CommunicationMessageDetailItem,
 		type CommunicationMessageSummary,
 		type GmailOAuthStartResponse,
+		type GraphEdge,
+		type GraphEvidenceSummary,
+		type GraphNeighborhood,
+		type GraphNode,
 		type GraphNodeKind,
+		type GraphRelationshipType,
 		type GraphSummary,
 		type V1Status
 	} from '$lib/api';
@@ -101,6 +108,32 @@
 		preview: string;
 	};
 
+	type GraphCanvasNode = GraphNode & {
+		x: number;
+		y: number;
+		isSelected: boolean;
+	};
+
+	type GraphCanvasEdge = GraphEdge & {
+		x1: number;
+		y1: number;
+		x2: number;
+		y2: number;
+		label: string;
+	};
+
+	type GraphPropertyRow = {
+		key: string;
+		value: string;
+	};
+
+	type GraphFilterChip = {
+		id: string;
+		label: string;
+		count: number | null;
+		enabled: boolean;
+	};
+
 	const apiBaseUrl = import.meta.env.VITE_HERMES_API_BASE_URL ?? 'http://127.0.0.1:8080';
 	const apiToken = import.meta.env.VITE_HERMES_LOCAL_API_TOKEN ?? 'change-me-local-api-token';
 	const actorId = import.meta.env.VITE_HERMES_ACTOR_ID ?? 'desktop-shell';
@@ -111,6 +144,15 @@
 	let statusError = $state('');
 	let graphSummary = $state<GraphSummary | null>(null);
 	let graphError = $state('');
+	let isGraphSummaryLoading = $state(false);
+	let graphSearchQuery = $state('');
+	let graphSearchResults = $state<GraphNode[]>([]);
+	let graphSearchError = $state('');
+	let isGraphSearchLoading = $state(false);
+	let graphSearchSubmitted = $state(false);
+	let graphNeighborhood = $state<GraphNeighborhood | null>(null);
+	let graphNeighborhoodError = $state('');
+	let isGraphNeighborhoodLoading = $state(false);
 	let communicationMessages = $state<CommunicationMessageSummary[]>([]);
 	let selectedCommunicationDetail = $state<CommunicationMessageDetail | null>(null);
 	let communicationsError = $state('');
@@ -450,6 +492,14 @@
 	const selectedAgent = $derived(agentCards[selectedAgentIndex] ?? agentCards[0]);
 	const activeView = $derived(viewCopy[currentView]);
 	const activeShortcuts = $derived(shortcutsByView[currentView]);
+	const selectedGraphNode = $derived(graphNeighborhood?.selected_node ?? null);
+	const graphCanvasNodes = $derived(buildGraphCanvasNodes(graphNeighborhood));
+	const graphCanvasEdges = $derived(buildGraphCanvasEdges(graphNeighborhood, graphCanvasNodes));
+	const selectedGraphProperties = $derived(
+		selectedGraphNode ? graphPropertyRows(selectedGraphNode.properties) : []
+	);
+	const graphNeighborCounts = $derived(graphKindCounts(graphNeighborhood?.nodes ?? []));
+	const graphFilterChips = $derived(buildGraphFilterChips(graphSummary));
 
 	onMount(() => {
 		void loadV1Status();
@@ -467,11 +517,54 @@
 	}
 
 	async function loadGraphSummary() {
+		isGraphSummaryLoading = true;
 		try {
 			graphSummary = await fetchGraphSummary(apiBaseUrl, apiToken, actorId);
 			graphError = '';
 		} catch (error) {
 			graphError = error instanceof Error ? error.message : 'Unknown graph summary error';
+		} finally {
+			isGraphSummaryLoading = false;
+		}
+	}
+
+	async function runGraphSearch() {
+		const query = graphSearchQuery.trim();
+		graphSearchSubmitted = true;
+
+		if (!query) {
+			graphSearchResults = [];
+			graphSearchError = '';
+			return;
+		}
+
+		isGraphSearchLoading = true;
+		try {
+			graphSearchResults = await searchGraphNodes(apiBaseUrl, apiToken, actorId, query, 20);
+			graphSearchError = '';
+		} catch (error) {
+			graphSearchError = error instanceof Error ? error.message : 'Unknown graph search error';
+		} finally {
+			isGraphSearchLoading = false;
+		}
+	}
+
+	async function selectGraphNode(node: GraphNode) {
+		graphNeighborhoodError = '';
+		isGraphNeighborhoodLoading = true;
+		try {
+			graphNeighborhood = await fetchGraphNeighborhood(
+				apiBaseUrl,
+				apiToken,
+				actorId,
+				node.node_id,
+				1
+			);
+		} catch (error) {
+			graphNeighborhoodError =
+				error instanceof Error ? error.message : 'Unknown graph neighborhood error';
+		} finally {
+			isGraphNeighborhoodLoading = false;
 		}
 	}
 
@@ -703,11 +796,11 @@
 	}
 
 	function graphNodeTotal() {
-		return graphSummary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 1842;
+		return graphSummary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 0;
 	}
 
 	function graphRelationshipTotal() {
-		return graphSummary?.edge_counts.reduce((total, item) => total + item.count, 0) ?? 3721;
+		return graphSummary?.edge_counts.reduce((total, item) => total + item.count, 0) ?? 0;
 	}
 
 	function formatNumber(value: number) {
@@ -734,6 +827,150 @@
 			default:
 				return 'tabler:circle-dot';
 		}
+	}
+
+	function graphNodeKindCount(kind: GraphNodeKind) {
+		return graphSummary?.node_counts.find((item) => item.key === kind)?.count ?? 0;
+	}
+
+	function graphEvidenceTotal() {
+		return graphSummary?.evidence_count ?? 0;
+	}
+
+	function buildGraphFilterChips(summary: GraphSummary | null): GraphFilterChip[] {
+		const nodeKinds: Array<{ id: GraphNodeKind; label: string }> = [
+			{ id: 'person', label: 'People' },
+			{ id: 'email_address', label: 'Email Addresses' },
+			{ id: 'message', label: 'Messages' },
+			{ id: 'document', label: 'Documents' }
+		];
+
+		return [
+			{
+				id: 'all',
+				label: 'All',
+				count: summary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 0,
+				enabled: true
+			},
+			...nodeKinds.map((item) => ({
+				id: item.id,
+				label: item.label,
+				count: summary?.node_counts.find((count) => count.key === item.id)?.count ?? 0,
+				enabled: false
+			}))
+		];
+	}
+
+	function buildGraphCanvasNodes(neighborhood: GraphNeighborhood | null): GraphCanvasNode[] {
+		if (!neighborhood) {
+			return [];
+		}
+
+		const selected = neighborhood.selected_node;
+		const neighbors = neighborhood.nodes
+			.filter((node) => node.node_id !== selected.node_id)
+			.slice(0, 14);
+		const radius = 38;
+
+		return [
+			{ ...selected, x: 50, y: 50, isSelected: true },
+			...neighbors.map((node, index) => {
+				const angle = (Math.PI * 2 * index) / Math.max(neighbors.length, 1) - Math.PI / 2;
+				return {
+					...node,
+					x: 50 + Math.cos(angle) * radius,
+					y: 50 + Math.sin(angle) * radius,
+					isSelected: false
+				};
+			})
+		];
+	}
+
+	function buildGraphCanvasEdges(
+		neighborhood: GraphNeighborhood | null,
+		canvasNodes: GraphCanvasNode[]
+	): GraphCanvasEdge[] {
+		if (!neighborhood) {
+			return [];
+		}
+
+		const positions = new Map(canvasNodes.map((node) => [node.node_id, node]));
+		return neighborhood.edges.flatMap((edge) => {
+			const source = positions.get(edge.source_node_id);
+			const target = positions.get(edge.target_node_id);
+			if (!source || !target) {
+				return [];
+			}
+			return [
+				{
+					...edge,
+					x1: source.x,
+					y1: source.y,
+					x2: target.x,
+					y2: target.y,
+					label: formatGraphRelationship(edge.relationship_type)
+				}
+			];
+		});
+	}
+
+	function graphKindCounts(nodes: GraphNode[]) {
+		const counts = new Map<string, number>();
+		for (const node of nodes) {
+			counts.set(node.node_kind, (counts.get(node.node_kind) ?? 0) + 1);
+		}
+		return Array.from(counts.entries())
+			.map(([kind, count]) => ({ kind, count }))
+			.sort((left, right) => right.count - left.count || left.kind.localeCompare(right.kind));
+	}
+
+	function graphPropertyRows(properties: Record<string, unknown>): GraphPropertyRow[] {
+		return Object.entries(properties)
+			.map(([key, value]) => ({ key, value: formatGraphPropertyValue(value) }))
+			.filter((row) => row.value.length > 0)
+			.sort((left, right) => left.key.localeCompare(right.key))
+			.slice(0, 8);
+	}
+
+	function formatGraphPropertyValue(value: unknown): string {
+		if (value === null || value === undefined) {
+			return '';
+		}
+		if (Array.isArray(value)) {
+			return value.map(formatGraphPropertyValue).filter(Boolean).join(', ');
+		}
+		if (typeof value === 'object') {
+			return JSON.stringify(value);
+		}
+		return String(value);
+	}
+
+	function formatGraphRelationship(type: GraphRelationshipType | string) {
+		return type
+			.split('_')
+			.filter((part) => !['person', 'email', 'address', 'message'].includes(part))
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+			.join(' ');
+	}
+
+	function formatGraphTimestamp(value: string | null) {
+		if (!value) {
+			return 'No projection yet';
+		}
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) {
+			return 'Invalid timestamp';
+		}
+		return new Intl.DateTimeFormat('en', {
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		}).format(date);
+	}
+
+	function graphEvidenceLabel(evidence: GraphEvidenceSummary) {
+		return `${formatGraphKind(evidence.source_kind)} ${evidence.source_id}`;
 	}
 </script>
 
