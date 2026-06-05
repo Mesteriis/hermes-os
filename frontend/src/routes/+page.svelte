@@ -1675,17 +1675,17 @@
 										<span>{formatGraphKind(node.node_kind)}</span>
 									</button>
 								{/each}
-								{#if isGraphNeighborhoodLoading}
-									<div class="graph-loading-overlay">
-										<Icon icon="tabler:loader-2" width="22" height="22" />
-										<span>Loading neighborhood</span>
-									</div>
-								{/if}
 							{:else}
 								<div class="graph-state-card">
 									<img src="/assets/hermes-logo-mark.png" alt="" />
 									<h2>Select a graph node</h2>
 									<p>{formatNumber(graphNodeTotal())} nodes and {formatNumber(graphRelationshipTotal())} connections are available from the local projection.</p>
+								</div>
+							{/if}
+							{#if isGraphNeighborhoodLoading}
+								<div class="graph-loading-overlay">
+									<Icon icon="tabler:loader-2" width="22" height="22" />
+									<span>Loading neighborhood</span>
 								</div>
 							{/if}
 						</div>
