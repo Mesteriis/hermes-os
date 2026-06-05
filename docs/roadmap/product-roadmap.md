@@ -103,6 +103,10 @@ Dependencies:
 - entity extraction evaluation
 - graph query patterns
 
+Closure tracking:
+
+- [V2 Closure Checklist](v2-closure-checklist.md)
+
 ## Version 3.0 - AI Native Workflows
 
 Goals:

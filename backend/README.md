@@ -135,6 +135,24 @@ Supported environment variables:
 
 Authorized event API calls are recorded in `api_audit_log` with `actor_kind` and `actor_id`. The API token value is never stored.
 
+## V2 Workflow APIs
+
+Available endpoints below require both `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`. Planned entries describe closure targets and are marked as planned until their acceptance gates are complete.
+
+- `GET /api/v2/projects` - lists local project records with derived stats.
+- `GET /api/v2/projects/{project_id}` - returns project detail, timeline, messages, documents and people.
+- `GET /api/v2/projects/{project_id}/link-candidates` - returns safe project message/document link candidates.
+- `PUT /api/v2/projects/{project_id}/link-reviews` - records project link review state as a canonical event.
+- `GET /api/v2/task-candidates` - lists source-backed task candidates.
+- `PUT /api/v2/task-candidates/{task_candidate_id}/review` - records task candidate review state as a canonical event.
+- `GET /api/v2/tasks` - lists active local tasks created from confirmed candidates.
+- `GET /api/v2/identity-candidates` - lists contact identity candidates.
+- `PUT /api/v2/identity-candidates/{identity_candidate_id}/review` - records identity candidate review state as a canonical event.
+- `GET /api/v2/contacts/{contact_id}/identity` - returns confirmed identity links for one contact.
+- `GET /api/v2/documents/{document_id}/processing` - returns processing jobs and artifacts for one document.
+- `GET /api/v2/document-processing/jobs` - lists recent document processing jobs.
+- `POST /api/v2/document-processing/jobs/{job_id}/retry` - planned; not available until the document-processing retry gate is complete. It will requeue a failed processing job through a canonical retry event.
+
 ## Migrations
 
 Backend startup applies local PostgreSQL migrations when `DATABASE_URL` is configured.

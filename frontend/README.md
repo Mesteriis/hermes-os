@@ -77,3 +77,20 @@ pnpm dev
 ```
 
 The placeholder token is for local development only and must match the backend local API token. `VITE_HERMES_ACTOR_ID` is a non-secret local client identity used by protected API requests and backend audit records.
+
+## V2 Desktop Surfaces
+
+The desktop shell is intentionally desktop/laptop scoped under ADR-0031. Current V2 desktop surfaces and closure targets are:
+
+- Current: Knowledge Graph explorer using graph summary, node picker, search and neighborhood APIs.
+- Current: Projects tab using project records, timelines and project detail APIs. Project link review controls are V2 closure work.
+- Current: Tasks tab using task candidate, task candidate review and active task APIs.
+- Current: Contacts identity review surface using identity candidate list and review APIs. Confirmed identity-link detail and explicit split review are V2 closure work.
+- Current: Document processing status surface using the document-processing jobs API. Artifact detail wiring and failed-job retry controls are V2 closure work.
+
+Validate frontend changes with:
+
+```sh
+pnpm check
+pnpm build
+```
