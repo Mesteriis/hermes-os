@@ -264,6 +264,29 @@ async fn post_document_processing_job_retry_requires_actor_and_requeues_failed_j
             "event_id": format!("document_processing_retry:{}", request_body["command_id"].as_str().unwrap())
         })
     );
+    let audit_record =
+        sqlx::query_as::<_, (String, String, String, String, String, Option<String>)>(
+            r#"
+            SELECT operation, actor_id, method, path_template, target_kind, target_id
+            FROM api_audit_log
+            WHERE target_kind = 'document_processing_job'
+              AND target_id = $1
+            ORDER BY audit_id ASC
+            "#,
+        )
+        .bind(&extract_job.job_id)
+        .fetch_one(&pool)
+        .await
+        .expect("document processing retry audit record");
+    assert_eq!(audit_record.0, "document_processing.job.retry");
+    assert_eq!(audit_record.1, LOCAL_API_ACTOR_ID);
+    assert_eq!(audit_record.2, "POST");
+    assert_eq!(
+        audit_record.3,
+        "/api/v2/document-processing/jobs/{job_id}/retry"
+    );
+    assert_eq!(audit_record.4, "document_processing_job");
+    assert_eq!(audit_record.5.as_deref(), Some(extract_job.job_id.as_str()));
     quiesce_processing_jobs_for_document(&pool, &document_id).await;
 }
 
