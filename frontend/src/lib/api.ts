@@ -201,6 +201,130 @@ export type ProjectDocumentSummary = {
 	imported_at: string;
 };
 
+export type ContactIdentityReviewState =
+	| 'suggested'
+	| 'user_confirmed'
+	| 'user_rejected';
+
+export type ContactIdentityCandidate = {
+	identity_candidate_id: string;
+	candidate_kind: 'merge_contacts' | 'attach_email_address' | 'split_contact';
+	left_contact_id: string;
+	right_contact_id: string | null;
+	email_address: string | null;
+	evidence_summary: string;
+	confidence: number;
+	review_state: ContactIdentityReviewState;
+	generated_at: string;
+	reviewed_at: string | null;
+	updated_at: string;
+};
+
+export type ContactIdentityCandidateListResponse = {
+	items: ContactIdentityCandidate[];
+};
+
+export type TaskCandidateReviewState =
+	| 'suggested'
+	| 'user_confirmed'
+	| 'user_rejected';
+
+export type TaskCandidate = {
+	task_candidate_id: string;
+	source_kind: 'message' | 'document';
+	source_id: string;
+	project_id: string | null;
+	title: string;
+	due_text: string | null;
+	assignee_label: string | null;
+	confidence: number;
+	review_state: TaskCandidateReviewState;
+	evidence_excerpt: string;
+	generated_at: string;
+	reviewed_at: string | null;
+	updated_at: string;
+};
+
+export type ActiveTask = {
+	task_id: string;
+	task_candidate_id: string;
+	title: string;
+	source_kind: 'message' | 'document';
+	source_id: string;
+	project_id: string | null;
+	status: 'active';
+	created_at: string;
+	updated_at: string;
+};
+
+export type TaskCandidateListResponse = {
+	items: TaskCandidate[];
+};
+
+export type TaskListResponse = {
+	items: ActiveTask[];
+};
+
+export type DocumentProcessingStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped';
+
+export type DocumentProcessingStep = 'extract_text' | 'ocr';
+
+export type DocumentProcessingArtifactKind = 'extracted_text' | 'ocr_text';
+
+export type DocumentProcessingJob = {
+	job_id: string;
+	document_id: string;
+	step: DocumentProcessingStep;
+	status: DocumentProcessingStatus;
+	attempts: number;
+	max_attempts: number;
+	last_error_summary: string | null;
+	queued_at: string;
+	started_at: string | null;
+	finished_at: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type DocumentProcessingArtifact = {
+	artifact_id: string;
+	document_id: string;
+	job_id: string;
+	artifact_kind: DocumentProcessingArtifactKind;
+	content_sha256: string;
+	text_content: string | null;
+	storage_kind: string | null;
+	storage_path: string | null;
+	metadata: Record<string, unknown>;
+	created_at: string;
+};
+
+export type DocumentProcessingRecord = {
+	document_id: string;
+	jobs: DocumentProcessingJob[];
+	artifacts: DocumentProcessingArtifact[];
+};
+
+export type DocumentProcessingJobsResponse = {
+	items: DocumentProcessingJob[];
+};
+
+export async function fetchIdentityCandidates(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	limit = 50
+) : Promise<ContactIdentityCandidateListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/identity-candidates?${params.toString()}`,
+		'Identity candidate request failed'
+	);
+}
+
 export type ProjectDetail = {
 	project: ProjectRecord;
 	stats: ProjectStats;
@@ -399,6 +523,107 @@ export async function fetchProjectDetail(
 	);
 }
 
+export async function fetchTaskCandidates(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	limit = 50
+): Promise<TaskCandidateListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/task-candidates?${params.toString()}`,
+		'Task candidates request failed'
+	);
+}
+
+export async function fetchTasks(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	limit = 50
+): Promise<TaskListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/tasks?${params.toString()}`,
+		'Tasks request failed'
+	);
+}
+
+export async function fetchDocumentProcessingJobs(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	limit = 50
+): Promise<DocumentProcessingJobsResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/document-processing/jobs?${params.toString()}`,
+		'Document processing jobs request failed'
+	);
+}
+
+export async function fetchDocumentProcessing(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	documentId: string
+): Promise<DocumentProcessingRecord> {
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/documents/${encodeURIComponent(documentId)}/processing`,
+		'Document processing request failed'
+	);
+}
+
+export async function reviewTaskCandidate(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	taskCandidateId: string,
+	reviewState: TaskCandidateReviewState
+) {
+	return putJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/task-candidates/${encodeURIComponent(taskCandidateId)}/review`,
+		{
+			command_id: `task-candidate-review-${crypto.randomUUID()}`,
+			review_state: reviewState
+		}
+	);
+}
+
+export async function reviewIdentityCandidate(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	identityCandidateId: string,
+	reviewState: ContactIdentityReviewState
+) {
+	return putJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/identity-candidates/${encodeURIComponent(identityCandidateId)}/review`,
+		{
+			command_id: `contact-identity-review-${crypto.randomUUID()}`,
+			review_state: reviewState
+		}
+	);
+}
+
 export async function startGmailOAuthSetup(
 	baseUrl: string,
 	token: string,
@@ -474,6 +699,34 @@ async function postJson<TResponse>(
 			| { message?: string }
 			| null;
 		throw new Error(error?.message ?? `Account setup request failed: ${response.status}`);
+	}
+
+	return (await response.json()) as TResponse;
+}
+
+async function putJson<TResponse>(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	path: string,
+	body: unknown
+): Promise<TResponse> {
+	const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+	const response = await fetch(`${normalizedBaseUrl}${path}`, {
+		method: 'PUT',
+		headers: {
+			Authorization: `Bearer ${token}`,
+			'Content-Type': 'application/json',
+			'X-Hermes-Actor-Id': actorId
+		},
+		body: JSON.stringify(body)
+	});
+
+	if (!response.ok) {
+		const error = (await response.json().catch(() => null)) as
+			| { message?: string }
+			| null;
+		throw new Error(error?.message ?? `Task candidate review request failed: ${response.status}`);
 	}
 
 	return (await response.json()) as TResponse;

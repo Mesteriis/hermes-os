@@ -8,16 +8,26 @@
 		fetchGraphNodes,
 		fetchGraphSummary,
 		fetchProjectDetail,
+		fetchDocumentProcessingJobs,
+		fetchIdentityCandidates,
+		fetchTaskCandidates,
+		fetchTasks,
 		fetchProjects,
 		fetchV1Status,
+		reviewIdentityCandidate,
+		reviewTaskCandidate,
 		searchGraphNodes,
 		setupImapAccount,
 		startGmailOAuthSetup,
+		type ActiveTask,
+		type ContactIdentityCandidate,
+		type ContactIdentityReviewState,
 		type CommunicationMessageDetail,
 		type CommunicationMessageDetailItem,
 		type CommunicationMessageSummary,
 		type GmailOAuthStartResponse,
 		type GraphEdge,
+		type DocumentProcessingJob,
 		type GraphEvidenceSummary,
 		type GraphNeighborhood,
 		type GraphNode,
@@ -30,6 +40,8 @@
 		type ProjectStats,
 		type ProjectSummary,
 		type ProjectTimelineItem,
+		type TaskCandidate,
+		type TaskCandidateReviewState,
 		type V1Status
 	} from '$lib/api';
 	import { onMount } from 'svelte';
@@ -178,6 +190,16 @@
 	let selectedProjectId = $state('');
 	let projectsError = $state('');
 	let isProjectsLoading = $state(false);
+	let taskCandidates = $state<TaskCandidate[]>([]);
+	let activeTasks = $state<ActiveTask[]>([]);
+	let documentProcessingJobs = $state<DocumentProcessingJob[]>([]);
+	let isDocumentProcessingJobsLoading = $state(false);
+	let documentProcessingJobsError = $state('');
+	let isTasksLoading = $state(false);
+	let tasksError = $state('');
+	let identityCandidates = $state<ContactIdentityCandidate[]>([]);
+	let identityCandidatesError = $state('');
+	let isIdentityCandidatesLoading = $state(false);
 	let projectRequestSequence = 0;
 	let selectedConversationIndex = $state(0);
 	let selectedContactIndex = $state(0);
@@ -525,13 +547,22 @@
 	const relatedProjectSummaries = $derived(
 		projectSummaries.filter((item) => item.project.project_id !== selectedProjectRecord?.project_id)
 	);
+	const suggestedTaskCandidates = $derived(
+		taskCandidates.filter((item) => item.review_state === 'suggested')
+	);
+	const suggestedIdentityCandidates = $derived(
+		identityCandidates.filter((item) => item.review_state === 'suggested')
+	);
 
 	onMount(() => {
 		void loadV1Status();
 		void loadGraphSummary();
 		void loadGraphNodeChoices();
 		void loadCommunications();
+		void loadDocumentProcessingJobs();
 		void loadProjects();
+		void loadIdentityCandidates();
+		void loadTaskReviewState();
 	});
 
 	async function loadV1Status() {
@@ -694,6 +725,82 @@
 			if (requestSequence === projectRequestSequence) {
 				isProjectsLoading = false;
 			}
+		}
+	}
+
+	async function loadTaskReviewState() {
+		isTasksLoading = true;
+		try {
+			const [candidateResponse, taskResponse] = await Promise.all([
+				fetchTaskCandidates(apiBaseUrl, apiToken, actorId, 50),
+				fetchTasks(apiBaseUrl, apiToken, actorId, 50)
+			]);
+			taskCandidates = candidateResponse.items;
+			activeTasks = taskResponse.items;
+			tasksError = '';
+		} catch (error) {
+			tasksError = error instanceof Error ? error.message : 'Unknown task candidate error';
+		} finally {
+			isTasksLoading = false;
+		}
+	}
+
+	async function loadIdentityCandidates() {
+		isIdentityCandidatesLoading = true;
+		try {
+			const response = await fetchIdentityCandidates(apiBaseUrl, apiToken, actorId, 50);
+			identityCandidates = response.items;
+			identityCandidatesError = '';
+		} catch (error) {
+			identityCandidatesError =
+				error instanceof Error ? error.message : 'Unknown identity candidate error';
+		} finally {
+			isIdentityCandidatesLoading = false;
+		}
+	}
+
+	async function loadDocumentProcessingJobs() {
+		isDocumentProcessingJobsLoading = true;
+		try {
+			const response = await fetchDocumentProcessingJobs(apiBaseUrl, apiToken, actorId, 50);
+			documentProcessingJobs = response.items;
+			documentProcessingJobsError = '';
+		} catch (error) {
+			documentProcessingJobsError =
+				error instanceof Error ? error.message : 'Unknown document processing jobs error';
+		} finally {
+			isDocumentProcessingJobsLoading = false;
+		}
+	}
+
+	async function setIdentityCandidateReview(
+		candidate: ContactIdentityCandidate,
+		reviewState: ContactIdentityReviewState
+	) {
+		try {
+			await reviewIdentityCandidate(
+				apiBaseUrl,
+				apiToken,
+				actorId,
+				candidate.identity_candidate_id,
+				reviewState
+			);
+			await loadIdentityCandidates();
+		} catch (error) {
+			identityCandidatesError =
+				error instanceof Error ? error.message : 'Unknown identity review error';
+		}
+	}
+
+	async function setTaskCandidateReview(
+		candidate: TaskCandidate,
+		reviewState: TaskCandidateReviewState
+	) {
+		try {
+			await reviewTaskCandidate(apiBaseUrl, apiToken, actorId, candidate.task_candidate_id, reviewState);
+			await loadTaskReviewState();
+		} catch (error) {
+			tasksError = error instanceof Error ? error.message : 'Unknown task candidate review error';
 		}
 	}
 
@@ -1187,7 +1294,35 @@
 	function graphEvidenceLabel(evidence: GraphEvidenceSummary) {
 		return `${formatGraphKind(evidence.source_kind)} ${evidence.source_id}`;
 	}
-</script>
+
+	function taskSourceLabel(item: TaskCandidate | ActiveTask) {
+		return `${item.source_kind[0].toUpperCase()}${item.source_kind.slice(1)} · ${item.source_id}`;
+	}
+
+	function taskConfidence(item: TaskCandidate) {
+		return `${Math.round(item.confidence * 100)}%`;
+	}
+
+	function identityConfidence(item: ContactIdentityCandidate) {
+		return `${Math.round(item.confidence * 100)}%`;
+	}
+
+	function taskCreatedTime(value: string | null) {
+		if (!value) {
+			return '';
+		}
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) {
+			return 'Unknown date';
+		}
+		return new Intl.DateTimeFormat('en', {
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		}).format(date);
+	}
+	</script>
 
 <svelte:head>
 	<title>Hermes Hub</title>
@@ -1584,6 +1719,39 @@
 					</section>
 					<aside class="stacked-rail">
 						<section class="panel info-card"><h2>AI Summary</h2><p>John is a key strategic partner and decision maker. You have a strong professional relationship with frequent communication across multiple projects.</p></section>
+						<section class="panel info-card">
+							<h2>Contact Identity Review</h2>
+							<p class="identity-note">Contact merges are only suggested and are not applied until confirmed.</p>
+							{#if isIdentityCandidatesLoading}
+								<p class="inline-copy">Loading identity suggestions…</p>
+							{:else if identityCandidatesError}
+								<p class="inline-error">{identityCandidatesError}</p>
+							{:else if suggestedIdentityCandidates.length === 0}
+								<p class="inline-copy">No identity suggestions right now.</p>
+							{:else}
+								{#each suggestedIdentityCandidates as candidate}
+									<div class="identity-candidate-row">
+										<div>
+											<strong>{candidate.candidate_kind}</strong>
+											<p>{candidate.evidence_summary}</p>
+											<small>Left: {candidate.left_contact_id}</small>
+											<small>Right: {candidate.right_contact_id ?? 'N/A'}</small>
+											<small>Confidence: {identityConfidence(candidate)} · {candidate.review_state}</small>
+										</div>
+										<div class="identity-actions">
+											<button type="button" onclick={() => void setIdentityCandidateReview(candidate, 'user_confirmed')}>
+												<Icon icon="tabler:check" width="15" height="15" />
+												Confirm
+											</button>
+											<button type="button" onclick={() => void setIdentityCandidateReview(candidate, 'user_rejected')}>
+												<Icon icon="tabler:x" width="15" height="15" />
+												Reject
+											</button>
+										</div>
+									</div>
+								{/each}
+							{/if}
+						</section>
 						<section class="panel info-card"><h2>Related Documents</h2>{#each documents.slice(0, 4) as doc}<div class="doc-mini"><Icon icon={doc.icon} width="20" height="20" /><span><strong>{doc.name}</strong><small>{doc.size} · {doc.date}</small></span></div>{/each}</section>
 						<section class="panel info-card"><h2>Recent Notes</h2><p>Discussed expansion to EU market</p><p>Prefers email for official communication</p><p>Interested in AI/ML integration</p></section>
 					</aside>
@@ -1766,29 +1934,75 @@
 			<section class="tasks-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:hexagon" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
-					<div class="metric-grid inline-metrics">{#each [{label:'Total Tasks',value:'342',delta:'18%'},{label:'To Do',value:'128',delta:''},{label:'In Progress',value:'97',delta:''},{label:'In Review',value:'43',delta:''},{label:'Done',value:'74',delta:'12%'}] as metric}<article class="metric-card"><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.delta ? `↑ ${metric.delta}` : ' '}</small></article>{/each}</div>
-					<button type="button" class="primary-button" disabled>New Task</button>
+					<div class="metric-grid inline-metrics">
+						<article class="metric-card">
+							<span>Active Tasks</span>
+							<strong>{activeTasks.length}</strong>
+							<small>Active records</small>
+						</article>
+						<article class="metric-card">
+							<span>Suggested Candidates</span>
+							<strong>{suggestedTaskCandidates.length}</strong>
+							<small>Ready for review</small>
+						</article>
+						<article class="metric-card">
+							<span>Review State</span>
+							<strong>{tasksError ? 'Error' : 'Ready'}</strong>
+							<small>{tasksError ? 'Show message below' : 'Live API'}</small>
+						</article>
+					</div>
 				</div>
-				<div class="filter-bar"><button type="button" disabled>All Trackers</button><button type="button" disabled>All Accounts</button><button type="button" disabled>All Projects</button><button type="button" disabled>All Assignees</button><button type="button" disabled>Filters</button><button type="button" disabled>Sort: Priority</button><button type="button" disabled>Group by: None</button></div>
+				{#if tasksError}
+					<p class="inline-error">{tasksError}</p>
+				{/if}
 				<div class="tasks-layout">
 					<section class="panel task-table">
-						<header class="tracker-strip">
-							{#each ['Jira Cloud', 'YouTrack', 'ClickUp'] as tracker, index}
-								<article><Icon icon={index === 0 ? 'tabler:brand-jira' : index === 1 ? 'tabler:brand-youtube-kids' : 'tabler:triangle-square-circle'} width="22" height="22" /><strong>{tracker}</strong><span>{index === 0 ? '104' : index === 1 ? '48' : '32'} to do</span></article>
+						<h3 class="task-group">Active Tasks <em>{activeTasks.length}</em></h3>
+							<div class="table-head task-table-head"><span>Task</span><span>Source</span><span>Project</span><span>Created</span><span>Status</span></div>
+						{#if isTasksLoading}
+							<p class="inline-copy">Loading task state…</p>
+						{:else if activeTasks.length === 0}
+							<p class="inline-copy">No active tasks yet.</p>
+						{:else}
+							{#each activeTasks as item}
+								<label class="task-row"><input type="checkbox" disabled checked /><strong>{item.title}</strong><span>{taskSourceLabel(item)}</span><span>{item.project_id ?? 'Unassigned'}</span><time>{taskCreatedTime(item.created_at)}</time><em>{item.status}</em></label>
 							{/each}
-						</header>
-						<div class="table-head"><span>Task</span><span>Tracker</span><span>Project</span><span>Assignee</span><span>Status</span><span>Priority</span><span>Due Date</span></div>
-						{#each ['Due Today', 'This Week', 'Later'] as group}
-							<h3 class="task-group">{group} <em>{tasks.filter((task) => task.group === group).length}</em></h3>
-							{#each tasks.filter((task) => task.group === group) as task}
-								<label class="task-row"><input type="checkbox" /><strong>{task.title}</strong><span>{task.tracker}</span><span>{task.project}</span><span>{task.assignee}</span><em>{task.status}</em><b class:high={task.priority === 'High'}>{task.priority}</b><time>{task.due}</time></label>
+						{/if}
+
+						<h3 class="task-group">Review Queue <em>{suggestedTaskCandidates.length}</em></h3>
+							<div class="table-head task-table-head"><span>Candidate</span><span>Source</span><span>Project</span><span>Confidence</span><span>Action</span></div>
+						{#if isTasksLoading}
+							<p class="inline-copy">Loading task candidates…</p>
+						{:else if suggestedTaskCandidates.length === 0}
+							<p class="inline-copy">No suggested candidates.</p>
+						{:else}
+							{#each suggestedTaskCandidates as candidate}
+								<div class="task-row task-row-actions">
+									<strong>{candidate.title}</strong>
+									<span>{taskSourceLabel(candidate)}</span>
+									<span>{candidate.project_id ?? 'Unassigned'}</span>
+									<em>{taskConfidence(candidate)}</em>
+									<div class="task-actions">
+										<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_confirmed')}><Icon icon="tabler:check" width="15" height="15" /> Confirm</button>
+										<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_rejected')}><Icon icon="tabler:x" width="15" height="15" /> Reject</button>
+									</div>
+								</div>
 							{/each}
-						{/each}
+						{/if}
 					</section>
 					<aside class="stacked-rail">
-						<section class="panel chart-panel"><h2>Tasks Overview</h2><div class="donut"><strong>342</strong><span>Total</span></div><ul><li>128 To Do</li><li>97 In Progress</li><li>43 In Review</li><li>74 Done</li></ul></section>
-						<section class="panel info-card"><h2>By Tracker</h2>{#each ['Jira Cloud 246 tasks', 'YouTrack 106 tasks', 'ClickUp 48 tasks'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
-						<section class="panel info-card"><h2>Upcoming Deadlines</h2>{#each tasks.slice(0, 5) as task}<div class="deadline"><span>{task.title}</span><time>{task.due}</time></div>{/each}</section>
+						<section class="panel chart-panel"><h2>Review Stats</h2><div class="donut"><strong>{taskCandidates.length}</strong><span>Suggestions</span></div><ul><li>{`${suggestedTaskCandidates.length} Suggested`}</li><li>{`${activeTasks.length} Active`}</li><li>{`${taskCandidates.length - suggestedTaskCandidates.length - activeTasks.length} Done`}</li></ul></section>
+						<section class="panel info-card">
+							<h2>Recent Candidate Signals</h2>
+							{#if suggestedTaskCandidates.length === 0}
+								<p class="muted-copy">No pending candidate signals.</p>
+							{:else}
+								{#each suggestedTaskCandidates.slice(0, 5) as candidate}
+									<div class="deadline"><span>{candidate.title}</span><time>{candidate.source_kind}</time></div>
+								{/each}
+							{/if}
+						</section>
+						<section class="panel info-card"><h2>Active Task Sources</h2>{#each ['message','document'] as source}<div class="bar-row"><span>{source}</span><div><i></i></div></div>{/each}</section>
 					</aside>
 				</div>
 			</section>
@@ -1842,6 +2056,23 @@
 						{/each}
 					</section>
 					<aside class="stacked-rail">
+						<section class="panel info-card">
+							<h2>Document Processing</h2>
+							{#if isDocumentProcessingJobsLoading}
+								<p class="muted-copy">Loading document processing status…</p>
+							{:else if documentProcessingJobsError}
+								<p class="muted-copy">{documentProcessingJobsError}</p>
+							{:else if documentProcessingJobs.length === 0}
+								<p class="muted-copy">No processing jobs yet.</p>
+							{:else}
+								{#each documentProcessingJobs.slice(0, 5) as job}
+									<div class="deadline">
+										<span>{job.document_id} · {job.step}</span>
+										<small>{job.status}{job.last_error_summary ? ` — ${job.last_error_summary}` : ''}</small>
+									</div>
+								{/each}
+							{/if}
+						</section>
 						<section class="panel chart-panel"><h2>Documents Insights</h2><strong>2,653</strong><span>Total Documents</span><div class="donut small"><strong>24%</strong></div></section>
 						<section class="panel info-card"><h2>Document Types</h2>{#each ['PDF 1,234 (46%)', 'Documents 623 (23%)', 'Spreadsheets 312 (12%)', 'Presentations 198 (7%)', 'Images 142 (5%)'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
 						<section class="panel info-card"><h2>Recent Activity</h2>{#each contactList.slice(1,5) as person}<div class="person-compact"><img src="/assets/hermes-reference-avatar.png" alt="" /><span><strong>{person.name}</strong><small>updated a document</small></span></div>{/each}</section>
@@ -3870,36 +4101,6 @@
 		min-height: 680px;
 	}
 
-	.tracker-strip {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 12px;
-		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
-		padding: 14px;
-	}
-
-	.tracker-strip article {
-		display: grid;
-		grid-template-columns: 28px 1fr auto;
-		align-items: center;
-		gap: 8px;
-		min-height: 50px;
-		border: 1px solid rgba(111, 205, 195, 0.1);
-		border-radius: 8px;
-		background: rgba(8, 36, 39, 0.48);
-		padding: 10px;
-	}
-
-	.tracker-strip strong {
-		color: #fff;
-		font-size: 13px;
-	}
-
-	.tracker-strip span {
-		color: #a6bbbb;
-		font-size: 10px;
-	}
-
 	.table-head,
 	.task-row,
 	.doc-row {
@@ -3929,6 +4130,83 @@
 
 	.task-row span {
 		color: #c7d9d8;
+	}
+
+	.task-table-head {
+		grid-template-columns: 2fr 1fr 0.9fr 1fr 0.7fr;
+	}
+
+	.task-row-actions {
+		grid-template-columns: 2fr 1.1fr 1fr 0.7fr auto;
+		gap: 10px;
+	}
+
+	.task-actions {
+		display: inline-flex;
+		gap: 7px;
+	}
+
+	.task-actions button {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 8px;
+		height: auto;
+		font-size: 11px;
+	}
+
+	.identity-note {
+		margin: 0 0 8px;
+		color: #91a8a8;
+		font-size: 12px;
+	}
+
+	.identity-candidate-row {
+		display: grid;
+		gap: 8px;
+		padding: 10px 0;
+		border-top: 1px solid rgba(102, 189, 180, 0.08);
+	}
+
+	.identity-candidate-row:first-child {
+		border-top: none;
+	}
+
+	.identity-candidate-row strong {
+		display: block;
+		margin-bottom: 3px;
+	}
+
+	.identity-candidate-row p {
+		margin: 0 0 4px;
+		color: #dbe9e8;
+	}
+
+	.identity-candidate-row small {
+		display: block;
+		color: #91a8a8;
+	}
+
+	.identity-actions {
+		display: inline-flex;
+		gap: 7px;
+		margin-top: 8px;
+	}
+
+	.identity-actions button {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 4px 8px;
+		height: auto;
+		font-size: 11px;
+	}
+
+	.inline-copy {
+		margin: 0;
+		padding: 12px 16px;
+		color: #91a8a8;
+		font-size: 12px;
 	}
 
 	.task-row em,
