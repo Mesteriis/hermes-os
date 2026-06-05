@@ -9,8 +9,10 @@ use hermes_hub_backend::communications::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
     StoredRawCommunicationRecord,
 };
+use hermes_hub_backend::mail_storage::LocalMailBlobStore;
 use hermes_hub_backend::messages::{
     MessageProjectionError, MessageProjectionStore, NewProjectedMessage, project_raw_email_message,
+    project_raw_email_message_from_blob,
 };
 use hermes_hub_backend::storage::Database;
 
@@ -54,6 +56,71 @@ async fn message_projection_upserts_canonical_message_against_postgres() {
     assert_eq!(projected.subject, "Projected subject");
     assert_eq!(projected.sender, "alice@example.com");
     assert_eq!(projected.recipients, vec!["bob@example.com".to_owned()]);
+}
+
+#[tokio::test]
+async fn message_projection_extracts_canonical_fields_from_raw_blob_against_postgres() {
+    let Some((_, communication_store, message_store)) =
+        live_projection_context("message raw blob projection").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let account_id = format!("acct_message_blob_projection_{suffix}");
+    let raw_record_id = format!("raw_message_blob_projection_{suffix}");
+    let provider_record_id = format!("provider-message-blob-{suffix}");
+    let blob_root = tempfile::tempdir().expect("blob root");
+    let blob_store = LocalMailBlobStore::new(blob_root.path());
+    let local_blob = blob_store
+        .put_blob(
+            b"Subject: Real MIME\r\nFrom: Alice <alice@example.com>\r\nTo: Bob <bob@example.com>\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHello=20from=20real=20mail.",
+        )
+        .await
+        .expect("write raw mail blob");
+
+    store_provider_account(
+        &communication_store,
+        &account_id,
+        "Projection raw blob",
+        format!("projection-raw-blob-{suffix}@example.com"),
+    )
+    .await;
+    let raw = communication_store
+        .record_raw_source(
+            &NewRawCommunicationRecord::new(
+                &raw_record_id,
+                &account_id,
+                "email_message",
+                &provider_record_id,
+                format!("sha256:{raw_record_id}"),
+                format!("batch_{raw_record_id}"),
+                json!({
+                    "provider": "imap",
+                    "raw_blob_storage_kind": local_blob.storage_kind,
+                    "raw_blob_storage_path": local_blob.storage_path,
+                    "raw_blob_sha256": local_blob.sha256,
+                    "raw_blob_size_bytes": local_blob.size_bytes
+                }),
+            )
+            .occurred_at(Utc::now())
+            .provenance(json!({"source":"email_provider_sync"})),
+        )
+        .await
+        .expect("record raw blob message");
+
+    let projected = project_raw_email_message_from_blob(&message_store, &blob_store, &raw)
+        .await
+        .expect("project message from raw blob");
+
+    assert_eq!(projected.account_id, account_id);
+    assert_eq!(projected.provider_record_id, provider_record_id);
+    assert_eq!(projected.subject, "Real MIME");
+    assert_eq!(projected.sender, "Alice <alice@example.com>");
+    assert_eq!(
+        projected.recipients,
+        vec!["Bob <bob@example.com>".to_owned()]
+    );
+    assert_eq!(projected.body_text, "Hello from real mail.");
 }
 
 #[tokio::test]

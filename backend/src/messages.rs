@@ -5,6 +5,8 @@ use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
 use crate::communications::StoredRawCommunicationRecord;
+use crate::email_rfc822::{EmailRfc822ParseError, parse_rfc822_message};
+use crate::mail_storage::{LocalMailBlobStore, MailStorageError};
 
 #[derive(Clone)]
 pub struct MessageProjectionStore {
@@ -164,6 +166,35 @@ pub async fn project_raw_email_message(
     store.upsert_message(&message).await
 }
 
+pub async fn project_raw_email_message_from_blob(
+    store: &MessageProjectionStore,
+    blob_store: &LocalMailBlobStore,
+    raw: &StoredRawCommunicationRecord,
+) -> Result<ProjectedMessage, MessageProjectionError> {
+    let storage_kind = required_payload_string(&raw.payload, "raw_blob_storage_kind")?;
+    if storage_kind != "local_fs" {
+        return Err(MessageProjectionError::UnsupportedRawBlobStorageKind(
+            storage_kind,
+        ));
+    }
+    let storage_path = required_payload_string(&raw.payload, "raw_blob_storage_path")?;
+    let bytes = blob_store.read_blob(&storage_path).await?;
+    let parsed = parse_rfc822_message(&bytes)?;
+    let message = NewProjectedMessage {
+        message_id: message_id(&raw.account_id, &raw.provider_record_id),
+        raw_record_id: raw.raw_record_id.clone(),
+        account_id: raw.account_id.clone(),
+        provider_record_id: raw.provider_record_id.clone(),
+        subject: parsed.subject,
+        sender: parsed.from,
+        recipients: parsed.to,
+        body_text: parsed.body_text,
+        occurred_at: raw.occurred_at,
+    };
+
+    store.upsert_message(&message).await
+}
+
 fn row_to_projected_message(row: PgRow) -> Result<ProjectedMessage, MessageProjectionError> {
     Ok(ProjectedMessage {
         message_id: row.try_get("message_id")?,
@@ -253,6 +284,12 @@ pub enum MessageProjectionError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 
+    #[error(transparent)]
+    MailStorage(#[from] MailStorageError),
+
+    #[error(transparent)]
+    Rfc822(#[from] EmailRfc822ParseError),
+
     #[error("raw email payload missing required field or wrong type: {0}")]
     MissingPayloadField(&'static str),
 
@@ -270,4 +307,7 @@ pub enum MessageProjectionError {
 
     #[error("stored communication message recipients must be a JSON array of strings")]
     InvalidStoredRecipients,
+
+    #[error("unsupported raw blob storage kind: {0}")]
+    UnsupportedRawBlobStorageKind(String),
 }

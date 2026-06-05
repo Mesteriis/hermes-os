@@ -8,6 +8,7 @@ pub mod email_fixture_export;
 pub mod email_fixture_pipeline;
 pub mod email_import;
 pub mod email_provider_network;
+pub mod email_rfc822;
 pub mod email_sources;
 pub mod email_sync;
 pub mod event_log;

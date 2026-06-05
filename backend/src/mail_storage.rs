@@ -59,6 +59,11 @@ impl LocalMailBlobStore {
             size_bytes,
         })
     }
+
+    pub async fn read_blob(&self, storage_path: &str) -> Result<Vec<u8>, MailStorageError> {
+        let storage_path = validate_storage_path(storage_path)?;
+        Ok(tokio::fs::read(self.root.join(storage_path)).await?)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
