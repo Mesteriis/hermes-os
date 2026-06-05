@@ -440,6 +440,7 @@ pub enum GraphNodeKind {
     EmailAddress,
     Message,
     Document,
+    Project,
 }
 
 impl GraphNodeKind {
@@ -449,6 +450,7 @@ impl GraphNodeKind {
             Self::EmailAddress => "email_address",
             Self::Message => "message",
             Self::Document => "document",
+            Self::Project => "project",
         }
     }
 }
@@ -461,6 +463,10 @@ pub enum RelationshipType {
     PersonReceivedMessage,
     EmailAddressSentMessage,
     EmailAddressReceivedMessage,
+    ProjectHasMessage,
+    ProjectHasDocument,
+    ProjectInvolvesPerson,
+    ProjectInvolvesEmailAddress,
 }
 
 impl RelationshipType {
@@ -471,6 +477,10 @@ impl RelationshipType {
             Self::PersonReceivedMessage => "person_received_message",
             Self::EmailAddressSentMessage => "email_address_sent_message",
             Self::EmailAddressReceivedMessage => "email_address_received_message",
+            Self::ProjectHasMessage => "project_has_message",
+            Self::ProjectHasDocument => "project_has_document",
+            Self::ProjectInvolvesPerson => "project_involves_person",
+            Self::ProjectInvolvesEmailAddress => "project_involves_email_address",
         }
     }
 }
@@ -811,6 +821,7 @@ fn parse_node_kind(value: String) -> Result<GraphNodeKind, GraphStoreError> {
         "email_address" => Ok(GraphNodeKind::EmailAddress),
         "message" => Ok(GraphNodeKind::Message),
         "document" => Ok(GraphNodeKind::Document),
+        "project" => Ok(GraphNodeKind::Project),
         _ => Err(GraphStoreError::UnknownNodeKind(value)),
     }
 }
@@ -822,6 +833,10 @@ fn parse_relationship_type(value: String) -> Result<RelationshipType, GraphStore
         "person_received_message" => Ok(RelationshipType::PersonReceivedMessage),
         "email_address_sent_message" => Ok(RelationshipType::EmailAddressSentMessage),
         "email_address_received_message" => Ok(RelationshipType::EmailAddressReceivedMessage),
+        "project_has_message" => Ok(RelationshipType::ProjectHasMessage),
+        "project_has_document" => Ok(RelationshipType::ProjectHasDocument),
+        "project_involves_person" => Ok(RelationshipType::ProjectInvolvesPerson),
+        "project_involves_email_address" => Ok(RelationshipType::ProjectInvolvesEmailAddress),
         _ => Err(GraphStoreError::UnknownRelationshipType(value)),
     }
 }

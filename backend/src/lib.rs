@@ -18,6 +18,7 @@ pub mod graph_projection;
 pub mod mail_storage;
 pub mod messages;
 pub mod projections;
+pub mod projects;
 pub mod search;
 pub mod secret_vault;
 pub mod secrets;
@@ -54,6 +55,7 @@ use crate::mail_storage::{MailStorageError, MailStorageStore, StoredMailAttachme
 use crate::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
 };
+use crate::projects::{ProjectListResponse, ProjectStore, ProjectStoreError};
 use crate::secret_vault::EncryptedSecretVault;
 use crate::secrets::{SecretKind, SecretReferenceStore};
 use crate::storage::{
@@ -102,6 +104,8 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route("/api/v2/graph/nodes", get(get_graph_nodes))
         .route("/api/v2/graph/neighborhood", get(get_graph_neighborhood))
         .route("/api/v2/graph/search", get(get_graph_search))
+        .route("/api/v2/projects", get(get_projects))
+        .route("/api/v2/projects/{project_id}", get(get_project_detail))
         .route(
             "/api/v1/email-accounts/gmail/oauth/start",
             post(post_gmail_oauth_start),
@@ -399,6 +403,31 @@ async fn get_graph_search(
     ))
 }
 
+async fn get_projects(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<ProjectListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let query = parse_projects_query(raw_query.as_deref())?;
+    let items = project_store(&state)?.list_projects(query.limit).await?;
+
+    Ok(Json(ProjectListResponse { items }))
+}
+
+async fn get_project_detail(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+) -> Result<Json<crate::projects::ProjectDetail>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let Some(project) = project_store(&state)?.project_detail(&project_id).await? else {
+        return Err(ApiError::ProjectNotFound);
+    };
+
+    Ok(Json(project))
+}
+
 async fn post_gmail_oauth_start(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -526,6 +555,14 @@ fn mail_storage_store(state: &AppState) -> Result<MailStorageStore, ApiError> {
     };
 
     Ok(MailStorageStore::new(pool.clone()))
+}
+
+fn project_store(state: &AppState) -> Result<ProjectStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(ProjectStore::new(pool.clone()))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
@@ -866,6 +903,10 @@ struct GraphSearchQuery {
     limit: Option<i64>,
 }
 
+struct ProjectsQuery {
+    limit: Option<i64>,
+}
+
 fn parse_communication_messages_query(
     raw_query: Option<&str>,
 ) -> Result<CommunicationMessagesQuery, ApiError> {
@@ -953,6 +994,24 @@ fn parse_graph_search_query(raw_query: Option<&str>) -> Result<GraphSearchQuery,
     Ok(query)
 }
 
+fn parse_projects_query(raw_query: Option<&str>) -> Result<ProjectsQuery, ApiError> {
+    let mut query = ProjectsQuery { limit: None };
+
+    if let Some(raw_query) = raw_query {
+        for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
+            if key.as_ref() == "limit" {
+                query.limit = Some(
+                    value
+                        .parse::<i64>()
+                        .map_err(|_| ApiError::InvalidProjectQuery("limit must be an integer"))?,
+                );
+            }
+        }
+    }
+
+    Ok(query)
+}
+
 fn text_preview(value: &str, max_chars: usize) -> String {
     let mut preview = value.chars().take(max_chars).collect::<String>();
     if value.chars().count() > max_chars {
@@ -972,6 +1031,8 @@ enum ApiError {
     Store(EventStoreError),
     Graph(crate::graph::GraphStoreError),
     InvalidGraphQuery(&'static str),
+    Projects(ProjectStoreError),
+    InvalidProjectQuery(&'static str),
     Messages(MessageProjectionError),
     MailStorage(MailStorageError),
     InvalidCommunicationQuery(&'static str),
@@ -982,6 +1043,7 @@ enum ApiError {
     AccountSetupPendingGrantNotFound,
     AccountSetupStateMismatch,
     GraphNotFound,
+    ProjectNotFound,
     NotFound,
 }
 
@@ -1063,6 +1125,21 @@ impl axum::response::IntoResponse for ApiError {
                 message.to_owned(),
                 false,
             ),
+            Self::Projects(error) => {
+                tracing::error!(error = %error, "project API store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "project_store_error",
+                    "project store operation failed".to_owned(),
+                    false,
+                )
+            }
+            Self::InvalidProjectQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_project_query",
+                message.to_owned(),
+                false,
+            ),
             Self::Messages(error) => {
                 tracing::error!(error = %error, "communication message API store operation failed");
                 (
@@ -1139,6 +1216,12 @@ impl axum::response::IntoResponse for ApiError {
                 "graph node was not found".to_owned(),
                 false,
             ),
+            Self::ProjectNotFound => (
+                StatusCode::NOT_FOUND,
+                "project_not_found",
+                "project was not found".to_owned(),
+                false,
+            ),
             Self::NotFound => (
                 StatusCode::NOT_FOUND,
                 "event_not_found",
@@ -1172,6 +1255,12 @@ impl From<EventStoreError> for ApiError {
 impl From<crate::graph::GraphStoreError> for ApiError {
     fn from(error: crate::graph::GraphStoreError) -> Self {
         Self::Graph(error)
+    }
+}
+
+impl From<ProjectStoreError> for ApiError {
+    fn from(error: ProjectStoreError) -> Self {
+        Self::Projects(error)
     }
 }
 

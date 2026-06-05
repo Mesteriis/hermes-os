@@ -67,14 +67,18 @@ export type CommunicationMessageDetail = {
 	attachments: CommunicationAttachment[];
 };
 
-export type GraphNodeKind = 'person' | 'email_address' | 'message' | 'document';
+export type GraphNodeKind = 'person' | 'email_address' | 'message' | 'document' | 'project';
 
 export type GraphRelationshipType =
 	| 'person_has_email_address'
 	| 'person_sent_message'
 	| 'person_received_message'
 	| 'email_address_sent_message'
-	| 'email_address_received_message';
+	| 'email_address_received_message'
+	| 'project_has_message'
+	| 'project_has_document'
+	| 'project_involves_person'
+	| 'project_involves_email_address';
 
 export type GraphReviewState =
 	| 'system_accepted'
@@ -138,6 +142,77 @@ export type GraphNeighborhood = {
 	truncated: boolean;
 	evidence_limit: number;
 	evidence_truncated: boolean;
+};
+
+export type ProjectRecord = {
+	project_id: string;
+	name: string;
+	kind: string;
+	status: 'planning' | 'active' | 'on_hold' | 'completed' | 'archived';
+	description: string;
+	owner_display_name: string;
+	progress_percent: number;
+	start_date: string | null;
+	target_date: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type ProjectStats = {
+	message_count: number;
+	document_count: number;
+	people_count: number;
+	graph_connection_count: number;
+	latest_activity_at: string | null;
+};
+
+export type ProjectSummary = {
+	project: ProjectRecord;
+	stats: ProjectStats;
+	graph_node_id: string;
+};
+
+export type ProjectTimelineItem = {
+	item_kind: 'message' | 'document' | string;
+	item_id: string;
+	title: string;
+	subtitle: string;
+	occurred_at: string;
+};
+
+export type ProjectPersonSummary = {
+	display_name: string;
+	email_address: string;
+	interaction_count: number;
+	last_interaction_at: string | null;
+};
+
+export type ProjectMessageSummary = {
+	message_id: string;
+	subject: string;
+	sender: string;
+	occurred_at: string;
+};
+
+export type ProjectDocumentSummary = {
+	document_id: string;
+	document_kind: string;
+	title: string;
+	imported_at: string;
+};
+
+export type ProjectDetail = {
+	project: ProjectRecord;
+	stats: ProjectStats;
+	graph_node_id: string;
+	timeline: ProjectTimelineItem[];
+	key_people: ProjectPersonSummary[];
+	recent_messages: ProjectMessageSummary[];
+	documents: ProjectDocumentSummary[];
+};
+
+export type ProjectListResponse = {
+	items: ProjectSummary[];
 };
 
 export type GmailOAuthStartRequest = {
@@ -290,6 +365,37 @@ export async function fetchGraphNeighborhood(
 		actorId,
 		`/api/v2/graph/neighborhood?${params.toString()}`,
 		'Graph neighborhood request failed'
+	);
+}
+
+export async function fetchProjects(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	limit = 25
+): Promise<ProjectListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/projects?${params.toString()}`,
+		'Projects request failed'
+	);
+}
+
+export async function fetchProjectDetail(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	projectId: string
+): Promise<ProjectDetail> {
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/projects/${encodeURIComponent(projectId)}`,
+		'Project detail request failed'
 	);
 }
 

@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
 use serde_json::json;
+use sqlx::Row;
 use sqlx::postgres::PgPool;
 
 use hermes_hub_backend::communications::{
@@ -10,8 +11,10 @@ use hermes_hub_backend::communications::{
 };
 use hermes_hub_backend::contacts::ContactProjectionStore;
 use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
+use hermes_hub_backend::graph::{GraphNodeKind, node_id};
 use hermes_hub_backend::graph_projection::GraphProjectionService;
 use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
+use hermes_hub_backend::projects::{NewProject, ProjectStore, project_graph_node_id};
 use hermes_hub_backend::storage::Database;
 
 #[tokio::test]
@@ -134,12 +137,122 @@ async fn graph_projection_replaces_stale_unknown_message_edges_against_postgres(
     .await;
 }
 
+#[tokio::test]
+async fn graph_projection_links_projects_to_keyword_messages_documents_and_people_against_postgres()
+{
+    let Some(context) = live_projection_context("project graph projection").await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let keyword = format!("GraphProject{suffix}");
+    let project_id = format!("project:v1:graph:{suffix}");
+    context
+        .project_store
+        .upsert_project(
+            &NewProject::active(
+                &project_id,
+                format!("Graph Project {suffix}"),
+                "Product Development",
+                "Graph project projection test",
+                "Alex Morgan",
+                vec![keyword.clone()],
+            )
+            .progress(55),
+        )
+        .await
+        .expect("upsert graph project");
+    let owner = context
+        .contact_store
+        .upsert_email_contact(&format!("graph-project-owner-{suffix}@example.com"))
+        .await
+        .expect("upsert graph project owner");
+    let projected = seed_message(
+        &context,
+        suffix,
+        &owner.email_address,
+        &[format!("graph-project-reviewer-{suffix}@example.com")],
+        &format!("provider-graph-project-{suffix}"),
+        &format!("{keyword} kickoff"),
+    )
+    .await;
+    let document_id = format!("doc_graph_project_{suffix}");
+    context
+        .document_store
+        .import_document(&NewDocumentImport::markdown(
+            &document_id,
+            format!("{keyword} notes.md"),
+            "# Notes\n\nProject graph content.",
+        ))
+        .await
+        .expect("import graph project document");
+
+    context
+        .graph_projection
+        .project_from_v1()
+        .await
+        .expect("first graph projection");
+    let counts_after_first = project_graph_counts(&context.pool, &project_id).await;
+    context
+        .graph_projection
+        .project_from_v1()
+        .await
+        .expect("second graph projection");
+    let counts_after_second = project_graph_counts(&context.pool, &project_id).await;
+    assert_eq!(counts_after_first, counts_after_second);
+
+    let project_node_id = project_graph_node_id(&project_id);
+    let owner_node_id = node_id(GraphNodeKind::Person, &owner.contact_id);
+    let reviewer_node_id = node_id(
+        GraphNodeKind::EmailAddress,
+        &format!("graph-project-reviewer-{suffix}@example.com"),
+    );
+    assert_project_edge_with_evidence(
+        &context.pool,
+        &project_node_id,
+        &node_id(GraphNodeKind::Message, &projected.message_id),
+        "project_has_message",
+        "message",
+        &projected.message_id,
+    )
+    .await;
+    assert_project_edge_with_evidence(
+        &context.pool,
+        &project_node_id,
+        &node_id(GraphNodeKind::Document, &document_id),
+        "project_has_document",
+        "document",
+        &document_id,
+    )
+    .await;
+    assert_project_edge_with_evidence(
+        &context.pool,
+        &project_node_id,
+        &owner_node_id,
+        "project_involves_person",
+        "message",
+        &projected.message_id,
+    )
+    .await;
+    assert_project_edge_with_evidence(
+        &context.pool,
+        &project_node_id,
+        &reviewer_node_id,
+        "project_involves_email_address",
+        "message",
+        &projected.message_id,
+    )
+    .await;
+
+    cleanup_project_graph_fixture(&context.pool, &project_id).await;
+}
+
 struct LiveProjectionContext {
     pool: PgPool,
     contact_store: ContactProjectionStore,
     communication_store: CommunicationIngestionStore,
     message_store: MessageProjectionStore,
     document_store: DocumentImportStore,
+    project_store: ProjectStore,
     graph_projection: GraphProjectionService,
 }
 
@@ -174,6 +287,7 @@ async fn live_projection_context(test_name: &str) -> Option<LiveProjectionContex
         communication_store: CommunicationIngestionStore::new(pool.clone()),
         message_store: MessageProjectionStore::new(pool.clone()),
         document_store: DocumentImportStore::new(pool.clone()),
+        project_store: ProjectStore::new(pool.clone()),
         graph_projection: GraphProjectionService::new(pool),
     })
 }
@@ -303,6 +417,108 @@ async fn graph_counts_for_suffix(pool: &PgPool, suffix: u128) -> GraphCounts {
         edges,
         evidence,
     }
+}
+
+async fn project_graph_counts(pool: &PgPool, project_id: &str) -> GraphCounts {
+    let project_node_id = project_graph_node_id(project_id);
+    let nodes = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*) FROM graph_nodes WHERE node_id = $1 AND node_kind = 'project'",
+    )
+    .bind(&project_node_id)
+    .fetch_one(pool)
+    .await
+    .expect("project graph node count");
+    let edges = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT count(*)
+        FROM graph_edges
+        WHERE source_node_id = $1
+          AND relationship_type IN (
+              'project_has_message',
+              'project_has_document',
+              'project_involves_person',
+              'project_involves_email_address'
+          )
+        "#,
+    )
+    .bind(&project_node_id)
+    .fetch_one(pool)
+    .await
+    .expect("project graph edge count");
+    let evidence = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT count(*)
+        FROM graph_evidence evidence
+        JOIN graph_edges edge ON edge.edge_id = evidence.edge_id
+        WHERE edge.source_node_id = $1
+        "#,
+    )
+    .bind(&project_node_id)
+    .fetch_one(pool)
+    .await
+    .expect("project graph evidence count");
+
+    GraphCounts {
+        nodes,
+        edges,
+        evidence,
+    }
+}
+
+async fn assert_project_edge_with_evidence(
+    pool: &PgPool,
+    source_node_id: &str,
+    target_node_id: &str,
+    relationship_type: &str,
+    source_kind: &str,
+    source_id: &str,
+) {
+    let row = sqlx::query(
+        r#"
+        SELECT
+            edge.review_state,
+            edge.confidence::float8 AS confidence,
+            evidence.source_kind,
+            evidence.source_id
+        FROM graph_edges edge
+        JOIN graph_evidence evidence ON evidence.edge_id = edge.edge_id
+        WHERE edge.source_node_id = $1
+          AND edge.target_node_id = $2
+          AND edge.relationship_type = $3
+          AND evidence.source_kind = $4
+          AND evidence.source_id = $5
+        "#,
+    )
+    .bind(source_node_id)
+    .bind(target_node_id)
+    .bind(relationship_type)
+    .bind(source_kind)
+    .bind(source_id)
+    .fetch_one(pool)
+    .await
+    .expect("project edge with evidence");
+
+    let review_state: String = row.try_get("review_state").expect("review state");
+    let confidence: f64 = row.try_get("confidence").expect("confidence");
+    let stored_source_kind: String = row.try_get("source_kind").expect("source kind");
+    let stored_source_id: String = row.try_get("source_id").expect("source id");
+    assert_eq!(review_state, "suggested");
+    assert!((confidence - 0.75).abs() < f64::EPSILON);
+    assert_eq!(stored_source_kind, source_kind);
+    assert_eq!(stored_source_id, source_id);
+}
+
+async fn cleanup_project_graph_fixture(pool: &PgPool, project_id: &str) {
+    sqlx::query("DELETE FROM graph_nodes WHERE node_id = $1")
+        .bind(project_graph_node_id(project_id))
+        .execute(pool)
+        .await
+        .expect("cleanup project graph node");
+    sqlx::query("DELETE FROM projects WHERE project_id = $1")
+        .bind(project_id)
+        .execute(pool)
+        .await
+        .expect("cleanup graph project");
 }
 
 async fn assert_unknown_email_endpoint_projected(

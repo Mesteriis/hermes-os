@@ -7,6 +7,8 @@
 		fetchGraphNeighborhood,
 		fetchGraphNodes,
 		fetchGraphSummary,
+		fetchProjectDetail,
+		fetchProjects,
 		fetchV1Status,
 		searchGraphNodes,
 		setupImapAccount,
@@ -22,6 +24,12 @@
 		type GraphNodeKind,
 		type GraphRelationshipType,
 		type GraphSummary,
+		type ProjectDetail,
+		type ProjectDocumentSummary,
+		type ProjectMessageSummary,
+		type ProjectStats,
+		type ProjectSummary,
+		type ProjectTimelineItem,
 		type V1Status
 	} from '$lib/api';
 	import { onMount } from 'svelte';
@@ -165,6 +173,12 @@
 	let selectedCommunicationDetail = $state<CommunicationMessageDetail | null>(null);
 	let communicationsError = $state('');
 	let isCommunicationsLoading = $state(false);
+	let projectSummaries = $state<ProjectSummary[]>([]);
+	let selectedProjectDetail = $state<ProjectDetail | null>(null);
+	let selectedProjectId = $state('');
+	let projectsError = $state('');
+	let isProjectsLoading = $state(false);
+	let projectRequestSequence = 0;
 	let selectedConversationIndex = $state(0);
 	let selectedContactIndex = $state(0);
 	let selectedAgentIndex = $state(0);
@@ -497,12 +511,27 @@
 	);
 	const graphNeighborCounts = $derived(graphKindCounts(graphNeighborNodes(graphNeighborhood)));
 	const graphFilterChips = $derived(buildGraphFilterChips(graphSummary));
+	const selectedProjectSummary = $derived(
+		projectSummaries.find((item) => item.project.project_id === selectedProjectId) ??
+			projectSummaries[0] ??
+			null
+	);
+	const selectedProjectRecord = $derived(
+		selectedProjectDetail?.project ?? selectedProjectSummary?.project ?? null
+	);
+	const selectedProjectStats = $derived(
+		selectedProjectDetail?.stats ?? selectedProjectSummary?.stats ?? emptyProjectStats()
+	);
+	const relatedProjectSummaries = $derived(
+		projectSummaries.filter((item) => item.project.project_id !== selectedProjectRecord?.project_id)
+	);
 
 	onMount(() => {
 		void loadV1Status();
 		void loadGraphSummary();
 		void loadGraphNodeChoices();
 		void loadCommunications();
+		void loadProjects();
 	});
 
 	async function loadV1Status() {
@@ -637,6 +666,71 @@
 		}
 	}
 
+	async function loadProjects() {
+		const requestSequence = ++projectRequestSequence;
+		isProjectsLoading = true;
+		try {
+			const response = await fetchProjects(apiBaseUrl, apiToken, actorId, 25);
+			if (requestSequence !== projectRequestSequence) {
+				return;
+			}
+			projectSummaries = response.items;
+			projectsError = '';
+			const nextProjectId =
+				selectedProjectId || response.items[0]?.project.project_id || '';
+			selectedProjectId = nextProjectId;
+			if (nextProjectId) {
+				await loadProjectDetail(nextProjectId, requestSequence);
+			} else {
+				selectedProjectDetail = null;
+			}
+		} catch (error) {
+			if (requestSequence !== projectRequestSequence) {
+				return;
+			}
+			projectsError = error instanceof Error ? error.message : 'Unknown projects error';
+			selectedProjectDetail = null;
+		} finally {
+			if (requestSequence === projectRequestSequence) {
+				isProjectsLoading = false;
+			}
+		}
+	}
+
+	async function loadProjectDetail(projectId: string, requestSequence = ++projectRequestSequence) {
+		if (!projectId) {
+			selectedProjectDetail = null;
+			return;
+		}
+		isProjectsLoading = true;
+		try {
+			const detail = await fetchProjectDetail(apiBaseUrl, apiToken, actorId, projectId);
+			if (requestSequence !== projectRequestSequence) {
+				return;
+			}
+			selectedProjectDetail = detail;
+			selectedProjectId = detail.project.project_id;
+			projectsError = '';
+		} catch (error) {
+			if (requestSequence !== projectRequestSequence) {
+				return;
+			}
+			projectsError = error instanceof Error ? error.message : 'Unknown project detail error';
+			selectedProjectDetail = null;
+		} finally {
+			if (requestSequence === projectRequestSequence) {
+				isProjectsLoading = false;
+			}
+		}
+	}
+
+	function selectProject(project: ProjectSummary) {
+		if (project.project.project_id === selectedProjectId && selectedProjectDetail) {
+			return;
+		}
+		void loadProjectDetail(project.project.project_id);
+	}
+
 	async function loadCommunicationDetail(messageId: string) {
 		try {
 			selectedCommunicationDetail = await fetchCommunicationMessage(
@@ -679,6 +773,16 @@
 		return formatDateTime(message.occurred_at ?? message.projected_at);
 	}
 
+	function emptyProjectStats(): ProjectStats {
+		return {
+			message_count: 0,
+			document_count: 0,
+			people_count: 0,
+			graph_connection_count: 0,
+			latest_activity_at: null
+		};
+	}
+
 	function formatDateTime(value: string | null) {
 		if (!value) {
 			return '';
@@ -693,6 +797,59 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		}).format(date);
+	}
+
+	function formatProjectDate(value: string | null) {
+		if (!value) {
+			return 'Not set';
+		}
+		const date = new Date(`${value}T00:00:00`);
+		if (Number.isNaN(date.getTime())) {
+			return 'Invalid date';
+		}
+		return new Intl.DateTimeFormat('en', {
+			month: 'short',
+			day: 'numeric',
+			year: 'numeric'
+		}).format(date);
+	}
+
+	function formatProjectDateTime(value: string | null) {
+		const formatted = formatDateTime(value);
+		return formatted || 'No activity';
+	}
+
+	function projectStatusLabel(status: string) {
+		return status
+			.split('_')
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+			.join(' ');
+	}
+
+	function projectTimelineIcon(item: ProjectTimelineItem) {
+		switch (item.item_kind) {
+			case 'message':
+				return 'tabler:mail';
+			case 'document':
+				return 'tabler:file-text';
+			default:
+				return 'tabler:circle-dot';
+		}
+	}
+
+	function projectDocumentIcon(document: ProjectDocumentSummary) {
+		switch (document.document_kind) {
+			case 'pdf':
+				return 'tabler:file-type-pdf';
+			case 'markdown':
+				return 'tabler:file-text';
+			default:
+				return 'tabler:file';
+		}
+	}
+
+	function projectMessageSender(message: ProjectMessageSummary) {
+		return senderLabel(message.sender);
 	}
 
 	function formatBytes(sizeBytes: number) {
@@ -870,6 +1027,8 @@
 				return 'tabler:message';
 			case 'document':
 				return 'tabler:file-text';
+			case 'project':
+				return 'tabler:cube';
 			default:
 				return 'tabler:circle-dot';
 		}
@@ -888,7 +1047,8 @@
 			{ id: 'person', label: 'People' },
 			{ id: 'email_address', label: 'Email Addresses' },
 			{ id: 'message', label: 'Messages' },
-			{ id: 'document', label: 'Documents' }
+			{ id: 'document', label: 'Documents' },
+			{ id: 'project', label: 'Projects' }
 		];
 
 		return [
@@ -1431,43 +1591,176 @@
 			</section>
 		{:else if currentView === 'projects'}
 			<section class="projects-page">
-				<header class="project-hero panel">
-					<div class="project-logo"><Icon icon="tabler:cube" width="48" height="48" /></div>
-					<div><h1>Hermes Hub <em>Active</em></h1><p>Product Development</p><small>Building the next generation personal OS for managing communications, data and workflows.</small></div>
-					<button type="button" class="primary-button" disabled><Icon icon="tabler:plus" width="16" height="16" />New</button>
-				</header>
-				<div class="project-meta-strip panel">
-					<article><span>Owner</span><strong>Alex Morgan</strong></article>
-					<article><span>Team</span><strong>5 members +3</strong></article>
-					<article><span>Start Date</span><strong>Jan 15, 2024</strong></article>
-					<article><span>Target Date</span><strong>Dec 20, 2024</strong></article>
-					<article><span>Progress</span><div class="progress"><span style="width: 75%"></span></div><strong>75%</strong></article>
-				</div>
-				<div class="section-tabs">
-					<button type="button" class="active">Overview</button>
-					<button type="button" disabled>Communications</button>
-					<button type="button" disabled>Tasks <em>23</em></button>
-					<button type="button" disabled>Documents <em>48</em></button>
-					<button type="button" disabled>Calendar</button>
-					<button type="button" disabled>Team <em>7</em></button>
-					<button type="button" disabled>Notes</button>
-					<button type="button" disabled>Files</button>
-					<button type="button" disabled>Settings</button>
-				</div>
-				<div class="project-dashboard-grid">
-					<section class="panel info-card"><h2>AI Summary</h2><div class="summary-numbers"><article><strong>142</strong><span>Documents created</span></article><article><strong>327</strong><span>Messages received</span></article><article><strong>24</strong><span>Tasks completed</span></article><article><strong>8</strong><span>New contacts added</span></article></div></section>
-					<section class="panel graph-card-large"><h2>Knowledge Graph</h2><div class="radial-graph"><div class="graph-center"><Icon icon="tabler:cube" width="30" height="30" /><span>Hermes Hub</span></div>{#each projects as project, index}<span class="graph-chip" style={`--x:${20 + index * 19}%; --y:${20 + (index % 2) * 42}%`}>{project.name}</span>{/each}</div></section>
-					<section class="panel info-card"><h2>Project Timeline</h2>{#each ['ADR-001: Event Driven Architecture', 'UI/UX Prototype Completed', 'Agent System Implemented', 'Knowledge Graph Integration', 'Plugin System Discussion'] as item, index}<div class="timeline-mini"><time>May {12 + index * 4}</time><strong>{item}</strong></div>{/each}</section>
-					<section class="panel info-card"><h2>Recent Communications</h2>{#each conversations.slice(0, 4) as conversation}<div class="related-row"><span class="round-icon cyan"><Icon icon="tabler:mail" width="16" height="16" /></span><strong>{conversation.name}</strong><em>{conversation.time}</em></div>{/each}</section>
-					<section class="panel info-card"><h2>Top Documents</h2>{#each documents.slice(0, 4) as doc}<div class="doc-mini"><Icon icon={doc.icon} width="20" height="20" /><span><strong>{doc.name}</strong><small>{doc.size} · {doc.date}</small></span></div>{/each}</section>
-					<section class="panel info-card"><h2>Decisions (ADR)</h2>{#each ['ADR-0001 Event Driven Architecture', 'ADR-0002 Rust Backend', 'ADR-0003 SvelteKit Frontend', 'ADR-0004 PostgreSQL + Vector DB'] as adr}<div class="timeline-mini"><Icon icon="tabler:git-pull-request" width="16" height="16" /><strong>{adr}</strong></div>{/each}</section>
-					<section class="panel info-card"><h2>Open Promises</h2>{#each tasks.slice(0, 4) as task}<label class="mini-check"><input type="checkbox" />{task.title}<em>{task.priority}</em></label>{/each}</section>
-					<aside class="stacked-rail project-side">
-						<section class="panel info-card"><h2>Project Health</h2><div class="health-row"><span>Health</span><strong>Excellent</strong></div><div class="health-row"><span>Risk</span><strong>Low</strong></div><div class="health-row"><span>Budget</span><strong>$42,500 / $60,000</strong></div></section>
-						<section class="panel info-card"><h2>Key People</h2>{#each contactList.slice(0, 4) as contact, index}<div class="person-compact"><img src="/assets/hermes-reference-avatar.png" alt="" /><span><strong>{contact.name}</strong><small>{contact.role}</small></span><em>{87 - index * 9}%</em></div>{/each}</section>
-						<section class="panel info-card"><h2>Related Projects</h2>{#each projects.slice(1) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
-					</aside>
-				</div>
+				{#if projectsError && !selectedProjectRecord}
+					<section class="panel info-card project-empty-state">
+						<Icon icon="tabler:alert-circle" width="28" height="28" />
+						<h2>Projects unavailable</h2>
+						<p>{projectsError}</p>
+						<button type="button" onclick={() => void loadProjects()}>Retry</button>
+					</section>
+				{:else if !selectedProjectRecord}
+					<section class="panel info-card project-empty-state">
+						<Icon icon="tabler:cube" width="30" height="30" />
+						<h2>No projects returned</h2>
+						<p>{isProjectsLoading ? 'Loading local projects...' : 'Local project records are empty.'}</p>
+					</section>
+				{:else}
+					<header class="project-hero panel">
+						<div class="project-logo"><Icon icon="tabler:cube" width="48" height="48" /></div>
+						<div>
+							<h1>{selectedProjectRecord.name} <em>{projectStatusLabel(selectedProjectRecord.status)}</em></h1>
+							<p>{selectedProjectRecord.kind}</p>
+							<small>{selectedProjectRecord.description}</small>
+						</div>
+						<button type="button" class="primary-button" disabled><Icon icon="tabler:plus" width="16" height="16" />New</button>
+					</header>
+					<div class="project-meta-strip panel">
+						<article><span>Owner</span><strong>{selectedProjectRecord.owner_display_name}</strong></article>
+						<article><span>People</span><strong>{formatNumber(selectedProjectStats.people_count)}</strong></article>
+						<article><span>Start Date</span><strong>{formatProjectDate(selectedProjectRecord.start_date)}</strong></article>
+						<article><span>Target Date</span><strong>{formatProjectDate(selectedProjectRecord.target_date)}</strong></article>
+						<article><span>Progress</span><div class="progress"><span style={`width: ${selectedProjectRecord.progress_percent}%`}></span></div><strong>{selectedProjectRecord.progress_percent}%</strong></article>
+					</div>
+					{#if projectSummaries.length > 1}
+						<div class="project-switcher panel">
+							{#each projectSummaries as item}
+								<button
+									type="button"
+									class:active={item.project.project_id === selectedProjectRecord.project_id}
+									onclick={() => selectProject(item)}
+								>
+									<Icon icon="tabler:cube" width="16" height="16" />
+									<span>{item.project.name}</span>
+									<em>{item.project.progress_percent}%</em>
+								</button>
+							{/each}
+						</div>
+					{/if}
+					<div class="section-tabs">
+						<button type="button" class="active">Overview</button>
+						<button type="button" disabled>Communications <em>{selectedProjectStats.message_count}</em></button>
+						<button type="button" disabled>Tasks</button>
+						<button type="button" disabled>Documents <em>{selectedProjectStats.document_count}</em></button>
+						<button type="button" disabled>Calendar</button>
+						<button type="button" disabled>Team <em>{selectedProjectStats.people_count}</em></button>
+						<button type="button" disabled>Notes</button>
+						<button type="button" disabled>Files</button>
+						<button type="button" disabled>Settings</button>
+					</div>
+					{#if projectsError}
+						<p class="inline-error">{projectsError}</p>
+					{/if}
+					<div class="project-dashboard-grid">
+						<section class="panel info-card">
+							<h2>Project Summary</h2>
+							<div class="summary-numbers">
+								<article><strong>{formatNumber(selectedProjectStats.document_count)}</strong><span>Documents</span></article>
+								<article><strong>{formatNumber(selectedProjectStats.message_count)}</strong><span>Messages</span></article>
+								<article><strong>{formatNumber(selectedProjectStats.people_count)}</strong><span>People</span></article>
+								<article><strong>{formatNumber(selectedProjectStats.graph_connection_count)}</strong><span>Graph links</span></article>
+							</div>
+						</section>
+						<section class="panel graph-card-large">
+							<h2>Knowledge Graph</h2>
+							<div class="radial-graph">
+								<div class="graph-center"><Icon icon="tabler:cube" width="30" height="30" /><span>{selectedProjectRecord.name}</span></div>
+								<span class="graph-chip" style="--x:18%; --y:24%">Messages {formatNumber(selectedProjectStats.message_count)}</span>
+								<span class="graph-chip" style="--x:68%; --y:22%">Documents {formatNumber(selectedProjectStats.document_count)}</span>
+								<span class="graph-chip" style="--x:18%; --y:68%">People {formatNumber(selectedProjectStats.people_count)}</span>
+								<span class="graph-chip" style="--x:66%; --y:70%">Links {formatNumber(selectedProjectStats.graph_connection_count)}</span>
+							</div>
+						</section>
+						<section class="panel info-card">
+							<h2>Project Timeline</h2>
+							{#if selectedProjectDetail?.timeline.length}
+								{#each selectedProjectDetail.timeline as item}
+									<div class="timeline-mini">
+										<Icon icon={projectTimelineIcon(item)} width="16" height="16" />
+										<time>{formatProjectDateTime(item.occurred_at)}</time>
+										<strong>{item.title}</strong>
+									</div>
+								{/each}
+							{:else}
+								<p class="muted-copy">No timeline items from local sources.</p>
+							{/if}
+						</section>
+						<section class="panel info-card">
+							<h2>Recent Communications</h2>
+							{#if selectedProjectDetail?.recent_messages.length}
+								{#each selectedProjectDetail.recent_messages as message}
+									<div class="related-row">
+										<span class="round-icon cyan"><Icon icon="tabler:mail" width="16" height="16" /></span>
+										<strong>{projectMessageSender(message)}</strong>
+										<em>{formatProjectDateTime(message.occurred_at)}</em>
+									</div>
+								{/each}
+							{:else}
+								<p class="muted-copy">No linked communications.</p>
+							{/if}
+						</section>
+						<section class="panel info-card">
+							<h2>Top Documents</h2>
+							{#if selectedProjectDetail?.documents.length}
+								{#each selectedProjectDetail.documents as document}
+									<div class="doc-mini">
+										<Icon icon={projectDocumentIcon(document)} width="20" height="20" />
+										<span><strong>{document.title}</strong><small>{document.document_kind} · {formatProjectDateTime(document.imported_at)}</small></span>
+									</div>
+								{/each}
+							{:else}
+								<p class="muted-copy">No linked documents.</p>
+							{/if}
+						</section>
+						<section class="panel info-card">
+							<h2>Source Evidence</h2>
+							<div class="summary-numbers compact">
+								<article><strong>{formatNumber(selectedProjectStats.message_count + selectedProjectStats.document_count)}</strong><span>Matched records</span></article>
+								<article><strong>{formatProjectDateTime(selectedProjectStats.latest_activity_at)}</strong><span>Last activity</span></article>
+							</div>
+						</section>
+						<section class="panel info-card">
+							<h2>Open Promises</h2>
+							<p class="muted-copy">No task candidates connected to this project.</p>
+							<button type="button" class="link-row" disabled>View all promises <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
+						</section>
+						<aside class="stacked-rail project-side">
+							<section class="panel info-card">
+								<h2>Project Health</h2>
+								<div class="health-row"><span>Status</span><strong>{projectStatusLabel(selectedProjectRecord.status)}</strong></div>
+								<div class="health-row"><span>Progress</span><strong>{selectedProjectRecord.progress_percent}%</strong></div>
+								<div class="health-row"><span>Graph Links</span><strong>{formatNumber(selectedProjectStats.graph_connection_count)}</strong></div>
+							</section>
+							<section class="panel info-card">
+								<h2>Key People</h2>
+								{#if selectedProjectDetail?.key_people.length}
+									{#each selectedProjectDetail.key_people as person}
+										<div class="person-compact">
+											<img src="/assets/hermes-reference-avatar.png" alt="" />
+											<span><strong>{person.display_name}</strong><small>{person.email_address}</small></span>
+											<em>{formatNumber(person.interaction_count)}</em>
+										</div>
+									{/each}
+								{:else}
+									<p class="muted-copy">No linked people.</p>
+								{/if}
+							</section>
+							<section class="panel info-card">
+								<h2>Related Projects</h2>
+								{#if relatedProjectSummaries.length}
+									{#each relatedProjectSummaries.slice(0, 4) as item}
+										<div class="related-row">
+											<span class="round-icon cyan"><Icon icon="tabler:cube" width="16" height="16" /></span>
+											<strong>{item.project.name}</strong>
+											<em>{item.project.progress_percent}%</em>
+										</div>
+									{/each}
+								{:else}
+									<p class="muted-copy">No related project records.</p>
+								{/if}
+							</section>
+						</aside>
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'tasks'}
 			<section class="tasks-page">
@@ -3333,6 +3626,71 @@
 		color: #fff;
 		font-size: 14px;
 		font-weight: 500;
+	}
+
+	.project-empty-state {
+		display: grid;
+		place-items: center;
+		min-height: 360px;
+		color: #9fb6b4;
+		text-align: center;
+	}
+
+	.project-empty-state h2 {
+		margin: 0;
+		color: #f1fffe;
+		font-size: 20px;
+		font-weight: 560;
+	}
+
+	.project-empty-state p,
+	.muted-copy {
+		margin: 0;
+		color: #91a8a8;
+		font-size: 12px;
+		line-height: 1.5;
+	}
+
+	.project-empty-state button {
+		min-height: 34px;
+		border: 1px solid rgba(45, 240, 206, 0.24);
+		border-radius: 6px;
+		background: rgba(31, 161, 142, 0.12);
+		color: #2ef1cd;
+		padding: 0 14px;
+	}
+
+	.project-switcher {
+		display: flex;
+		gap: 8px;
+		margin-top: 12px;
+		padding: 8px;
+		overflow-x: auto;
+	}
+
+	.project-switcher button {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		min-height: 34px;
+		border: 1px solid rgba(102, 189, 180, 0.12);
+		border-radius: 6px;
+		background: rgba(8, 32, 36, 0.76);
+		color: #b7cdca;
+		padding: 0 10px;
+		white-space: nowrap;
+	}
+
+	.project-switcher button.active {
+		border-color: rgba(45, 240, 206, 0.5);
+		background: rgba(25, 153, 131, 0.24);
+		color: #2ef1cd;
+	}
+
+	.project-switcher em {
+		color: #91a8a8;
+		font-size: 11px;
+		font-style: normal;
 	}
 
 	.project-dashboard-grid {
