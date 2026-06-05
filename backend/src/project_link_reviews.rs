@@ -103,6 +103,16 @@ pub struct ProjectReviewedTarget {
     pub review_state: ProjectLinkReviewState,
 }
 
+struct ReviewEventApplication<'a> {
+    target_kind: ProjectLinkTargetKind,
+    project_id: &'a str,
+    target_id: &'a str,
+    review_state: ProjectLinkReviewState,
+    event_id: &'a str,
+    actor_id: &'a str,
+    reviewed_at: DateTime<Utc>,
+}
+
 #[derive(Clone)]
 pub struct ProjectLinkReviewStore {
     pool: PgPool,
@@ -142,13 +152,15 @@ impl ProjectLinkReviewStore {
         EventStore::append_in_transaction(&mut transaction, &event).await?;
         self.apply_review_event_in_transaction(
             &mut transaction,
-            command.target_kind,
-            &project_id,
-            &target_id,
-            command.review_state,
-            &event.event_id,
-            &actor_id,
-            event.occurred_at,
+            ReviewEventApplication {
+                target_kind: command.target_kind,
+                project_id: &project_id,
+                target_id: &target_id,
+                review_state: command.review_state,
+                event_id: &event.event_id,
+                actor_id: &actor_id,
+                reviewed_at: event.occurred_at,
+            },
         )
         .await?;
 
@@ -187,13 +199,15 @@ impl ProjectLinkReviewStore {
             .await?;
         self.apply_review_event_in_transaction(
             &mut transaction,
-            parsed.target_kind,
-            &parsed.project_id,
-            &parsed.target_id,
-            parsed.review_state,
-            &event.event_id,
-            &actor_id,
-            event.occurred_at,
+            ReviewEventApplication {
+                target_kind: parsed.target_kind,
+                project_id: &parsed.project_id,
+                target_id: &parsed.target_id,
+                review_state: parsed.review_state,
+                event_id: &event.event_id,
+                actor_id: &actor_id,
+                reviewed_at: event.occurred_at,
+            },
         )
         .await?;
 
@@ -358,15 +372,9 @@ impl ProjectLinkReviewStore {
     async fn apply_review_event_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
-        target_kind: ProjectLinkTargetKind,
-        project_id: &str,
-        target_id: &str,
-        review_state: ProjectLinkReviewState,
-        event_id: &str,
-        actor_id: &str,
-        reviewed_at: DateTime<Utc>,
+        application: ReviewEventApplication<'_>,
     ) -> Result<(), ProjectLinkReviewError> {
-        match review_state {
+        match application.review_state {
             ProjectLinkReviewState::Suggested => {
                 sqlx::query(
                     r#"
@@ -376,9 +384,9 @@ impl ProjectLinkReviewStore {
                       AND target_id = $3
                     "#,
                 )
-                .bind(project_id)
-                .bind(target_kind.as_str())
-                .bind(target_id)
+                .bind(application.project_id)
+                .bind(application.target_kind.as_str())
+                .bind(application.target_id)
                 .execute(&mut **transaction)
                 .await?;
             }
@@ -404,13 +412,13 @@ impl ProjectLinkReviewStore {
                         updated_at = now()
                     "#,
                 )
-                .bind(project_id)
-                .bind(target_kind.as_str())
-                .bind(target_id)
-                .bind(review_state.as_str())
-                .bind(event_id)
-                .bind(actor_id)
-                .bind(reviewed_at)
+                .bind(application.project_id)
+                .bind(application.target_kind.as_str())
+                .bind(application.target_id)
+                .bind(application.review_state.as_str())
+                .bind(application.event_id)
+                .bind(application.actor_id)
+                .bind(application.reviewed_at)
                 .execute(&mut **transaction)
                 .await?;
             }

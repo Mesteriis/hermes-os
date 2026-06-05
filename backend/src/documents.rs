@@ -3,6 +3,8 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
+use crate::document_processing::{DocumentProcessingJob, DocumentProcessingStore};
+
 const DOCUMENT_KIND_MARKDOWN: &str = "markdown";
 const DOCUMENT_KIND_PDF: &str = "pdf";
 const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
@@ -93,6 +95,19 @@ impl DocumentImportStore {
         Self { pool }
     }
 
+    pub async fn import_document_and_enqueue_processing(
+        &self,
+        document: &NewDocumentImport,
+        processing_store: &DocumentProcessingStore,
+    ) -> Result<ImportedDocumentWithProcessing, DocumentImportWithProcessingError> {
+        let imported = self.import_document(document).await?;
+        let jobs = processing_store
+            .enqueue_for_document(&imported.document_id)
+            .await?;
+
+        Ok(ImportedDocumentWithProcessing { imported, jobs })
+    }
+
     pub async fn import_document(
         &self,
         document: &NewDocumentImport,
@@ -152,6 +167,21 @@ impl DocumentImportStore {
             None => Err(DocumentImportError::UpsertSkipped(document.document_id)),
         }
     }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ImportedDocumentWithProcessing {
+    pub imported: ImportedDocument,
+    pub jobs: Vec<DocumentProcessingJob>,
+}
+
+#[derive(Debug, Error)]
+pub enum DocumentImportWithProcessingError {
+    #[error(transparent)]
+    DocumentImport(#[from] DocumentImportError),
+
+    #[error(transparent)]
+    Processing(#[from] crate::document_processing::DocumentProcessingError),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

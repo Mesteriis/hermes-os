@@ -211,46 +211,54 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
     );
     assert_project_edge_with_evidence(
         &context.pool,
-        &project_node_id,
-        &node_id(GraphNodeKind::Message, &projected.message_id),
-        "project_has_message",
-        "message",
-        &projected.message_id,
-        "suggested",
-        0.75,
+        ExpectedProjectEdge {
+            source_node_id: &project_node_id,
+            target_node_id: &node_id(GraphNodeKind::Message, &projected.message_id),
+            relationship_type: "project_has_message",
+            source_kind: "message",
+            source_id: &projected.message_id,
+            review_state: "suggested",
+            confidence: 0.75,
+        },
     )
     .await;
     assert_project_edge_with_evidence(
         &context.pool,
-        &project_node_id,
-        &node_id(GraphNodeKind::Document, &document_id),
-        "project_has_document",
-        "document",
-        &document_id,
-        "suggested",
-        0.75,
+        ExpectedProjectEdge {
+            source_node_id: &project_node_id,
+            target_node_id: &node_id(GraphNodeKind::Document, &document_id),
+            relationship_type: "project_has_document",
+            source_kind: "document",
+            source_id: &document_id,
+            review_state: "suggested",
+            confidence: 0.75,
+        },
     )
     .await;
     assert_project_edge_with_evidence(
         &context.pool,
-        &project_node_id,
-        &owner_node_id,
-        "project_involves_person",
-        "message",
-        &projected.message_id,
-        "suggested",
-        0.75,
+        ExpectedProjectEdge {
+            source_node_id: &project_node_id,
+            target_node_id: &owner_node_id,
+            relationship_type: "project_involves_person",
+            source_kind: "message",
+            source_id: &projected.message_id,
+            review_state: "suggested",
+            confidence: 0.75,
+        },
     )
     .await;
     assert_project_edge_with_evidence(
         &context.pool,
-        &project_node_id,
-        &reviewer_node_id,
-        "project_involves_email_address",
-        "message",
-        &projected.message_id,
-        "suggested",
-        0.75,
+        ExpectedProjectEdge {
+            source_node_id: &project_node_id,
+            target_node_id: &reviewer_node_id,
+            relationship_type: "project_involves_email_address",
+            source_kind: "message",
+            source_id: &projected.message_id,
+            review_state: "suggested",
+            confidence: 0.75,
+        },
     )
     .await;
 
@@ -391,13 +399,15 @@ async fn graph_projection_marks_confirmed_project_link_user_confirmed_against_po
     let project_node_id = project_graph_node_id(&project_id);
     assert_project_edge_with_evidence(
         &context.pool,
-        &project_node_id,
-        &node_id(GraphNodeKind::Message, &projected.message_id),
-        "project_has_message",
-        "message",
-        &projected.message_id,
-        "user_confirmed",
-        1.0,
+        ExpectedProjectEdge {
+            source_node_id: &project_node_id,
+            target_node_id: &node_id(GraphNodeKind::Message, &projected.message_id),
+            relationship_type: "project_has_message",
+            source_kind: "message",
+            source_id: &projected.message_id,
+            review_state: "user_confirmed",
+            confidence: 1.0,
+        },
     )
     .await;
 
@@ -625,16 +635,17 @@ async fn project_graph_counts(pool: &PgPool, project_id: &str) -> GraphCounts {
     }
 }
 
-async fn assert_project_edge_with_evidence(
-    pool: &PgPool,
-    source_node_id: &str,
-    target_node_id: &str,
-    relationship_type: &str,
-    source_kind: &str,
-    source_id: &str,
-    expected_review_state: &str,
-    expected_confidence: f64,
-) {
+struct ExpectedProjectEdge<'a> {
+    source_node_id: &'a str,
+    target_node_id: &'a str,
+    relationship_type: &'a str,
+    source_kind: &'a str,
+    source_id: &'a str,
+    review_state: &'a str,
+    confidence: f64,
+}
+
+async fn assert_project_edge_with_evidence(pool: &PgPool, expected: ExpectedProjectEdge<'_>) {
     let row = sqlx::query(
         r#"
         SELECT
@@ -651,11 +662,11 @@ async fn assert_project_edge_with_evidence(
           AND evidence.source_id = $5
         "#,
     )
-    .bind(source_node_id)
-    .bind(target_node_id)
-    .bind(relationship_type)
-    .bind(source_kind)
-    .bind(source_id)
+    .bind(expected.source_node_id)
+    .bind(expected.target_node_id)
+    .bind(expected.relationship_type)
+    .bind(expected.source_kind)
+    .bind(expected.source_id)
     .fetch_one(pool)
     .await
     .expect("project edge with evidence");
@@ -664,10 +675,10 @@ async fn assert_project_edge_with_evidence(
     let confidence: f64 = row.try_get("confidence").expect("confidence");
     let stored_source_kind: String = row.try_get("source_kind").expect("source kind");
     let stored_source_id: String = row.try_get("source_id").expect("source id");
-    assert_eq!(review_state, expected_review_state);
-    assert!((confidence - expected_confidence).abs() < f64::EPSILON);
-    assert_eq!(stored_source_kind, source_kind);
-    assert_eq!(stored_source_id, source_id);
+    assert_eq!(review_state, expected.review_state);
+    assert!((confidence - expected.confidence).abs() < f64::EPSILON);
+    assert_eq!(stored_source_kind, expected.source_kind);
+    assert_eq!(stored_source_id, expected.source_id);
 }
 
 async fn cleanup_project_graph_fixture(pool: &PgPool, project_id: &str) {

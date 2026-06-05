@@ -69,7 +69,7 @@ async fn project_link_review_command_appends_event_and_updates_review_against_po
     assert_eq!(
         result,
         ProjectLinkReviewCommandResult {
-            project_id: project_id,
+            project_id,
             target_kind: ProjectLinkTargetKind::Message,
             target_id: message_id,
             review_state: ProjectLinkReviewState::UserConfirmed,
@@ -194,7 +194,7 @@ async fn project_link_review_projection_rebuilds_review_state_from_event_against
         ProjectLinkTargetKind::Message,
         &message_id,
         ProjectLinkReviewState::UserConfirmed,
-        &actor_id,
+        actor_id,
         &confirm_event_id,
     );
     let reject_event_id = format!("evt_link_review_replay_reject_{suffix}");
@@ -203,7 +203,7 @@ async fn project_link_review_projection_rebuilds_review_state_from_event_against
         ProjectLinkTargetKind::Message,
         &message_id,
         ProjectLinkReviewState::UserRejected,
-        &actor_id,
+        actor_id,
         &reject_event_id,
     );
     let _ = context

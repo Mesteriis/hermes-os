@@ -29,6 +29,10 @@ path = "src/bin/hermes_email_fixture_dev.rs"
 name = "hermes-email-sync-dev"
 path = "src/bin/hermes_email_sync_dev.rs"
 
+[[bin]]
+name = "hermes-document-process"
+path = "src/bin/hermes_document_process.rs"
+
 [dependencies]
 aes-gcm = "0.10"
 argon2 = "0.5"

@@ -187,6 +187,39 @@ impl NewApiAuditRecord {
             }),
         }
     }
+
+    pub fn task_candidate_review_set(
+        actor_id: impl Into<String>,
+        task_candidate_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "task_candidate.review.set".to_owned(),
+            method: "PUT".to_owned(),
+            path_template: "/api/v2/task-candidates/{task_candidate_id}/review".to_owned(),
+            target_kind: "task_candidate".to_owned(),
+            target_id: Some(task_candidate_id.into()),
+            metadata: json!({}),
+        }
+    }
+
+    pub fn contact_identity_review_set(
+        actor_id: impl Into<String>,
+        identity_candidate_id: impl Into<String>,
+    ) -> Self {
+        let identity_candidate_id = identity_candidate_id.into();
+        Self {
+            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "contact_identity.review.set".to_owned(),
+            method: "PUT".to_owned(),
+            path_template: "/api/v2/identity-candidates/{identity_candidate_id}/review".to_owned(),
+            target_kind: "contact_identity_candidate".to_owned(),
+            target_id: Some(identity_candidate_id),
+            metadata: json!({}),
+        }
+    }
 }
 
 #[derive(Debug, Error)]

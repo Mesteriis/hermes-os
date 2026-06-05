@@ -1,7 +1,9 @@
 pub mod audit;
 pub mod communications;
 pub mod config;
+pub mod contact_identity;
 pub mod contacts;
+pub mod document_processing;
 pub mod documents;
 pub mod email_account_setup;
 pub mod email_fixture_export;
@@ -24,6 +26,7 @@ pub mod search;
 pub mod secret_vault;
 pub mod secrets;
 pub mod storage;
+pub mod task_candidates;
 
 use std::collections::HashMap;
 use std::io;
@@ -45,6 +48,14 @@ use url::form_urlencoded;
 use crate::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
 use crate::communications::{CommunicationIngestionStore, EmailProviderKind};
 use crate::config::AppConfig;
+use crate::contact_identity::{
+    ContactIdentityCandidate, ContactIdentityDetail, ContactIdentityError,
+    ContactIdentityReviewCommand, ContactIdentityReviewState, ContactIdentityStore,
+};
+use crate::document_processing::{
+    DocumentProcessingError, DocumentProcessingJob, DocumentProcessingRecord,
+    DocumentProcessingStore,
+};
 use crate::email_account_setup::{
     EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
@@ -66,6 +77,10 @@ use crate::secret_vault::EncryptedSecretVault;
 use crate::secrets::{SecretKind, SecretReferenceStore};
 use crate::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
+};
+use crate::task_candidates::{
+    ActiveTask, TaskCandidate, TaskCandidateError, TaskCandidateReviewCommand,
+    TaskCandidateReviewState, TaskCandidateStore,
 };
 
 const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
@@ -120,6 +135,29 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/projects/{project_id}/link-reviews",
             put(put_project_link_review),
         )
+        .route(
+            "/api/v2/documents/{document_id}/processing",
+            get(get_document_processing),
+        )
+        .route(
+            "/api/v2/document-processing/jobs",
+            get(get_document_processing_jobs),
+        )
+        .route("/api/v2/identity-candidates", get(get_identity_candidates))
+        .route(
+            "/api/v2/identity-candidates/{identity_candidate_id}/review",
+            put(put_identity_candidate_review),
+        )
+        .route(
+            "/api/v2/contacts/{contact_id}/identity",
+            get(get_contact_identity),
+        )
+        .route("/api/v2/task-candidates", get(get_task_candidates))
+        .route(
+            "/api/v2/task-candidates/{task_candidate_id}/review",
+            put(put_task_candidate_review),
+        )
+        .route("/api/v2/tasks", get(get_tasks))
         .route(
             "/api/v1/email-accounts/gmail/oauth/start",
             post(post_gmail_oauth_start),
@@ -545,6 +583,137 @@ async fn put_project_link_review(
     Ok(Json(result.into()))
 }
 
+async fn get_task_candidates(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<TaskCandidateListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let query = parse_task_candidates_query(raw_query.as_deref())?;
+    let items = task_candidate_store(&state)?
+        .list_candidates(query.limit)
+        .await?;
+
+    Ok(Json(TaskCandidateListResponse { items }))
+}
+
+async fn get_identity_candidates(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<ContactIdentityCandidateListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let query = parse_contact_identity_candidates_query(raw_query.as_deref())?;
+    let items = contact_identity_store(&state)?
+        .list_candidates(query.limit)
+        .await?;
+
+    Ok(Json(ContactIdentityCandidateListResponse { items }))
+}
+
+async fn put_identity_candidate_review(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(identity_candidate_id): Path<String>,
+    Json(request): Json<ContactIdentityReviewApiRequest>,
+) -> Result<Json<ContactIdentityReviewApiResponse>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let command = request.into_command(identity_candidate_id, actor.actor_id)?;
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::contact_identity_review_set(
+            &command.actor_id,
+            &command.identity_candidate_id,
+        ))
+        .await?;
+
+    let result = contact_identity_store(&state)?
+        .set_review_state(&command)
+        .await?;
+
+    Ok(Json(result.into()))
+}
+
+async fn get_contact_identity(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(contact_id): Path<String>,
+) -> Result<Json<ContactIdentityDetail>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let _ = validate_non_empty_contact_identity_field("contact_id", &contact_id)?;
+
+    let detail = contact_identity_store(&state)?
+        .contact_identity(&contact_id)
+        .await?;
+    Ok(Json(detail))
+}
+
+async fn put_task_candidate_review(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_candidate_id): Path<String>,
+    Json(request): Json<TaskCandidateReviewApiRequest>,
+) -> Result<Json<TaskCandidateReviewApiResponse>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let command = request.into_command(task_candidate_id, actor.actor_id)?;
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::task_candidate_review_set(
+            &command.actor_id,
+            &command.task_candidate_id,
+        ))
+        .await?;
+
+    let result = task_candidate_store(&state)?
+        .set_review_state(&command)
+        .await?;
+
+    Ok(Json(result.into()))
+}
+
+async fn get_tasks(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<TaskListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let query = parse_task_candidates_query(raw_query.as_deref())?;
+    let items = task_candidate_store(&state)?
+        .list_tasks(query.limit)
+        .await?;
+
+    Ok(Json(TaskListResponse { items }))
+}
+
+async fn get_document_processing(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(document_id): Path<String>,
+) -> Result<Json<DocumentProcessingRecord>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let _ = validate_non_empty_document_id(document_id.as_str())?;
+
+    Ok(Json(
+        document_processing_store(&state)?
+            .document_processing(&document_id)
+            .await?,
+    ))
+}
+
+async fn get_document_processing_jobs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<DocumentProcessingJobsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let query = parse_document_processing_jobs_query(raw_query.as_deref())?;
+    let items = document_processing_store(&state)?
+        .list_jobs(query.limit)
+        .await?;
+
+    Ok(Json(DocumentProcessingJobsResponse { items }))
+}
+
 async fn post_gmail_oauth_start(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -688,6 +857,30 @@ fn project_link_review_store(state: &AppState) -> Result<ProjectLinkReviewStore,
     };
 
     Ok(ProjectLinkReviewStore::new(pool.clone()))
+}
+
+fn task_candidate_store(state: &AppState) -> Result<TaskCandidateStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(TaskCandidateStore::new(pool.clone()))
+}
+
+fn document_processing_store(state: &AppState) -> Result<DocumentProcessingStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(DocumentProcessingStore::new(pool.clone()))
+}
+
+fn contact_identity_store(state: &AppState) -> Result<ContactIdentityStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(ContactIdentityStore::new(pool.clone()))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
@@ -1029,6 +1222,118 @@ struct ProjectLinkCandidateListResponse {
     items: Vec<ProjectLinkCandidate>,
 }
 
+#[derive(Serialize)]
+struct TaskCandidateListResponse {
+    items: Vec<TaskCandidate>,
+}
+
+#[derive(Serialize)]
+struct ContactIdentityCandidateListResponse {
+    items: Vec<ContactIdentityCandidate>,
+}
+
+#[derive(Deserialize)]
+struct ContactIdentityReviewApiRequest {
+    command_id: String,
+    review_state: String,
+}
+
+impl ContactIdentityReviewApiRequest {
+    fn into_command(
+        self,
+        identity_candidate_id: String,
+        actor_id: String,
+    ) -> Result<ContactIdentityReviewCommand, ApiError> {
+        let command_id = validate_non_empty_contact_identity_field("command_id", &self.command_id)?;
+        let identity_candidate_id = validate_non_empty_contact_identity_field(
+            "identity_candidate_id",
+            &identity_candidate_id,
+        )?;
+        let review_state = parse_contact_identity_review_state(&self.review_state)?;
+
+        Ok(ContactIdentityReviewCommand {
+            command_id,
+            identity_candidate_id,
+            review_state,
+            actor_id,
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct ContactIdentityReviewApiResponse {
+    identity_candidate_id: String,
+    review_state: String,
+    event_id: String,
+}
+
+impl From<crate::contact_identity::ContactIdentityReviewCommandResult>
+    for ContactIdentityReviewApiResponse
+{
+    fn from(result: crate::contact_identity::ContactIdentityReviewCommandResult) -> Self {
+        Self {
+            identity_candidate_id: result.identity_candidate_id,
+            review_state: result.review_state.as_str().to_owned(),
+            event_id: result.event_id,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct TaskListResponse {
+    items: Vec<ActiveTask>,
+}
+
+#[derive(Serialize)]
+struct DocumentProcessingJobsResponse {
+    items: Vec<DocumentProcessingJob>,
+}
+
+#[derive(Deserialize)]
+struct TaskCandidateReviewApiRequest {
+    command_id: String,
+    review_state: String,
+}
+
+impl TaskCandidateReviewApiRequest {
+    fn into_command(
+        self,
+        task_candidate_id: String,
+        actor_id: String,
+    ) -> Result<TaskCandidateReviewCommand, ApiError> {
+        let command_id = validate_non_empty_task_candidate_field("command_id", &self.command_id)?;
+        let task_candidate_id =
+            validate_non_empty_task_candidate_field("task_candidate_id", &task_candidate_id)?;
+        let review_state = parse_task_candidate_review_state(&self.review_state)?;
+
+        Ok(TaskCandidateReviewCommand {
+            command_id,
+            task_candidate_id,
+            review_state,
+            actor_id,
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct TaskCandidateReviewApiResponse {
+    task_candidate_id: String,
+    review_state: String,
+    event_id: String,
+}
+
+impl From<crate::task_candidates::TaskCandidateReviewCommandResult>
+    for TaskCandidateReviewApiResponse
+{
+    fn from(result: crate::task_candidates::TaskCandidateReviewCommandResult) -> Self {
+        Self {
+            task_candidate_id: result.task_candidate_id,
+            review_state: result.review_state.as_str().to_owned(),
+            event_id: result.event_id,
+        }
+    }
+}
+
 #[derive(Deserialize)]
 struct ProjectLinkReviewApiRequest {
     command_id: String,
@@ -1086,6 +1391,14 @@ impl From<crate::project_link_reviews::ProjectLinkReviewCommandResult>
 #[derive(Deserialize)]
 struct ProjectLinkCandidatesQuery {
     limit: Option<usize>,
+}
+
+struct TaskCandidatesQuery {
+    limit: Option<i64>,
+}
+
+struct DocumentProcessingJobsQuery {
+    limit: Option<i64>,
 }
 
 struct CommunicationMessagesQuery {
@@ -1238,6 +1551,90 @@ fn parse_project_link_candidates_query(
     Ok(query)
 }
 
+fn parse_task_candidates_query(raw_query: Option<&str>) -> Result<TaskCandidatesQuery, ApiError> {
+    let mut query = TaskCandidatesQuery { limit: None };
+
+    if let Some(raw_query) = raw_query {
+        for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
+            if key.as_ref() == "limit" {
+                query.limit = Some(
+                    value
+                        .parse::<i64>()
+                        .map_err(|_| {
+                            ApiError::InvalidTaskCandidateQuery("limit must be an integer")
+                        })?
+                        .clamp(1, 100),
+                );
+            }
+        }
+    }
+
+    Ok(query)
+}
+
+fn parse_document_processing_jobs_query(
+    raw_query: Option<&str>,
+) -> Result<DocumentProcessingJobsQuery, ApiError> {
+    let mut query = DocumentProcessingJobsQuery { limit: None };
+
+    if let Some(raw_query) = raw_query {
+        for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
+            if key.as_ref() == "limit" {
+                query.limit = Some(
+                    value
+                        .parse::<i64>()
+                        .map_err(|_| {
+                            ApiError::InvalidDocumentProcessingQuery("limit must be an integer")
+                        })?
+                        .clamp(1, 100),
+                );
+            }
+        }
+    }
+
+    Ok(query)
+}
+
+struct ContactIdentityCandidatesQuery {
+    limit: Option<i64>,
+}
+
+fn parse_contact_identity_candidates_query(
+    raw_query: Option<&str>,
+) -> Result<ContactIdentityCandidatesQuery, ApiError> {
+    let mut query = ContactIdentityCandidatesQuery { limit: None };
+
+    if let Some(raw_query) = raw_query {
+        for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
+            if key.as_ref() == "limit" {
+                query.limit = Some(
+                    value
+                        .parse::<i64>()
+                        .map_err(|_| {
+                            ApiError::InvalidContactIdentityReview("limit must be an integer")
+                        })?
+                        .clamp(1, 100),
+                );
+            }
+        }
+    }
+
+    Ok(query)
+}
+
+fn parse_contact_identity_review_state(
+    value: &str,
+) -> Result<ContactIdentityReviewState, ApiError> {
+    match value.trim() {
+        "suggested" => Ok(ContactIdentityReviewState::Suggested),
+        "user_confirmed" => Ok(ContactIdentityReviewState::UserConfirmed),
+        "user_rejected" => Ok(ContactIdentityReviewState::UserRejected),
+        _ => Err(ApiError::InvalidContactIdentityReview(
+            "review_state must be suggested, user_confirmed, or user_rejected",
+        )),
+    }
+}
+
 fn parse_project_link_target_kind(value: &str) -> Result<ProjectLinkTargetKind, ApiError> {
     match value.trim() {
         "message" => Ok(ProjectLinkTargetKind::Message),
@@ -1259,6 +1656,17 @@ fn parse_project_link_review_state(value: &str) -> Result<ProjectLinkReviewState
     }
 }
 
+fn parse_task_candidate_review_state(value: &str) -> Result<TaskCandidateReviewState, ApiError> {
+    match value.trim() {
+        "suggested" => Ok(TaskCandidateReviewState::Suggested),
+        "user_confirmed" => Ok(TaskCandidateReviewState::UserConfirmed),
+        "user_rejected" => Ok(TaskCandidateReviewState::UserRejected),
+        _ => Err(ApiError::InvalidTaskCandidateReview(
+            "review_state must be suggested, user_confirmed, or user_rejected",
+        )),
+    }
+}
+
 fn validate_non_empty_project_link_field(
     field: &'static str,
     value: &str,
@@ -1266,6 +1674,51 @@ fn validate_non_empty_project_link_field(
     let normalized = value.trim();
     if normalized.is_empty() {
         return Err(ApiError::InvalidProjectLinkReview(field));
+    }
+
+    Ok(normalized.to_owned())
+}
+
+fn validate_non_empty_task_candidate_field(
+    field: &'static str,
+    value: &str,
+) -> Result<String, ApiError> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err(ApiError::InvalidTaskCandidateReview(match field {
+            "command_id" => "command_id must not be empty",
+            "review_state" => "review_state must not be empty",
+            "task_candidate_id" => "task_candidate_id must not be empty",
+            _ => "field must not be empty",
+        }));
+    }
+
+    Ok(normalized.to_owned())
+}
+
+fn validate_non_empty_document_id(value: &str) -> Result<String, ApiError> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err(ApiError::InvalidDocumentProcessingQuery(
+            "document_id must not be empty",
+        ));
+    }
+
+    Ok(normalized.to_owned())
+}
+
+fn validate_non_empty_contact_identity_field(
+    field: &'static str,
+    value: &str,
+) -> Result<String, ApiError> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err(ApiError::InvalidContactIdentityReview(match field {
+            "command_id" => "command_id must not be empty",
+            "identity_candidate_id" => "identity_candidate_id must not be empty",
+            "contact_id" => "contact_id must not be empty",
+            _ => "field must not be empty",
+        }));
     }
 
     Ok(normalized.to_owned())
@@ -1293,8 +1746,17 @@ enum ApiError {
     Projects(ProjectStoreError),
     InvalidProjectQuery(&'static str),
     InvalidProjectLinkReview(&'static str),
+    InvalidTaskCandidateQuery(&'static str),
+    InvalidTaskCandidateReview(&'static str),
+    InvalidContactIdentityReview(&'static str),
+    InvalidDocumentProcessingQuery(&'static str),
+    DocumentProcessing(DocumentProcessingError),
+    TaskCandidateNotFound,
+    TaskCandidate(TaskCandidateError),
     ProjectLinkTargetNotFound,
     ProjectLinkReview(ProjectLinkReviewError),
+    ContactIdentityNotFound,
+    ContactIdentity(ContactIdentityError),
     Messages(MessageProjectionError),
     MailStorage(MailStorageError),
     InvalidCommunicationQuery(&'static str),
@@ -1408,6 +1870,67 @@ impl axum::response::IntoResponse for ApiError {
                 message.to_owned(),
                 false,
             ),
+            Self::InvalidTaskCandidateQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_task_candidate_query",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidTaskCandidateReview(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_task_candidate_review",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidContactIdentityReview(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_contact_identity_review",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidDocumentProcessingQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_document_processing_query",
+                message.to_owned(),
+                false,
+            ),
+            Self::DocumentProcessing(error) => {
+                let (status, message) = match error {
+                    DocumentProcessingError::InvalidLimit => {
+                        (StatusCode::BAD_REQUEST, "document processing limit must be between 1 and 100")
+                    }
+                    DocumentProcessingError::EmptyField(_)
+                    | DocumentProcessingError::InvalidStep(_)
+                    | DocumentProcessingError::InvalidStatus(_)
+                    | DocumentProcessingError::InvalidArtifactKind(_) => {
+                        (StatusCode::BAD_REQUEST, "invalid document processing request payload")
+                    }
+                    DocumentProcessingError::DocumentNotFound | DocumentProcessingError::JobNotFound => {
+                        (StatusCode::NOT_FOUND, "document processing job was not found")
+                    }
+                    _ => {
+                        tracing::error!(error = %error, "document processing store operation failed");
+                        (StatusCode::INTERNAL_SERVER_ERROR, "document processing store operation failed")
+                    }
+                };
+
+                (status, "document_processing_store_error", message.to_owned(), false)
+            }
+            Self::TaskCandidateNotFound => (
+                StatusCode::NOT_FOUND,
+                "task_candidate_not_found",
+                "task candidate was not found".to_owned(),
+                false,
+            ),
+            Self::TaskCandidate(error) => {
+                tracing::error!(error = %error, "task candidate store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "task_candidate_store_error",
+                    "task candidate store operation failed".to_owned(),
+                    false,
+                )
+            }
             Self::ProjectLinkTargetNotFound => (
                 StatusCode::NOT_FOUND,
                 "project_link_target_not_found",
@@ -1420,6 +1943,24 @@ impl axum::response::IntoResponse for ApiError {
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "project_link_review_store_error",
                     "project link review store operation failed".to_owned(),
+                    false,
+                )
+            }
+            Self::ContactIdentityNotFound => (
+                StatusCode::NOT_FOUND,
+                "contact_identity_candidate_not_found",
+                "contact identity candidate was not found".to_owned(),
+                false,
+            ),
+            Self::ContactIdentity(error) => {
+                tracing::error!(
+                    error = %error,
+                    "contact identity store operation failed"
+                );
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "contact_identity_store_error",
+                    "contact identity store operation failed".to_owned(),
                     false,
                 )
             }
@@ -1549,6 +2090,40 @@ impl From<ProjectLinkReviewError> for ApiError {
             }
             _ => Self::ProjectLinkReview(error),
         }
+    }
+}
+
+impl From<TaskCandidateError> for ApiError {
+    fn from(error: TaskCandidateError) -> Self {
+        match error {
+            TaskCandidateError::TaskCandidateNotFound => Self::TaskCandidateNotFound,
+            _ => Self::TaskCandidate(error),
+        }
+    }
+}
+
+impl From<ContactIdentityError> for ApiError {
+    fn from(error: ContactIdentityError) -> Self {
+        match error {
+            ContactIdentityError::IdentityCandidateNotFound => Self::ContactIdentityNotFound,
+            ContactIdentityError::InvalidLimit | ContactIdentityError::InvalidReviewState(_) => {
+                Self::InvalidContactIdentityReview(
+                    "review_state or limit must be valid for contact identity candidates",
+                )
+            }
+            ContactIdentityError::InvalidPayload(_)
+            | ContactIdentityError::MissingPayloadField(_)
+            | ContactIdentityError::MissingActorId => {
+                Self::InvalidContactIdentityReview("invalid identity candidate review payload")
+            }
+            _ => Self::ContactIdentity(error),
+        }
+    }
+}
+
+impl From<DocumentProcessingError> for ApiError {
+    fn from(error: DocumentProcessingError) -> Self {
+        Self::DocumentProcessing(error)
     }
 }
 
