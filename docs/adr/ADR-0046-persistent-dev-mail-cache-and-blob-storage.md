@@ -20,8 +20,8 @@ Use a persistent local mail cache split by responsibility:
 - Extracted attachment metadata must pass through an attachment safety scanning boundary before it is stored or exposed to application workflows.
 - The initial scanner is an explicit no-op scanner and records `not_scanned`; it must not mark attachments as `clean` until a real scanner backend is implemented.
 - Attachment scan metadata is stored with the attachment record: scan status, scanner engine, scan timestamp, human-readable summary and structured metadata.
-- The initial MIME extractor is intentionally basic: it supports recursive multipart traversal, `text/plain` body projection, attachment-like parts with `attachment` disposition, inline parts with filenames, `filename` and single-section `filename*` parameters, and `base64` or `quoted-printable` transfer decoding.
-- The initial MIME extractor is not a complete RFC MIME engine. MIME continuations, encrypted/signed containers, malformed boundary recovery, charset transcoding beyond lossy UTF-8 handling, preview generation and deep attachment inspection remain future slices.
+- The initial MIME extractor is intentionally basic: it supports recursive multipart traversal, `text/plain` body projection, attachment-like parts with `attachment` disposition, inline parts with filenames, `filename`, single-section `filename*`, ordered RFC2231 continuation filename segments, and `base64` or `quoted-printable` transfer decoding.
+- The initial MIME extractor is not a complete RFC MIME engine. Encrypted/signed containers, malformed boundary recovery, charset transcoding beyond lossy UTF-8 handling, preview generation and deep attachment inspection remain future slices.
 - The system must not store mailbox credentials, OAuth tokens or app passwords in blob paths, blob metadata, database payloads, logs or fixture files.
 - Read-only provider sync must remain non-mutating: IMAP uses `EXAMINE` plus `BODY.PEEK[]`; Gmail uses read-only API scopes.
 - `make dev` should be allowed to reuse already downloaded local cache data and should not require provider connectivity for the UI to display previously downloaded messages.

@@ -59,3 +59,39 @@ fn rfc822_parser_extracts_nested_multipart_attachments_for_current_basic_slice()
     assert_eq!(notes.disposition, ParsedEmailAttachmentDisposition::Inline);
     assert_eq!(notes.body_bytes, b"note body\nsecond line");
 }
+
+#[test]
+fn rfc822_parser_extracts_rfc2231_continued_attachment_filenames() {
+    let raw = concat!(
+        "Subject: Continued filename\r\n",
+        "From: Sender <sender@example.invalid>\r\n",
+        "To: Recipient <recipient@example.invalid>\r\n",
+        "Content-Type: multipart/mixed; boundary=\"continued-boundary\"\r\n",
+        "\r\n",
+        "--continued-boundary\r\n",
+        "Content-Type: text/plain; charset=utf-8\r\n",
+        "\r\n",
+        "Body.\r\n",
+        "--continued-boundary\r\n",
+        "Content-Type: application/pdf;\r\n",
+        " name*0*=UTF-8''quarterly%20;\r\n",
+        " name*1*=%D1%84%D0%B0%D0%B9%D0%BB;\r\n",
+        " name*2=.pdf\r\n",
+        "Content-Disposition: attachment;\r\n",
+        " filename*0*=UTF-8''quarterly%20;\r\n",
+        " filename*1*=%D1%84%D0%B0%D0%B9%D0%BB;\r\n",
+        " filename*2=.pdf\r\n",
+        "Content-Transfer-Encoding: base64\r\n",
+        "\r\n",
+        "JVBERi0xLjQ=\r\n",
+        "--continued-boundary--\r\n"
+    );
+
+    let parsed = parse_rfc822_message(raw.as_bytes()).expect("parse continued filename message");
+
+    assert_eq!(parsed.attachments.len(), 1);
+    let attachment = &parsed.attachments[0];
+    assert_eq!(attachment.filename.as_deref(), Some("quarterly файл.pdf"));
+    assert_eq!(attachment.content_type, "application/pdf");
+    assert_eq!(attachment.body_bytes, b"%PDF-1.4");
+}

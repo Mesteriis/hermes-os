@@ -241,6 +241,7 @@ fn header_media_type(value: &str) -> String {
 }
 
 fn header_parameter(value: &str, parameter: &str) -> Option<String> {
+    let mut continuation_segments = Vec::new();
     let mut plain_parameter = None;
     let mut encoded_parameter = None;
 
@@ -253,6 +254,10 @@ fn header_parameter(value: &str, parameter: &str) -> Option<String> {
             plain_parameter = Some(unquote_header_parameter_value(value));
             continue;
         }
+        if let Some(segment) = rfc2231_continuation_segment(name, parameter, value) {
+            continuation_segments.push(segment);
+            continue;
+        }
         if let Some(base_name) = name.strip_suffix('*') {
             if base_name.eq_ignore_ascii_case(parameter) {
                 encoded_parameter = Some(decode_rfc2231_parameter_value(value));
@@ -260,7 +265,76 @@ fn header_parameter(value: &str, parameter: &str) -> Option<String> {
         }
     }
 
-    encoded_parameter.or(plain_parameter)
+    encoded_parameter
+        .or_else(|| decode_rfc2231_continuation_segments(continuation_segments))
+        .or(plain_parameter)
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Rfc2231ContinuationSegment {
+    index: usize,
+    encoded: bool,
+    value: String,
+}
+
+fn rfc2231_continuation_segment(
+    name: &str,
+    parameter: &str,
+    value: &str,
+) -> Option<Rfc2231ContinuationSegment> {
+    if name.len() <= parameter.len() || !name[..parameter.len()].eq_ignore_ascii_case(parameter) {
+        return None;
+    }
+    let rest = &name[parameter.len()..];
+    let rest = rest.strip_prefix('*')?;
+    let encoded = rest.ends_with('*');
+    let index = rest.trim_end_matches('*').parse::<usize>().ok()?;
+
+    Some(Rfc2231ContinuationSegment {
+        index,
+        encoded,
+        value: unquote_header_parameter_value(value),
+    })
+}
+
+fn decode_rfc2231_continuation_segments(
+    mut segments: Vec<Rfc2231ContinuationSegment>,
+) -> Option<String> {
+    if segments.is_empty() {
+        return None;
+    }
+
+    segments.sort_by_key(|segment| segment.index);
+    if segments.first().map(|segment| segment.index) != Some(0) {
+        return None;
+    }
+
+    let mut output = Vec::new();
+    for (expected_index, segment) in segments.into_iter().enumerate() {
+        if segment.index != expected_index {
+            return None;
+        }
+
+        let value = if expected_index == 0 {
+            rfc2231_continuation_payload(&segment.value)
+        } else {
+            segment.value.as_str()
+        };
+        if segment.encoded {
+            output.extend(percent_decode_bytes(value));
+        } else {
+            output.extend_from_slice(value.as_bytes());
+        }
+    }
+
+    Some(String::from_utf8_lossy(&output).into_owned())
+}
+
+fn rfc2231_continuation_payload(value: &str) -> &str {
+    value
+        .split_once('\'')
+        .and_then(|(_, rest)| rest.split_once('\'').map(|(_, encoded)| encoded))
+        .unwrap_or(value)
 }
 
 fn unquote_header_parameter_value(value: &str) -> String {
