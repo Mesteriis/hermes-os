@@ -56,6 +56,9 @@
 - `ADR-0032` - Docker Compose development environment under `docker/`.
 - `ADR-0041` - email provider ingestion foundation for Gmail, iCloud and generic IMAP.
 - `ADR-0042` - provider credential secret references and resolver boundary.
+- `ADR-0043` - read-only Gmail API and IMAP provider networking.
+- `ADR-0044` - account setup and encrypted secret vault.
+- `ADR-0046` - persistent dev mail cache and blob storage; mail bytes/attachments live under `docker/data/mail/`, PostgreSQL stores metadata and references.
 
 ## 4. Implementation Phase
 
@@ -83,6 +86,8 @@ Disallowed without an explicit user request and relevant ADR review:
 - fake placeholder modules.
 
 For implementation work, prefer TDD: write the failing test first, verify the failure, implement the smallest passing code, then run the configured validation.
+
+After meaningful repository changes, run the relevant validation and create a git commit unless the user explicitly asks not to commit or the work is not yet in a valid state.
 
 ## 5. Required Workflow
 
@@ -217,6 +222,7 @@ Use the repository-configured tool first. If no tool exists, report that validat
 - Raw communication provider records must remain append-only and preserve source provenance.
 - Secret references per `ADR-0042` store metadata only; never place secret values in PostgreSQL config, metadata, tests, logs or docs.
 - The in-memory secret resolver is allowed only for `test_double` references in tests and local adapter tests. Real provider adapters must use a real resolver for `os_keychain`, `encrypted_vault` or `external_vault`.
+- Mail blob and attachment bytes must stay out of PostgreSQL per `ADR-0046`; store only metadata, hashes and local blob paths in database tables.
 
 ## 9. Security and Privacy
 

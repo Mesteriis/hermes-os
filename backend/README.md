@@ -2,7 +2,7 @@
 
 Rust backend for Hermes Hub.
 
-Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, and read-only V2 graph core projection/read APIs backed by PostgreSQL. OS keychain resolver, full MIME parsing, graph editing, AI/entity extraction, richer graph inference and agent runtime are not implemented yet.
+Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, local mail blob/attachment metadata storage, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, and read-only V2 graph core projection/read APIs backed by PostgreSQL. OS keychain resolver, full MIME parsing, attachment extraction, graph editing, AI/entity extraction, richer graph inference and agent runtime are not implemented yet.
 
 ## Commands
 

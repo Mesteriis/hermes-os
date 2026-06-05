@@ -21,6 +21,7 @@ Hermes Hub - персональная локальная платформа ко
 - secret reference metadata boundary for provider credentials
 - encrypted secret vault and account setup for Gmail, iCloud Mail and generic IMAP
 - read-only Gmail API and IMAP provider networking
+- persistent local mail blob/attachment metadata foundation
 - V1 status API for desktop shell bootstrapping
 - desktop-only SvelteKit/Tauri status and account setup shell
 - Docker Compose окружение для локальной разработки
