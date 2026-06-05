@@ -18,6 +18,84 @@ impl MessageProjectionStore {
         Self { pool }
     }
 
+    pub async fn recent_messages(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<ProjectedMessageSummary>, MessageProjectionError> {
+        let limit = validate_limit(limit)?;
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                m.message_id,
+                m.raw_record_id,
+                m.account_id,
+                m.provider_record_id,
+                m.subject,
+                m.sender,
+                m.recipients,
+                m.body_text,
+                m.occurred_at,
+                m.projected_at,
+                count(a.attachment_id)::BIGINT AS attachment_count
+            FROM communication_messages m
+            LEFT JOIN communication_attachments a ON a.message_id = m.message_id
+            GROUP BY
+                m.message_id,
+                m.raw_record_id,
+                m.account_id,
+                m.provider_record_id,
+                m.subject,
+                m.sender,
+                m.recipients,
+                m.body_text,
+                m.occurred_at,
+                m.projected_at
+            ORDER BY
+                COALESCE(m.occurred_at, m.projected_at) DESC,
+                m.projected_at DESC,
+                m.message_id ASC
+            LIMIT $1
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(row_to_projected_message_summary)
+            .collect()
+    }
+
+    pub async fn message(
+        &self,
+        message_id: &str,
+    ) -> Result<Option<ProjectedMessage>, MessageProjectionError> {
+        validate_non_empty("message_id", message_id)?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT
+                message_id,
+                raw_record_id,
+                account_id,
+                provider_record_id,
+                subject,
+                sender,
+                recipients,
+                body_text,
+                occurred_at,
+                projected_at
+            FROM communication_messages
+            WHERE message_id = $1
+            "#,
+        )
+        .bind(message_id.trim())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_projected_message).transpose()
+    }
+
     pub async fn upsert_message(
         &self,
         message: &NewProjectedMessage,
@@ -143,6 +221,12 @@ pub struct ProjectedMessage {
     pub projected_at: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectedMessageSummary {
+    pub message: ProjectedMessage,
+    pub attachment_count: i64,
+}
+
 pub async fn project_raw_email_message(
     store: &MessageProjectionStore,
     raw: &StoredRawCommunicationRecord,
@@ -208,6 +292,16 @@ pub async fn project_parsed_raw_email_message(
     };
 
     store.upsert_message(&message).await
+}
+
+fn row_to_projected_message_summary(
+    row: PgRow,
+) -> Result<ProjectedMessageSummary, MessageProjectionError> {
+    let attachment_count = row.try_get("attachment_count")?;
+    Ok(ProjectedMessageSummary {
+        message: row_to_projected_message(row)?,
+        attachment_count,
+    })
 }
 
 fn row_to_projected_message(row: PgRow) -> Result<ProjectedMessage, MessageProjectionError> {
@@ -294,6 +388,14 @@ fn validate_non_empty(field_name: &'static str, value: &str) -> Result<(), Messa
     Ok(())
 }
 
+fn validate_limit(limit: i64) -> Result<i64, MessageProjectionError> {
+    if !(1..=100).contains(&limit) {
+        return Err(MessageProjectionError::InvalidLimit(limit));
+    }
+
+    Ok(limit)
+}
+
 #[derive(Debug, Error)]
 pub enum MessageProjectionError {
     #[error(transparent)]
@@ -325,4 +427,7 @@ pub enum MessageProjectionError {
 
     #[error("unsupported raw blob storage kind: {0}")]
     UnsupportedRawBlobStorageKind(String),
+
+    #[error("message query limit must be between 1 and 100: {0}")]
+    InvalidLimit(i64),
 }

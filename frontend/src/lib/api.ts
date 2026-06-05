@@ -9,6 +9,64 @@ export type V1Status = {
 	};
 };
 
+export type CommunicationMessageSummary = {
+	message_id: string;
+	raw_record_id: string;
+	account_id: string;
+	provider_record_id: string;
+	subject: string;
+	sender: string;
+	recipients: string[];
+	body_text_preview: string;
+	occurred_at: string | null;
+	projected_at: string;
+	attachment_count: number;
+};
+
+export type CommunicationMessageDetailItem = {
+	message_id: string;
+	raw_record_id: string;
+	account_id: string;
+	provider_record_id: string;
+	subject: string;
+	sender: string;
+	recipients: string[];
+	body_text: string;
+	occurred_at: string | null;
+	projected_at: string;
+};
+
+export type CommunicationAttachment = {
+	attachment_id: string;
+	message_id: string;
+	raw_record_id: string;
+	blob_id: string;
+	provider_attachment_id: string;
+	filename: string | null;
+	content_type: string;
+	size_bytes: number;
+	sha256: string;
+	disposition: 'attachment' | 'inline' | 'unknown';
+	scan_status: 'not_scanned' | 'clean' | 'suspicious' | 'malicious' | 'failed';
+	scan_engine: string | null;
+	scan_checked_at: string | null;
+	scan_summary: string | null;
+	scan_metadata: Record<string, unknown>;
+	storage_kind: string;
+	storage_path: string;
+	created_at: string;
+	updated_at: string;
+};
+
+export type CommunicationMessagesResponse = {
+	items: CommunicationMessageSummary[];
+};
+
+export type CommunicationMessageDetail = {
+	message: CommunicationMessageDetailItem;
+	attachments: CommunicationAttachment[];
+};
+
 export type GraphNodeKind = 'person' | 'email_address' | 'message' | 'document';
 
 export type GraphRelationshipType =
@@ -131,6 +189,37 @@ export async function fetchV1Status(
 	actorId: string
 ): Promise<V1Status> {
 	return getJson(baseUrl, token, actorId, '/api/v1/status', 'V1 status request failed');
+}
+
+export async function fetchCommunicationMessages(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	limit = 50
+): Promise<CommunicationMessagesResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v1/communications/messages?${params.toString()}`,
+		'Communication messages request failed'
+	);
+}
+
+export async function fetchCommunicationMessage(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	messageId: string
+): Promise<CommunicationMessageDetail> {
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}`,
+		'Communication message detail request failed'
+	);
 }
 
 export async function fetchGraphSummary(

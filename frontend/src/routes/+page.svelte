@@ -2,10 +2,15 @@
 	import Icon from '@iconify/svelte';
 	import {
 		completeGmailOAuthSetup,
+		fetchCommunicationMessage,
+		fetchCommunicationMessages,
 		fetchGraphSummary,
 		fetchV1Status,
 		setupImapAccount,
 		startGmailOAuthSetup,
+		type CommunicationMessageDetail,
+		type CommunicationMessageDetailItem,
+		type CommunicationMessageSummary,
 		type GmailOAuthStartResponse,
 		type GraphNodeKind,
 		type GraphSummary,
@@ -106,6 +111,10 @@
 	let statusError = $state('');
 	let graphSummary = $state<GraphSummary | null>(null);
 	let graphError = $state('');
+	let communicationMessages = $state<CommunicationMessageSummary[]>([]);
+	let selectedCommunicationDetail = $state<CommunicationMessageDetail | null>(null);
+	let communicationsError = $state('');
+	let isCommunicationsLoading = $state(false);
 	let selectedConversationIndex = $state(0);
 	let selectedContactIndex = $state(0);
 	let selectedAgentIndex = $state(0);
@@ -435,6 +444,7 @@
 		{ label: 'People', count: '12', x: 47, y: 17, tone: 'mint', items: ['Maria Petrova', 'Alex Morgan', 'John Smith'] }
 	];
 
+	const selectedCommunication = $derived(communicationMessages[selectedConversationIndex] ?? null);
 	const selectedConversation = $derived(conversations[selectedConversationIndex] ?? conversations[0]);
 	const selectedContact = $derived(contactList[selectedContactIndex] ?? contactList[0]);
 	const selectedAgent = $derived(agentCards[selectedAgentIndex] ?? agentCards[0]);
@@ -444,6 +454,7 @@
 	onMount(() => {
 		void loadV1Status();
 		void loadGraphSummary();
+		void loadCommunications();
 	});
 
 	async function loadV1Status() {
@@ -462,6 +473,110 @@
 		} catch (error) {
 			graphError = error instanceof Error ? error.message : 'Unknown graph summary error';
 		}
+	}
+
+	async function loadCommunications() {
+		isCommunicationsLoading = true;
+		try {
+			const response = await fetchCommunicationMessages(apiBaseUrl, apiToken, actorId, 50);
+			communicationMessages = response.items;
+			communicationsError = '';
+			if (selectedConversationIndex >= communicationMessages.length) {
+				selectedConversationIndex = 0;
+			}
+			if (communicationMessages.length > 0) {
+				await loadCommunicationDetail(communicationMessages[selectedConversationIndex].message_id);
+			} else {
+				selectedCommunicationDetail = null;
+			}
+		} catch (error) {
+			communicationsError =
+				error instanceof Error ? error.message : 'Unknown communications error';
+			selectedCommunicationDetail = null;
+		} finally {
+			isCommunicationsLoading = false;
+		}
+	}
+
+	async function loadCommunicationDetail(messageId: string) {
+		try {
+			selectedCommunicationDetail = await fetchCommunicationMessage(
+				apiBaseUrl,
+				apiToken,
+				actorId,
+				messageId
+			);
+			communicationsError = '';
+		} catch (error) {
+			communicationsError =
+				error instanceof Error ? error.message : 'Unknown communication detail error';
+			selectedCommunicationDetail = null;
+		}
+	}
+
+	function selectCommunication(index: number) {
+		selectedConversationIndex = index;
+		const message = communicationMessages[index];
+		if (message) {
+			void loadCommunicationDetail(message.message_id);
+		}
+	}
+
+	function senderLabel(sender: string) {
+		const match = sender.match(/^"?([^"<]+)"?\s*</);
+		return (match?.[1] ?? senderEmail(sender) ?? sender).trim();
+	}
+
+	function senderEmail(sender: string) {
+		const angleMatch = sender.match(/<([^>]+)>/);
+		if (angleMatch?.[1]) {
+			return angleMatch[1].trim();
+		}
+		const emailMatch = sender.match(/[^\s<>]+@[^\s<>]+/);
+		return emailMatch?.[0]?.trim() ?? sender.trim();
+	}
+
+	function messageTime(message: CommunicationMessageSummary | CommunicationMessageDetailItem) {
+		return formatDateTime(message.occurred_at ?? message.projected_at);
+	}
+
+	function formatDateTime(value: string | null) {
+		if (!value) {
+			return '';
+		}
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) {
+			return '';
+		}
+		return new Intl.DateTimeFormat('en', {
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		}).format(date);
+	}
+
+	function formatBytes(sizeBytes: number) {
+		if (sizeBytes < 1024) {
+			return `${sizeBytes} B`;
+		}
+		if (sizeBytes < 1024 * 1024) {
+			return `${(sizeBytes / 1024).toFixed(1)} KB`;
+		}
+		return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+	}
+
+	function attachmentIcon(contentType: string) {
+		if (contentType.includes('pdf')) {
+			return 'tabler:file-type-pdf';
+		}
+		if (contentType.startsWith('image/')) {
+			return 'tabler:photo';
+		}
+		if (contentType.includes('spreadsheet') || contentType.includes('excel')) {
+			return 'tabler:file-spreadsheet';
+		}
+		return 'tabler:file';
 	}
 
 	function setView(item: NavItem) {
@@ -869,61 +984,81 @@
 					</div>
 				</div>
 				<div class="filter-tabs">
-					<button type="button" class="active">All <em>128</em></button>
-					<button type="button" disabled>People <em>42</em></button>
-					<button type="button" disabled>Unread <em>23</em></button>
-					<button type="button" disabled>Requires Reply <em>3</em></button>
-					<button type="button" disabled>Waiting <em>5</em></button>
+					<button type="button" class="active">All <em>{communicationMessages.length}</em></button>
+					<button type="button" disabled>People <em>0</em></button>
+					<button type="button" disabled>Unread <em>0</em></button>
+					<button type="button" disabled>Requires Reply <em>0</em></button>
+					<button type="button" disabled>Waiting <em>0</em></button>
 					<button type="button" disabled>More <Icon icon="tabler:chevron-down" width="14" height="14" /></button>
 				</div>
 				<div class="three-pane communications-grid">
 					<section class="panel conversation-list">
 						<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search conversations..." /></label>
-						{#each conversations as conversation, index}
-							<button type="button" class:active={selectedConversationIndex === index} onclick={() => (selectedConversationIndex = index)}>
-								<span class="round-icon {conversation.channel === 'WhatsApp' ? 'green' : conversation.channel === 'Telegram' ? 'blue' : 'cyan'}">
-									<Icon icon={conversation.channel === 'WhatsApp' ? 'tabler:brand-whatsapp' : conversation.channel === 'Telegram' ? 'tabler:brand-telegram' : 'tabler:mail'} width="22" height="22" />
-								</span>
-								<img src="/assets/hermes-reference-avatar.png" alt="" />
-								<span>
-									<strong>{conversation.name}</strong>
-									<small>{conversation.preview}</small>
-									<em>{conversation.project}</em>
-								</span>
-								<time>{conversation.time}</time>
-								{#if conversation.unread}<b>{conversation.unread}</b>{/if}
-							</button>
-						{/each}
+						{#if isCommunicationsLoading}
+							<div class="empty-panel">Loading messages...</div>
+						{:else if communicationsError}
+							<div class="empty-panel error">{communicationsError}</div>
+						{:else if communicationMessages.length === 0}
+							<div class="empty-panel">No local messages yet.</div>
+						{:else}
+							{#each communicationMessages as message, index}
+								<button type="button" class:active={selectedConversationIndex === index} onclick={() => selectCommunication(index)}>
+									<span class="round-icon cyan">
+										<Icon icon="tabler:mail" width="22" height="22" />
+									</span>
+									<img src="/assets/hermes-reference-avatar.png" alt="" />
+									<span>
+										<strong>{senderLabel(message.sender)}</strong>
+										<small>{message.subject}</small>
+										<em>{message.body_text_preview}</em>
+									</span>
+									<time>{messageTime(message)}</time>
+									{#if message.attachment_count > 0}<b>{message.attachment_count}</b>{/if}
+								</button>
+							{/each}
+						{/if}
 					</section>
 					<section class="panel chat-pane">
-						<header>
-							<img src="/assets/hermes-reference-avatar.png" alt="" />
-							<div><h2>{selectedConversation.name}</h2><p>{selectedConversation.role}</p></div>
-							<div class="chat-actions">
-								<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
-								<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
-								<button type="button" disabled><Icon icon="tabler:info-circle" width="17" height="17" /></button>
+						{#if selectedCommunication}
+							<header>
+								<img src="/assets/hermes-reference-avatar.png" alt="" />
+								<div><h2>{senderLabel(selectedCommunication.sender)}</h2><p>{selectedCommunication.subject}</p></div>
+								<div class="chat-actions">
+									<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
+									<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
+									<button type="button" disabled><Icon icon="tabler:info-circle" width="17" height="17" /></button>
+								</div>
+							</header>
+							<div class="chat-body">
+								<div class="date-divider">{messageTime(selectedCommunicationDetail?.message ?? selectedCommunication)}</div>
+								<article class="bubble inbound">
+									<strong>{selectedCommunication.subject}</strong><br />
+									{selectedCommunicationDetail?.message.body_text ?? selectedCommunication.body_text_preview}
+									<time>{messageTime(selectedCommunicationDetail?.message ?? selectedCommunication)}</time>
+								</article>
+								{#each selectedCommunicationDetail?.attachments ?? [] as attachment}
+									<article class="attachment-bubble">
+										<Icon icon={attachmentIcon(attachment.content_type)} width="34" height="34" />
+										<span>
+											<strong>{attachment.filename ?? attachment.provider_attachment_id}</strong>
+											<small>{formatBytes(attachment.size_bytes)} · {attachment.content_type} · {attachment.scan_status}</small>
+										</span>
+										<button type="button" disabled><Icon icon="tabler:download" width="16" height="16" /></button>
+									</article>
+								{/each}
 							</div>
-						</header>
-						<div class="chat-body">
-							<div class="date-divider">May 12, 2024</div>
-							<article class="bubble inbound">Hi Alex, how are you? I've reviewed the proposal for the Hermes project.<time>14:28</time></article>
-							<article class="bubble outbound">Hi John! Great to hear from you. Please let me know your feedback.<time>14:30</time></article>
-							<article class="attachment-bubble"><Icon icon="tabler:file-type-pdf" width="34" height="34" /><span><strong>Hermes_Proposal_v2.pdf</strong><small>2.4 MB · PDF</small></span><button type="button" disabled><Icon icon="tabler:download" width="16" height="16" /></button></article>
-							<article class="bubble inbound">Looks good overall. I have a few comments on page 4 and 7.<time>14:31</time></article>
-							<div class="date-divider">Today</div>
-							<article class="bubble inbound"><strong>{selectedConversation.name}</strong><br />Let's schedule a call for tomorrow 10:00 AM?<time>14:32</time></article>
-							<article class="bubble outbound">Perfect, see you tomorrow!<time>14:32</time></article>
-						</div>
-						<footer class="composer">
-							<input placeholder="Type your message..." />
-							<button type="button" disabled><Icon icon="tabler:paperclip" width="17" height="17" /></button>
-							<button type="button" disabled><Icon icon="tabler:send" width="18" height="18" /></button>
-						</footer>
+							<footer class="composer">
+								<input placeholder="Sending is not available yet" disabled />
+								<button type="button" disabled><Icon icon="tabler:paperclip" width="17" height="17" /></button>
+								<button type="button" disabled><Icon icon="tabler:send" width="18" height="18" /></button>
+							</footer>
+						{:else}
+							<div class="empty-panel fill">Select a local message.</div>
+						{/if}
 					</section>
 					<aside class="context-rail">
 						<section class="panel profile-panel">
-							<div class="profile-head"><img src="/assets/hermes-reference-avatar.png" alt="" /><div><h2>{selectedConversation.name}</h2><p>{selectedConversation.role}</p><small>jsmith@smithpartners.com</small></div></div>
+							<div class="profile-head"><img src="/assets/hermes-reference-avatar.png" alt="" /><div><h2>{selectedCommunication ? senderLabel(selectedCommunication.sender) : 'No sender selected'}</h2><p>Email</p><small>{selectedCommunication ? senderEmail(selectedCommunication.sender) : 'No local message selected'}</small></div></div>
 							<div class="quick-icons">
 								<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
 								<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
@@ -931,7 +1066,8 @@
 								<button type="button" disabled><Icon icon="tabler:brand-whatsapp" width="17" height="17" /></button>
 							</div>
 						</section>
-						<section class="panel info-card"><h2>Summary</h2><p>Important client and partner. Working together on Hermes Hub project since Jan 2024. Professional relationship with regular communication.</p><button type="button" class="link-row" disabled>View full profile <Icon icon="tabler:arrow-right" width="15" height="15" /></button></section>
+						<section class="panel info-card"><h2>Summary</h2><p>{selectedCommunication ? `Stored from ${selectedCommunication.account_id}. Provider record ${selectedCommunication.provider_record_id}.` : 'Local communication metadata will appear after messages are imported.'}</p><button type="button" class="link-row" disabled>View full profile <Icon icon="tabler:arrow-right" width="15" height="15" /></button></section>
+						<section class="panel info-card"><h2>Message Metadata</h2>{#if selectedCommunication}<ul class="detail-list"><li><Icon icon="tabler:users" width="17" height="17" /> {selectedCommunication.recipients.length} recipients</li><li><Icon icon="tabler:paperclip" width="17" height="17" /> {selectedCommunication.attachment_count} attachments</li><li><Icon icon="tabler:clock" width="17" height="17" /> {messageTime(selectedCommunication)}</li></ul>{:else}<p>No message selected.</p>{/if}</section>
 						<section class="panel info-card"><h2>Related Projects</h2>{#each projects.slice(0, 2) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
 						<section class="panel info-card"><h2>Active Tasks</h2>{#each tasks.slice(0, 3) as task}<label class="mini-check"><input type="checkbox" />{task.title}<em>{task.due.split(' ')[0]}</em></label>{/each}</section>
 					</aside>
@@ -2329,6 +2465,30 @@
 		background: rgba(45, 240, 206, 0.28);
 		color: #42f3d5;
 		font-size: 10px;
+	}
+
+	.empty-panel {
+		display: grid;
+		place-items: center;
+		min-height: 120px;
+		border: 1px dashed rgba(113, 205, 196, 0.18);
+		border-radius: 8px;
+		color: #a9bcbb;
+		font-size: 13px;
+		line-height: 1.4;
+		padding: 18px;
+		text-align: center;
+	}
+
+	.empty-panel.error {
+		color: #ffb4b4;
+		border-color: rgba(255, 87, 87, 0.26);
+		background: rgba(106, 31, 42, 0.18);
+	}
+
+	.empty-panel.fill {
+		min-height: 100%;
+		border: 0;
 	}
 
 	.chat-pane {

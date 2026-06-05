@@ -174,6 +174,17 @@ Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
 X-Hermes-Actor-Id: desktop-shell
 ```
 
+Read-only Communications API for the desktop shell uses the same local API token and actor header:
+
+```sh
+GET /api/v1/communications/messages?limit=50
+GET /api/v1/communications/messages/<message_id>
+Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
+X-Hermes-Actor-Id: desktop-shell
+```
+
+The message list reads canonical `communication_messages`; message detail returns canonical body text plus attachment metadata and local blob references. It does not read or return attachment bytes.
+
 Account setup endpoints additionally require `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`; `make docker-env` adds local development defaults to `docker/.env`.
 
 Frontend/Tauri shell commands:

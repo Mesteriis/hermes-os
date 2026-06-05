@@ -212,6 +212,48 @@ impl MailStorageStore {
 
         row_to_mail_attachment(row)
     }
+
+    pub async fn attachments_for_message(
+        &self,
+        message_id: &str,
+    ) -> Result<Vec<StoredMailAttachmentWithBlob>, MailStorageError> {
+        let message_id = validate_non_empty("message_id", message_id)?;
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                a.attachment_id,
+                a.message_id,
+                a.raw_record_id,
+                a.blob_id,
+                a.provider_attachment_id,
+                a.filename,
+                a.content_type,
+                a.size_bytes,
+                a.sha256,
+                a.disposition,
+                a.scan_status,
+                a.scan_engine,
+                a.scan_checked_at,
+                a.scan_summary,
+                a.scan_metadata,
+                a.created_at,
+                a.updated_at,
+                b.storage_kind AS blob_storage_kind,
+                b.storage_path AS blob_storage_path
+            FROM communication_attachments a
+            JOIN communication_mail_blobs b ON b.blob_id = a.blob_id
+            WHERE a.message_id = $1
+            ORDER BY a.created_at ASC, a.attachment_id ASC
+            "#,
+        )
+        .bind(message_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(row_to_mail_attachment_with_blob)
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -413,6 +455,13 @@ pub struct StoredMailAttachment {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct StoredMailAttachmentWithBlob {
+    pub attachment: StoredMailAttachment,
+    pub storage_kind: String,
+    pub storage_path: String,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MailAttachmentDisposition {
     Attachment,
@@ -421,7 +470,7 @@ pub enum MailAttachmentDisposition {
 }
 
 impl MailAttachmentDisposition {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Attachment => "attachment",
             Self::Inline => "inline",
@@ -504,7 +553,7 @@ pub enum AttachmentSafetyScanStatus {
 }
 
 impl AttachmentSafetyScanStatus {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::NotScanned => "not_scanned",
             Self::Clean => "clean",
@@ -600,6 +649,18 @@ fn row_to_mail_attachment(row: PgRow) -> Result<StoredMailAttachment, MailStorag
         scan_metadata: row.try_get("scan_metadata")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn row_to_mail_attachment_with_blob(
+    row: PgRow,
+) -> Result<StoredMailAttachmentWithBlob, MailStorageError> {
+    let storage_kind: String = row.try_get("blob_storage_kind")?;
+    let storage_path: String = row.try_get("blob_storage_path")?;
+    Ok(StoredMailAttachmentWithBlob {
+        attachment: row_to_mail_attachment(row)?,
+        storage_kind,
+        storage_path,
     })
 }
 

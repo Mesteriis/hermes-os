@@ -50,6 +50,10 @@ use crate::email_account_setup::{
 use crate::event_log::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };
+use crate::mail_storage::{MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob};
+use crate::messages::{
+    MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
+};
 use crate::secret_vault::EncryptedSecretVault;
 use crate::secrets::{SecretKind, SecretReferenceStore};
 use crate::storage::{
@@ -86,6 +90,14 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route("/api/v1/status", get(get_v1_status))
+        .route(
+            "/api/v1/communications/messages",
+            get(get_v1_communication_messages),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}",
+            get(get_v1_communication_message),
+        )
         .route("/api/v2/graph/summary", get(get_graph_summary))
         .route("/api/v2/graph/neighborhood", get(get_graph_neighborhood))
         .route("/api/v2/graph/search", get(get_graph_search))
@@ -284,6 +296,46 @@ async fn get_v1_status(
     }))
 }
 
+async fn get_v1_communication_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<CommunicationMessagesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let query = parse_communication_messages_query(raw_query.as_deref())?;
+    let limit = query.limit.unwrap_or(50).clamp(1, 100);
+    let items = message_store(&state)?
+        .recent_messages(limit)
+        .await?
+        .into_iter()
+        .map(CommunicationMessageSummaryResponse::from)
+        .collect();
+
+    Ok(Json(CommunicationMessagesResponse { items }))
+}
+
+async fn get_v1_communication_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<CommunicationMessageDetailResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let Some(message) = message_store(&state)?.message(&message_id).await? else {
+        return Err(ApiError::CommunicationMessageNotFound);
+    };
+    let attachments = mail_storage_store(&state)?
+        .attachments_for_message(&message.message_id)
+        .await?
+        .into_iter()
+        .map(CommunicationAttachmentResponse::from)
+        .collect();
+
+    Ok(Json(CommunicationMessageDetailResponse {
+        message: CommunicationMessageDetailItem::from(message),
+        attachments,
+    }))
+}
+
 async fn get_graph_summary(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -444,6 +496,22 @@ fn graph_store(state: &AppState) -> Result<crate::graph::GraphStore, ApiError> {
     };
 
     Ok(crate::graph::GraphStore::new(pool.clone()))
+}
+
+fn message_store(state: &AppState) -> Result<MessageProjectionStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(MessageProjectionStore::new(pool.clone()))
+}
+
+fn mail_storage_store(state: &AppState) -> Result<MailStorageStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(MailStorageStore::new(pool.clone()))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
@@ -641,6 +709,135 @@ struct V1Surfaces {
     account_setup: bool,
 }
 
+#[derive(Serialize)]
+struct CommunicationMessagesResponse {
+    items: Vec<CommunicationMessageSummaryResponse>,
+}
+
+#[derive(Serialize)]
+struct CommunicationMessageSummaryResponse {
+    message_id: String,
+    raw_record_id: String,
+    account_id: String,
+    provider_record_id: String,
+    subject: String,
+    sender: String,
+    recipients: Vec<String>,
+    body_text_preview: String,
+    occurred_at: Option<DateTime<Utc>>,
+    projected_at: DateTime<Utc>,
+    attachment_count: i64,
+}
+
+impl From<ProjectedMessageSummary> for CommunicationMessageSummaryResponse {
+    fn from(summary: ProjectedMessageSummary) -> Self {
+        Self {
+            message_id: summary.message.message_id,
+            raw_record_id: summary.message.raw_record_id,
+            account_id: summary.message.account_id,
+            provider_record_id: summary.message.provider_record_id,
+            subject: summary.message.subject,
+            sender: summary.message.sender,
+            recipients: summary.message.recipients,
+            body_text_preview: text_preview(&summary.message.body_text, 240),
+            occurred_at: summary.message.occurred_at,
+            projected_at: summary.message.projected_at,
+            attachment_count: summary.attachment_count,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CommunicationMessageDetailResponse {
+    message: CommunicationMessageDetailItem,
+    attachments: Vec<CommunicationAttachmentResponse>,
+}
+
+#[derive(Serialize)]
+struct CommunicationMessageDetailItem {
+    message_id: String,
+    raw_record_id: String,
+    account_id: String,
+    provider_record_id: String,
+    subject: String,
+    sender: String,
+    recipients: Vec<String>,
+    body_text: String,
+    occurred_at: Option<DateTime<Utc>>,
+    projected_at: DateTime<Utc>,
+}
+
+impl From<ProjectedMessage> for CommunicationMessageDetailItem {
+    fn from(message: ProjectedMessage) -> Self {
+        Self {
+            message_id: message.message_id,
+            raw_record_id: message.raw_record_id,
+            account_id: message.account_id,
+            provider_record_id: message.provider_record_id,
+            subject: message.subject,
+            sender: message.sender,
+            recipients: message.recipients,
+            body_text: message.body_text,
+            occurred_at: message.occurred_at,
+            projected_at: message.projected_at,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CommunicationAttachmentResponse {
+    attachment_id: String,
+    message_id: String,
+    raw_record_id: String,
+    blob_id: String,
+    provider_attachment_id: String,
+    filename: Option<String>,
+    content_type: String,
+    size_bytes: i64,
+    sha256: String,
+    disposition: &'static str,
+    scan_status: &'static str,
+    scan_engine: Option<String>,
+    scan_checked_at: Option<DateTime<Utc>>,
+    scan_summary: Option<String>,
+    scan_metadata: Value,
+    storage_kind: String,
+    storage_path: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl From<StoredMailAttachmentWithBlob> for CommunicationAttachmentResponse {
+    fn from(record: StoredMailAttachmentWithBlob) -> Self {
+        let attachment = record.attachment;
+        Self {
+            attachment_id: attachment.attachment_id,
+            message_id: attachment.message_id,
+            raw_record_id: attachment.raw_record_id,
+            blob_id: attachment.blob_id,
+            provider_attachment_id: attachment.provider_attachment_id,
+            filename: attachment.filename,
+            content_type: attachment.content_type,
+            size_bytes: attachment.size_bytes,
+            sha256: attachment.sha256,
+            disposition: attachment.disposition.as_str(),
+            scan_status: attachment.scan_status.as_str(),
+            scan_engine: attachment.scan_engine,
+            scan_checked_at: attachment.scan_checked_at,
+            scan_summary: attachment.scan_summary,
+            scan_metadata: attachment.scan_metadata,
+            storage_kind: record.storage_kind,
+            storage_path: record.storage_path,
+            created_at: attachment.created_at,
+            updated_at: attachment.updated_at,
+        }
+    }
+}
+
+struct CommunicationMessagesQuery {
+    limit: Option<i64>,
+}
+
 struct GraphNeighborhoodQuery {
     node_id: Option<String>,
     depth: Option<u8>,
@@ -649,6 +846,24 @@ struct GraphNeighborhoodQuery {
 struct GraphSearchQuery {
     q: Option<String>,
     limit: Option<i64>,
+}
+
+fn parse_communication_messages_query(
+    raw_query: Option<&str>,
+) -> Result<CommunicationMessagesQuery, ApiError> {
+    let mut query = CommunicationMessagesQuery { limit: None };
+
+    if let Some(raw_query) = raw_query {
+        for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
+            if key.as_ref() == "limit" {
+                query.limit = Some(value.parse::<i64>().map_err(|_| {
+                    ApiError::InvalidCommunicationQuery("limit must be an integer")
+                })?);
+            }
+        }
+    }
+
+    Ok(query)
 }
 
 fn parse_graph_neighborhood_query(
@@ -702,6 +917,15 @@ fn parse_graph_search_query(raw_query: Option<&str>) -> Result<GraphSearchQuery,
     Ok(query)
 }
 
+fn text_preview(value: &str, max_chars: usize) -> String {
+    let mut preview = value.chars().take(max_chars).collect::<String>();
+    if value.chars().count() > max_chars {
+        preview.push_str("...");
+    }
+
+    preview
+}
+
 enum ApiError {
     ApiTokenNotConfigured,
     InvalidApiToken,
@@ -712,6 +936,10 @@ enum ApiError {
     Store(EventStoreError),
     Graph(crate::graph::GraphStoreError),
     InvalidGraphQuery(&'static str),
+    Messages(MessageProjectionError),
+    MailStorage(MailStorageError),
+    InvalidCommunicationQuery(&'static str),
+    CommunicationMessageNotFound,
     SecretVaultNotConfigured,
     AccountSetup(EmailAccountSetupError),
     AccountSetupState,
@@ -799,6 +1027,36 @@ impl axum::response::IntoResponse for ApiError {
                 message.to_owned(),
                 false,
             ),
+            Self::Messages(error) => {
+                tracing::error!(error = %error, "communication message API store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "communication_message_store_error",
+                    "communication message store operation failed".to_owned(),
+                    false,
+                )
+            }
+            Self::MailStorage(error) => {
+                tracing::error!(error = %error, "communication attachment API store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "communication_attachment_store_error",
+                    "communication attachment store operation failed".to_owned(),
+                    false,
+                )
+            }
+            Self::InvalidCommunicationQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_communication_query",
+                message.to_owned(),
+                false,
+            ),
+            Self::CommunicationMessageNotFound => (
+                StatusCode::NOT_FOUND,
+                "communication_message_not_found",
+                "communication message was not found".to_owned(),
+                false,
+            ),
             Self::AccountSetup(error) => {
                 let status = if matches!(
                     error,
@@ -878,6 +1136,18 @@ impl From<EventStoreError> for ApiError {
 impl From<crate::graph::GraphStoreError> for ApiError {
     fn from(error: crate::graph::GraphStoreError) -> Self {
         Self::Graph(error)
+    }
+}
+
+impl From<MessageProjectionError> for ApiError {
+    fn from(error: MessageProjectionError) -> Self {
+        Self::Messages(error)
+    }
+}
+
+impl From<MailStorageError> for ApiError {
+    fn from(error: MailStorageError) -> Self {
+        Self::MailStorage(error)
     }
 }
 

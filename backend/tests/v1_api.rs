@@ -1,9 +1,18 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{HeaderValue, Method, Request, StatusCode, header};
+use chrono::Utc;
 use serde_json::json;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
+use hermes_hub_backend::communications::{
+    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
+};
 use hermes_hub_backend::config::AppConfig;
+use hermes_hub_backend::mail_storage::{
+    LocalMailBlobStore, MailAttachmentDisposition, MailStorageStore, NewMailAttachment, NewMailBlob,
+};
+use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
 use hermes_hub_backend::storage::Database;
 use hermes_hub_backend::{build_router, build_router_with_database};
 
@@ -59,6 +68,156 @@ async fn v1_status_returns_enabled_surfaces_against_postgres() {
     assert_eq!(value["surfaces"]["search"], json!(true));
     assert_eq!(value["surfaces"]["documents"], json!(true));
     assert_eq!(value["surfaces"]["account_setup"], json!(true));
+}
+
+#[tokio::test]
+async fn v1_communications_message_detail_returns_attachment_metadata_against_postgres() {
+    let Some(database_url) = std::env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skipping live v1 communications API test: HERMES_TEST_DATABASE_URL is not set");
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("acct_v1_communications_{suffix}");
+    let provider_record_id = format!("v1-communications-message-{suffix}");
+    let raw_record_id = format!("raw-v1-communications-{suffix}");
+    let subject = format!("V1 communications API subject {suffix}");
+
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let message_store = MessageProjectionStore::new(pool.clone());
+    let mail_store = MailStorageStore::new(pool.clone());
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &account_id,
+            EmailProviderKind::Icloud,
+            "V1 Communications API iCloud",
+            format!("v1-communications-{suffix}@example.invalid"),
+        ))
+        .await
+        .expect("provider account");
+    let raw = communication_store
+        .record_raw_source(
+            &NewRawCommunicationRecord::new(
+                &raw_record_id,
+                &account_id,
+                "email_message",
+                &provider_record_id,
+                format!("sha256:raw-v1-communications-{suffix}"),
+                format!("batch-v1-communications-{suffix}"),
+                json!({
+                    "subject": subject,
+                    "from": "sender@example.invalid",
+                    "to": ["recipient@example.invalid"],
+                    "body_text": "The attachment metadata must be visible without reading the blob."
+                }),
+            )
+            .occurred_at(Utc::now())
+            .provenance(json!({"source": "v1_communications_api_test"})),
+        )
+        .await
+        .expect("raw record");
+    let message = project_raw_email_message(&message_store, &raw)
+        .await
+        .expect("project message");
+
+    let blob_root = tempfile::tempdir().expect("blob root");
+    let local_blob_store = LocalMailBlobStore::new(blob_root.path());
+    let local_blob = local_blob_store
+        .put_blob(b"attachment bytes")
+        .await
+        .expect("write attachment blob");
+    let blob = mail_store
+        .upsert_blob(&NewMailBlob::from_local_blob(&local_blob).content_type("text/plain"))
+        .await
+        .expect("blob metadata");
+    mail_store
+        .upsert_attachment(
+            &NewMailAttachment::new(
+                &message.message_id,
+                &raw.raw_record_id,
+                &blob.blob_id,
+                "part-1",
+                "text/plain",
+                local_blob.size_bytes,
+                &blob.sha256,
+            )
+            .filename("notes.txt")
+            .disposition(MailAttachmentDisposition::Attachment),
+        )
+        .await
+        .expect("attachment metadata");
+
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let list_response = app
+        .clone()
+        .oneshot(get_request_with_token_and_actor(
+            "/api/v1/communications/messages?limit=100",
+            LOCAL_API_TOKEN,
+            LOCAL_API_ACTOR_ID,
+        ))
+        .await
+        .expect("list response");
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_body = json_body(list_response).await;
+    let list_item = list_body["items"]
+        .as_array()
+        .expect("items array")
+        .iter()
+        .find(|item| item["message_id"] == message.message_id)
+        .expect("seeded message in list");
+    assert_eq!(list_item["subject"], json!(subject));
+    assert_eq!(list_item["attachment_count"], json!(1));
+
+    let detail_response = app
+        .oneshot(get_request_with_token_and_actor(
+            &format!("/api/v1/communications/messages/{}", message.message_id),
+            LOCAL_API_TOKEN,
+            LOCAL_API_ACTOR_ID,
+        ))
+        .await
+        .expect("detail response");
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_body = json_body(detail_response).await;
+    assert_eq!(
+        detail_body["message"]["message_id"],
+        json!(message.message_id)
+    );
+    assert_eq!(
+        detail_body["message"]["body_text"],
+        json!(message.body_text)
+    );
+    assert_eq!(
+        detail_body["attachments"][0]["filename"],
+        json!("notes.txt")
+    );
+    assert_eq!(
+        detail_body["attachments"][0]["content_type"],
+        json!("text/plain")
+    );
+    assert_eq!(
+        detail_body["attachments"][0]["scan_status"],
+        json!("not_scanned")
+    );
+    assert_eq!(
+        detail_body["attachments"][0]["storage_kind"],
+        json!("local_fs")
+    );
+    assert_eq!(
+        detail_body["attachments"][0]["storage_path"],
+        json!(local_blob.storage_path)
+    );
 }
 
 #[tokio::test]
@@ -258,4 +417,11 @@ async fn json_body(response: axum::response::Response) -> serde_json::Value {
         .await
         .expect("body");
     serde_json::from_slice(&body).expect("json body")
+}
+
+fn unique_suffix() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock after unix epoch")
+        .as_nanos()
 }
