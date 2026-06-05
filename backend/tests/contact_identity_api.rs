@@ -173,10 +173,6 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
 
-    let _ = store
-        .refresh_candidates(100)
-        .await
-        .expect("refresh split candidates");
     let split_candidate_id =
         split_identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
     promote_identity_candidate(&pool, &split_candidate_id)

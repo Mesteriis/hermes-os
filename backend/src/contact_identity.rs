@@ -242,6 +242,12 @@ impl ContactIdentityStore {
             event.occurred_at,
         )
         .await?;
+        self.materialize_split_candidate_for_confirmed_merge_in_transaction(
+            &mut transaction,
+            &identity_candidate_id,
+            command.review_state,
+        )
+        .await?;
 
         transaction.commit().await?;
 
@@ -278,6 +284,12 @@ impl ContactIdentityStore {
             &event.event_id,
             &actor_id,
             event.occurred_at,
+        )
+        .await?;
+        self.materialize_split_candidate_for_confirmed_merge_in_transaction(
+            &mut transaction,
+            &parsed.identity_candidate_id,
+            parsed.review_state,
         )
         .await?;
 
@@ -421,6 +433,55 @@ impl ContactIdentityStore {
         }
 
         Ok(())
+    }
+
+    async fn materialize_split_candidate_for_confirmed_merge_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        identity_candidate_id: &str,
+        review_state: ContactIdentityReviewState,
+    ) -> Result<(), ContactIdentityError> {
+        if review_state != ContactIdentityReviewState::UserConfirmed {
+            return Ok(());
+        }
+
+        let row = sqlx::query(
+            r#"
+            SELECT candidate_kind, left_contact_id, right_contact_id
+            FROM contact_identity_candidates
+            WHERE identity_candidate_id = $1
+            "#,
+        )
+        .bind(identity_candidate_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+
+        let candidate_kind = row.try_get::<String, _>("candidate_kind")?;
+        if candidate_kind != ContactIdentityCandidateKind::MergeContacts.as_str() {
+            return Ok(());
+        }
+
+        let left = row.try_get::<String, _>("left_contact_id")?;
+        let Some(right) = row.try_get::<Option<String>, _>("right_contact_id")? else {
+            return Ok(());
+        };
+        let candidate = ContactIdentityCandidatePayload {
+            candidate_kind: ContactIdentityCandidateKind::SplitContact,
+            left_contact_id: left.clone(),
+            right_contact_id: Some(right.clone()),
+            email_address: None,
+            evidence_summary: format!(
+                "Previously confirmed merge can be split: {left} and {right}"
+            ),
+            confidence: 1.0,
+        };
+        upsert_candidate_in_transaction(
+            transaction,
+            &candidate,
+            candidate.identity_candidate_id(),
+            ContactIdentityReviewState::Suggested,
+        )
+        .await
     }
 
     async fn ensure_candidate_exists(
@@ -599,6 +660,73 @@ async fn upsert_candidate(
     .bind(payload.confidence)
     .bind(review_state.as_str())
     .execute(pool)
+    .await?;
+
+    Ok(())
+}
+
+async fn upsert_candidate_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    payload: &ContactIdentityCandidatePayload,
+    identity_candidate_id: String,
+    review_state: ContactIdentityReviewState,
+) -> Result<(), ContactIdentityError> {
+    sqlx::query(
+        r#"
+        INSERT INTO contact_identity_candidates (
+            identity_candidate_id,
+            candidate_kind,
+            left_contact_id,
+            right_contact_id,
+            email_address,
+            evidence_summary,
+            confidence,
+            review_state,
+            event_id,
+            actor_id,
+            reviewed_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL, NULL)
+        ON CONFLICT (identity_candidate_id)
+        DO UPDATE SET
+            candidate_kind = EXCLUDED.candidate_kind,
+            left_contact_id = EXCLUDED.left_contact_id,
+            right_contact_id = EXCLUDED.right_contact_id,
+            email_address = EXCLUDED.email_address,
+            evidence_summary = EXCLUDED.evidence_summary,
+            confidence = EXCLUDED.confidence,
+            review_state = CASE
+                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN contact_identity_candidates.review_state
+                ELSE EXCLUDED.review_state
+            END,
+            event_id = CASE
+                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN contact_identity_candidates.event_id
+                ELSE NULL
+            END,
+            actor_id = CASE
+                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN contact_identity_candidates.actor_id
+                ELSE NULL
+            END,
+            reviewed_at = CASE
+                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN contact_identity_candidates.reviewed_at
+                ELSE NULL
+            END,
+            updated_at = now()
+        "#,
+    )
+    .bind(identity_candidate_id)
+    .bind(payload.candidate_kind.as_str())
+    .bind(&payload.left_contact_id)
+    .bind(&payload.right_contact_id)
+    .bind(&payload.email_address)
+    .bind(&payload.evidence_summary)
+    .bind(payload.confidence)
+    .bind(review_state.as_str())
+    .execute(&mut **transaction)
     .await?;
 
     Ok(())

@@ -139,7 +139,7 @@ async fn contact_identity_confirm_records_review_without_mutating_contacts_again
 }
 
 #[tokio::test]
-async fn contact_identity_refresh_creates_split_candidate_for_confirmed_merge_against_postgres() {
+async fn contact_identity_confirm_materializes_split_candidate_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!("skipping live contact identity test: HERMES_TEST_DATABASE_URL is not set");
         return;
@@ -183,12 +183,6 @@ async fn contact_identity_refresh_creates_split_candidate_for_confirmed_merge_ag
         })
         .await
         .expect("confirm merge candidate");
-
-    let _ = context
-        .store
-        .refresh_candidates(100)
-        .await
-        .expect("refresh split candidates");
 
     let split_candidate_id =
         split_identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);

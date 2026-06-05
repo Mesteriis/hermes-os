@@ -71,7 +71,6 @@ PUT http://127.0.0.1:8080/api/v2/task-candidates/{task_candidate_id}/review
 GET http://127.0.0.1:8080/api/v2/tasks?limit=<limit>
 GET http://127.0.0.1:8080/api/v2/identity-candidates?limit=<limit>
 PUT http://127.0.0.1:8080/api/v2/identity-candidates/{identity_candidate_id}/review
-GET http://127.0.0.1:8080/api/v2/documents/{document_id}/processing
 GET http://127.0.0.1:8080/api/v2/document-processing/jobs?limit=<limit>
 POST http://127.0.0.1:8080/api/v2/document-processing/jobs/{job_id}/retry
 ```
