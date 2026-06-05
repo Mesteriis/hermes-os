@@ -3876,6 +3876,12 @@
 		font-size: 13px;
 	}
 
+	.graph-search-form input:focus-visible {
+		border-radius: 4px;
+		outline: 1px solid rgba(45, 240, 206, 0.62);
+		outline-offset: 2px;
+	}
+
 	.graph-toolbar button,
 	.graph-search-form button,
 	.graph-strip-message button,
@@ -4001,13 +4007,16 @@
 	.graph-edge-label {
 		position: absolute;
 		z-index: 2;
+		display: block;
 		max-width: 120px;
 		border: 1px solid rgba(45, 240, 206, 0.12);
 		border-radius: 999px;
 		background: rgba(5, 22, 25, 0.82);
 		color: #8fece1;
 		font-size: 10px;
+		overflow: hidden;
 		padding: 3px 7px;
+		text-overflow: ellipsis;
 		transform: translate(-50%, -50%);
 		white-space: nowrap;
 		pointer-events: none;
@@ -4032,6 +4041,19 @@
 			background 180ms ease,
 			box-shadow 180ms ease,
 			transform 180ms ease;
+	}
+
+	.graph-node.kind-person {
+		border-color: rgba(43, 235, 175, 0.28);
+	}
+
+	.graph-node.kind-email_address,
+	.graph-node.kind-message {
+		border-color: rgba(44, 174, 255, 0.28);
+	}
+
+	.graph-node.kind-document {
+		border-color: rgba(142, 98, 255, 0.28);
 	}
 
 	.graph-node:hover {
@@ -4061,19 +4083,6 @@
 	.graph-node span {
 		color: #8eaead;
 		font-size: 10px;
-	}
-
-	.graph-node.kind-person {
-		border-color: rgba(43, 235, 175, 0.28);
-	}
-
-	.graph-node.kind-email_address,
-	.graph-node.kind-message {
-		border-color: rgba(44, 174, 255, 0.28);
-	}
-
-	.graph-node.kind-document {
-		border-color: rgba(142, 98, 255, 0.28);
 	}
 
 	.graph-state-card {
@@ -4131,13 +4140,16 @@
 
 	.graph-status-bar {
 		display: flex;
-		gap: 16px;
+		flex-wrap: wrap;
+		gap: 6px 12px;
 		align-items: center;
+		align-content: center;
 		min-height: 46px;
 		border-top: 1px solid rgba(82, 204, 190, 0.08);
-		padding: 0 14px;
+		padding: 8px 14px;
 		color: #a6bbbb;
 		font-size: 12px;
+		line-height: 1.4;
 	}
 
 	.evidence-row {
