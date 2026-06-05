@@ -153,6 +153,8 @@
 	let graphNeighborhood = $state<GraphNeighborhood | null>(null);
 	let graphNeighborhoodError = $state('');
 	let isGraphNeighborhoodLoading = $state(false);
+	let graphSearchRequestSequence = 0;
+	let graphNeighborhoodRequestSequence = 0;
 	let communicationMessages = $state<CommunicationMessageSummary[]>([]);
 	let selectedCommunicationDetail = $state<CommunicationMessageDetail | null>(null);
 	let communicationsError = $state('');
@@ -529,42 +531,66 @@
 	}
 
 	async function runGraphSearch() {
+		const requestSequence = ++graphSearchRequestSequence;
 		const query = graphSearchQuery.trim();
 		graphSearchSubmitted = true;
 
 		if (!query) {
 			graphSearchResults = [];
 			graphSearchError = '';
+			isGraphSearchLoading = false;
 			return;
 		}
 
 		isGraphSearchLoading = true;
 		try {
-			graphSearchResults = await searchGraphNodes(apiBaseUrl, apiToken, actorId, query, 20);
+			const results = await searchGraphNodes(apiBaseUrl, apiToken, actorId, query, 20);
+			if (requestSequence !== graphSearchRequestSequence) {
+				return;
+			}
+			graphSearchResults = results;
 			graphSearchError = '';
 		} catch (error) {
+			if (requestSequence !== graphSearchRequestSequence) {
+				return;
+			}
+			graphSearchResults = [];
 			graphSearchError = error instanceof Error ? error.message : 'Unknown graph search error';
 		} finally {
-			isGraphSearchLoading = false;
+			if (requestSequence === graphSearchRequestSequence) {
+				isGraphSearchLoading = false;
+			}
 		}
 	}
 
 	async function selectGraphNode(node: GraphNode) {
+		const requestSequence = ++graphNeighborhoodRequestSequence;
 		graphNeighborhoodError = '';
+		graphNeighborhood = null;
 		isGraphNeighborhoodLoading = true;
 		try {
-			graphNeighborhood = await fetchGraphNeighborhood(
+			const neighborhood = await fetchGraphNeighborhood(
 				apiBaseUrl,
 				apiToken,
 				actorId,
 				node.node_id,
 				1
 			);
+			if (requestSequence !== graphNeighborhoodRequestSequence) {
+				return;
+			}
+			graphNeighborhood = neighborhood;
 		} catch (error) {
+			if (requestSequence !== graphNeighborhoodRequestSequence) {
+				return;
+			}
+			graphNeighborhood = null;
 			graphNeighborhoodError =
 				error instanceof Error ? error.message : 'Unknown graph neighborhood error';
 		} finally {
-			isGraphNeighborhoodLoading = false;
+			if (requestSequence === graphNeighborhoodRequestSequence) {
+				isGraphNeighborhoodLoading = false;
+			}
 		}
 	}
 
@@ -914,8 +940,8 @@
 		});
 	}
 
-	function graphKindCounts(nodes: GraphNode[]) {
-		const counts = new Map<string, number>();
+	function graphKindCounts(nodes: GraphNode[]): Array<{ kind: GraphNodeKind; count: number }> {
+		const counts = new Map<GraphNodeKind, number>();
 		for (const node of nodes) {
 			counts.set(node.node_kind, (counts.get(node.node_kind) ?? 0) + 1);
 		}
