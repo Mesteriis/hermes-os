@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::communications::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind,
     NewIngestionCheckpoint, NewRawCommunicationRecord, ProviderAccount,
-    ProviderAccountSecretPurpose,
+    ProviderAccountSecretPurpose, StoredRawCommunicationRecord,
 };
 use crate::mail_storage::{LocalMailBlobStore, MailStorageError, MailStorageStore, NewMailBlob};
 
@@ -62,6 +62,7 @@ pub struct EmailSyncBlobImportReport {
     pub inserted_or_existing_records: usize,
     pub checkpoint_saved: bool,
     pub blobs_upserted: usize,
+    pub raw_records: Vec<StoredRawCommunicationRecord>,
 }
 
 pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, EmailSyncPlanError> {
@@ -181,6 +182,7 @@ pub async fn record_email_sync_batch_with_mail_blobs(
 
     let mut inserted_or_existing_records = 0;
     let mut blobs_upserted = 0;
+    let mut raw_records = Vec::new();
     for message in &batch.messages {
         let raw_bytes = raw_message_bytes(batch.provider_kind, &message.payload)?;
         let local_blob = blob_store.put_blob(&raw_bytes).await?;
@@ -213,7 +215,7 @@ pub async fn record_email_sync_batch_with_mail_blobs(
             raw_record = raw_record.occurred_at(occurred_at);
         }
 
-        store.record_raw_source(&raw_record).await?;
+        raw_records.push(store.record_raw_source(&raw_record).await?);
         inserted_or_existing_records += 1;
         blobs_upserted += 1;
     }
@@ -235,6 +237,7 @@ pub async fn record_email_sync_batch_with_mail_blobs(
         inserted_or_existing_records,
         checkpoint_saved,
         blobs_upserted,
+        raw_records,
     })
 }
 

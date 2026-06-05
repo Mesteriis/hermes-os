@@ -11,6 +11,7 @@ pub mod email_provider_network;
 pub mod email_rfc822;
 pub mod email_sources;
 pub mod email_sync;
+pub mod email_sync_pipeline;
 pub mod event_log;
 pub mod graph;
 pub mod graph_projection;
