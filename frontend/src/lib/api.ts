@@ -230,6 +230,22 @@ export async function fetchGraphSummary(
 	return getJson(baseUrl, token, actorId, '/api/v2/graph/summary', 'Graph summary request failed');
 }
 
+export async function fetchGraphNodes(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	limit = 20
+): Promise<GraphNode[]> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/graph/nodes?${params.toString()}`,
+		'Graph node picker request failed'
+	);
+}
+
 export async function searchGraphNodes(
 	baseUrl: string,
 	token: string,

@@ -254,6 +254,50 @@ impl GraphStore {
         rows.into_iter().map(row_to_node).collect()
     }
 
+    pub async fn list_nodes_for_picker(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<GraphNode>, GraphStoreError> {
+        let rows = sqlx::query(
+            r#"
+            WITH node_degree AS (
+                SELECT node_id, count(*) AS edge_count
+                FROM (
+                    SELECT source_node_id AS node_id
+                    FROM graph_edges
+                    WHERE valid_to IS NULL
+                    UNION ALL
+                    SELECT target_node_id AS node_id
+                    FROM graph_edges
+                    WHERE valid_to IS NULL
+                ) edge_endpoints
+                GROUP BY node_id
+            )
+            SELECT
+                graph_nodes.node_id,
+                graph_nodes.node_kind,
+                graph_nodes.stable_key,
+                graph_nodes.label,
+                graph_nodes.properties,
+                graph_nodes.created_at,
+                graph_nodes.updated_at
+            FROM graph_nodes
+            LEFT JOIN node_degree ON node_degree.node_id = graph_nodes.node_id
+            ORDER BY
+                coalesce(node_degree.edge_count, 0) DESC,
+                graph_nodes.updated_at DESC,
+                graph_nodes.label,
+                graph_nodes.node_id
+            LIMIT $1
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_node).collect()
+    }
+
     pub async fn neighborhood(
         &self,
         node_id: &str,

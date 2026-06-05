@@ -5,6 +5,7 @@
 		fetchCommunicationMessage,
 		fetchCommunicationMessages,
 		fetchGraphNeighborhood,
+		fetchGraphNodes,
 		fetchGraphSummary,
 		fetchV1Status,
 		searchGraphNodes,
@@ -145,6 +146,9 @@
 	let graphSummary = $state<GraphSummary | null>(null);
 	let graphError = $state('');
 	let isGraphSummaryLoading = $state(false);
+	let graphNodeChoices = $state<GraphNode[]>([]);
+	let graphNodeChoicesError = $state('');
+	let isGraphNodeChoicesLoading = $state(false);
 	let graphSearchQuery = $state('');
 	let graphSearchResults = $state<GraphNode[]>([]);
 	let graphSearchError = $state('');
@@ -154,6 +158,7 @@
 	let graphNeighborhood = $state<GraphNeighborhood | null>(null);
 	let graphNeighborhoodError = $state('');
 	let isGraphNeighborhoodLoading = $state(false);
+	let graphNodeChoicesRequestSequence = 0;
 	let graphSearchRequestSequence = 0;
 	let graphNeighborhoodRequestSequence = 0;
 	let communicationMessages = $state<CommunicationMessageSummary[]>([]);
@@ -496,6 +501,7 @@
 	onMount(() => {
 		void loadV1Status();
 		void loadGraphSummary();
+		void loadGraphNodeChoices();
 		void loadCommunications();
 	});
 
@@ -517,6 +523,29 @@
 			graphError = error instanceof Error ? error.message : 'Unknown graph summary error';
 		} finally {
 			isGraphSummaryLoading = false;
+		}
+	}
+
+	async function loadGraphNodeChoices() {
+		const requestSequence = ++graphNodeChoicesRequestSequence;
+		isGraphNodeChoicesLoading = true;
+		try {
+			const nodes = await fetchGraphNodes(apiBaseUrl, apiToken, actorId, 20);
+			if (requestSequence !== graphNodeChoicesRequestSequence) {
+				return;
+			}
+			graphNodeChoices = nodes;
+			graphNodeChoicesError = '';
+		} catch (error) {
+			if (requestSequence !== graphNodeChoicesRequestSequence) {
+				return;
+			}
+			graphNodeChoices = [];
+			graphNodeChoicesError = error instanceof Error ? error.message : 'Unknown graph node picker error';
+		} finally {
+			if (requestSequence === graphNodeChoicesRequestSequence) {
+				isGraphNodeChoicesLoading = false;
+			}
 		}
 	}
 
@@ -1601,33 +1630,72 @@
 							</button>
 						</div>
 
-						<div class="graph-search-strip" aria-live="polite" aria-busy={isGraphSearchLoading}>
+						<div
+							class="graph-search-strip"
+							aria-live="polite"
+							aria-busy={isGraphSearchLoading || isGraphNodeChoicesLoading}
+						>
 							{#if graphSearchError}
 								<div class="graph-strip-message error">
 									<span>{graphSearchError}</span>
 									<button type="button" onclick={() => void runGraphSearch()}>Retry</button>
 								</div>
 							{:else if graphSearchResults.length > 0}
-								<div class="graph-result-row" aria-label="Graph search results">
-									{#each graphSearchResults as node}
-										<button
-											type="button"
-											class:active={selectedGraphNode?.node_id === node.node_id}
-											onclick={() => void selectGraphNode(node)}
-										>
-											<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
-											<span>{node.label}</span>
-											<em>{formatGraphKind(node.node_kind)}</em>
-										</button>
-									{/each}
+								<div class="graph-picker">
+									<div class="graph-picker-head">
+										<span>Search results</span>
+										<em>{formatNumber(graphSearchResults.length)}</em>
+									</div>
+									<div class="graph-result-row" aria-label="Graph search results">
+										{#each graphSearchResults as node}
+											<button
+												type="button"
+												class:active={selectedGraphNode?.node_id === node.node_id}
+												onclick={() => void selectGraphNode(node)}
+											>
+												<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
+												<span>{node.label}</span>
+												<em>{formatGraphKind(node.node_kind)}</em>
+											</button>
+										{/each}
+									</div>
 								</div>
 							{:else if graphSearchSubmitted && lastSubmittedGraphSearchQuery}
 								<div class="graph-strip-message">
 									<span>No graph nodes found for "{lastSubmittedGraphSearchQuery}".</span>
 								</div>
+							{:else if graphNodeChoicesError}
+								<div class="graph-strip-message error">
+									<span>{graphNodeChoicesError}</span>
+									<button type="button" onclick={() => void loadGraphNodeChoices()}>Retry</button>
+								</div>
+							{:else if graphNodeChoices.length > 0}
+								<div class="graph-picker">
+									<div class="graph-picker-head">
+										<span>Suggested nodes</span>
+										<em>{formatNumber(graphNodeChoices.length)}</em>
+									</div>
+									<div class="graph-result-row" aria-label="Suggested graph nodes">
+										{#each graphNodeChoices as node}
+											<button
+												type="button"
+												class:active={selectedGraphNode?.node_id === node.node_id}
+												onclick={() => void selectGraphNode(node)}
+											>
+												<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
+												<span>{node.label}</span>
+												<em>{formatGraphKind(node.node_kind)}</em>
+											</button>
+										{/each}
+									</div>
+								</div>
+							{:else if isGraphNodeChoicesLoading}
+								<div class="graph-strip-message">
+									<span>Loading selectable graph nodes.</span>
+								</div>
 							{:else}
 								<div class="graph-strip-message">
-									<span>Search people, email addresses, messages or documents to load a neighborhood.</span>
+									<span>No selectable graph nodes returned by the local projection.</span>
 								</div>
 							{/if}
 						</div>
@@ -1694,7 +1762,7 @@
 								<div class="graph-state-card">
 									<img src="/assets/hermes-logo-mark.png" alt="" />
 									<h2>Select a graph node</h2>
-									<p>{formatNumber(graphNodeTotal())} nodes and {formatNumber(graphRelationshipTotal())} connections are available from the local projection.</p>
+									<p>{formatNumber(graphNodeTotal())} nodes and {formatNumber(graphRelationshipTotal())} connections are available from the local projection. Use Suggested nodes or search to load a neighborhood.</p>
 								</div>
 							{/if}
 							{#if isGraphNeighborhoodLoading}
@@ -1733,7 +1801,7 @@
 									{/each}
 								</ul>
 							{:else}
-								<p>Select a search result to inspect graph metadata and evidence.</p>
+								<p>Select a graph node to inspect metadata and evidence.</p>
 							{/if}
 							{#if graphNeighborhoodError}
 								<p class="inline-error" role="status" aria-live="polite">{graphNeighborhoodError}</p>
@@ -3914,6 +3982,34 @@
 		border-top: 1px solid rgba(82, 204, 190, 0.08);
 		border-bottom: 1px solid rgba(82, 204, 190, 0.08);
 		padding: 9px 12px;
+	}
+
+	.graph-picker {
+		display: grid;
+		gap: 7px;
+	}
+
+	.graph-picker-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		color: #91a8a8;
+		font-size: 11px;
+	}
+
+	.graph-picker-head span {
+		color: #dcefed;
+		font-weight: 560;
+	}
+
+	.graph-picker-head em {
+		border: 1px solid rgba(45, 240, 206, 0.14);
+		border-radius: 999px;
+		background: rgba(45, 240, 206, 0.08);
+		color: #9ee8df;
+		font-style: normal;
+		padding: 1px 7px;
 	}
 
 	.graph-result-row {

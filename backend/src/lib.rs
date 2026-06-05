@@ -99,6 +99,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             get(get_v1_communication_message),
         )
         .route("/api/v2/graph/summary", get(get_graph_summary))
+        .route("/api/v2/graph/nodes", get(get_graph_nodes))
         .route("/api/v2/graph/neighborhood", get(get_graph_neighborhood))
         .route("/api/v2/graph/search", get(get_graph_search))
         .route(
@@ -342,6 +343,19 @@ async fn get_graph_summary(
 ) -> Result<Json<crate::graph::GraphSummary>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     Ok(Json(graph_store(&state)?.summary().await?))
+}
+
+async fn get_graph_nodes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<Vec<crate::graph::GraphNode>>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let query = parse_graph_nodes_query(raw_query.as_deref())?;
+    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    Ok(Json(
+        graph_store(&state)?.list_nodes_for_picker(limit).await?,
+    ))
 }
 
 async fn get_graph_neighborhood(
@@ -843,6 +857,10 @@ struct GraphNeighborhoodQuery {
     depth: Option<u8>,
 }
 
+struct GraphNodesQuery {
+    limit: Option<i64>,
+}
+
 struct GraphSearchQuery {
     q: Option<String>,
     limit: Option<i64>,
@@ -886,6 +904,24 @@ fn parse_graph_neighborhood_query(
                     );
                 }
                 _ => {}
+            }
+        }
+    }
+
+    Ok(query)
+}
+
+fn parse_graph_nodes_query(raw_query: Option<&str>) -> Result<GraphNodesQuery, ApiError> {
+    let mut query = GraphNodesQuery { limit: None };
+
+    if let Some(raw_query) = raw_query {
+        for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
+            if key.as_ref() == "limit" {
+                query.limit = Some(
+                    value
+                        .parse::<i64>()
+                        .map_err(|_| ApiError::InvalidGraphQuery("limit must be an integer"))?,
+                );
             }
         }
     }
