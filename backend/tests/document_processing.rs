@@ -1,9 +1,15 @@
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hermes_hub_backend::document_processing::DocumentProcessingStore;
+use chrono::Utc;
+use hermes_hub_backend::document_processing::{
+    DocumentProcessingError, DocumentProcessingRetryCommand, DocumentProcessingStatus,
+    DocumentProcessingStore,
+};
 use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
+use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope};
 use hermes_hub_backend::storage::Database;
+use serde_json::json;
 use sqlx::postgres::PgPool;
 use sqlx::query_scalar;
 
@@ -15,7 +21,7 @@ async fn enqueue_for_document_creates_extract_text_and_ocr_jobs() {
         );
         return;
     };
-    let Some((_pool, document_store, processing_store)) =
+    let Some((pool, document_store, processing_store)) =
         live_context("enqueue both processing jobs").await
     else {
         return;
@@ -43,6 +49,7 @@ async fn enqueue_for_document_creates_extract_text_and_ocr_jobs() {
             .any(|job| step_name(&job.step) == "extract_text")
     );
     assert!(jobs.iter().any(|job| step_name(&job.step) == "ocr"));
+    quiesce_processing_jobs_for_document(&pool, &document_id).await;
 }
 
 #[tokio::test]
@@ -56,6 +63,7 @@ async fn enqueue_for_document_does_not_reset_terminal_jobs() {
     else {
         return;
     };
+    quiesce_retryable_test_processing_jobs(&pool).await;
     let suffix = unique_suffix();
     let document_id = format!("doc_processing_terminal_{suffix}");
 
@@ -101,6 +109,7 @@ async fn run_queued_jobs_for_markdown_populates_extracted_text_artifact() {
     else {
         return;
     };
+    quiesce_retryable_test_processing_jobs(&pool).await;
     let suffix = unique_suffix();
     let document_id = format!("doc_processing_run_markdown_{suffix}");
 
@@ -152,6 +161,7 @@ async fn run_queued_jobs_skips_non_markdown_text_extraction_with_summary() {
     else {
         return;
     };
+    quiesce_retryable_test_processing_jobs(&pool).await;
 
     let suffix = unique_suffix();
     let document_id = format!("doc_processing_non_markdown_{suffix}");
@@ -182,6 +192,264 @@ async fn run_queued_jobs_skips_non_markdown_text_extraction_with_summary() {
     .expect("extract skip summary");
 
     assert!(matches!(summary, Some(value) if !value.is_empty()));
+}
+
+#[tokio::test]
+async fn document_processing_retry_failed_job_requeues_job_against_postgres() {
+    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live document processing retry test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let Some((pool, document_store, processing_store)) =
+        live_context("retry failed processing job").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let document_id = format!("doc_processing_retry_{suffix}");
+
+    document_store
+        .import_document(&NewDocumentImport::markdown(
+            &document_id,
+            "retry.md",
+            "# Retry\n\nProcessing retry body.",
+        ))
+        .await
+        .expect("import markdown document");
+    let jobs = processing_store
+        .enqueue_for_document(&document_id)
+        .await
+        .expect("enqueue processing jobs");
+    let extract_job = jobs
+        .iter()
+        .find(|job| step_name(&job.step) == "extract_text")
+        .expect("extract text job");
+
+    sqlx::query(
+        r#"
+        UPDATE document_processing_jobs
+        SET status = 'failed',
+            attempts = 2,
+            last_error_summary = 'temporary extractor failure',
+            started_at = now(),
+            finished_at = now(),
+            updated_at = now()
+        WHERE job_id = $1
+        "#,
+    )
+    .bind(&extract_job.job_id)
+    .execute(&pool)
+    .await
+    .expect("mark extract job failed");
+
+    let command_id = format!("document-processing-retry-{suffix}");
+    let result = processing_store
+        .retry_failed_job(&DocumentProcessingRetryCommand {
+            command_id: command_id.clone(),
+            job_id: extract_job.job_id.clone(),
+            actor_id: "document-processing-test-actor".to_owned(),
+        })
+        .await
+        .expect("retry failed job");
+
+    assert_eq!(result.job_id, extract_job.job_id);
+    assert_eq!(result.status, DocumentProcessingStatus::Queued);
+    assert_eq!(
+        result.event_id,
+        format!("document_processing_retry:{command_id}")
+    );
+
+    let persisted = sqlx::query_as::<_, (String, i32, Option<String>)>(
+        r#"
+        SELECT status, attempts, last_error_summary
+        FROM document_processing_jobs
+        WHERE job_id = $1
+        "#,
+    )
+    .bind(&extract_job.job_id)
+    .fetch_one(&pool)
+    .await
+    .expect("persisted retried job");
+
+    assert_eq!(persisted.0, "queued");
+    assert_eq!(persisted.1, 0);
+    assert_eq!(persisted.2, None);
+    quiesce_processing_jobs_for_document(&pool, &document_id).await;
+}
+
+#[tokio::test]
+async fn document_processing_retry_duplicate_same_command_is_idempotent() {
+    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live document processing duplicate retry test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let Some((pool, document_store, processing_store)) =
+        live_context("duplicate retry command").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let document_id = format!("doc_processing_retry_idempotent_{suffix}");
+    let job_id =
+        create_failed_extract_text_job(&pool, &document_store, &processing_store, &document_id)
+            .await;
+    let command = DocumentProcessingRetryCommand {
+        command_id: format!("document-processing-retry-idempotent-{suffix}"),
+        job_id: job_id.clone(),
+        actor_id: "document-processing-test-actor".to_owned(),
+    };
+
+    let first = processing_store
+        .retry_failed_job(&command)
+        .await
+        .expect("first retry succeeds");
+    let second = processing_store
+        .retry_failed_job(&command)
+        .await
+        .expect("duplicate retry is idempotent");
+
+    assert_eq!(first, second);
+    assert_eq!(second.job_id, job_id);
+    assert_eq!(second.status, DocumentProcessingStatus::Queued);
+    assert_eq!(
+        second.event_id,
+        format!("document_processing_retry:{}", command.command_id)
+    );
+    quiesce_processing_jobs_for_document(&pool, &document_id).await;
+}
+
+#[tokio::test]
+async fn document_processing_retry_duplicate_command_for_different_job_is_rejected() {
+    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live document processing retry collision test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let Some((pool, document_store, processing_store)) =
+        live_context("duplicate retry command collision").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let existing_document_id = format!("doc_processing_retry_collision_existing_{suffix}");
+    let target_document_id = format!("doc_processing_retry_collision_target_{suffix}");
+    let existing_job_id = create_failed_extract_text_job(
+        &pool,
+        &document_store,
+        &processing_store,
+        &existing_document_id,
+    )
+    .await;
+    let target_job_id = create_failed_extract_text_job(
+        &pool,
+        &document_store,
+        &processing_store,
+        &target_document_id,
+    )
+    .await;
+    let command_id = format!("document-processing-retry-collision-{suffix}");
+    append_retry_event_for_job(&pool, &command_id, &existing_job_id).await;
+
+    let error = processing_store
+        .retry_failed_job(&DocumentProcessingRetryCommand {
+            command_id,
+            job_id: target_job_id.clone(),
+            actor_id: "document-processing-test-actor".to_owned(),
+        })
+        .await
+        .expect_err("command collision must be rejected");
+
+    assert!(matches!(
+        error,
+        DocumentProcessingError::RetryCommandConflict
+    ));
+    let persisted = job_retry_state(&pool, &target_job_id).await;
+    assert_eq!(persisted.0, "failed");
+    assert_eq!(persisted.1, 2);
+    assert!(persisted.2.is_some());
+
+    quiesce_processing_jobs_for_document(&pool, &existing_document_id).await;
+    quiesce_processing_jobs_for_document(&pool, &target_document_id).await;
+}
+
+#[tokio::test]
+async fn document_processing_retry_non_failed_job_requires_failed_status() {
+    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live document processing non-failed retry test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let Some((pool, document_store, processing_store)) =
+        live_context("non-failed retry command").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let document_id = format!("doc_processing_retry_non_failed_{suffix}");
+
+    document_store
+        .import_document(&NewDocumentImport::markdown(
+            &document_id,
+            "retry-non-failed.md",
+            "# Retry\n\nQueued retry body.",
+        ))
+        .await
+        .expect("import markdown document");
+    let jobs = processing_store
+        .enqueue_for_document(&document_id)
+        .await
+        .expect("enqueue processing jobs");
+    let extract_job = jobs
+        .iter()
+        .find(|job| step_name(&job.step) == "extract_text")
+        .expect("extract text job");
+
+    let error = processing_store
+        .retry_failed_job(&DocumentProcessingRetryCommand {
+            command_id: format!("document-processing-retry-non-failed-{suffix}"),
+            job_id: extract_job.job_id.clone(),
+            actor_id: "document-processing-test-actor".to_owned(),
+        })
+        .await
+        .expect_err("queued job retry must be rejected");
+
+    assert!(matches!(
+        error,
+        DocumentProcessingError::RetryRequiresFailedJob
+    ));
+    quiesce_processing_jobs_for_document(&pool, &document_id).await;
+}
+
+#[tokio::test]
+async fn document_processing_retry_missing_job_returns_job_not_found() {
+    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live document processing missing retry test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let Some((_pool, _document_store, processing_store)) =
+        live_context("missing retry command").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let error = processing_store
+        .retry_failed_job(&DocumentProcessingRetryCommand {
+            command_id: format!("document-processing-retry-missing-{suffix}"),
+            job_id: format!("document_processing_job:v1:missing-{suffix}:extract_text"),
+            actor_id: "document-processing-test-actor".to_owned(),
+        })
+        .await
+        .expect_err("missing job retry must be rejected");
+
+    assert!(matches!(error, DocumentProcessingError::JobNotFound));
 }
 
 async fn live_context(
@@ -232,4 +500,133 @@ async fn terminal_state_for_document(
     .fetch_all(pool)
     .await
     .expect("terminal state")
+}
+
+async fn create_failed_extract_text_job(
+    pool: &sqlx::postgres::PgPool,
+    document_store: &DocumentImportStore,
+    processing_store: &DocumentProcessingStore,
+    document_id: &str,
+) -> String {
+    document_store
+        .import_document(&NewDocumentImport::markdown(
+            document_id,
+            "retry-collision.md",
+            "# Retry\n\nProcessing retry body.",
+        ))
+        .await
+        .expect("import markdown document");
+    let jobs = processing_store
+        .enqueue_for_document(document_id)
+        .await
+        .expect("enqueue processing jobs");
+    let job_id = jobs
+        .iter()
+        .find(|job| step_name(&job.step) == "extract_text")
+        .expect("extract text job")
+        .job_id
+        .clone();
+
+    fail_processing_job(pool, &job_id).await;
+
+    job_id
+}
+
+async fn fail_processing_job(pool: &sqlx::postgres::PgPool, job_id: &str) {
+    sqlx::query(
+        r#"
+        UPDATE document_processing_jobs
+        SET status = 'failed',
+            attempts = 2,
+            last_error_summary = 'temporary extractor failure',
+            started_at = now(),
+            finished_at = now(),
+            updated_at = now()
+        WHERE job_id = $1
+        "#,
+    )
+    .bind(job_id)
+    .execute(pool)
+    .await
+    .expect("mark extract job failed");
+}
+
+async fn append_retry_event_for_job(pool: &sqlx::postgres::PgPool, command_id: &str, job_id: &str) {
+    let event = NewEventEnvelope::builder(
+        format!("document_processing_retry:{command_id}"),
+        "document_processing.retry_requested",
+        Utc::now(),
+        json!({
+            "kind": "document_processing_retry",
+            "provider": "local_api",
+            "source_id": command_id,
+        }),
+        json!({
+            "kind": "document_processing_job",
+            "job_id": job_id,
+        }),
+    )
+    .actor(json!({ "actor_id": "document-processing-test-actor" }))
+    .payload(json!({ "job_id": job_id }))
+    .build()
+    .expect("retry event envelope");
+
+    EventStore::new(pool.clone())
+        .append(&event)
+        .await
+        .expect("append retry collision event");
+}
+
+async fn job_retry_state(
+    pool: &sqlx::postgres::PgPool,
+    job_id: &str,
+) -> (String, i32, Option<String>) {
+    sqlx::query_as::<_, (String, i32, Option<String>)>(
+        r#"
+        SELECT status, attempts, last_error_summary
+        FROM document_processing_jobs
+        WHERE job_id = $1
+        "#,
+    )
+    .bind(job_id)
+    .fetch_one(pool)
+    .await
+    .expect("job retry state")
+}
+
+async fn quiesce_retryable_test_processing_jobs(pool: &sqlx::postgres::PgPool) {
+    sqlx::query(
+        r#"
+        UPDATE document_processing_jobs
+        SET status = 'skipped',
+            last_error_summary = COALESCE(last_error_summary, 'test cleanup'),
+            started_at = NULL,
+            finished_at = COALESCE(finished_at, now()),
+            updated_at = now()
+        WHERE document_id LIKE 'doc_processing_%'
+          AND status IN ('queued', 'failed', 'running')
+        "#,
+    )
+    .execute(pool)
+    .await
+    .expect("quiesce retryable test processing jobs");
+}
+
+async fn quiesce_processing_jobs_for_document(pool: &sqlx::postgres::PgPool, document_id: &str) {
+    sqlx::query(
+        r#"
+        UPDATE document_processing_jobs
+        SET status = 'skipped',
+            last_error_summary = COALESCE(last_error_summary, 'test cleanup'),
+            started_at = NULL,
+            finished_at = COALESCE(finished_at, now()),
+            updated_at = now()
+        WHERE document_id = $1
+          AND status IN ('queued', 'failed', 'running')
+        "#,
+    )
+    .bind(document_id)
+    .execute(pool)
+    .await
+    .expect("quiesce document processing jobs for test document");
 }

@@ -4,6 +4,7 @@
 		completeGmailOAuthSetup,
 		fetchCommunicationMessage,
 		fetchCommunicationMessages,
+		fetchDocumentProcessing,
 		fetchGraphNeighborhood,
 		fetchGraphNodes,
 		fetchGraphSummary,
@@ -16,6 +17,7 @@
 		fetchV1Status,
 		reviewIdentityCandidate,
 		reviewTaskCandidate,
+		retryDocumentProcessingJob,
 		searchGraphNodes,
 		setupImapAccount,
 		startGmailOAuthSetup,
@@ -28,6 +30,7 @@
 		type GmailOAuthStartResponse,
 		type GraphEdge,
 		type DocumentProcessingJob,
+		type DocumentProcessingRecord,
 		type GraphEvidenceSummary,
 		type GraphNeighborhood,
 		type GraphNode,
@@ -193,7 +196,10 @@
 	let taskCandidates = $state<TaskCandidate[]>([]);
 	let activeTasks = $state<ActiveTask[]>([]);
 	let documentProcessingJobs = $state<DocumentProcessingJob[]>([]);
+	let selectedDocumentProcessingDetail = $state<DocumentProcessingRecord | null>(null);
+	let documentProcessingDetailError = $state('');
 	let isDocumentProcessingJobsLoading = $state(false);
+	let retryingDocumentProcessingJobId = $state<string | null>(null);
 	let documentProcessingJobsError = $state('');
 	let isTasksLoading = $state(false);
 	let tasksError = $state('');
@@ -778,6 +784,49 @@
 				error instanceof Error ? error.message : 'Unknown document processing jobs error';
 		} finally {
 			isDocumentProcessingJobsLoading = false;
+		}
+	}
+
+	async function reloadSelectedDocumentProcessingDetail() {
+		const documentId = selectedDocumentProcessingDetail?.document_id;
+		if (!documentId) {
+			return;
+		}
+
+		try {
+			selectedDocumentProcessingDetail = await fetchDocumentProcessing(
+				apiBaseUrl,
+				apiToken,
+				actorId,
+				documentId
+			);
+			documentProcessingDetailError = '';
+		} catch (error) {
+			documentProcessingDetailError =
+				error instanceof Error ? error.message : 'Unknown document processing detail error';
+		}
+	}
+
+	async function retryFailedDocumentProcessingJob(job: DocumentProcessingJob) {
+		if (retryingDocumentProcessingJobId === job.job_id) {
+			return;
+		}
+
+		retryingDocumentProcessingJobId = job.job_id;
+		documentProcessingJobsError = '';
+		try {
+			await retryDocumentProcessingJob(apiBaseUrl, apiToken, actorId, job.job_id, {
+				command_id: `document-processing-retry-${Date.now()}-${job.job_id}`
+			});
+			await loadDocumentProcessingJobs();
+			await reloadSelectedDocumentProcessingDetail();
+		} catch (error) {
+			documentProcessingJobsError =
+				error instanceof Error ? error.message : 'Unknown document processing retry error';
+		} finally {
+			if (retryingDocumentProcessingJobId === job.job_id) {
+				retryingDocumentProcessingJobId = null;
+			}
 		}
 	}
 
@@ -2156,10 +2205,24 @@
 							{:else}
 								{#each documentProcessingJobs.slice(0, 5) as job}
 									<div class="deadline">
-										<span>{job.document_id} · {job.step}</span>
-										<small>{job.status}{job.last_error_summary ? ` — ${job.last_error_summary}` : ''}</small>
+										<div>
+											<span>{job.document_id} · {job.step}</span>
+											<small>{job.status}{job.last_error_summary ? ` — ${job.last_error_summary}` : ''}</small>
+										</div>
+										{#if job.status === 'failed'}
+											<button
+												type="button"
+												disabled={retryingDocumentProcessingJobId === job.job_id}
+												onclick={() => void retryFailedDocumentProcessingJob(job)}
+											>
+												Retry
+											</button>
+										{/if}
 									</div>
 								{/each}
+								{#if documentProcessingDetailError}
+									<p class="muted-copy">{documentProcessingDetailError}</p>
+								{/if}
 							{/if}
 						</section>
 						<section class="panel chart-panel"><h2>Documents Insights</h2><strong>2,653</strong><span>Total Documents</span><div class="donut small"><strong>24%</strong></div></section>

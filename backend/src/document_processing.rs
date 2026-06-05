@@ -6,6 +6,8 @@ use sqlx::postgres::{PgPool, Postgres};
 use sqlx::{Row, Transaction};
 use thiserror::Error;
 
+use crate::event_log::{EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope};
+
 const DEFAULT_LIST_LIMIT: i64 = 50;
 const MAX_LIST_LIMIT: i64 = 100;
 const MIN_LIST_LIMIT: i64 = 1;
@@ -13,6 +15,10 @@ const ARTIFACT_METADATA_KIND: &str = "document_processing";
 const DEFAULT_MAX_ATTEMPTS: i32 = 3;
 const JOB_ID_PREFIX: &str = "document_processing_job:v1:";
 const ARTIFACT_ID_PREFIX: &str = "document_artifact:v1:";
+const RETRY_EVENT_TYPE: &str = "document_processing.retry_requested";
+const RETRY_EVENT_ID_PREFIX: &str = "document_processing_retry:";
+const RETRY_SOURCE_KIND: &str = "document_processing_retry";
+const RETRY_SOURCE_PROVIDER: &str = "local_api";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -139,6 +145,20 @@ pub struct DocumentProcessingRunReport {
     pub jobs_succeeded: i64,
     pub jobs_failed: i64,
     pub jobs_skipped: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DocumentProcessingRetryCommand {
+    pub command_id: String,
+    pub job_id: String,
+    pub actor_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DocumentProcessingRetryCommandResult {
+    pub job_id: String,
+    pub status: DocumentProcessingStatus,
+    pub event_id: String,
 }
 
 #[derive(Clone)]
@@ -323,6 +343,91 @@ impl DocumentProcessingStore {
         }
 
         Ok(report)
+    }
+
+    pub async fn retry_failed_job(
+        &self,
+        command: &DocumentProcessingRetryCommand,
+    ) -> Result<DocumentProcessingRetryCommandResult, DocumentProcessingError> {
+        let command_id = validate_non_empty("command_id", &command.command_id)?;
+        let job_id = validate_non_empty("job_id", &command.job_id)?;
+        let actor_id = validate_non_empty("actor_id", &command.actor_id)?;
+        let event_id = format!("{RETRY_EVENT_ID_PREFIX}{command_id}");
+
+        if let Some(result) = self
+            .retry_result_for_existing_event(&event_id, &job_id)
+            .await?
+        {
+            return Ok(result);
+        }
+
+        let mut transaction = self.pool.begin().await?;
+        let current_job = self.job_for_update(&mut transaction, &job_id).await?;
+        if current_job.status != DocumentProcessingStatus::Failed {
+            if let Some(result) = self
+                .retry_result_for_existing_event(&event_id, &job_id)
+                .await?
+            {
+                return Ok(result);
+            }
+            return Err(DocumentProcessingError::RetryRequiresFailedJob);
+        }
+
+        let event = RetryCommandEvent {
+            command_id,
+            job_id: job_id.clone(),
+            actor_id,
+            event_id: event_id.clone(),
+            occurred_at: Utc::now(),
+        }
+        .into_event()?;
+
+        if let Err(error) = EventStore::append_in_transaction(&mut transaction, &event).await {
+            if error.is_unique_violation() {
+                transaction.rollback().await?;
+                return self
+                    .retry_result_for_existing_event(&event_id, &job_id)
+                    .await?
+                    .ok_or(DocumentProcessingError::RetryCommandConflict);
+            }
+
+            return Err(DocumentProcessingError::EventStore(error));
+        }
+        let retried_job = self.requeue_failed_job(&mut transaction, &job_id).await?;
+        transaction.commit().await?;
+
+        Ok(DocumentProcessingRetryCommandResult {
+            job_id: retried_job.job_id,
+            status: retried_job.status,
+            event_id,
+        })
+    }
+
+    async fn retry_result_for_existing_event(
+        &self,
+        event_id: &str,
+        job_id: &str,
+    ) -> Result<Option<DocumentProcessingRetryCommandResult>, DocumentProcessingError> {
+        let Some(event) = EventStore::new(self.pool.clone())
+            .get_by_id(event_id)
+            .await?
+        else {
+            return Ok(None);
+        };
+
+        let Some(event_job_id) = event.payload.get("job_id").and_then(Value::as_str) else {
+            return Err(DocumentProcessingError::RetryCommandConflict);
+        };
+
+        if event.event_type != RETRY_EVENT_TYPE || event_job_id != job_id {
+            return Err(DocumentProcessingError::RetryCommandConflict);
+        }
+
+        Ok(Some(DocumentProcessingRetryCommandResult {
+            job_id: job_id.to_owned(),
+            status: DocumentProcessingStatus::Queued,
+            event_id: event_id.to_owned(),
+        }))
     }
 
     async fn run_single_job(
@@ -644,6 +749,78 @@ impl DocumentProcessingStore {
             .ok_or(DocumentProcessingError::JobNotFound)?
     }
 
+    async fn job_for_update(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        job_id: &str,
+    ) -> Result<DocumentProcessingJob, DocumentProcessingError> {
+        let row = sqlx::query(
+            r#"
+            SELECT
+                job_id,
+                document_id,
+                step,
+                status,
+                attempts,
+                max_attempts,
+                last_error_summary,
+                queued_at,
+                started_at,
+                finished_at,
+                created_at,
+                updated_at
+            FROM document_processing_jobs
+            WHERE job_id = $1
+            FOR UPDATE
+            "#,
+        )
+        .bind(job_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        row.map(try_row_to_job)
+            .ok_or(DocumentProcessingError::JobNotFound)?
+    }
+
+    async fn requeue_failed_job(
+        &self,
+        tx: &mut Transaction<'_, Postgres>,
+        job_id: &str,
+    ) -> Result<DocumentProcessingJob, DocumentProcessingError> {
+        let row = sqlx::query(
+            r#"
+            UPDATE document_processing_jobs
+            SET status = 'queued',
+                attempts = 0,
+                last_error_summary = NULL,
+                started_at = NULL,
+                finished_at = NULL,
+                updated_at = now()
+            WHERE job_id = $1
+              AND status = 'failed'
+            RETURNING
+                job_id,
+                document_id,
+                step,
+                status,
+                attempts,
+                max_attempts,
+                last_error_summary,
+                queued_at,
+                started_at,
+                finished_at,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(job_id)
+        .fetch_optional(&mut **tx)
+        .await?;
+
+        row.map(try_row_to_job)
+            .ok_or(DocumentProcessingError::RetryRequiresFailedJob)?
+    }
+
     async fn finish_job(
         &self,
         tx: &mut Transaction<'_, Postgres>,
@@ -734,6 +911,38 @@ enum DocumentProcessingRunStepResult {
 struct DocumentRecord {
     kind: String,
     extracted_text: String,
+}
+
+#[derive(Debug)]
+struct RetryCommandEvent {
+    command_id: String,
+    job_id: String,
+    actor_id: String,
+    event_id: String,
+    occurred_at: DateTime<Utc>,
+}
+
+impl RetryCommandEvent {
+    fn into_event(self) -> Result<NewEventEnvelope, DocumentProcessingError> {
+        let job_id = self.job_id;
+        Ok(NewEventEnvelope::builder(
+            self.event_id,
+            RETRY_EVENT_TYPE,
+            self.occurred_at,
+            json!({
+                "kind": RETRY_SOURCE_KIND,
+                "provider": RETRY_SOURCE_PROVIDER,
+                "source_id": self.command_id,
+            }),
+            json!({
+                "kind": "document_processing_job",
+                "job_id": job_id.clone(),
+            }),
+        )
+        .actor(json!({ "actor_id": self.actor_id }))
+        .payload(json!({ "job_id": job_id }))
+        .build()?)
+    }
 }
 
 fn job_id(document_id: &str, step: DocumentProcessingStep) -> String {
@@ -854,6 +1063,12 @@ pub enum DocumentProcessingError {
     #[error("document processing job not found")]
     JobNotFound,
 
+    #[error("document processing retry requires a failed job")]
+    RetryRequiresFailedJob,
+
+    #[error("document processing retry command conflicts with existing event")]
+    RetryCommandConflict,
+
     #[error("document not found")]
     DocumentNotFound,
 
@@ -871,6 +1086,12 @@ pub enum DocumentProcessingError {
 
     #[error("OCR backend is not available")]
     OcrBackendUnavailable,
+
+    #[error(transparent)]
+    EventEnvelope(#[from] EventEnvelopeError),
+
+    #[error(transparent)]
+    EventStore(#[from] EventStoreError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

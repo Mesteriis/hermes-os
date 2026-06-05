@@ -54,6 +54,7 @@ use crate::contact_identity::{
 };
 use crate::document_processing::{
     DocumentProcessingError, DocumentProcessingJob, DocumentProcessingRecord,
+    DocumentProcessingRetryCommand, DocumentProcessingRetryCommandResult, DocumentProcessingStatus,
     DocumentProcessingStore,
 };
 use crate::email_account_setup::{
@@ -142,6 +143,10 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route(
             "/api/v2/document-processing/jobs",
             get(get_document_processing_jobs),
+        )
+        .route(
+            "/api/v2/document-processing/jobs/{job_id}/retry",
+            post(post_document_processing_job_retry),
         )
         .route("/api/v2/identity-candidates", get(get_identity_candidates))
         .route(
@@ -712,6 +717,29 @@ async fn get_document_processing_jobs(
         .await?;
 
     Ok(Json(DocumentProcessingJobsResponse { items }))
+}
+
+async fn post_document_processing_job_retry(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(job_id): Path<String>,
+    Json(request): Json<DocumentProcessingRetryApiRequest>,
+) -> Result<Json<DocumentProcessingRetryApiResponse>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let command = request.into_command(job_id, actor.actor_id)?;
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::document_processing_job_retry(
+            &command.actor_id,
+            &command.job_id,
+        ))
+        .await?;
+
+    let result = document_processing_store(&state)?
+        .retry_failed_job(&command)
+        .await?;
+
+    Ok(Json(result.into()))
 }
 
 async fn post_gmail_oauth_start(
@@ -1290,6 +1318,46 @@ struct DocumentProcessingJobsResponse {
 }
 
 #[derive(Deserialize)]
+struct DocumentProcessingRetryApiRequest {
+    command_id: String,
+}
+
+impl DocumentProcessingRetryApiRequest {
+    fn into_command(
+        self,
+        job_id: String,
+        actor_id: String,
+    ) -> Result<DocumentProcessingRetryCommand, ApiError> {
+        let command_id =
+            validate_non_empty_document_processing_field("command_id", &self.command_id)?;
+        let job_id = validate_non_empty_document_processing_field("job_id", &job_id)?;
+
+        Ok(DocumentProcessingRetryCommand {
+            command_id,
+            job_id,
+            actor_id,
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct DocumentProcessingRetryApiResponse {
+    job_id: String,
+    status: DocumentProcessingStatus,
+    event_id: String,
+}
+
+impl From<DocumentProcessingRetryCommandResult> for DocumentProcessingRetryApiResponse {
+    fn from(result: DocumentProcessingRetryCommandResult) -> Self {
+        Self {
+            job_id: result.job_id,
+            status: result.status,
+            event_id: result.event_id,
+        }
+    }
+}
+
+#[derive(Deserialize)]
 struct TaskCandidateReviewApiRequest {
     command_id: String,
     review_state: String,
@@ -1707,6 +1775,22 @@ fn validate_non_empty_document_id(value: &str) -> Result<String, ApiError> {
     Ok(normalized.to_owned())
 }
 
+fn validate_non_empty_document_processing_field(
+    field: &'static str,
+    value: &str,
+) -> Result<String, ApiError> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err(ApiError::InvalidDocumentProcessingQuery(match field {
+            "command_id" => "command_id must not be empty",
+            "job_id" => "job_id must not be empty",
+            _ => "field must not be empty",
+        }));
+    }
+
+    Ok(normalized.to_owned())
+}
+
 fn validate_non_empty_contact_identity_field(
     field: &'static str,
     value: &str,
@@ -1908,6 +1992,18 @@ impl axum::response::IntoResponse for ApiError {
                     DocumentProcessingError::DocumentNotFound | DocumentProcessingError::JobNotFound => {
                         (StatusCode::NOT_FOUND, "document processing job was not found")
                     }
+                    DocumentProcessingError::RetryRequiresFailedJob => (
+                        StatusCode::BAD_REQUEST,
+                        "document processing retry requires a failed job",
+                    ),
+                    DocumentProcessingError::RetryCommandConflict => (
+                        StatusCode::CONFLICT,
+                        "document processing retry command conflicts with existing event",
+                    ),
+                    DocumentProcessingError::EventStore(error) if error.is_unique_violation() => (
+                        StatusCode::CONFLICT,
+                        "document processing retry command conflicts with existing event",
+                    ),
                     _ => {
                         tracing::error!(error = %error, "document processing store operation failed");
                         (StatusCode::INTERNAL_SERVER_ERROR, "document processing store operation failed")

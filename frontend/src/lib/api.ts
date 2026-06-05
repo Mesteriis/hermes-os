@@ -309,6 +309,16 @@ export type DocumentProcessingJobsResponse = {
 	items: DocumentProcessingJob[];
 };
 
+export type DocumentProcessingRetryRequest = {
+	command_id: string;
+};
+
+export type DocumentProcessingRetryResponse = {
+	job_id: string;
+	status: DocumentProcessingStatus;
+	event_id: string;
+};
+
 export async function fetchIdentityCandidates(
 	baseUrl: string,
 	token: string,
@@ -586,6 +596,23 @@ export async function fetchDocumentProcessing(
 	);
 }
 
+export async function retryDocumentProcessingJob(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	jobId: string,
+	request: DocumentProcessingRetryRequest
+): Promise<DocumentProcessingRetryResponse> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/document-processing/jobs/${encodeURIComponent(jobId)}/retry`,
+		request,
+		'Document processing retry request failed'
+	);
+}
+
 export async function reviewTaskCandidate(
 	baseUrl: string,
 	token: string,
@@ -682,7 +709,8 @@ async function postJson<TResponse>(
 	token: string,
 	actorId: string,
 	path: string,
-	body: unknown
+	body: unknown,
+	fallbackMessage = 'Account setup request failed'
 ): Promise<TResponse> {
 	const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
 	const response = await fetch(`${normalizedBaseUrl}${path}`, {
@@ -699,7 +727,7 @@ async function postJson<TResponse>(
 		const error = (await response.json().catch(() => null)) as
 			| { message?: string }
 			| null;
-		throw new Error(error?.message ?? `Account setup request failed: ${response.status}`);
+		throw new Error(error?.message ?? `${fallbackMessage}: ${response.status}`);
 	}
 
 	return (await response.json()) as TResponse;

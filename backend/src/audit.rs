@@ -220,6 +220,23 @@ impl NewApiAuditRecord {
             metadata: json!({}),
         }
     }
+
+    pub fn document_processing_job_retry(
+        actor_id: impl Into<String>,
+        job_id: impl Into<String>,
+    ) -> Self {
+        let job_id = job_id.into();
+        Self {
+            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "document_processing.job.retry".to_owned(),
+            method: "POST".to_owned(),
+            path_template: "/api/v2/document-processing/jobs/{job_id}/retry".to_owned(),
+            target_kind: "document_processing_job".to_owned(),
+            target_id: Some(job_id),
+            metadata: json!({}),
+        }
+    }
 }
 
 #[derive(Debug, Error)]
