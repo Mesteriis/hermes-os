@@ -2,7 +2,7 @@
 
 Rust backend for Hermes Hub.
 
-Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, local mail blob/attachment metadata storage, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, and read-only V2 graph core projection/read APIs backed by PostgreSQL. OS keychain resolver, full MIME parsing, attachment extraction, graph editing, AI/entity extraction, richer graph inference and agent runtime are not implemented yet.
+Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, local mail blob/attachment metadata storage, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, V2 graph core projection/read APIs, and protected V2 workflow APIs for projects, task candidates, contact identity review and document processing. OS keychain resolver, full MIME parsing, attachment extraction, graph editing, AI/entity extraction, richer graph inference and agent runtime are not implemented yet.
 
 ## Commands
 
@@ -29,6 +29,7 @@ make backend-messages-smoke-dev
 make backend-contacts-smoke-dev
 make backend-documents-smoke-dev
 make backend-graph-smoke-dev
+make backend-v2-workflow-smoke-dev
 make backend-graph-project-dev
 make backend-search-smoke-dev
 make backend-projection-smoke-dev
@@ -45,6 +46,14 @@ make backend-graph-smoke-dev
 ```
 
 This starts the local PostgreSQL container, runs graph store, projection and read API tests with `HERMES_TEST_DATABASE_URL`, then stops the Compose PostgreSQL service on exit. Do not run this while relying on the same Compose PostgreSQL service for an active development database session.
+
+V2 workflow smoke:
+
+```bash
+make backend-v2-workflow-smoke-dev
+```
+
+This starts the local PostgreSQL container, creates isolated temporary databases on the dev PostgreSQL server, and runs the project, project API, project link review, task candidate, task candidate API, contact identity, contact identity API, document processing and document processing API integration suites serially. The target is included in `make validate`.
 
 Project current V1 data into the V2 graph tables:
 
@@ -137,7 +146,7 @@ Authorized event API calls are recorded in `api_audit_log` with `actor_kind` and
 
 ## V2 Workflow APIs
 
-Available endpoints below require both `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`. Planned entries describe closure targets and are marked as planned until their acceptance gates are complete.
+Available endpoints below require both `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
 
 - `GET /api/v2/projects` - lists local project records with derived stats.
 - `GET /api/v2/projects/{project_id}` - returns project detail, timeline, messages, documents and people.
@@ -151,7 +160,7 @@ Available endpoints below require both `Authorization: Bearer <HERMES_LOCAL_API_
 - `GET /api/v2/contacts/{contact_id}/identity` - returns confirmed identity links for one contact.
 - `GET /api/v2/documents/{document_id}/processing` - returns processing jobs and artifacts for one document.
 - `GET /api/v2/document-processing/jobs` - lists recent document processing jobs.
-- `POST /api/v2/document-processing/jobs/{job_id}/retry` - planned; not available until the document-processing retry gate is complete. It will requeue a failed processing job through a canonical retry event.
+- `POST /api/v2/document-processing/jobs/{job_id}/retry` - requeues a failed processing job through a canonical retry event. The JSON body requires `command_id`; the response returns `job_id`, `status` and `event_id`.
 
 ## Migrations
 

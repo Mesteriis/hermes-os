@@ -2,7 +2,7 @@
 
 SvelteKit desktop UI for Hermes Hub, packaged by Tauri.
 
-Current scope is a desktop/laptop status shell for the local V1 backend API with provider account setup wizards for Gmail, iCloud and raw IMAP. Mobile UI is out of scope while ADR-0031 is active.
+Current scope is a desktop/laptop shell for the local backend APIs with provider account setup wizards for Gmail, iCloud and raw IMAP plus V2 graph, project, task, contact identity and document-processing workflow surfaces. Mobile UI is out of scope while ADR-0031 is active.
 
 ## Scaffold
 
@@ -61,11 +61,22 @@ POST http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/start
 POST http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/complete
 POST http://127.0.0.1:8080/api/v1/email-accounts/imap
 GET http://127.0.0.1:8080/api/v2/graph/summary
+GET http://127.0.0.1:8080/api/v2/graph/nodes?limit=<limit>
 GET http://127.0.0.1:8080/api/v2/graph/search?q=<query>&limit=<limit>
 GET http://127.0.0.1:8080/api/v2/graph/neighborhood?node_id=<node_id>&depth=1
+GET http://127.0.0.1:8080/api/v2/projects?limit=<limit>
+GET http://127.0.0.1:8080/api/v2/projects/{project_id}
+GET http://127.0.0.1:8080/api/v2/task-candidates?limit=<limit>
+PUT http://127.0.0.1:8080/api/v2/task-candidates/{task_candidate_id}/review
+GET http://127.0.0.1:8080/api/v2/tasks?limit=<limit>
+GET http://127.0.0.1:8080/api/v2/identity-candidates?limit=<limit>
+PUT http://127.0.0.1:8080/api/v2/identity-candidates/{identity_candidate_id}/review
+GET http://127.0.0.1:8080/api/v2/documents/{document_id}/processing
+GET http://127.0.0.1:8080/api/v2/document-processing/jobs?limit=<limit>
+POST http://127.0.0.1:8080/api/v2/document-processing/jobs/{job_id}/retry
 ```
 
-Requests use `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. The graph dashboard reads `/api/v2/graph/summary`; the read-only graph explorer searches non-empty queries through `/api/v2/graph/search` and loads depth-1 neighborhoods through `/api/v2/graph/neighborhood`. Account setup also requires backend `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`.
+Requests use `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. The graph dashboard reads `/api/v2/graph/summary`; the graph explorer searches non-empty queries through `/api/v2/graph/search` and loads depth-1 neighborhoods through `/api/v2/graph/neighborhood`. The workflow tabs use protected project, task candidate, active task, contact identity and document-processing endpoints. Account setup also requires backend `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`.
 
 The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_TOKEN=change-me-local-api-token`, or the frontend must be started with matching Vite public overrides:
 
@@ -80,17 +91,25 @@ The placeholder token is for local development only and must match the backend l
 
 ## V2 Desktop Surfaces
 
-The desktop shell is intentionally desktop/laptop scoped under ADR-0031. Current V2 desktop surfaces and closure targets are:
+The desktop shell is intentionally desktop/laptop scoped under ADR-0031. Current V2 desktop surfaces are:
 
 - Current: Knowledge Graph explorer using graph summary, node picker, search and neighborhood APIs.
-- Current: Projects tab using project records, timelines and project detail APIs. Project link review controls are V2 closure work.
+- Current: Projects tab using project records, timelines and project detail APIs.
 - Current: Tasks tab using task candidate, task candidate review and active task APIs.
-- Current: Contacts identity review surface using identity candidate list and review APIs. Confirmed identity-link detail and explicit split review are V2 closure work.
-- Current: Document processing status surface using the document-processing jobs API. Artifact detail wiring and failed-job retry controls are V2 closure work.
+- Current: Contacts identity review surface using identity candidate list, review APIs and explicit split review controls.
+- Current: Document processing status surface using the document-processing jobs API and failed-job retry controls.
 
 Validate frontend changes with:
 
 ```sh
 pnpm check
 pnpm build
+```
+
+From the repository root, the V2 closure validation path is:
+
+```sh
+make frontend-check
+make frontend-build
+make validate
 ```
