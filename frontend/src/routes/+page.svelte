@@ -150,6 +150,7 @@
 	let graphSearchError = $state('');
 	let isGraphSearchLoading = $state(false);
 	let graphSearchSubmitted = $state(false);
+	let lastSubmittedGraphSearchQuery = $state('');
 	let graphNeighborhood = $state<GraphNeighborhood | null>(null);
 	let graphNeighborhoodError = $state('');
 	let isGraphNeighborhoodLoading = $state(false);
@@ -489,7 +490,7 @@
 	const selectedGraphProperties = $derived(
 		selectedGraphNode ? graphPropertyRows(selectedGraphNode.properties) : []
 	);
-	const graphNeighborCounts = $derived(graphKindCounts(graphNeighborhood?.nodes ?? []));
+	const graphNeighborCounts = $derived(graphKindCounts(graphNeighborNodes(graphNeighborhood)));
 	const graphFilterChips = $derived(buildGraphFilterChips(graphSummary));
 
 	onMount(() => {
@@ -523,6 +524,7 @@
 		const requestSequence = ++graphSearchRequestSequence;
 		const query = graphSearchQuery.trim();
 		graphSearchSubmitted = true;
+		lastSubmittedGraphSearchQuery = query;
 
 		if (!query) {
 			graphSearchResults = [];
@@ -927,6 +929,15 @@
 				}
 			];
 		});
+	}
+
+	function graphNeighborNodes(neighborhood: GraphNeighborhood | null): GraphNode[] {
+		if (!neighborhood) {
+			return [];
+		}
+		return neighborhood.nodes.filter(
+			(node) => node.node_id !== neighborhood.selected_node.node_id
+		);
 	}
 
 	function graphKindCounts(nodes: GraphNode[]): Array<{ kind: GraphNodeKind; count: number }> {
@@ -1590,7 +1601,7 @@
 							</button>
 						</div>
 
-						<div class="graph-search-strip">
+						<div class="graph-search-strip" aria-live="polite" aria-busy={isGraphSearchLoading}>
 							{#if graphSearchError}
 								<div class="graph-strip-message error">
 									<span>{graphSearchError}</span>
@@ -1610,9 +1621,9 @@
 										</button>
 									{/each}
 								</div>
-							{:else if graphSearchSubmitted && graphSearchQuery.trim()}
+							{:else if graphSearchSubmitted && lastSubmittedGraphSearchQuery}
 								<div class="graph-strip-message">
-									<span>No graph nodes found for "{graphSearchQuery.trim()}".</span>
+									<span>No graph nodes found for "{lastSubmittedGraphSearchQuery}".</span>
 								</div>
 							{:else}
 								<div class="graph-strip-message">
@@ -1621,7 +1632,7 @@
 							{/if}
 						</div>
 
-						<div class="knowledge-canvas">
+						<div class="knowledge-canvas" aria-busy={isGraphNeighborhoodLoading}>
 							{#if graphError && !graphSummary}
 								<div class="graph-state-card error">
 									<Icon icon="tabler:alert-triangle" width="26" height="26" />
@@ -1683,7 +1694,7 @@
 								</div>
 							{/if}
 							{#if isGraphNeighborhoodLoading}
-								<div class="graph-loading-overlay">
+								<div class="graph-loading-overlay" role="status" aria-live="polite">
 									<Icon icon="tabler:loader-2" width="22" height="22" />
 									<span>Loading neighborhood</span>
 								</div>
@@ -1717,11 +1728,11 @@
 										<li>{formatGraphKind(row.key)} <em>{row.value}</em></li>
 									{/each}
 								</ul>
-								{#if graphNeighborhoodError}
-									<p class="inline-error">{graphNeighborhoodError}</p>
-								{/if}
 							{:else}
 								<p>Select a search result to inspect graph metadata and evidence.</p>
+							{/if}
+							{#if graphNeighborhoodError}
+								<p class="inline-error" role="status" aria-live="polite">{graphNeighborhoodError}</p>
 							{/if}
 						</section>
 
