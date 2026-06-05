@@ -161,10 +161,16 @@ fn multipart_parts<'a>(boundary: &str, body: &'a str) -> Vec<(Vec<(String, Strin
             continue;
         };
         let headers = parse_headers(headers);
-        parts.push((headers, nested_body));
+        parts.push((headers, trim_multipart_part_body(nested_body)));
     }
 
     parts
+}
+
+fn trim_multipart_part_body(body: &str) -> &str {
+    body.strip_suffix("\r\n")
+        .or_else(|| body.strip_suffix('\n'))
+        .unwrap_or(body)
 }
 
 fn parsed_attachment_from_part(
@@ -235,16 +241,87 @@ fn header_media_type(value: &str) -> String {
 }
 
 fn header_parameter(value: &str, parameter: &str) -> Option<String> {
+    let mut plain_parameter = None;
+    let mut encoded_parameter = None;
+
     for part in value.split(';').skip(1) {
         let Some((name, value)) = part.split_once('=') else {
             continue;
         };
-        if name.trim().eq_ignore_ascii_case(parameter) {
-            return Some(value.trim().trim_matches('"').to_owned());
+        let name = name.trim();
+        if name.eq_ignore_ascii_case(parameter) {
+            plain_parameter = Some(unquote_header_parameter_value(value));
+            continue;
+        }
+        if let Some(base_name) = name.strip_suffix('*') {
+            if base_name.eq_ignore_ascii_case(parameter) {
+                encoded_parameter = Some(decode_rfc2231_parameter_value(value));
+            }
         }
     }
 
-    None
+    encoded_parameter.or(plain_parameter)
+}
+
+fn unquote_header_parameter_value(value: &str) -> String {
+    let value = value.trim();
+    let value = value
+        .strip_prefix('"')
+        .and_then(|stripped| stripped.strip_suffix('"'))
+        .unwrap_or(value);
+    let mut output = String::with_capacity(value.len());
+    let mut escaped = false;
+
+    for character in value.chars() {
+        if escaped {
+            output.push(character);
+            escaped = false;
+            continue;
+        }
+        if character == '\\' {
+            escaped = true;
+            continue;
+        }
+        output.push(character);
+    }
+
+    if escaped {
+        output.push('\\');
+    }
+
+    output
+}
+
+fn decode_rfc2231_parameter_value(value: &str) -> String {
+    let value = unquote_header_parameter_value(value);
+    let encoded_value = value
+        .split_once('\'')
+        .and_then(|(_, rest)| rest.split_once('\'').map(|(_, encoded)| encoded))
+        .unwrap_or(&value);
+
+    String::from_utf8_lossy(&percent_decode_bytes(encoded_value)).into_owned()
+}
+
+fn percent_decode_bytes(value: &str) -> Vec<u8> {
+    let bytes = value.as_bytes();
+    let mut output = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+
+    while index < bytes.len() {
+        if bytes[index] == b'%' {
+            if let (Some(high), Some(low)) = (bytes.get(index + 1), bytes.get(index + 2)) {
+                if let (Some(high), Some(low)) = (hex_value(*high), hex_value(*low)) {
+                    output.push((high << 4) | low);
+                    index += 3;
+                    continue;
+                }
+            }
+        }
+        output.push(bytes[index]);
+        index += 1;
+    }
+
+    output
 }
 
 fn decode_transfer_body(body: &str, transfer_encoding: &str) -> String {
