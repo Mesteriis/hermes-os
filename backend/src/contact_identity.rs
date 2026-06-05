@@ -158,6 +158,53 @@ impl ContactIdentityStore {
             count += 1;
         }
 
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                merge.left_contact_id,
+                merge.right_contact_id
+            FROM contact_identity_candidates merge
+            WHERE merge.candidate_kind = 'merge_contacts'
+              AND merge.review_state = 'user_confirmed'
+              AND merge.right_contact_id IS NOT NULL
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM contact_identity_candidates split
+                  WHERE split.candidate_kind = 'split_contact'
+                    AND split.left_contact_id = merge.left_contact_id
+                    AND split.right_contact_id = merge.right_contact_id
+              )
+            ORDER BY merge.updated_at DESC, merge.identity_candidate_id
+            LIMIT $1
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        for row in rows {
+            let left = row.try_get::<String, _>("left_contact_id")?;
+            let right = row.try_get::<String, _>("right_contact_id")?;
+            let candidate = ContactIdentityCandidatePayload {
+                candidate_kind: ContactIdentityCandidateKind::SplitContact,
+                left_contact_id: left.clone(),
+                right_contact_id: Some(right.clone()),
+                email_address: None,
+                evidence_summary: format!(
+                    "Previously confirmed merge can be split: {left} and {right}"
+                ),
+                confidence: 1.0,
+            };
+            upsert_candidate(
+                &self.pool,
+                &candidate,
+                candidate.identity_candidate_id(),
+                ContactIdentityReviewState::Suggested,
+            )
+            .await?;
+            count += 1;
+        }
+
         Ok(count)
     }
 
@@ -292,9 +339,20 @@ impl ContactIdentityStore {
                 generated_at,
                 reviewed_at,
                 updated_at
-            FROM contact_identity_candidates
-            WHERE (left_contact_id = $1 OR right_contact_id = $1)
-              AND review_state = 'user_confirmed'
+            FROM contact_identity_candidates merge
+            WHERE (merge.left_contact_id = $1 OR merge.right_contact_id = $1)
+              AND merge.candidate_kind = 'merge_contacts'
+              AND merge.review_state = 'user_confirmed'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM contact_identity_candidates split
+                  WHERE split.candidate_kind = 'split_contact'
+                    AND split.review_state = 'user_confirmed'
+                    AND LEAST(split.left_contact_id, split.right_contact_id) =
+                        LEAST(merge.left_contact_id, merge.right_contact_id)
+                    AND GREATEST(split.left_contact_id, split.right_contact_id) =
+                        GREATEST(merge.left_contact_id, merge.right_contact_id)
+              )
             ORDER BY updated_at DESC, identity_candidate_id
             "#,
         )

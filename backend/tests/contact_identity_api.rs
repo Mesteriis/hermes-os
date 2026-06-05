@@ -74,6 +74,10 @@ async fn identity_candidates_returns_safe_candidate_payload() {
         .refresh_candidates(100)
         .await
         .expect("refresh candidates");
+    let candidate_id = identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
+    promote_identity_candidate(&pool, &candidate_id)
+        .await
+        .expect("promote candidate");
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
@@ -86,7 +90,7 @@ async fn identity_candidates_returns_safe_candidate_payload() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v2/identity-candidates",
+            "/api/v2/identity-candidates?limit=100",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -97,7 +101,6 @@ async fn identity_candidates_returns_safe_candidate_payload() {
     let items = body["items"].as_array().expect("items");
     assert!(!items.is_empty());
 
-    let candidate_id = identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
     let item = items
         .iter()
         .find(|value| value["identity_candidate_id"] == json!(candidate_id))
@@ -109,6 +112,101 @@ async fn identity_candidates_returns_safe_candidate_payload() {
     assert_eq!(item["right_contact_id"], json!(right.contact_id));
     assert!(item["evidence_summary"].is_string());
     assert!(item["confidence"].is_number());
+}
+
+#[tokio::test]
+async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skipping live contact identity API test: HERMES_TEST_DATABASE_URL is not set");
+        return;
+    };
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+
+    let contact_store = ContactProjectionStore::new(pool.clone());
+    let shared_name = format!("Identity Api Split {suffix}");
+
+    let left = contact_store
+        .upsert_email_contact(&format!("split-left-{suffix}@example.com"))
+        .await
+        .expect("upsert left contact");
+    let right = contact_store
+        .upsert_email_contact(&format!("split-right-{suffix}@example.com"))
+        .await
+        .expect("upsert right contact");
+    seed_normalized_contacts(&pool, &left.contact_id, &right.contact_id, &shared_name)
+        .await
+        .expect("seed display names");
+
+    let store = ContactIdentityStore::new(pool.clone());
+    let _ = store
+        .refresh_candidates(100)
+        .await
+        .expect("refresh candidates");
+    let merge_candidate_id =
+        identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
+    let command_id = format!("identity-api-split-confirm-{suffix}");
+
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let response = app
+        .clone()
+        .oneshot(json_put_request_with_actor(
+            &format!("/api/v2/identity-candidates/{merge_candidate_id}/review"),
+            json!({
+                "command_id": command_id,
+                "review_state": "user_confirmed",
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let _ = store
+        .refresh_candidates(100)
+        .await
+        .expect("refresh split candidates");
+    let split_candidate_id =
+        split_identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
+    promote_identity_candidate(&pool, &split_candidate_id)
+        .await
+        .expect("promote split candidate");
+
+    let response = app
+        .oneshot(get_request_with_token(
+            "/api/v2/identity-candidates?limit=100",
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    let items = body["items"].as_array().expect("items");
+    let split_item = items
+        .iter()
+        .find(|value| value["identity_candidate_id"] == json!(split_candidate_id))
+        .expect("split candidate payload");
+
+    assert_eq!(split_item["candidate_kind"], "split_contact");
+    assert_eq!(split_item["review_state"], "suggested");
+    let evidence_summary = split_item["evidence_summary"]
+        .as_str()
+        .expect("evidence summary");
+    assert!(evidence_summary.starts_with("Previously confirmed merge can be split:"));
+    assert!(evidence_summary.contains(&left.contact_id));
+    assert!(evidence_summary.contains(&right.contact_id));
 }
 
 #[tokio::test]
@@ -360,9 +458,39 @@ async fn seed_normalized_contacts(
     Ok(())
 }
 
+async fn promote_identity_candidate(
+    pool: &PgPool,
+    identity_candidate_id: &str,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        r#"
+        UPDATE contact_identity_candidates
+        SET updated_at = clock_timestamp()
+        WHERE identity_candidate_id = $1
+        "#,
+    )
+    .bind(identity_candidate_id)
+    .execute(pool)
+    .await
+    .map(|result| {
+        assert_eq!(
+            result.rows_affected(),
+            1,
+            "identity candidate should exist before list promotion"
+        );
+    })?;
+
+    Ok(())
+}
+
 fn identity_candidate_id_from_contacts(left_id: &str, right_id: &str) -> String {
     let (left_contact_id, right_contact_id) = ordered_contact_ids(left_id, right_id);
     format!("identity_candidate:v1:merge_contacts:{left_contact_id}:{right_contact_id}")
+}
+
+fn split_identity_candidate_id_from_contacts(left_id: &str, right_id: &str) -> String {
+    let (left_contact_id, right_contact_id) = ordered_contact_ids(left_id, right_id);
+    format!("identity_candidate:v1:split_contact:{left_contact_id}:{right_contact_id}")
 }
 
 fn ordered_contact_ids(left_id: &str, right_id: &str) -> (String, String) {

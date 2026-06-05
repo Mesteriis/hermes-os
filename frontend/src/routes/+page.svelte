@@ -553,6 +553,14 @@
 	const suggestedIdentityCandidates = $derived(
 		identityCandidates.filter((item) => item.review_state === 'suggested')
 	);
+	const confirmedMergeIdentityCandidates = $derived(
+		identityCandidates.filter(
+			(item) =>
+				item.candidate_kind === 'merge_contacts' &&
+				item.review_state === 'user_confirmed' &&
+				!confirmedSplitCandidateForMerge(item)
+		)
+	);
 
 	onMount(() => {
 		void loadV1Status();
@@ -789,6 +797,29 @@
 		} catch (error) {
 			identityCandidatesError =
 				error instanceof Error ? error.message : 'Unknown identity review error';
+		}
+	}
+
+	async function splitConfirmedIdentityMerge(candidate: ContactIdentityCandidate) {
+		const splitCandidate = splitCandidateForConfirmedMerge(candidate);
+		if (!splitCandidate) {
+			return;
+		}
+
+		const commandId = `contact-identity-split-${Date.now()}-${candidate.identity_candidate_id}`;
+		try {
+			await reviewIdentityCandidate(
+				apiBaseUrl,
+				apiToken,
+				actorId,
+				splitCandidate.identity_candidate_id,
+				'user_confirmed',
+				commandId
+			);
+			await loadIdentityCandidates();
+		} catch (error) {
+			identityCandidatesError =
+				error instanceof Error ? error.message : 'Unknown identity split review error';
 		}
 	}
 
@@ -1307,6 +1338,39 @@
 		return `${Math.round(item.confidence * 100)}%`;
 	}
 
+	function splitCandidateForConfirmedMerge(candidate: ContactIdentityCandidate) {
+		return splitCandidateForMerge(candidate, 'suggested');
+	}
+
+	function confirmedSplitCandidateForMerge(candidate: ContactIdentityCandidate) {
+		return splitCandidateForMerge(candidate, 'user_confirmed');
+	}
+
+	function splitCandidateForMerge(
+		candidate: ContactIdentityCandidate,
+		reviewState: ContactIdentityReviewState
+	) {
+		if (!candidate.right_contact_id) {
+			return null;
+		}
+		const pairKey = contactIdentityPairKey(candidate.left_contact_id, candidate.right_contact_id);
+		return (
+			identityCandidates.find(
+				(item) =>
+					item.candidate_kind === 'split_contact' &&
+					item.review_state === reviewState &&
+					item.right_contact_id !== null &&
+					contactIdentityPairKey(item.left_contact_id, item.right_contact_id) === pairKey
+			) ?? null
+		);
+	}
+
+	function contactIdentityPairKey(leftContactId: string, rightContactId: string) {
+		return leftContactId <= rightContactId
+			? `${leftContactId}:${rightContactId}`
+			: `${rightContactId}:${leftContactId}`;
+	}
+
 	function taskCreatedTime(value: string | null) {
 		if (!value) {
 			return '';
@@ -1726,7 +1790,7 @@
 								<p class="inline-copy">Loading identity suggestions…</p>
 							{:else if identityCandidatesError}
 								<p class="inline-error">{identityCandidatesError}</p>
-							{:else if suggestedIdentityCandidates.length === 0}
+							{:else if suggestedIdentityCandidates.length === 0 && confirmedMergeIdentityCandidates.length === 0}
 								<p class="inline-copy">No identity suggestions right now.</p>
 							{:else}
 								{#each suggestedIdentityCandidates as candidate}
@@ -1746,6 +1810,31 @@
 											<button type="button" onclick={() => void setIdentityCandidateReview(candidate, 'user_rejected')}>
 												<Icon icon="tabler:x" width="15" height="15" />
 												Reject
+											</button>
+										</div>
+									</div>
+								{/each}
+								{#each confirmedMergeIdentityCandidates as candidate}
+									{@const splitCandidate = splitCandidateForConfirmedMerge(candidate)}
+									<div class="identity-candidate-row">
+										<div>
+											<strong>{candidate.candidate_kind}</strong>
+											<p>{candidate.evidence_summary}</p>
+											<small>Left: {candidate.left_contact_id}</small>
+											<small>Right: {candidate.right_contact_id ?? 'N/A'}</small>
+											<small>Confidence: {identityConfidence(candidate)} · {candidate.review_state}</small>
+										</div>
+										<div class="identity-actions">
+											<button
+												type="button"
+												disabled={splitCandidate === null}
+												title={splitCandidate === null
+													? 'Refresh identity candidates to create a split review for this confirmed link'
+													: undefined}
+												onclick={() => void splitConfirmedIdentityMerge(candidate)}
+											>
+												<Icon icon="tabler:arrows-split" width="15" height="15" />
+												Split
 											</button>
 										</div>
 									</div>

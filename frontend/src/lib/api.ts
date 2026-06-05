@@ -610,7 +610,8 @@ export async function reviewIdentityCandidate(
 	token: string,
 	actorId: string,
 	identityCandidateId: string,
-	reviewState: ContactIdentityReviewState
+	reviewState: ContactIdentityReviewState,
+	commandId = `contact-identity-review-${crypto.randomUUID()}`
 ) {
 	return putJson(
 		baseUrl,
@@ -618,7 +619,7 @@ export async function reviewIdentityCandidate(
 		actorId,
 		`/api/v2/identity-candidates/${encodeURIComponent(identityCandidateId)}/review`,
 		{
-			command_id: `contact-identity-review-${crypto.randomUUID()}`,
+			command_id: commandId,
 			review_state: reviewState
 		}
 	);
