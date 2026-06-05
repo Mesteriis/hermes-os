@@ -1675,7 +1675,11 @@
 								{#each graphCanvasNodes as node}
 									<button
 										type="button"
-										class="graph-node kind-{node.node_kind}"
+										class="graph-node"
+										class:kind-person={node.node_kind === 'person'}
+										class:kind-email_address={node.node_kind === 'email_address'}
+										class:kind-message={node.node_kind === 'message'}
+										class:kind-document={node.node_kind === 'document'}
 										class:selected={node.isSelected}
 										style={`left:${node.x}%; top:${node.y}%`}
 										onclick={() => void selectGraphNode(node)}
@@ -1746,7 +1750,7 @@
 									</div>
 								{/each}
 							{:else}
-								<p>No selected neighborhood.</p>
+								<p>No returned connections.</p>
 							{/if}
 						</section>
 
@@ -3823,6 +3827,15 @@
 		margin-top: 2px;
 	}
 
+	.graph-filter-tabs em {
+		border-radius: 999px;
+		background: rgba(142, 174, 174, 0.16);
+		color: #d5e7e5;
+		font-size: 10px;
+		font-style: normal;
+		padding: 2px 7px;
+	}
+
 	.knowledge-layout {
 		grid-template-columns: minmax(760px, 1fr) 310px;
 		min-height: 760px;
@@ -3830,7 +3843,8 @@
 
 	.graph-workbench {
 		display: grid;
-		grid-template-rows: auto minmax(0, 1fr) auto;
+		grid-template-rows: auto auto minmax(0, 1fr) auto;
+		overflow: hidden;
 	}
 
 	.graph-toolbar {
@@ -3839,13 +3853,119 @@
 		padding: 12px;
 	}
 
-	.graph-toolbar button {
+	.graph-search-form {
+		display: grid;
+		grid-template-columns: auto minmax(260px, 1fr) auto;
+		gap: 10px;
+		align-items: center;
+		flex: 1;
+		min-height: 38px;
+		border: 1px solid rgba(111, 205, 195, 0.14);
+		border-radius: 8px;
+		background: rgba(4, 21, 24, 0.72);
+		padding: 0 8px 0 12px;
+		color: #9fb8b6;
+	}
+
+	.graph-search-form input {
+		width: 100%;
+		border: 0;
+		outline: 0;
+		background: transparent;
+		color: #edf8f6;
+		font-size: 13px;
+	}
+
+	.graph-toolbar button,
+	.graph-search-form button,
+	.graph-strip-message button,
+	.graph-state-card button {
 		min-height: 34px;
 		border: 1px solid rgba(111, 205, 195, 0.14);
 		border-radius: 7px;
 		background: rgba(4, 21, 24, 0.72);
 		color: #dcefed;
 		padding: 0 12px;
+		transition:
+			border-color 160ms ease,
+			background 160ms ease,
+			color 160ms ease,
+			transform 160ms ease;
+	}
+
+	.graph-search-form button:not(:disabled):hover,
+	.graph-strip-message button:not(:disabled):hover,
+	.graph-state-card button:not(:disabled):hover {
+		border-color: rgba(45, 240, 206, 0.38);
+		background: rgba(25, 154, 132, 0.18);
+		color: #2df0ce;
+		transform: translateY(-1px);
+	}
+
+	.graph-search-strip {
+		min-height: 54px;
+		border-top: 1px solid rgba(82, 204, 190, 0.08);
+		border-bottom: 1px solid rgba(82, 204, 190, 0.08);
+		padding: 9px 12px;
+	}
+
+	.graph-result-row {
+		display: flex;
+		gap: 8px;
+		overflow-x: auto;
+		padding-bottom: 2px;
+	}
+
+	.graph-result-row button {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+		flex: 0 0 auto;
+		max-width: 240px;
+		min-height: 34px;
+		border: 1px solid rgba(111, 205, 195, 0.14);
+		border-radius: 8px;
+		background: rgba(7, 29, 33, 0.76);
+		color: #dcefed;
+		padding: 0 10px;
+		transition:
+			border-color 160ms ease,
+			background 160ms ease,
+			color 160ms ease;
+	}
+
+	.graph-result-row button.active,
+	.graph-result-row button:hover {
+		border-color: rgba(45, 240, 206, 0.42);
+		background: rgba(25, 154, 132, 0.2);
+		color: #2df0ce;
+	}
+
+	.graph-result-row span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.graph-result-row em {
+		color: #8eaead;
+		font-size: 10px;
+		font-style: normal;
+		white-space: nowrap;
+	}
+
+	.graph-strip-message {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		min-height: 34px;
+		color: #a7bbba;
+		font-size: 12px;
+	}
+
+	.graph-strip-message.error {
+		color: #ffabab;
 	}
 
 	.knowledge-canvas {
@@ -3859,70 +3979,181 @@
 		background-size: auto, 30px 30px, 30px 30px;
 	}
 
-	.knowledge-core {
+	.graph-edge-layer {
+		position: absolute;
+		inset: 0;
+		width: 100%;
+		height: 100%;
+		pointer-events: none;
+	}
+
+	.graph-edge-layer line {
+		stroke: rgba(45, 240, 206, 0.2);
+		stroke-width: 0.14;
+		vector-effect: non-scaling-stroke;
+		transition: stroke 180ms ease;
+	}
+
+	.graph-edge-layer line.reviewed {
+		stroke: rgba(45, 240, 206, 0.42);
+	}
+
+	.graph-edge-label {
+		position: absolute;
+		z-index: 2;
+		max-width: 120px;
+		border: 1px solid rgba(45, 240, 206, 0.12);
+		border-radius: 999px;
+		background: rgba(5, 22, 25, 0.82);
+		color: #8fece1;
+		font-size: 10px;
+		padding: 3px 7px;
+		transform: translate(-50%, -50%);
+		white-space: nowrap;
+		pointer-events: none;
+	}
+
+	.graph-node {
+		position: absolute;
+		z-index: 3;
+		display: grid;
+		place-items: center;
+		gap: 4px;
+		width: 118px;
+		min-height: 74px;
+		border: 1px solid rgba(45, 240, 206, 0.18);
+		border-radius: 8px;
+		background: rgba(6, 30, 34, 0.9);
+		color: #dcefed;
+		padding: 9px;
+		transform: translate(-50%, -50%);
+		transition:
+			border-color 180ms ease,
+			background 180ms ease,
+			box-shadow 180ms ease,
+			transform 180ms ease;
+	}
+
+	.graph-node:hover {
+		border-color: rgba(45, 240, 206, 0.44);
+		background: rgba(8, 44, 48, 0.94);
+		transform: translate(-50%, -50%) scale(1.02);
+	}
+
+	.graph-node.selected {
+		width: 138px;
+		min-height: 92px;
+		border-color: rgba(45, 240, 206, 0.72);
+		background: rgba(7, 50, 51, 0.94);
+		box-shadow:
+			0 0 0 1px rgba(45, 240, 206, 0.2),
+			0 0 34px rgba(45, 240, 206, 0.2);
+	}
+
+	.graph-node strong {
+		max-width: 100%;
+		overflow: hidden;
+		text-align: center;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.graph-node span {
+		color: #8eaead;
+		font-size: 10px;
+	}
+
+	.graph-node.kind-person {
+		border-color: rgba(43, 235, 175, 0.28);
+	}
+
+	.graph-node.kind-email_address,
+	.graph-node.kind-message {
+		border-color: rgba(44, 174, 255, 0.28);
+	}
+
+	.graph-node.kind-document {
+		border-color: rgba(142, 98, 255, 0.28);
+	}
+
+	.graph-state-card {
+		position: absolute;
 		top: 50%;
 		left: 50%;
-		width: 112px;
-		height: 112px;
+		display: grid;
+		justify-items: center;
+		gap: 10px;
+		width: min(420px, 72%);
+		border: 1px solid rgba(82, 204, 190, 0.14);
+		border-radius: 8px;
+		background: rgba(5, 22, 25, 0.78);
+		color: #dcefed;
+		padding: 28px;
+		text-align: center;
 		transform: translate(-50%, -50%);
 	}
 
-	.knowledge-core img {
-		width: 58px;
-		height: 58px;
+	.graph-state-card.error {
+		border-color: rgba(255, 110, 110, 0.3);
+		background: rgba(128, 32, 40, 0.22);
+	}
+
+	.graph-state-card img {
+		width: 56px;
+		height: 56px;
 		object-fit: contain;
 	}
 
-	.knowledge-core strong {
-		position: absolute;
-		top: 122px;
-		width: 140px;
-		text-align: center;
-		color: #fff;
+	.graph-state-card h2 {
+		margin: 0;
+		font-size: 18px;
 	}
 
-	.knowledge-core span {
-		position: absolute;
-		top: 150px;
-		border-radius: 4px;
-		background: rgba(45, 240, 206, 0.15);
-		color: #2df0ce;
-		font-size: 11px;
-		padding: 3px 8px;
+	.graph-state-card p {
+		margin: 0;
+		color: #9fb8b6;
+		line-height: 1.5;
 	}
 
-	.graph-bucket {
+	.graph-loading-overlay {
 		position: absolute;
-		width: 140px;
+		right: 18px;
+		bottom: 18px;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
 		border: 1px solid rgba(45, 240, 206, 0.18);
-		border-radius: 8px;
-		background: rgba(6, 30, 34, 0.88);
-		transform: translate(-50%, -50%);
+		border-radius: 999px;
+		background: rgba(5, 22, 25, 0.86);
+		color: #2df0ce;
+		padding: 8px 12px;
 	}
 
-	.graph-bucket header {
+	.graph-status-bar {
 		display: flex;
-		justify-content: space-between;
-		background: rgba(45, 240, 206, 0.08);
-		padding: 7px 9px;
+		gap: 16px;
+		align-items: center;
+		min-height: 46px;
+		border-top: 1px solid rgba(82, 204, 190, 0.08);
+		padding: 0 14px;
+		color: #a6bbbb;
+		font-size: 12px;
 	}
 
-	.graph-bucket strong {
+	.evidence-row {
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		padding: 10px 0;
+	}
+
+	.evidence-row strong {
 		color: #2df0ce;
 		font-size: 12px;
 	}
 
-	.graph-bucket em {
-		color: #a6bbbb;
-		font-size: 10px;
-		font-style: normal;
-	}
-
-	.graph-bucket p {
-		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
-		color: #dcefed;
-		font-size: 11px;
-		padding: 8px 9px;
+	.evidence-row p {
+		margin: 5px 0 0;
+		color: #a7bbba;
+		line-height: 1.4;
 	}
 
 	.timeline-slider {
