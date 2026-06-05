@@ -1,3 +1,5 @@
+use base64::Engine as _;
+use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -7,6 +9,7 @@ use crate::communications::{
     NewIngestionCheckpoint, NewRawCommunicationRecord, ProviderAccount,
     ProviderAccountSecretPurpose,
 };
+use crate::mail_storage::{LocalMailBlobStore, MailStorageError, MailStorageStore, NewMailBlob};
 
 const EMAIL_MESSAGE_RECORD_KIND: &str = "email_message";
 
@@ -52,6 +55,13 @@ pub struct EmailSyncBatch {
 pub struct EmailSyncImportReport {
     pub inserted_or_existing_records: usize,
     pub checkpoint_saved: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmailSyncBlobImportReport {
+    pub inserted_or_existing_records: usize,
+    pub checkpoint_saved: bool,
+    pub blobs_upserted: usize,
 }
 
 pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, EmailSyncPlanError> {
@@ -154,6 +164,77 @@ pub async fn record_email_sync_batch(
     Ok(EmailSyncImportReport {
         inserted_or_existing_records,
         checkpoint_saved,
+    })
+}
+
+pub async fn record_email_sync_batch_with_mail_blobs(
+    store: &CommunicationIngestionStore,
+    mail_store: &MailStorageStore,
+    blob_store: &LocalMailBlobStore,
+    account_id: &str,
+    import_batch_id: &str,
+    batch: &EmailSyncBatch,
+) -> Result<EmailSyncBlobImportReport, EmailSyncRecordError> {
+    let account_id = validate_non_empty("account_id", account_id)?;
+    let import_batch_id = validate_non_empty("import_batch_id", import_batch_id)?;
+    validate_non_empty("stream_id", &batch.stream_id)?;
+
+    let mut inserted_or_existing_records = 0;
+    let mut blobs_upserted = 0;
+    for message in &batch.messages {
+        let raw_bytes = raw_message_bytes(batch.provider_kind, &message.payload)?;
+        let local_blob = blob_store.put_blob(&raw_bytes).await?;
+        let stored_blob = mail_store
+            .upsert_blob(&NewMailBlob::from_local_blob(&local_blob).content_type("message/rfc822"))
+            .await?;
+        let payload = payload_with_raw_blob_reference(&message.payload, &stored_blob)?;
+
+        let mut raw_record = NewRawCommunicationRecord::new(
+            raw_record_id(
+                &account_id,
+                EMAIL_MESSAGE_RECORD_KIND,
+                &message.provider_record_id,
+            ),
+            &account_id,
+            EMAIL_MESSAGE_RECORD_KIND,
+            &message.provider_record_id,
+            &message.source_fingerprint,
+            &import_batch_id,
+            payload,
+        )
+        .provenance(json!({
+            "source": "email_provider_sync",
+            "provider": batch.provider_kind.as_str(),
+            "stream_id": batch.stream_id,
+            "raw_storage": stored_blob.storage_kind
+        }));
+
+        if let Some(occurred_at) = message.occurred_at {
+            raw_record = raw_record.occurred_at(occurred_at);
+        }
+
+        store.record_raw_source(&raw_record).await?;
+        inserted_or_existing_records += 1;
+        blobs_upserted += 1;
+    }
+
+    let checkpoint_saved = if let Some(checkpoint) = &batch.checkpoint {
+        store
+            .save_checkpoint(&NewIngestionCheckpoint::new(
+                &account_id,
+                &batch.stream_id,
+                checkpoint.clone(),
+            ))
+            .await?;
+        true
+    } else {
+        false
+    };
+
+    Ok(EmailSyncBlobImportReport {
+        inserted_or_existing_records,
+        checkpoint_saved,
+        blobs_upserted,
     })
 }
 
@@ -322,6 +403,62 @@ fn append_raw_record_id_component(encoded: &mut String, value: &str) {
     encoded.push_str(value);
 }
 
+fn raw_message_bytes(
+    provider_kind: EmailProviderKind,
+    payload: &Value,
+) -> Result<Vec<u8>, EmailSyncRecordError> {
+    match provider_kind {
+        EmailProviderKind::Gmail => {
+            let raw = required_payload_string(payload, "raw_base64url")?;
+            URL_SAFE_NO_PAD
+                .decode(raw)
+                .or_else(|_| URL_SAFE.decode(raw))
+                .map_err(|source| EmailSyncRecordError::InvalidRawPayloadBase64 {
+                    field: "raw_base64url",
+                    source,
+                })
+        }
+        EmailProviderKind::Icloud | EmailProviderKind::Imap => {
+            let raw = required_payload_string(payload, "raw_rfc822_base64")?;
+            BASE64_STANDARD.decode(raw).map_err(|source| {
+                EmailSyncRecordError::InvalidRawPayloadBase64 {
+                    field: "raw_rfc822_base64",
+                    source,
+                }
+            })
+        }
+    }
+}
+
+fn payload_with_raw_blob_reference(
+    payload: &Value,
+    blob: &crate::mail_storage::StoredMailBlob,
+) -> Result<Value, EmailSyncRecordError> {
+    let Some(object) = payload.as_object() else {
+        return Err(EmailSyncRecordError::InvalidRawPayloadObject);
+    };
+    let mut object = object.clone();
+    object.remove("raw_base64url");
+    object.remove("raw_rfc822_base64");
+    object.insert("raw_blob_id".to_owned(), json!(blob.blob_id));
+    object.insert("raw_blob_sha256".to_owned(), json!(blob.sha256));
+    object.insert("raw_blob_storage_kind".to_owned(), json!(blob.storage_kind));
+    object.insert("raw_blob_storage_path".to_owned(), json!(blob.storage_path));
+    object.insert("raw_blob_size_bytes".to_owned(), json!(blob.size_bytes));
+
+    Ok(Value::Object(object))
+}
+
+fn required_payload_string<'a>(
+    payload: &'a Value,
+    field: &'static str,
+) -> Result<&'a str, EmailSyncRecordError> {
+    payload
+        .get(field)
+        .and_then(Value::as_str)
+        .ok_or(EmailSyncRecordError::MissingRawPayloadField { field })
+}
+
 #[derive(Debug, Error)]
 pub enum EmailSyncPlanError {
     #[error("invalid provider config field {field}: {message}")]
@@ -341,4 +478,20 @@ pub enum EmailSyncRecordError {
 
     #[error(transparent)]
     Communication(#[from] CommunicationIngestionError),
+
+    #[error(transparent)]
+    MailStorage(#[from] MailStorageError),
+
+    #[error("email sync payload must be a JSON object before raw blob projection")]
+    InvalidRawPayloadObject,
+
+    #[error("email sync payload missing provider raw field: {field}")]
+    MissingRawPayloadField { field: &'static str },
+
+    #[error("email sync payload field {field} is invalid base64: {source}")]
+    InvalidRawPayloadBase64 {
+        field: &'static str,
+        #[source]
+        source: base64::DecodeError,
+    },
 }

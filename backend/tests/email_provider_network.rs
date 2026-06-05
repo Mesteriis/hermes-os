@@ -7,6 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
+use sqlx::Row;
 
 use hermes_hub_backend::communications::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
@@ -16,7 +17,9 @@ use hermes_hub_backend::email_provider_network::{
 };
 use hermes_hub_backend::email_sync::{
     EmailSyncBatch, FetchedEmailMessage, record_email_sync_batch,
+    record_email_sync_batch_with_mail_blobs,
 };
+use hermes_hub_backend::mail_storage::{LocalMailBlobStore, MailStorageStore};
 use hermes_hub_backend::secrets::ResolvedSecret;
 use hermes_hub_backend::storage::Database;
 
@@ -217,6 +220,143 @@ async fn email_sync_records_provider_network_batch_against_postgres() {
         .expect("load checkpoint")
         .expect("checkpoint exists");
     assert_eq!(checkpoint.checkpoint["history_id"], "12345");
+}
+
+#[tokio::test]
+async fn email_sync_records_provider_batches_with_mail_blobs_against_postgres() {
+    let Some((database, store, suffix)) = live_sync_context("provider blob batch").await else {
+        return;
+    };
+
+    let pool = database.pool().expect("configured pool").clone();
+    let mail_store = MailStorageStore::new(pool.clone());
+    let blob_root = tempfile::tempdir().expect("mail blob root");
+    let blob_store = LocalMailBlobStore::new(blob_root.path());
+    let gmail_account_id = format!("acct_blob_gmail_{suffix}");
+    let imap_account_id = format!("acct_blob_imap_{suffix}");
+
+    store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &gmail_account_id,
+            EmailProviderKind::Gmail,
+            "Blob Gmail",
+            format!("blob-gmail-{suffix}@example.com"),
+        ))
+        .await
+        .expect("store gmail provider account");
+    store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &imap_account_id,
+            EmailProviderKind::Imap,
+            "Blob IMAP",
+            format!("blob-imap-{suffix}@example.net"),
+        ))
+        .await
+        .expect("store imap provider account");
+
+    let gmail_batch = EmailSyncBatch {
+        provider_kind: EmailProviderKind::Gmail,
+        stream_id: "gmail:history".to_owned(),
+        checkpoint: Some(json!({"provider": "gmail", "history_id": "blob-123"})),
+        messages: vec![FetchedEmailMessage {
+            provider_record_id: format!("gmail-blob-message-{suffix}"),
+            source_fingerprint: format!("sha256:gmail-blob-message-{suffix}"),
+            occurred_at: Utc.timestamp_millis_opt(1_770_000_000_000).single(),
+            payload: json!({
+                "provider": "gmail",
+                "id": format!("gmail-blob-message-{suffix}"),
+                "raw_base64url": "U3ViamVjdDogR21haWwNCg0KSGVsbG8"
+            }),
+        }],
+    };
+    let imap_batch = EmailSyncBatch {
+        provider_kind: EmailProviderKind::Imap,
+        stream_id: "imap:INBOX".to_owned(),
+        checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 77})),
+        messages: vec![FetchedEmailMessage {
+            provider_record_id: format!("imap-blob-message-{suffix}"),
+            source_fingerprint: format!("sha256:imap-blob-message-{suffix}"),
+            occurred_at: Utc.timestamp_millis_opt(1_770_000_100_000).single(),
+            payload: json!({
+                "provider": "imap",
+                "uid": 77,
+                "raw_rfc822_base64": "U3ViamVjdDogSU1BUA0KDQpIZWxsbw=="
+            }),
+        }],
+    };
+
+    let gmail_report = record_email_sync_batch_with_mail_blobs(
+        &store,
+        &mail_store,
+        &blob_store,
+        &gmail_account_id,
+        &format!("provider-blob-gmail-{suffix}"),
+        &gmail_batch,
+    )
+    .await
+    .expect("record gmail provider blob batch");
+    let imap_report = record_email_sync_batch_with_mail_blobs(
+        &store,
+        &mail_store,
+        &blob_store,
+        &imap_account_id,
+        &format!("provider-blob-imap-{suffix}"),
+        &imap_batch,
+    )
+    .await
+    .expect("record imap provider blob batch");
+
+    assert_eq!(gmail_report.inserted_or_existing_records, 1);
+    assert_eq!(gmail_report.blobs_upserted, 1);
+    assert!(gmail_report.checkpoint_saved);
+    assert_eq!(imap_report.inserted_or_existing_records, 1);
+    assert_eq!(imap_report.blobs_upserted, 1);
+    assert!(imap_report.checkpoint_saved);
+
+    let rows = sqlx::query(
+        r#"
+        SELECT account_id, payload
+        FROM communication_raw_records
+        WHERE account_id IN ($1, $2)
+        ORDER BY account_id
+        "#,
+    )
+    .bind(&gmail_account_id)
+    .bind(&imap_account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("raw records");
+    assert_eq!(rows.len(), 2);
+
+    for row in rows {
+        let payload: serde_json::Value = row.try_get("payload").expect("payload");
+        assert!(payload.get("raw_base64url").is_none());
+        assert!(payload.get("raw_rfc822_base64").is_none());
+        assert!(
+            payload["raw_blob_id"]
+                .as_str()
+                .expect("raw_blob_id")
+                .starts_with("blob:v1:sha256:")
+        );
+        assert_eq!(payload["raw_blob_storage_kind"], "local_fs");
+        let storage_path = payload["raw_blob_storage_path"]
+            .as_str()
+            .expect("raw_blob_storage_path");
+        assert!(blob_root.path().join(storage_path).is_file());
+        assert!(
+            payload["raw_blob_sha256"]
+                .as_str()
+                .expect("raw_blob_sha256")
+                .starts_with("sha256:")
+        );
+        assert!(payload["raw_blob_size_bytes"].as_i64().unwrap() > 0);
+    }
+
+    let blob_count = sqlx::query_scalar::<_, i64>("SELECT count(*) FROM communication_mail_blobs")
+        .fetch_one(&pool)
+        .await
+        .expect("mail blob count");
+    assert!(blob_count >= 2);
 }
 
 struct MockGmailServer {
