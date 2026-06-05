@@ -2798,6 +2798,7 @@
 	.segmented.active,
 	.filter-tabs button.active,
 	.section-tabs button.active,
+	.graph-filter-tabs button.active,
 	.filter-bar button.active {
 		border-color: rgba(45, 240, 206, 0.48);
 		background: rgba(25, 154, 132, 0.24);
