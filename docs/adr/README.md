@@ -56,3 +56,4 @@ ADR status vocabulary:
 - [ADR-0045 Graph Core Projection](ADR-0045-graph-core-projection.md)
 - [ADR-0046 Persistent Dev Mail Cache and Blob Storage](ADR-0046-persistent-dev-mail-cache-and-blob-storage.md)
 - [ADR-0047 Project Memory Spine](ADR-0047-project-memory-spine.md)
+- [ADR-0048 Project Link Review Workflow](ADR-0048-project-link-review-workflow.md)
