@@ -1,97 +1,121 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
-	import { onMount, tick } from 'svelte';
 	import {
 		completeGmailOAuthSetup,
-		fetchGraphNeighborhood,
 		fetchGraphSummary,
 		fetchV1Status,
-		searchGraphNodes,
 		setupImapAccount,
 		startGmailOAuthSetup,
-		type GraphNeighborhood,
-		type GraphNode,
-		type GraphNodeKind,
-		type GraphRelationshipType,
-		type GraphSummary,
 		type GmailOAuthStartResponse,
+		type GraphNodeKind,
+		type GraphSummary,
 		type V1Status
 	} from '$lib/api';
+	import { onMount } from 'svelte';
 
 	type Provider = 'gmail' | 'icloud' | 'imap';
-	type NavAction = 'account-setup';
+	type ViewId =
+		| 'home'
+		| 'communications'
+		| 'timeline'
+		| 'contacts'
+		| 'projects'
+		| 'tasks'
+		| 'calendar'
+		| 'documents'
+		| 'notes'
+		| 'knowledge'
+		| 'agents';
 
 	type NavItem = {
+		id: ViewId;
 		label: string;
 		icon: string;
 		badge?: string;
-		active?: boolean;
 		enabled: boolean;
-		action?: NavAction;
 	};
 
-	type TimelineItem = {
-		time: string;
-		title: string;
-		description: string;
-		meta: string;
+	type ShortcutItem = {
+		label: string;
 		icon: string;
+		badge?: string;
+	};
+
+	type StatCard = {
+		label: string;
+		value: string;
+		delta: string;
+		icon: string;
+		tone?: string;
+	};
+
+	type FeedItem = {
+		icon: string;
+		title: string;
+		meta: string;
+		time: string;
 		tag?: string;
-		tagTone?: 'amber' | 'cyan' | 'purple';
-		details?: string;
+		tone?: string;
 	};
 
 	type ProjectItem = {
 		name: string;
 		kind: string;
 		progress: number;
-		tasks: string;
-		members: string;
+		tasks: number;
 		icon: string;
-		tone: 'amber' | 'cyan' | 'purple' | 'mint';
+		tone: string;
 	};
 
-	type GraphPreviewNode = {
-		label: string;
-		caption: string;
-		icon: string;
-		x: number;
-		y: number;
+	type TaskItem = {
+		title: string;
+		tracker: string;
+		project: string;
+		assignee: string;
+		status: string;
+		priority: string;
+		due: string;
+		group: string;
+	};
+
+	type Person = {
+		name: string;
+		role: string;
+		company: string;
+		channel?: string;
+		status?: string;
+	};
+
+	type Conversation = {
+		name: string;
+		role: string;
+		project: string;
+		channel: string;
+		time: string;
+		unread?: string;
+		preview: string;
 	};
 
 	const apiBaseUrl = import.meta.env.VITE_HERMES_API_BASE_URL ?? 'http://127.0.0.1:8080';
 	const apiToken = import.meta.env.VITE_HERMES_LOCAL_API_TOKEN ?? 'change-me-local-api-token';
 	const actorId = import.meta.env.VITE_HERMES_ACTOR_ID ?? 'desktop-shell';
 
+	let currentView = $state<ViewId>('home');
+	let searchQuery = $state('');
 	let status = $state<V1Status | null>(null);
-	let errorMessage = $state('');
-	let isLoading = $state(true);
+	let statusError = $state('');
 	let graphSummary = $state<GraphSummary | null>(null);
 	let graphError = $state('');
-	let isGraphLoading = $state(true);
-	let isGraphExplorerOpen = $state(false);
-	let graphSearchQuery = $state('');
-	let graphSearchResults = $state<GraphNode[]>([]);
-	let graphSearchError = $state('');
-	let graphSearchMessage = $state('Enter a non-empty query to search graph nodes.');
-	let isGraphSearching = $state(false);
-	let selectedGraphNeighborhood = $state<GraphNeighborhood | null>(null);
-	let selectedGraphError = $state('');
-	let isGraphNeighborhoodLoading = $state(false);
+	let selectedConversationIndex = $state(0);
+	let selectedContactIndex = $state(0);
+	let selectedAgentIndex = $state(0);
 	let selectedProvider = $state<Provider>('gmail');
+	let isAccountDrawerOpen = $state(false);
+	let isSetupSubmitting = $state(false);
 	let setupMessage = $state('');
 	let setupError = $state('');
-	let isSetupSubmitting = $state(false);
-	let isAccountDrawerOpen = $state(false);
 	let gmailPending = $state<GmailOAuthStartResponse | null>(null);
 	let gmailAuthorizationCode = $state('');
-	let searchQuery = $state('');
-	let selectedTimelineFilter = $state('All Events');
-	let graphExplorerPanel = $state<HTMLElement | null>(null);
-	let graphSearchInput = $state<HTMLInputElement | null>(null);
-	let graphExplorerReturnFocus: HTMLElement | null = null;
-	let graphSearchRequestId = 0;
-	let graphNeighborhoodRequestId = 0;
 	let gmailForm = $state({
 		account_id: 'gmail-primary',
 		display_name: 'Primary Gmail',
@@ -114,394 +138,338 @@
 	});
 
 	const primaryNav: NavItem[] = [
-		{ label: 'Home', icon: 'tabler:home', active: true, enabled: true },
-		{ label: 'Timeline', icon: 'tabler:timeline-event', enabled: false },
-		{ label: 'Communications', icon: 'tabler:messages', badge: '23', enabled: false },
-		{ label: 'Contacts', icon: 'tabler:address-book', enabled: false },
-		{ label: 'Projects', icon: 'tabler:briefcase', enabled: false },
-		{ label: 'Tasks', icon: 'tabler:checkbox', enabled: false },
-		{ label: 'Calendar', icon: 'tabler:calendar', enabled: false },
-		{ label: 'Documents', icon: 'tabler:file-text', enabled: false },
-		{ label: 'Notes', icon: 'tabler:notes', enabled: false },
-		{ label: 'Knowledge Graph', icon: 'tabler:share', enabled: false },
-		{ label: 'AI Agents', icon: 'tabler:sparkles', enabled: false }
+		{ id: 'home', label: 'Home', icon: 'tabler:home', enabled: true },
+		{ id: 'communications', label: 'Communications', icon: 'tabler:messages', badge: '23', enabled: true },
+		{ id: 'timeline', label: 'Timeline', icon: 'tabler:timeline-event', enabled: true },
+		{ id: 'contacts', label: 'Contacts', icon: 'tabler:address-book', enabled: true },
+		{ id: 'projects', label: 'Projects', icon: 'tabler:briefcase', enabled: true },
+		{ id: 'tasks', label: 'Tasks', icon: 'tabler:checkbox', enabled: true },
+		{ id: 'calendar', label: 'Calendar', icon: 'tabler:calendar', enabled: true },
+		{ id: 'documents', label: 'Documents', icon: 'tabler:file-text', enabled: true },
+		{ id: 'notes', label: 'Notes', icon: 'tabler:notes', enabled: true },
+		{ id: 'knowledge', label: 'Knowledge Graph', icon: 'tabler:share', enabled: true },
+		{ id: 'agents', label: 'AI Agents', icon: 'tabler:sparkles', enabled: true }
 	];
 
-	const shortcutNav: NavItem[] = [
-		{ label: 'Inbox', icon: 'tabler:inbox', badge: '12', enabled: false },
-		{ label: 'Starred', icon: 'tabler:star', enabled: false },
-		{ label: 'Today', icon: 'tabler:calendar-time', enabled: false },
-		{ label: 'Waiting', icon: 'tabler:clock-hour-4', enabled: false },
-		{ label: 'Someday', icon: 'tabler:calendar-week', enabled: false },
-		{ label: 'Trash', icon: 'tabler:trash', enabled: false }
-	];
-
-	const metricCards = [
-		{ label: 'Events', value: '1,247', delta: '12%', icon: 'tabler:chart-bar', tone: 'chart' },
-		{ label: 'Tasks', value: '23', delta: '5', icon: 'tabler:circle-check', tone: 'check' },
-		{ label: 'Projects', value: '17', delta: '2', icon: 'tabler:folder', tone: 'folder' },
-		{ label: 'Contacts', value: '642', delta: '18', icon: 'tabler:users', tone: 'contacts' }
-	];
-
-	const timelineItems: TimelineItem[] = [
-		{
-			time: '18:42',
-			title: 'Re: Project Hermes Update',
-			description: 'John Carter -> You. Thanks for the update. Please prepare the final report...',
-			meta: 'Email',
-			icon: 'tabler:mail',
-			tag: 'Important',
-			tagTone: 'amber'
+	const viewCopy: Record<ViewId, { title: string; subtitle: string; search: string; icon: string }> = {
+		home: {
+			title: 'Good evening, Alex',
+			subtitle: "Here's what's happening in your world today.",
+			search: 'Search anything...',
+			icon: 'tabler:home'
 		},
-		{
-			time: '17:30',
-			title: 'Telegram - @design_discussion',
-			description: "Maria Petrova: I've reviewed the new mockups. Looks great!",
-			meta: 'Telegram',
-			icon: 'tabler:brand-telegram',
-			tag: 'Work',
-			tagTone: 'cyan'
+		communications: {
+			title: 'Communications',
+			subtitle: 'All your conversations. All channels. One place.',
+			search: 'Search in communications...',
+			icon: 'tabler:messages'
 		},
-		{
-			time: '16:15',
-			title: 'Document Uploaded',
-			description: 'Q2_Financial_Report.pdf',
-			meta: 'Documents',
-			icon: 'tabler:file-description',
-			tag: 'Document',
-			tagTone: 'amber',
-			details: '2.4 MB · OCR completed'
+		timeline: {
+			title: 'Timeline',
+			subtitle: 'Chronological activity across messages, tasks, documents and meetings.',
+			search: 'Search timeline...',
+			icon: 'tabler:timeline-event'
 		},
-		{
-			time: '15:09',
-			title: 'Task Created',
-			description: 'Prepare presentation for Acme Corp',
-			meta: 'Tasks',
-			icon: 'tabler:checkbox',
-			details: 'Due Tomorrow · John Carter'
+		contacts: {
+			title: 'Contacts',
+			subtitle: '642 contacts',
+			search: 'Search contacts, companies, emails...',
+			icon: 'tabler:address-book'
 		},
-		{
-			time: '14:20',
-			title: 'Meeting Completed',
-			description: 'Project Hermes - Weekly Sync',
-			meta: 'Calendar',
-			icon: 'tabler:calendar-check',
-			details: '45m · 3 participants'
+		projects: {
+			title: 'Hermes Hub',
+			subtitle: 'Product Development',
+			search: 'Search projects, documents, people...',
+			icon: 'tabler:cube'
 		},
-		{
-			time: '21:17',
-			title: 'WhatsApp - Business',
-			description: 'Acme Corp: Could you send the latest contract?',
-			meta: 'WhatsApp',
-			icon: 'tabler:brand-whatsapp'
+		tasks: {
+			title: 'Tasks',
+			subtitle: 'All your tasks from connected trackers',
+			search: 'Search tasks, projects, trackers, people...',
+			icon: 'tabler:checkbox'
 		},
-		{
-			time: '19:45',
-			title: 'Note Created',
-			description: 'Ideas for Q3 Marketing Campaign',
-			meta: 'Notes',
-			icon: 'tabler:note',
-			tagTone: 'purple'
+		calendar: {
+			title: 'Calendar',
+			subtitle: 'All your events from connected calendars',
+			search: 'Search events, meetings, contacts...',
+			icon: 'tabler:calendar'
+		},
+		documents: {
+			title: 'Documents',
+			subtitle: 'All your documents from connected sources',
+			search: 'Search documents, folders, content...',
+			icon: 'tabler:file-text'
+		},
+		notes: {
+			title: 'Notes',
+			subtitle: 'All your notes from connected sources',
+			search: 'Search notes, content, emails...',
+			icon: 'tabler:notes'
+		},
+		knowledge: {
+			title: 'Knowledge Graph',
+			subtitle: 'Explore relationships across people, projects, documents, messages and tasks.',
+			search: 'Search anything in your knowledge graph...',
+			icon: 'tabler:share'
+		},
+		agents: {
+			title: 'AI Agents',
+			subtitle: 'Your intelligent assistants working across your data and tools',
+			search: 'Search agents, capabilities, tasks...',
+			icon: 'tabler:sparkles'
 		}
+	};
+
+	const shortcutsByView: Record<ViewId, ShortcutItem[]> = {
+		home: [
+			{ label: 'Inbox', icon: 'tabler:inbox', badge: '12' },
+			{ label: 'Starred', icon: 'tabler:star' },
+			{ label: 'Waiting', icon: 'tabler:clock-hour-4', badge: '3' },
+			{ label: 'Requires Reply', icon: 'tabler:message-reply', badge: '5' },
+			{ label: 'Mentions', icon: 'tabler:at' },
+			{ label: 'Trash', icon: 'tabler:trash' }
+		],
+		communications: [
+			{ label: 'Inbox', icon: 'tabler:inbox', badge: '12' },
+			{ label: 'Starred', icon: 'tabler:star' },
+			{ label: 'Waiting', icon: 'tabler:clock-hour-4' },
+			{ label: 'Requires Reply', icon: 'tabler:message-reply', badge: '3' },
+			{ label: 'Mentions', icon: 'tabler:at' },
+			{ label: 'Spam', icon: 'tabler:shield-x', badge: '4' },
+			{ label: 'Archive', icon: 'tabler:archive' }
+		],
+		timeline: [
+			{ label: 'Today', icon: 'tabler:calendar-time', badge: '18' },
+			{ label: 'Messages', icon: 'tabler:message' },
+			{ label: 'Documents', icon: 'tabler:file-text' },
+			{ label: 'Decisions', icon: 'tabler:git-pull-request' }
+		],
+		contacts: [
+			{ label: 'All People', icon: 'tabler:users', badge: '642' },
+			{ label: 'Companies', icon: 'tabler:building', badge: '128' },
+			{ label: 'Clients', icon: 'tabler:shield-check' },
+			{ label: 'Partners', icon: 'tabler:users-group' },
+			{ label: 'Team', icon: 'tabler:user-check' },
+			{ label: 'Vendors', icon: 'tabler:briefcase' },
+			{ label: 'Archived', icon: 'tabler:archive' }
+		],
+		projects: [
+			{ label: 'My Projects', icon: 'tabler:briefcase', badge: '12' },
+			{ label: 'Active', icon: 'tabler:chart-bar', badge: '7' },
+			{ label: 'Planning', icon: 'tabler:calendar-plus' },
+			{ label: 'On Hold', icon: 'tabler:clock-pause' },
+			{ label: 'Completed', icon: 'tabler:rosette-discount-check' },
+			{ label: 'Archived', icon: 'tabler:archive' }
+		],
+		tasks: [
+			{ label: 'My Tasks', icon: 'tabler:checkbox', badge: '12' },
+			{ label: 'Assigned to Me', icon: 'tabler:user-check', badge: '7' },
+			{ label: 'Waiting', icon: 'tabler:clock', badge: '5' },
+			{ label: 'Due Today', icon: 'tabler:calendar-exclamation', badge: '3' },
+			{ label: 'This Week', icon: 'tabler:calendar-week', badge: '9' },
+			{ label: 'High Priority', icon: 'tabler:star', badge: '4' },
+			{ label: 'Completed', icon: 'tabler:heart-check' }
+		],
+		calendar: [
+			{ label: 'My Agenda', icon: 'tabler:calendar-stats', badge: '12' },
+			{ label: 'Team Meetings', icon: 'tabler:star', badge: '7' },
+			{ label: 'Focus Time', icon: 'tabler:shield-half', badge: '5' },
+			{ label: 'Important', icon: 'tabler:shield-star', badge: '3' },
+			{ label: 'Travel', icon: 'tabler:plane', badge: '2' },
+			{ label: 'Birthdays', icon: 'tabler:calendar-heart' }
+		],
+		documents: [
+			{ label: 'Recent', icon: 'tabler:inbox', badge: '24' },
+			{ label: 'Starred', icon: 'tabler:star', badge: '8' },
+			{ label: 'Shared with me', icon: 'tabler:shield-check', badge: '12' },
+			{ label: 'Contracts', icon: 'tabler:briefcase' },
+			{ label: 'Reports', icon: 'tabler:report' },
+			{ label: 'Presentations', icon: 'tabler:presentation' },
+			{ label: 'Archive', icon: 'tabler:archive' },
+			{ label: 'Trash', icon: 'tabler:trash' }
+		],
+		notes: [
+			{ label: 'Inbox', icon: 'tabler:inbox', badge: '12' },
+			{ label: 'Starred', icon: 'tabler:star', badge: '8' },
+			{ label: 'Today', icon: 'tabler:calendar-check', badge: '5' },
+			{ label: 'Personal', icon: 'tabler:folder', badge: '7' },
+			{ label: 'Work', icon: 'tabler:folder', badge: '9' },
+			{ label: 'Ideas', icon: 'tabler:bulb', badge: '4' },
+			{ label: 'Archive', icon: 'tabler:archive' }
+		],
+		knowledge: [
+			{ label: 'My Graphs', icon: 'tabler:heart-handshake', badge: '12' },
+			{ label: 'Recent', icon: 'tabler:star', badge: '24' },
+			{ label: 'Favorites', icon: 'tabler:star', badge: '8' },
+			{ label: 'Important', icon: 'tabler:shield-star', badge: '15' },
+			{ label: 'Shared with me', icon: 'tabler:star', badge: '7' },
+			{ label: 'Trash', icon: 'tabler:trash' }
+		],
+		agents: [
+			{ label: 'My Agents', icon: 'tabler:robot', badge: '12' },
+			{ label: 'Active Tasks', icon: 'tabler:star', badge: '8' },
+			{ label: 'Automations', icon: 'tabler:settings-automation', badge: '6' },
+			{ label: 'Templates', icon: 'tabler:template', badge: '15' },
+			{ label: 'Logs', icon: 'tabler:clipboard-list' },
+			{ label: 'Settings', icon: 'tabler:settings' }
+		]
+	};
+
+	const homeStats: StatCard[] = [
+		{ label: 'New Events', value: '47', delta: '18%', icon: 'tabler:chart-bar' },
+		{ label: 'Needs Attention', value: '4', delta: '2', icon: 'tabler:alert-circle' },
+		{ label: 'Waiting For Reply', value: '3', delta: '1', icon: 'tabler:message-reply' },
+		{ label: 'New Documents', value: '2', delta: '1', icon: 'tabler:file-text' },
+		{ label: 'New Contacts', value: '1', delta: '1', icon: 'tabler:user-plus' }
 	];
 
-	const graphPreviewPositions = [
-		{ x: 47, y: 12 },
-		{ x: 82, y: 28 },
-		{ x: 88, y: 54 },
-		{ x: 74, y: 78 },
-		{ x: 18, y: 70 },
-		{ x: 12, y: 38 }
+	const whatsNew: FeedItem[] = [
+		{ icon: 'tabler:mail', title: 'New email from John Smith', meta: 'Re: Project Hermes - Next Steps', time: '14:32', tag: 'Project Hermes', tone: 'blue' },
+		{ icon: 'tabler:brand-telegram', title: 'Telegram message from Maria Petrova', meta: 'Can you review the new mockups?', time: '14:15', tag: 'Design', tone: 'blue' },
+		{ icon: 'tabler:brand-whatsapp', title: 'WhatsApp from Accountant', meta: 'Please send me the VAT report for Q2', time: '13:47', tag: 'Finance', tone: 'green' },
+		{ icon: 'tabler:file-text', title: 'Document uploaded', meta: 'Contract_Smith_Partners.pdf', time: '11:28', tag: 'Smith & Partners', tone: 'slate' },
+		{ icon: 'tabler:calendar-check', title: 'Meeting completed', meta: 'Project Hermes - Weekly Sync', time: '10:42', tag: '45m · 6 participants', tone: 'mint' }
+	];
+
+	const peopleTalked = [
+		{ name: 'John Smith', meta: 'Re: Project Hermes - Next Steps', icon: 'tabler:mail' },
+		{ name: 'Maria Petrova', meta: 'Can you review the new mockups?', icon: 'tabler:brand-telegram' },
+		{ name: 'Accountant', meta: 'VAT report for Q2', icon: 'tabler:brand-whatsapp' },
+		{ name: 'IRIS Team', meta: 'Updated roadmap v2.0', icon: 'tabler:brand-telegram' },
+		{ name: 'Elena Rodriguez', meta: 'Document request', icon: 'tabler:brand-whatsapp' }
+	];
+
+	const conversations: Conversation[] = [
+		{ name: 'John Smith', role: 'CEO at Smith & Partners', project: 'Hermes Project', channel: 'Email', time: '14:32', unread: '2', preview: "Sounds good! Let's schedule a call for tomorrow" },
+		{ name: 'Maria Petrova', role: 'Lead Designer', project: 'Design Discussion', channel: 'Telegram', time: '14:15', unread: '1', preview: 'Here are the mockups for the new dashboard' },
+		{ name: 'Acme Corp - Legal', role: 'Contract Review', project: 'Contract Review', channel: 'Email', time: '13:47', preview: 'Please review the attached contract' },
+		{ name: 'Accountant', role: 'Finance', project: 'VAT & Taxes', channel: 'WhatsApp', time: '12:21', unread: '3', preview: 'We need the VAT report for Q2' },
+		{ name: 'IRIS Team', role: 'Team Channel', project: 'Project Updates', channel: 'Telegram', time: '11:08', preview: 'Alex: Updated the roadmap for v2.0' },
+		{ name: 'GitHub', role: 'Hermes Hub', project: 'Hermes Hub', channel: 'Email', time: 'Yesterday', preview: 'Pull request #128 was merged' }
+	];
+
+	const contactList: Person[] = [
+		{ name: 'John Smith', role: 'CEO', company: 'Smith & Partners', status: 'Online' },
+		{ name: 'Maria Petrova', role: 'Lead Designer', company: 'Acme Corp', channel: 'Telegram' },
+		{ name: 'Michael Brown', role: 'CTO', company: 'TechFlow Inc.', status: 'Online' },
+		{ name: 'Elena Rodriguez', role: 'Project Manager', company: 'IRIS Solutions', status: 'Online' },
+		{ name: 'David Wilson', role: 'Product Owner', company: 'Acme Corp', channel: 'Email' },
+		{ name: 'Anna Becker', role: 'Marketing Director', company: 'Vision Labs', status: 'Online' },
+		{ name: 'Accountant', role: 'Finance', company: 'Personal', channel: 'WhatsApp' },
+		{ name: 'IRIS Team', role: 'Team Channel', company: 'IRIS Solution', channel: 'Telegram' }
 	];
 
 	const projects: ProjectItem[] = [
-		{
-			name: 'Hermes Hub',
-			kind: 'Product Development',
-			progress: 75,
-			tasks: '23 tasks',
-			members: '8 members',
-			icon: 'tabler:hexagon-letter-h',
-			tone: 'amber'
-		},
-		{
-			name: 'Acme Integration',
-			kind: 'Client Project',
-			progress: 45,
-			tasks: '12 tasks',
-			members: '3 members',
-			icon: 'tabler:cube',
-			tone: 'cyan'
-		},
-		{
-			name: 'Q3 Marketing Campaign',
-			kind: 'Marketing',
-			progress: 60,
-			tasks: '17 tasks',
-			members: '4 members',
-			icon: 'tabler:hexagon-3d',
-			tone: 'purple'
-		},
-		{
-			name: 'Personal Finance',
-			kind: 'Personal Project',
-			progress: 30,
-			tasks: '8 tasks',
-			members: '1 member',
-			icon: 'tabler:cash',
-			tone: 'mint'
-		}
+		{ name: 'Hermes Hub', kind: 'Product Development', progress: 75, tasks: 23, icon: 'tabler:cube', tone: 'cyan' },
+		{ name: 'Acme Integration', kind: 'Client Project', progress: 45, tasks: 12, icon: 'tabler:cube', tone: 'blue' },
+		{ name: 'Q3 Marketing Campaign', kind: 'Marketing', progress: 60, tasks: 17, icon: 'tabler:hexagon', tone: 'purple' },
+		{ name: 'Personal Finance', kind: 'Personal Project', progress: 30, tasks: 8, icon: 'tabler:home-dollar', tone: 'mint' }
 	];
 
-	const calendarDays = [
-		{ day: 'Mon', date: '12', active: true },
-		{ day: 'Tue', date: '13' },
-		{ day: 'Wed', date: '14' },
-		{ day: 'Thu', date: '15' },
-		{ day: 'Fri', date: '16' },
-		{ day: 'Sat', date: '17.' },
-		{ day: 'Sun', date: '18' }
+	const tasks: TaskItem[] = [
+		{ title: 'Review Q2 financial report', tracker: 'Jira Cloud', project: 'Hermes Hub', assignee: 'Maria Petrova', status: 'In Review', priority: 'High', due: 'Today 14:00', group: 'Due Today' },
+		{ title: 'Fix authentication flow bug', tracker: 'YouTrack', project: 'Platform Core', assignee: 'Alex Morgan', status: 'In Progress', priority: 'High', due: 'Today 16:00', group: 'Due Today' },
+		{ title: 'Prepare design system update', tracker: 'ClickUp', project: 'Design System', assignee: 'Elena Rodriguez', status: 'To Do', priority: 'Medium', due: 'Today 18:00', group: 'Due Today' },
+		{ title: 'Implement plugin architecture', tracker: 'Jira Cloud', project: 'Hermes Hub', assignee: 'John Smith', status: 'In Progress', priority: 'High', due: 'May 16', group: 'This Week' },
+		{ title: 'API rate limiting', tracker: 'YouTrack', project: 'Backend Services', assignee: 'Alex Morgan', status: 'To Do', priority: 'Medium', due: 'May 16', group: 'This Week' },
+		{ title: 'Update user documentation', tracker: 'ClickUp', project: 'Documentation', assignee: 'Maria Petrova', status: 'In Review', priority: 'Medium', due: 'May 17', group: 'This Week' },
+		{ title: 'Setup monitoring alerts', tracker: 'Jira Cloud', project: 'DevOps', assignee: 'John Smith', status: 'To Do', priority: 'Medium', due: 'May 17', group: 'This Week' },
+		{ title: 'Refactor notification module', tracker: 'YouTrack', project: 'Platform Core', assignee: 'Elena Rodriguez', status: 'In Progress', priority: 'Low', due: 'May 18', group: 'This Week' },
+		{ title: 'Mobile app dark mode', tracker: 'Jira Cloud', project: 'Mobile App', assignee: 'Maria Petrova', status: 'To Do', priority: 'Low', due: 'May 24', group: 'Later' }
 	];
 
-	const calendarItems = [
-		{ time: '10:00', title: 'Project Hermes - Weekly Sync', duration: '1h', badge: '+3' },
-		{ time: '14:00', title: 'Call with Acme Corp', duration: '1h' },
-		{ time: '16:30', title: 'Review Q2 Report', duration: '30m' }
+	const documents = [
+		{ name: 'Hermes_Hub_Architecture_v1.2.pdf', source: 'Google Drive', project: 'Hermes Hub', type: 'PDF', date: 'May 13, 2024', size: '2.4 MB', icon: 'tabler:file-type-pdf', tone: 'red' },
+		{ name: 'Product_Roadmap_2024.xlsx', source: 'OneDrive', project: 'Hermes Hub', type: 'Excel', date: 'May 12, 2024', size: '1.1 MB', icon: 'tabler:file-spreadsheet', tone: 'green' },
+		{ name: 'Meeting_Notes_Design_System.md', source: 'Dropbox', project: 'Design System', type: 'Markdown', date: 'May 9, 2024', size: '45 KB', icon: 'tabler:file-text', tone: 'blue' },
+		{ name: 'Contract_Acme_Corp_v2.pdf', source: 'Google Drive', project: 'Acme Integration', type: 'PDF', date: 'May 10, 2024', size: '1.8 MB', icon: 'tabler:file-type-pdf', tone: 'red' },
+		{ name: 'User_Research_Summary.pdf', source: 'Notion', project: 'Website Redesign', type: 'PDF', date: 'May 7, 2024', size: '3.2 MB', icon: 'tabler:file-description', tone: 'slate' },
+		{ name: 'API_Documentation_v1.0.pdf', source: 'Dropbox', project: 'Platform Core', type: 'PDF', date: 'May 6, 2024', size: '5.7 MB', icon: 'tabler:file-type-pdf', tone: 'red' },
+		{ name: 'Q2_Financial_Report.xlsx', source: 'OneDrive', project: 'Finance', type: 'Excel', date: 'May 5, 2024', size: '980 KB', icon: 'tabler:file-spreadsheet', tone: 'green' }
 	];
 
-	const taskItems = [
-		{ title: 'Prepare report for Acme Corp', due: 'Today', tag: 'Work' },
-		{ title: 'Review Q2 financials', due: 'Jun 2', tag: 'Work' },
-		{ title: 'Call with John Carter', due: 'Jun 3', tag: 'Personal' },
-		{ title: 'Update project roadmap', due: 'Jun 5', tag: 'Work' },
-		{ title: 'Book flights to Berlin', due: 'Jun 5', tag: 'Personal' }
+	const notes = [
+		{ title: 'Hermes Hub - Product Strategy', body: 'Основные принципы: единое пространство памяти, интеграция всех коммуникаций...', source: 'Apple Notes', tag: '#project', time: '10:42', icon: 'tabler:notes' },
+		{ title: 'User Research Summary', body: 'Ключевые инсайты из интервью с пользователями...', source: 'Obsidian', tag: '#research', time: '09:15', icon: 'tabler:file-text' },
+		{ title: 'Meeting with Maria - 13 May 2024', body: 'Обсудили roadmap, приоритеты и сроки запуска новых функций...', source: 'Gmail', tag: '#meeting', time: '08:27', icon: 'tabler:brand-gmail' },
+		{ title: 'Quick Ideas', body: '- AI для автоматической категоризации заметок - Граф связей между проектами...', source: 'Anytype', tag: '#idea', time: '07:58', icon: 'tabler:bulb' },
+		{ title: 'Integration Architecture', body: 'Схема интеграции с внешними сервисами и потоками данных...', source: 'Obsidian', tag: '#reference', time: 'May 12, 18:45', icon: 'tabler:file-text' },
+		{ title: 'Email: Partnership Opportunity', body: 'Интересное предложение о партнерстве. Нужно обсудить с командой...', source: 'Outlook', tag: '#partnership', time: 'May 12, 16:20', icon: 'tabler:mail' }
 	];
 
-	const topicItems = [
-		{ label: 'Hermes Project', value: 128 },
-		{ label: 'Acme Corp', value: 96 },
-		{ label: 'Q2 Report', value: 64 },
-		{ label: 'Budget', value: 48 },
-		{ label: 'VAT', value: 32 }
+	const agentCards = [
+		{ name: 'Research Analyst', summary: 'Researches topics, finds information, and creates comprehensive reports.', icon: 'tabler:zoom-scan', tasks: 124, success: '92%', status: 'Active', tone: 'purple' },
+		{ name: 'Email Assistant', summary: 'Manages emails, drafts responses, categorizes and summarizes.', icon: 'tabler:mail', tasks: 532, success: '96%', status: 'Active', tone: 'blue' },
+		{ name: 'Meeting Summarizer', summary: 'Joins meetings, transcribes, and creates action items.', icon: 'tabler:calendar', tasks: 312, success: '94%', status: 'Active', tone: 'mint' },
+		{ name: 'Task Manager', summary: 'Organizes tasks, sets priorities, and tracks progress.', icon: 'tabler:checkbox', tasks: 218, success: '91%', status: 'Active', tone: 'amber' },
+		{ name: 'Knowledge Curator', summary: 'Organizes information and connects insights.', icon: 'tabler:folders', tasks: 423, success: '95%', status: 'Active', tone: 'purple' },
+		{ name: 'Data Analyst', summary: 'Analyzes data and generates visualizations.', icon: 'tabler:chart-bar', tasks: 98, success: '89%', status: 'Inactive', tone: 'cyan' },
+		{ name: 'Project Scout', summary: 'Monitors project updates, risks, and opportunities.', icon: 'tabler:target-arrow', tasks: 156, success: '90%', status: 'Active', tone: 'orange' },
+		{ name: 'Content Creator', summary: 'Creates content, drafts documents, and helps with writing.', icon: 'tabler:pencil', tasks: 278, success: '93%', status: 'Active', tone: 'pink' },
+		{ name: 'Automation Builder', summary: 'Builds and manages automations across workflows.', icon: 'tabler:bolt', tasks: 24, success: '88%', status: 'Inactive', tone: 'cyan' }
 	];
+
+	const weekColumns = ['MON 12', 'TUE 13', 'WED 14', 'THU 15', 'FRI 16', 'SAT 17', 'SUN 18'];
+	const calendarBlocks = [
+		{ day: 0, top: 24, height: 52, title: 'Team Standup', meta: 'Google Calendar', tone: 'blue' },
+		{ day: 0, top: 118, height: 70, title: 'Project Hermes Planning', meta: 'Microsoft 365', tone: 'green' },
+		{ day: 1, top: 70, height: 70, title: 'Focus Time', meta: 'Microsoft 365', tone: 'green' },
+		{ day: 1, top: 168, height: 52, title: 'Platform Core Sync', meta: 'YouTrack', tone: 'purple' },
+		{ day: 2, top: 24, height: 52, title: 'Product Review', meta: 'Google Calendar', tone: 'blue' },
+		{ day: 2, top: 118, height: 62, title: 'Engineering Sync', meta: 'Microsoft 365', tone: 'green' },
+		{ day: 3, top: 56, height: 72, title: 'YouTrack: Daily Standup', meta: 'YouTrack', tone: 'purple' },
+		{ day: 3, top: 166, height: 74, title: 'Architecture Discussion', meta: 'Microsoft 365', tone: 'green' },
+		{ day: 4, top: 24, height: 58, title: 'All Hands', meta: 'Google Calendar', tone: 'blue' },
+		{ day: 4, top: 140, height: 62, title: 'Sprint Planning', meta: 'YouTrack', tone: 'purple' },
+		{ day: 5, top: 24, height: 298, title: 'Hackathon', meta: 'Personal', tone: 'amber' }
+	];
+
+	const graphBuckets = [
+		{ label: 'Tasks', count: '24', x: 13, y: 26, tone: 'purple', items: ['Implement plugin architecture', 'Redesign Dashboard', 'Fix Authentication Flow'] },
+		{ label: 'Meetings', count: '18', x: 9, y: 54, tone: 'mint', items: ['Weekly Sync', 'Product Review', 'Architecture Discussion'] },
+		{ label: 'Messages', count: '327', x: 24, y: 75, tone: 'amber', items: ['Telegram Chat', 'Email Thread', 'WhatsApp Group'] },
+		{ label: 'Projects', count: '5', x: 48, y: 83, tone: 'cyan', items: ['Hermes Agent', 'Hermes Mobile', 'Herald System'] },
+		{ label: 'Sources', count: '', x: 71, y: 78, tone: 'blue', items: ['Obsidian Vault', 'Google Drive', 'Gmail'] },
+		{ label: 'Decisions', count: '8', x: 83, y: 59, tone: 'orange', items: ['ADR-0001', 'ADR-0002', 'ADR-0003'] },
+		{ label: 'Documents', count: '142', x: 84, y: 31, tone: 'blue', items: ['Architecture.md', 'Product Strategy.pdf', 'ADR-0001.md'] },
+		{ label: 'People', count: '12', x: 47, y: 17, tone: 'mint', items: ['Maria Petrova', 'Alex Morgan', 'John Smith'] }
+	];
+
+	const selectedConversation = $derived(conversations[selectedConversationIndex] ?? conversations[0]);
+	const selectedContact = $derived(contactList[selectedContactIndex] ?? contactList[0]);
+	const selectedAgent = $derived(agentCards[selectedAgentIndex] ?? agentCards[0]);
+	const activeView = $derived(viewCopy[currentView]);
+	const activeShortcuts = $derived(shortcutsByView[currentView]);
 
 	onMount(() => {
-		void Promise.all([loadV1Status(), loadGraphSummary()]);
+		void loadV1Status();
+		void loadGraphSummary();
 	});
 
 	async function loadV1Status() {
-		isLoading = true;
 		try {
 			status = await fetchV1Status(apiBaseUrl, apiToken, actorId);
-			errorMessage = '';
+			statusError = '';
 		} catch (error) {
-			errorMessage = error instanceof Error ? error.message : 'Unknown status error';
-		} finally {
-			isLoading = false;
+			statusError = error instanceof Error ? error.message : 'Unknown status error';
 		}
 	}
 
 	async function loadGraphSummary() {
-		isGraphLoading = true;
 		try {
 			graphSummary = await fetchGraphSummary(apiBaseUrl, apiToken, actorId);
 			graphError = '';
 		} catch (error) {
 			graphError = error instanceof Error ? error.message : 'Unknown graph summary error';
-		} finally {
-			isGraphLoading = false;
 		}
 	}
 
-	function graphNodeTotal() {
-		return graphSummary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 0;
-	}
-
-	function graphRelationshipTotal() {
-		return graphSummary?.edge_counts.reduce((total, item) => total + item.count, 0) ?? 0;
-	}
-
-	function graphEvidenceTotal() {
-		return graphSummary?.evidence_count ?? 0;
-	}
-
-	function graphPreviewNodes(): GraphPreviewNode[] {
-		if (!graphSummary || graphSummary.is_empty) {
-			return [];
-		}
-
-		return graphSummary.node_counts.slice(0, graphPreviewPositions.length).map((count, index) => ({
-			label: formatGraphKind(count.key),
-			caption: `${formatNumber(count.count)} nodes`,
-			icon: graphNodeKindIcon(count.key),
-			x: graphPreviewPositions[index].x,
-			y: graphPreviewPositions[index].y
-		}));
-	}
-
-	function formatNumber(value: number) {
-		return new Intl.NumberFormat('en-US').format(value);
-	}
-
-	function formatGraphKind(kind: GraphNodeKind | string) {
-		return kind
-			.split('_')
-			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-			.join(' ');
-	}
-
-	function formatGraphRelationship(type: GraphRelationshipType) {
-		return formatGraphKind(type);
-	}
-
-	function graphNodeKindIcon(kind: GraphNodeKind | string) {
-		switch (kind) {
-			case 'person':
-				return 'tabler:user';
-			case 'email_address':
-				return 'tabler:mail';
-			case 'message':
-				return 'tabler:message';
-			case 'document':
-				return 'tabler:file-text';
-			default:
-				return 'tabler:circle-dot';
-		}
-	}
-
-	async function openGraphExplorer(event: MouseEvent) {
-		graphExplorerReturnFocus =
-			event.currentTarget instanceof HTMLElement
-				? event.currentTarget
-				: document.activeElement instanceof HTMLElement
-					? document.activeElement
-					: null;
-		isGraphExplorerOpen = true;
-		graphSearchError = '';
-		selectedGraphError = '';
-		if (graphSummary?.is_empty) {
-			graphSearchMessage = 'Graph is empty. Run projections before searching.';
-		}
-		await tick();
-		const initialFocus =
-			graphSearchInput ?? graphExplorerPanel?.querySelector<HTMLElement>(graphFocusableSelector());
-		initialFocus?.focus();
-	}
-
-	function closeGraphExplorer() {
-		isGraphExplorerOpen = false;
-		graphExplorerReturnFocus?.focus();
-		graphExplorerReturnFocus = null;
-	}
-
-	function graphFocusableSelector() {
-		return 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
-	}
-
-	function graphFocusableElements() {
-		if (!graphExplorerPanel) {
-			return [];
-		}
-		return Array.from(graphExplorerPanel.querySelectorAll<HTMLElement>(graphFocusableSelector())).filter(
-			(element) => element.offsetParent !== null || element === document.activeElement
-		);
-	}
-
-	function handleGraphExplorerKeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape') {
-			event.preventDefault();
-			closeGraphExplorer();
+	function setView(item: NavItem) {
+		if (!item.enabled) {
 			return;
 		}
-
-		if (event.key !== 'Tab') {
-			return;
-		}
-
-		const focusable = graphFocusableElements();
-		if (focusable.length === 0) {
-			event.preventDefault();
-			graphExplorerPanel?.focus();
-			return;
-		}
-
-		const first = focusable[0];
-		const last = focusable[focusable.length - 1];
-		if (event.shiftKey && document.activeElement === first) {
-			event.preventDefault();
-			last.focus();
-		} else if (!event.shiftKey && document.activeElement === last) {
-			event.preventDefault();
-			first.focus();
-		}
-	}
-
-	async function submitGraphSearch() {
-		const requestId = ++graphSearchRequestId;
-		graphNeighborhoodRequestId += 1;
-		const query = graphSearchQuery.trim();
-		graphSearchError = '';
-		selectedGraphError = '';
-		selectedGraphNeighborhood = null;
-		isGraphNeighborhoodLoading = false;
-
-		if (!query) {
-			graphSearchResults = [];
-			graphSearchMessage = 'Enter a non-empty query to search graph nodes.';
-			return;
-		}
-
-		isGraphSearching = true;
-		graphSearchMessage = '';
-		try {
-			const results = await searchGraphNodes(apiBaseUrl, apiToken, actorId, query, 20);
-			if (requestId !== graphSearchRequestId) {
-				return;
-			}
-			graphSearchResults = results;
-			if (results.length === 0) {
-				graphSearchMessage = 'No graph nodes matched that query.';
-			}
-		} catch (error) {
-			if (requestId !== graphSearchRequestId) {
-				return;
-			}
-			graphSearchError = error instanceof Error ? error.message : 'Graph search failed';
-			graphSearchResults = [];
-		} finally {
-			if (requestId === graphSearchRequestId) {
-				isGraphSearching = false;
-			}
-		}
-	}
-
-	async function selectGraphNode(node: GraphNode) {
-		const requestId = ++graphNeighborhoodRequestId;
-		isGraphNeighborhoodLoading = true;
-		selectedGraphError = '';
-		try {
-			const neighborhood = await fetchGraphNeighborhood(
-				apiBaseUrl,
-				apiToken,
-				actorId,
-				node.node_id,
-				1
-			);
-			if (requestId !== graphNeighborhoodRequestId) {
-				return;
-			}
-			selectedGraphNeighborhood = neighborhood;
-		} catch (error) {
-			if (requestId !== graphNeighborhoodRequestId) {
-				return;
-			}
-			selectedGraphError = error instanceof Error ? error.message : 'Graph neighborhood failed';
-			selectedGraphNeighborhood = null;
-		} finally {
-			if (requestId === graphNeighborhoodRequestId) {
-				isGraphNeighborhoodLoading = false;
-			}
-		}
+		currentView = item.id;
+		searchQuery = '';
 	}
 
 	function openAccountDrawer() {
@@ -541,34 +509,6 @@
 				secret_kind: 'password'
 			};
 		}
-	}
-
-	function handleNav(item: NavItem) {
-		if (!item.enabled) {
-			return;
-		}
-		if (item.action === 'account-setup') {
-			openAccountDrawer();
-		}
-	}
-
-	function visibleTimelineItems() {
-		const query = searchQuery.trim().toLowerCase();
-		const activeFilter = selectedTimelineFilter === 'All Events' ? '' : selectedTimelineFilter;
-
-		return timelineItems.filter((item) => {
-			if (activeFilter && item.meta !== activeFilter) {
-				return false;
-			}
-			if (!query) {
-				return true;
-			}
-
-			return [item.title, item.description, item.meta, item.tag ?? '', item.details ?? '']
-				.join(' ')
-				.toLowerCase()
-				.includes(query);
-		});
 	}
 
 	async function startGmailSetup() {
@@ -646,6 +586,40 @@
 			isSetupSubmitting = false;
 		}
 	}
+
+	function graphNodeTotal() {
+		return graphSummary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 1842;
+	}
+
+	function graphRelationshipTotal() {
+		return graphSummary?.edge_counts.reduce((total, item) => total + item.count, 0) ?? 3721;
+	}
+
+	function formatNumber(value: number) {
+		return new Intl.NumberFormat('en-US').format(value);
+	}
+
+	function formatGraphKind(kind: GraphNodeKind | string) {
+		return kind
+			.split('_')
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+			.join(' ');
+	}
+
+	function graphNodeKindIcon(kind: GraphNodeKind | string) {
+		switch (kind) {
+			case 'person':
+				return 'tabler:user';
+			case 'email_address':
+				return 'tabler:mail';
+			case 'message':
+				return 'tabler:message';
+			case 'document':
+				return 'tabler:file-text';
+			default:
+				return 'tabler:circle-dot';
+		}
+	}
 </script>
 
 <svelte:head>
@@ -653,7 +627,7 @@
 	<meta name="description" content="Hermes Hub desktop personal OS dashboard." />
 </svelte:head>
 
-<main class="desktop-shell">
+<main class="desktop-shell view-{currentView}">
 	<aside class="sidebar" aria-label="Hermes Hub navigation">
 		<div class="brand">
 			<img src="/assets/hermes-logo-mark.png" alt="" class="brand-mark" />
@@ -667,11 +641,11 @@
 			{#each primaryNav as item}
 				<button
 					type="button"
-					class:active={item.active}
+					class:active={currentView === item.id}
 					class:disabled={!item.enabled}
 					disabled={!item.enabled}
 					title={item.enabled ? item.label : `${item.label} is not available in the current desktop scope`}
-					onclick={() => handleNav(item)}
+					onclick={() => setView(item)}
 				>
 					<Icon icon={item.icon} width="18" height="18" />
 					<span>{item.label}</span>
@@ -687,13 +661,8 @@
 		<section class="shortcuts" aria-label="Shortcuts">
 			<p>Shortcuts</p>
 			<nav class="nav-group">
-				{#each shortcutNav as item}
-					<button
-						type="button"
-						class:disabled={!item.enabled}
-						disabled={!item.enabled}
-						title={`${item.label} is not available in the current desktop scope`}
-					>
+				{#each activeShortcuts as item}
+					<button type="button" class="shortcut" disabled title={`${item.label} shortcut is not implemented yet`}>
 						<Icon icon={item.icon} width="18" height="18" />
 						<span>{item.label}</span>
 						{#if item.badge}
@@ -726,435 +695,530 @@
 		</div>
 	</aside>
 
-	<section class="workspace" aria-label="Hermes Hub dashboard">
+	<section class="workspace" aria-label={`${activeView.title} workspace`}>
 		<header class="topbar">
 			<label class="search-box">
 				<Icon icon="tabler:search" width="18" height="18" />
-				<input bind:value={searchQuery} placeholder="Search anything..." aria-label="Search timeline" />
+				<input bind:value={searchQuery} placeholder={activeView.search} aria-label={activeView.search} />
 				<span class="kbd">⌘ K</span>
 			</label>
+			<div class="top-actions">
+				<button type="button" disabled>
+					<Icon icon="tabler:terminal-2" width="16" height="16" />
+					Command Palette
+					<span class="kbd">⌘ P</span>
+				</button>
+				<button type="button" class="icon-button" disabled title="Notifications are not implemented yet">
+					<Icon icon="tabler:bell" width="18" height="18" />
+					<i>2</i>
+				</button>
+				<button type="button" class="avatar-button" onclick={openAccountDrawer} title="Open account setup">
+					<img src="/assets/hermes-logo-mark.png" alt="" />
+				</button>
+			</div>
 		</header>
 
-		<section class="hero-row" aria-labelledby="dashboard-heading">
-			<div class="greeting">
-				<div class="hero-mark">
-					<img src="/assets/hermes-logo-mark.png" alt="" />
-				</div>
-				<div>
-					<h1 id="dashboard-heading">Good evening, Alex</h1>
-					<p>Here's what happened today</p>
-				</div>
-			</div>
-
-			<div class="metric-grid" aria-label="Daily metrics">
-				{#each metricCards as metric}
-					<article class="metric-card {metric.tone}">
-						<span>{metric.label}</span>
+		{#if currentView === 'home'}
+			<section class="home-page">
+				<div class="hero-row">
+					<div class="greeting">
+						<div class="hero-mark"><img src="/assets/hermes-logo-mark.png" alt="" /></div>
 						<div>
-							<strong>{metric.value}</strong>
-							<Icon icon={metric.icon} width="28" height="28" />
-						</div>
-						<small>↑ {metric.delta}</small>
-					</article>
-				{/each}
-				<article class="metric-card focus">
-					<span>Focus Score</span>
-					<div class="score-ring">
-						<strong>78</strong>
-					</div>
-					<small>Good</small>
-				</article>
-			</div>
-		</section>
-
-		<div class="main-grid">
-			<section class="panel timeline-panel" aria-labelledby="timeline-heading">
-				<header class="panel-header">
-					<div class="panel-tabs" role="tablist" aria-label="Timeline views">
-						<button type="button" class="active" role="tab" aria-selected="true" id="timeline-heading">
-							Timeline
-						</button>
-						<button type="button" role="tab" disabled title="Highlights are not implemented yet">
-							Highlights
-						</button>
-						<button type="button" role="tab" disabled title="My Day is not implemented yet">My Day</button>
-					</div>
-					<button type="button" class="icon-button" disabled title="Share is not implemented yet">
-						<Icon icon="tabler:share-3" width="17" height="17" />
-					</button>
-				</header>
-
-				<div class="timeline-toolbar">
-					<span class="today-dot">Today</span>
-					<label>
-						<select bind:value={selectedTimelineFilter} aria-label="Timeline filter">
-							<option>All Events</option>
-							<option>Email</option>
-							<option>Documents</option>
-							<option>Tasks</option>
-						</select>
-					</label>
-					<button type="button" class="icon-button" disabled title="Timeline settings are not implemented yet">
-						<Icon icon="tabler:adjustments-horizontal" width="17" height="17" />
-					</button>
-				</div>
-
-				<div class="timeline-list">
-					{#each visibleTimelineItems().slice(0, 5) as item, index}
-						<article class="timeline-item">
-							<div class="time">{item.time}</div>
-							<div class="rail">
-								<span class="rail-dot"></span>
-							</div>
-							<div class="event-icon tone-{index % 4}">
-								<Icon icon={item.icon} width="20" height="20" />
-							</div>
-							<div class="event-body">
-								<header>
-									<strong>{item.title}</strong>
-									<span>{item.meta}</span>
-								</header>
-								<p>{item.description}</p>
-								{#if item.details}
-									<small>{item.details}</small>
-								{/if}
-								{#if item.tag}
-									<em class="tag {item.tagTone ?? 'cyan'}">{item.tag}</em>
-								{/if}
-							</div>
-						</article>
-					{/each}
-
-					<div class="yesterday-label">Yesterday</div>
-
-					{#each visibleTimelineItems().slice(5) as item, index}
-						<article class="timeline-item muted">
-							<div class="time">{item.time}</div>
-							<div class="rail">
-								<span class="rail-dot"></span>
-							</div>
-							<div class="event-icon tone-{index + 2}">
-								<Icon icon={item.icon} width="20" height="20" />
-							</div>
-							<div class="event-body">
-								<header>
-									<strong>{item.title}</strong>
-									<span>{item.meta}</span>
-								</header>
-								<p>{item.description}</p>
-							</div>
-						</article>
-					{/each}
-				</div>
-
-				<button type="button" class="load-button" disabled>Load more events</button>
-			</section>
-
-			<div class="center-column">
-				<section class="panel graph-panel" aria-labelledby="graph-heading">
-					<header class="panel-title-row">
-						<h2 id="graph-heading">Knowledge Graph</h2>
-						<div>
-							<button
-								type="button"
-								class="ghost-button"
-								onclick={(event) => {
-									void openGraphExplorer(event);
-								}}>Explore Graph</button
-							>
-							<button type="button" class="icon-button" disabled title="Graph fullscreen is not implemented yet">
-								<Icon icon="tabler:arrows-maximize" width="17" height="17" />
-							</button>
-						</div>
-					</header>
-
-					<div class="graph-canvas" aria-label="Knowledge graph preview">
-						{#if isGraphLoading}
-							<div class="graph-state">
-								<Icon icon="tabler:loader-2" width="30" height="30" />
-								<strong>Loading graph summary</strong>
-								<span>Reading the local graph API.</span>
-							</div>
-						{:else if graphError}
-							<div class="graph-state error">
-								<Icon icon="tabler:alert-triangle" width="30" height="30" />
-								<strong>Graph API unavailable</strong>
-								<span>{graphError}</span>
-							</div>
-						{:else if graphSummary?.is_empty}
-							<div class="graph-state">
-								<Icon icon="tabler:circles" width="30" height="30" />
-								<strong>Graph is empty</strong>
-								<span>No projected nodes, relationships or evidence are available yet.</span>
-							</div>
-						{:else}
-							<div class="graph-line one"></div>
-							<div class="graph-line two"></div>
-							<div class="graph-line three"></div>
-							<div class="graph-line four"></div>
-							<div class="graph-core">
-								<Icon icon="tabler:cube" width="32" height="32" />
-								<span>{formatNumber(graphNodeTotal())} Nodes</span>
-							</div>
-							{#each graphPreviewNodes() as node}
-								<div class="graph-node" style={`left: ${node.x}%; top: ${node.y}%;`}>
-									<span>
-										<Icon icon={node.icon} width="18" height="18" />
-									</span>
-									<strong>{node.label}</strong>
-									<small>{node.caption}</small>
-								</div>
-							{/each}
-						{/if}
-					</div>
-
-					<div class="graph-summary-strip">
-						<article>
-							<span>Nodes</span>
-							<strong>{isGraphLoading ? '...' : formatNumber(graphNodeTotal())}</strong>
-						</article>
-						<article>
-							<span>Relationships</span>
-							<strong>{isGraphLoading ? '...' : formatNumber(graphRelationshipTotal())}</strong>
-						</article>
-						<article>
-							<span>Evidence</span>
-							<strong>{isGraphLoading ? '...' : formatNumber(graphEvidenceTotal())}</strong>
-						</article>
-					</div>
-
-					<div class="discovered">
-						<p>Node Types</p>
-						<div>
-							{#if graphSummary && !graphSummary.is_empty && graphSummary.node_counts.length > 0}
-								{#each graphSummary.node_counts.slice(0, 3) as item}
-									<button type="button" disabled>
-										<Icon icon={graphNodeKindIcon(item.key)} width="18" height="18" />
-										<span>
-											<strong>{formatGraphKind(item.key)}</strong>
-											<small>{formatNumber(item.count)} nodes</small>
-										</span>
-									</button>
-								{/each}
-							{:else}
-								<div class="graph-discovered-state">
-									{#if isGraphLoading}
-										<span>Loading projected node types.</span>
-									{:else if graphError}
-										<span>Graph API unavailable.</span>
-									{:else}
-										<span>No projected node types yet.</span>
-									{/if}
-								</div>
-							{/if}
-						</div>
-						<div class="graph-actions">
-							<button type="button" disabled title="Graph merge is not implemented yet">
-								<Icon icon="tabler:git-merge" width="16" height="16" />
-								Merge
-							</button>
-							<button type="button" disabled title="Graph split is not implemented yet">
-								<Icon icon="tabler:git-branch" width="16" height="16" />
-								Split
-							</button>
-							<button type="button" disabled title="Graph editing is not implemented yet">
-								<Icon icon="tabler:edit" width="16" height="16" />
-								Edit
-							</button>
+							<h1>{activeView.title}</h1>
+							<p>{activeView.subtitle}</p>
 						</div>
 					</div>
-				</section>
-
-				<section class="panel projects-panel" aria-labelledby="projects-heading">
-					<header class="panel-title-row">
-						<h2 id="projects-heading">Active Projects</h2>
-						<button type="button" class="link-button" disabled>View all projects →</button>
-					</header>
-
-					<div class="project-list">
-						{#each projects as project}
-							<article class="project-row">
-								<div class="project-icon {project.tone}">
-									<Icon icon={project.icon} width="20" height="20" />
+					<div class="metric-grid home-metrics">
+						{#each homeStats as metric}
+							<article class="metric-card">
+								<span>{metric.label}</span>
+								<div>
+									<strong>{metric.value}</strong>
+									<Icon icon={metric.icon} width="26" height="26" />
 								</div>
-								<div class="project-main">
-									<strong>{project.name}</strong>
-									<span>{project.kind}</span>
-								</div>
-								<div class="progress" aria-label={`${project.progress}%`}>
-									<span style={`width: ${project.progress}%`}></span>
-								</div>
-								<strong class="progress-value">{project.progress}%</strong>
-								<div class="project-meta">
-									<span>{project.tasks}</span>
-									<span>{project.members}</span>
-								</div>
+								<small>↑ {metric.delta}</small>
 							</article>
 						{/each}
+						<article class="metric-card focus-card">
+							<span>Focus Score</span>
+							<div class="score-ring"><strong>78</strong></div>
+							<small>Good ↑ 5</small>
+						</article>
+					</div>
+				</div>
+
+				<div class="dashboard-grid">
+					<section class="panel feed-panel">
+						<header class="panel-title-row">
+							<div>
+								<h2>What's New</h2>
+								<p>Key changes and important updates</p>
+							</div>
+							<button type="button" class="ghost-button" disabled>All Types</button>
+						</header>
+						<div class="feed-list">
+							{#each whatsNew as item}
+								<article class="feed-row">
+									<span class="round-icon {item.tone}"><Icon icon={item.icon} width="22" height="22" /></span>
+									<div>
+										<strong>{item.title}</strong>
+										<p>{item.meta}</p>
+										{#if item.tag}<em>{item.tag}</em>{/if}
+									</div>
+									<time>{item.time}</time>
+								</article>
+							{/each}
+						</div>
+						<button type="button" class="link-row" disabled>View all events <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
+					</section>
+
+					<section class="panel priorities-panel">
+						<header class="panel-title-row">
+							<div>
+								<h2>Today's Priorities</h2>
+								<p>Focus on what matters most</p>
+							</div>
+						</header>
+						<div class="task-stack">
+							{#each tasks.slice(0, 5) as task}
+								<label>
+									<input type="checkbox" />
+									<span>
+										<strong>{task.title}</strong>
+										<small>{task.assignee} · {task.due}</small>
+									</span>
+									<em class:high={task.priority === 'High'}>{task.priority}</em>
+								</label>
+							{/each}
+						</div>
+						<button type="button" class="link-row" disabled>View all tasks <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
+					</section>
+
+					<section class="panel schedule-panel">
+						<header class="panel-title-row">
+							<div>
+								<h2>Upcoming</h2>
+								<p>Your schedule</p>
+							</div>
+						</header>
+						<div class="schedule-list">
+							<article><time>Today, May 12</time><strong>14:00 Call with Acme Corp</strong><span>16:30 Review Q2 Report</span></article>
+							<article><time>Tomorrow, May 13</time><strong>10:00 Project Hermes - Planning</strong><span>15:00 Design Review</span></article>
+						</div>
+						<button type="button" class="link-row" disabled>View full calendar <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
+					</section>
+
+					<aside class="stacked-rail">
+						<section class="panel mini-panel">
+							<header class="panel-title-row"><h2>People You Talked To</h2><button type="button" class="link-button" disabled>View all</button></header>
+							<div class="person-list">
+								{#each peopleTalked as person}
+									<article>
+										<img src="/assets/hermes-reference-avatar.png" alt="" />
+										<span><strong>{person.name}</strong><small>{person.meta}</small></span>
+										<Icon icon={person.icon} width="18" height="18" />
+									</article>
+								{/each}
+							</div>
+						</section>
+						<section class="panel mini-panel">
+							<header class="panel-title-row"><h2>System Status</h2></header>
+							<ul class="status-list">
+								<li class:online={status}>All systems operational</li>
+								<li>AI Agents online <span>5/5</span></li>
+								<li>Data synchronized <span>2m ago</span></li>
+								<li>Local AI models <span>Ready</span></li>
+							</ul>
+							{#if statusError}<p class="inline-error">{statusError}</p>{/if}
+						</section>
+					</aside>
+				</div>
+
+				<section class="panel full-band">
+					<header class="panel-title-row">
+						<h2>Active Projects</h2>
+						<button type="button" class="link-button" onclick={() => (currentView = 'projects')}>View all projects</button>
+					</header>
+					<div class="project-card-row">
+						{#each projects as project}
+							<article class="compact-project">
+								<span class="round-icon {project.tone}"><Icon icon={project.icon} width="20" height="20" /></span>
+								<div>
+									<strong>{project.name}</strong>
+									<small>{project.kind}</small>
+								</div>
+								<div class="progress"><span style={`width: ${project.progress}%`}></span></div>
+								<em>{project.progress}%</em>
+							</article>
+						{/each}
+						<button type="button" class="new-tile" disabled><Icon icon="tabler:plus" width="22" height="22" />New Project</button>
 					</div>
 				</section>
-			</div>
-		</div>
-
-		<footer class="quick-command" aria-label="Quick command">
-			<Icon icon="tabler:command" width="20" height="20" />
-			<input bind:value={searchQuery} placeholder="Quick command..." aria-label="Quick command" />
-			<span class="kbd">⌘ K</span>
-			<button type="button" disabled title="Notes are not implemented yet">
-				<Icon icon="tabler:note" width="16" height="16" />
-				New Note
-			</button>
-			<button type="button" disabled title="Tasks are not implemented yet">
-				<Icon icon="tabler:checkbox" width="16" height="16" />
-				New Task
-			</button>
-			<button type="button" disabled title="Calendar events are not implemented yet">
-				<Icon icon="tabler:calendar-plus" width="16" height="16" />
-				New Event
-			</button>
-			<button type="button" onclick={openAccountDrawer}>
-				<Icon icon="tabler:mail-plus" width="16" height="16" />
-				Add Account
-			</button>
-		</footer>
-	</section>
-
-	<aside class="right-rail" aria-label="Dashboard side panels">
-		<header class="rail-actions">
-			<button type="button" disabled title="Command palette is not implemented yet">
-				<Icon icon="tabler:terminal-2" width="16" height="16" />
-				Command Palette
-				<span class="kbd">⌘ P</span>
-			</button>
-			<button type="button" class="icon-button" disabled title="Notifications are not implemented yet">
-				<Icon icon="tabler:bell" width="18" height="18" />
-			</button>
-			<button type="button" class="avatar-button" onclick={openAccountDrawer} title="Open account setup">
-				<img src="/assets/hermes-logo-mark.png" alt="" />
-			</button>
-		</header>
-
-		<section class="panel calendar-card" aria-labelledby="calendar-heading">
-			<header class="panel-title-row">
-				<h2 id="calendar-heading">Calendar</h2>
-				<button type="button" class="link-button" disabled>View full calendar ›</button>
-			</header>
-			<h3>May 12 - 18, 2024</h3>
-			<div class="calendar-strip">
-				{#each calendarDays as day}
-					<button type="button" class:active={day.active} disabled={!day.active}>
-						<span>{day.day}</span>
-						<strong>{day.date}</strong>
-					</button>
-				{/each}
-			</div>
-			<div class="agenda">
-				{#each calendarItems as item}
-					<article>
-						<div>
-							<strong>{item.time}</strong>
-							<span>{item.duration}</span>
-						</div>
-						<p>{item.title}</p>
-						{#if item.badge}
-							<em>{item.badge}</em>
-						{/if}
-					</article>
-				{/each}
-			</div>
-		</section>
-
-		<section class="panel tasks-card" aria-labelledby="tasks-heading">
-			<header class="panel-title-row">
-				<h2 id="tasks-heading">Tasks</h2>
-				<button type="button" class="link-button" disabled>View all tasks ›</button>
-			</header>
-			<div class="small-tabs">
-				<button type="button" class="active">My Tasks</button>
-				<button type="button" disabled>Today <span>7</span></button>
-				<button type="button" disabled>Upcoming</button>
-				<button type="button" disabled>Waiting</button>
-			</div>
-			<div class="task-list">
-				{#each taskItems as item}
-					<label>
-						<input type="checkbox" disabled />
-						<span>{item.title}</span>
-						<em>{item.due}</em>
-						<strong>{item.tag}</strong>
-					</label>
-				{/each}
-			</div>
-		</section>
-
-		<section class="panel insights-card" aria-labelledby="insights-heading">
-			<header class="panel-title-row">
-				<h2 id="insights-heading">Insights</h2>
-				<button type="button" class="link-button" disabled>View all insights ›</button>
-			</header>
-			<div class="insight-grid">
-				<article>
-					<strong>Activity Summary</strong>
-					<span>Last 7 days</span>
-					<div class="bar-chart" aria-label="Activity chart">
-						<i style="height: 36%"></i>
-						<i style="height: 58%"></i>
-						<i style="height: 48%"></i>
-						<i style="height: 78%"></i>
-						<i style="height: 52%"></i>
-						<i style="height: 64%"></i>
-						<i style="height: 92%"></i>
-						<i style="height: 72%"></i>
+			</section>
+		{:else if currentView === 'communications'}
+			<section class="communications-page">
+				<div class="view-header">
+					<div>
+						<h1>{activeView.title}</h1>
+						<p>{activeView.subtitle}</p>
 					</div>
-				</article>
-				<article>
-					<strong>Top Topics</strong>
-					<ul>
-						{#each topicItems as topic}
-							<li><span>{topic.label}</span><em>{topic.value}</em></li>
+					<div class="header-actions">
+						<button type="button" class="segmented active"><Icon icon="tabler:message" width="16" height="16" /></button>
+						<button type="button" class="segmented" disabled><Icon icon="tabler:layout-grid" width="16" height="16" /></button>
+						<button type="button" class="primary-button" disabled>New Message</button>
+					</div>
+				</div>
+				<div class="filter-tabs">
+					<button type="button" class="active">All <em>128</em></button>
+					<button type="button" disabled>People <em>42</em></button>
+					<button type="button" disabled>Unread <em>23</em></button>
+					<button type="button" disabled>Requires Reply <em>3</em></button>
+					<button type="button" disabled>Waiting <em>5</em></button>
+					<button type="button" disabled>More <Icon icon="tabler:chevron-down" width="14" height="14" /></button>
+				</div>
+				<div class="three-pane communications-grid">
+					<section class="panel conversation-list">
+						<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search conversations..." /></label>
+						{#each conversations as conversation, index}
+							<button type="button" class:active={selectedConversationIndex === index} onclick={() => (selectedConversationIndex = index)}>
+								<span class="round-icon {conversation.channel === 'WhatsApp' ? 'green' : conversation.channel === 'Telegram' ? 'blue' : 'cyan'}">
+									<Icon icon={conversation.channel === 'WhatsApp' ? 'tabler:brand-whatsapp' : conversation.channel === 'Telegram' ? 'tabler:brand-telegram' : 'tabler:mail'} width="22" height="22" />
+								</span>
+								<img src="/assets/hermes-reference-avatar.png" alt="" />
+								<span>
+									<strong>{conversation.name}</strong>
+									<small>{conversation.preview}</small>
+									<em>{conversation.project}</em>
+								</span>
+								<time>{conversation.time}</time>
+								{#if conversation.unread}<b>{conversation.unread}</b>{/if}
+							</button>
 						{/each}
-					</ul>
-				</article>
-			</div>
-		</section>
-
-		<section class="panel assistant-card" aria-labelledby="assistant-heading">
-			<header class="panel-title-row">
-				<h2 id="assistant-heading">AI Assistant</h2>
-				<button type="button" class="link-button" disabled>
-					<Icon icon="tabler:message-plus" width="15" height="15" />
-					New Chat
-				</button>
-			</header>
-			<label>
-				<input placeholder="Ask HESTIA anything..." disabled />
-				<Icon icon="tabler:sparkles" width="18" height="18" />
-			</label>
-			<div>
-				<button type="button" disabled>Summarize last 7 days</button>
-				<button type="button" disabled>What did I promise?</button>
-				<button type="button" disabled>Show project updates</button>
-			</div>
-		</section>
-
-		<section class="panel system-card" aria-labelledby="system-heading">
-			<div>
-				<h2 id="system-heading">System Status</h2>
-				<p class:online={status} class:error={errorMessage}>
-					{#if status}
-						All systems operational
-					{:else if errorMessage}
-						Backend unavailable
-					{:else if isLoading}
-						Checking local API
-					{/if}
-				</p>
-			</div>
-			<div class="sparkline" aria-hidden="true">
-				<span></span>
-			</div>
-		</section>
-	</aside>
+					</section>
+					<section class="panel chat-pane">
+						<header>
+							<img src="/assets/hermes-reference-avatar.png" alt="" />
+							<div><h2>{selectedConversation.name}</h2><p>{selectedConversation.role}</p></div>
+							<div class="chat-actions">
+								<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
+								<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
+								<button type="button" disabled><Icon icon="tabler:info-circle" width="17" height="17" /></button>
+							</div>
+						</header>
+						<div class="chat-body">
+							<div class="date-divider">May 12, 2024</div>
+							<article class="bubble inbound">Hi Alex, how are you? I've reviewed the proposal for the Hermes project.<time>14:28</time></article>
+							<article class="bubble outbound">Hi John! Great to hear from you. Please let me know your feedback.<time>14:30</time></article>
+							<article class="attachment-bubble"><Icon icon="tabler:file-type-pdf" width="34" height="34" /><span><strong>Hermes_Proposal_v2.pdf</strong><small>2.4 MB · PDF</small></span><button type="button" disabled><Icon icon="tabler:download" width="16" height="16" /></button></article>
+							<article class="bubble inbound">Looks good overall. I have a few comments on page 4 and 7.<time>14:31</time></article>
+							<div class="date-divider">Today</div>
+							<article class="bubble inbound"><strong>{selectedConversation.name}</strong><br />Let's schedule a call for tomorrow 10:00 AM?<time>14:32</time></article>
+							<article class="bubble outbound">Perfect, see you tomorrow!<time>14:32</time></article>
+						</div>
+						<footer class="composer">
+							<input placeholder="Type your message..." />
+							<button type="button" disabled><Icon icon="tabler:paperclip" width="17" height="17" /></button>
+							<button type="button" disabled><Icon icon="tabler:send" width="18" height="18" /></button>
+						</footer>
+					</section>
+					<aside class="context-rail">
+						<section class="panel profile-panel">
+							<div class="profile-head"><img src="/assets/hermes-reference-avatar.png" alt="" /><div><h2>{selectedConversation.name}</h2><p>{selectedConversation.role}</p><small>jsmith@smithpartners.com</small></div></div>
+							<div class="quick-icons">
+								<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
+								<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
+								<button type="button" disabled><Icon icon="tabler:brand-telegram" width="17" height="17" /></button>
+								<button type="button" disabled><Icon icon="tabler:brand-whatsapp" width="17" height="17" /></button>
+							</div>
+						</section>
+						<section class="panel info-card"><h2>Summary</h2><p>Important client and partner. Working together on Hermes Hub project since Jan 2024. Professional relationship with regular communication.</p><button type="button" class="link-row" disabled>View full profile <Icon icon="tabler:arrow-right" width="15" height="15" /></button></section>
+						<section class="panel info-card"><h2>Related Projects</h2>{#each projects.slice(0, 2) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
+						<section class="panel info-card"><h2>Active Tasks</h2>{#each tasks.slice(0, 3) as task}<label class="mini-check"><input type="checkbox" />{task.title}<em>{task.due.split(' ')[0]}</em></label>{/each}</section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'contacts'}
+			<section class="contacts-page">
+				<div class="contacts-layout">
+					<section class="panel contacts-list-panel">
+						<header>
+							<div><h1>Contacts</h1><p>642 contacts</p></div>
+							<button type="button" class="primary-button" disabled>New Contact</button>
+						</header>
+						<div class="filter-tabs compact">
+							<button type="button" class="active">All</button>
+							<button type="button" disabled>People <em>532</em></button>
+							<button type="button" disabled>Companies <em>110</em></button>
+						</div>
+						<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search contacts..." /></label>
+						{#each contactList as contact, index}
+							<button type="button" class="contact-row" class:active={selectedContactIndex === index} onclick={() => (selectedContactIndex = index)}>
+								<img src="/assets/hermes-reference-avatar.png" alt="" />
+								<span><strong>{contact.name}</strong><small>{contact.role}</small><em>{contact.company}</em></span>
+								<small>{contact.status ?? contact.channel ?? 'Email'}</small>
+							</button>
+						{/each}
+					</section>
+					<section class="contact-detail">
+						<header class="contact-hero panel">
+							<img src="/assets/hermes-reference-avatar.png" alt="" />
+							<div><h1>{selectedContact.name}</h1><p>{selectedContact.role} at {selectedContact.company}</p><small>Online</small></div>
+							<div class="chat-actions">
+								<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
+								<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
+								<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
+								<button type="button" disabled><Icon icon="tabler:brand-whatsapp" width="17" height="17" /></button>
+							</div>
+						</header>
+						<div class="section-tabs">
+							<button type="button" class="active">Overview</button>
+							<button type="button" disabled>Communications</button>
+							<button type="button" disabled>Documents <em>24</em></button>
+							<button type="button" disabled>Tasks <em>7</em></button>
+							<button type="button" disabled>Projects <em>5</em></button>
+							<button type="button" disabled>Notes</button>
+						</div>
+						<div class="contact-cards">
+							<section class="panel info-card">
+								<h2>Contact Information</h2>
+								<ul class="detail-list">
+									<li><Icon icon="tabler:mail" width="17" height="17" /> jsmith@smithpartners.com <em>Work</em></li>
+									<li><Icon icon="tabler:phone" width="17" height="17" /> +1 (555) 123-4567 <em>Mobile</em></li>
+									<li><Icon icon="tabler:brand-telegram" width="17" height="17" /> @john.smith <em>Telegram</em></li>
+									<li><Icon icon="tabler:map-pin" width="17" height="17" /> New York, USA <em>Local Time: 18:42</em></li>
+								</ul>
+							</section>
+							<section class="panel info-card"><h2>About</h2><p>John is a strategic consulting partner. We have been working together since 2021 on multiple projects including Hermes Hub and IRIS platform development.</p><div class="tag-cloud"><span>Decision Maker</span><span>Executive</span><span>Strategic</span><span>Tech Enthusiast</span></div></section>
+							<section class="panel info-card"><h2>Relationship Strength</h2><div class="big-score">85</div><strong>Strong</strong><p>Last interaction 2 hours ago</p></section>
+							<section class="panel info-card span-2"><h2>Recent Interactions</h2>{#each whatsNew.slice(0, 3) as item}<div class="feed-row compact-row"><span class="round-icon {item.tone}"><Icon icon={item.icon} width="18" height="18" /></span><div><strong>{item.title}</strong><p>{item.meta}</p></div><time>{item.time}</time></div>{/each}</section>
+							<section class="panel info-card"><h2>Active Projects</h2>{#each projects.slice(0, 3) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
+						</div>
+					</section>
+					<aside class="stacked-rail">
+						<section class="panel info-card"><h2>AI Summary</h2><p>John is a key strategic partner and decision maker. You have a strong professional relationship with frequent communication across multiple projects.</p></section>
+						<section class="panel info-card"><h2>Related Documents</h2>{#each documents.slice(0, 4) as doc}<div class="doc-mini"><Icon icon={doc.icon} width="20" height="20" /><span><strong>{doc.name}</strong><small>{doc.size} · {doc.date}</small></span></div>{/each}</section>
+						<section class="panel info-card"><h2>Recent Notes</h2><p>Discussed expansion to EU market</p><p>Prefers email for official communication</p><p>Interested in AI/ML integration</p></section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'projects'}
+			<section class="projects-page">
+				<header class="project-hero panel">
+					<div class="project-logo"><Icon icon="tabler:cube" width="48" height="48" /></div>
+					<div><h1>Hermes Hub <em>Active</em></h1><p>Product Development</p><small>Building the next generation personal OS for managing communications, data and workflows.</small></div>
+					<button type="button" class="primary-button" disabled><Icon icon="tabler:plus" width="16" height="16" />New</button>
+				</header>
+				<div class="project-meta-strip panel">
+					<article><span>Owner</span><strong>Alex Morgan</strong></article>
+					<article><span>Team</span><strong>5 members +3</strong></article>
+					<article><span>Start Date</span><strong>Jan 15, 2024</strong></article>
+					<article><span>Target Date</span><strong>Dec 20, 2024</strong></article>
+					<article><span>Progress</span><div class="progress"><span style="width: 75%"></span></div><strong>75%</strong></article>
+				</div>
+				<div class="section-tabs">
+					<button type="button" class="active">Overview</button>
+					<button type="button" disabled>Communications</button>
+					<button type="button" disabled>Tasks <em>23</em></button>
+					<button type="button" disabled>Documents <em>48</em></button>
+					<button type="button" disabled>Calendar</button>
+					<button type="button" disabled>Team <em>7</em></button>
+					<button type="button" disabled>Notes</button>
+					<button type="button" disabled>Files</button>
+					<button type="button" disabled>Settings</button>
+				</div>
+				<div class="project-dashboard-grid">
+					<section class="panel info-card"><h2>AI Summary</h2><div class="summary-numbers"><article><strong>142</strong><span>Documents created</span></article><article><strong>327</strong><span>Messages received</span></article><article><strong>24</strong><span>Tasks completed</span></article><article><strong>8</strong><span>New contacts added</span></article></div></section>
+					<section class="panel graph-card-large"><h2>Knowledge Graph</h2><div class="radial-graph"><div class="graph-center"><Icon icon="tabler:cube" width="30" height="30" /><span>Hermes Hub</span></div>{#each projects as project, index}<span class="graph-chip" style={`--x:${20 + index * 19}%; --y:${20 + (index % 2) * 42}%`}>{project.name}</span>{/each}</div></section>
+					<section class="panel info-card"><h2>Project Timeline</h2>{#each ['ADR-001: Event Driven Architecture', 'UI/UX Prototype Completed', 'Agent System Implemented', 'Knowledge Graph Integration', 'Plugin System Discussion'] as item, index}<div class="timeline-mini"><time>May {12 + index * 4}</time><strong>{item}</strong></div>{/each}</section>
+					<section class="panel info-card"><h2>Recent Communications</h2>{#each conversations.slice(0, 4) as conversation}<div class="related-row"><span class="round-icon cyan"><Icon icon="tabler:mail" width="16" height="16" /></span><strong>{conversation.name}</strong><em>{conversation.time}</em></div>{/each}</section>
+					<section class="panel info-card"><h2>Top Documents</h2>{#each documents.slice(0, 4) as doc}<div class="doc-mini"><Icon icon={doc.icon} width="20" height="20" /><span><strong>{doc.name}</strong><small>{doc.size} · {doc.date}</small></span></div>{/each}</section>
+					<section class="panel info-card"><h2>Decisions (ADR)</h2>{#each ['ADR-0001 Event Driven Architecture', 'ADR-0002 Rust Backend', 'ADR-0003 SvelteKit Frontend', 'ADR-0004 PostgreSQL + Vector DB'] as adr}<div class="timeline-mini"><Icon icon="tabler:git-pull-request" width="16" height="16" /><strong>{adr}</strong></div>{/each}</section>
+					<section class="panel info-card"><h2>Open Promises</h2>{#each tasks.slice(0, 4) as task}<label class="mini-check"><input type="checkbox" />{task.title}<em>{task.priority}</em></label>{/each}</section>
+					<aside class="stacked-rail project-side">
+						<section class="panel info-card"><h2>Project Health</h2><div class="health-row"><span>Health</span><strong>Excellent</strong></div><div class="health-row"><span>Risk</span><strong>Low</strong></div><div class="health-row"><span>Budget</span><strong>$42,500 / $60,000</strong></div></section>
+						<section class="panel info-card"><h2>Key People</h2>{#each contactList.slice(0, 4) as contact, index}<div class="person-compact"><img src="/assets/hermes-reference-avatar.png" alt="" /><span><strong>{contact.name}</strong><small>{contact.role}</small></span><em>{87 - index * 9}%</em></div>{/each}</section>
+						<section class="panel info-card"><h2>Related Projects</h2>{#each projects.slice(1) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'tasks'}
+			<section class="tasks-page">
+				<div class="view-header">
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:hexagon" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<div class="metric-grid inline-metrics">{#each [{label:'Total Tasks',value:'342',delta:'18%'},{label:'To Do',value:'128',delta:''},{label:'In Progress',value:'97',delta:''},{label:'In Review',value:'43',delta:''},{label:'Done',value:'74',delta:'12%'}] as metric}<article class="metric-card"><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.delta ? `↑ ${metric.delta}` : ' '}</small></article>{/each}</div>
+					<button type="button" class="primary-button" disabled>New Task</button>
+				</div>
+				<div class="filter-bar"><button type="button" disabled>All Trackers</button><button type="button" disabled>All Accounts</button><button type="button" disabled>All Projects</button><button type="button" disabled>All Assignees</button><button type="button" disabled>Filters</button><button type="button" disabled>Sort: Priority</button><button type="button" disabled>Group by: None</button></div>
+				<div class="tasks-layout">
+					<section class="panel task-table">
+						<header class="tracker-strip">
+							{#each ['Jira Cloud', 'YouTrack', 'ClickUp'] as tracker, index}
+								<article><Icon icon={index === 0 ? 'tabler:brand-jira' : index === 1 ? 'tabler:brand-youtube-kids' : 'tabler:triangle-square-circle'} width="22" height="22" /><strong>{tracker}</strong><span>{index === 0 ? '104' : index === 1 ? '48' : '32'} to do</span></article>
+							{/each}
+						</header>
+						<div class="table-head"><span>Task</span><span>Tracker</span><span>Project</span><span>Assignee</span><span>Status</span><span>Priority</span><span>Due Date</span></div>
+						{#each ['Due Today', 'This Week', 'Later'] as group}
+							<h3 class="task-group">{group} <em>{tasks.filter((task) => task.group === group).length}</em></h3>
+							{#each tasks.filter((task) => task.group === group) as task}
+								<label class="task-row"><input type="checkbox" /><strong>{task.title}</strong><span>{task.tracker}</span><span>{task.project}</span><span>{task.assignee}</span><em>{task.status}</em><b class:high={task.priority === 'High'}>{task.priority}</b><time>{task.due}</time></label>
+							{/each}
+						{/each}
+					</section>
+					<aside class="stacked-rail">
+						<section class="panel chart-panel"><h2>Tasks Overview</h2><div class="donut"><strong>342</strong><span>Total</span></div><ul><li>128 To Do</li><li>97 In Progress</li><li>43 In Review</li><li>74 Done</li></ul></section>
+						<section class="panel info-card"><h2>By Tracker</h2>{#each ['Jira Cloud 246 tasks', 'YouTrack 106 tasks', 'ClickUp 48 tasks'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
+						<section class="panel info-card"><h2>Upcoming Deadlines</h2>{#each tasks.slice(0, 5) as task}<div class="deadline"><span>{task.title}</span><time>{task.due}</time></div>{/each}</section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'calendar'}
+			<section class="calendar-page">
+				<div class="view-header">
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:calendar" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<div class="section-tabs pill-tabs"><button type="button" disabled>Day</button><button type="button" class="active">Week</button><button type="button" disabled>Month</button><button type="button" disabled>Agenda</button></div>
+					<button type="button" class="primary-button" disabled>New Event</button>
+				</div>
+				<div class="filter-bar"><button type="button" disabled>All Accounts (8)</button><button type="button" disabled>All Calendars (24)</button><button type="button" disabled>All Event Types</button><button type="button" disabled>Filters</button></div>
+				<div class="calendar-layout">
+					<section class="panel week-board">
+						<div class="week-header">{#each weekColumns as day}<strong>{day}</strong>{/each}</div>
+						<div class="time-grid">
+							{#each calendarBlocks as block}
+								<article class="event-block {block.tone}" style={`--day:${block.day}; --top:${block.top}px; --height:${block.height}px`}><strong>{block.title}</strong><span>{block.meta}</span></article>
+							{/each}
+							<div class="now-line"><span>11:42</span></div>
+						</div>
+						<footer>Legend: <span>Google Calendar</span><span>Microsoft 365</span><span>YouTrack</span><span>Personal</span></footer>
+					</section>
+					<aside class="stacked-rail">
+						<section class="panel info-card"><h2>Upcoming Events</h2>{#each ['1:1 with Maria', 'Roadmap Review', 'Product Review', 'Engineering Sync', 'Architecture Discussion'] as event, index}<div class="deadline"><span>{index < 2 ? 'Today' : 'Tomorrow'} · {event}</span><time>{index + 9}:00</time></div>{/each}</section>
+						<section class="panel info-card"><h2>Calendars</h2>{#each ['Google Work', 'Google Personal', 'Microsoft Work', 'YouTrack Events'] as item}<label class="mini-check"><input type="checkbox" checked />{item}<em></em></label>{/each}<button type="button" class="link-row" disabled>Add Calendar</button></section>
+						<section class="panel info-card"><h2>Time Insights</h2>{#each ['Meetings 18h 30m', 'Focus Time 12h 15m', 'Personal 8h 45m', 'Other 3h 30m'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'documents'}
+			<section class="documents-page">
+				<div class="view-header">
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:file-text" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<button type="button" class="primary-button" disabled>Upload</button>
+				</div>
+				<div class="source-strip">
+					{#each ['Google Drive 1,243', 'OneDrive 812', 'Dropbox 342', 'Notion 256'] as source, index}
+						<article class="source-card"><Icon icon={index === 0 ? 'tabler:brand-google-drive' : index === 1 ? 'tabler:cloud' : index === 2 ? 'tabler:brand-dropbox' : 'tabler:brand-notion'} width="28" height="28" /><span>{source}</span></article>
+					{/each}
+					<button type="button" class="source-card add" disabled><Icon icon="tabler:plus" width="20" height="20" />Add Source</button>
+				</div>
+				<div class="filter-bar"><button type="button" disabled>All Accounts</button><button type="button" disabled>All Types</button><button type="button" disabled>All Projects</button><button type="button" disabled>All Folders</button><button type="button" disabled>Filters</button></div>
+				<div class="docs-layout">
+					<aside class="left-panels"><section class="panel info-card"><h2>Smart Collections</h2>{#each ['Recently Added 48', 'Recently Opened 24', 'Important 32', 'Shared with Me 18', 'Requires Review 7', 'Contracts & Legal 23', 'Financial 15'] as item}<div class="collection-row">{item}</div>{/each}</section><section class="panel info-card"><h2>My Folders</h2>{#each ['Hermes Hub', 'Projects', 'Personal', 'Work', 'Archive 2024', 'Clients', 'References'] as folder}<div class="collection-row"><Icon icon="tabler:folder" width="16" height="16" />{folder}</div>{/each}</section></aside>
+					<section class="panel docs-table">
+						<header><h2>Hermes Hub</h2><div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Documents <em>142</em></button><button type="button" disabled>Folders <em>16</em></button><button type="button" disabled>Links <em>28</em></button><button type="button" disabled>Activity</button></div></header>
+						<div class="category-grid">{#each ['Architecture 23 documents','Product 31 documents','Design 18 documents','Meetings 24 documents','Contracts 12 documents','Research 15 documents','Reports 11 documents','Other 8 documents'] as category}<article><Icon icon="tabler:folder" width="20" height="20" /><span>{category}</span></article>{/each}</div>
+						<div class="table-head docs"><span>Name</span><span>Source</span><span>Project</span><span>Type</span><span>Last Modified</span><span>Size</span></div>
+						{#each documents as doc}
+							<div class="doc-row"><Icon icon={doc.icon} width="19" height="19" /><strong>{doc.name}</strong><span>{doc.source}</span><span>{doc.project}</span><span>{doc.type}</span><time>{doc.date}</time><em>{doc.size}</em></div>
+						{/each}
+					</section>
+					<aside class="stacked-rail">
+						<section class="panel chart-panel"><h2>Documents Insights</h2><strong>2,653</strong><span>Total Documents</span><div class="donut small"><strong>24%</strong></div></section>
+						<section class="panel info-card"><h2>Document Types</h2>{#each ['PDF 1,234 (46%)', 'Documents 623 (23%)', 'Spreadsheets 312 (12%)', 'Presentations 198 (7%)', 'Images 142 (5%)'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
+						<section class="panel info-card"><h2>Recent Activity</h2>{#each contactList.slice(1,5) as person}<div class="person-compact"><img src="/assets/hermes-reference-avatar.png" alt="" /><span><strong>{person.name}</strong><small>updated a document</small></span></div>{/each}</section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'notes'}
+			<section class="notes-page">
+				<div class="notes-layout">
+					<aside class="left-panels">
+						<section class="panel info-card"><h2>Sources</h2>{#each ['Apple Notes 1,243','Obsidian 872','Anytype 532','Gmail 1,156','Outlook 623'] as source}<div class="collection-row">{source}</div>{/each}<button type="button" class="link-row" disabled>Add Source</button></section>
+						<section class="panel info-card"><h2>Collections</h2>{#each ['Inbox 231','Starred 128','Today 89','To Review 74','Personal 312','Projects 482','Ideas 156','Research 203','Archive 1,024'] as item}<div class="collection-row">{item}</div>{/each}</section>
+						<section class="panel info-card"><h2>Tags</h2><div class="tag-cloud"><span># project 342</span><span># idea 156</span><span># meeting 213</span><span># research 182</span><span># reference 98</span><span># design 76</span></div></section>
+					</aside>
+					<section class="notes-main">
+						<div class="view-header">
+							<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:notes" width="28" height="28" /></span><div><h1>Notes</h1><p>All your notes from connected sources</p></div></div>
+							<div class="metric-grid inline-metrics tiny">{#each [{label:'Total Notes',value:'4,426',delta:'18%'},{label:'This Week',value:'128',delta:'12%'},{label:'Unprocessed',value:'89',delta:'5%'}] as metric}<article class="metric-card"><span>{metric.label}</span><strong>{metric.value}</strong><small>↑ {metric.delta}</small></article>{/each}</div>
+							<button type="button" class="primary-button" disabled>New Note</button>
+						</div>
+						<div class="filter-bar"><button type="button" disabled>All Sources</button><button type="button" disabled>All Types</button><button type="button" disabled>All Collections</button><button type="button" disabled>All Tags</button><button type="button" disabled>Filters</button><button type="button" disabled>Sort: Updated</button></div>
+						<section class="notes-list panel">
+							<h3>Today</h3>{#each notes.slice(0,4) as note}<article><Icon icon={note.icon} width="22" height="22" /><div><strong>{note.title}</strong><p>{note.body}</p><small>{note.source} · {note.time}</small></div><em>{note.tag}</em></article>{/each}
+							<h3>Yesterday</h3>{#each notes.slice(4) as note}<article><Icon icon={note.icon} width="22" height="22" /><div><strong>{note.title}</strong><p>{note.body}</p><small>{note.source} · {note.time}</small></div><em>{note.tag}</em></article>{/each}
+						</section>
+					</section>
+					<aside class="stacked-rail">
+						<section class="panel chart-panel"><h2>Notes Insights</h2><div class="donut"><strong>4,426</strong><span>Total Notes</span></div></section>
+						<section class="panel info-card"><h2>Activity</h2>{#each ['You created a note','Maria Petrova shared a note','Email processed','Note linked to project'] as item}<div class="deadline"><span>{item}</span><time>10:42</time></div>{/each}</section>
+						<section class="panel info-card"><h2>Unprocessed Items</h2>{#each ['23 Emails','34 Apple Notes','12 Attachments','8 Web Clippings'] as item}<div class="collection-row">{item}</div>{/each}<button type="button" class="link-row" disabled>Process All</button></section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'knowledge'}
+			<section class="knowledge-page">
+				<div class="graph-filter-tabs">
+					{#each ['All','People','Projects','Documents','Tasks','Meetings','Decisions','Messages','Events','Notes','Sources'] as item, index}
+						<button type="button" class:active={index === 0} disabled={index !== 0}>{item}</button>
+					{/each}
+				</div>
+				<div class="knowledge-layout">
+					<section class="panel graph-workbench">
+						<div class="graph-toolbar"><button type="button" disabled>Local View</button><button type="button" disabled><Icon icon="tabler:hand-click" width="16" height="16" /></button><button type="button" disabled><Icon icon="tabler:plus" width="16" height="16" /></button><button type="button" disabled><Icon icon="tabler:minus" width="16" height="16" /></button></div>
+						<div class="knowledge-canvas">
+							<div class="knowledge-core"><img src="/assets/hermes-logo-mark.png" alt="" /><strong>Hermes Hub</strong><span>Project</span></div>
+							{#each graphBuckets as bucket}
+								<article class="graph-bucket {bucket.tone}" style={`left:${bucket.x}%; top:${bucket.y}%`}>
+									<header><strong>{bucket.label}</strong><em>{bucket.count}</em></header>
+									{#each bucket.items as item}<p>{item}</p>{/each}
+								</article>
+							{/each}
+						</div>
+						<footer class="timeline-slider"><span>2023</span><div><i></i></div><span>2026</span></footer>
+					</section>
+					<aside class="stacked-rail">
+						<section class="panel info-card"><h2>Selected Node</h2><div class="doc-mini"><Icon icon="tabler:file-text" width="24" height="24" /><span><strong>Architecture.md</strong><small>Document · Obsidian</small></span></div><ul class="detail-list node-detail-list"><li>Projects <em>Hermes Hub</em></li><li>Created <em>Apr 28, 2024</em></li><li>Updated <em>May 12, 2024</em></li><li>Created by <em>Alex Morgan</em></li></ul></section>
+						<section class="panel info-card"><h2>AI Summary</h2><p>Этот документ связан с Hermes Hub, Agent System и ADR-0001. Чаще всего упоминается вместе с Plugin System, Knowledge Graph и Communications.</p></section>
+						<section class="panel info-card"><h2>Graph Statistics</h2><div class="summary-numbers compact"><article><strong>{formatNumber(graphNodeTotal())}</strong><span>Nodes</span></article><article><strong>{formatNumber(graphRelationshipTotal())}</strong><span>Connections</span></article><article><strong>24</strong><span>Clusters</span></article><article><strong>12</strong><span>Orphan Nodes</span></article></div>{#if graphError}<p class="inline-error">{graphError}</p>{/if}</section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'agents'}
+			<section class="agents-page">
+				<div class="view-header">
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:robot" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<button type="button" class="primary-button" disabled>New Agent</button>
+				</div>
+				<div class="metric-grid agent-metrics">{#each [{label:'Total Agents',value:'12',delta:'20%'},{label:'Active Now',value:'6',delta:'6 running'},{label:'Tasks Completed',value:'1,842',delta:'18%'},{label:'Success Rate',value:'94.2%',delta:'2.1%'},{label:'Time Saved',value:'128h',delta:'32h'},{label:'Tokens Used',value:'2.4M',delta:'8%'}] as metric}<article class="metric-card"><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.delta}</small></article>{/each}</div>
+				<div class="filter-bar"><button type="button" class="active">All Agents</button><button type="button" disabled>Active</button><button type="button" disabled>Inactive</button><button type="button" disabled>Templates</button><button type="button" disabled>Marketplace</button><button type="button" disabled>All Types</button><button type="button" disabled>All Status</button></div>
+				<div class="agents-layout">
+					<section class="agent-main">
+						<div class="agent-grid">{#each agentCards as agent, index}<button type="button" class="agent-card panel" class:active={selectedAgentIndex === index} onclick={() => (selectedAgentIndex = index)}><span class="round-icon {agent.tone}"><Icon icon={agent.icon} width="22" height="22" /></span><div><strong>{agent.name}</strong><p>{agent.summary}</p><em>{agent.status}</em></div><footer><span>{agent.tasks} tasks</span><span>{agent.success} success</span></footer></button>{/each}</div>
+						<section class="panel agent-detail">
+							<header><span class="round-icon {selectedAgent.tone}"><Icon icon={selectedAgent.icon} width="26" height="26" /></span><div><h2>{selectedAgent.name}</h2><em>{selectedAgent.status}</em></div></header>
+							<div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Capabilities</button><button type="button" disabled>Tasks</button><button type="button" disabled>Logs</button><button type="button" disabled>Settings</button></div>
+							<div class="agent-detail-grid"><p>{selectedAgent.summary} Specialized in researching connected sources, then generating work products with citations.</p><div class="spark-chart"></div><ul>{#each ['Web Search','Document Analysis','Data Synthesis','Report Generation','Source Citation'] as capability}<li><Icon icon="tabler:circle-check" width="16" height="16" />{capability}</li>{/each}</ul></div>
+						</section>
+					</section>
+					<aside class="stacked-rail">
+						<section class="panel info-card"><h2>Agent Activity</h2>{#each agentCards.slice(0,5) as agent, index}<div class="deadline"><span>{agent.name} completed task</span><time>{index * 5 + 2} min ago</time></div>{/each}</section>
+						<section class="panel info-card"><h2>Tasks Queue</h2>{#each ['Research: Competitor Analysis','Email: Draft Partnership Proposal','Meeting: Weekly Standup Summary','Analysis: Q1 Performance Review'] as item}<div class="deadline"><span>{item}</span><time>Due in 1h</time></div>{/each}</section>
+						<section class="panel info-card"><h2>AI Insights</h2><p>Your agents saved 128 hours this month. Research Analyst has the highest success rate at 96%.</p></section>
+					</aside>
+				</div>
+			</section>
+		{:else}
+			<section class="timeline-page">
+				<div class="view-header"><div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:timeline-event" width="28" height="28" /></span><div><h1>Timeline</h1><p>Chronological activity across connected sources.</p></div></div></div>
+				<div class="timeline-layout">
+					<section class="panel feed-panel large-timeline">
+						<header class="panel-title-row"><h2>Today</h2><button type="button" class="ghost-button" disabled>All Events</button></header>
+						{#each whatsNew.concat(whatsNew) as item, index}<article class="timeline-event-row"><time>{18 - index}:42</time><span class="rail-dot"></span><span class="round-icon {item.tone}"><Icon icon={item.icon} width="20" height="20" /></span><div><strong>{item.title}</strong><p>{item.meta}</p>{#if item.tag}<em>{item.tag}</em>{/if}</div></article>{/each}
+					</section>
+					<aside class="stacked-rail"><section class="panel info-card"><h2>Timeline Filters</h2>{#each ['Messages','Documents','Tasks','Calendar','Notes','Decisions'] as item}<label class="mini-check"><input type="checkbox" checked />{item}</label>{/each}</section></aside>
+				</div>
+			</section>
+		{/if}
+	</section>
 </main>
 
 {#if isAccountDrawerOpen}
@@ -1176,334 +1240,47 @@
 		</header>
 
 		<div class="provider-tabs" aria-label="Account provider">
-			<button
-				type="button"
-				class:active={selectedProvider === 'gmail'}
-				onclick={() => selectProvider('gmail')}>Gmail</button
-			>
-			<button
-				type="button"
-				class:active={selectedProvider === 'icloud'}
-				onclick={() => selectProvider('icloud')}>iCloud</button
-			>
-			<button
-				type="button"
-				class:active={selectedProvider === 'imap'}
-				onclick={() => selectProvider('imap')}>Raw IMAP</button
-			>
+			<button type="button" class:active={selectedProvider === 'gmail'} onclick={() => selectProvider('gmail')}>Gmail</button>
+			<button type="button" class:active={selectedProvider === 'icloud'} onclick={() => selectProvider('icloud')}>iCloud</button>
+			<button type="button" class:active={selectedProvider === 'imap'} onclick={() => selectProvider('imap')}>Raw IMAP</button>
 		</div>
 
 		{#if selectedProvider === 'gmail'}
 			<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
-				<label>
-					<span>Account ID</span>
-					<input bind:value={gmailForm.account_id} autocomplete="off" />
-				</label>
-				<label>
-					<span>Display name</span>
-					<input bind:value={gmailForm.display_name} autocomplete="off" />
-				</label>
-				<label>
-					<span>Gmail address</span>
-					<input bind:value={gmailForm.external_account_id} autocomplete="email" />
-				</label>
-				<label>
-					<span>OAuth client ID</span>
-					<input bind:value={gmailForm.client_id} autocomplete="off" />
-				</label>
-				<label>
-					<span>OAuth client secret</span>
-					<input bind:value={gmailForm.client_secret} type="password" autocomplete="off" />
-				</label>
-				<label class="wide">
-					<span>Redirect URI</span>
-					<input bind:value={gmailForm.redirect_uri} autocomplete="off" />
-				</label>
-				<div class="form-actions wide">
-					<button type="button" onclick={startGmailSetup} disabled={isSetupSubmitting}>
-						Start OAuth
-					</button>
-				</div>
+				<label><span>Account ID</span><input bind:value={gmailForm.account_id} autocomplete="off" /></label>
+				<label><span>Display name</span><input bind:value={gmailForm.display_name} autocomplete="off" /></label>
+				<label><span>Gmail address</span><input bind:value={gmailForm.external_account_id} autocomplete="email" /></label>
+				<label><span>OAuth client ID</span><input bind:value={gmailForm.client_id} autocomplete="off" /></label>
+				<label><span>OAuth client secret</span><input bind:value={gmailForm.client_secret} type="password" autocomplete="off" /></label>
+				<label class="wide"><span>Redirect URI</span><input bind:value={gmailForm.redirect_uri} autocomplete="off" /></label>
+				<div class="form-actions wide"><button type="button" onclick={startGmailSetup} disabled={isSetupSubmitting}>Start OAuth</button></div>
 			</form>
 
 			{#if gmailPending}
 				<div class="oauth-box">
-					<a href={gmailPending.authorization_url} target="_blank" rel="noreferrer">
-						Open Google consent
-					</a>
-					<label>
-						<span>Authorization code</span>
-						<input bind:value={gmailAuthorizationCode} autocomplete="off" />
-					</label>
-					<button type="button" onclick={completeGmailSetup} disabled={isSetupSubmitting}>
-						Complete Gmail
-					</button>
+					<a href={gmailPending.authorization_url} target="_blank" rel="noreferrer">Open Google consent</a>
+					<label><span>Authorization code</span><input bind:value={gmailAuthorizationCode} autocomplete="off" /></label>
+					<button type="button" onclick={completeGmailSetup} disabled={isSetupSubmitting}>Complete Gmail</button>
 				</div>
 			{/if}
 		{:else}
 			<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
-				<label>
-					<span>Account ID</span>
-					<input bind:value={imapForm.account_id} autocomplete="off" />
-				</label>
-				<label>
-					<span>Display name</span>
-					<input bind:value={imapForm.display_name} autocomplete="off" />
-				</label>
-				<label>
-					<span>Email address</span>
-					<input bind:value={imapForm.external_account_id} autocomplete="email" />
-				</label>
-				<label>
-					<span>Username</span>
-					<input bind:value={imapForm.username} autocomplete="username" />
-				</label>
-				<label>
-					<span>Host</span>
-					<input bind:value={imapForm.host} autocomplete="off" />
-				</label>
-				<label>
-					<span>Port</span>
-					<input bind:value={imapForm.port} type="number" min="1" max="65535" />
-				</label>
-				<label>
-					<span>Mailbox</span>
-					<input bind:value={imapForm.mailbox} autocomplete="off" />
-				</label>
-				<label>
-					<span>Password</span>
-					<input bind:value={imapForm.password} type="password" autocomplete="current-password" />
-				</label>
-				<label class="checkbox-row">
-					<input bind:checked={imapForm.tls} type="checkbox" />
-					<span>TLS</span>
-				</label>
-				<div class="form-actions">
-					<button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>
-						Save Account
-					</button>
-				</div>
+				<label><span>Account ID</span><input bind:value={imapForm.account_id} autocomplete="off" /></label>
+				<label><span>Display name</span><input bind:value={imapForm.display_name} autocomplete="off" /></label>
+				<label><span>Email address</span><input bind:value={imapForm.external_account_id} autocomplete="email" /></label>
+				<label><span>Username</span><input bind:value={imapForm.username} autocomplete="username" /></label>
+				<label><span>Host</span><input bind:value={imapForm.host} autocomplete="off" /></label>
+				<label><span>Port</span><input bind:value={imapForm.port} type="number" min="1" max="65535" /></label>
+				<label><span>Mailbox</span><input bind:value={imapForm.mailbox} autocomplete="off" /></label>
+				<label><span>Password</span><input bind:value={imapForm.password} type="password" autocomplete="current-password" /></label>
+				<label class="checkbox-row"><input bind:checked={imapForm.tls} type="checkbox" /><span>TLS</span></label>
+				<div class="form-actions"><button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>Save Account</button></div>
 			</form>
 		{/if}
 
-		{#if setupMessage}
-			<p class="setup-state success">{setupMessage}</p>
-		{/if}
-		{#if setupError}
-			<p class="setup-state error">{setupError}</p>
-		{/if}
+		{#if setupMessage}<p class="setup-state success">{setupMessage}</p>{/if}
+		{#if setupError}<p class="setup-state error">{setupError}</p>{/if}
 	</aside>
-{/if}
-
-{#if isGraphExplorerOpen}
-	<button
-		type="button"
-		class="drawer-backdrop"
-		aria-label="Close graph explorer"
-		onclick={closeGraphExplorer}
-	></button>
-	<div
-		class="graph-drawer"
-		role="dialog"
-		aria-modal="true"
-		aria-labelledby="graph-explorer-heading"
-		tabindex="-1"
-		bind:this={graphExplorerPanel}
-		onkeydown={handleGraphExplorerKeydown}
-	>
-		<header>
-			<div>
-				<p>Read-only Graph</p>
-				<h2 id="graph-explorer-heading">Explore Graph</h2>
-			</div>
-			<button type="button" class="icon-button" onclick={closeGraphExplorer} aria-label="Close">
-				<Icon icon="tabler:x" width="18" height="18" />
-			</button>
-		</header>
-
-		<div class="graph-drawer-tabs" role="tablist" aria-label="Graph explorer modes">
-			<button type="button" class="active" role="tab" aria-selected="true">Search</button>
-			<button type="button" role="tab" disabled title="Merge review is not implemented yet">Merge</button>
-			<button type="button" role="tab" disabled title="Split review is not implemented yet">Split</button>
-			<button type="button" role="tab" disabled title="OCR evidence review is not implemented yet">OCR</button>
-			<button type="button" role="tab" disabled title="Task candidates are not implemented yet">Tasks</button>
-		</div>
-
-		<section class="graph-drawer-summary" aria-label="Graph totals">
-			<article>
-				<span>Nodes</span>
-				<strong>{formatNumber(graphNodeTotal())}</strong>
-			</article>
-			<article>
-				<span>Relationships</span>
-				<strong>{formatNumber(graphRelationshipTotal())}</strong>
-			</article>
-			<article>
-				<span>Evidence</span>
-				<strong>{formatNumber(graphEvidenceTotal())}</strong>
-			</article>
-		</section>
-
-		{#if isGraphLoading}
-			<div class="graph-empty-state">
-				<Icon icon="tabler:loader-2" width="28" height="28" />
-				<strong>Loading graph summary</strong>
-				<span>Waiting for the local graph API.</span>
-			</div>
-		{:else if graphError}
-			<div class="graph-empty-state error">
-				<Icon icon="tabler:alert-triangle" width="28" height="28" />
-				<strong>Graph API unavailable</strong>
-				<span>{graphError}</span>
-			</div>
-		{:else if graphSummary?.is_empty}
-			<div class="graph-empty-state">
-				<Icon icon="tabler:circles" width="28" height="28" />
-				<strong>Graph is empty</strong>
-				<span>There are no projected graph nodes to search yet.</span>
-			</div>
-		{:else}
-			<form class="graph-search-form" onsubmit={(event) => {
-				event.preventDefault();
-				void submitGraphSearch();
-			}}>
-				<label>
-					<Icon icon="tabler:search" width="18" height="18" />
-					<input
-						bind:this={graphSearchInput}
-						bind:value={graphSearchQuery}
-						placeholder="Search people, messages, emails, documents..."
-						aria-label="Search graph nodes"
-					/>
-				</label>
-				<button type="submit" disabled={isGraphSearching}>
-					{isGraphSearching ? 'Searching' : 'Search'}
-				</button>
-			</form>
-
-			<div class="graph-explorer-grid">
-				<section class="graph-results" aria-label="Graph search results">
-					<header>
-						<strong>Results</strong>
-						<span>{formatNumber(graphSearchResults.length)}</span>
-					</header>
-					{#if graphSearchError}
-						<p class="graph-inline-error">{graphSearchError}</p>
-					{:else if graphSearchMessage}
-						<p class="graph-inline-message">{graphSearchMessage}</p>
-					{:else}
-						{#each graphSearchResults as node}
-							<button
-								type="button"
-								class:active={selectedGraphNeighborhood?.selected_node.node_id === node.node_id}
-								disabled={isGraphNeighborhoodLoading}
-								onclick={() => selectGraphNode(node)}
-							>
-								<Icon icon={graphNodeKindIcon(node.node_kind)} width="18" height="18" />
-								<span>
-									<strong>{node.label}</strong>
-									<small>{formatGraphKind(node.node_kind)}</small>
-								</span>
-							</button>
-						{/each}
-					{/if}
-				</section>
-
-				<section class="graph-neighborhood" aria-label="Selected graph neighborhood">
-					{#if isGraphNeighborhoodLoading}
-						<div class="graph-empty-state compact">
-							<Icon icon="tabler:loader-2" width="24" height="24" />
-							<strong>Loading neighborhood</strong>
-						</div>
-					{:else if selectedGraphError}
-						<div class="graph-empty-state compact error">
-							<Icon icon="tabler:alert-triangle" width="24" height="24" />
-							<strong>Neighborhood unavailable</strong>
-							<span>{selectedGraphError}</span>
-						</div>
-					{:else if selectedGraphNeighborhood}
-						<header>
-							<span>{formatGraphKind(selectedGraphNeighborhood.selected_node.node_kind)}</span>
-							<h3>{selectedGraphNeighborhood.selected_node.label}</h3>
-							<small>{selectedGraphNeighborhood.selected_node.node_id}</small>
-						</header>
-
-						{#if selectedGraphNeighborhood.truncated || selectedGraphNeighborhood.evidence_truncated}
-							<p class="graph-truncation">
-								{#if selectedGraphNeighborhood.truncated}
-									Showing first {selectedGraphNeighborhood.edge_limit} edges.
-								{/if}
-								{#if selectedGraphNeighborhood.evidence_truncated}
-									Showing first {selectedGraphNeighborhood.evidence_limit} evidence records.
-								{/if}
-							</p>
-						{/if}
-
-						<div class="neighborhood-columns">
-							<section>
-								<strong>Neighbors</strong>
-								{#if selectedGraphNeighborhood.nodes.length === 0}
-									<p>No neighboring nodes.</p>
-								{:else}
-									<ul>
-										{#each selectedGraphNeighborhood.nodes as node}
-											<li>
-												<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
-												<span>{node.label}</span>
-												<em>{formatGraphKind(node.node_kind)}</em>
-											</li>
-										{/each}
-									</ul>
-								{/if}
-							</section>
-
-							<section>
-								<strong>Edges</strong>
-								{#if selectedGraphNeighborhood.edges.length === 0}
-									<p>No relationships.</p>
-								{:else}
-									<ul>
-										{#each selectedGraphNeighborhood.edges as edge}
-											<li>
-												<Icon icon="tabler:line" width="16" height="16" />
-												<span>{formatGraphRelationship(edge.relationship_type)}</span>
-												<em>{Math.round(edge.confidence * 100)}%</em>
-											</li>
-										{/each}
-									</ul>
-								{/if}
-							</section>
-						</div>
-
-						<section class="graph-evidence">
-							<strong>Evidence</strong>
-							{#if selectedGraphNeighborhood.evidence.length === 0}
-								<p>No evidence records returned for this neighborhood.</p>
-							{:else}
-								<ul>
-									{#each selectedGraphNeighborhood.evidence as evidence}
-										<li>
-											<span>{formatGraphKind(evidence.source_kind)}</span>
-											<strong>{evidence.source_id}</strong>
-											{#if evidence.excerpt}
-												<small>{evidence.excerpt}</small>
-											{/if}
-										</li>
-									{/each}
-								</ul>
-							{/if}
-						</section>
-					{:else}
-						<div class="graph-empty-state compact">
-							<Icon icon="tabler:hand-click" width="24" height="24" />
-							<strong>Select a node</strong>
-							<span>Search and choose a result to inspect its depth-1 neighborhood.</span>
-						</div>
-					{/if}
-				</section>
-			</div>
-		{/if}
-	</div>
 {/if}
 
 <style>
@@ -1513,7 +1290,7 @@
 
 	:global(body) {
 		margin: 0;
-		min-width: 1024px;
+		min-width: 1280px;
 		background: #02090b;
 		color: #eefefb;
 		font-family:
@@ -1523,8 +1300,7 @@
 	}
 
 	:global(button),
-	:global(input),
-	:global(select) {
+	:global(input) {
 		font: inherit;
 		letter-spacing: 0;
 	}
@@ -1538,27 +1314,31 @@
 		cursor: not-allowed;
 	}
 
+	:global(button:focus-visible),
+	:global(input:focus-visible) {
+		outline: 1px solid rgba(45, 240, 206, 0.62);
+		outline-offset: 2px;
+	}
+
 	.desktop-shell {
 		display: grid;
-		grid-template-columns: 224px minmax(750px, 1fr) 354px;
-		gap: 20px;
+		grid-template-columns: 224px minmax(1040px, 1fr);
+		gap: 16px;
 		height: 100vh;
-		min-height: 720px;
+		min-height: 760px;
 		overflow: hidden;
-		padding: 16px 14px 16px 0;
+		padding: 0 14px 16px 0;
 		background:
-			linear-gradient(180deg, rgba(9, 31, 34, 0.76), rgba(2, 9, 11, 0.96) 42%),
+			radial-gradient(circle at 72% 2%, rgba(23, 122, 121, 0.14), transparent 34%),
+			linear-gradient(180deg, rgba(7, 28, 32, 0.88), rgba(2, 9, 11, 0.98) 46%),
 			#02090b;
 	}
 
 	.sidebar {
-		position: sticky;
-		top: 0;
 		display: grid;
 		grid-template-rows: auto auto auto 1fr auto auto;
-		align-self: stretch;
-		min-height: calc(100vh - 32px);
-		padding: 20px 13px 14px;
+		min-height: 100vh;
+		padding: 20px 12px 14px;
 		border: 1px solid rgba(37, 224, 197, 0.14);
 		border-left: 0;
 		border-radius: 0 18px 34px 0;
@@ -1569,47 +1349,39 @@
 	}
 
 	.brand,
-	.greeting,
 	.profile-card,
-	.rail-actions,
+	.topbar,
+	.top-actions,
 	.panel-title-row,
+	.view-header,
+	.view-title-with-icon,
 	.metric-card div,
-	.task-list label,
-	.project-row,
-	.system-card {
+	.feed-row,
+	.related-row,
+	.person-compact,
+	.doc-mini {
 		display: flex;
 		align-items: center;
 	}
 
 	.brand {
 		gap: 12px;
-		padding: 2px 8px 24px;
-	}
-
-	.brand-mark,
-	.hero-mark img,
-	.avatar-button img {
-		display: block;
-		object-fit: contain;
+		padding: 2px 8px 28px;
 	}
 
 	.brand-mark {
 		width: 42px;
 		height: 42px;
+		object-fit: contain;
 		filter: drop-shadow(0 0 16px rgba(37, 224, 197, 0.55));
 	}
 
 	.brand-name,
 	.brand-subtitle,
-	.shortcuts p,
-	.panel-title-row h2,
-	.calendar-card h3,
-	.discovered p,
-	.greeting h1,
-	.greeting p,
-	.setup-state,
-	.account-drawer h2,
-	.account-drawer p {
+	h1,
+	h2,
+	h3,
+	p {
 		margin: 0;
 	}
 
@@ -1655,18 +1427,20 @@
 		color: #40f3d1;
 	}
 
-	.nav-group button.disabled {
-		opacity: 0.76;
+	.nav-group button.disabled,
+	.nav-group button.shortcut {
+		opacity: 0.9;
 	}
 
-	.nav-group button em,
-	.task-list strong,
+	.nav-group em,
+	.filter-tabs em,
+	.section-tabs em,
 	.kbd {
 		border-radius: 999px;
 		font-style: normal;
 	}
 
-	.nav-group button em {
+	.nav-group em {
 		background: rgba(33, 218, 183, 0.16);
 		color: #39f2d0;
 		font-size: 11px;
@@ -1683,32 +1457,38 @@
 		padding: 0 8px;
 	}
 
-	.shortcuts p,
-	.discovered p {
+	.shortcuts > p {
 		color: #8ea4a6;
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
-	}
-
-	.shortcuts .nav-group {
-		margin-top: 12px;
+		margin-bottom: 12px;
 	}
 
 	.profile-card {
 		gap: 11px;
-		margin: 22px -13px 0;
+		margin: 22px -12px 0;
 		padding: 12px 22px;
 		border-top: 1px solid rgba(78, 157, 151, 0.15);
 		border-bottom: 1px solid rgba(78, 157, 151, 0.1);
 		background: rgba(9, 30, 33, 0.58);
 	}
 
+	.profile-card img,
+	.conversation-list img,
+	.chat-pane header img,
+	.profile-head img,
+	.contacts-list-panel img,
+	.contact-hero img,
+	.person-list img,
+	.person-compact img {
+		border-radius: 50%;
+		object-fit: cover;
+	}
+
 	.profile-card img {
 		width: 42px;
 		height: 42px;
-		border-radius: 50%;
-		object-fit: cover;
 	}
 
 	.profile-card div {
@@ -1736,7 +1516,10 @@
 	}
 
 	.sidebar-tools button,
-	.icon-button {
+	.icon-button,
+	.chat-actions button,
+	.quick-icons button,
+	.segmented {
 		display: inline-grid;
 		place-items: center;
 		width: 34px;
@@ -1749,26 +1532,22 @@
 
 	.workspace {
 		display: grid;
-		grid-template-rows: auto auto 1fr auto;
-		gap: 14px;
-		min-height: 0;
+		grid-template-rows: 58px minmax(0, 1fr);
+		gap: 10px;
 		min-width: 0;
-		padding-top: 0;
-	}
-
-	.topbar,
-	.rail-actions {
-		height: 38px;
+		min-height: 0;
+		overflow: hidden;
+		padding-top: 15px;
 	}
 
 	.topbar {
-		display: flex;
-		align-items: center;
+		justify-content: space-between;
+		gap: 18px;
 	}
 
 	.search-box,
-	.quick-command,
-	.assistant-card label {
+	.local-search,
+	.composer {
 		display: flex;
 		align-items: center;
 		border: 1px solid rgba(111, 205, 195, 0.17);
@@ -1777,17 +1556,14 @@
 	}
 
 	.search-box {
-		width: min(540px, 62vw);
+		width: min(560px, 44vw);
 		height: 38px;
 		border-radius: 8px;
 		padding: 0 10px;
 		box-shadow: inset 0 0 28px rgba(24, 189, 164, 0.04);
 	}
 
-	.search-box input,
-	.quick-command input,
-	.assistant-card input,
-	.setup-form input {
+	input {
 		min-width: 0;
 		flex: 1;
 		border: 0;
@@ -1797,8 +1573,8 @@
 	}
 
 	.search-box input,
-	.quick-command input,
-	.assistant-card input {
+	.local-search input,
+	.composer input {
 		padding: 0 10px;
 		font-size: 13px;
 	}
@@ -1812,17 +1588,125 @@
 		padding: 5px 7px;
 	}
 
+	.top-actions {
+		justify-content: flex-end;
+		gap: 9px;
+	}
+
+	.top-actions > button:not(.icon-button):not(.avatar-button) {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		height: 38px;
+		border: 1px solid rgba(111, 205, 195, 0.16);
+		border-radius: 8px;
+		background: rgba(6, 23, 27, 0.8);
+		color: #ccdedd;
+		padding: 0 10px;
+		font-size: 12px;
+	}
+
+	.icon-button {
+		position: relative;
+	}
+
+	.icon-button i {
+		position: absolute;
+		top: -5px;
+		right: -5px;
+		display: grid;
+		place-items: center;
+		min-width: 16px;
+		height: 16px;
+		border-radius: 999px;
+		background: #ff3b52;
+		color: #fff;
+		font-size: 9px;
+		font-style: normal;
+	}
+
+	.avatar-button {
+		display: grid;
+		place-items: center;
+		width: 38px;
+		height: 38px;
+		border: 1px solid rgba(45, 240, 206, 0.2);
+		border-radius: 50%;
+		background: rgba(28, 174, 151, 0.16);
+	}
+
+	.avatar-button img {
+		width: 31px;
+		height: 31px;
+		object-fit: contain;
+	}
+
+	.panel,
+	.metric-card,
+	.source-card {
+		border: 1px solid rgba(82, 204, 190, 0.16);
+		background:
+			linear-gradient(180deg, rgba(8, 29, 33, 0.94), rgba(5, 22, 25, 0.9)),
+			#06181b;
+		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+	}
+
+	.panel {
+		border-radius: 8px;
+		overflow: hidden;
+	}
+
+	.panel-title-row {
+		justify-content: space-between;
+		gap: 12px;
+		min-height: 48px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.12);
+		padding: 0 16px;
+	}
+
+	.panel-title-row h2,
+	.info-card h2,
+	.chart-panel h2 {
+		color: #f6fffe;
+		font-size: 16px;
+		font-weight: 500;
+	}
+
+	.panel-title-row p {
+		margin-top: 4px;
+		color: #8fa8a7;
+		font-size: 12px;
+	}
+
+	.home-page,
+	.communications-page,
+	.contacts-page,
+	.projects-page,
+	.tasks-page,
+	.calendar-page,
+	.documents-page,
+	.notes-page,
+	.knowledge-page,
+	.agents-page,
+	.timeline-page {
+		min-height: 0;
+		overflow: auto;
+		padding-right: 2px;
+		scrollbar-color: rgba(45, 240, 206, 0.25) transparent;
+	}
+
 	.hero-row {
 		display: grid;
-		grid-template-columns: minmax(285px, 1fr) minmax(525px, 604px);
+		grid-template-columns: 300px minmax(640px, 1fr);
 		align-items: center;
 		gap: 14px;
-		min-height: 98px;
+		min-height: 102px;
 	}
 
 	.greeting {
+		display: flex;
+		align-items: center;
 		gap: 16px;
-		min-width: 0;
 	}
 
 	.hero-mark {
@@ -1836,47 +1720,73 @@
 			linear-gradient(180deg, rgba(13, 84, 78, 0.5), rgba(5, 29, 31, 0.5)),
 			#041214;
 		box-shadow: 0 0 36px rgba(30, 230, 196, 0.2);
+		color: #2df0ce;
+	}
+
+	.hero-mark.small {
+		width: 54px;
+		height: 54px;
 	}
 
 	.hero-mark img {
 		width: 58px;
 		height: 58px;
+		object-fit: contain;
 	}
 
-	.greeting h1 {
+	h1 {
 		color: #ffffff;
-		font-size: 23px;
-		font-weight: 500;
+		font-size: 24px;
+		font-weight: 560;
 		line-height: 1.18;
 	}
 
-	.greeting p {
-		margin-top: 9px;
-		color: #9bb1b0;
+	.greeting p,
+	.view-header p,
+	.project-hero p,
+	.project-hero small,
+	.info-card p,
+	.chart-panel span,
+	.feed-row p,
+	.feed-row small,
+	.conversation-list small,
+	.conversation-list em,
+	.chat-pane p,
+	.profile-head p,
+	.profile-head small,
+	.contacts-list-panel p,
+	.contacts-list-panel small,
+	.contacts-list-panel em,
+	.doc-mini small,
+	.notes-list p,
+	.notes-list small,
+	.agent-card p,
+	.agent-card footer,
+	.detail-list,
+	.collection-row {
+		color: #91a8a8;
+	}
+
+	.greeting p,
+	.view-header p {
+		margin-top: 8px;
 		font-size: 13px;
 	}
 
 	.metric-grid {
 		display: grid;
-		grid-template-columns: repeat(5, minmax(94px, 1fr));
-		gap: 9px;
+		grid-template-columns: repeat(6, minmax(110px, 1fr));
+		gap: 10px;
 	}
 
-	.metric-card,
-	.panel {
-		border: 1px solid rgba(82, 204, 190, 0.16);
-		background:
-			linear-gradient(180deg, rgba(8, 29, 33, 0.94), rgba(5, 22, 25, 0.9)),
-			#06181b;
-		box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+	.home-metrics {
+		grid-template-columns: repeat(6, minmax(110px, 1fr));
 	}
 
 	.metric-card {
-		position: relative;
-		min-height: 82px;
-		padding: 13px 12px;
+		min-height: 84px;
 		border-radius: 8px;
-		overflow: hidden;
+		padding: 13px 12px;
 	}
 
 	.metric-card span {
@@ -1894,7 +1804,7 @@
 
 	.metric-card strong {
 		color: #ffffff;
-		font-size: 23px;
+		font-size: 24px;
 		font-weight: 500;
 	}
 
@@ -1905,648 +1815,331 @@
 		font-size: 11px;
 	}
 
-	.metric-card.focus {
+	.score-ring,
+	.big-score,
+	.donut {
 		display: grid;
-		grid-template-columns: 1fr auto;
-		gap: 4px 10px;
-		border-color: rgba(45, 235, 204, 0.32);
-	}
-
-	.metric-card.focus span,
-	.metric-card.focus small {
-		grid-column: 1;
+		place-items: center;
+		border: 4px solid rgba(45, 235, 204, 0.82);
+		border-right-color: rgba(42, 139, 167, 0.8);
+		border-bottom-color: rgba(236, 183, 70, 0.8);
+		border-radius: 50%;
 	}
 
 	.score-ring {
-		grid-column: 2;
-		grid-row: 1 / 3;
-		display: grid !important;
-		place-items: center;
 		width: 48px;
 		height: 48px;
 		margin: 0 !important;
-		border: 3px solid rgba(45, 235, 204, 0.8);
-		border-right-color: rgba(45, 235, 204, 0.22);
-		border-radius: 50%;
 	}
 
 	.score-ring strong {
 		font-size: 14px;
 	}
 
-	.main-grid {
+	.dashboard-grid {
 		display: grid;
-		grid-template-columns: minmax(430px, 1.18fr) minmax(390px, 0.94fr);
+		grid-template-columns: minmax(380px, 1.05fr) minmax(300px, 0.83fr) minmax(280px, 0.76fr) 270px;
 		gap: 12px;
-		min-height: 0;
-		overflow: hidden;
+		min-height: 456px;
 	}
 
-	.center-column {
+	.feed-list,
+	.task-stack,
+	.schedule-list,
+	.person-list,
+	.status-list,
+	.info-card,
+	.chart-panel {
 		display: grid;
+		gap: 10px;
+		padding: 14px;
+	}
+
+	.feed-row {
+		display: grid;
+		grid-template-columns: 36px minmax(0, 1fr) auto;
 		gap: 12px;
-		min-height: 0;
-		min-width: 0;
+		min-height: 64px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
 	}
 
-	.panel {
-		border-radius: 8px;
-		overflow: hidden;
+	.feed-row:last-child {
+		border-bottom: 0;
 	}
 
-	.panel-header,
-	.panel-title-row {
-		min-height: 48px;
-		border-bottom: 1px solid rgba(102, 189, 180, 0.12);
-	}
-
-	.panel-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0 16px;
-	}
-
-	.panel-title-row {
-		justify-content: space-between;
-		gap: 12px;
-		padding: 0 16px;
-	}
-
-	.panel-title-row h2 {
+	.feed-row strong,
+	.related-row strong,
+	.person-compact strong,
+	.doc-mini strong,
+	.deadline span,
+	.collection-row,
+	.notes-list strong,
+	.agent-card strong {
 		color: #f6fffe;
-		font-size: 16px;
-		font-weight: 500;
-	}
-
-	.panel-title-row > div {
-		display: flex;
-		align-items: center;
-		gap: 8px;
-	}
-
-	.panel-tabs,
-	.small-tabs,
-	.provider-tabs {
-		display: flex;
-		align-items: center;
-		gap: 20px;
-	}
-
-	.panel-tabs button,
-	.small-tabs button {
-		position: relative;
-		height: 48px;
-		background: transparent;
-		color: #91a7a7;
 		font-size: 13px;
+		font-weight: 560;
 	}
 
-	.panel-tabs button.active,
-	.small-tabs button.active {
-		color: #ffffff;
-	}
-
-	.panel-tabs button.active::after,
-	.small-tabs button.active::after {
-		position: absolute;
-		right: 0;
-		bottom: 0;
-		left: 0;
-		height: 2px;
-		background: #2df0ce;
-		content: '';
-	}
-
-	.timeline-toolbar {
-		display: grid;
-		grid-template-columns: 1fr auto auto;
-		align-items: center;
-		gap: 10px;
-		padding: 14px 18px 5px;
-	}
-
-	.today-dot {
-		display: inline-flex;
-		align-items: center;
-		gap: 10px;
-		color: #2deac9;
-		font-size: 11px;
-		font-weight: 700;
-		text-transform: uppercase;
-	}
-
-	.today-dot::before {
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		background: #2df0ce;
-		box-shadow: 0 0 16px rgba(45, 240, 206, 0.8);
-		content: '';
-	}
-
-	.timeline-toolbar select {
-		height: 32px;
-		border: 1px solid rgba(125, 204, 197, 0.16);
-		border-radius: 7px;
-		background: rgba(3, 20, 23, 0.76);
-		color: #9fb6b5;
-		padding: 0 30px 0 12px;
-	}
-
-	.timeline-list {
-		display: grid;
-		min-height: 0;
-		overflow: hidden;
-		padding: 0 16px 2px;
-	}
-
-	.timeline-panel {
-		display: grid;
-		grid-template-rows: auto auto 1fr auto;
-		min-height: 0;
-	}
-
-	.timeline-item {
-		display: grid;
-		grid-template-columns: 44px 20px 38px 1fr;
-		gap: 9px;
-		min-height: 84px;
-		padding: 10px 0;
-		border-bottom: 1px solid rgba(113, 189, 181, 0.08);
-	}
-
-	.timeline-item.muted {
-		min-height: 68px;
-	}
-
-	.time {
-		align-self: start;
-		color: #36e5c9;
-		font-size: 12px;
-		padding-top: 12px;
-		text-align: right;
-	}
-
-	.rail {
-		position: relative;
-		display: flex;
-		justify-content: center;
-	}
-
-	.rail::before {
-		position: absolute;
-		top: -16px;
-		bottom: -16px;
-		width: 1px;
-		background: rgba(42, 225, 198, 0.55);
-		content: '';
-	}
-
-	.rail-dot {
-		z-index: 1;
-		width: 7px;
-		height: 7px;
-		margin-top: 17px;
-		border-radius: 50%;
-		background: #2df0ce;
-		box-shadow: 0 0 12px rgba(45, 240, 206, 0.85);
-	}
-
-	.event-icon,
-	.project-icon {
-		display: grid;
-		place-items: center;
-		border-radius: 50%;
-	}
-
-	.event-icon {
-		width: 32px;
-		height: 32px;
+	.feed-row p {
 		margin-top: 4px;
-		background: rgba(28, 199, 197, 0.17);
-		color: #2eeed0;
-	}
-
-	.event-icon.tone-1 {
-		background: rgba(31, 138, 214, 0.2);
-		color: #30d8ff;
-	}
-
-	.event-icon.tone-2 {
-		background: rgba(45, 240, 206, 0.14);
-	}
-
-	.event-icon.tone-3 {
-		background: rgba(161, 87, 220, 0.22);
-		color: #cf9dff;
-	}
-
-	.event-body {
-		min-width: 0;
-	}
-
-	.event-body header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 14px;
-	}
-
-	.event-body strong {
-		color: #f5fffe;
-		font-size: 13px;
-		font-weight: 600;
-	}
-
-	.event-body header span {
-		flex: 0 0 auto;
-		color: #8ba2a1;
-		font-size: 11px;
-	}
-
-	.event-body p,
-	.event-body small,
-	.project-main span,
-	.project-meta span,
-	.discovered small,
-	.calendar-card h3,
-	.agenda article div span,
-	.insight-grid span,
-	.account-drawer p,
-	.setup-form span {
-		color: #91a8a8;
-	}
-
-	.event-body p {
-		margin: 7px 0 0;
 		font-size: 12px;
-		line-height: 1.35;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
 	}
 
-	.event-body small {
-		display: block;
-		margin-top: 6px;
-		font-size: 11px;
-	}
-
-	.tag {
+	.feed-row em,
+	.tag-cloud span,
+	.task-stack em,
+	.task-row em,
+	.task-row b,
+	.project-hero em,
+	.agent-card em,
+	.notes-list em {
 		display: inline-block;
-		margin-top: 7px;
-		border-radius: 4px;
+		border-radius: 5px;
+		background: rgba(33, 218, 183, 0.14);
+		color: #35edce;
 		font-size: 10px;
 		font-style: normal;
-		padding: 3px 6px;
+		padding: 3px 7px;
 	}
 
-	.tag.amber {
-		border: 1px solid rgba(236, 183, 70, 0.28);
-		background: rgba(236, 183, 70, 0.16);
-		color: #eeb84b;
-	}
-
-	.tag.cyan {
-		background: rgba(43, 221, 194, 0.15);
-		color: #2df0ce;
-	}
-
-	.yesterday-label {
-		color: #96aeb0;
+	.feed-row time,
+	.related-row em,
+	.deadline time,
+	.doc-row time,
+	.doc-row em,
+	.task-row time {
+		color: #a6bbbb;
 		font-size: 11px;
-		font-weight: 700;
-		letter-spacing: 0;
-		padding: 14px 0 3px 4px;
-		text-transform: uppercase;
+		font-style: normal;
 	}
 
-	.load-button {
-		display: block;
-		width: 204px;
-		height: 32px;
-		margin: 7px auto 8px;
-		border: 1px solid rgba(89, 217, 202, 0.2);
-		border-radius: 7px;
-		background: rgba(11, 43, 45, 0.48);
-		color: #43e9cf;
-		font-size: 12px;
-	}
-
-	.graph-panel {
-		min-height: 432px;
-	}
-
-	.graph-canvas {
-		position: relative;
-		height: 290px;
-		margin: 0 16px;
-		overflow: hidden;
-		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
-		background-image:
-			linear-gradient(rgba(45, 240, 206, 0.04) 1px, transparent 1px),
-			linear-gradient(90deg, rgba(45, 240, 206, 0.035) 1px, transparent 1px);
-		background-size: 32px 32px;
-	}
-
-	.graph-canvas::before {
-		position: absolute;
-		inset: 28px 34px;
-		border: 1px dashed rgba(45, 240, 206, 0.08);
-		border-radius: 50%;
-		content: '';
-	}
-
-	.graph-core {
-		position: absolute;
-		top: 50%;
-		left: 52%;
-		z-index: 2;
-		display: grid;
-		place-items: center;
-		width: 62px;
-		height: 62px;
-		border: 1px solid rgba(45, 240, 206, 0.84);
-		border-radius: 50%;
-		background: rgba(13, 126, 113, 0.78);
-		box-shadow: 0 0 34px rgba(45, 240, 206, 0.42);
-		color: #dffffa;
-		transform: translate(-50%, -50%);
-	}
-
-	.graph-core span {
-		position: absolute;
-		top: calc(100% + 8px);
-		width: 110px;
-		color: #f8fffe;
-		font-size: 12px;
-		text-align: center;
-	}
-
-	.graph-node {
-		position: absolute;
-		display: grid;
-		grid-template-columns: 36px max-content;
-		grid-template-rows: 18px 16px;
-		column-gap: 7px;
-		align-items: center;
-		transform: translate(-50%, -50%);
-	}
-
-	.graph-node > span {
-		grid-row: 1 / 3;
+	.round-icon {
 		display: grid;
 		place-items: center;
 		width: 34px;
 		height: 34px;
-		border: 1px solid rgba(45, 240, 206, 0.32);
 		border-radius: 50%;
-		background: rgba(16, 110, 101, 0.66);
-		color: #40f2d4;
-		box-shadow: 0 0 20px rgba(45, 240, 206, 0.22);
+		background: rgba(28, 199, 197, 0.17);
+		color: #2eeed0;
 	}
 
-	.graph-node strong,
-	.graph-node small {
-		white-space: nowrap;
+	.round-icon.blue {
+		background: rgba(31, 138, 214, 0.2);
+		color: #30d8ff;
 	}
 
-	.graph-node strong {
-		color: #ffffff;
-		font-size: 11px;
+	.round-icon.green,
+	.round-icon.mint {
+		background: rgba(35, 204, 142, 0.18);
+		color: #2df0a4;
 	}
 
-	.graph-node small {
-		color: #90a7a7;
-		font-size: 10px;
+	.round-icon.purple {
+		background: rgba(161, 87, 220, 0.22);
+		color: #cf9dff;
 	}
 
-	.graph-line {
-		position: absolute;
-		top: 50%;
-		left: 52%;
-		width: 178px;
-		height: 1px;
-		background: rgba(45, 240, 206, 0.48);
-		transform-origin: left;
+	.round-icon.amber,
+	.round-icon.orange {
+		background: rgba(236, 183, 70, 0.18);
+		color: #eeb84b;
 	}
 
-	.graph-line.one {
-		transform: rotate(-61deg);
+	.round-icon.pink {
+		background: rgba(236, 93, 157, 0.2);
+		color: #ff9ccd;
 	}
 
-	.graph-line.two {
-		transform: rotate(-25deg);
+	.round-icon.red {
+		background: rgba(236, 70, 70, 0.18);
+		color: #ff6969;
 	}
 
-	.graph-line.three {
-		transform: rotate(33deg);
-	}
-
-	.graph-line.four {
-		transform: rotate(147deg);
-	}
-
-	.graph-state,
-	.graph-empty-state {
-		display: grid;
-		place-items: center;
-		gap: 8px;
-		height: 100%;
-		color: #94adac;
-		text-align: center;
-		padding: 24px;
-	}
-
-	.graph-state strong,
-	.graph-empty-state strong {
-		color: #f4fffe;
-		font-size: 14px;
-		font-weight: 600;
-	}
-
-	.graph-state span,
-	.graph-empty-state span {
-		max-width: 340px;
-		color: #91a8a8;
-		font-size: 12px;
-		line-height: 1.4;
-	}
-
-	.graph-state.error,
-	.graph-empty-state.error,
-	.graph-inline-error {
-		color: #ffabab;
-	}
-
-	.graph-summary-strip,
-	.graph-drawer-summary {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 8px;
-		padding: 12px 16px 0;
-	}
-
-	.graph-summary-strip article,
-	.graph-drawer-summary article {
-		border: 1px solid rgba(111, 205, 195, 0.12);
-		border-radius: 7px;
-		background: rgba(10, 42, 45, 0.38);
-		padding: 9px 10px;
-	}
-
-	.graph-summary-strip span,
-	.graph-drawer-summary span {
-		display: block;
-		color: #91a8a8;
-		font-size: 10px;
-		text-transform: uppercase;
-	}
-
-	.graph-summary-strip strong,
-	.graph-drawer-summary strong {
-		display: block;
-		margin-top: 5px;
-		color: #f4fffe;
-		font-size: 18px;
-		font-weight: 500;
-	}
-
-	.discovered {
-		padding: 13px 16px 12px;
-	}
-
-	.discovered > div {
-		display: grid;
-		grid-template-columns: repeat(3, 1fr);
-		gap: 8px;
-		margin-top: 10px;
-	}
-
-	.discovered button {
-		display: grid;
-		grid-template-columns: 28px 1fr;
-		gap: 8px;
-		align-items: center;
-		min-height: 48px;
-		border: 1px solid rgba(111, 205, 195, 0.13);
-		border-radius: 7px;
-		background: rgba(10, 42, 45, 0.52);
-		color: #35e9cc;
-		text-align: left;
-	}
-
-	.discovered strong,
-	.discovered small {
-		display: block;
-	}
-
-	.discovered strong {
-		color: #eefefb;
-		font-size: 10px;
-		font-weight: 500;
-	}
-
-	.discovered small {
-		margin-top: 2px;
-		font-size: 9px;
-	}
-
-	.graph-discovered-state {
-		display: grid;
-		grid-column: 1 / -1;
-		place-items: center;
-		min-height: 48px;
-		border: 1px solid rgba(111, 205, 195, 0.13);
-		border-radius: 7px;
-		background: rgba(10, 42, 45, 0.38);
-		color: #91a8a8;
-		font-size: 11px;
-	}
-
-	.graph-actions {
-		display: grid !important;
-		grid-template-columns: repeat(3, 1fr) !important;
-		margin-top: 8px !important;
-	}
-
-	.graph-actions button {
+	.link-row {
 		display: inline-flex;
+		align-items: center;
 		justify-content: center;
-		gap: 6px;
-		min-height: 32px;
-		color: #8fa8a7;
+		gap: 8px;
+		min-height: 34px;
+		background: transparent;
+		color: #2ef1cd;
+		font-size: 12px;
 	}
 
-	.projects-panel {
-		min-height: 298px;
+	.link-button,
+	.ghost-button {
+		background: transparent;
+		color: #9bb1b0;
+		font-size: 11px;
 	}
 
-	.project-list {
+	.ghost-button {
+		height: 30px;
+		border: 1px solid rgba(45, 240, 206, 0.18);
+		border-radius: 6px;
+		background: rgba(33, 167, 144, 0.1);
+		color: #3ae9cb;
+		padding: 0 10px;
+	}
+
+	.task-stack label,
+	.mini-check {
 		display: grid;
-		padding: 10px 14px;
+		grid-template-columns: 18px minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 10px;
+		color: #d9eeec;
+		font-size: 12px;
 	}
 
-	.project-row {
+	input[type='checkbox'] {
+		width: 15px;
+		height: 15px;
+		margin: 0;
+		accent-color: #27d8bd;
+	}
+
+	.task-stack small {
+		display: block;
+		margin-top: 4px;
+		color: #91a8a8;
+		font-size: 11px;
+	}
+
+	.high {
+		background: rgba(226, 55, 70, 0.17) !important;
+		color: #ff6b74 !important;
+	}
+
+	.schedule-list article {
 		display: grid;
-		grid-template-columns: 34px minmax(118px, 1fr) minmax(76px, 120px) 42px 70px;
+		gap: 8px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		padding-bottom: 14px;
+	}
+
+	.schedule-list time {
+		color: #2ef1cd;
+		font-size: 12px;
+	}
+
+	.schedule-list strong,
+	.schedule-list span {
+		color: #f5fffe;
+		font-size: 13px;
+		font-weight: 500;
+	}
+
+	.stacked-rail,
+	.left-panels {
+		display: grid;
 		gap: 12px;
-		min-height: 52px;
-		border-bottom: 1px solid rgba(102, 189, 180, 0.09);
-	}
-
-	.project-row:last-child {
-		border-bottom: 0;
-	}
-
-	.project-icon {
-		width: 32px;
-		height: 32px;
-	}
-
-	.project-icon.amber {
-		background: rgba(226, 170, 45, 0.18);
-		color: #f3b63f;
-	}
-
-	.project-icon.cyan {
-		background: rgba(29, 168, 220, 0.2);
-		color: #2ed4ff;
-	}
-
-	.project-icon.purple {
-		background: rgba(175, 88, 215, 0.22);
-		color: #d893ff;
-	}
-
-	.project-icon.mint {
-		background: rgba(30, 218, 176, 0.15);
-		color: #2df0ce;
-	}
-
-	.project-main {
+		align-content: start;
 		min-width: 0;
 	}
 
-	.project-main strong {
-		display: block;
-		color: #f7fffd;
-		font-size: 12px;
-		font-weight: 600;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
+	.status-list {
+		margin: 0;
+		list-style: none;
 	}
 
-	.project-main span,
-	.project-meta span {
+	.person-list article {
+		display: grid;
+		grid-template-columns: 44px minmax(0, 1fr) 20px;
+		align-items: center;
+		gap: 10px;
+		min-height: 56px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+	}
+
+	.person-list img {
+		width: 44px;
+		height: 44px;
+	}
+
+	.person-list strong,
+	.person-list small {
 		display: block;
-		font-size: 10px;
-		margin-top: 3px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.person-list strong {
+		color: #fff;
+		font-size: 13px;
+		font-weight: 560;
+	}
+
+	.person-list small {
+		margin-top: 4px;
+		color: #91a8a8;
+		font-size: 11px;
+	}
+
+	.status-list li {
+		position: relative;
+		display: flex;
+		justify-content: space-between;
+		padding-left: 14px;
+		color: #2df0ce;
+		font-size: 12px;
+	}
+
+	.status-list li::before {
+		position: absolute;
+		top: 6px;
+		left: 0;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: #2df0ce;
+		content: '';
+	}
+
+	.inline-error {
+		color: #ff9fa7 !important;
+		font-size: 11px !important;
+		line-height: 1.4;
+	}
+
+	.full-band {
+		margin-top: 12px;
+	}
+
+	.project-card-row {
+		display: grid;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 12px;
+		padding: 14px;
+	}
+
+	.compact-project,
+	.new-tile {
+		display: grid;
+		grid-template-columns: 38px 1fr;
+		align-items: center;
+		gap: 10px;
+		min-height: 98px;
+		border: 1px solid rgba(111, 205, 195, 0.12);
+		border-radius: 8px;
+		background: rgba(12, 40, 44, 0.52);
+		padding: 12px;
+	}
+
+	.compact-project strong {
+		color: #f7fffd;
+		font-size: 13px;
+	}
+
+	.compact-project small {
+		display: block;
+		color: #91a8a8;
+		font-size: 11px;
 	}
 
 	.progress {
+		grid-column: 2;
 		height: 6px;
 		border-radius: 999px;
 		background: rgba(66, 130, 126, 0.22);
@@ -2560,418 +2153,1310 @@
 		background: linear-gradient(90deg, #27d0b3, #54f0d4);
 	}
 
-	.progress-value {
-		color: #55f4d8;
-		font-size: 11px;
-		font-weight: 500;
+	.compact-project em {
+		grid-column: 2;
+		color: #cffff6;
+		font-size: 12px;
+		font-style: normal;
 	}
 
-	.project-meta {
-		color: #a6bbbb;
-		font-size: 10px;
+	.new-tile {
+		grid-template-columns: 1fr;
+		place-items: center;
+		color: #dcefed;
+		background: rgba(3, 17, 20, 0.38);
+		border-style: dashed;
 	}
 
-	.quick-command {
-		height: 50px;
-		border-radius: 10px;
-		padding: 0 10px;
+	.view-header {
+		justify-content: space-between;
+		gap: 18px;
+		min-height: 64px;
+		margin-bottom: 12px;
+		padding: 0 12px;
 	}
 
-	.quick-command button {
+	.header-actions {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.primary-button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		height: 38px;
+		min-width: 118px;
+		border-radius: 8px;
+		background: linear-gradient(180deg, rgba(34, 183, 160, 0.82), rgba(15, 106, 94, 0.88));
+		color: #eafffb;
+		font-size: 13px;
+		font-weight: 560;
+	}
+
+	.segmented.active,
+	.filter-tabs button.active,
+	.section-tabs button.active,
+	.filter-bar button.active {
+		border-color: rgba(45, 240, 206, 0.48);
+		background: rgba(25, 154, 132, 0.24);
+		color: #2df0ce;
+	}
+
+	.filter-tabs,
+	.filter-bar,
+	.section-tabs,
+	.graph-filter-tabs {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		min-height: 42px;
+		margin-bottom: 12px;
+		padding: 4px 10px;
+		border: 1px solid rgba(82, 204, 190, 0.12);
+		border-radius: 8px;
+		background: rgba(5, 22, 25, 0.62);
+	}
+
+	.filter-tabs button,
+	.filter-bar button,
+	.section-tabs button,
+	.graph-filter-tabs button {
 		display: inline-flex;
 		align-items: center;
 		gap: 7px;
-		height: 36px;
-		border-left: 1px solid rgba(111, 205, 195, 0.1);
+		height: 32px;
+		border: 1px solid transparent;
+		border-radius: 7px;
 		background: transparent;
-		color: #d8efed;
+		color: #a7bbba;
 		padding: 0 12px;
 		font-size: 12px;
 	}
 
-	.quick-command button:last-child {
-		border: 1px solid rgba(45, 240, 206, 0.28);
-		border-radius: 7px;
-		background: rgba(39, 198, 171, 0.13);
-		color: #45f3d4;
+	.filter-tabs em,
+	.section-tabs em {
+		background: rgba(142, 174, 174, 0.16);
+		color: #d5e7e5;
+		padding: 2px 7px;
 	}
 
-	.right-rail {
+	.three-pane {
 		display: grid;
-		grid-template-rows: 38px auto auto auto auto 1fr;
-		align-content: start;
+		grid-template-columns: 350px minmax(430px, 1fr) 320px;
 		gap: 12px;
-		min-height: 0;
-		min-width: 0;
-		overflow: hidden;
+		min-height: 690px;
 	}
 
-	.rail-actions {
-		justify-content: end;
-		gap: 9px;
+	.conversation-list {
+		display: grid;
+		align-content: start;
+		padding: 10px;
 	}
 
-	.rail-actions > button:not(.icon-button):not(.avatar-button) {
-		display: inline-flex;
-		align-items: center;
-		gap: 8px;
+	.local-search {
 		height: 38px;
-		border: 1px solid rgba(111, 205, 195, 0.16);
 		border-radius: 8px;
-		background: rgba(6, 23, 27, 0.8);
-		color: #ccdedd;
 		padding: 0 10px;
-		font-size: 12px;
+		margin-bottom: 10px;
 	}
 
-	.avatar-button {
+	.conversation-list button,
+	.contacts-list-panel .contact-row {
+		position: relative;
 		display: grid;
-		place-items: center;
-		width: 38px;
-		height: 38px;
-		border: 1px solid rgba(45, 240, 206, 0.2);
-		border-radius: 50%;
-		background: rgba(28, 174, 151, 0.16);
-	}
-
-	.avatar-button img {
-		width: 31px;
-		height: 31px;
-	}
-
-	.calendar-card {
-		min-height: 274px;
-	}
-
-	.calendar-card h3 {
-		padding: 14px 16px 8px;
-		font-size: 13px;
-		font-weight: 600;
-	}
-
-	.calendar-strip {
-		display: grid;
-		grid-template-columns: repeat(7, 1fr);
-		gap: 6px;
-		padding: 0 12px 10px;
-	}
-
-	.calendar-strip button {
-		display: grid;
-		place-items: center;
-		gap: 3px;
-		min-height: 42px;
-		border-radius: 7px;
-		background: transparent;
-		color: #dcefed;
-	}
-
-	.calendar-strip button.active {
-		border: 1px solid rgba(45, 240, 206, 0.48);
-		background: rgba(23, 134, 119, 0.62);
-		color: #ffffff;
-	}
-
-	.calendar-strip span {
-		font-size: 9px;
-		text-transform: uppercase;
-	}
-
-	.calendar-strip strong {
-		font-size: 14px;
-		font-weight: 500;
-	}
-
-	.agenda {
-		display: grid;
-		gap: 7px;
-		padding: 0 10px 10px;
-	}
-
-	.agenda article {
-		display: grid;
-		grid-template-columns: 42px 1fr auto;
+		grid-template-columns: 34px 42px minmax(0, 1fr) auto;
 		gap: 10px;
 		align-items: center;
-		min-height: 38px;
-		border-radius: 7px;
-		background: rgba(13, 44, 47, 0.6);
-		padding: 7px 9px;
+		width: 100%;
+		min-height: 78px;
+		border: 1px solid transparent;
+		border-radius: 8px;
+		background: transparent;
+		color: #e6f7f5;
+		padding: 9px 10px;
+		text-align: left;
 	}
 
-	.agenda article div strong,
-	.agenda article div span {
+	.conversation-list button.active,
+	.contacts-list-panel .contact-row.active {
+		border-color: rgba(45, 240, 206, 0.24);
+		background: rgba(25, 109, 100, 0.24);
+	}
+
+	.conversation-list img {
+		width: 42px;
+		height: 42px;
+	}
+
+	.conversation-list strong,
+	.contacts-list-panel strong {
 		display: block;
+		color: #fff;
+		font-size: 14px;
+		font-weight: 560;
 	}
 
-	.agenda article div strong {
-		color: #e9fffc;
+	.conversation-list small,
+	.contacts-list-panel small,
+	.contacts-list-panel em {
+		display: block;
+		margin-top: 5px;
 		font-size: 11px;
-		font-weight: 500;
-	}
-
-	.agenda article div span {
-		margin-top: 2px;
-		font-size: 10px;
-	}
-
-	.agenda article p {
-		margin: 0;
-		color: #f6fffe;
-		font-size: 12px;
-		line-height: 1.25;
-	}
-
-	.agenda article em {
-		border-radius: 999px;
-		background: rgba(45, 240, 206, 0.13);
-		color: #87fff0;
-		font-size: 10px;
 		font-style: normal;
-		padding: 4px 7px;
-	}
-
-	.tasks-card {
-		min-height: 232px;
-	}
-
-	.small-tabs {
-		gap: 18px;
-		height: 39px;
-		padding: 0 14px;
-		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
-	}
-
-	.small-tabs button {
-		height: 39px;
-		font-size: 11px;
-	}
-
-	.small-tabs span {
-		border-radius: 999px;
-		background: rgba(135, 170, 170, 0.18);
-		padding: 1px 5px;
-	}
-
-	.task-list {
-		display: grid;
-		gap: 7px;
-		padding: 10px 12px 14px;
-	}
-
-	.task-list label {
-		display: grid;
-		grid-template-columns: 17px 1fr 44px 64px;
-		gap: 8px;
-		color: #d9eeec;
-		font-size: 11px;
-	}
-
-	.task-list input {
-		width: 13px;
-		height: 13px;
-		margin: 0;
-		accent-color: #27d8bd;
-	}
-
-	.task-list span {
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 
-	.task-list em,
-	.task-list strong {
+	.conversation-list time {
+		align-self: start;
+		color: #a9bcbb;
+		font-size: 11px;
+	}
+
+	.conversation-list b {
+		position: absolute;
+		right: 12px;
+		bottom: 24px;
+		display: grid;
+		place-items: center;
+		width: 18px;
+		height: 18px;
+		border-radius: 50%;
+		background: rgba(45, 240, 206, 0.28);
+		color: #42f3d5;
 		font-size: 10px;
-		font-style: normal;
+	}
+
+	.chat-pane {
+		display: grid;
+		grid-template-rows: auto 1fr auto;
+		min-height: 0;
+	}
+
+	.chat-pane > header,
+	.contact-hero {
+		display: grid;
+		grid-template-columns: auto 1fr auto;
+		align-items: center;
+		gap: 12px;
+		min-height: 68px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.12);
+		padding: 12px 16px;
+	}
+
+	.chat-pane header img {
+		width: 48px;
+		height: 48px;
+	}
+
+	.chat-pane h2,
+	.profile-head h2 {
+		color: #fff;
+		font-size: 20px;
+		font-weight: 560;
+	}
+
+	.chat-actions {
+		display: flex;
+		gap: 8px;
+	}
+
+	.chat-body {
+		display: grid;
+		align-content: start;
+		gap: 12px;
+		min-height: 0;
+		overflow: auto;
+		padding: 18px 16px;
+	}
+
+	.date-divider {
+		color: #95aaa9;
+		font-size: 12px;
 		text-align: center;
 	}
 
-	.task-list em {
-		color: #dcefed;
-	}
-
-	.task-list strong {
-		background: rgba(31, 203, 170, 0.14);
-		color: #2ff1cd;
-		padding: 3px 5px;
-	}
-
-	.insights-card {
-		min-height: 188px;
-	}
-
-	.insight-grid {
-		display: grid;
-		grid-template-columns: 1.1fr 0.9fr;
-		gap: 8px;
-		padding: 10px;
-	}
-
-	.insight-grid article {
-		min-height: 120px;
+	.bubble,
+	.attachment-bubble {
+		position: relative;
+		max-width: 60%;
 		border: 1px solid rgba(111, 205, 195, 0.12);
-		border-radius: 7px;
-		background: rgba(12, 40, 44, 0.5);
-		padding: 11px;
+		border-radius: 8px;
+		background: rgba(18, 46, 51, 0.74);
+		color: #effffd;
+		font-size: 14px;
+		line-height: 1.45;
+		padding: 12px 14px 20px;
 	}
 
-	.insight-grid strong {
-		display: block;
-		color: #f4fffe;
-		font-size: 11px;
-		font-weight: 600;
+	.bubble.outbound {
+		justify-self: end;
+		border-color: rgba(45, 240, 206, 0.28);
+		background: rgba(19, 116, 98, 0.48);
 	}
 
-	.insight-grid span {
-		display: block;
-		margin-top: 4px;
+	.bubble time,
+	.attachment-bubble time {
+		position: absolute;
+		right: 10px;
+		bottom: 5px;
+		color: #a6bbbb;
 		font-size: 10px;
 	}
 
-	.bar-chart {
+	.attachment-bubble {
 		display: grid;
-		grid-template-columns: repeat(8, 1fr);
-		align-items: end;
-		gap: 8px;
-		height: 66px;
-		margin-top: 12px;
+		grid-template-columns: 44px 1fr auto;
+		align-items: center;
+		gap: 12px;
+		max-width: 54%;
 	}
 
-	.bar-chart i {
+	.attachment-bubble small {
 		display: block;
-		border-radius: 2px 2px 0 0;
-		background: linear-gradient(180deg, #30efd0, rgba(25, 129, 116, 0.75));
-		box-shadow: 0 0 16px rgba(45, 240, 206, 0.18);
+		margin-top: 5px;
+		color: #a6bbbb;
 	}
 
-	.insight-grid ul {
+	.attachment-bubble button {
+		color: #b7cdcc;
+		background: transparent;
+	}
+
+	.composer {
+		gap: 8px;
+		height: 64px;
+		margin: 0 16px 16px;
+		border-radius: 10px;
+		padding: 0 10px;
+	}
+
+	.composer button {
 		display: grid;
-		gap: 7px;
-		margin: 10px 0 0;
+		place-items: center;
+		width: 34px;
+		height: 34px;
+		border-radius: 8px;
+		background: rgba(34, 183, 160, 0.16);
+		color: #39f0d0;
+	}
+
+	.context-rail {
+		display: grid;
+		gap: 12px;
+		align-content: start;
+	}
+
+	.profile-panel {
+		padding: 16px;
+	}
+
+	.profile-head {
+		display: grid;
+		grid-template-columns: 58px 1fr;
+		gap: 12px;
+		align-items: center;
+	}
+
+	.profile-head img {
+		width: 58px;
+		height: 58px;
+	}
+
+	.quick-icons {
+		display: flex;
+		gap: 8px;
+		margin-top: 16px;
+	}
+
+	.info-card p {
+		font-size: 13px;
+		line-height: 1.48;
+	}
+
+	.related-row {
+		display: grid;
+		grid-template-columns: 30px 1fr auto;
+		gap: 9px;
+		min-height: 34px;
+	}
+
+	.mini-check em {
+		color: #2df0ce;
+		font-size: 11px;
+		font-style: normal;
+	}
+
+	.contacts-layout,
+	.docs-layout,
+	.notes-layout {
+		display: grid;
+		grid-template-columns: 320px minmax(520px, 1fr) 310px;
+		gap: 12px;
+		min-height: 0;
+	}
+
+	.contacts-list-panel {
+		padding: 12px;
+	}
+
+	.contacts-list-panel header {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		margin-bottom: 12px;
+	}
+
+	.contacts-list-panel .contact-row {
+		grid-template-columns: 44px 1fr auto;
+		min-height: 76px;
+	}
+
+	.contacts-list-panel img {
+		width: 44px;
+		height: 44px;
+	}
+
+	.contact-detail,
+	.notes-main,
+	.agent-main {
+		display: grid;
+		gap: 12px;
+		align-content: start;
+		min-width: 0;
+	}
+
+	.contact-hero img {
+		width: 92px;
+		height: 92px;
+	}
+
+	.contact-hero {
+		grid-template-columns: 92px 1fr auto;
+	}
+
+	.contact-cards {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 12px;
+	}
+
+	.span-2 {
+		grid-column: span 2;
+	}
+
+	.detail-list {
+		display: grid;
+		gap: 12px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		font-size: 12px;
+	}
+
+	.detail-list li {
+		display: grid;
+		grid-template-columns: 20px 1fr auto;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.detail-list em {
+		color: #a6bbbb;
+		font-style: normal;
+	}
+
+	.node-detail-list li {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+
+	.tag-cloud {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	.big-score {
+		width: 72px;
+		height: 72px;
+		color: #fff;
+		font-size: 24px;
+	}
+
+	.project-hero {
+		display: grid;
+		grid-template-columns: 82px 1fr auto;
+		align-items: center;
+		gap: 18px;
+		min-height: 152px;
+		padding: 18px;
+	}
+
+	.project-logo {
+		display: grid;
+		place-items: center;
+		width: 78px;
+		height: 78px;
+		border: 1px solid rgba(45, 240, 206, 0.28);
+		border-radius: 50%;
+		background: rgba(18, 116, 112, 0.2);
+		color: #24d8ff;
+	}
+
+	.project-hero h1 {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+
+	.project-meta-strip {
+		display: grid;
+		grid-template-columns: repeat(5, 1fr);
+		margin-top: 12px;
+		padding: 14px;
+	}
+
+	.project-meta-strip article {
+		border-right: 1px solid rgba(102, 189, 180, 0.1);
+		padding: 0 14px;
+	}
+
+	.project-meta-strip article:last-child {
+		border-right: 0;
+	}
+
+	.project-meta-strip span {
+		display: block;
+		color: #91a8a8;
+		font-size: 12px;
+	}
+
+	.project-meta-strip strong {
+		display: block;
+		margin-top: 8px;
+		color: #fff;
+		font-size: 14px;
+		font-weight: 500;
+	}
+
+	.project-dashboard-grid {
+		display: grid;
+		grid-template-columns: 0.8fr 1.45fr 0.8fr 310px;
+		gap: 12px;
+	}
+
+	.project-dashboard-grid .project-side {
+		grid-column: 4;
+		grid-row: 1 / span 4;
+	}
+
+	.graph-card-large {
+		min-height: 330px;
+		padding: 14px;
+	}
+
+	.radial-graph {
+		position: relative;
+		height: 260px;
+		margin-top: 12px;
+		background:
+			linear-gradient(rgba(45, 240, 206, 0.035) 1px, transparent 1px),
+			linear-gradient(90deg, rgba(45, 240, 206, 0.025) 1px, transparent 1px);
+		background-size: 30px 30px;
+	}
+
+	.graph-center,
+	.knowledge-core {
+		position: absolute;
+		display: grid;
+		place-items: center;
+		border: 1px solid rgba(45, 240, 206, 0.84);
+		border-radius: 50%;
+		background: rgba(13, 126, 113, 0.72);
+		box-shadow: 0 0 34px rgba(45, 240, 206, 0.42);
+		color: #dffffa;
+	}
+
+	.graph-center {
+		top: 50%;
+		left: 50%;
+		width: 76px;
+		height: 76px;
+		transform: translate(-50%, -50%);
+	}
+
+	.graph-center span {
+		position: absolute;
+		top: 84px;
+		width: 110px;
+		text-align: center;
+		font-size: 12px;
+	}
+
+	.graph-chip {
+		position: absolute;
+		left: var(--x);
+		top: var(--y);
+		border: 1px solid rgba(45, 240, 206, 0.18);
+		border-radius: 999px;
+		background: rgba(5, 30, 34, 0.82);
+		color: #dffffa;
+		font-size: 11px;
+		padding: 5px 8px;
+	}
+
+	.summary-numbers {
+		display: grid;
+		gap: 12px;
+	}
+
+	.summary-numbers.compact {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	.summary-numbers article {
+		display: grid;
+		gap: 4px;
+	}
+
+	.summary-numbers strong {
+		color: #fff;
+		font-size: 22px;
+		font-weight: 500;
+	}
+
+	.summary-numbers span {
+		color: #91a8a8;
+		font-size: 11px;
+	}
+
+	.timeline-mini,
+	.health-row,
+	.deadline {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		gap: 10px;
+		align-items: start;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		padding-bottom: 9px;
+	}
+
+	.timeline-mini strong {
+		color: #f6fffe;
+		font-size: 12px;
+		font-weight: 500;
+	}
+
+	.timeline-mini time {
+		color: #dcefed;
+		font-size: 11px;
+	}
+
+	.health-row {
+		grid-template-columns: 1fr auto;
+		border: 1px solid rgba(111, 205, 195, 0.1);
+		border-radius: 7px;
+		padding: 10px;
+	}
+
+	.health-row span {
+		color: #91a8a8;
+	}
+
+	.health-row strong {
+		color: #2df0ce;
+	}
+
+	.person-compact {
+		display: grid;
+		grid-template-columns: 36px 1fr auto;
+		gap: 10px;
+		min-height: 40px;
+	}
+
+	.person-compact img {
+		width: 36px;
+		height: 36px;
+	}
+
+	.person-compact small,
+	.doc-mini small {
+		display: block;
+		margin-top: 3px;
+		font-size: 11px;
+	}
+
+	.person-compact em {
+		color: #bde8e4;
+		font-size: 11px;
+		font-style: normal;
+	}
+
+	.inline-metrics {
+		flex: 1;
+		grid-template-columns: repeat(5, minmax(92px, 1fr));
+	}
+
+	.inline-metrics.tiny {
+		max-width: 460px;
+		grid-template-columns: repeat(3, 1fr);
+	}
+
+	.tasks-layout,
+	.calendar-layout,
+	.knowledge-layout,
+	.agents-layout,
+	.timeline-layout {
+		display: grid;
+		grid-template-columns: minmax(740px, 1fr) 310px;
+		gap: 12px;
+	}
+
+	.task-table {
+		min-height: 680px;
+	}
+
+	.tracker-strip {
+		display: grid;
+		grid-template-columns: repeat(3, 1fr);
+		gap: 12px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
+		padding: 14px;
+	}
+
+	.tracker-strip article {
+		display: grid;
+		grid-template-columns: 28px 1fr auto;
+		align-items: center;
+		gap: 8px;
+		min-height: 50px;
+		border: 1px solid rgba(111, 205, 195, 0.1);
+		border-radius: 8px;
+		background: rgba(8, 36, 39, 0.48);
+		padding: 10px;
+	}
+
+	.tracker-strip strong {
+		color: #fff;
+		font-size: 13px;
+	}
+
+	.tracker-strip span {
+		color: #a6bbbb;
+		font-size: 10px;
+	}
+
+	.table-head,
+	.task-row,
+	.doc-row {
+		display: grid;
+		align-items: center;
+		min-height: 46px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		padding: 0 16px;
+	}
+
+	.table-head {
+		grid-template-columns: 2fr 0.9fr 1.2fr 1.2fr 0.9fr 0.8fr 0.9fr;
+		color: #9fb6b5;
+		font-size: 11px;
+	}
+
+	.task-row {
+		grid-template-columns: 22px 2fr 0.9fr 1.2fr 1.2fr 0.9fr 0.8fr 0.9fr;
+		color: #dcefed;
+		font-size: 12px;
+	}
+
+	.task-row strong {
+		color: #fff;
+		font-weight: 500;
+	}
+
+	.task-row span {
+		color: #c7d9d8;
+	}
+
+	.task-row em,
+	.task-row b {
+		justify-self: start;
+	}
+
+	.task-group {
+		color: #dcefed;
+		font-size: 13px;
+		font-weight: 500;
+		padding: 18px 16px 8px;
+	}
+
+	.task-group em {
+		border-radius: 999px;
+		background: rgba(142, 174, 174, 0.16);
+		color: #d5e7e5;
+		font-size: 10px;
+		font-style: normal;
+		padding: 2px 7px;
+	}
+
+	.chart-panel .donut {
+		width: 114px;
+		height: 114px;
+		margin: 6px auto;
+	}
+
+	.donut strong {
+		color: #fff;
+		font-size: 24px;
+		font-weight: 500;
+	}
+
+	.donut span {
+		margin-top: -28px;
+		font-size: 11px;
+	}
+
+	.donut.small {
+		width: 70px;
+		height: 70px;
+	}
+
+	.bar-row {
+		display: grid;
+		grid-template-columns: 1fr 120px;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.bar-row span {
+		color: #dcefed;
+		font-size: 12px;
+	}
+
+	.bar-row div {
+		height: 5px;
+		border-radius: 999px;
+		background: rgba(66, 130, 126, 0.22);
+		overflow: hidden;
+	}
+
+	.bar-row i {
+		display: block;
+		width: 72%;
+		height: 100%;
+		background: #2df0ce;
+	}
+
+	.deadline {
+		grid-template-columns: 1fr auto;
+	}
+
+	.week-board {
+		display: grid;
+		grid-template-rows: 52px 1fr auto;
+		min-height: 710px;
+	}
+
+	.week-header {
+		display: grid;
+		grid-template-columns: repeat(7, 1fr);
+		border-bottom: 1px solid rgba(102, 189, 180, 0.12);
+	}
+
+	.week-header strong {
+		display: grid;
+		place-items: center;
+		color: #dcefed;
+		font-size: 12px;
+		font-weight: 500;
+	}
+
+	.time-grid {
+		position: relative;
+		display: grid;
+		grid-template-columns: repeat(7, 1fr);
+		height: 580px;
+		background:
+			linear-gradient(rgba(111, 205, 195, 0.09) 1px, transparent 1px),
+			linear-gradient(90deg, rgba(111, 205, 195, 0.09) 1px, transparent 1px);
+		background-size: calc(100% / 7) 46px;
+	}
+
+	.event-block {
+		position: absolute;
+		left: calc((100% / 7) * var(--day) + 6px);
+		top: var(--top);
+		width: calc((100% / 7) - 12px);
+		height: var(--height);
+		border: 1px solid rgba(45, 240, 206, 0.26);
+		border-radius: 6px;
+		background: rgba(13, 96, 90, 0.38);
+		padding: 9px;
+	}
+
+	.event-block.blue {
+		border-color: rgba(36, 148, 255, 0.54);
+		background: rgba(20, 86, 136, 0.38);
+	}
+
+	.event-block.purple {
+		border-color: rgba(181, 99, 231, 0.5);
+		background: rgba(89, 53, 119, 0.38);
+	}
+
+	.event-block.amber {
+		border-color: rgba(236, 183, 70, 0.72);
+		background: rgba(93, 78, 25, 0.4);
+	}
+
+	.event-block strong,
+	.event-block span {
+		display: block;
+	}
+
+	.event-block strong {
+		color: #fff;
+		font-size: 12px;
+		font-weight: 560;
+	}
+
+	.event-block span {
+		margin-top: 4px;
+		color: #b8cbc9;
+		font-size: 10px;
+	}
+
+	.now-line {
+		position: absolute;
+		right: 0;
+		left: 0;
+		top: 230px;
+		height: 1px;
+		background: #ef3140;
+	}
+
+	.now-line span {
+		position: absolute;
+		left: 0;
+		top: -10px;
+		border-radius: 4px;
+		background: #ef3140;
+		color: #fff;
+		font-size: 10px;
+		padding: 2px 5px;
+	}
+
+	.week-board footer {
+		display: flex;
+		gap: 18px;
+		border-top: 1px solid rgba(102, 189, 180, 0.12);
+		color: #a6bbbb;
+		font-size: 11px;
+		padding: 12px 14px;
+	}
+
+	.source-strip {
+		display: grid;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 10px;
+		margin-bottom: 12px;
+	}
+
+	.source-card {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		min-height: 58px;
+		border-radius: 8px;
+		color: #eefefb;
+		padding: 0 14px;
+	}
+
+	.source-card.add {
+		justify-content: center;
+		color: #2df0ce;
+	}
+
+	.docs-layout {
+		grid-template-columns: 220px minmax(640px, 1fr) 310px;
+	}
+
+	.docs-table header {
+		padding: 16px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
+	}
+
+	.category-grid {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 10px;
+		padding: 12px;
+	}
+
+	.category-grid article {
+		display: grid;
+		grid-template-columns: 24px 1fr;
+		align-items: center;
+		gap: 8px;
+		min-height: 56px;
+		border: 1px solid rgba(111, 205, 195, 0.1);
+		border-radius: 8px;
+		background: rgba(8, 36, 39, 0.48);
+		padding: 10px;
+		color: #dffffa;
+		font-size: 12px;
+	}
+
+	.table-head.docs {
+		grid-template-columns: 2fr 1fr 1fr 0.7fr 1fr 0.7fr;
+	}
+
+	.doc-row {
+		grid-template-columns: 24px 2fr 1fr 1fr 0.7fr 1fr 0.7fr;
+		color: #dcefed;
+		font-size: 12px;
+	}
+
+	.doc-row strong {
+		color: #fff;
+		font-size: 12px;
+		font-weight: 500;
+	}
+
+	.doc-mini {
+		grid-template-columns: 26px 1fr;
+		gap: 10px;
+		min-height: 38px;
+	}
+
+	.collection-row {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		padding-bottom: 8px;
+		font-size: 12px;
+	}
+
+	.notes-layout {
+		grid-template-columns: 250px minmax(620px, 1fr) 310px;
+	}
+
+	.notes-list {
+		padding: 12px;
+	}
+
+	.notes-list h3 {
+		color: #dcefed;
+		font-size: 12px;
+		font-weight: 500;
+		padding: 8px 0;
+	}
+
+	.notes-list article {
+		display: grid;
+		grid-template-columns: 28px minmax(0, 1fr) 86px;
+		align-items: start;
+		gap: 12px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		padding: 12px 0;
+	}
+
+	.notes-list article > div {
+		min-width: 0;
+	}
+
+	.notes-list strong {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.notes-list p {
+		margin-top: 4px;
+		font-size: 12px;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.notes-list small {
+		display: block;
+		margin-top: 6px;
+		font-size: 11px;
+	}
+
+	.notes-list em {
+		justify-self: end;
+		max-width: 86px;
+		overflow: hidden;
+		text-align: center;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.graph-filter-tabs {
+		margin-top: 2px;
+	}
+
+	.knowledge-layout {
+		grid-template-columns: minmax(760px, 1fr) 310px;
+		min-height: 760px;
+	}
+
+	.graph-workbench {
+		display: grid;
+		grid-template-rows: auto minmax(0, 1fr) auto;
+	}
+
+	.graph-toolbar {
+		display: flex;
+		gap: 8px;
+		padding: 12px;
+	}
+
+	.graph-toolbar button {
+		min-height: 34px;
+		border: 1px solid rgba(111, 205, 195, 0.14);
+		border-radius: 7px;
+		background: rgba(4, 21, 24, 0.72);
+		color: #dcefed;
+		padding: 0 12px;
+	}
+
+	.knowledge-canvas {
+		position: relative;
+		min-height: 610px;
+		overflow: hidden;
+		background:
+			radial-gradient(circle at center, rgba(21, 132, 126, 0.18), transparent 35%),
+			linear-gradient(rgba(45, 240, 206, 0.035) 1px, transparent 1px),
+			linear-gradient(90deg, rgba(45, 240, 206, 0.025) 1px, transparent 1px);
+		background-size: auto, 30px 30px, 30px 30px;
+	}
+
+	.knowledge-core {
+		top: 50%;
+		left: 50%;
+		width: 112px;
+		height: 112px;
+		transform: translate(-50%, -50%);
+	}
+
+	.knowledge-core img {
+		width: 58px;
+		height: 58px;
+		object-fit: contain;
+	}
+
+	.knowledge-core strong {
+		position: absolute;
+		top: 122px;
+		width: 140px;
+		text-align: center;
+		color: #fff;
+	}
+
+	.knowledge-core span {
+		position: absolute;
+		top: 150px;
+		border-radius: 4px;
+		background: rgba(45, 240, 206, 0.15);
+		color: #2df0ce;
+		font-size: 11px;
+		padding: 3px 8px;
+	}
+
+	.graph-bucket {
+		position: absolute;
+		width: 140px;
+		border: 1px solid rgba(45, 240, 206, 0.18);
+		border-radius: 8px;
+		background: rgba(6, 30, 34, 0.88);
+		transform: translate(-50%, -50%);
+	}
+
+	.graph-bucket header {
+		display: flex;
+		justify-content: space-between;
+		background: rgba(45, 240, 206, 0.08);
+		padding: 7px 9px;
+	}
+
+	.graph-bucket strong {
+		color: #2df0ce;
+		font-size: 12px;
+	}
+
+	.graph-bucket em {
+		color: #a6bbbb;
+		font-size: 10px;
+		font-style: normal;
+	}
+
+	.graph-bucket p {
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		color: #dcefed;
+		font-size: 11px;
+		padding: 8px 9px;
+	}
+
+	.timeline-slider {
+		display: grid;
+		grid-template-columns: auto 1fr auto;
+		gap: 14px;
+		align-items: center;
+		padding: 14px;
+		color: #a6bbbb;
+		font-size: 11px;
+	}
+
+	.timeline-slider div {
+		height: 4px;
+		border-radius: 999px;
+		background: rgba(66, 130, 126, 0.22);
+	}
+
+	.timeline-slider i {
+		display: block;
+		width: 64%;
+		height: 100%;
+		margin-left: 28%;
+		background: #2df0ce;
+	}
+
+	.agent-metrics {
+		grid-template-columns: repeat(6, 1fr);
+		margin-bottom: 12px;
+	}
+
+	.agents-layout {
+		grid-template-columns: minmax(760px, 1fr) 310px;
+	}
+
+	.agent-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 10px;
+	}
+
+	.agent-card {
+		display: grid;
+		grid-template-columns: 44px 1fr;
+		gap: 12px;
+		min-height: 128px;
+		padding: 12px;
+		text-align: left;
+	}
+
+	.agent-card.active {
+		border-color: rgba(45, 240, 206, 0.38);
+	}
+
+	.agent-card footer {
+		grid-column: 1 / -1;
+		display: flex;
+		justify-content: space-between;
+		border-top: 1px solid rgba(102, 189, 180, 0.08);
+		padding-top: 10px;
+		font-size: 11px;
+	}
+
+	.agent-detail {
+		margin-top: 12px;
+		padding: 14px;
+	}
+
+	.agent-detail header {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.agent-detail h2 {
+		color: #fff;
+		font-size: 20px;
+	}
+
+	.agent-detail-grid {
+		display: grid;
+		grid-template-columns: 1fr 300px 240px;
+		gap: 22px;
+		padding: 14px 8px 0;
+	}
+
+	.agent-detail-grid p,
+	.agent-detail-grid li {
+		color: #c7d9d8;
+		font-size: 13px;
+		line-height: 1.5;
+	}
+
+	.agent-detail-grid ul {
+		display: grid;
+		gap: 12px;
+		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
 
-	.insight-grid li {
+	.agent-detail-grid li {
 		display: flex;
-		justify-content: space-between;
-		gap: 12px;
-		color: #dcefed;
-		font-size: 10px;
+		align-items: center;
+		gap: 8px;
 	}
 
-	.insight-grid li em {
-		color: #ffffff;
-		font-style: normal;
-	}
-
-	.assistant-card {
-		min-height: 112px;
-		padding-bottom: 10px;
-	}
-
-	.assistant-card label {
-		height: 36px;
-		margin: 10px;
+	.spark-chart {
+		height: 150px;
+		border: 1px solid rgba(111, 205, 195, 0.1);
 		border-radius: 8px;
-		padding: 0 9px 0 0;
+		background:
+			linear-gradient(160deg, transparent 42%, rgba(45, 240, 206, 0.9) 43%, transparent 44%),
+			linear-gradient(rgba(45, 240, 206, 0.035) 1px, transparent 1px);
+		background-size: auto, 28px 28px;
 	}
 
-	.assistant-card > div {
-		display: flex;
-		gap: 6px;
-		padding: 0 10px;
+	.large-timeline {
+		padding: 0 0 12px;
 	}
 
-	.assistant-card > div button {
-		flex: 1;
-		min-height: 26px;
-		border: 1px solid rgba(45, 240, 206, 0.12);
-		border-radius: 6px;
-		background: rgba(30, 154, 134, 0.13);
-		color: #38eccd;
-		font-size: 10px;
-	}
-
-	.system-card {
-		justify-content: space-between;
+	.timeline-event-row {
+		display: grid;
+		grid-template-columns: 64px 18px 40px 1fr;
+		gap: 10px;
 		min-height: 72px;
-		padding: 12px 14px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+		padding: 12px 18px;
 	}
 
-	.system-card h2 {
-		margin: 0 0 8px;
-		color: #f4fffe;
-		font-size: 13px;
-		font-weight: 500;
-	}
-
-	.system-card p {
-		position: relative;
-		margin: 0;
-		padding-left: 12px;
-		color: #8fa8a7;
-		font-size: 11px;
-	}
-
-	.system-card p::before {
-		position: absolute;
-		top: 5px;
-		left: 0;
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: #879b9b;
-		content: '';
-	}
-
-	.system-card p.online {
+	.timeline-event-row time {
 		color: #2df0ce;
+		font-size: 12px;
 	}
 
-	.system-card p.online::before {
-		background: #2df0ce;
-	}
-
-	.system-card p.error {
-		color: #ff8d8d;
-	}
-
-	.system-card p.error::before {
-		background: #ff6d6d;
-	}
-
-	.sparkline {
-		position: relative;
-		width: 164px;
-		height: 46px;
-		overflow: hidden;
-	}
-
-	.sparkline span {
-		position: absolute;
-		inset: 8px 0 0;
-		border-top: 1px solid #2df0ce;
+	.rail-dot {
+		width: 8px;
+		height: 8px;
+		margin-top: 8px;
 		border-radius: 50%;
-		transform: rotate(-8deg);
-		filter: drop-shadow(0 0 10px rgba(45, 240, 206, 0.55));
+		background: #2df0ce;
+		box-shadow: 0 0 12px rgba(45, 240, 206, 0.85);
 	}
 
-	.link-button,
-	.ghost-button {
-		background: transparent;
-		color: #9bb1b0;
-		font-size: 11px;
+	.timeline-event-row strong {
+		color: #fff;
+		font-size: 13px;
 	}
 
-	.ghost-button {
-		height: 26px;
-		border: 1px solid rgba(45, 240, 206, 0.18);
-		border-radius: 6px;
-		background: rgba(33, 167, 144, 0.1);
-		color: #3ae9cb;
-		padding: 0 10px;
+	.timeline-event-row p {
+		margin-top: 5px;
+		color: #91a8a8;
+		font-size: 12px;
 	}
 
 	.drawer-backdrop {
@@ -3001,365 +3486,30 @@
 		padding: 18px;
 	}
 
-	.graph-drawer {
-		position: fixed;
-		top: 18px;
-		right: 18px;
-		bottom: 18px;
-		z-index: 21;
-		display: grid;
-		grid-template-rows: auto auto auto 1fr;
-		gap: 14px;
-		width: min(920px, calc(100vw - 36px));
-		overflow: auto;
-		border: 1px solid rgba(45, 240, 206, 0.24);
-		border-radius: 14px;
-		background:
-			linear-gradient(180deg, rgba(8, 31, 35, 0.98), rgba(4, 18, 21, 0.98)),
-			#041215;
-		box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
-		padding: 18px;
-	}
-
-	.graph-drawer:focus {
-		outline: 1px solid rgba(45, 240, 206, 0.28);
-		outline-offset: -3px;
-	}
-
-	.account-drawer > header,
-	.graph-drawer > header {
+	.account-drawer > header {
 		display: flex;
 		justify-content: space-between;
 		gap: 18px;
 		align-items: start;
 	}
 
-	.account-drawer p,
-	.graph-drawer > header p {
+	.account-drawer p {
 		color: #37e8c9;
 		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
 	}
 
-	.account-drawer h2,
-	.graph-drawer h2 {
+	.account-drawer h2 {
 		margin-top: 6px;
 		color: #ffffff;
 		font-size: 22px;
 		font-weight: 500;
 	}
 
-	.graph-drawer > header p,
-	.graph-drawer h2 {
-		margin: 0;
-	}
-
-	.graph-drawer-tabs {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 4px;
-		border: 1px solid rgba(111, 205, 195, 0.14);
-		border-radius: 8px;
-		background: rgba(4, 21, 24, 0.72);
-	}
-
-	.graph-drawer-tabs button {
-		flex: 1;
-		height: 34px;
-		border-radius: 6px;
-		background: transparent;
-		color: #9bb1b0;
-	}
-
-	.graph-drawer-tabs button.active {
-		background: rgba(36, 207, 178, 0.16);
-		color: #39f0d0;
-	}
-
-	.graph-drawer-summary {
-		padding: 0;
-	}
-
-	.graph-search-form {
-		display: grid;
-		grid-template-columns: 1fr auto;
-		gap: 10px;
-	}
-
-	.graph-search-form label {
-		display: flex;
-		align-items: center;
-		min-width: 0;
-		height: 40px;
-		border: 1px solid rgba(111, 205, 195, 0.18);
-		border-radius: 8px;
-		background: rgba(4, 21, 24, 0.76);
-		color: #8ba4a5;
-		padding: 0 10px;
-	}
-
-	.graph-search-form input {
-		min-width: 0;
-		flex: 1;
-		border: 0;
-		outline: 0;
-		background: transparent;
-		color: #edfffc;
-		padding: 0 10px;
-	}
-
-	.graph-search-form button {
-		height: 40px;
-		border-radius: 8px;
-		background: #25d8bd;
-		color: #02201f;
-		font-weight: 700;
-		padding: 0 16px;
-	}
-
-	.graph-explorer-grid {
-		display: grid;
-		grid-template-columns: minmax(250px, 0.8fr) minmax(0, 1.2fr);
-		gap: 12px;
-		min-height: 0;
-	}
-
-	.graph-results,
-	.graph-neighborhood {
-		min-height: 440px;
-		border: 1px solid rgba(111, 205, 195, 0.13);
-		border-radius: 9px;
-		background: rgba(7, 28, 31, 0.58);
-		overflow: hidden;
-	}
-
-	.graph-results {
-		display: grid;
-		grid-template-rows: auto 1fr;
-		align-content: start;
-	}
-
-	.graph-results > header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		min-height: 40px;
-		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
-		padding: 0 12px;
-	}
-
-	.graph-results > header strong {
-		color: #f4fffe;
-		font-size: 12px;
-		font-weight: 600;
-	}
-
-	.graph-results > header span {
-		color: #2df0ce;
-		font-size: 11px;
-	}
-
-	.graph-results button {
-		display: grid;
-		grid-template-columns: 24px 1fr;
-		gap: 8px;
-		align-items: center;
-		width: 100%;
-		min-height: 54px;
-		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
-		background: transparent;
-		color: #35e9cc;
-		padding: 8px 12px;
-		text-align: left;
-	}
-
-	.graph-results button.active {
-		background: rgba(36, 207, 178, 0.14);
-	}
-
-	.graph-results button:disabled {
-		opacity: 0.64;
-	}
-
-	.graph-results button > span {
-		min-width: 0;
-	}
-
-	.graph-results button strong,
-	.graph-results button small {
-		display: block;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.graph-results button strong {
-		color: #eefefb;
-		font-size: 12px;
-		font-weight: 600;
-	}
-
-	.graph-results button small {
-		margin-top: 3px;
-		color: #91a8a8;
-		font-size: 10px;
-	}
-
-	.graph-inline-message,
-	.graph-inline-error {
-		margin: 0;
-		padding: 14px 12px;
-		font-size: 12px;
-		line-height: 1.4;
-	}
-
-	.graph-inline-message {
-		color: #91a8a8;
-	}
-
-	.graph-neighborhood {
-		overflow: auto;
-		padding: 14px;
-	}
-
-	.graph-neighborhood > header {
-		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
-		padding-bottom: 12px;
-	}
-
-	.graph-neighborhood > header span {
-		color: #37e8c9;
-		font-size: 10px;
-		font-weight: 700;
-		text-transform: uppercase;
-	}
-
-	.graph-neighborhood h3 {
-		margin: 6px 0 4px;
-		color: #ffffff;
-		font-size: 18px;
-		font-weight: 500;
-	}
-
-	.graph-neighborhood > header small {
-		color: #91a8a8;
-		font-size: 10px;
-		word-break: break-all;
-	}
-
-	.graph-truncation {
-		border: 1px solid rgba(236, 183, 70, 0.28);
-		border-radius: 8px;
-		background: rgba(236, 183, 70, 0.12);
-		color: #eeb84b;
-		font-size: 12px;
-		line-height: 1.4;
-		padding: 10px 12px;
-	}
-
-	.neighborhood-columns {
-		display: grid;
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 12px;
-		margin-top: 12px;
-	}
-
-	.neighborhood-columns section,
-	.graph-evidence {
-		border: 1px solid rgba(111, 205, 195, 0.11);
-		border-radius: 8px;
-		background: rgba(5, 23, 26, 0.58);
-		padding: 12px;
-	}
-
-	.neighborhood-columns section > strong,
-	.graph-evidence > strong {
-		display: block;
-		color: #f4fffe;
-		font-size: 12px;
-		font-weight: 600;
-	}
-
-	.neighborhood-columns p,
-	.graph-evidence p {
-		margin: 10px 0 0;
-		color: #91a8a8;
-		font-size: 12px;
-	}
-
-	.neighborhood-columns ul,
-	.graph-evidence ul {
-		display: grid;
-		gap: 8px;
-		margin: 10px 0 0;
-		padding: 0;
-		list-style: none;
-	}
-
-	.neighborhood-columns li {
-		display: grid;
-		grid-template-columns: 18px 1fr auto;
-		gap: 7px;
-		align-items: center;
-		color: #dcefed;
-		font-size: 11px;
-	}
-
-	.neighborhood-columns li span {
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.neighborhood-columns li em {
-		color: #91a8a8;
-		font-size: 10px;
-		font-style: normal;
-	}
-
-	.graph-evidence {
-		margin-top: 12px;
-	}
-
-	.graph-evidence li {
-		display: grid;
-		gap: 4px;
-		border-bottom: 1px solid rgba(102, 189, 180, 0.08);
-		padding-bottom: 8px;
-	}
-
-	.graph-evidence li:last-child {
-		border-bottom: 0;
-		padding-bottom: 0;
-	}
-
-	.graph-evidence li span {
-		color: #37e8c9;
-		font-size: 10px;
-		text-transform: uppercase;
-	}
-
-	.graph-evidence li strong {
-		color: #eefefb;
-		font-size: 11px;
-		font-weight: 600;
-		word-break: break-all;
-	}
-
-	.graph-evidence li small {
-		color: #91a8a8;
-		font-size: 11px;
-		line-height: 1.35;
-	}
-
-	.graph-empty-state.compact {
-		min-height: 220px;
-	}
-
 	.provider-tabs {
+		display: flex;
+		align-items: center;
 		gap: 6px;
 		padding: 4px;
 		border: 1px solid rgba(111, 205, 195, 0.14);
@@ -3399,6 +3549,7 @@
 	}
 
 	.setup-form span {
+		color: #91a8a8;
 		font-size: 11px;
 		font-weight: 600;
 	}
@@ -3416,14 +3567,6 @@
 		align-items: center;
 		gap: 8px !important;
 		padding-top: 18px;
-	}
-
-	.checkbox-row input {
-		width: 16px;
-		height: 16px;
-		flex: 0 0 auto;
-		padding: 0;
-		accent-color: #2deac9;
 	}
 
 	.form-actions {
@@ -3474,124 +3617,31 @@
 
 	@media (max-width: 1360px) {
 		.desktop-shell {
-			grid-template-columns: 210px minmax(720px, 1fr) 330px;
-			gap: 14px;
+			grid-template-columns: 210px minmax(980px, 1fr);
+			gap: 12px;
+		}
+
+		.hero-row,
+		.dashboard-grid,
+		.three-pane,
+		.contacts-layout,
+		.docs-layout,
+		.notes-layout,
+		.project-dashboard-grid,
+		.tasks-layout,
+		.calendar-layout,
+		.knowledge-layout,
+		.agents-layout,
+		.timeline-layout {
+			transform-origin: top left;
 		}
 
 		.metric-grid {
-			grid-template-columns: repeat(5, minmax(88px, 1fr));
-		}
-
-		.quick-command button {
-			padding: 0 8px;
-		}
-	}
-
-	@media (max-width: 1200px) {
-		.desktop-shell {
-			grid-template-columns: 204px minmax(0, 1fr) 296px;
-			gap: 10px;
-			padding: 10px 8px 10px 0;
-		}
-
-		.sidebar {
-			min-height: calc(100vh - 20px);
-			padding-inline: 8px;
-		}
-
-		.nav-group button {
-			gap: 8px;
-			padding-inline: 7px;
-		}
-
-		.workspace {
-			gap: 10px;
-		}
-
-		.search-box {
-			width: 100%;
-		}
-
-		.hero-row {
-			grid-template-columns: 1fr;
-			align-items: start;
-			gap: 10px;
-		}
-
-		.metric-grid {
-			grid-template-columns: repeat(5, minmax(74px, 1fr));
-			gap: 7px;
-		}
-
-		.metric-card {
-			min-height: 74px;
-			padding: 10px 9px;
-		}
-
-		.metric-card strong {
-			font-size: 20px;
-		}
-
-		.metric-card div {
-			margin-top: 8px;
-		}
-
-		.main-grid {
-			grid-template-columns: 1fr;
-			gap: 10px;
-		}
-
-		.timeline-item {
-			grid-template-columns: 42px 18px 36px 1fr;
-			gap: 7px;
-		}
-
-		.graph-panel {
-			min-height: 392px;
-		}
-
-		.graph-canvas {
-			height: 242px;
-		}
-
-		.project-row {
-			grid-template-columns: 34px minmax(112px, 1fr) minmax(70px, 112px) 38px 66px;
-			gap: 9px;
-		}
-
-		.right-rail {
-			gap: 10px;
-		}
-
-		.rail-actions > button:not(.icon-button):not(.avatar-button) {
-			width: 168px;
-			overflow: hidden;
-			justify-content: center;
-			white-space: nowrap;
-		}
-
-		.calendar-strip {
-			gap: 4px;
-			padding-inline: 8px;
-		}
-
-		.insight-grid {
-			grid-template-columns: 1fr;
-		}
-
-		.assistant-card > div {
-			display: grid;
-			grid-template-columns: 1fr;
-		}
-
-		.quick-command {
-			display: grid;
-			grid-template-columns: 24px minmax(0, 1fr) auto auto;
 			gap: 8px;
 		}
 
-		.quick-command button:not(:last-child) {
-			display: none;
+		.agent-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}
 </style>

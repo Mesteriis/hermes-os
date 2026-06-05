@@ -1,0 +1,68 @@
+**Findings**
+- No actionable P0/P1/P2 findings remain after the sidebar tab implementation pass.
+
+**Open Questions**
+- The reference set contains no dedicated Timeline screen, so Timeline uses the existing Hermes activity-stream pattern rather than a pixel-matched source.
+- Avatars intentionally reuse the existing local Hermes reference avatar asset; replacing them with distinct people imagery is a future visual asset slice.
+
+**Implementation Checklist**
+- Implemented primary sidebar tab switching for Home, Communications, Timeline, Contacts, Projects, Tasks, Calendar, Documents, Notes, Knowledge Graph, and AI Agents.
+- Kept secondary controls, sub-tabs, filters, and creation actions disabled where backend behavior is not implemented.
+- Fixed post-QA layout issues in Home people list, Contacts filter/list styling, Knowledge Graph node details, Notes rows, focus ring styling, and invalid Iconify ids.
+
+**Follow-up Polish**
+- P3: Knowledge Graph can be upgraded with actual edge lines and pan/zoom behavior when graph interaction is in scope.
+- P3: Distinct person avatars would improve fidelity versus the visual references.
+
+source visual truth path:
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_23_04.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_24_24.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_24_17.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_24_06.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_23_59.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_23_54.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_23_48.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_23_42.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_23_28.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_23_21.png`
+- `/Users/avm/Downloads/ChatGPT Image 5 июн. 2026 г., 11_23_12.png`
+
+implementation screenshot path:
+- `/tmp/hermes-sidebar-tabs-qa/home.png`
+- `/tmp/hermes-sidebar-tabs-qa/communications.png`
+- `/tmp/hermes-sidebar-tabs-qa/contacts.png`
+- `/tmp/hermes-sidebar-tabs-qa/projects.png`
+- `/tmp/hermes-sidebar-tabs-qa/tasks.png`
+- `/tmp/hermes-sidebar-tabs-qa/calendar.png`
+- `/tmp/hermes-sidebar-tabs-qa/documents.png`
+- `/tmp/hermes-sidebar-tabs-qa/notes.png`
+- `/tmp/hermes-sidebar-tabs-qa/knowledge-graph.png`
+- `/tmp/hermes-sidebar-tabs-qa/ai-agents.png`
+- `/tmp/hermes-sidebar-tabs-qa/timeline.png`
+
+viewport:
+- `1600x1000`
+
+state:
+- Desktop-only per ADR-0031.
+- Sidebar primary navigation active state switched through every implemented tab.
+
+full-view comparison evidence:
+- Compared Home, Communications, Contacts, Projects, Tasks, Calendar, Documents, Notes, Knowledge Graph, and AI Agents source references against captured local screenshots at the same desktop viewport.
+
+focused region comparison evidence:
+- Checked sidebar active state and shortcut set per view.
+- Checked Communications three-pane layout and chat/context rail.
+- Checked Contacts filter row and contact detail cards after layout fix.
+- Checked Knowledge Graph selected-node key/value details after layout fix.
+- Checked Notes list rows after invalid icon id fix.
+
+patches made since previous QA pass:
+- Scoped Contacts list row CSS so filter tabs do not inherit contact-row layout.
+- Added stable focus-visible styling for active controls.
+- Added Home people-list row layout.
+- Added Knowledge Graph key/value detail-list layout.
+- Added Notes row text constraints.
+- Replaced invalid Notes Iconify ids with existing Tabler icons.
+
+final result: passed
