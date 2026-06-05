@@ -5,8 +5,8 @@ use hermes_hub_backend::communications::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
 use hermes_hub_backend::mail_storage::{
-    LocalMailBlobStore, MailAttachmentDisposition, MailStorageError, MailStorageStore,
-    NewMailAttachment, NewMailBlob,
+    AttachmentSafetyScanStatus, LocalMailBlobStore, MailAttachmentDisposition, MailStorageError,
+    MailStorageStore, NewMailAttachment, NewMailBlob,
 };
 use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
 use hermes_hub_backend::storage::Database;
@@ -122,6 +122,14 @@ async fn mail_storage_records_attachment_metadata_against_postgres() {
         attachment.disposition,
         MailAttachmentDisposition::Attachment
     );
+    assert_eq!(
+        attachment.scan_status,
+        AttachmentSafetyScanStatus::NotScanned
+    );
+    assert!(attachment.scan_engine.is_none());
+    assert!(attachment.scan_checked_at.is_none());
+    assert!(attachment.scan_summary.is_none());
+    assert_eq!(attachment.scan_metadata, json!({}));
 
     let attachment_count = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM communication_attachments WHERE message_id = $1",

@@ -8,6 +8,23 @@ pub struct ParsedEmailMessage {
     pub from: String,
     pub to: Vec<String>,
     pub body_text: String,
+    pub attachments: Vec<ParsedEmailAttachment>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParsedEmailAttachment {
+    pub provider_attachment_id: String,
+    pub filename: Option<String>,
+    pub content_type: String,
+    pub disposition: ParsedEmailAttachmentDisposition,
+    pub body_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ParsedEmailAttachmentDisposition {
+    Attachment,
+    Inline,
+    Unknown,
 }
 
 pub fn parse_rfc822_message(raw: &[u8]) -> Result<ParsedEmailMessage, EmailRfc822ParseError> {
@@ -19,13 +36,17 @@ pub fn parse_rfc822_message(raw: &[u8]) -> Result<ParsedEmailMessage, EmailRfc82
     let from =
         header_value(&headers, "from").unwrap_or_else(|| "unknown@example.invalid".to_owned());
     let to = split_address_list(&header_value(&headers, "to").unwrap_or_default());
-    let body_text = body_text_from_part(&headers, body);
+    let body_content = body_content_from_part(&headers, body);
+    let body_text = body_content
+        .body_text
+        .unwrap_or_else(|| "(empty body)".to_owned());
 
     Ok(ParsedEmailMessage {
         subject: non_empty_or_default(subject, "(no subject)"),
         from: non_empty_or_default(from, "unknown@example.invalid"),
         to: non_empty_recipients(to),
         body_text: non_empty_or_default(body_text, "(empty body)"),
+        attachments: body_content.attachments,
     })
 }
 
@@ -67,14 +88,50 @@ fn header_value(headers: &[(String, String)], name: &str) -> Option<String> {
         .map(|(_, value)| decode_rfc2047_words(value.trim()))
 }
 
-fn body_text_from_part(headers: &[(String, String)], body: &str) -> String {
+#[derive(Default)]
+struct ParsedEmailBodyContent {
+    body_text: Option<String>,
+    attachments: Vec<ParsedEmailAttachment>,
+    next_attachment_index: usize,
+}
+
+fn body_content_from_part(headers: &[(String, String)], body: &str) -> ParsedEmailBodyContent {
+    let mut content = ParsedEmailBodyContent::default();
+    collect_part_content(headers, body, &mut content);
+    content
+}
+
+fn collect_part_content(
+    headers: &[(String, String)],
+    body: &str,
+    content: &mut ParsedEmailBodyContent,
+) {
     let content_type = header_value(headers, "content-type").unwrap_or_default();
-    if content_type.to_ascii_lowercase().starts_with("multipart/") {
-        if let Some(boundary) = content_type_parameter(&content_type, "boundary") {
-            if let Some(text) = first_text_plain_multipart_part(&boundary, body) {
-                return text;
+    let content_type_media_type = header_media_type(&content_type);
+
+    if content_type_media_type.starts_with("multipart/") {
+        if let Some(boundary) = header_parameter(&content_type, "boundary") {
+            for (part_headers, part_body) in multipart_parts(&boundary, body) {
+                collect_part_content(&part_headers, part_body, content);
             }
         }
+        return;
+    }
+
+    if is_attachment_like_part(headers, &content_type) {
+        content.next_attachment_index += 1;
+        let provider_attachment_id = format!("part-{}", content.next_attachment_index);
+        content.attachments.push(parsed_attachment_from_part(
+            headers,
+            body,
+            &content_type,
+            provider_attachment_id,
+        ));
+        return;
+    }
+
+    if content.body_text.is_some() {
+        return;
     }
 
     let decoded = decode_transfer_body(
@@ -83,14 +140,17 @@ fn body_text_from_part(headers: &[(String, String)], body: &str) -> String {
             .unwrap_or_default()
             .as_str(),
     );
-    if content_type.to_ascii_lowercase().starts_with("text/html") {
-        return strip_html_tags(&decoded);
+    if content_type_media_type == "text/html" {
+        content.body_text = Some(strip_html_tags(&decoded));
+        return;
     }
-
-    normalize_body_text(&decoded)
+    if content_type_media_type == "text/plain" || content_type_media_type.is_empty() {
+        content.body_text = Some(normalize_body_text(&decoded));
+    }
 }
 
-fn first_text_plain_multipart_part(boundary: &str, body: &str) -> Option<String> {
+fn multipart_parts<'a>(boundary: &str, body: &'a str) -> Vec<(Vec<(String, String)>, &'a str)> {
+    let mut parts = Vec::new();
     let delimiter = format!("--{boundary}");
     for raw_part in body.split(&delimiter).skip(1) {
         let part = raw_part.trim_start_matches("\r\n").trim_start_matches('\n');
@@ -101,27 +161,81 @@ fn first_text_plain_multipart_part(boundary: &str, body: &str) -> Option<String>
             continue;
         };
         let headers = parse_headers(headers);
-        let content_type = header_value(&headers, "content-type").unwrap_or_default();
-        let content_disposition = header_value(&headers, "content-disposition").unwrap_or_default();
-        let normalized_content_type = content_type.to_ascii_lowercase();
-        let normalized_disposition = content_disposition.to_ascii_lowercase();
-        if normalized_content_type.starts_with("text/plain")
-            && !normalized_disposition.contains("attachment")
-        {
-            return Some(normalize_body_text(&decode_transfer_body(
-                nested_body,
-                header_value(&headers, "content-transfer-encoding")
-                    .unwrap_or_default()
-                    .as_str(),
-            )));
-        }
+        parts.push((headers, nested_body));
     }
 
-    None
+    parts
 }
 
-fn content_type_parameter(content_type: &str, parameter: &str) -> Option<String> {
-    for part in content_type.split(';').skip(1) {
+fn parsed_attachment_from_part(
+    headers: &[(String, String)],
+    body: &str,
+    content_type: &str,
+    provider_attachment_id: String,
+) -> ParsedEmailAttachment {
+    let transfer_encoding = header_value(headers, "content-transfer-encoding").unwrap_or_default();
+    ParsedEmailAttachment {
+        provider_attachment_id,
+        filename: attachment_filename(headers, content_type),
+        content_type: non_empty_or_default(
+            header_media_type(content_type),
+            "application/octet-stream",
+        ),
+        disposition: parsed_attachment_disposition(headers),
+        body_bytes: decode_transfer_bytes(body, &transfer_encoding),
+    }
+}
+
+fn is_attachment_like_part(headers: &[(String, String)], content_type: &str) -> bool {
+    match parsed_attachment_disposition(headers) {
+        ParsedEmailAttachmentDisposition::Attachment => true,
+        ParsedEmailAttachmentDisposition::Inline => {
+            attachment_filename(headers, content_type).is_some()
+        }
+        ParsedEmailAttachmentDisposition::Unknown => {
+            attachment_filename(headers, content_type).is_some()
+        }
+    }
+}
+
+fn parsed_attachment_disposition(headers: &[(String, String)]) -> ParsedEmailAttachmentDisposition {
+    let content_disposition = header_value(headers, "content-disposition").unwrap_or_default();
+    match content_disposition
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "attachment" => ParsedEmailAttachmentDisposition::Attachment,
+        "inline" => ParsedEmailAttachmentDisposition::Inline,
+        _ => ParsedEmailAttachmentDisposition::Unknown,
+    }
+}
+
+fn attachment_filename(headers: &[(String, String)], content_type: &str) -> Option<String> {
+    header_value(headers, "content-disposition")
+        .and_then(|value| header_parameter(&value, "filename"))
+        .or_else(|| header_parameter(content_type, "name"))
+        .map(|value| decode_rfc2047_words(value.trim()))
+        .and_then(|value| {
+            let value = value.trim().to_owned();
+            if value.is_empty() { None } else { Some(value) }
+        })
+}
+
+fn header_media_type(value: &str) -> String {
+    value
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn header_parameter(value: &str, parameter: &str) -> Option<String> {
+    for part in value.split(';').skip(1) {
         let Some((name, value)) = part.split_once('=') else {
             continue;
         };
@@ -134,6 +248,10 @@ fn content_type_parameter(content_type: &str, parameter: &str) -> Option<String>
 }
 
 fn decode_transfer_body(body: &str, transfer_encoding: &str) -> String {
+    String::from_utf8_lossy(&decode_transfer_bytes(body, transfer_encoding)).into_owned()
+}
+
+fn decode_transfer_bytes(body: &str, transfer_encoding: &str) -> Vec<u8> {
     match transfer_encoding.trim().to_ascii_lowercase().as_str() {
         "base64" => {
             let compact = body
@@ -142,15 +260,18 @@ fn decode_transfer_body(body: &str, transfer_encoding: &str) -> String {
                 .collect::<String>();
             BASE64_STANDARD
                 .decode(compact)
-                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-                .unwrap_or_else(|_| body.to_owned())
+                .unwrap_or_else(|_| body.as_bytes().to_vec())
         }
-        "quoted-printable" => decode_quoted_printable(body),
-        _ => body.to_owned(),
+        "quoted-printable" => decode_quoted_printable_bytes(body),
+        _ => body.as_bytes().to_vec(),
     }
 }
 
 fn decode_quoted_printable(input: &str) -> String {
+    String::from_utf8_lossy(&decode_quoted_printable_bytes(input)).into_owned()
+}
+
+fn decode_quoted_printable_bytes(input: &str) -> Vec<u8> {
     let bytes = input.as_bytes();
     let mut output = Vec::with_capacity(bytes.len());
     let mut index = 0;
@@ -177,7 +298,7 @@ fn decode_quoted_printable(input: &str) -> String {
         index += 1;
     }
 
-    String::from_utf8_lossy(&output).into_owned()
+    output
 }
 
 fn hex_value(byte: u8) -> Option<u8> {

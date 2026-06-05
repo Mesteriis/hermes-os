@@ -58,7 +58,7 @@
 - `ADR-0042` - provider credential secret references and resolver boundary.
 - `ADR-0043` - read-only Gmail API and IMAP provider networking.
 - `ADR-0044` - account setup and encrypted secret vault.
-- `ADR-0046` - persistent dev mail cache and blob storage; mail bytes/attachments live under `docker/data/mail/`, PostgreSQL stores metadata and references.
+- `ADR-0046` - persistent dev mail cache and blob storage; mail bytes/attachments live under `docker/data/mail/`, PostgreSQL stores metadata, references and attachment scan state.
 
 ## 4. Implementation Phase
 
@@ -223,6 +223,7 @@ Use the repository-configured tool first. If no tool exists, report that validat
 - Secret references per `ADR-0042` store metadata only; never place secret values in PostgreSQL config, metadata, tests, logs or docs.
 - The in-memory secret resolver is allowed only for `test_double` references in tests and local adapter tests. Real provider adapters must use a real resolver for `os_keychain`, `encrypted_vault` or `external_vault`.
 - Mail blob and attachment bytes must stay out of PostgreSQL per `ADR-0046`; store only metadata, hashes and local blob paths in database tables.
+- Extracted attachment metadata must pass through the attachment safety scanner boundary from `ADR-0046`. The no-op scanner records `not_scanned`; do not mark attachments as `clean` without a real scanner backend.
 
 ## 9. Security and Privacy
 

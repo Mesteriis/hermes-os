@@ -1,6 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use chrono::{DateTime, Utc};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
@@ -148,9 +149,14 @@ impl MailStorageStore {
                 size_bytes,
                 sha256,
                 disposition,
+                scan_status,
+                scan_engine,
+                scan_checked_at,
+                scan_summary,
+                scan_metadata,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, now())
             ON CONFLICT (message_id, provider_attachment_id)
             DO UPDATE SET
                 raw_record_id = EXCLUDED.raw_record_id,
@@ -160,6 +166,11 @@ impl MailStorageStore {
                 size_bytes = EXCLUDED.size_bytes,
                 sha256 = EXCLUDED.sha256,
                 disposition = EXCLUDED.disposition,
+                scan_status = EXCLUDED.scan_status,
+                scan_engine = EXCLUDED.scan_engine,
+                scan_checked_at = EXCLUDED.scan_checked_at,
+                scan_summary = EXCLUDED.scan_summary,
+                scan_metadata = EXCLUDED.scan_metadata,
                 updated_at = now()
             RETURNING
                 attachment_id,
@@ -172,6 +183,11 @@ impl MailStorageStore {
                 size_bytes,
                 sha256,
                 disposition,
+                scan_status,
+                scan_engine,
+                scan_checked_at,
+                scan_summary,
+                scan_metadata,
                 created_at,
                 updated_at
             "#,
@@ -186,6 +202,11 @@ impl MailStorageStore {
         .bind(attachment.size_bytes)
         .bind(&attachment.sha256)
         .bind(attachment.disposition.as_str())
+        .bind(attachment.scan_report.status.as_str())
+        .bind(&attachment.scan_report.engine)
+        .bind(attachment.scan_report.checked_at)
+        .bind(&attachment.scan_report.summary)
+        .bind(&attachment.scan_report.metadata)
         .fetch_one(&self.pool)
         .await?;
 
@@ -273,7 +294,7 @@ pub struct StoredMailBlob {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct NewMailAttachment {
     pub message_id: String,
     pub raw_record_id: String,
@@ -284,6 +305,7 @@ pub struct NewMailAttachment {
     pub size_bytes: i64,
     pub sha256: String,
     pub disposition: MailAttachmentDisposition,
+    pub scan_report: AttachmentSafetyScanReport,
 }
 
 impl NewMailAttachment {
@@ -306,6 +328,7 @@ impl NewMailAttachment {
             size_bytes,
             sha256: sha256.into(),
             disposition: MailAttachmentDisposition::Unknown,
+            scan_report: AttachmentSafetyScanReport::not_scanned(),
         }
     }
 
@@ -316,6 +339,11 @@ impl NewMailAttachment {
 
     pub fn disposition(mut self, disposition: MailAttachmentDisposition) -> Self {
         self.disposition = disposition;
+        self
+    }
+
+    pub fn scan_report(mut self, scan_report: AttachmentSafetyScanReport) -> Self {
+        self.scan_report = scan_report;
         self
     }
 
@@ -333,6 +361,7 @@ impl NewMailAttachment {
         let content_type = validate_non_empty("content_type", &self.content_type)?;
         let size_bytes = validate_size_bytes(self.size_bytes)?;
         let sha256 = validate_sha256(&self.sha256)?;
+        let scan_report = self.scan_report.validate()?;
 
         Ok(ValidatedMailAttachment {
             message_id,
@@ -344,11 +373,12 @@ impl NewMailAttachment {
             size_bytes,
             sha256,
             disposition: self.disposition,
+            scan_report,
         })
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 struct ValidatedMailAttachment {
     message_id: String,
     raw_record_id: String,
@@ -359,9 +389,10 @@ struct ValidatedMailAttachment {
     size_bytes: i64,
     sha256: String,
     disposition: MailAttachmentDisposition,
+    scan_report: AttachmentSafetyScanReport,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct StoredMailAttachment {
     pub attachment_id: String,
     pub message_id: String,
@@ -373,6 +404,11 @@ pub struct StoredMailAttachment {
     pub size_bytes: i64,
     pub sha256: String,
     pub disposition: MailAttachmentDisposition,
+    pub scan_status: AttachmentSafetyScanStatus,
+    pub scan_engine: Option<String>,
+    pub scan_checked_at: Option<DateTime<Utc>>,
+    pub scan_summary: Option<String>,
+    pub scan_metadata: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -407,6 +443,129 @@ impl TryFrom<&str> for MailAttachmentDisposition {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct AttachmentSafetyScanReport {
+    pub status: AttachmentSafetyScanStatus,
+    pub engine: Option<String>,
+    pub checked_at: Option<DateTime<Utc>>,
+    pub summary: Option<String>,
+    pub metadata: Value,
+}
+
+impl AttachmentSafetyScanReport {
+    pub fn not_scanned() -> Self {
+        Self {
+            status: AttachmentSafetyScanStatus::NotScanned,
+            engine: None,
+            checked_at: None,
+            summary: None,
+            metadata: json!({}),
+        }
+    }
+
+    fn validate(&self) -> Result<Self, MailStorageError> {
+        let engine = self
+            .engine
+            .as_deref()
+            .map(|value| validate_non_empty("scan_engine", value))
+            .transpose()?;
+        let summary = self
+            .summary
+            .as_deref()
+            .map(|value| validate_non_empty("scan_summary", value))
+            .transpose()?;
+        if !self.metadata.is_object() {
+            return Err(MailStorageError::NonObjectJson("scan_metadata"));
+        }
+
+        if self.status == AttachmentSafetyScanStatus::NotScanned
+            && (engine.is_some() || self.checked_at.is_some() || summary.is_some())
+        {
+            return Err(MailStorageError::InvalidNotScannedReport);
+        }
+
+        Ok(Self {
+            status: self.status,
+            engine,
+            checked_at: self.checked_at,
+            summary,
+            metadata: self.metadata.clone(),
+        })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AttachmentSafetyScanStatus {
+    NotScanned,
+    Clean,
+    Suspicious,
+    Malicious,
+    Failed,
+}
+
+impl AttachmentSafetyScanStatus {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::NotScanned => "not_scanned",
+            Self::Clean => "clean",
+            Self::Suspicious => "suspicious",
+            Self::Malicious => "malicious",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+impl TryFrom<&str> for AttachmentSafetyScanStatus {
+    type Error = MailStorageError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "not_scanned" => Ok(Self::NotScanned),
+            "clean" => Ok(Self::Clean),
+            "suspicious" => Ok(Self::Suspicious),
+            "malicious" => Ok(Self::Malicious),
+            "failed" => Ok(Self::Failed),
+            other => Err(MailStorageError::InvalidScanStatus(other.to_owned())),
+        }
+    }
+}
+
+pub struct AttachmentSafetyScanRequest<'a> {
+    pub provider_attachment_id: &'a str,
+    pub filename: Option<&'a str>,
+    pub content_type: &'a str,
+    pub size_bytes: i64,
+    pub sha256: &'a str,
+    pub storage_kind: &'a str,
+    pub storage_path: &'a str,
+    pub bytes: &'a [u8],
+}
+
+pub trait AttachmentSafetyScanner {
+    fn scan(
+        &self,
+        request: &AttachmentSafetyScanRequest<'_>,
+    ) -> Result<AttachmentSafetyScanReport, AttachmentSafetyScanError>;
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoopAttachmentSafetyScanner;
+
+impl AttachmentSafetyScanner for NoopAttachmentSafetyScanner {
+    fn scan(
+        &self,
+        _request: &AttachmentSafetyScanRequest<'_>,
+    ) -> Result<AttachmentSafetyScanReport, AttachmentSafetyScanError> {
+        Ok(AttachmentSafetyScanReport::not_scanned())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum AttachmentSafetyScanError {
+    #[error("attachment safety scanner failed: {0}")]
+    Scanner(String),
+}
+
 fn row_to_mail_blob(row: PgRow) -> Result<StoredMailBlob, MailStorageError> {
     Ok(StoredMailBlob {
         blob_id: row.try_get("blob_id")?,
@@ -421,6 +580,7 @@ fn row_to_mail_blob(row: PgRow) -> Result<StoredMailBlob, MailStorageError> {
 
 fn row_to_mail_attachment(row: PgRow) -> Result<StoredMailAttachment, MailStorageError> {
     let disposition: String = row.try_get("disposition")?;
+    let scan_status: String = row.try_get("scan_status")?;
 
     Ok(StoredMailAttachment {
         attachment_id: row.try_get("attachment_id")?,
@@ -433,6 +593,11 @@ fn row_to_mail_attachment(row: PgRow) -> Result<StoredMailAttachment, MailStorag
         size_bytes: row.try_get("size_bytes")?,
         sha256: row.try_get("sha256")?,
         disposition: MailAttachmentDisposition::try_from(disposition.as_str())?,
+        scan_status: AttachmentSafetyScanStatus::try_from(scan_status.as_str())?,
+        scan_engine: row.try_get("scan_engine")?,
+        scan_checked_at: row.try_get("scan_checked_at")?,
+        scan_summary: row.try_get("scan_summary")?,
+        scan_metadata: row.try_get("scan_metadata")?,
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })
@@ -572,4 +737,13 @@ pub enum MailStorageError {
 
     #[error("invalid attachment disposition: {0}")]
     InvalidDisposition(String),
+
+    #[error("invalid attachment scan status: {0}")]
+    InvalidScanStatus(String),
+
+    #[error("{0} must be a JSON object")]
+    NonObjectJson(&'static str),
+
+    #[error("not_scanned attachment scan reports must not include engine, checked_at or summary")]
+    InvalidNotScannedReport,
 }
