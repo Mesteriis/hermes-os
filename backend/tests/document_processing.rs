@@ -280,6 +280,64 @@ async fn document_processing_retry_failed_job_requeues_job_against_postgres() {
 }
 
 #[tokio::test]
+async fn run_queued_jobs_requires_retry_command_for_failed_jobs() {
+    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live document processing failed runner retry test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let Some((pool, document_store, processing_store)) =
+        live_context("failed job requires retry command").await
+    else {
+        return;
+    };
+    quiesce_retryable_test_processing_jobs(&pool).await;
+    let suffix = unique_suffix();
+    let document_id = format!("doc_processing_retry_runner_{suffix}");
+    let job_id =
+        create_failed_extract_text_job(&pool, &document_store, &processing_store, &document_id)
+            .await;
+    quiesce_document_processing_jobs_except(&pool, &document_id, &job_id).await;
+
+    let skipped_report = processing_store
+        .run_queued_jobs(10)
+        .await
+        .expect("run queued jobs without retry command");
+    let failed_state = job_retry_state(&pool, &job_id).await;
+    let artifact_count_before_retry = extracted_text_artifact_count(&pool, &document_id).await;
+
+    assert_eq!(skipped_report.jobs_seen, 0);
+    assert_eq!(skipped_report.jobs_queued, 0);
+    assert_eq!(failed_state.0, "failed");
+    assert_eq!(failed_state.1, 2);
+    assert!(failed_state.2.is_some());
+    assert_eq!(artifact_count_before_retry, 0);
+
+    processing_store
+        .retry_failed_job(&DocumentProcessingRetryCommand {
+            command_id: format!("document-processing-retry-runner-{suffix}"),
+            job_id: job_id.clone(),
+            actor_id: "document-processing-test-actor".to_owned(),
+        })
+        .await
+        .expect("retry failed job");
+    let retried_report = processing_store
+        .run_queued_jobs(10)
+        .await
+        .expect("run retried job");
+    let retried_state = job_retry_state(&pool, &job_id).await;
+    let artifact_count_after_retry = extracted_text_artifact_count(&pool, &document_id).await;
+
+    assert_eq!(retried_report.jobs_seen, 1);
+    assert_eq!(retried_report.jobs_queued, 1);
+    assert_eq!(retried_report.jobs_succeeded, 1);
+    assert_eq!(retried_state.0, "succeeded");
+    assert_eq!(artifact_count_after_retry, 1);
+    quiesce_processing_jobs_for_document(&pool, &document_id).await;
+}
+
+#[tokio::test]
 async fn document_processing_retry_duplicate_same_command_is_idempotent() {
     let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!(
@@ -592,6 +650,41 @@ async fn job_retry_state(
     .fetch_one(pool)
     .await
     .expect("job retry state")
+}
+
+async fn extracted_text_artifact_count(pool: &sqlx::postgres::PgPool, document_id: &str) -> i64 {
+    query_scalar::<_, i64>(
+        "SELECT count(*) FROM document_artifacts WHERE document_id = $1 AND artifact_kind = 'extracted_text'",
+    )
+    .bind(document_id)
+    .fetch_one(pool)
+    .await
+    .expect("extracted text artifact count")
+}
+
+async fn quiesce_document_processing_jobs_except(
+    pool: &sqlx::postgres::PgPool,
+    document_id: &str,
+    active_job_id: &str,
+) {
+    sqlx::query(
+        r#"
+        UPDATE document_processing_jobs
+        SET status = 'skipped',
+            last_error_summary = COALESCE(last_error_summary, 'test cleanup'),
+            started_at = NULL,
+            finished_at = COALESCE(finished_at, now()),
+            updated_at = now()
+        WHERE document_id = $1
+          AND job_id <> $2
+          AND status IN ('queued', 'failed', 'running')
+        "#,
+    )
+    .bind(document_id)
+    .bind(active_job_id)
+    .execute(pool)
+    .await
+    .expect("quiesce non-target document processing jobs");
 }
 
 async fn quiesce_retryable_test_processing_jobs(pool: &sqlx::postgres::PgPool) {

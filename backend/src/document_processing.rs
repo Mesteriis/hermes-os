@@ -692,7 +692,7 @@ impl DocumentProcessingStore {
                 created_at,
                 updated_at
             FROM document_processing_jobs
-            WHERE status IN ('queued', 'failed')
+            WHERE status = 'queued'
               AND attempts < max_attempts
             ORDER BY queued_at ASC, job_id
             LIMIT $1
@@ -724,7 +724,7 @@ impl DocumentProcessingStore {
                 started_at = now(),
                 updated_at = now()
             WHERE job_id = $1
-              AND status IN ('queued', 'failed')
+              AND status = 'queued'
               AND attempts < max_attempts
             RETURNING
                 job_id,
