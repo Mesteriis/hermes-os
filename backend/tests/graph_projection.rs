@@ -14,6 +14,9 @@ use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::graph::{GraphNodeKind, node_id};
 use hermes_hub_backend::graph_projection::GraphProjectionService;
 use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
+use hermes_hub_backend::project_link_reviews::{
+    ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkReviewStore, ProjectLinkTargetKind,
+};
 use hermes_hub_backend::projects::{NewProject, ProjectStore, project_graph_node_id};
 use hermes_hub_backend::storage::Database;
 
@@ -213,6 +216,8 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
         "project_has_message",
         "message",
         &projected.message_id,
+        "suggested",
+        0.75,
     )
     .await;
     assert_project_edge_with_evidence(
@@ -222,6 +227,8 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
         "project_has_document",
         "document",
         &document_id,
+        "suggested",
+        0.75,
     )
     .await;
     assert_project_edge_with_evidence(
@@ -231,6 +238,8 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
         "project_involves_person",
         "message",
         &projected.message_id,
+        "suggested",
+        0.75,
     )
     .await;
     assert_project_edge_with_evidence(
@@ -240,6 +249,155 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
         "project_involves_email_address",
         "message",
         &projected.message_id,
+        "suggested",
+        0.75,
+    )
+    .await;
+
+    cleanup_project_graph_fixture(&context.pool, &project_id).await;
+}
+
+#[tokio::test]
+async fn graph_projection_omits_rejected_project_link_against_postgres() {
+    let Some(context) = live_projection_context("project graph projection rejected link").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let keyword = format!("GraphReject{suffix}");
+    let project_id = format!("project:v1:graph-reject:{suffix}");
+
+    context
+        .project_store
+        .upsert_project(
+            &NewProject::active(
+                &project_id,
+                format!("Graph Reject Project {suffix}"),
+                "Product Development",
+                "Graph project rejected link test",
+                "Alex Morgan",
+                vec![keyword.clone()],
+            )
+            .progress(50),
+        )
+        .await
+        .expect("upsert graph reject project");
+
+    let projected = seed_message(
+        &context,
+        suffix,
+        &format!("owner-reject-{suffix}@example.com"),
+        &[format!("reviewer-reject-{suffix}@example.com")],
+        &format!("provider-graph-reject-{suffix}"),
+        &format!("{keyword} kickoff"),
+    )
+    .await;
+
+    context
+        .project_link_review_store
+        .set_review_state(&ProjectLinkReviewCommand {
+            command_id: format!("graph-reject-{suffix}"),
+            project_id: project_id.clone(),
+            target_kind: ProjectLinkTargetKind::Message,
+            target_id: projected.message_id.clone(),
+            review_state: ProjectLinkReviewState::UserRejected,
+            actor_id: format!("reviewer-actor-{suffix}"),
+        })
+        .await
+        .expect("set rejected link review");
+
+    context
+        .graph_projection
+        .project_from_v1()
+        .await
+        .expect("project projection for rejected link");
+
+    let project_node_id = project_graph_node_id(&project_id);
+    let message_node_id = node_id(GraphNodeKind::Message, &projected.message_id);
+    let link_count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT count(*)
+        FROM graph_edges
+        WHERE source_node_id = $1
+          AND target_node_id = $2
+          AND relationship_type = 'project_has_message'
+        "#,
+    )
+    .bind(&project_node_id)
+    .bind(&message_node_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("rejected project link count");
+    assert_eq!(link_count, 0);
+
+    cleanup_project_graph_fixture(&context.pool, &project_id).await;
+}
+
+#[tokio::test]
+async fn graph_projection_marks_confirmed_project_link_user_confirmed_against_postgres() {
+    let Some(context) = live_projection_context("project graph projection confirmed link").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let keyword = format!("GraphConfirm{suffix}");
+    let project_id = format!("project:v1:graph-confirm:{suffix}");
+
+    context
+        .project_store
+        .upsert_project(
+            &NewProject::active(
+                &project_id,
+                format!("Graph Confirm Project {suffix}"),
+                "Product Development",
+                "Graph project confirmed link test",
+                "Alex Morgan",
+                vec![keyword.clone()],
+            )
+            .progress(50),
+        )
+        .await
+        .expect("upsert graph confirm project");
+
+    let projected = seed_message(
+        &context,
+        suffix,
+        &format!("owner-confirm-{suffix}@example.com"),
+        &[format!("reviewer-confirm-{suffix}@example.com")],
+        &format!("provider-graph-confirm-{suffix}"),
+        &format!("{keyword} kickoff"),
+    )
+    .await;
+
+    context
+        .project_link_review_store
+        .set_review_state(&ProjectLinkReviewCommand {
+            command_id: format!("graph-confirm-{suffix}"),
+            project_id: project_id.clone(),
+            target_kind: ProjectLinkTargetKind::Message,
+            target_id: projected.message_id.clone(),
+            review_state: ProjectLinkReviewState::UserConfirmed,
+            actor_id: format!("reviewer-actor-{suffix}"),
+        })
+        .await
+        .expect("set confirmed link review");
+
+    context
+        .graph_projection
+        .project_from_v1()
+        .await
+        .expect("project projection for confirmed link");
+
+    let project_node_id = project_graph_node_id(&project_id);
+    assert_project_edge_with_evidence(
+        &context.pool,
+        &project_node_id,
+        &node_id(GraphNodeKind::Message, &projected.message_id),
+        "project_has_message",
+        "message",
+        &projected.message_id,
+        "user_confirmed",
+        1.0,
     )
     .await;
 
@@ -254,6 +412,7 @@ struct LiveProjectionContext {
     document_store: DocumentImportStore,
     project_store: ProjectStore,
     graph_projection: GraphProjectionService,
+    project_link_review_store: ProjectLinkReviewStore,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -288,7 +447,8 @@ async fn live_projection_context(test_name: &str) -> Option<LiveProjectionContex
         message_store: MessageProjectionStore::new(pool.clone()),
         document_store: DocumentImportStore::new(pool.clone()),
         project_store: ProjectStore::new(pool.clone()),
-        graph_projection: GraphProjectionService::new(pool),
+        graph_projection: GraphProjectionService::new(pool.clone()),
+        project_link_review_store: ProjectLinkReviewStore::new(pool),
     })
 }
 
@@ -472,6 +632,8 @@ async fn assert_project_edge_with_evidence(
     relationship_type: &str,
     source_kind: &str,
     source_id: &str,
+    expected_review_state: &str,
+    expected_confidence: f64,
 ) {
     let row = sqlx::query(
         r#"
@@ -502,8 +664,8 @@ async fn assert_project_edge_with_evidence(
     let confidence: f64 = row.try_get("confidence").expect("confidence");
     let stored_source_kind: String = row.try_get("source_kind").expect("source kind");
     let stored_source_id: String = row.try_get("source_id").expect("source id");
-    assert_eq!(review_state, "suggested");
-    assert!((confidence - 0.75).abs() < f64::EPSILON);
+    assert_eq!(review_state, expected_review_state);
+    assert!((confidence - expected_confidence).abs() < f64::EPSILON);
     assert_eq!(stored_source_kind, source_kind);
     assert_eq!(stored_source_id, source_id);
 }

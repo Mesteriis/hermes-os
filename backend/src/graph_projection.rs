@@ -11,6 +11,7 @@ use crate::graph::{
     GraphEvidenceSourceKind, GraphNodeKind, GraphReviewState, GraphStore, GraphStoreError,
     NewGraphEdge, NewGraphEvidence, NewGraphNode, RelationshipType, node_id,
 };
+use crate::project_link_reviews::ProjectLinkReviewState;
 use crate::projects::{
     ProjectMatchedDocument, ProjectMatchedMessage, ProjectProjectionSource, ProjectStore,
     ProjectStoreError,
@@ -430,8 +431,8 @@ impl GraphProjectionService {
                 project_node_id.to_owned(),
                 node_id(GraphNodeKind::Message, &message.message_id),
                 RelationshipType::ProjectHasMessage,
-                PROJECT_KEYWORD_CONFIDENCE,
-                GraphReviewState::Suggested,
+                project_review_confidence(message.review_state),
+                project_review_graph_state(message.review_state),
             )
             .properties(json!({ "match_rule": "project_keyword" })),
             &[project_message_evidence(message)],
@@ -456,8 +457,8 @@ impl GraphProjectionService {
                 project_node_id.to_owned(),
                 node_id(GraphNodeKind::Document, &document.document_id),
                 RelationshipType::ProjectHasDocument,
-                PROJECT_KEYWORD_CONFIDENCE,
-                GraphReviewState::Suggested,
+                project_review_confidence(document.review_state),
+                project_review_graph_state(document.review_state),
             )
             .properties(json!({ "match_rule": "project_keyword" })),
             &[project_document_evidence(document)],
@@ -492,8 +493,8 @@ impl GraphProjectionService {
                     project_node_id.to_owned(),
                     endpoint.node_id().to_owned(),
                     endpoint.project_relationship_type(),
-                    PROJECT_KEYWORD_CONFIDENCE,
-                    GraphReviewState::Suggested,
+                    project_review_confidence(message.review_state),
+                    project_review_graph_state(message.review_state),
                 )
                 .properties(json!({ "match_rule": "project_keyword" })),
                 &[project_message_evidence(message)],
@@ -685,4 +686,20 @@ fn project_document_evidence(document: &ProjectMatchedDocument) -> NewGraphEvide
 
 fn normalize_email_address(email_address: &str) -> String {
     email_address.trim().to_ascii_lowercase()
+}
+
+fn project_review_graph_state(review_state: ProjectLinkReviewState) -> GraphReviewState {
+    match review_state {
+        ProjectLinkReviewState::Suggested => GraphReviewState::Suggested,
+        ProjectLinkReviewState::UserConfirmed => GraphReviewState::UserConfirmed,
+        ProjectLinkReviewState::UserRejected => GraphReviewState::UserRejected,
+    }
+}
+
+fn project_review_confidence(review_state: ProjectLinkReviewState) -> f64 {
+    match review_state {
+        ProjectLinkReviewState::Suggested => PROJECT_KEYWORD_CONFIDENCE,
+        ProjectLinkReviewState::UserConfirmed => 1.0,
+        ProjectLinkReviewState::UserRejected => 0.0,
+    }
 }

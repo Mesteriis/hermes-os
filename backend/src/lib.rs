@@ -17,6 +17,7 @@ pub mod graph;
 pub mod graph_projection;
 pub mod mail_storage;
 pub mod messages;
+pub mod project_link_reviews;
 pub mod projections;
 pub mod projects;
 pub mod search;
@@ -31,7 +32,7 @@ use std::sync::{Arc, Mutex};
 use axum::extract::{Path, Query, RawQuery, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::Html;
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -51,9 +52,14 @@ use crate::email_account_setup::{
 use crate::event_log::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };
+use crate::graph::{GraphNodeKind, node_id};
 use crate::mail_storage::{MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob};
 use crate::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
+};
+use crate::project_link_reviews::{
+    ProjectLinkReviewCommand, ProjectLinkReviewError, ProjectLinkReviewState,
+    ProjectLinkReviewStore, ProjectLinkTargetKind,
 };
 use crate::projects::{ProjectListResponse, ProjectStore, ProjectStoreError};
 use crate::secret_vault::EncryptedSecretVault;
@@ -107,6 +113,14 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route("/api/v2/projects", get(get_projects))
         .route("/api/v2/projects/{project_id}", get(get_project_detail))
         .route(
+            "/api/v2/projects/{project_id}/link-candidates",
+            get(get_project_link_candidates),
+        )
+        .route(
+            "/api/v2/projects/{project_id}/link-reviews",
+            put(put_project_link_review),
+        )
+        .route(
             "/api/v1/email-accounts/gmail/oauth/start",
             post(post_gmail_oauth_start),
         )
@@ -156,7 +170,7 @@ fn local_frontend_cors_layer() -> CorsLayer {
                 .map(is_allowed_local_frontend_origin)
                 .unwrap_or(false)
         }))
-        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
         .allow_headers([
             header::AUTHORIZATION,
             header::CONTENT_TYPE,
@@ -428,6 +442,109 @@ async fn get_project_detail(
     Ok(Json(project))
 }
 
+async fn get_project_link_candidates(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    RawQuery(raw_query): RawQuery,
+) -> Result<Json<ProjectLinkCandidateListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let query = parse_project_link_candidates_query(raw_query.as_deref())?;
+    let project_id = validate_non_empty_project_link_field("project_id", &project_id)?;
+
+    let project_store = project_store(&state)?;
+    let review_store = project_link_review_store(&state)?;
+    let mut candidates = Vec::new();
+
+    for message in project_store.matching_project_messages(&project_id).await? {
+        let graph_node_id = node_id(GraphNodeKind::Message, &message.message_id);
+        let sender_excerpt = text_preview(&message.sender, 140);
+        let review_state = review_store
+            .explicit_review(
+                &project_id,
+                ProjectLinkTargetKind::Message,
+                &message.message_id,
+            )
+            .await?
+            .map(|review| review.review_state)
+            .unwrap_or(ProjectLinkReviewState::Suggested);
+        let occurred_at = message.occurred_at.unwrap_or(message.projected_at);
+
+        candidates.push(ProjectLinkCandidate {
+            project_id: project_id.clone(),
+            target_kind: ProjectLinkTargetKind::Message.as_str().to_owned(),
+            target_id: message.message_id,
+            graph_node_id,
+            title: text_preview(&message.subject, 120),
+            subtitle: message.sender,
+            source_label: message.account_id,
+            occurred_at,
+            review_state: review_state.as_str().to_owned(),
+            evidence_excerpt: Some(sender_excerpt),
+        });
+    }
+
+    for document in project_store
+        .matching_project_documents(&project_id)
+        .await?
+    {
+        let graph_node_id = node_id(GraphNodeKind::Document, &document.document_id);
+        let title = text_preview(&document.title, 140);
+        let review_state = review_store
+            .explicit_review(
+                &project_id,
+                ProjectLinkTargetKind::Document,
+                &document.document_id,
+            )
+            .await?
+            .map(|review| review.review_state)
+            .unwrap_or(ProjectLinkReviewState::Suggested);
+
+        candidates.push(ProjectLinkCandidate {
+            project_id: project_id.clone(),
+            target_kind: ProjectLinkTargetKind::Document.as_str().to_owned(),
+            target_id: document.document_id,
+            graph_node_id,
+            title: title.clone(),
+            subtitle: document.document_kind,
+            source_label: document.source_fingerprint,
+            occurred_at: document.imported_at,
+            review_state: review_state.as_str().to_owned(),
+            evidence_excerpt: Some(title),
+        });
+    }
+
+    candidates.sort_by(|left, right| right.occurred_at.cmp(&left.occurred_at));
+    candidates.truncate(query.limit.unwrap_or(25));
+
+    Ok(Json(ProjectLinkCandidateListResponse { items: candidates }))
+}
+
+async fn put_project_link_review(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(project_id): Path<String>,
+    Json(request): Json<ProjectLinkReviewApiRequest>,
+) -> Result<Json<ProjectLinkReviewApiResponse>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let command = request.into_command(project_id, actor.actor_id)?;
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::project_link_review_set(
+            &command.actor_id,
+            &command.project_id,
+            command.target_kind.as_str(),
+            &command.target_id,
+        ))
+        .await?;
+
+    let result = project_link_review_store(&state)?
+        .set_review_state(&command)
+        .await?;
+
+    Ok(Json(result.into()))
+}
+
 async fn post_gmail_oauth_start(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -563,6 +680,14 @@ fn project_store(state: &AppState) -> Result<ProjectStore, ApiError> {
     };
 
     Ok(ProjectStore::new(pool.clone()))
+}
+
+fn project_link_review_store(state: &AppState) -> Result<ProjectLinkReviewStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(ProjectLinkReviewStore::new(pool.clone()))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
@@ -885,6 +1010,84 @@ impl From<StoredMailAttachmentWithBlob> for CommunicationAttachmentResponse {
     }
 }
 
+#[derive(Serialize)]
+struct ProjectLinkCandidate {
+    project_id: String,
+    target_kind: String,
+    target_id: String,
+    graph_node_id: String,
+    title: String,
+    subtitle: String,
+    source_label: String,
+    occurred_at: DateTime<Utc>,
+    review_state: String,
+    evidence_excerpt: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ProjectLinkCandidateListResponse {
+    items: Vec<ProjectLinkCandidate>,
+}
+
+#[derive(Deserialize)]
+struct ProjectLinkReviewApiRequest {
+    command_id: String,
+    target_kind: String,
+    target_id: String,
+    review_state: String,
+}
+
+impl ProjectLinkReviewApiRequest {
+    fn into_command(
+        self,
+        project_id: String,
+        actor_id: String,
+    ) -> Result<ProjectLinkReviewCommand, ApiError> {
+        let command_id = validate_non_empty_project_link_field("command_id", &self.command_id)?;
+        let project_id = validate_non_empty_project_link_field("project_id", &project_id)?;
+        let target_id = validate_non_empty_project_link_field("target_id", &self.target_id)?;
+        let target_kind = parse_project_link_target_kind(&self.target_kind)?;
+        let review_state = parse_project_link_review_state(&self.review_state)?;
+
+        Ok(ProjectLinkReviewCommand {
+            command_id,
+            project_id,
+            target_kind,
+            target_id,
+            review_state,
+            actor_id,
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct ProjectLinkReviewApiResponse {
+    project_id: String,
+    target_kind: String,
+    target_id: String,
+    review_state: String,
+    event_id: String,
+}
+
+impl From<crate::project_link_reviews::ProjectLinkReviewCommandResult>
+    for ProjectLinkReviewApiResponse
+{
+    fn from(result: crate::project_link_reviews::ProjectLinkReviewCommandResult) -> Self {
+        Self {
+            project_id: result.project_id,
+            target_kind: result.target_kind.as_str().to_owned(),
+            target_id: result.target_id,
+            review_state: result.review_state.as_str().to_owned(),
+            event_id: result.event_id,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct ProjectLinkCandidatesQuery {
+    limit: Option<usize>,
+}
+
 struct CommunicationMessagesQuery {
     limit: Option<i64>,
 }
@@ -1012,6 +1215,62 @@ fn parse_projects_query(raw_query: Option<&str>) -> Result<ProjectsQuery, ApiErr
     Ok(query)
 }
 
+fn parse_project_link_candidates_query(
+    raw_query: Option<&str>,
+) -> Result<ProjectLinkCandidatesQuery, ApiError> {
+    let mut query = ProjectLinkCandidatesQuery { limit: None };
+
+    if let Some(raw_query) = raw_query {
+        for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
+            if key.as_ref() == "limit" {
+                query.limit = Some(
+                    value
+                        .parse::<usize>()
+                        .map_err(|_| {
+                            ApiError::InvalidProjectLinkReview("limit must be an integer")
+                        })?
+                        .clamp(1, 100),
+                );
+            }
+        }
+    }
+
+    Ok(query)
+}
+
+fn parse_project_link_target_kind(value: &str) -> Result<ProjectLinkTargetKind, ApiError> {
+    match value.trim() {
+        "message" => Ok(ProjectLinkTargetKind::Message),
+        "document" => Ok(ProjectLinkTargetKind::Document),
+        _ => Err(ApiError::InvalidProjectLinkReview(
+            "target_kind must be message or document",
+        )),
+    }
+}
+
+fn parse_project_link_review_state(value: &str) -> Result<ProjectLinkReviewState, ApiError> {
+    match value.trim() {
+        "suggested" => Ok(ProjectLinkReviewState::Suggested),
+        "user_confirmed" => Ok(ProjectLinkReviewState::UserConfirmed),
+        "user_rejected" => Ok(ProjectLinkReviewState::UserRejected),
+        _ => Err(ApiError::InvalidProjectLinkReview(
+            "review_state must be suggested, user_confirmed, or user_rejected",
+        )),
+    }
+}
+
+fn validate_non_empty_project_link_field(
+    field: &'static str,
+    value: &str,
+) -> Result<String, ApiError> {
+    let normalized = value.trim();
+    if normalized.is_empty() {
+        return Err(ApiError::InvalidProjectLinkReview(field));
+    }
+
+    Ok(normalized.to_owned())
+}
+
 fn text_preview(value: &str, max_chars: usize) -> String {
     let mut preview = value.chars().take(max_chars).collect::<String>();
     if value.chars().count() > max_chars {
@@ -1033,6 +1292,9 @@ enum ApiError {
     InvalidGraphQuery(&'static str),
     Projects(ProjectStoreError),
     InvalidProjectQuery(&'static str),
+    InvalidProjectLinkReview(&'static str),
+    ProjectLinkTargetNotFound,
+    ProjectLinkReview(ProjectLinkReviewError),
     Messages(MessageProjectionError),
     MailStorage(MailStorageError),
     InvalidCommunicationQuery(&'static str),
@@ -1140,6 +1402,27 @@ impl axum::response::IntoResponse for ApiError {
                 message.to_owned(),
                 false,
             ),
+            Self::InvalidProjectLinkReview(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_project_link_review",
+                message.to_owned(),
+                false,
+            ),
+            Self::ProjectLinkTargetNotFound => (
+                StatusCode::NOT_FOUND,
+                "project_link_target_not_found",
+                "project link target was not found".to_owned(),
+                false,
+            ),
+            Self::ProjectLinkReview(error) => {
+                tracing::error!(error = %error, "project link review store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "project_link_review_store_error",
+                    "project link review store operation failed".to_owned(),
+                    false,
+                )
+            }
             Self::Messages(error) => {
                 tracing::error!(error = %error, "communication message API store operation failed");
                 (
@@ -1255,6 +1538,17 @@ impl From<EventStoreError> for ApiError {
 impl From<crate::graph::GraphStoreError> for ApiError {
     fn from(error: crate::graph::GraphStoreError) -> Self {
         Self::Graph(error)
+    }
+}
+
+impl From<ProjectLinkReviewError> for ApiError {
+    fn from(error: ProjectLinkReviewError) -> Self {
+        match error {
+            ProjectLinkReviewError::ProjectNotFound | ProjectLinkReviewError::TargetNotFound => {
+                Self::ProjectLinkTargetNotFound
+            }
+            _ => Self::ProjectLinkReview(error),
+        }
     }
 }
 

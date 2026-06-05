@@ -11,6 +11,9 @@ use hermes_hub_backend::communications::{
 use hermes_hub_backend::contacts::ContactProjectionStore;
 use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
+use hermes_hub_backend::project_link_reviews::{
+    ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkReviewStore, ProjectLinkTargetKind,
+};
 use hermes_hub_backend::projects::{NewProject, ProjectStore};
 use hermes_hub_backend::storage::Database;
 
@@ -106,6 +109,137 @@ async fn project_detail_links_keyword_messages_documents_and_people_against_post
     cleanup_project(&context.pool, &project_id).await;
 }
 
+#[tokio::test]
+async fn project_detail_excludes_rejected_keyword_message_against_postgres() {
+    let Some(context) = live_project_context("project detail excludes rejected keyword").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let keyword = format!("ProjectRejected{suffix}");
+    let project_id = format!("project:v1:reject:{suffix}");
+
+    context
+        .project_store
+        .upsert_project(
+            &NewProject::active(
+                &project_id,
+                format!("Rejected Project {suffix}"),
+                "Product Development",
+                "Reject keyword matches",
+                "Alex Morgan",
+                vec![keyword.clone()],
+            )
+            .progress(33),
+        )
+        .await
+        .expect("upsert rejected project");
+
+    let message_id = seed_message(
+        &context,
+        suffix,
+        &format!("owner-reject-{suffix}@example.com"),
+        &[format!("reviewer-reject-{suffix}@example.com")],
+        &format!("provider-project-reject-{suffix}"),
+        &format!("{keyword} kickoff"),
+        "This keyword message should be excluded",
+    )
+    .await;
+
+    context
+        .review_store
+        .set_review_state(&ProjectLinkReviewCommand {
+            command_id: format!("project-reject-{suffix}"),
+            project_id: project_id.clone(),
+            target_kind: ProjectLinkTargetKind::Message,
+            target_id: message_id,
+            review_state: ProjectLinkReviewState::UserRejected,
+            actor_id: "project-reviewer".to_owned(),
+        })
+        .await
+        .expect("set rejected review");
+
+    let detail = context
+        .project_store
+        .project_detail(&project_id)
+        .await
+        .expect("project detail");
+    assert!(detail.is_some(), "project exists");
+    let detail = detail.expect("project detail");
+
+    assert_eq!(detail.stats.message_count, 0);
+    assert_eq!(detail.recent_messages.len(), 0);
+    assert_eq!(detail.timeline.len(), 0);
+
+    cleanup_project(&context.pool, &project_id).await;
+}
+
+#[tokio::test]
+async fn project_detail_includes_confirmed_non_keyword_message_against_postgres() {
+    let Some(context) = live_project_context("project detail includes confirmed non keyword").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let keyword = format!("ProjectConfirmKeyword{suffix}");
+    let non_keyword_subject = format!("Non keyword subject {suffix}");
+    let project_id = format!("project:v1:confirm:{suffix}");
+
+    context
+        .project_store
+        .upsert_project(
+            &NewProject::active(
+                &project_id,
+                format!("Confirmed Project {suffix}"),
+                "Product Development",
+                "Confirm non-matching message",
+                "Alex Morgan",
+                vec![keyword],
+            )
+            .progress(44),
+        )
+        .await
+        .expect("upsert confirmed project");
+
+    let message_id = seed_message(
+        &context,
+        suffix,
+        &format!("owner-confirm-{suffix}@example.com"),
+        &[format!("reviewer-confirm-{suffix}@example.com")],
+        &format!("provider-project-confirm-{suffix}"),
+        &non_keyword_subject,
+        "This message does not contain the project keyword",
+    )
+    .await;
+
+    context
+        .review_store
+        .set_review_state(&ProjectLinkReviewCommand {
+            command_id: format!("project-confirm-{suffix}"),
+            project_id: project_id.clone(),
+            target_kind: ProjectLinkTargetKind::Message,
+            target_id: message_id,
+            review_state: ProjectLinkReviewState::UserConfirmed,
+            actor_id: "project-reviewer".to_owned(),
+        })
+        .await
+        .expect("set confirmed review");
+
+    let detail = context
+        .project_store
+        .project_detail(&project_id)
+        .await
+        .expect("project detail");
+    assert!(detail.is_some(), "project exists");
+    let detail = detail.expect("project detail");
+
+    assert_eq!(detail.stats.message_count, 1);
+    assert_eq!(detail.recent_messages.len(), 1);
+    assert_eq!(detail.recent_messages[0].subject, non_keyword_subject);
+
+    cleanup_project(&context.pool, &project_id).await;
+}
+
 struct LiveProjectContext {
     pool: PgPool,
     contact_store: ContactProjectionStore,
@@ -113,6 +247,7 @@ struct LiveProjectContext {
     document_store: DocumentImportStore,
     message_store: MessageProjectionStore,
     project_store: ProjectStore,
+    review_store: ProjectLinkReviewStore,
 }
 
 async fn live_project_context(test_name: &str) -> Option<LiveProjectContext> {
@@ -132,7 +267,8 @@ async fn live_project_context(test_name: &str) -> Option<LiveProjectContext> {
         communication_store: CommunicationIngestionStore::new(pool.clone()),
         document_store: DocumentImportStore::new(pool.clone()),
         message_store: MessageProjectionStore::new(pool.clone()),
-        project_store: ProjectStore::new(pool),
+        project_store: ProjectStore::new(pool.clone()),
+        review_store: ProjectLinkReviewStore::new(pool.clone()),
     })
 }
 
@@ -152,7 +288,7 @@ async fn seed_message(
     provider_record_id: &str,
     subject: &str,
     body_text: &str,
-) {
+) -> String {
     let account_id = format!("acct_project_memory_{suffix}");
     context
         .communication_store
@@ -189,9 +325,11 @@ async fn seed_message(
         .await
         .expect("record project raw message");
 
-    project_raw_email_message(&context.message_store, &raw)
+    let message = project_raw_email_message(&context.message_store, &raw)
         .await
         .expect("project raw message");
+
+    message.message_id
 }
 
 fn unique_suffix() -> u128 {

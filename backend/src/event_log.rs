@@ -1,9 +1,9 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sqlx::Row;
 use sqlx::migrate::Migrator;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
@@ -19,6 +19,17 @@ impl EventStore {
     }
 
     pub async fn append(&self, event: &NewEventEnvelope) -> Result<i64, EventStoreError> {
+        let mut transaction = self.pool.begin().await?;
+        let position = Self::append_in_transaction(&mut transaction, event).await?;
+        transaction.commit().await?;
+
+        Ok(position)
+    }
+
+    pub async fn append_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        event: &NewEventEnvelope,
+    ) -> Result<i64, EventStoreError> {
         let position = sqlx::query_scalar::<_, i64>(
             r#"
             INSERT INTO event_log (
@@ -49,7 +60,7 @@ impl EventStore {
         .bind(&event.provenance)
         .bind(&event.causation_id)
         .bind(&event.correlation_id)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut **transaction)
         .await?;
 
         Ok(position)

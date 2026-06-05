@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
@@ -7,6 +7,9 @@ use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
 use crate::graph::{GraphNodeKind, node_id};
+use crate::project_link_reviews::{
+    ProjectLinkReviewState, ProjectLinkReviewStore, ProjectReviewedTarget,
+};
 
 const DEFAULT_PROJECT_LIMIT: i64 = 25;
 const MAX_PROJECT_LIMIT: i64 = 100;
@@ -212,6 +215,12 @@ impl ProjectStore {
         &self,
         project_id: &str,
     ) -> Result<Vec<ProjectMatchedMessage>, ProjectStoreError> {
+        let reviewed = self.active_project_messages(project_id).await?;
+        if reviewed.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (message_ids, reviewed_by_id) = reviewed_targets_and_map(reviewed);
+
         let rows = sqlx::query(
             r#"
             SELECT
@@ -225,50 +234,60 @@ impl ProjectStore {
                 occurred_at,
                 projected_at
             FROM communication_messages message
-            WHERE EXISTS (
-                SELECT 1
-                FROM project_keywords keyword
-                WHERE keyword.project_id = $1
-                  AND (
-                      position(lower(keyword.keyword) in lower(message.subject)) > 0
-                      OR position(lower(keyword.keyword) in lower(message.body_text)) > 0
-                  )
-            )
+            WHERE message_id = ANY($1)
             ORDER BY COALESCE(occurred_at, projected_at) DESC, message_id
             "#,
         )
-        .bind(project_id)
+        .bind(&message_ids)
         .fetch_all(&self.pool)
         .await?;
 
-        rows.into_iter().map(row_to_matched_message).collect()
+        let mut messages = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut message = row_to_matched_message(row)?;
+            message.review_state = reviewed_by_id
+                .get(&message.message_id)
+                .copied()
+                .unwrap_or(ProjectLinkReviewState::Suggested);
+            messages.push(message);
+        }
+
+        Ok(messages)
     }
 
     pub(crate) async fn matching_project_documents(
         &self,
         project_id: &str,
     ) -> Result<Vec<ProjectMatchedDocument>, ProjectStoreError> {
+        let reviewed = self.active_project_documents(project_id).await?;
+        if reviewed.is_empty() {
+            return Ok(Vec::new());
+        }
+        let (document_ids, reviewed_by_id) = reviewed_targets_and_map(reviewed);
+
         let rows = sqlx::query(
             r#"
             SELECT document_id, document_kind, title, source_fingerprint, imported_at
             FROM documents document
-            WHERE EXISTS (
-                SELECT 1
-                FROM project_keywords keyword
-                WHERE keyword.project_id = $1
-                  AND (
-                      position(lower(keyword.keyword) in lower(document.title)) > 0
-                      OR position(lower(keyword.keyword) in lower(document.extracted_text)) > 0
-                  )
-            )
+            WHERE document_id = ANY($1)
             ORDER BY imported_at DESC, document_id
             "#,
         )
-        .bind(project_id)
+        .bind(&document_ids)
         .fetch_all(&self.pool)
         .await?;
 
-        rows.into_iter().map(row_to_matched_document).collect()
+        let mut documents = Vec::with_capacity(rows.len());
+        for row in rows {
+            let mut document = row_to_matched_document(row)?;
+            document.review_state = reviewed_by_id
+                .get(&document.document_id)
+                .copied()
+                .unwrap_or(ProjectLinkReviewState::Suggested);
+            documents.push(document);
+        }
+
+        Ok(documents)
     }
 
     async fn project_by_id(&self, project_id: &str) -> Result<Option<Project>, ProjectStoreError> {
@@ -314,22 +333,19 @@ impl ProjectStore {
     }
 
     async fn project_stats(&self, project_id: &str) -> Result<ProjectStats, ProjectStoreError> {
+        let message_targets = self.active_project_messages(project_id).await?;
+        let message_ids = reviewed_target_ids(&message_targets);
+        let document_targets = self.active_project_documents(project_id).await?;
+        let document_ids = reviewed_target_ids(&document_targets);
+
         let message_count = sqlx::query_scalar::<_, i64>(
             r#"
             SELECT count(*)
             FROM communication_messages message
-            WHERE EXISTS (
-                SELECT 1
-                FROM project_keywords keyword
-                WHERE keyword.project_id = $1
-                  AND (
-                      position(lower(keyword.keyword) in lower(message.subject)) > 0
-                      OR position(lower(keyword.keyword) in lower(message.body_text)) > 0
-                  )
-            )
+            WHERE message_id = ANY($1)
             "#,
         )
-        .bind(project_id)
+        .bind(&message_ids)
         .fetch_one(&self.pool)
         .await?;
 
@@ -337,18 +353,10 @@ impl ProjectStore {
             r#"
             SELECT count(*)
             FROM documents document
-            WHERE EXISTS (
-                SELECT 1
-                FROM project_keywords keyword
-                WHERE keyword.project_id = $1
-                  AND (
-                      position(lower(keyword.keyword) in lower(document.title)) > 0
-                      OR position(lower(keyword.keyword) in lower(document.extracted_text)) > 0
-                  )
-            )
+            WHERE document_id = ANY($1)
             "#,
         )
-        .bind(project_id)
+        .bind(&document_ids)
         .fetch_one(&self.pool)
         .await?;
 
@@ -357,15 +365,7 @@ impl ProjectStore {
             WITH project_messages AS (
                 SELECT sender, recipients
                 FROM communication_messages message
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM project_keywords keyword
-                    WHERE keyword.project_id = $1
-                      AND (
-                          position(lower(keyword.keyword) in lower(message.subject)) > 0
-                          OR position(lower(keyword.keyword) in lower(message.body_text)) > 0
-                      )
-                )
+                WHERE message_id = ANY($1)
             ),
             participants AS (
                 SELECT lower(trim(sender)) AS email_address
@@ -380,7 +380,7 @@ impl ProjectStore {
             WHERE email_address <> ''
             "#,
         )
-        .bind(project_id)
+        .bind(&message_ids)
         .fetch_one(&self.pool)
         .await?;
 
@@ -402,28 +402,12 @@ impl ProjectStore {
             WITH project_message_activity AS (
                 SELECT COALESCE(occurred_at, projected_at) AS occurred_at
                 FROM communication_messages message
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM project_keywords keyword
-                    WHERE keyword.project_id = $1
-                      AND (
-                          position(lower(keyword.keyword) in lower(message.subject)) > 0
-                          OR position(lower(keyword.keyword) in lower(message.body_text)) > 0
-                      )
-                )
+                WHERE message_id = ANY($1)
             ),
             project_document_activity AS (
                 SELECT imported_at AS occurred_at
                 FROM documents document
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM project_keywords keyword
-                    WHERE keyword.project_id = $1
-                      AND (
-                          position(lower(keyword.keyword) in lower(document.title)) > 0
-                          OR position(lower(keyword.keyword) in lower(document.extracted_text)) > 0
-                      )
-                )
+                WHERE document_id = ANY($2)
             )
             SELECT max(occurred_at)
             FROM (
@@ -433,7 +417,8 @@ impl ProjectStore {
             ) activity
             "#,
         )
-        .bind(project_id)
+        .bind(&message_ids)
+        .bind(&document_ids)
         .fetch_one(&self.pool)
         .await?;
 
@@ -451,6 +436,11 @@ impl ProjectStore {
         project_id: &str,
         limit: i64,
     ) -> Result<Vec<ProjectMessageSummary>, ProjectStoreError> {
+        let message_ids = reviewed_target_ids(&self.active_project_messages(project_id).await?);
+        if message_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let rows = sqlx::query(
             r#"
             SELECT
@@ -459,20 +449,12 @@ impl ProjectStore {
                 sender,
                 COALESCE(occurred_at, projected_at) AS occurred_at
             FROM communication_messages message
-            WHERE EXISTS (
-                SELECT 1
-                FROM project_keywords keyword
-                WHERE keyword.project_id = $1
-                  AND (
-                      position(lower(keyword.keyword) in lower(message.subject)) > 0
-                      OR position(lower(keyword.keyword) in lower(message.body_text)) > 0
-                  )
-            )
+            WHERE message_id = ANY($1)
             ORDER BY occurred_at DESC, message_id
             LIMIT $2
             "#,
         )
-        .bind(project_id)
+        .bind(&message_ids)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
@@ -485,24 +467,21 @@ impl ProjectStore {
         project_id: &str,
         limit: i64,
     ) -> Result<Vec<ProjectDocumentSummary>, ProjectStoreError> {
+        let document_ids = reviewed_target_ids(&self.active_project_documents(project_id).await?);
+        if document_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let rows = sqlx::query(
             r#"
             SELECT document_id, document_kind, title, imported_at
             FROM documents document
-            WHERE EXISTS (
-                SELECT 1
-                FROM project_keywords keyword
-                WHERE keyword.project_id = $1
-                  AND (
-                      position(lower(keyword.keyword) in lower(document.title)) > 0
-                      OR position(lower(keyword.keyword) in lower(document.extracted_text)) > 0
-                  )
-            )
+            WHERE document_id = ANY($1)
             ORDER BY imported_at DESC, document_id
             LIMIT $2
             "#,
         )
-        .bind(project_id)
+        .bind(&document_ids)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
@@ -515,20 +494,17 @@ impl ProjectStore {
         project_id: &str,
         limit: i64,
     ) -> Result<Vec<ProjectPersonSummary>, ProjectStoreError> {
+        let message_ids = reviewed_target_ids(&self.active_project_messages(project_id).await?);
+        if message_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let rows = sqlx::query(
             r#"
             WITH project_messages AS (
                 SELECT sender, recipients, COALESCE(occurred_at, projected_at) AS occurred_at
                 FROM communication_messages message
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM project_keywords keyword
-                    WHERE keyword.project_id = $1
-                      AND (
-                          position(lower(keyword.keyword) in lower(message.subject)) > 0
-                          OR position(lower(keyword.keyword) in lower(message.body_text)) > 0
-                      )
-                )
+                WHERE message_id = ANY($1)
             ),
             participants AS (
                 SELECT lower(trim(sender)) AS email_address, occurred_at
@@ -551,7 +527,7 @@ impl ProjectStore {
             LIMIT $2
             "#,
         )
-        .bind(project_id)
+        .bind(&message_ids)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
@@ -564,6 +540,9 @@ impl ProjectStore {
         project_id: &str,
         limit: i64,
     ) -> Result<Vec<ProjectTimelineItem>, ProjectStoreError> {
+        let message_ids = reviewed_target_ids(&self.active_project_messages(project_id).await?);
+        let document_ids = reviewed_target_ids(&self.active_project_documents(project_id).await?);
+
         let rows = sqlx::query(
             r#"
             WITH project_messages AS (
@@ -574,15 +553,7 @@ impl ProjectStore {
                     sender AS subtitle,
                     COALESCE(occurred_at, projected_at) AS occurred_at
                 FROM communication_messages message
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM project_keywords keyword
-                    WHERE keyword.project_id = $1
-                      AND (
-                          position(lower(keyword.keyword) in lower(message.subject)) > 0
-                          OR position(lower(keyword.keyword) in lower(message.body_text)) > 0
-                      )
-                )
+                WHERE message_id = ANY($1)
             ),
             project_documents AS (
                 SELECT
@@ -592,15 +563,7 @@ impl ProjectStore {
                     document_kind AS subtitle,
                     imported_at AS occurred_at
                 FROM documents document
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM project_keywords keyword
-                    WHERE keyword.project_id = $1
-                      AND (
-                          position(lower(keyword.keyword) in lower(document.title)) > 0
-                          OR position(lower(keyword.keyword) in lower(document.extracted_text)) > 0
-                      )
-                )
+                WHERE document_id = ANY($2)
             )
             SELECT item_kind, item_id, title, subtitle, occurred_at
             FROM (
@@ -609,15 +572,36 @@ impl ProjectStore {
                 SELECT * FROM project_documents
             ) timeline
             ORDER BY occurred_at DESC, item_kind, item_id
-            LIMIT $2
+            LIMIT $3
             "#,
         )
-        .bind(project_id)
+        .bind(&message_ids)
+        .bind(&document_ids)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
 
         rows.into_iter().map(row_to_timeline_item).collect()
+    }
+
+    async fn active_project_messages(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectReviewedTarget>, ProjectStoreError> {
+        ProjectLinkReviewStore::new(self.pool.clone())
+            .active_message_ids_for_project(project_id)
+            .await
+            .map_err(ProjectStoreError::ProjectLinkReview)
+    }
+
+    async fn active_project_documents(
+        &self,
+        project_id: &str,
+    ) -> Result<Vec<ProjectReviewedTarget>, ProjectStoreError> {
+        ProjectLinkReviewStore::new(self.pool.clone())
+            .active_document_ids_for_project(project_id)
+            .await
+            .map_err(ProjectStoreError::ProjectLinkReview)
     }
 }
 
@@ -813,6 +797,7 @@ pub(crate) struct ProjectMatchedMessage {
     pub recipients: Vec<String>,
     pub occurred_at: Option<DateTime<Utc>>,
     pub projected_at: DateTime<Utc>,
+    pub review_state: ProjectLinkReviewState,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -822,6 +807,7 @@ pub(crate) struct ProjectMatchedDocument {
     pub title: String,
     pub source_fingerprint: String,
     pub imported_at: DateTime<Utc>,
+    pub review_state: ProjectLinkReviewState,
 }
 
 #[derive(Debug, Error)]
@@ -837,6 +823,9 @@ pub enum ProjectStoreError {
 
     #[error("project must have at least one keyword")]
     NoKeywords,
+
+    #[error(transparent)]
+    ProjectLinkReview(#[from] crate::project_link_reviews::ProjectLinkReviewError),
 
     #[error("project limit must be positive")]
     InvalidLimit,
@@ -913,6 +902,7 @@ fn row_to_matched_message(row: PgRow) -> Result<ProjectMatchedMessage, ProjectSt
         recipients: recipients_from_value(row.try_get("recipients")?)?,
         occurred_at: row.try_get("occurred_at")?,
         projected_at: row.try_get("projected_at")?,
+        review_state: ProjectLinkReviewState::Suggested,
     })
 }
 
@@ -923,7 +913,28 @@ fn row_to_matched_document(row: PgRow) -> Result<ProjectMatchedDocument, Project
         title: row.try_get("title")?,
         source_fingerprint: row.try_get("source_fingerprint")?,
         imported_at: row.try_get("imported_at")?,
+        review_state: ProjectLinkReviewState::Suggested,
     })
+}
+
+fn reviewed_targets_and_map(
+    targets: Vec<ProjectReviewedTarget>,
+) -> (Vec<String>, HashMap<String, ProjectLinkReviewState>) {
+    let mut ids = Vec::with_capacity(targets.len());
+    let mut map = HashMap::with_capacity(targets.len());
+    for target in targets {
+        map.insert(target.target_id.clone(), target.review_state);
+        ids.push(target.target_id);
+    }
+
+    (ids, map)
+}
+
+fn reviewed_target_ids(targets: &[ProjectReviewedTarget]) -> Vec<String> {
+    targets
+        .iter()
+        .map(|target| target.target_id.clone())
+        .collect()
 }
 
 fn recipients_from_value(value: serde_json::Value) -> Result<Vec<String>, ProjectStoreError> {

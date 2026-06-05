@@ -161,6 +161,32 @@ impl NewApiAuditRecord {
             metadata: json!({}),
         }
     }
+
+    pub fn project_link_review_set(
+        actor_id: impl Into<String>,
+        project_id: impl Into<String>,
+        target_kind: impl Into<String>,
+        target_id: impl Into<String>,
+    ) -> Self {
+        let project_id = project_id.into();
+        let target_kind = target_kind.into();
+        let target_id = target_id.into();
+
+        Self {
+            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "project.link_review.set".to_owned(),
+            method: "PUT".to_owned(),
+            path_template: "/api/v2/projects/{project_id}/link-reviews".to_owned(),
+            target_kind: "project_link".to_owned(),
+            target_id: Some(format!("{project_id}:{target_kind}:{target_id}")),
+            metadata: json!({
+                "project_id": project_id,
+                "target_kind": target_kind,
+                "target_id": target_id,
+            }),
+        }
+    }
 }
 
 #[derive(Debug, Error)]
