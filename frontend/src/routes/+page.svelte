@@ -477,17 +477,6 @@
 		{ day: 5, top: 24, height: 298, title: 'Hackathon', meta: 'Personal', tone: 'amber' }
 	];
 
-	const graphBuckets = [
-		{ label: 'Tasks', count: '24', x: 13, y: 26, tone: 'purple', items: ['Implement plugin architecture', 'Redesign Dashboard', 'Fix Authentication Flow'] },
-		{ label: 'Meetings', count: '18', x: 9, y: 54, tone: 'mint', items: ['Weekly Sync', 'Product Review', 'Architecture Discussion'] },
-		{ label: 'Messages', count: '327', x: 24, y: 75, tone: 'amber', items: ['Telegram Chat', 'Email Thread', 'WhatsApp Group'] },
-		{ label: 'Projects', count: '5', x: 48, y: 83, tone: 'cyan', items: ['Hermes Agent', 'Hermes Mobile', 'Herald System'] },
-		{ label: 'Sources', count: '', x: 71, y: 78, tone: 'blue', items: ['Obsidian Vault', 'Google Drive', 'Gmail'] },
-		{ label: 'Decisions', count: '8', x: 83, y: 59, tone: 'orange', items: ['ADR-0001', 'ADR-0002', 'ADR-0003'] },
-		{ label: 'Documents', count: '142', x: 84, y: 31, tone: 'blue', items: ['Architecture.md', 'Product Strategy.pdf', 'ADR-0001.md'] },
-		{ label: 'People', count: '12', x: 47, y: 17, tone: 'mint', items: ['Maria Petrova', 'Alex Morgan', 'John Smith'] }
-	];
-
 	const selectedCommunication = $derived(communicationMessages[selectedConversationIndex] ?? null);
 	const selectedConversation = $derived(conversations[selectedConversationIndex] ?? conversations[0]);
 	const selectedContact = $derived(contactList[selectedContactIndex] ?? contactList[0]);
@@ -1556,28 +1545,224 @@
 		{:else if currentView === 'knowledge'}
 			<section class="knowledge-page">
 				<div class="graph-filter-tabs">
-					{#each ['All','People','Projects','Documents','Tasks','Meetings','Decisions','Messages','Events','Notes','Sources'] as item, index}
-						<button type="button" class:active={index === 0} disabled={index !== 0}>{item}</button>
+					{#each graphFilterChips as item}
+						<button
+							type="button"
+							class:active={item.id === 'all'}
+							disabled={!item.enabled}
+							title={item.enabled ? `${item.label} graph view` : `${item.label} filtering is not available in this read-only slice`}
+						>
+							{item.label}
+							{#if item.count !== null}<em>{formatNumber(item.count)}</em>{/if}
+						</button>
 					{/each}
+					<button type="button" disabled title="Projection rebuild requires a command API boundary">
+						<Icon icon="tabler:refresh" width="15" height="15" />
+						Rebuild
+					</button>
 				</div>
+
 				<div class="knowledge-layout">
 					<section class="panel graph-workbench">
-						<div class="graph-toolbar"><button type="button" disabled>Local View</button><button type="button" disabled><Icon icon="tabler:hand-click" width="16" height="16" /></button><button type="button" disabled><Icon icon="tabler:plus" width="16" height="16" /></button><button type="button" disabled><Icon icon="tabler:minus" width="16" height="16" /></button></div>
-						<div class="knowledge-canvas">
-							<div class="knowledge-core"><img src="/assets/hermes-logo-mark.png" alt="" /><strong>Hermes Hub</strong><span>Project</span></div>
-							{#each graphBuckets as bucket}
-								<article class="graph-bucket {bucket.tone}" style={`left:${bucket.x}%; top:${bucket.y}%`}>
-									<header><strong>{bucket.label}</strong><em>{bucket.count}</em></header>
-									{#each bucket.items as item}<p>{item}</p>{/each}
-								</article>
-							{/each}
+						<div class="graph-toolbar">
+							<form
+								class="graph-search-form"
+								onsubmit={(event) => {
+									event.preventDefault();
+									void runGraphSearch();
+								}}
+							>
+								<Icon icon="tabler:search" width="17" height="17" />
+								<input
+									bind:value={graphSearchQuery}
+									placeholder="Search graph nodes..."
+									aria-label="Search graph nodes"
+								/>
+								<button type="submit" disabled={isGraphSearchLoading || !graphSearchQuery.trim()}>
+									{isGraphSearchLoading ? 'Searching' : 'Search'}
+								</button>
+							</form>
+							<button type="button" disabled title="Pan and zoom engine is not part of this slice">
+								<Icon icon="tabler:hand-click" width="16" height="16" />
+							</button>
+							<button type="button" disabled title="Depth is fixed to 1 by the current graph API contract">
+								Depth 1
+							</button>
 						</div>
-						<footer class="timeline-slider"><span>2023</span><div><i></i></div><span>2026</span></footer>
+
+						<div class="graph-search-strip">
+							{#if graphSearchError}
+								<div class="graph-strip-message error">
+									<span>{graphSearchError}</span>
+									<button type="button" onclick={() => void runGraphSearch()}>Retry</button>
+								</div>
+							{:else if graphSearchResults.length > 0}
+								<div class="graph-result-row" aria-label="Graph search results">
+									{#each graphSearchResults as node}
+										<button
+											type="button"
+											class:active={selectedGraphNode?.node_id === node.node_id}
+											onclick={() => void selectGraphNode(node)}
+										>
+											<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
+											<span>{node.label}</span>
+											<em>{formatGraphKind(node.node_kind)}</em>
+										</button>
+									{/each}
+								</div>
+							{:else if graphSearchSubmitted && graphSearchQuery.trim()}
+								<div class="graph-strip-message">
+									<span>No graph nodes found for "{graphSearchQuery.trim()}".</span>
+								</div>
+							{:else}
+								<div class="graph-strip-message">
+									<span>Search people, email addresses, messages or documents to load a neighborhood.</span>
+								</div>
+							{/if}
+						</div>
+
+						<div class="knowledge-canvas">
+							{#if graphError && !graphSummary}
+								<div class="graph-state-card error">
+									<Icon icon="tabler:alert-triangle" width="26" height="26" />
+									<h2>Graph summary unavailable</h2>
+									<p>{graphError}</p>
+									<button type="button" onclick={() => void loadGraphSummary()}>Retry summary</button>
+								</div>
+							{:else if isGraphSummaryLoading && !graphSummary}
+								<div class="graph-state-card">
+									<Icon icon="tabler:loader-2" width="26" height="26" />
+									<h2>Loading graph summary</h2>
+									<p>Reading local graph projection metadata.</p>
+								</div>
+							{:else if graphSummary?.is_empty}
+								<div class="graph-state-card">
+									<Icon icon="tabler:database-off" width="26" height="26" />
+									<h2>No graph projection yet</h2>
+									<p>Import contacts, messages or documents, then run the existing projection smoke command to create graph data.</p>
+								</div>
+							{:else if graphNeighborhood}
+								<svg class="graph-edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+									{#each graphCanvasEdges as edge}
+										<line
+											x1={edge.x1}
+											y1={edge.y1}
+											x2={edge.x2}
+											y2={edge.y2}
+											class:reviewed={edge.review_state === 'system_accepted' || edge.review_state === 'user_confirmed'}
+										/>
+									{/each}
+								</svg>
+								{#each graphCanvasEdges as edge}
+									<span
+										class="graph-edge-label"
+										style={`left:${(edge.x1 + edge.x2) / 2}%; top:${(edge.y1 + edge.y2) / 2}%`}
+									>
+										{edge.label}
+									</span>
+								{/each}
+								{#each graphCanvasNodes as node}
+									<button
+										type="button"
+										class="graph-node kind-{node.node_kind}"
+										class:selected={node.isSelected}
+										style={`left:${node.x}%; top:${node.y}%`}
+										onclick={() => void selectGraphNode(node)}
+										title={`${node.label} - ${formatGraphKind(node.node_kind)}`}
+									>
+										<Icon icon={graphNodeKindIcon(node.node_kind)} width={node.isSelected ? 28 : 21} height={node.isSelected ? 28 : 21} />
+										<strong>{node.label}</strong>
+										<span>{formatGraphKind(node.node_kind)}</span>
+									</button>
+								{/each}
+								{#if isGraphNeighborhoodLoading}
+									<div class="graph-loading-overlay">
+										<Icon icon="tabler:loader-2" width="22" height="22" />
+										<span>Loading neighborhood</span>
+									</div>
+								{/if}
+							{:else}
+								<div class="graph-state-card">
+									<img src="/assets/hermes-logo-mark.png" alt="" />
+									<h2>Select a graph node</h2>
+									<p>{formatNumber(graphNodeTotal())} nodes and {formatNumber(graphRelationshipTotal())} connections are available from the local projection.</p>
+								</div>
+							{/if}
+						</div>
+
+						<footer class="graph-status-bar">
+							<span>Projection: {formatGraphTimestamp(graphSummary?.latest_projection_at ?? null)}</span>
+							<span>Evidence: {formatNumber(graphEvidenceTotal())}</span>
+							{#if graphNeighborhood?.truncated}<span>Neighborhood truncated at {graphNeighborhood.edge_limit} edges</span>{/if}
+							{#if graphNeighborhood?.evidence_truncated}<span>Evidence truncated at {graphNeighborhood.evidence_limit} rows</span>{/if}
+						</footer>
 					</section>
+
 					<aside class="stacked-rail">
-						<section class="panel info-card"><h2>Selected Node</h2><div class="doc-mini"><Icon icon="tabler:file-text" width="24" height="24" /><span><strong>Architecture.md</strong><small>Document · Obsidian</small></span></div><ul class="detail-list node-detail-list"><li>Projects <em>Hermes Hub</em></li><li>Created <em>Apr 28, 2024</em></li><li>Updated <em>May 12, 2024</em></li><li>Created by <em>Alex Morgan</em></li></ul></section>
-						<section class="panel info-card"><h2>AI Summary</h2><p>Этот документ связан с Hermes Hub, Agent System и ADR-0001. Чаще всего упоминается вместе с Plugin System, Knowledge Graph и Communications.</p></section>
-						<section class="panel info-card"><h2>Graph Statistics</h2><div class="summary-numbers compact"><article><strong>{formatNumber(graphNodeTotal())}</strong><span>Nodes</span></article><article><strong>{formatNumber(graphRelationshipTotal())}</strong><span>Connections</span></article><article><strong>24</strong><span>Clusters</span></article><article><strong>12</strong><span>Orphan Nodes</span></article></div>{#if graphError}<p class="inline-error">{graphError}</p>{/if}</section>
+						<section class="panel info-card">
+							<h2>Selected Node</h2>
+							{#if selectedGraphNode}
+								<div class="doc-mini">
+									<Icon icon={graphNodeKindIcon(selectedGraphNode.node_kind)} width="24" height="24" />
+									<span>
+										<strong>{selectedGraphNode.label}</strong>
+										<small>{formatGraphKind(selectedGraphNode.node_kind)}</small>
+									</span>
+								</div>
+								<ul class="detail-list node-detail-list">
+									<li>Stable key <em>{selectedGraphNode.stable_key}</em></li>
+									<li>Created <em>{formatGraphTimestamp(selectedGraphNode.created_at)}</em></li>
+									<li>Updated <em>{formatGraphTimestamp(selectedGraphNode.updated_at)}</em></li>
+									{#each selectedGraphProperties as row}
+										<li>{formatGraphKind(row.key)} <em>{row.value}</em></li>
+									{/each}
+								</ul>
+								{#if graphNeighborhoodError}
+									<p class="inline-error">{graphNeighborhoodError}</p>
+								{/if}
+							{:else}
+								<p>Select a search result to inspect graph metadata and evidence.</p>
+							{/if}
+						</section>
+
+						<section class="panel info-card">
+							<h2>Connections</h2>
+							{#if graphNeighborCounts.length > 0}
+								{#each graphNeighborCounts as item}
+									<div class="collection-row">
+										<span>{formatGraphKind(item.kind)}</span>
+										<em>{item.count}</em>
+									</div>
+								{/each}
+							{:else}
+								<p>No selected neighborhood.</p>
+							{/if}
+						</section>
+
+						<section class="panel info-card">
+							<h2>Evidence</h2>
+							{#if graphNeighborhood?.evidence.length}
+								{#each graphNeighborhood.evidence.slice(0, 5) as evidence}
+									<div class="evidence-row">
+										<strong>{formatGraphKind(evidence.source_kind)}</strong>
+										<p>{evidence.excerpt ?? graphEvidenceLabel(evidence)}</p>
+									</div>
+								{/each}
+							{:else}
+								<p>Evidence appears after selecting a node with returned edges.</p>
+							{/if}
+						</section>
+
+						<section class="panel info-card">
+							<h2>Graph Statistics</h2>
+							<div class="summary-numbers compact">
+								<article><strong>{formatNumber(graphNodeTotal())}</strong><span>Nodes</span></article>
+								<article><strong>{formatNumber(graphRelationshipTotal())}</strong><span>Connections</span></article>
+								<article><strong>{formatNumber(graphEvidenceTotal())}</strong><span>Evidence</span></article>
+								<article><strong>{formatNumber(graphNodeKindCount('person'))}</strong><span>People</span></article>
+							</div>
+							{#if graphError}<p class="inline-error">{graphError}</p>{/if}
+						</section>
 					</aside>
 				</div>
 			</section>
