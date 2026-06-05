@@ -37,7 +37,7 @@ Version 2.0 is complete when Hermes Hub makes graph-backed memory central: messa
 - [x] Document processing jobs/artifacts exist and Markdown extraction is implemented.
 - [ ] Contact identity supports explicit split review for confirmed merge links.
 - [ ] Document processing failed jobs can be retried through a protected event-backed command.
-- [ ] `make validate` includes live PostgreSQL smoke coverage for V2 workflow APIs.
+- [x] `make validate` includes live PostgreSQL smoke coverage for V2 workflow APIs.
 - [ ] Backend README documents all V2 workflow APIs and dev commands.
 - [ ] Frontend README documents V2 desktop surfaces and validation commands.
 - [ ] Full `make validate` passes from a clean checkout with Docker available.

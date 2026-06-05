@@ -344,7 +344,7 @@ fn build_review_event(
         json!({
             "kind": "project_link_review",
             "provider": "local_api",
-            "source_id": target_id,
+            "source_id": event_id,
         }),
         json!({
             "kind": "project_link_review",
