@@ -19,6 +19,7 @@ make backend-event-log-smoke-dev
 make backend-communication-smoke-dev
 make backend-email-sync-smoke-dev
 make backend-email-provider-network-smoke-dev
+make backend-email-sync-cache-dev
 make backend-email-fixture-export-icloud-dev
 make backend-email-fixture-import-dev
 make backend-email-fixture-project-dev
@@ -79,6 +80,18 @@ make backend-email-fixture-project-dev
 
 Both commands default to `tmp/email-fixtures/icloud-inbox-redacted.json`, create or update the local `dev-icloud-fixture` provider account, print JSON summaries and leave PostgreSQL running for the active development session. Override path and account metadata with `HERMES_EMAIL_FIXTURE_PATH`, `HERMES_EMAIL_FIXTURE_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_DISPLAY_NAME`, `HERMES_EMAIL_FIXTURE_EXTERNAL_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_IMPORT_BATCH_ID` and `HERMES_EMAIL_FIXTURE_PROVIDER`.
 
+Fetch iCloud/raw IMAP mail into the persistent local development cache:
+
+```bash
+HERMES_EMAIL_SYNC_USERNAME=<imap-login> \
+HERMES_EMAIL_SYNC_PASSWORD=<app-password> \
+HERMES_EMAIL_SYNC_PROVIDER=icloud \
+HERMES_EMAIL_SYNC_MAX_MESSAGES=25 \
+make backend-email-sync-cache-dev
+```
+
+The command uses read-only IMAP, writes raw `.eml` blobs under `docker/data/mail/`, stores only metadata and blob references in PostgreSQL, and projects canonical messages plus contacts for the UI. It does not support Gmail OAuth yet; Gmail cache sync should use the same pipeline after account setup exposes refreshed access tokens to the dev command.
+
 Direct Cargo commands:
 
 ```sh
@@ -86,6 +99,7 @@ cargo run --manifest-path backend/Cargo.toml
 cargo run --manifest-path backend/Cargo.toml --bin hermes-graph-project
 cargo run --manifest-path backend/Cargo.toml --bin hermes-email-fixture-export
 cargo run --manifest-path backend/Cargo.toml --bin hermes-email-fixture-dev
+cargo run --manifest-path backend/Cargo.toml --bin hermes-email-sync-dev
 cargo test --manifest-path backend/Cargo.toml
 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
 ```

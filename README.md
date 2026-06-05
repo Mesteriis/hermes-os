@@ -147,6 +147,18 @@ make backend-email-fixture-project-dev
 
 Команда выполняет import, canonical message projection, contact projection, rebuild V2 graph projection и печатает JSON summary. Путь fixture и account metadata можно переопределить через `HERMES_EMAIL_FIXTURE_PATH`, `HERMES_EMAIL_FIXTURE_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_DISPLAY_NAME`, `HERMES_EMAIL_FIXTURE_EXTERNAL_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_IMPORT_BATCH_ID`, `HERMES_EMAIL_FIXTURE_PROVIDER`.
 
+Скачать iCloud/raw IMAP почту в persistent dev cache без mailbox-мутаций:
+
+```sh
+HERMES_EMAIL_SYNC_USERNAME=<imap-login> \
+HERMES_EMAIL_SYNC_PASSWORD=<app-password> \
+HERMES_EMAIL_SYNC_PROVIDER=icloud \
+HERMES_EMAIL_SYNC_MAX_MESSAGES=25 \
+make backend-email-sync-cache-dev
+```
+
+Команда использует read-only IMAP, сохраняет raw `.eml` blobs под `docker/data/mail/`, кладет в PostgreSQL только metadata/blob references, проецирует canonical messages и contacts. Повторный запуск использует checkpoint, а `make dev` после этого работает с уже скачанными локальными данными.
+
 `/api/events` и `/api/audit/events` требуют локальный API token и non-secret actor ID:
 
 ```sh

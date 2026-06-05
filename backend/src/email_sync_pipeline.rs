@@ -1,3 +1,4 @@
+use serde::Serialize;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
@@ -14,7 +15,7 @@ use crate::messages::{
     project_raw_email_message_from_blob,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct EmailSyncPipelineReport {
     pub imported_records: usize,
     pub raw_blobs_upserted: usize,
