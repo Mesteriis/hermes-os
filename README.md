@@ -28,6 +28,20 @@ Hermes Hub - персональная локальная платформа ко
 - local Ollama AI runtime boundary for V3 workflows
 - pgvector semantic embeddings with `halfvec(2560)`
 - protected V3 AI APIs for status, agents, run history, cited answers, task candidate refresh and meeting prep
+- V4 Telegram fixture foundation with policy-backed automation dry-run and call transcript storage
+- V5 WhatsApp Web fixture/manual companion foundation
+- capability decision audit slice for V4 Telegram send policy decisions
+
+## Open Source
+
+Hermes Hub is published as an open source repository under the MIT License.
+
+Before contributing:
+
+- read [CONTRIBUTING.md](CONTRIBUTING.md);
+- do not commit secrets, private message data, local `.env` files or generated data under `docker/data/`;
+- report security issues through [SECURITY.md](SECURITY.md), not public issues;
+- keep changes aligned with the relevant ADRs in [docs/adr](docs/adr).
 
 ## Принципы
 
@@ -291,3 +305,4 @@ make compose-config
 - [V2 Graph Core Checklist](docs/roadmap/v2-graph-core-checklist.md)
 - [Architecture Overview](docs/architecture/architecture-overview.md)
 - [ADR Index](docs/adr/README.md)
+- [License](LICENSE)
