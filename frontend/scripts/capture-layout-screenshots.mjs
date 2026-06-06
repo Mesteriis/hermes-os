@@ -21,9 +21,14 @@ const views = [
 ];
 
 const viewports = [
-	{ id: '800x600', width: 800, height: 600 },
-	{ id: '1366x768', width: 1366, height: 768 }
+	{ id: '800x600', width: 800, height: 600, expectMultiColumn: false },
+	{ id: '901x768', width: 901, height: 768, expectMultiColumn: false },
+	{ id: '1024x768', width: 1024, height: 768, expectMultiColumn: false },
+	{ id: '1200x768', width: 1200, height: 768, expectMultiColumn: false },
+	{ id: '1366x768', width: 1366, height: 768, expectMultiColumn: true }
 ];
+
+const desktopColumnSpreadTolerance = 2;
 
 const mode = process.argv[2] ?? 'baseline';
 if (!['baseline', 'after'].includes(mode)) {
@@ -175,9 +180,6 @@ async function captureViewport(viewport) {
 					for (const child of Array.from(container.children)) {
 						const { rect, visible } = isElementVisible(child);
 						if (!visible) continue;
-						const clippedTop = Math.max(rect.top, 0);
-						const clippedBottom = Math.min(rect.bottom, window.innerHeight);
-						if (clippedBottom <= clippedTop) continue;
 						const left = Math.round((rect.left - containerRect.left) / 8) * 8;
 						const column = columnsByLeft.get(left) ?? {
 							left,
@@ -188,8 +190,8 @@ async function captureViewport(viewport) {
 							contentBottom: Number.NEGATIVE_INFINITY
 						};
 						column.count += 1;
-						column.top = Math.min(column.top, Math.round(clippedTop));
-						column.bottom = Math.max(column.bottom, Math.round(clippedBottom));
+						column.top = Math.min(column.top, Math.round(rect.top - containerRect.top));
+						column.bottom = Math.max(column.bottom, Math.round(rect.bottom - containerRect.top));
 						column.contentTop = Math.min(column.contentTop, Math.round(rect.top - containerRect.top));
 						column.contentBottom = Math.max(column.contentBottom, Math.round(rect.bottom - containerRect.top));
 						columnsByLeft.set(left, column);
@@ -262,6 +264,20 @@ async function captureViewport(viewport) {
 					widgets: state.widgetFrameMetrics.nonModularHeights
 				});
 			}
+			if (viewport.expectMultiColumn) {
+				const spreadOutliers = state.layoutColumnMetrics.filter(
+					(metric) => metric.columnHeightSpread > desktopColumnSpreadTolerance
+				);
+				if (spreadOutliers.length > 0) {
+					failures.push({
+						type: 'desktop-column-spread',
+						viewport: viewport.id,
+						view: id,
+						tolerance: desktopColumnSpreadTolerance,
+						layouts: spreadOutliers
+					});
+				}
+			}
 		}
 
 		results.push({ type: 'console', viewport, issues: consoleIssues });
@@ -306,6 +322,7 @@ try {
 			viewport: result.viewport.id,
 			id: result.id,
 			visibleWidgets: result.state.widgetFrameMetrics.visibleCount,
+			widgetRow: result.state.widgetFrameMetrics.widgetRow,
 			nonModularWidgets: result.state.widgetFrameMetrics.nonModularHeights.length,
 			horizontalOutliers: result.state.outliers.length,
 			columnSpreads: result.state.layoutColumnMetrics.map((metric) => ({

@@ -516,6 +516,7 @@ input {
 .widget-frame[data-widget-id='timeline-filters'],
 .widget-frame[data-widget-id='whatsapp-session-status'],
 .widget-frame[data-widget-id='ai-runtime-status'],
+.widget-frame[data-widget-id='communications-conversation-list'],
 .widget-frame[data-widget-id='telegram-chat-list'],
 .widget-frame[data-widget-id='whatsapp-account-session-metadata'] {
 	min-height: calc(var(--hh-widget-row) * 9);
@@ -544,6 +545,7 @@ input {
 .widget-frame[data-widget-id='telegram-account-status'],
 .widget-frame[data-widget-id='ai-runtime-metrics'],
 .widget-frame[data-widget-id='ai-selected-agent-detail'],
+.widget-frame[data-widget-id='home-metrics'],
 .widget-frame[data-widget-id='settings-metrics'] {
 	min-height: calc(var(--hh-widget-row) * 13);
 }
@@ -593,7 +595,9 @@ input {
 }
 
 .widget-frame[data-widget-id='telegram-selected-chat-metadata'] {
-	min-height: calc(var(--hh-widget-row) * 31);
+	min-height: var(--hh-widget-workbench-large);
+	max-height: var(--hh-widget-workbench-large);
+	overflow: auto;
 }
 
 .widget-frame[data-widget-id='timeline-stream'] {
@@ -601,11 +605,15 @@ input {
 }
 
 .widget-frame[data-widget-id='whatsapp-sync-controls'] {
-	min-height: calc(var(--hh-widget-row) * 38);
+	min-height: var(--hh-widget-workbench-large);
+	max-height: var(--hh-widget-workbench-large);
+	overflow: auto;
 }
 
 .widget-frame[data-widget-id='telegram-sync-controls'] {
-	min-height: calc(var(--hh-widget-row) * 79);
+	min-height: var(--hh-widget-workbench-large);
+	max-height: var(--hh-widget-workbench-large);
+	overflow: auto;
 }
 
 .widget-frame[data-widget-hidden='true'] {
@@ -3360,7 +3368,18 @@ input[type='checkbox'] {
 
 .telegram-grid,
 .whatsapp-grid {
-	align-items: start;
+	align-items: stretch;
+}
+
+.telegram-grid > .widget-frame,
+.telegram-grid > .telegram-rail,
+.whatsapp-grid > .widget-frame,
+.whatsapp-grid > .whatsapp-rail,
+.settings-layout > .widget-frame,
+.settings-layout > .settings-rail {
+	min-height: var(--hh-widget-workbench-large);
+	max-height: var(--hh-widget-workbench-large);
+	overflow: auto;
 }
 
 .telegram-chat-pane,
@@ -3452,7 +3471,7 @@ input[type='checkbox'] {
 
 .settings-layout {
 	grid-template-columns: minmax(760px, 1fr) 330px;
-	align-items: start;
+	align-items: stretch;
 }
 
 .settings-list-panel {
@@ -3755,7 +3774,7 @@ input[type='checkbox'] {
 	}
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1359px) {
 	.desktop-shell {
 		grid-template-columns: var(--hh-shell-sidebar-width-compact) minmax(0, 1fr);
 		gap: 8px;
