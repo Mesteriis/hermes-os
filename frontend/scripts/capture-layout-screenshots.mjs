@@ -35,6 +35,22 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
 const results = [];
 
+async function getPrimaryNavButton(label) {
+	const primaryNav = page.locator('nav[aria-label="Primary"]');
+	const button = primaryNav.getByRole('button').filter({ hasText: label });
+	const count = await button.count();
+	if (count !== 1) {
+		const navLabels = await primaryNav.getByRole('button').evaluateAll((buttons) =>
+			buttons.map((navButton) => (navButton.textContent ?? '').trim().replace(/\s+/g, ' '))
+		);
+		throw new Error(
+			`Expected exactly one primary nav button containing visible text "${label}", found ${count}. ` +
+				`Primary nav buttons: ${navLabels.length > 0 ? navLabels.join(', ') : '(none)'}`
+		);
+	}
+	return button;
+}
+
 page.on('console', (message) => {
 	if (['warning', 'error'].includes(message.type())) {
 		results.push({ type: 'console', level: message.type(), text: message.text() });
@@ -44,7 +60,7 @@ page.on('console', (message) => {
 await page.goto(url, { waitUntil: 'networkidle' });
 
 for (const [id, label] of views) {
-	const button = page.getByRole('button', { name: label, exact: true });
+	const button = await getPrimaryNavButton(label);
 	await button.click();
 	await page.waitForTimeout(100);
 	const state = await page.evaluate(() => {
