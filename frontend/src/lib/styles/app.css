@@ -471,6 +471,129 @@ input {
 	min-height: 0;
 }
 
+.widget-frame > .panel.info-card,
+.widget-frame > .panel.chart-panel,
+.widget-frame > .panel.mini-panel {
+	min-height: var(--hh-widget-panel);
+}
+
+.widget-frame > .panel.feed-panel,
+.widget-frame > .panel.priorities-panel,
+.widget-frame > .panel.schedule-panel {
+	min-height: var(--hh-widget-workbench);
+}
+
+.widget-frame[data-widget-id='communications-message-detail'],
+.widget-frame[data-widget-id='knowledge-search-results'] {
+	min-height: calc(var(--hh-widget-unit) * 3);
+}
+
+.widget-frame[data-widget-id='settings-application-list-editor'],
+.widget-frame[data-widget-id='knowledge-toolbar'] {
+	min-height: calc(var(--hh-widget-unit) * 5);
+}
+
+.widget-frame[data-widget-id='tasks-candidate-review'] {
+	min-height: calc(var(--hh-widget-unit) * 6);
+}
+
+.widget-frame[data-widget-id='projects-hero'] {
+	min-height: calc(var(--hh-widget-unit) * 7);
+}
+
+.widget-frame[data-widget-id='ai-agent-list'] {
+	min-height: calc(var(--hh-widget-unit) * 2);
+}
+
+.widget-frame[data-widget-id='home-system-status'],
+.widget-frame[data-widget-id='knowledge-graph-summary'],
+.widget-frame[data-widget-id='notes-metadata'] {
+	min-height: calc(var(--hh-widget-unit) * 8);
+}
+
+.widget-frame[data-widget-id='tasks-metrics'],
+.widget-frame[data-widget-id='timeline-filters'],
+.widget-frame[data-widget-id='whatsapp-session-status'],
+.widget-frame[data-widget-id='ai-runtime-status'] {
+	min-height: calc(var(--hh-widget-unit) * 9);
+}
+
+.widget-frame[data-widget-id='calendar-upcoming'] {
+	min-height: calc(var(--hh-widget-unit) * 10);
+}
+
+.widget-frame[data-widget-id='contacts-information'],
+.widget-frame[data-widget-id='contacts-about'],
+.widget-frame[data-widget-id='contacts-relationship-strength'] {
+	min-height: calc(var(--hh-widget-unit) * 11);
+}
+
+.widget-frame[data-widget-id='contacts-recent-interactions'],
+.widget-frame[data-widget-id='contacts-active-projects'],
+.widget-frame[data-widget-id='tasks-ai-refresh-status'] {
+	min-height: calc(var(--hh-widget-unit) * 12);
+}
+
+.widget-frame[data-widget-id='telegram-account-status'],
+.widget-frame[data-widget-id='ai-runtime-metrics'],
+.widget-frame[data-widget-id='ai-selected-agent-detail'],
+.widget-frame[data-widget-id='settings-metrics'] {
+	min-height: calc(var(--hh-widget-unit) * 13);
+}
+
+.widget-frame[data-widget-id='calendar-source-status'] {
+	min-height: calc(var(--hh-widget-unit) * 15);
+}
+
+.widget-frame[data-widget-id='home-people-talked-to'] {
+	min-height: calc(var(--hh-widget-unit) * 17);
+}
+
+.widget-frame[data-widget-id='home-active-projects'],
+.widget-frame[data-widget-id='knowledge-graph-canvas'] {
+	min-height: calc(var(--hh-widget-unit) * 18);
+}
+
+.widget-frame[data-widget-id='home-whats-new'] {
+	min-height: calc(var(--hh-widget-unit) * 20);
+}
+
+.widget-frame[data-widget-id='notes-list'] {
+	min-height: calc(var(--hh-widget-unit) * 24);
+}
+
+.widget-frame[data-widget-id='documents-navigation'] {
+	min-height: calc(var(--hh-widget-unit) * 25);
+}
+
+.widget-frame[data-widget-id='documents-related-context'] {
+	min-height: calc(var(--hh-widget-unit) * 27);
+}
+
+.widget-frame[data-widget-id='documents-list'] {
+	min-height: calc(var(--hh-widget-unit) * 28);
+}
+
+.widget-frame[data-widget-id='notes-source-filters'] {
+	min-height: calc(var(--hh-widget-unit) * 30);
+}
+
+.widget-frame[data-widget-id='telegram-selected-chat-metadata'] {
+	min-height: calc(var(--hh-widget-unit) * 31);
+}
+
+.widget-frame[data-widget-id='timeline-stream'] {
+	min-height: calc(var(--hh-widget-unit) * 37);
+}
+
+.widget-frame[data-widget-id='whatsapp-sync-controls'] {
+	min-height: calc(var(--hh-widget-unit) * 38);
+}
+
+.widget-frame[data-widget-id='telegram-sync-controls'] {
+	min-height: calc(var(--hh-widget-unit) * 79);
+}
+
 .widget-frame[data-widget-hidden='true'] {
 	display: none;
 }
@@ -599,7 +722,7 @@ input {
 	grid-template-columns: 300px minmax(640px, 1fr);
 	align-items: center;
 	gap: 14px;
-	min-height: 102px;
+	min-height: var(--hh-widget-card);
 }
 
 .greeting {
@@ -683,7 +806,7 @@ h1 {
 }
 
 .metric-card {
-	min-height: 84px;
+	min-height: var(--hh-widget-card);
 	border-radius: var(--hh-radius-md);
 	padding: 13px 12px;
 }
@@ -739,7 +862,7 @@ h1 {
 	display: grid;
 	grid-template-columns: minmax(380px, 1.05fr) minmax(300px, 0.83fr) minmax(280px, 0.76fr) 270px;
 	gap: 12px;
-	min-height: 456px;
+	min-height: var(--hh-widget-workbench);
 }
 
 .feed-list,
@@ -1019,7 +1142,7 @@ input[type='checkbox'] {
 	grid-template-columns: 38px 1fr;
 	align-items: center;
 	gap: 10px;
-	min-height: 98px;
+	min-height: var(--hh-widget-card);
 	border: 1px solid rgba(111, 205, 195, 0.12);
 	border-radius: var(--hh-radius-md);
 	background: rgba(12, 40, 44, 0.52);
@@ -1163,7 +1286,7 @@ input[type='checkbox'] {
 	display: grid;
 	grid-template-columns: 350px minmax(430px, 1fr) 320px;
 	gap: 12px;
-	min-height: 690px;
+	min-height: var(--hh-widget-workbench-large);
 }
 
 .conversation-list {
@@ -1250,7 +1373,7 @@ input[type='checkbox'] {
 .empty-panel {
 	display: grid;
 	place-items: center;
-	min-height: 120px;
+	min-height: var(--hh-widget-panel);
 	border: 1px dashed rgba(113, 205, 196, 0.18);
 	border-radius: var(--hh-radius-md);
 	color: #a9bcbb;
@@ -1283,7 +1406,7 @@ input[type='checkbox'] {
 	grid-template-columns: auto 1fr auto;
 	align-items: center;
 	gap: 12px;
-	min-height: 68px;
+	min-height: var(--hh-widget-card-compact);
 	border-bottom: 1px solid rgba(102, 189, 180, 0.12);
 	padding: 12px 16px;
 }
@@ -1437,7 +1560,7 @@ input[type='checkbox'] {
 	display: grid;
 	grid-template-columns: 320px minmax(520px, 1fr) 310px;
 	gap: 12px;
-	min-height: 0;
+	min-height: var(--hh-widget-workbench-large);
 }
 
 .contacts-list-panel {
@@ -1453,7 +1576,7 @@ input[type='checkbox'] {
 
 .contacts-list-panel .contact-row {
 	grid-template-columns: 44px 1fr auto;
-	min-height: 76px;
+	min-height: var(--hh-widget-card-compact);
 }
 
 .contacts-list-panel img {
@@ -1532,7 +1655,7 @@ input[type='checkbox'] {
 	grid-template-columns: 82px 1fr auto;
 	align-items: center;
 	gap: 18px;
-	min-height: 152px;
+	min-height: var(--hh-widget-card-large);
 	padding: 18px;
 }
 
@@ -1586,7 +1709,7 @@ input[type='checkbox'] {
 .project-empty-state {
 	display: grid;
 	place-items: center;
-	min-height: 360px;
+	min-height: var(--hh-widget-canvas);
 	color: #9fb6b4;
 	text-align: center;
 }
@@ -1660,13 +1783,13 @@ input[type='checkbox'] {
 }
 
 .graph-card-large {
-	min-height: 330px;
+	min-height: var(--hh-widget-canvas);
 	padding: 14px;
 }
 
 .radial-graph {
 	position: relative;
-	height: 260px;
+	height: calc(var(--hh-widget-row) * 10);
 	margin-top: 12px;
 	background:
 		linear-gradient(rgba(45, 240, 206, 0.035) 1px, transparent 1px),
@@ -1838,10 +1961,11 @@ input[type='checkbox'] {
 	display: grid;
 	grid-template-columns: minmax(740px, 1fr) 310px;
 	gap: 12px;
+	min-height: var(--hh-widget-workbench-large);
 }
 
 .task-table {
-	min-height: 680px;
+	min-height: var(--hh-widget-workbench-large);
 }
 
 .table-head,
@@ -2028,7 +2152,7 @@ input[type='checkbox'] {
 .week-board {
 	display: grid;
 	grid-template-rows: 52px 1fr auto;
-	min-height: 710px;
+	min-height: var(--hh-widget-workbench-tall);
 }
 
 .week-header {
@@ -2049,7 +2173,7 @@ input[type='checkbox'] {
 	position: relative;
 	display: grid;
 	grid-template-columns: repeat(7, 1fr);
-	height: 580px;
+	height: var(--hh-widget-canvas-large);
 	background:
 		linear-gradient(rgba(111, 205, 195, 0.09) 1px, transparent 1px),
 		linear-gradient(90deg, rgba(111, 205, 195, 0.09) 1px, transparent 1px);
@@ -2203,7 +2327,7 @@ input[type='checkbox'] {
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	min-height: 58px;
+	min-height: var(--hh-widget-card-compact);
 	border-radius: var(--hh-radius-md);
 	color: var(--hh-color-text);
 	padding: 0 14px;
@@ -2235,7 +2359,7 @@ input[type='checkbox'] {
 	grid-template-columns: 24px 1fr;
 	align-items: center;
 	gap: 8px;
-	min-height: 56px;
+	min-height: var(--hh-widget-card-compact);
 	border: 1px solid rgba(111, 205, 195, 0.1);
 	border-radius: var(--hh-radius-md);
 	background: rgba(8, 36, 39, 0.48);
@@ -2349,7 +2473,7 @@ input[type='checkbox'] {
 
 .knowledge-layout {
 	grid-template-columns: minmax(760px, 1fr) 310px;
-	min-height: var(--hh-shell-min-height);
+	min-height: var(--hh-widget-workbench-large);
 }
 
 .graph-workbench {
@@ -2515,7 +2639,7 @@ input[type='checkbox'] {
 
 .knowledge-canvas {
 	position: relative;
-	min-height: 610px;
+	min-height: var(--hh-widget-canvas-large);
 	overflow: hidden;
 	background:
 		radial-gradient(circle at center, rgba(21, 132, 126, 0.18), transparent 35%),
@@ -2820,7 +2944,7 @@ input[type='checkbox'] {
 	display: grid;
 	grid-template-columns: 44px 1fr;
 	gap: 12px;
-	min-height: 128px;
+	min-height: var(--hh-widget-panel);
 	padding: 12px;
 	text-align: left;
 }
@@ -2892,7 +3016,7 @@ input[type='checkbox'] {
 .ai-workflow-block {
 	display: grid;
 	gap: 10px;
-	min-height: 190px;
+	min-height: var(--hh-widget-panel-large);
 	border: 1px solid rgba(111, 205, 195, 0.1);
 	border-radius: var(--hh-radius-md);
 	background: rgba(5, 22, 25, 0.54);
@@ -3318,7 +3442,7 @@ input[type='checkbox'] {
 }
 
 .settings-list-panel {
-	min-height: 640px;
+	min-height: var(--hh-widget-workbench-large);
 }
 
 .settings-category-list {
@@ -3362,7 +3486,7 @@ input[type='checkbox'] {
 	grid-template-columns: minmax(280px, 1fr) minmax(360px, 0.92fr);
 	gap: 14px;
 	align-items: center;
-	min-height: 92px;
+	min-height: var(--hh-widget-card);
 	border: 1px solid rgba(111, 205, 195, 0.1);
 	border-radius: var(--hh-radius-md);
 	background: rgba(4, 21, 24, 0.44);
@@ -3505,7 +3629,7 @@ input[type='checkbox'] {
 }
 
 .account-section {
-	min-height: 188px;
+	min-height: var(--hh-widget-panel-large);
 }
 
 .account-card-grid {
@@ -3519,7 +3643,7 @@ input[type='checkbox'] {
 	display: grid;
 	grid-template-columns: 38px minmax(0, 1fr);
 	gap: 10px;
-	min-height: 118px;
+	min-height: calc(var(--hh-widget-unit) * 5);
 	border: 1px solid rgba(111, 205, 195, 0.1);
 	border-radius: var(--hh-radius-md);
 	background: rgba(4, 21, 24, 0.5);
@@ -3878,7 +4002,7 @@ input[type='checkbox'] {
 	}
 
 	.knowledge-canvas {
-		min-height: 420px;
+		min-height: calc(var(--hh-widget-unit) * 18);
 	}
 
 	.graph-node {

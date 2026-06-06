@@ -78,6 +78,25 @@ try {
 		await page.waitForTimeout(100);
 		const layoutState = await page.evaluate(() => {
 			const outliers = [];
+			const tokenNumber = (name, fallback) => {
+				const probe = document.createElement('div');
+				probe.style.position = 'absolute';
+				probe.style.visibility = 'hidden';
+				probe.style.pointerEvents = 'none';
+				probe.style.height = `var(${name})`;
+				document.body.append(probe);
+				const value = Number.parseFloat(getComputedStyle(probe).height);
+				probe.remove();
+				return Number.isFinite(value) ? value : fallback;
+			};
+			const widgetUnit = tokenNumber('--hh-widget-unit', 24);
+			const widgetRow = tokenNumber('--hh-widget-row', widgetUnit);
+			const isNearTokenMultiple = (height, token) => {
+				if (token <= 0) return false;
+				const nearest = Math.round(height / token) * token;
+				return Math.abs(height - nearest) <= 2;
+			};
+			const visibleWidgetFrames = [];
 			for (const element of document.querySelectorAll('body *')) {
 				const rect = element.getBoundingClientRect();
 				const style = getComputedStyle(element);
@@ -95,11 +114,49 @@ try {
 				}
 				if (outliers.length >= 10) break;
 			}
+			for (const element of document.querySelectorAll('.widget-frame[data-widget-id]')) {
+				const rect = element.getBoundingClientRect();
+				const style = getComputedStyle(element);
+				if (style.display === 'none' || style.visibility === 'hidden' || rect.width === 0 || rect.height === 0) {
+					continue;
+				}
+				const height = Math.round(rect.height);
+				visibleWidgetFrames.push({
+					widgetId: element.getAttribute('data-widget-id') ?? '',
+					height,
+					left: Math.round(rect.left),
+					top: Math.round(rect.top),
+					moduleAligned: isNearTokenMultiple(height, widgetUnit),
+					rowAligned: isNearTokenMultiple(height, widgetRow)
+				});
+			}
+			const columnsByLeft = new Map();
+			for (const frame of visibleWidgetFrames) {
+				const columnKey = String(Math.round(frame.left / 12) * 12);
+				const column = columnsByLeft.get(columnKey) ?? { left: Number(columnKey), count: 0, totalHeight: 0 };
+				column.count += 1;
+				column.totalHeight += frame.height;
+				columnsByLeft.set(columnKey, column);
+			}
+			const columns = Array.from(columnsByLeft.values()).sort((left, right) => left.left - right.left);
+			const columnHeights = columns.map((column) => column.totalHeight);
+			const columnHeightSpread =
+				columnHeights.length > 1 ? Math.max(...columnHeights) - Math.min(...columnHeights) : 0;
 			return {
 				h1: document.querySelector('h1')?.textContent?.trim() ?? null,
 				bodyScrollWidth: document.body.scrollWidth,
 				documentScrollWidth: document.documentElement.scrollWidth,
-				outliers
+				outliers,
+				widgetFrameMetrics: {
+					widgetUnit,
+					widgetRow,
+					visibleCount: visibleWidgetFrames.length,
+					nonModularHeights: visibleWidgetFrames
+						.filter((frame) => !frame.moduleAligned && !frame.rowAligned)
+						.slice(0, 10),
+					columns,
+					columnHeightSpread
+				}
 			};
 		});
 		const state = {
@@ -107,7 +164,8 @@ try {
 			bodyScrollWidth: layoutState.bodyScrollWidth,
 			documentScrollWidth: layoutState.documentScrollWidth,
 			guardDisplay: await getViewportGuardDisplay(`capturing ${label} view state`),
-			outliers: layoutState.outliers
+			outliers: layoutState.outliers,
+			widgetFrameMetrics: layoutState.widgetFrameMetrics
 		};
 		const screenshotPath = path.join(outputDir, `${id}.png`);
 		await page.screenshot({ path: screenshotPath, fullPage: false });
@@ -125,6 +183,16 @@ try {
 	results.push({ type: 'guard', widthGuard, heightGuard });
 
 	await writeFile(path.join(outputDir, 'summary.json'), JSON.stringify(results, null, 2));
+
+	const widgetSummary = results
+		.filter((result) => result.type === 'view')
+		.map((result) => ({
+			id: result.id,
+			visibleWidgets: result.state.widgetFrameMetrics.visibleCount,
+			nonModularWidgets: result.state.widgetFrameMetrics.nonModularHeights.length,
+			columnHeightSpread: result.state.widgetFrameMetrics.columnHeightSpread
+		}));
+	console.log(`Widget frame summary: ${JSON.stringify(widgetSummary)}`);
 } finally {
 	await browser.close();
 }

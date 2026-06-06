@@ -59,6 +59,21 @@
 	--hh-space-5: 20px;
 	--hh-space-6: 24px;
 
+	--hh-widget-unit: var(--hh-space-6);
+	--hh-workspace-static-height: calc(15px + 58px + 10px + 38px + 10px + var(--hh-space-6) + var(--hh-space-5));
+	--hh-workspace-available-height: calc(100dvh - var(--hh-workspace-static-height));
+	--hh-widget-row: clamp(var(--hh-widget-unit), calc(var(--hh-workspace-available-height) / 18), 36px);
+	--hh-widget-card-compact: calc(var(--hh-widget-unit) * 3);
+	--hh-widget-card: calc(var(--hh-widget-unit) * 4);
+	--hh-widget-card-large: calc(var(--hh-widget-unit) * 6);
+	--hh-widget-panel: calc(var(--hh-widget-row) * 6);
+	--hh-widget-panel-large: calc(var(--hh-widget-row) * 8);
+	--hh-widget-canvas: calc(var(--hh-widget-row) * 14);
+	--hh-widget-canvas-large: calc(var(--hh-widget-row) * 23);
+	--hh-widget-workbench: calc(var(--hh-widget-row) * 18);
+	--hh-widget-workbench-large: calc(var(--hh-widget-row) * 26);
+	--hh-widget-workbench-tall: calc(var(--hh-widget-row) * 28);
+
 	--hh-shadow-sidebar:
 		inset -1px 0 0 rgba(255, 255, 255, 0.03), 18px 0 48px rgba(0, 0, 0, 0.28);
 	--hh-shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.035);
