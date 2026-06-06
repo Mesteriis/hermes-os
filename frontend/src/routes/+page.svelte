@@ -31,6 +31,7 @@
 		fetchWhatsappWebSessions,
 		fetchProjects,
 		fetchV1Status,
+		findFrontendLayoutSetting,
 		ingestTelegramFixtureMessage,
 		ingestWhatsappWebFixtureMessage,
 		refreshAiTaskCandidates,
@@ -96,6 +97,15 @@
 		type WhatsappWebSession,
 		type V1Status
 	} from '$lib/api';
+	import {
+		defaultLayoutSettings,
+		findPresetForView,
+		parseLayoutSettings,
+		resolveLayout,
+		widgetRegistry,
+		type LayoutSettings,
+		type ResolvedLayout
+	} from '$lib/layout';
 	import { onMount } from 'svelte';
 
 	type Provider = 'gmail' | 'icloud' | 'imap';
@@ -412,6 +422,9 @@
 		always_on_policy: true
 	});
 	let applicationSettings = $state<ApplicationSetting[]>([]);
+	let layoutSettings = $state<LayoutSettings>(defaultLayoutSettings());
+	let layoutError = $state('');
+	const activeLayout = $derived(resolveActiveLayout(currentView, layoutSettings));
 	let providerAccounts = $state<ProviderAccount[]>([]);
 	let settingDrafts = $state<Record<string, string>>({});
 	let settingsError = $state('');
@@ -862,6 +875,9 @@
 				fetchProviderAccounts(apiBaseUrl, apiToken, actorId)
 			]);
 			applicationSettings = settingsResponse.items;
+			const frontendLayoutSetting = findFrontendLayoutSetting(settingsResponse.items);
+			layoutSettings = parseLayoutSettings(frontendLayoutSetting?.value ?? null);
+			layoutError = '';
 			providerAccounts = accountsResponse.items;
 			applyLoadedFrontendSettings(settingsResponse.items);
 			settingDrafts = Object.fromEntries(
@@ -869,6 +885,8 @@
 			);
 			settingsError = '';
 		} catch (error) {
+			layoutSettings = defaultLayoutSettings();
+			layoutError = error instanceof Error ? error.message : 'Unknown layout settings error';
 			settingsError = error instanceof Error ? error.message : 'Unknown settings error';
 		} finally {
 			isSettingsLoading = false;
@@ -1466,6 +1484,13 @@
 
 	function checkboxEventValue(event: Event) {
 		return (event.currentTarget as HTMLInputElement).checked ? 'true' : 'false';
+	}
+
+	function resolveActiveLayout(viewId: ViewId, settings: LayoutSettings): ResolvedLayout | null {
+		const preset = findPresetForView(viewId);
+		if (!preset) return null;
+		const layoutViewId = preset.viewId;
+		return resolveLayout(preset, widgetRegistry, settings.views[layoutViewId]);
 	}
 
 	function settingDraftToValue(setting: ApplicationSetting, draft: string): ApplicationSetting['value'] {
