@@ -1,5 +1,26 @@
 import type { LayoutPreset, LayoutViewId, LayoutWidgetInstance } from './types';
 
+export type AppShellLayoutViewId = LayoutViewId | 'knowledge' | 'agents';
+
+const layoutViewIds = [
+	'home',
+	'communications',
+	'timeline',
+	'contacts',
+	'projects',
+	'tasks',
+	'calendar',
+	'documents',
+	'notes',
+	'knowledge-graph',
+	'telegram',
+	'whatsapp',
+	'ai-agents',
+	'settings'
+] as const satisfies readonly LayoutViewId[];
+
+const layoutViewIdSet = new Set<string>(layoutViewIds);
+
 function instance(widgetId: string, zoneId: string, order: number): LayoutWidgetInstance {
 	return {
 		widgetId,
@@ -185,6 +206,31 @@ export const layoutPresets: LayoutPreset[] = [
 	])
 ];
 
-export function findPresetForView(viewId: LayoutViewId): LayoutPreset | null {
-	return layoutPresets.find((preset) => preset.viewId === viewId) ?? null;
+export function layoutViewIdForAppView(viewId: string): LayoutViewId | null {
+	if (viewId === 'knowledge') {
+		return 'knowledge-graph';
+	}
+
+	if (viewId === 'agents') {
+		return 'ai-agents';
+	}
+
+	if (isLayoutViewId(viewId)) {
+		return viewId;
+	}
+
+	return null;
+}
+
+export function findPresetForView(viewId: AppShellLayoutViewId | string): LayoutPreset | null {
+	const layoutViewId = layoutViewIdForAppView(viewId);
+	if (layoutViewId === null) {
+		return null;
+	}
+
+	return layoutPresets.find((preset) => preset.viewId === layoutViewId) ?? null;
+}
+
+function isLayoutViewId(viewId: string): viewId is LayoutViewId {
+	return layoutViewIdSet.has(viewId);
 }

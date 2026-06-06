@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { layoutPresets } from './presets';
+import { findPresetForView, layoutPresets, layoutViewIdForAppView } from './presets';
 import { widgetRegistry } from './registry';
 import { resolveLayout } from './resolver';
 import { defaultLayoutSettings, parseLayoutSettings } from './settings';
@@ -157,6 +157,41 @@ describe('default widget inventory', () => {
 		expect(layoutPresets.map((preset) => preset.viewId).sort()).toEqual([...expectedViews].sort());
 	});
 
+	it('does not declare duplicate widget definitions', () => {
+		const seen = new Set<string>();
+		const duplicates = widgetRegistry
+			.map((definition) => definition.id)
+			.filter((widgetId) => {
+				if (seen.has(widgetId)) {
+					return true;
+				}
+
+				seen.add(widgetId);
+				return false;
+			});
+
+		expect(duplicates).toEqual([]);
+	});
+
+	it('does not declare duplicate widget instances inside each preset', () => {
+		const duplicates = layoutPresets.flatMap((preset) => {
+			const seen = new Set<string>();
+			return preset.widgets
+				.map((widget) => widget.widgetId)
+				.filter((widgetId) => {
+					if (seen.has(widgetId)) {
+						return true;
+					}
+
+					seen.add(widgetId);
+					return false;
+				})
+				.map((widgetId) => `${preset.viewId}:${widgetId}`);
+		});
+
+		expect(duplicates).toEqual([]);
+	});
+
 	it('has a widget definition for every preset instance', () => {
 		const widgetIds = new Set(widgetRegistry.map((definition) => definition.id));
 		const missing = layoutPresets.flatMap((preset) =>
@@ -166,6 +201,17 @@ describe('default widget inventory', () => {
 		);
 
 		expect(missing).toEqual([]);
+	});
+
+	it('keeps every preset instance inside a declared preset zone', () => {
+		const invalidZones = layoutPresets.flatMap((preset) => {
+			const zoneIds = new Set(preset.zones.map((zone) => zone.id));
+			return preset.widgets
+				.filter((widget) => !zoneIds.has(widget.zoneId))
+				.map((widget) => `${preset.viewId}:${widget.widgetId}:${widget.zoneId}`);
+		});
+
+		expect(invalidZones).toEqual([]);
 	});
 
 	it('keeps all visible default widgets inside allowed zones', () => {
@@ -184,6 +230,34 @@ describe('default widget inventory', () => {
 		);
 
 		expect(invalidZones).toEqual([]);
+	});
+
+	it('keeps widget definitions scoped to the presets that use them', () => {
+		const widgetsById = new Map(widgetRegistry.map((definition) => [definition.id, definition]));
+		const invalidScopes = layoutPresets.flatMap((preset) =>
+			preset.widgets
+				.filter((widget) => {
+					const definition = widgetsById.get(widget.widgetId);
+					return !definition || !definition.viewScope.includes(preset.viewId);
+				})
+				.map((widget) => `${preset.viewId}:${widget.widgetId}`)
+		);
+
+		expect(invalidScopes).toEqual([]);
+	});
+});
+
+describe('app shell layout view aliases', () => {
+	it('maps current app shell view ids to layout domain view ids', () => {
+		expect(layoutViewIdForAppView('knowledge')).toBe('knowledge-graph');
+		expect(layoutViewIdForAppView('agents')).toBe('ai-agents');
+		expect(layoutViewIdForAppView('settings')).toBe('settings');
+		expect(layoutViewIdForAppView('unknown')).toBeNull();
+	});
+
+	it('finds layout presets from app shell aliases', () => {
+		expect(findPresetForView('knowledge')?.viewId).toBe('knowledge-graph');
+		expect(findPresetForView('agents')?.viewId).toBe('ai-agents');
 	});
 });
 
