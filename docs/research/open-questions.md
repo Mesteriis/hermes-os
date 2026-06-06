@@ -3,9 +3,9 @@
 ## Provider Integrations
 
 - Which email access mode should be first: IMAP/SMTP, Gmail API or provider-specific OAuth?
-- What is the reliable WhatsApp integration path for a local-first personal product?
 - What Telegram API constraints affect long-term archival and sending?
-- How should SMS be handled on desktop without unsafe phone bridge assumptions?
+- What is the reliable WhatsApp integration path for a local-first personal product? (V5)
+- How should SMS be handled on desktop without unsafe phone bridge assumptions? (V5)
 
 ## Storage
 

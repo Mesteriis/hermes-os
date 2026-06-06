@@ -149,19 +149,17 @@ Closure tracking:
 
 - [V3 Closure Checklist](v3-closure-checklist.md)
 
-## Version 4.0 - Automation, Plugins and Multi-Channel Depth
+## Version 4.0 - Automation, Plugins and Channel Foundation
 
 Goals:
 
-- expand providers and controlled automation
+- expand Telegram provider depth and controlled automation
 - introduce plugin host
 - harden privacy, security and backup
 
 Key functions:
 
 - Telegram integration
-- WhatsApp integration
-- optional SMS integration
 - plugin manifest and capability model
 - backup/restore
 - automation policies
@@ -182,7 +180,7 @@ Risks:
 
 Dependencies:
 
-- channel adapter research
+- Telegram adapter research
 - capability sandbox design
 - backup encryption model
 
@@ -196,6 +194,8 @@ Goals:
 
 Key functions:
 
+- WhatsApp integration
+- optional SMS integration
 - cross-year analytics
 - decision history
 - relationship evolution
