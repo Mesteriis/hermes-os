@@ -1,8 +1,28 @@
 import { describe, expect, it } from 'vitest';
+import { layoutPresets } from './presets';
+import { widgetRegistry } from './registry';
 import { resolveLayout } from './resolver';
 import { defaultLayoutSettings, parseLayoutSettings } from './settings';
 import { LAYOUT_SCHEMA_VERSION } from './types';
+import type { LayoutViewId } from './types';
 import type { LayoutPreset, ViewLayoutOverride, WidgetDefinition } from './types';
+
+const expectedViews: LayoutViewId[] = [
+	'home',
+	'communications',
+	'timeline',
+	'contacts',
+	'projects',
+	'tasks',
+	'calendar',
+	'documents',
+	'notes',
+	'knowledge-graph',
+	'telegram',
+	'whatsapp',
+	'ai-agents',
+	'settings'
+];
 
 const testWidgets: WidgetDefinition[] = [
 	{
@@ -129,6 +149,41 @@ const orderedPreset: LayoutPreset = {
 describe('layout domain exports', () => {
 	it('uses schema version 1 for the first persisted layout setting', () => {
 		expect(LAYOUT_SCHEMA_VERSION).toBe(1);
+	});
+});
+
+describe('default widget inventory', () => {
+	it('declares one preset for every current view', () => {
+		expect(layoutPresets.map((preset) => preset.viewId).sort()).toEqual([...expectedViews].sort());
+	});
+
+	it('has a widget definition for every preset instance', () => {
+		const widgetIds = new Set(widgetRegistry.map((definition) => definition.id));
+		const missing = layoutPresets.flatMap((preset) =>
+			preset.widgets
+				.filter((widget) => !widgetIds.has(widget.widgetId))
+				.map((widget) => `${preset.viewId}:${widget.widgetId}`)
+		);
+
+		expect(missing).toEqual([]);
+	});
+
+	it('keeps all visible default widgets inside allowed zones', () => {
+		const widgetsById = new Map(widgetRegistry.map((definition) => [definition.id, definition]));
+		const invalidZones = layoutPresets.flatMap((preset) =>
+			preset.widgets
+				.filter((widget) => {
+					if (!widget.visible) {
+						return false;
+					}
+
+					const definition = widgetsById.get(widget.widgetId);
+					return !definition || !definition.allowedZones.includes(widget.zoneId);
+				})
+				.map((widget) => `${preset.viewId}:${widget.widgetId}:${widget.zoneId}`)
+		);
+
+		expect(invalidZones).toEqual([]);
 	});
 });
 
