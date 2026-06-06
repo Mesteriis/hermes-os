@@ -43,6 +43,19 @@ const testWidgets: WidgetDefinition[] = [
 		canHide: true,
 		canAdd: true,
 		dataMode: 'static'
+	},
+	{
+		id: 'home-extra',
+		title: 'Extra',
+		viewScope: ['home'],
+		defaultZone: 'main',
+		allowedZones: ['main'],
+		minSize: { width: 260, height: 160 },
+		defaultSizeIntent: 'auto',
+		priority: 40,
+		canHide: true,
+		canAdd: true,
+		dataMode: 'static'
 	}
 ];
 
@@ -98,6 +111,14 @@ const orderedPreset: LayoutPreset = {
 			widgetId: 'home-later',
 			zoneId: 'main',
 			order: 2,
+			sizeIntent: 'auto',
+			highlight: 'none',
+			visible: true
+		},
+		{
+			widgetId: 'home-extra',
+			zoneId: 'main',
+			order: 4,
 			sizeIntent: 'auto',
 			highlight: 'none',
 			visible: true
@@ -177,14 +198,15 @@ describe('resolveLayout', () => {
 			presetVersion: 1,
 			hiddenWidgetIds: [],
 			zoneOverrides: {},
-			orderOverrides: { main: ['home-whats-new'] },
+			orderOverrides: { main: ['home-whats-new', 'home-later'] },
 			sizeIntentOverrides: {}
 		});
 
 		expect(resolved.widgetsByZone.main.map((widget) => widget.widgetId)).toEqual([
 			'home-whats-new',
+			'home-later',
 			'home-priorities',
-			'home-later'
+			'home-extra'
 		]);
 	});
 
