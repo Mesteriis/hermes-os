@@ -8,6 +8,7 @@
 		"dev": "vite dev",
 		"build": "vite build",
 		"lint:styles": "node scripts/check-no-inline-styles.mjs",
+		"capture:layout": "node scripts/capture-layout-screenshots.mjs",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
 		"check": "pnpm lint:styles && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
