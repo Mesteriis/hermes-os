@@ -1,3 +1,5 @@
+import type { LayoutSettings } from '$lib/layout';
+
 export type V1Status = {
 	version: string;
 	surfaces: {
@@ -28,6 +30,8 @@ export type ApplicationSetting = {
 export type ApplicationSettingsResponse = {
 	items: ApplicationSetting[];
 };
+
+export const FRONTEND_LAYOUT_SETTING_KEY = 'frontend.layout';
 
 export type ProviderAccount = {
 	account_id: string;
@@ -905,6 +909,19 @@ export async function saveApplicationSetting(
 		{ value },
 		'Setting update failed'
 	);
+}
+
+export function findFrontendLayoutSetting(settings: ApplicationSetting[]): ApplicationSetting | null {
+	return settings.find((setting) => setting.setting_key === FRONTEND_LAYOUT_SETTING_KEY) ?? null;
+}
+
+export async function saveFrontendLayoutSetting(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	value: LayoutSettings
+): Promise<ApplicationSetting> {
+	return saveApplicationSetting(baseUrl, token, actorId, FRONTEND_LAYOUT_SETTING_KEY, value);
 }
 
 export async function fetchProviderAccounts(
