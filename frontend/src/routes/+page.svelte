@@ -2759,132 +2759,146 @@
 							<p>{activeView.subtitle}</p>
 						</div>
 					</div>
-					<div class="metric-grid home-metrics">
-						{#each homeStats as metric}
-							<article class="metric-card">
-								<span>{metric.label}</span>
-								<div>
-									<strong>{metric.value}</strong>
-									<Icon icon={metric.icon} width="26" height="26" />
-								</div>
-								<small>↑ {metric.delta}</small>
+					<div class="widget-frame" data-widget-id="home-metrics" data-widget-hidden="false">
+						<div class="metric-grid home-metrics">
+							{#each homeStats as metric}
+								<article class="metric-card">
+									<span>{metric.label}</span>
+									<div>
+										<strong>{metric.value}</strong>
+										<Icon icon={metric.icon} width="26" height="26" />
+									</div>
+									<small>↑ {metric.delta}</small>
+								</article>
+							{/each}
+							<article class="metric-card focus-card">
+								<span>Focus Score</span>
+								<div class="score-ring"><strong>78</strong></div>
+								<small>Good ↑ 5</small>
 							</article>
-						{/each}
-						<article class="metric-card focus-card">
-							<span>Focus Score</span>
-							<div class="score-ring"><strong>78</strong></div>
-							<small>Good ↑ 5</small>
-						</article>
+						</div>
 					</div>
 				</div>
 
 				<div class="dashboard-grid">
-					<section class="panel feed-panel">
-						<header class="panel-title-row">
-							<div>
-								<h2>What's New</h2>
-								<p>Key changes and important updates</p>
-							</div>
-							<button type="button" class="ghost-button" disabled>All Types</button>
-						</header>
-						<div class="feed-list">
-							{#each whatsNew as item}
-								<article class="feed-row">
-									<span class="round-icon {item.tone}"><Icon icon={item.icon} width="22" height="22" /></span>
-									<div>
-										<strong>{item.title}</strong>
-										<p>{item.meta}</p>
-										{#if item.tag}<em>{item.tag}</em>{/if}
-									</div>
-									<time>{item.time}</time>
-								</article>
-							{/each}
-						</div>
-						<button type="button" class="link-row" disabled>View all events <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
-					</section>
-
-					<section class="panel priorities-panel">
-						<header class="panel-title-row">
-							<div>
-								<h2>Today's Priorities</h2>
-								<p>Focus on what matters most</p>
-							</div>
-						</header>
-						<div class="task-stack">
-							{#each tasks.slice(0, 5) as task}
-								<label>
-									<input type="checkbox" />
-									<span>
-										<strong>{task.title}</strong>
-										<small>{task.assignee} · {task.due}</small>
-									</span>
-									<em class:high={task.priority === 'High'}>{task.priority}</em>
-								</label>
-							{/each}
-						</div>
-						<button type="button" class="link-row" disabled>View all tasks <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
-					</section>
-
-					<section class="panel schedule-panel">
-						<header class="panel-title-row">
-							<div>
-								<h2>Upcoming</h2>
-								<p>Your schedule</p>
-							</div>
-						</header>
-						<div class="schedule-list">
-							<article><time>Today, May 12</time><strong>14:00 Call with Acme Corp</strong><span>16:30 Review Q2 Report</span></article>
-							<article><time>Tomorrow, May 13</time><strong>10:00 Project Hermes - Planning</strong><span>15:00 Design Review</span></article>
-						</div>
-						<button type="button" class="link-row" disabled>View full calendar <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
-					</section>
-
-					<aside class="stacked-rail">
-						<section class="panel mini-panel">
-							<header class="panel-title-row"><h2>People You Talked To</h2><button type="button" class="link-button" disabled>View all</button></header>
-							<div class="person-list">
-								{#each peopleTalked as person}
-									<article>
-										<img src="/assets/hermes-reference-avatar.png" alt="" />
-										<span><strong>{person.name}</strong><small>{person.meta}</small></span>
-										<Icon icon={person.icon} width="18" height="18" />
+					<div class="widget-frame" data-widget-id="home-whats-new" data-widget-hidden="false">
+						<section class="panel feed-panel">
+							<header class="panel-title-row">
+								<div>
+									<h2>What's New</h2>
+									<p>Key changes and important updates</p>
+								</div>
+								<button type="button" class="ghost-button" disabled>All Types</button>
+							</header>
+							<div class="feed-list">
+								{#each whatsNew as item}
+									<article class="feed-row">
+										<span class="round-icon {item.tone}"><Icon icon={item.icon} width="22" height="22" /></span>
+										<div>
+											<strong>{item.title}</strong>
+											<p>{item.meta}</p>
+											{#if item.tag}<em>{item.tag}</em>{/if}
+										</div>
+										<time>{item.time}</time>
 									</article>
 								{/each}
 							</div>
+							<button type="button" class="link-row" disabled>View all events <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
 						</section>
-						<section class="panel mini-panel">
-							<header class="panel-title-row"><h2>System Status</h2></header>
-							<ul class="status-list">
-								<li class:online={status}>All systems operational</li>
-								<li>AI Agents online <span>5/5</span></li>
-								<li>Data synchronized <span>2m ago</span></li>
-								<li>Local AI models <span>Ready</span></li>
-							</ul>
-							{#if statusError}<p class="inline-error">{statusError}</p>{/if}
+					</div>
+
+					<div class="widget-frame" data-widget-id="home-priorities" data-widget-hidden="false">
+						<section class="panel priorities-panel">
+							<header class="panel-title-row">
+								<div>
+									<h2>Today's Priorities</h2>
+									<p>Focus on what matters most</p>
+								</div>
+							</header>
+							<div class="task-stack">
+								{#each tasks.slice(0, 5) as task}
+									<label>
+										<input type="checkbox" />
+										<span>
+											<strong>{task.title}</strong>
+											<small>{task.assignee} · {task.due}</small>
+										</span>
+										<em class:high={task.priority === 'High'}>{task.priority}</em>
+									</label>
+								{/each}
+							</div>
+							<button type="button" class="link-row" disabled>View all tasks <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
 						</section>
+					</div>
+
+					<div class="widget-frame" data-widget-id="home-upcoming" data-widget-hidden="false">
+						<section class="panel schedule-panel">
+							<header class="panel-title-row">
+								<div>
+									<h2>Upcoming</h2>
+									<p>Your schedule</p>
+								</div>
+							</header>
+							<div class="schedule-list">
+								<article><time>Today, May 12</time><strong>14:00 Call with Acme Corp</strong><span>16:30 Review Q2 Report</span></article>
+								<article><time>Tomorrow, May 13</time><strong>10:00 Project Hermes - Planning</strong><span>15:00 Design Review</span></article>
+							</div>
+							<button type="button" class="link-row" disabled>View full calendar <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
+						</section>
+					</div>
+
+					<aside class="stacked-rail">
+						<div class="widget-frame" data-widget-id="home-people-talked-to" data-widget-hidden="false">
+							<section class="panel mini-panel">
+								<header class="panel-title-row"><h2>People You Talked To</h2><button type="button" class="link-button" disabled>View all</button></header>
+								<div class="person-list">
+									{#each peopleTalked as person}
+										<article>
+											<img src="/assets/hermes-reference-avatar.png" alt="" />
+											<span><strong>{person.name}</strong><small>{person.meta}</small></span>
+											<Icon icon={person.icon} width="18" height="18" />
+										</article>
+									{/each}
+								</div>
+							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="home-system-status" data-widget-hidden="false">
+							<section class="panel mini-panel">
+								<header class="panel-title-row"><h2>System Status</h2></header>
+								<ul class="status-list">
+									<li class:online={status}>All systems operational</li>
+									<li>AI Agents online <span>5/5</span></li>
+									<li>Data synchronized <span>2m ago</span></li>
+									<li>Local AI models <span>Ready</span></li>
+								</ul>
+								{#if statusError}<p class="inline-error">{statusError}</p>{/if}
+							</section>
+						</div>
 					</aside>
 				</div>
 
-				<section class="panel full-band">
-					<header class="panel-title-row">
-						<h2>Active Projects</h2>
-						<button type="button" class="link-button" onclick={() => (currentView = 'projects')}>View all projects</button>
-					</header>
-					<div class="project-card-row">
-						{#each projects as project}
-							<article class="compact-project">
-								<span class="round-icon {project.tone}"><Icon icon={project.icon} width="20" height="20" /></span>
-								<div>
-									<strong>{project.name}</strong>
-									<small>{project.kind}</small>
-								</div>
-								<progress class="progress" max="100" value={project.progress} aria-label={`${project.name} progress`}>{project.progress}%</progress>
-								<em>{project.progress}%</em>
-							</article>
-						{/each}
-						<button type="button" class="new-tile" disabled><Icon icon="tabler:plus" width="22" height="22" />New Project</button>
-					</div>
-				</section>
+				<div class="widget-frame" data-widget-id="home-active-projects" data-widget-hidden="false">
+					<section class="panel full-band">
+						<header class="panel-title-row">
+							<h2>Active Projects</h2>
+							<button type="button" class="link-button" onclick={() => (currentView = 'projects')}>View all projects</button>
+						</header>
+						<div class="project-card-row">
+							{#each projects as project}
+								<article class="compact-project">
+									<span class="round-icon {project.tone}"><Icon icon={project.icon} width="20" height="20" /></span>
+									<div>
+										<strong>{project.name}</strong>
+										<small>{project.kind}</small>
+									</div>
+									<progress class="progress" max="100" value={project.progress} aria-label={`${project.name} progress`}>{project.progress}%</progress>
+									<em>{project.progress}%</em>
+								</article>
+							{/each}
+							<button type="button" class="new-tile" disabled><Icon icon="tabler:plus" width="22" height="22" />New Project</button>
+						</div>
+					</section>
+				</div>
 			</section>
 		{:else if currentView === 'communications'}
 			<section class="communications-page">
