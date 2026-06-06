@@ -483,115 +483,129 @@ input {
 	min-height: var(--hh-widget-workbench);
 }
 
+/* Temporary visual sizing map until widget wrappers carry semantic size intent. */
 .widget-frame[data-widget-id='communications-message-detail'],
 .widget-frame[data-widget-id='knowledge-search-results'] {
-	min-height: calc(var(--hh-widget-unit) * 3);
+	min-height: calc(var(--hh-widget-row) * 3);
 }
 
 .widget-frame[data-widget-id='settings-application-list-editor'],
 .widget-frame[data-widget-id='knowledge-toolbar'] {
-	min-height: calc(var(--hh-widget-unit) * 5);
+	min-height: calc(var(--hh-widget-row) * 5);
 }
 
 .widget-frame[data-widget-id='tasks-candidate-review'] {
-	min-height: calc(var(--hh-widget-unit) * 6);
+	min-height: calc(var(--hh-widget-row) * 6);
 }
 
 .widget-frame[data-widget-id='projects-hero'] {
-	min-height: calc(var(--hh-widget-unit) * 7);
+	min-height: calc(var(--hh-widget-row) * 7);
 }
 
 .widget-frame[data-widget-id='ai-agent-list'] {
-	min-height: calc(var(--hh-widget-unit) * 2);
+	min-height: calc(var(--hh-widget-row) * 2);
 }
 
 .widget-frame[data-widget-id='home-system-status'],
 .widget-frame[data-widget-id='knowledge-graph-summary'],
 .widget-frame[data-widget-id='notes-metadata'] {
-	min-height: calc(var(--hh-widget-unit) * 8);
+	min-height: calc(var(--hh-widget-row) * 8);
 }
 
 .widget-frame[data-widget-id='tasks-metrics'],
 .widget-frame[data-widget-id='timeline-filters'],
 .widget-frame[data-widget-id='whatsapp-session-status'],
-.widget-frame[data-widget-id='ai-runtime-status'] {
-	min-height: calc(var(--hh-widget-unit) * 9);
+.widget-frame[data-widget-id='ai-runtime-status'],
+.widget-frame[data-widget-id='telegram-chat-list'],
+.widget-frame[data-widget-id='whatsapp-account-session-metadata'] {
+	min-height: calc(var(--hh-widget-row) * 9);
 }
 
 .widget-frame[data-widget-id='calendar-upcoming'] {
-	min-height: calc(var(--hh-widget-unit) * 10);
+	min-height: calc(var(--hh-widget-row) * 10);
+}
+
+.widget-frame[data-widget-id='settings-account-detail-status'] {
+	min-height: calc(var(--hh-widget-row) * 11);
 }
 
 .widget-frame[data-widget-id='contacts-information'],
 .widget-frame[data-widget-id='contacts-about'],
 .widget-frame[data-widget-id='contacts-relationship-strength'] {
-	min-height: calc(var(--hh-widget-unit) * 11);
+	min-height: calc(var(--hh-widget-row) * 11);
 }
 
 .widget-frame[data-widget-id='contacts-recent-interactions'],
 .widget-frame[data-widget-id='contacts-active-projects'],
 .widget-frame[data-widget-id='tasks-ai-refresh-status'] {
-	min-height: calc(var(--hh-widget-unit) * 12);
+	min-height: calc(var(--hh-widget-row) * 12);
 }
 
 .widget-frame[data-widget-id='telegram-account-status'],
 .widget-frame[data-widget-id='ai-runtime-metrics'],
 .widget-frame[data-widget-id='ai-selected-agent-detail'],
 .widget-frame[data-widget-id='settings-metrics'] {
-	min-height: calc(var(--hh-widget-unit) * 13);
+	min-height: calc(var(--hh-widget-row) * 13);
 }
 
 .widget-frame[data-widget-id='calendar-source-status'] {
-	min-height: calc(var(--hh-widget-unit) * 15);
+	min-height: calc(var(--hh-widget-row) * 15);
 }
 
 .widget-frame[data-widget-id='home-people-talked-to'] {
-	min-height: calc(var(--hh-widget-unit) * 17);
+	min-height: calc(var(--hh-widget-row) * 17);
 }
 
 .widget-frame[data-widget-id='home-active-projects'],
 .widget-frame[data-widget-id='knowledge-graph-canvas'] {
-	min-height: calc(var(--hh-widget-unit) * 18);
+	min-height: calc(var(--hh-widget-row) * 18);
 }
 
-.widget-frame[data-widget-id='home-whats-new'] {
-	min-height: calc(var(--hh-widget-unit) * 20);
+.widget-frame[data-widget-id='home-whats-new'],
+.widget-frame[data-widget-id='home-priorities'],
+.widget-frame[data-widget-id='home-upcoming'] {
+	min-height: calc(var(--hh-widget-row) * 26);
 }
 
 .widget-frame[data-widget-id='notes-list'] {
-	min-height: calc(var(--hh-widget-unit) * 24);
+	min-height: calc(var(--hh-widget-row) * 24);
 }
 
-.widget-frame[data-widget-id='documents-navigation'] {
-	min-height: calc(var(--hh-widget-unit) * 25);
+.widget-frame[data-widget-id='contacts-list'] {
+	min-height: calc(var(--hh-widget-row) * 30);
 }
 
 .widget-frame[data-widget-id='documents-related-context'] {
-	min-height: calc(var(--hh-widget-unit) * 27);
-}
-
-.widget-frame[data-widget-id='documents-list'] {
-	min-height: calc(var(--hh-widget-unit) * 28);
+	min-height: calc(var(--hh-widget-row) * 27);
 }
 
 .widget-frame[data-widget-id='notes-source-filters'] {
-	min-height: calc(var(--hh-widget-unit) * 30);
+	min-height: calc(var(--hh-widget-row) * 31);
+}
+
+.widget-frame[data-widget-id='documents-navigation'],
+.widget-frame[data-widget-id='documents-list'] {
+	min-height: calc(var(--hh-widget-row) * 34);
+}
+
+.widget-frame[data-widget-id='notes-related-projects-documents'] {
+	min-height: calc(var(--hh-widget-row) * 14);
 }
 
 .widget-frame[data-widget-id='telegram-selected-chat-metadata'] {
-	min-height: calc(var(--hh-widget-unit) * 31);
+	min-height: calc(var(--hh-widget-row) * 31);
 }
 
 .widget-frame[data-widget-id='timeline-stream'] {
-	min-height: calc(var(--hh-widget-unit) * 37);
+	min-height: calc(var(--hh-widget-row) * 37);
 }
 
 .widget-frame[data-widget-id='whatsapp-sync-controls'] {
-	min-height: calc(var(--hh-widget-unit) * 38);
+	min-height: calc(var(--hh-widget-row) * 38);
 }
 
 .widget-frame[data-widget-id='telegram-sync-controls'] {
-	min-height: calc(var(--hh-widget-unit) * 79);
+	min-height: calc(var(--hh-widget-row) * 79);
 }
 
 .widget-frame[data-widget-hidden='true'] {
@@ -860,7 +874,7 @@ h1 {
 
 .dashboard-grid {
 	display: grid;
-	grid-template-columns: minmax(380px, 1.05fr) minmax(300px, 0.83fr) minmax(280px, 0.76fr) 270px;
+	grid-template-columns: minmax(260px, 1.05fr) minmax(220px, 0.83fr) minmax(200px, 0.76fr) minmax(190px, 270px);
 	gap: 12px;
 	min-height: var(--hh-widget-workbench);
 }
@@ -1558,7 +1572,7 @@ input[type='checkbox'] {
 .docs-layout,
 .notes-layout {
 	display: grid;
-	grid-template-columns: 320px minmax(520px, 1fr) 310px;
+	grid-template-columns: minmax(240px, 0.85fr) minmax(420px, 1fr) minmax(240px, 310px);
 	gap: 12px;
 	min-height: var(--hh-widget-workbench-large);
 }
@@ -2339,7 +2353,7 @@ input[type='checkbox'] {
 }
 
 .docs-layout {
-	grid-template-columns: 220px minmax(640px, 1fr) 310px;
+	grid-template-columns: minmax(180px, 220px) minmax(460px, 1fr) minmax(240px, 310px);
 }
 
 .docs-table header {
@@ -2401,7 +2415,7 @@ input[type='checkbox'] {
 }
 
 .notes-layout {
-	grid-template-columns: 250px minmax(620px, 1fr) 310px;
+	grid-template-columns: minmax(190px, 250px) minmax(460px, 1fr) minmax(240px, 310px);
 }
 
 .notes-list {
@@ -3643,7 +3657,7 @@ input[type='checkbox'] {
 	display: grid;
 	grid-template-columns: 38px minmax(0, 1fr);
 	gap: 10px;
-	min-height: calc(var(--hh-widget-unit) * 5);
+	min-height: calc(var(--hh-widget-row) * 5);
 	border: 1px solid rgba(111, 205, 195, 0.1);
 	border-radius: var(--hh-radius-md);
 	background: rgba(4, 21, 24, 0.5);
@@ -4002,7 +4016,7 @@ input[type='checkbox'] {
 	}
 
 	.knowledge-canvas {
-		min-height: calc(var(--hh-widget-unit) * 18);
+		min-height: calc(var(--hh-widget-row) * 18);
 	}
 
 	.graph-node {
