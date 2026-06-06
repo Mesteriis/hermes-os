@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveLayout } from './resolver';
 import { defaultLayoutSettings, parseLayoutSettings } from './settings';
 import { LAYOUT_SCHEMA_VERSION } from './types';
-import type { LayoutPreset, WidgetDefinition } from './types';
+import type { LayoutPreset, ViewLayoutOverride, WidgetDefinition } from './types';
 
 const testWidgets: WidgetDefinition[] = [
 	{
@@ -27,6 +27,19 @@ const testWidgets: WidgetDefinition[] = [
 		minSize: { width: 260, height: 160 },
 		defaultSizeIntent: 'auto',
 		priority: 20,
+		canHide: true,
+		canAdd: true,
+		dataMode: 'static'
+	},
+	{
+		id: 'home-later',
+		title: 'Later',
+		viewScope: ['home'],
+		defaultZone: 'main',
+		allowedZones: ['main'],
+		minSize: { width: 260, height: 160 },
+		defaultSizeIntent: 'auto',
+		priority: 30,
 		canHide: true,
 		canAdd: true,
 		dataMode: 'static'
@@ -55,6 +68,36 @@ const testPreset: LayoutPreset = {
 			widgetId: 'home-priorities',
 			zoneId: 'main',
 			order: 1,
+			sizeIntent: 'auto',
+			highlight: 'none',
+			visible: true
+		}
+	]
+};
+
+const orderedPreset: LayoutPreset = {
+	...testPreset,
+	widgets: [
+		{
+			widgetId: 'home-whats-new',
+			zoneId: 'main',
+			order: 3,
+			sizeIntent: 'auto',
+			highlight: 'none',
+			visible: true
+		},
+		{
+			widgetId: 'home-priorities',
+			zoneId: 'main',
+			order: 1,
+			sizeIntent: 'auto',
+			highlight: 'none',
+			visible: true
+		},
+		{
+			widgetId: 'home-later',
+			zoneId: 'main',
+			order: 2,
 			sizeIntent: 'auto',
 			highlight: 'none',
 			visible: true
@@ -111,13 +154,13 @@ describe('resolveLayout', () => {
 		]);
 	});
 
-	it('applies hidden, zone, order and size overrides', () => {
+	it('applies hidden, zone and size overrides', () => {
 		const resolved = resolveLayout(testPreset, testWidgets, {
 			presetId: 'home-default',
 			presetVersion: 1,
 			hiddenWidgetIds: ['home-priorities'],
 			zoneOverrides: { 'home-whats-new': 'rail' },
-			orderOverrides: { rail: ['home-whats-new'] },
+			orderOverrides: {},
 			sizeIntentOverrides: { 'home-whats-new': 'wide' }
 		});
 
@@ -126,6 +169,23 @@ describe('resolveLayout', () => {
 			['home-whats-new', 'wide']
 		]);
 		expect(resolved.hiddenByUser.map((widget) => widget.widgetId)).toEqual(['home-priorities']);
+	});
+
+	it('applies order overrides before remaining widgets sorted by preset order', () => {
+		const resolved = resolveLayout(orderedPreset, testWidgets, {
+			presetId: 'home-default',
+			presetVersion: 1,
+			hiddenWidgetIds: [],
+			zoneOverrides: {},
+			orderOverrides: { main: ['home-whats-new'] },
+			sizeIntentOverrides: {}
+		});
+
+		expect(resolved.widgetsByZone.main.map((widget) => widget.widgetId)).toEqual([
+			'home-whats-new',
+			'home-priorities',
+			'home-later'
+		]);
 	});
 
 	it('ignores illegal zone overrides', () => {
@@ -142,5 +202,51 @@ describe('resolveLayout', () => {
 		expect(resolved.widgetsByZone.rail.map((widget) => widget.widgetId)).not.toContain(
 			'home-priorities'
 		);
+	});
+
+	it('reports preset widgets without matching definitions', () => {
+		const resolved = resolveLayout(
+			{
+				...testPreset,
+				widgets: [
+					...testPreset.widgets,
+					{
+						widgetId: 'home-missing',
+						zoneId: 'main',
+						order: 3,
+						sizeIntent: 'auto',
+						highlight: 'none',
+						visible: true
+					}
+				]
+			},
+			testWidgets,
+			undefined
+		);
+
+		expect(resolved.ignoredWidgetIds).toEqual(['home-missing']);
+		expect(Object.values(resolved.widgetsByZone).flat().map((widget) => widget.widgetId)).not.toContain(
+			'home-missing'
+		);
+	});
+
+	it('does not mutate preset, definition or override inputs', () => {
+		const override: ViewLayoutOverride = {
+			presetId: 'home-default',
+			presetVersion: 1,
+			hiddenWidgetIds: ['home-priorities'],
+			zoneOverrides: { 'home-whats-new': 'rail' },
+			orderOverrides: { rail: ['home-whats-new'] },
+			sizeIntentOverrides: { 'home-whats-new': 'wide' }
+		};
+		const originalPreset = JSON.stringify(testPreset);
+		const originalWidgets = JSON.stringify(testWidgets);
+		const originalOverride = JSON.stringify(override);
+
+		resolveLayout(testPreset, testWidgets, override);
+
+		expect(JSON.stringify(testPreset)).toBe(originalPreset);
+		expect(JSON.stringify(testWidgets)).toBe(originalWidgets);
+		expect(JSON.stringify(override)).toBe(originalOverride);
 	});
 });
