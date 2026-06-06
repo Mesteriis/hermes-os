@@ -30,6 +30,8 @@ describe('layout settings parser', () => {
 			}
 		});
 
+		expect(parsed.views.home?.presetId).toBe('home-default');
+		expect(parsed.views.home?.presetVersion).toBe(1);
 		expect(parsed.views.home?.hiddenWidgetIds).toEqual(['home-system-status']);
 		expect(parsed.views.home?.zoneOverrides).toEqual({ 'home-whats-new': 'rail' });
 		expect(parsed.views.home?.orderOverrides).toEqual({
