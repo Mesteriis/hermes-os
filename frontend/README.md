@@ -4,6 +4,17 @@ SvelteKit desktop UI for Hermes Hub, packaged by Tauri.
 
 Current scope is a desktop/laptop shell for the local backend APIs with provider account setup wizards for Gmail, iCloud and raw IMAP, V2 graph/project/task/contact/document workflow surfaces, and V3 local AI workflow surfaces. Mobile UI is out of scope while ADR-0031 is active.
 
+## UI Styling Contract
+
+The app-level CSS is loaded in this order from `src/routes/+layout.svelte`:
+
+1. `src/lib/styles/tokens.css` defines design tokens and browser root defaults.
+2. `src/lib/styles/app.css` defines global shell, view, state and responsive styles.
+
+`src/routes/+page.svelte` remains script and markup only for the current stabilization phase. Do not add inline `style=` attributes or embedded Svelte `<style>` blocks while the tokens-to-styles split is in place. Inline style attributes and embedded style blocks are rejected by `pnpm lint:styles`, and that guard is part of `pnpm check`.
+
+The supported desktop window minimum is `800 x 600`. At smaller widths or heights, `src/routes/+layout.svelte` shows a viewport guard instead of the app. This is a desktop window constraint, not mobile UI support; ADR-0031 still keeps mobile design and validation out of scope.
+
 ## Scaffold
 
 The requested scaffold command was attempted from `frontend/`:
@@ -31,6 +42,7 @@ pnpm tauri init --ci --app-name "Hermes Hub" --window-title "Hermes Hub" --front
 
 ```sh
 pnpm install
+pnpm lint:styles
 pnpm check
 pnpm build
 pnpm dev
@@ -116,6 +128,7 @@ The desktop shell is intentionally desktop/laptop scoped under ADR-0031. Current
 Validate frontend changes with:
 
 ```sh
+pnpm lint:styles
 pnpm check
 pnpm build
 ```

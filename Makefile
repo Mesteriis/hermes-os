@@ -23,7 +23,7 @@ help:
 	@printf '%s\n' '  make reset-data      Delete docker/data contents; requires CONFIRM=yes'
 	@printf '%s\n' '  make frontend-install Install frontend dependencies with pnpm'
 	@printf '%s\n' '  make frontend-dev    Run the SvelteKit frontend with Vite HMR'
-	@printf '%s\n' '  make frontend-check  Run SvelteKit type checks'
+	@printf '%s\n' '  make frontend-check  Run frontend style and SvelteKit type checks'
 	@printf '%s\n' '  make frontend-build  Build the SvelteKit frontend'
 	@printf '%s\n' '  make frontend-tauri-dev Run the Tauri desktop shell in development'
 	@printf '%s\n' '  make frontend-tauri-build Build the Tauri desktop shell'

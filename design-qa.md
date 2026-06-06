@@ -1,5 +1,6 @@
 **Findings**
 - No actionable P0/P1/P2 findings remain after the sidebar tab implementation pass.
+- No actionable P0/P1/P2 findings remain after the interface stabilization pass.
 
 **Open Questions**
 - The reference set contains no dedicated Timeline screen, so Timeline uses the existing Hermes activity-stream pattern rather than a pixel-matched source.
@@ -9,6 +10,10 @@
 - Implemented primary sidebar tab switching for Home, Communications, Timeline, Contacts, Projects, Tasks, Calendar, Documents, Notes, Knowledge Graph, and AI Agents.
 - Kept secondary controls, sub-tabs, filters, and creation actions disabled where backend behavior is not implemented.
 - Fixed post-QA layout issues in Home people list, Contacts filter/list styling, Knowledge Graph node details, Notes rows, focus ring styling, and invalid Iconify ids.
+- Split global frontend styling into `frontend/src/lib/styles/tokens.css` and `frontend/src/lib/styles/app.css`.
+- Removed inline `style=` usage from the Svelte and HTML sources.
+- Added a no-inline-style/no-embedded-style validation guard through `frontend/scripts/check-no-inline-styles.mjs`.
+- Added the `800 x 600` minimum desktop viewport guard; windows smaller than this show a blocking message instead of the app.
 
 **Follow-up Polish**
 - P3: Knowledge Graph can be upgraded with actual edge lines and pan/zoom behavior when graph interaction is in scope.
@@ -41,14 +46,20 @@ implementation screenshot path:
 - `/tmp/hermes-sidebar-tabs-qa/timeline.png`
 
 viewport:
-- `1600x1000`
+- Historical visual reference pass: `1600x1000`.
+- Current stabilization minimum: `800x600`.
+- Below-minimum guard checks: `799x600` and `800x599`.
 
 state:
 - Desktop-only per ADR-0031.
 - Sidebar primary navigation active state switched through every implemented tab.
+- Minimum supported desktop viewport is enforced by layout guard, not mobile responsive behavior.
 
 full-view comparison evidence:
 - Compared Home, Communications, Contacts, Projects, Tasks, Calendar, Documents, Notes, Knowledge Graph, and AI Agents source references against captured local screenshots at the same desktop viewport.
+- Rechecked Home, Communications, Timeline, Contacts, Projects, Tasks, Calendar, Documents, Notes, Knowledge Graph, Telegram, WhatsApp, AI Agents, and Settings at `800x600`.
+- Verified each primary view had no visible horizontal outliers at `800x600`.
+- Verified viewport guard appears below the supported minimum at `799x600` and `800x599`.
 
 focused region comparison evidence:
 - Checked sidebar active state and shortcut set per view.
@@ -64,5 +75,15 @@ patches made since previous QA pass:
 - Added Knowledge Graph key/value detail-list layout.
 - Added Notes row text constraints.
 - Replaced invalid Notes Iconify ids with existing Tabler icons.
+- Wrapped dense tab/filter/toolbar rows so Communications, Contacts, and Knowledge Graph no longer protrude at `800x600`.
+- Replaced inline progress, graph-chip, calendar-block, graph-edge-label and graph-node positioning styles with CSS classes or semantic attributes.
+- Moved the route-level stylesheet out of `+page.svelte` into `frontend/src/lib/styles/app.css`.
+
+validation:
+- `pnpm lint:styles`: passed.
+- `pnpm check`: passed.
+- `pnpm build`: passed.
+- `make frontend-check`: passed.
+- `git diff --check`: passed.
 
 final result: passed
