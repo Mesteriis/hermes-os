@@ -11,7 +11,7 @@ use hermes_hub_backend::communications::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
 use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::settings::ApplicationSettingsStore;
+use hermes_hub_backend::settings::{ApplicationSettingsStore, SettingValueKind};
 use hermes_hub_backend::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "settings-api-test-token";
@@ -61,6 +61,39 @@ async fn application_settings_store_lists_seeded_settings_against_postgres() {
             .iter()
             .all(|setting| !setting.setting_key.contains("password"))
     );
+}
+
+#[tokio::test]
+async fn application_settings_include_frontend_layout_against_postgres() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live frontend layout settings test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let store = ApplicationSettingsStore::new(database.pool().expect("configured pool").clone());
+    store
+        .repair_declared_settings()
+        .await
+        .expect("repair settings");
+
+    let settings = store.list_settings().await.expect("list settings");
+
+    let layout_setting = settings
+        .iter()
+        .find(|setting| setting.setting_key == "frontend.layout")
+        .expect("frontend layout setting");
+
+    assert_eq!(layout_setting.category, "frontend");
+    assert_eq!(layout_setting.value_kind, SettingValueKind::Json);
+    assert_eq!(layout_setting.value["schemaVersion"], json!(1));
+    assert!(layout_setting.value["views"].is_object());
+    assert!(layout_setting.is_editable);
 }
 
 #[tokio::test]

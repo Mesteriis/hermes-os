@@ -307,6 +307,24 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             is_editable: true,
         },
         DeclaredApplicationSetting {
+            setting_key: "frontend.layout",
+            category: "frontend",
+            value_kind: SettingValueKind::Json,
+            default_value: json!({
+                "schemaVersion": 1,
+                "views": {}
+            }),
+            label: "Frontend layout",
+            description: "Desktop widget layout preset selections and user overrides. Stores layout metadata only, never message bodies, document text or secrets.",
+            metadata: json!({
+                "ui_control": "json",
+                "schema_version": 1,
+                "stores_private_content": false,
+                "restart_required": false
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
             setting_key: "ai.ollama_base_url",
             category: "ai",
             value_kind: SettingValueKind::String,
