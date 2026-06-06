@@ -423,8 +423,11 @@
 	});
 	let applicationSettings = $state<ApplicationSetting[]>([]);
 	let layoutSettings = $state<LayoutSettings>(defaultLayoutSettings());
+	let isLayoutEditing = $state(false);
+	let layoutDraft = $state<LayoutSettings | null>(null);
 	let layoutError = $state('');
-	const activeLayout = $derived(resolveActiveLayout(currentView, layoutSettings));
+	const effectiveLayoutSettings = $derived(layoutDraft ?? layoutSettings);
+	const activeLayout = $derived(resolveActiveLayout(currentView, effectiveLayoutSettings));
 	let providerAccounts = $state<ProviderAccount[]>([]);
 	let settingDrafts = $state<Record<string, string>>({});
 	let settingsError = $state('');
@@ -1484,6 +1487,35 @@
 
 	function checkboxEventValue(event: Event) {
 		return (event.currentTarget as HTMLInputElement).checked ? 'true' : 'false';
+	}
+
+	function cloneLayoutSettings(settings: LayoutSettings): LayoutSettings {
+		return structuredClone($state.snapshot(settings));
+	}
+
+	function startLayoutEditing() {
+		layoutDraft = cloneLayoutSettings(layoutSettings);
+		isLayoutEditing = true;
+		layoutError = '';
+	}
+
+	function cancelLayoutEditing() {
+		layoutDraft = null;
+		isLayoutEditing = false;
+		layoutError = '';
+	}
+
+	function resetCurrentViewLayout() {
+		const layoutViewId = activeLayout?.preset.viewId;
+		if (!layoutViewId) {
+			return;
+		}
+
+		const draft = layoutDraft ?? cloneLayoutSettings(layoutSettings);
+		const views = { ...draft.views };
+		delete views[layoutViewId];
+		layoutDraft = { ...draft, views };
+		layoutError = '';
 	}
 
 	function resolveActiveLayout(viewId: ViewId, settings: LayoutSettings): ResolvedLayout | null {
@@ -2749,6 +2781,19 @@
 			</div>
 		</header>
 
+		<div class="layout-edit-controls" aria-label="Widget layout controls">
+			{#if !isLayoutEditing}
+				<button type="button" class="ghost-button" onclick={startLayoutEditing}>
+					<Icon icon="tabler:layout-dashboard" width="16" height="16" />
+					Edit Layout
+				</button>
+			{:else}
+				<button type="button" class="ghost-button" onclick={cancelLayoutEditing}>Cancel</button>
+				<button type="button" class="ghost-button" onclick={resetCurrentViewLayout}>Reset</button>
+				<button type="button" class="primary-button" disabled>Save</button>
+			{/if}
+		</div>
+
 		{#if currentView === 'home'}
 			<section class="home-page">
 				<div class="hero-row">
@@ -2759,7 +2804,7 @@
 							<p>{activeView.subtitle}</p>
 						</div>
 					</div>
-					<div class="widget-frame" data-widget-id="home-metrics" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-metrics" data-widget-hidden="false">
 						<div class="metric-grid home-metrics">
 							{#each homeStats as metric}
 								<article class="metric-card">
@@ -2781,7 +2826,7 @@
 				</div>
 
 				<div class="dashboard-grid">
-					<div class="widget-frame" data-widget-id="home-whats-new" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-whats-new" data-widget-hidden="false">
 						<section class="panel feed-panel">
 							<header class="panel-title-row">
 								<div>
@@ -2807,7 +2852,7 @@
 						</section>
 					</div>
 
-					<div class="widget-frame" data-widget-id="home-priorities" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-priorities" data-widget-hidden="false">
 						<section class="panel priorities-panel">
 							<header class="panel-title-row">
 								<div>
@@ -2831,7 +2876,7 @@
 						</section>
 					</div>
 
-					<div class="widget-frame" data-widget-id="home-upcoming" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-upcoming" data-widget-hidden="false">
 						<section class="panel schedule-panel">
 							<header class="panel-title-row">
 								<div>
@@ -2848,7 +2893,7 @@
 					</div>
 
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="home-people-talked-to" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-people-talked-to" data-widget-hidden="false">
 							<section class="panel mini-panel">
 								<header class="panel-title-row"><h2>People You Talked To</h2><button type="button" class="link-button" disabled>View all</button></header>
 								<div class="person-list">
@@ -2862,7 +2907,7 @@
 								</div>
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="home-system-status" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-system-status" data-widget-hidden="false">
 							<section class="panel mini-panel">
 								<header class="panel-title-row"><h2>System Status</h2></header>
 								<ul class="status-list">
@@ -2877,7 +2922,7 @@
 					</aside>
 				</div>
 
-				<div class="widget-frame" data-widget-id="home-active-projects" data-widget-hidden="false">
+				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-active-projects" data-widget-hidden="false">
 					<section class="panel full-band">
 						<header class="panel-title-row">
 							<h2>Active Projects</h2>
@@ -2922,7 +2967,7 @@
 					<button type="button" disabled>More <Icon icon="tabler:chevron-down" width="14" height="14" /></button>
 				</div>
 				<div class="three-pane communications-grid">
-					<div class="widget-frame" data-widget-id="communications-conversation-list" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-conversation-list" data-widget-hidden="false">
 						<section class="panel conversation-list">
 							<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search conversations..." /></label>
 							{#if isCommunicationsLoading}
@@ -2950,7 +2995,7 @@
 							{/if}
 						</section>
 					</div>
-					<div class="widget-frame" data-widget-id="communications-message-detail" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-message-detail" data-widget-hidden="false">
 						<section class="panel chat-pane">
 							{#if selectedCommunication}
 								<header>
@@ -2992,7 +3037,7 @@
 						</section>
 					</div>
 					<aside class="context-rail">
-						<div class="widget-frame" data-widget-id="communications-sender-profile" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-sender-profile" data-widget-hidden="false">
 							<section class="panel profile-panel">
 								<div class="profile-head"><img src="/assets/hermes-reference-avatar.png" alt="" /><div><h2>{selectedCommunication ? senderLabel(selectedCommunication.sender) : 'No sender selected'}</h2><p>{selectedCommunication ? communicationChannelLabel(selectedCommunication.channel_kind) : 'No channel'}</p><small>{selectedCommunication ? senderEmail(selectedCommunication.sender) : 'No local message selected'}</small></div></div>
 								<div class="quick-icons">
@@ -3003,16 +3048,16 @@
 								</div>
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="communications-summary" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-summary" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Summary</h2><p>{selectedCommunication ? `Stored from ${selectedCommunication.account_id}. Channel ${communicationChannelLabel(selectedCommunication.channel_kind)}. Provider record ${selectedCommunication.provider_record_id}.` : 'Local communication metadata will appear after messages are imported.'}</p><button type="button" class="link-row" disabled>View full profile <Icon icon="tabler:arrow-right" width="15" height="15" /></button></section>
 						</div>
-						<div class="widget-frame" data-widget-id="communications-message-metadata" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-message-metadata" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Message Metadata</h2>{#if selectedCommunication}<ul class="detail-list"><li><Icon icon="tabler:users" width="17" height="17" /> {selectedCommunication.recipients.length} recipients</li><li><Icon icon="tabler:paperclip" width="17" height="17" /> {selectedCommunication.attachment_count} attachments</li><li><Icon icon="tabler:clock" width="17" height="17" /> {messageTime(selectedCommunication)}</li></ul>{:else}<p>No message selected.</p>{/if}</section>
 						</div>
-						<div class="widget-frame" data-widget-id="communications-related-projects" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-related-projects" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Related Projects</h2>{#each projects.slice(0, 2) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
 						</div>
-						<div class="widget-frame" data-widget-id="communications-active-tasks" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-active-tasks" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Active Tasks</h2>{#each tasks.slice(0, 3) as task}<label class="mini-check"><input type="checkbox" />{task.title}<em>{task.due.split(' ')[0]}</em></label>{/each}</section>
 						</div>
 					</aside>
@@ -3021,7 +3066,7 @@
 		{:else if currentView === 'contacts'}
 			<section class="contacts-page">
 				<div class="contacts-layout">
-					<div class="widget-frame" data-widget-id="contacts-list" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-list" data-widget-hidden="false">
 						<section class="panel contacts-list-panel">
 							<header>
 								<div><h1>Contacts</h1><p>642 contacts</p></div>
@@ -3043,7 +3088,7 @@
 						</section>
 					</div>
 					<section class="contact-detail">
-						<div class="widget-frame" data-widget-id="contacts-hero" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-hero" data-widget-hidden="false">
 							<header class="contact-hero panel">
 								<img src="/assets/hermes-reference-avatar.png" alt="" />
 								<div><h1>{selectedContact.name}</h1><p>{selectedContact.role} at {selectedContact.company}</p><small>Online</small></div>
@@ -3064,7 +3109,7 @@
 							<button type="button" disabled>Notes</button>
 						</div>
 						<div class="contact-cards">
-							<div class="widget-frame" data-widget-id="contacts-information" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-information" data-widget-hidden="false">
 								<section class="panel info-card">
 									<h2>Contact Information</h2>
 									<ul class="detail-list">
@@ -3075,25 +3120,25 @@
 									</ul>
 								</section>
 							</div>
-							<div class="widget-frame" data-widget-id="contacts-about" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-about" data-widget-hidden="false">
 								<section class="panel info-card"><h2>About</h2><p>John is a strategic consulting partner. We have been working together since 2021 on multiple projects including Hermes Hub and IRIS platform development.</p><div class="tag-cloud"><span>Decision Maker</span><span>Executive</span><span>Strategic</span><span>Tech Enthusiast</span></div></section>
 							</div>
-							<div class="widget-frame" data-widget-id="contacts-relationship-strength" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-relationship-strength" data-widget-hidden="false">
 								<section class="panel info-card"><h2>Relationship Strength</h2><div class="big-score">85</div><strong>Strong</strong><p>Last interaction 2 hours ago</p></section>
 							</div>
-							<div class="widget-frame span-2" data-widget-id="contacts-recent-interactions" data-widget-hidden="false">
+							<div class="widget-frame span-2" class:editing={isLayoutEditing} data-widget-id="contacts-recent-interactions" data-widget-hidden="false">
 								<section class="panel info-card span-2"><h2>Recent Interactions</h2>{#each whatsNew.slice(0, 3) as item}<div class="feed-row compact-row"><span class="round-icon {item.tone}"><Icon icon={item.icon} width="18" height="18" /></span><div><strong>{item.title}</strong><p>{item.meta}</p></div><time>{item.time}</time></div>{/each}</section>
 							</div>
-							<div class="widget-frame" data-widget-id="contacts-active-projects" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-active-projects" data-widget-hidden="false">
 								<section class="panel info-card"><h2>Active Projects</h2>{#each projects.slice(0, 3) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
 							</div>
 						</div>
 					</section>
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="contacts-ai-summary" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-ai-summary" data-widget-hidden="false">
 							<section class="panel info-card"><h2>AI Summary</h2><p>John is a key strategic partner and decision maker. You have a strong professional relationship with frequent communication across multiple projects.</p></section>
 						</div>
-						<div class="widget-frame" data-widget-id="contacts-identity-review" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-identity-review" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Contact Identity Review</h2>
 								<p class="identity-note">Contact merges are only suggested and are not applied until confirmed.</p>
@@ -3153,10 +3198,10 @@
 								{/if}
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="contacts-related-documents" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-related-documents" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Related Documents</h2>{#each documents.slice(0, 4) as doc}<div class="doc-mini"><Icon icon={doc.icon} width="20" height="20" /><span><strong>{doc.name}</strong><small>{doc.size} · {doc.date}</small></span></div>{/each}</section>
 						</div>
-						<div class="widget-frame" data-widget-id="contacts-recent-notes" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-recent-notes" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Recent Notes</h2><p>Discussed expansion to EU market</p><p>Prefers email for official communication</p><p>Interested in AI/ML integration</p></section>
 						</div>
 					</aside>
@@ -3165,7 +3210,7 @@
 		{:else if currentView === 'projects'}
 			<section class="projects-page">
 				{#if projectsError && !selectedProjectRecord}
-					<div class="widget-frame" data-widget-id="projects-hero" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-hero" data-widget-hidden="false">
 						<section class="panel info-card project-empty-state">
 							<Icon icon="tabler:alert-circle" width="28" height="28" />
 							<h2>Projects unavailable</h2>
@@ -3174,7 +3219,7 @@
 						</section>
 					</div>
 				{:else if !selectedProjectRecord}
-					<div class="widget-frame" data-widget-id="projects-hero" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-hero" data-widget-hidden="false">
 						<section class="panel info-card project-empty-state">
 							<Icon icon="tabler:cube" width="30" height="30" />
 							<h2>No projects returned</h2>
@@ -3182,7 +3227,7 @@
 						</section>
 					</div>
 				{:else}
-					<div class="widget-frame" data-widget-id="projects-hero" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-hero" data-widget-hidden="false">
 						<header class="project-hero panel">
 							<div class="project-logo"><Icon icon="tabler:cube" width="48" height="48" /></div>
 							<div>
@@ -3193,7 +3238,7 @@
 							<button type="button" class="primary-button" onclick={() => void prepareAiBrief(selectedProjectRecord.project_id)} disabled={isAiMeetingPrepSubmitting}><Icon icon="tabler:calendar-stats" width="16" height="16" />Prepare brief</button>
 						</header>
 					</div>
-					<div class="widget-frame" data-widget-id="projects-metadata-strip" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-metadata-strip" data-widget-hidden="false">
 						<div class="project-meta-strip panel">
 							<article><span>Owner</span><strong>{selectedProjectRecord.owner_display_name}</strong></article>
 							<article><span>People</span><strong>{formatNumber(selectedProjectStats.people_count)}</strong></article>
@@ -3203,7 +3248,7 @@
 						</div>
 					</div>
 					{#if projectSummaries.length > 1}
-						<div class="widget-frame" data-widget-id="projects-switcher" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-switcher" data-widget-hidden="false">
 							<div class="project-switcher panel">
 								{#each projectSummaries as item}
 									<button
@@ -3219,7 +3264,7 @@
 							</div>
 						</div>
 					{/if}
-					<div class="widget-frame" data-widget-id="projects-section-tabs" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-section-tabs" data-widget-hidden="false">
 						<div class="section-tabs">
 							<button type="button" class="active">Overview</button>
 							<button type="button" disabled>Communications <em>{selectedProjectStats.message_count}</em></button>
@@ -3236,7 +3281,7 @@
 						<p class="inline-error">{projectsError}</p>
 					{/if}
 					<div class="project-dashboard-grid">
-						<div class="widget-frame" data-widget-id="projects-summary" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-summary" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Project Summary</h2>
 								<div class="summary-numbers">
@@ -3247,7 +3292,7 @@
 								</div>
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="projects-graph-preview" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-graph-preview" data-widget-hidden="false">
 							<section class="panel graph-card-large">
 								<h2>Knowledge Graph</h2>
 								<div class="radial-graph">
@@ -3259,7 +3304,7 @@
 								</div>
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="projects-timeline" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-timeline" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Project Timeline</h2>
 								{#if selectedProjectDetail?.timeline.length}
@@ -3275,7 +3320,7 @@
 								{/if}
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="projects-recent-communications" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-recent-communications" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Recent Communications</h2>
 								{#if selectedProjectDetail?.recent_messages.length}
@@ -3291,7 +3336,7 @@
 								{/if}
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="projects-top-documents" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-top-documents" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Top Documents</h2>
 								{#if selectedProjectDetail?.documents.length}
@@ -3306,7 +3351,7 @@
 								{/if}
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="projects-source-evidence" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-source-evidence" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Source Evidence</h2>
 								<div class="summary-numbers compact">
@@ -3315,7 +3360,7 @@
 								</div>
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="projects-open-promises" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-open-promises" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Open Promises</h2>
 								<p class="muted-copy">No task candidates connected to this project.</p>
@@ -3323,7 +3368,7 @@
 							</section>
 						</div>
 						<aside class="stacked-rail project-side">
-							<div class="widget-frame" data-widget-id="projects-health" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-health" data-widget-hidden="false">
 								<section class="panel info-card">
 									<h2>Project Health</h2>
 									<div class="health-row"><span>Status</span><strong>{projectStatusLabel(selectedProjectRecord.status)}</strong></div>
@@ -3331,7 +3376,7 @@
 									<div class="health-row"><span>Graph Links</span><strong>{formatNumber(selectedProjectStats.graph_connection_count)}</strong></div>
 								</section>
 							</div>
-							<div class="widget-frame" data-widget-id="projects-key-people" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-key-people" data-widget-hidden="false">
 								<section class="panel info-card">
 									<h2>Key People</h2>
 									{#if selectedProjectDetail?.key_people.length}
@@ -3347,7 +3392,7 @@
 									{/if}
 								</section>
 							</div>
-							<div class="widget-frame" data-widget-id="projects-related-projects" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-related-projects" data-widget-hidden="false">
 								<section class="panel info-card">
 									<h2>Related Projects</h2>
 									{#if relatedProjectSummaries.length}
@@ -3371,7 +3416,7 @@
 			<section class="tasks-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:hexagon" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
-					<div class="widget-frame inline-metrics" data-widget-id="tasks-metrics" data-widget-hidden="false">
+					<div class="widget-frame inline-metrics" class:editing={isLayoutEditing} data-widget-id="tasks-metrics" data-widget-hidden="false">
 						<div class="metric-grid inline-metrics">
 							<article class="metric-card">
 								<span>Active Tasks</span>
@@ -3396,7 +3441,7 @@
 					<p class="inline-error">{tasksError}</p>
 				{/if}
 				<div class="tasks-layout">
-					<div class="widget-frame" data-widget-id="tasks-active-list" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="tasks-active-list" data-widget-hidden="false">
 						<section class="panel task-table">
 							<h3 class="task-group">Active Tasks <em>{activeTasks.length}</em></h3>
 							<div class="table-head task-table-head"><span>Task</span><span>Source</span><span>Project</span><span>Created</span><span>Status</span></div>
@@ -3410,7 +3455,7 @@
 								{/each}
 							{/if}
 
-							<div class="widget-frame" data-widget-id="tasks-candidate-review" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="tasks-candidate-review" data-widget-hidden="false">
 								<h3 class="task-group">Review Queue <em>{suggestedTaskCandidates.length}</em></h3>
 								<div class="table-head task-table-head"><span>Candidate</span><span>Source</span><span>Project</span><span>Confidence</span><span>Action</span></div>
 								{#if isTasksLoading}
@@ -3435,10 +3480,10 @@
 						</section>
 					</div>
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="tasks-ai-refresh-status" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="tasks-ai-refresh-status" data-widget-hidden="false">
 							<section class="panel chart-panel"><h2>Review Stats</h2><div class="donut"><strong>{taskCandidates.length}</strong><span>Suggestions</span></div><ul><li>{`${suggestedTaskCandidates.length} Suggested`}</li><li>{`${activeTasks.length} Active`}</li><li>{`${taskCandidates.length - suggestedTaskCandidates.length - activeTasks.length} Done`}</li></ul></section>
 						</div>
-						<div class="widget-frame" data-widget-id="tasks-context" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="tasks-context" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Recent Candidate Signals</h2>
 								{#if suggestedTaskCandidates.length === 0}
@@ -3450,7 +3495,7 @@
 								{/if}
 							</section>
 						</div>
-						<div class="widget-frame" data-widget-id="tasks-deadlines-priority" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="tasks-deadlines-priority" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Active Task Sources</h2>{#each ['message','document'] as source}<div class="bar-row"><span>{source}</span><div><i></i></div></div>{/each}</section>
 						</div>
 					</aside>
@@ -3458,7 +3503,7 @@
 			</section>
 		{:else if currentView === 'calendar'}
 			<section class="calendar-page">
-				<div class="widget-frame" data-widget-id="calendar-toolbar" data-widget-hidden="false">
+				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="calendar-toolbar" data-widget-hidden="false">
 					<div class="view-header">
 						<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:calendar" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
 						<div class="section-tabs pill-tabs"><button type="button" disabled>Day</button><button type="button" class="active">Week</button><button type="button" disabled>Month</button><button type="button" disabled>Agenda</button></div>
@@ -3467,7 +3512,7 @@
 				</div>
 				<div class="filter-bar"><button type="button" disabled>All Accounts (8)</button><button type="button" disabled>All Calendars (24)</button><button type="button" disabled>All Event Types</button><button type="button" disabled>Filters</button></div>
 				<div class="calendar-layout">
-					<div class="widget-frame" data-widget-id="calendar-week-grid" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="calendar-week-grid" data-widget-hidden="false">
 						<section class="panel week-board">
 							<div class="week-header">{#each weekColumns as day}<strong>{day}</strong>{/each}</div>
 							<div class="time-grid">
@@ -3480,10 +3525,10 @@
 						</section>
 					</div>
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="calendar-upcoming" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="calendar-upcoming" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Upcoming Events</h2>{#each ['1:1 with Maria', 'Roadmap Review', 'Product Review', 'Engineering Sync', 'Architecture Discussion'] as event, index}<div class="deadline"><span>{index < 2 ? 'Today' : 'Tomorrow'} · {event}</span><time>{index + 9}:00</time></div>{/each}</section>
 						</div>
-						<div class="widget-frame stacked-rail" data-widget-id="calendar-source-status" data-widget-hidden="false">
+						<div class="widget-frame stacked-rail" class:editing={isLayoutEditing} data-widget-id="calendar-source-status" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Calendars</h2>{#each ['Google Work', 'Google Personal', 'Microsoft Work', 'YouTrack Events'] as item}<label class="mini-check"><input type="checkbox" checked />{item}<em></em></label>{/each}<button type="button" class="link-row" disabled>Add Calendar</button></section>
 							<section class="panel info-card"><h2>Time Insights</h2>{#each ['Meetings 18h 30m', 'Focus Time 12h 15m', 'Personal 8h 45m', 'Other 3h 30m'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
 						</div>
@@ -3496,7 +3541,7 @@
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:file-text" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
 					<button type="button" class="primary-button" disabled>Upload</button>
 				</div>
-				<div class="widget-frame" data-widget-id="documents-source-cards" data-widget-hidden="false">
+				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="documents-source-cards" data-widget-hidden="false">
 					<div class="source-strip">
 						{#each ['Google Drive 1,243', 'OneDrive 812', 'Dropbox 342', 'Notion 256'] as source, index}
 							<article class="source-card"><Icon icon={index === 0 ? 'tabler:brand-google-drive' : index === 1 ? 'tabler:cloud' : index === 2 ? 'tabler:brand-dropbox' : 'tabler:brand-notion'} width="28" height="28" /><span>{source}</span></article>
@@ -3506,10 +3551,10 @@
 				</div>
 				<div class="filter-bar"><button type="button" disabled>All Accounts</button><button type="button" disabled>All Types</button><button type="button" disabled>All Projects</button><button type="button" disabled>All Folders</button><button type="button" disabled>Filters</button></div>
 				<div class="docs-layout">
-					<div class="widget-frame" data-widget-id="documents-navigation" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="documents-navigation" data-widget-hidden="false">
 						<aside class="left-panels"><section class="panel info-card"><h2>Smart Collections</h2>{#each ['Recently Added 48', 'Recently Opened 24', 'Important 32', 'Shared with Me 18', 'Requires Review 7', 'Contracts & Legal 23', 'Financial 15'] as item}<div class="collection-row">{item}</div>{/each}</section><section class="panel info-card"><h2>My Folders</h2>{#each ['Hermes Hub', 'Projects', 'Personal', 'Work', 'Archive 2024', 'Clients', 'References'] as folder}<div class="collection-row"><Icon icon="tabler:folder" width="16" height="16" />{folder}</div>{/each}</section></aside>
 					</div>
-					<div class="widget-frame" data-widget-id="documents-list" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="documents-list" data-widget-hidden="false">
 						<section class="panel docs-table">
 							<header><h2>Hermes Hub</h2><div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Documents <em>142</em></button><button type="button" disabled>Folders <em>16</em></button><button type="button" disabled>Links <em>28</em></button><button type="button" disabled>Activity</button></div></header>
 							<div class="category-grid">{#each ['Architecture 23 documents','Product 31 documents','Design 18 documents','Meetings 24 documents','Contracts 12 documents','Research 15 documents','Reports 11 documents','Other 8 documents'] as category}<article><Icon icon="tabler:folder" width="20" height="20" /><span>{category}</span></article>{/each}</div>
@@ -3520,7 +3565,7 @@
 						</section>
 					</div>
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="documents-processing-jobs" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="documents-processing-jobs" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Document Processing</h2>
 								{#if isDocumentProcessingJobsLoading}
@@ -3553,7 +3598,7 @@
 								{/if}
 							</section>
 						</div>
-						<div class="widget-frame stacked-rail" data-widget-id="documents-related-context" data-widget-hidden="false">
+						<div class="widget-frame stacked-rail" class:editing={isLayoutEditing} data-widget-id="documents-related-context" data-widget-hidden="false">
 							<section class="panel chart-panel"><h2>Documents Insights</h2><strong>2,653</strong><span>Total Documents</span><div class="donut small"><strong>24%</strong></div></section>
 							<section class="panel info-card"><h2>Document Types</h2>{#each ['PDF 1,234 (46%)', 'Documents 623 (23%)', 'Spreadsheets 312 (12%)', 'Presentations 198 (7%)', 'Images 142 (5%)'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
 							<section class="panel info-card"><h2>Recent Activity</h2>{#each contactList.slice(1,5) as person}<div class="person-compact"><img src="/assets/hermes-reference-avatar.png" alt="" /><span><strong>{person.name}</strong><small>updated a document</small></span></div>{/each}</section>
@@ -3564,7 +3609,7 @@
 		{:else if currentView === 'notes'}
 			<section class="notes-page">
 				<div class="notes-layout">
-					<div class="widget-frame" data-widget-id="notes-source-filters" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="notes-source-filters" data-widget-hidden="false">
 						<aside class="left-panels">
 							<section class="panel info-card"><h2>Sources</h2>{#each ['Apple Notes 1,243','Obsidian 872','Anytype 532','Gmail 1,156','Outlook 623'] as source}<div class="collection-row">{source}</div>{/each}<button type="button" class="link-row" disabled>Add Source</button></section>
 							<section class="panel info-card"><h2>Collections</h2>{#each ['Inbox 231','Starred 128','Today 89','To Review 74','Personal 312','Projects 482','Ideas 156','Research 203','Archive 1,024'] as item}<div class="collection-row">{item}</div>{/each}</section>
@@ -3578,7 +3623,7 @@
 							<button type="button" class="primary-button" disabled>New Note</button>
 						</div>
 						<div class="filter-bar"><button type="button" disabled>All Sources</button><button type="button" disabled>All Types</button><button type="button" disabled>All Collections</button><button type="button" disabled>All Tags</button><button type="button" disabled>Filters</button><button type="button" disabled>Sort: Updated</button></div>
-						<div class="widget-frame" data-widget-id="notes-list" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="notes-list" data-widget-hidden="false">
 							<section class="notes-list panel">
 								<h3>Today</h3>{#each notes.slice(0,4) as note}<article><Icon icon={note.icon} width="22" height="22" /><div><strong>{note.title}</strong><p>{note.body}</p><small>{note.source} · {note.time}</small></div><em>{note.tag}</em></article>{/each}
 								<h3>Yesterday</h3>{#each notes.slice(4) as note}<article><Icon icon={note.icon} width="22" height="22" /><div><strong>{note.title}</strong><p>{note.body}</p><small>{note.source} · {note.time}</small></div><em>{note.tag}</em></article>{/each}
@@ -3586,10 +3631,10 @@
 						</div>
 					</section>
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="notes-metadata" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="notes-metadata" data-widget-hidden="false">
 							<section class="panel chart-panel"><h2>Notes Insights</h2><div class="donut"><strong>4,426</strong><span>Total Notes</span></div></section>
 						</div>
-						<div class="widget-frame stacked-rail" data-widget-id="notes-related-projects-documents" data-widget-hidden="false">
+						<div class="widget-frame stacked-rail" class:editing={isLayoutEditing} data-widget-id="notes-related-projects-documents" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Activity</h2>{#each ['You created a note','Maria Petrova shared a note','Email processed','Note linked to project'] as item}<div class="deadline"><span>{item}</span><time>10:42</time></div>{/each}</section>
 							<section class="panel info-card"><h2>Unprocessed Items</h2>{#each ['23 Emails','34 Apple Notes','12 Attachments','8 Web Clippings'] as item}<div class="collection-row">{item}</div>{/each}<button type="button" class="link-row" disabled>Process All</button></section>
 						</div>
@@ -3618,7 +3663,7 @@
 
 				<div class="knowledge-layout">
 					<section class="panel graph-workbench">
-						<div class="widget-frame" data-widget-id="knowledge-toolbar" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="knowledge-toolbar" data-widget-hidden="false">
 							<div class="graph-toolbar">
 								<form
 									class="graph-search-form"
@@ -3646,7 +3691,7 @@
 							</div>
 						</div>
 
-						<div class="widget-frame" data-widget-id="knowledge-search-results" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="knowledge-search-results" data-widget-hidden="false">
 							<div
 								class="graph-search-strip"
 								aria-live="polite"
@@ -3718,7 +3763,7 @@
 							</div>
 						</div>
 
-						<div class="widget-frame" data-widget-id="knowledge-graph-canvas" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="knowledge-graph-canvas" data-widget-hidden="false">
 							<div class="knowledge-canvas" aria-busy={isGraphNeighborhoodLoading}>
 								{#if graphError && !graphSummary}
 									<div class="graph-state-card error">
@@ -3803,7 +3848,7 @@
 					</section>
 
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="knowledge-node-inspector" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="knowledge-node-inspector" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Selected Node</h2>
 								{#if selectedGraphNode}
@@ -3831,7 +3876,7 @@
 							</section>
 						</div>
 
-						<div class="widget-frame" data-widget-id="knowledge-connections" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="knowledge-connections" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Connections</h2>
 								{#if graphNeighborCounts.length > 0}
@@ -3847,7 +3892,7 @@
 							</section>
 						</div>
 
-						<div class="widget-frame" data-widget-id="knowledge-evidence-context" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="knowledge-evidence-context" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Evidence</h2>
 								{#if graphNeighborhood?.evidence.length}
@@ -3863,7 +3908,7 @@
 							</section>
 						</div>
 
-						<div class="widget-frame" data-widget-id="knowledge-graph-summary" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="knowledge-graph-summary" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Graph Statistics</h2>
 								<div class="summary-numbers compact">
@@ -3885,7 +3930,7 @@
 					<button type="button" class="primary-button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
 
-				<div class="widget-frame" data-widget-id="telegram-account-status" data-widget-hidden="false">
+				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="telegram-account-status" data-widget-hidden="false">
 					<div class="metric-grid">
 						<article class="metric-card"><span>Chats</span><strong>{telegramChats.length}</strong><small>{selectedTelegramChat?.sync_state ?? 'not synced'}</small></article>
 						<article class="metric-card"><span>Messages</span><strong>{telegramMessages.length}</strong><small>Projected channel records</small></article>
@@ -3904,7 +3949,7 @@
 				{/if}
 
 				<div class="three-pane communications-grid telegram-grid">
-					<div class="widget-frame" data-widget-id="telegram-chat-list" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="telegram-chat-list" data-widget-hidden="false">
 						<section class="panel conversation-list">
 							<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search Telegram chats..." /></label>
 							{#if isTelegramLoading && telegramChats.length === 0}
@@ -3928,7 +3973,7 @@
 						</section>
 					</div>
 
-					<div class="widget-frame" data-widget-id="telegram-message-thread" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="telegram-message-thread" data-widget-hidden="false">
 						<section class="panel chat-pane telegram-chat-pane">
 							{#if selectedTelegramChat}
 								<header>
@@ -3966,7 +4011,7 @@
 					</div>
 
 					<aside class="stacked-rail telegram-rail">
-						<div class="widget-frame stacked-rail" data-widget-id="telegram-sync-controls" data-widget-hidden="false">
+						<div class="widget-frame stacked-rail" class:editing={isLayoutEditing} data-widget-id="telegram-sync-controls" data-widget-hidden="false">
 							<section class="panel info-card">
 							<h2>Account Setup</h2>
 							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void setupTelegramFixture(); }}>
@@ -4060,7 +4105,7 @@
 							</section>
 						</div>
 
-						<div class="widget-frame stacked-rail" data-widget-id="telegram-selected-chat-metadata" data-widget-hidden="false">
+						<div class="widget-frame stacked-rail" class:editing={isLayoutEditing} data-widget-id="telegram-selected-chat-metadata" data-widget-hidden="false">
 							<section class="panel info-card">
 							<h2>Calls</h2>
 							{#if telegramCalls.length}
@@ -4117,7 +4162,7 @@
 					<button type="button" class="primary-button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
 
-				<div class="widget-frame" data-widget-id="whatsapp-session-status" data-widget-hidden="false">
+				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="whatsapp-session-status" data-widget-hidden="false">
 					<div class="metric-grid">
 						<article class="metric-card"><span>Sessions</span><strong>{whatsappSessions.length}</strong><small>{selectedWhatsappSession?.link_state ?? 'not linked'}</small></article>
 						<article class="metric-card"><span>Messages</span><strong>{whatsappMessages.length}</strong><small>Canonical WhatsApp Web records</small></article>
@@ -4134,7 +4179,7 @@
 				{/if}
 
 				<div class="three-pane communications-grid whatsapp-grid">
-					<div class="widget-frame" data-widget-id="whatsapp-account-session-metadata" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="whatsapp-account-session-metadata" data-widget-hidden="false">
 						<section class="panel conversation-list">
 							<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search WhatsApp sessions..." /></label>
 							{#if isWhatsappLoading && whatsappSessions.length === 0}
@@ -4158,7 +4203,7 @@
 						</section>
 					</div>
 
-					<div class="widget-frame" data-widget-id="whatsapp-chat-message-surface" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="whatsapp-chat-message-surface" data-widget-hidden="false">
 						<section class="panel chat-pane whatsapp-chat-pane">
 							{#if selectedWhatsappSession}
 								<header>
@@ -4196,7 +4241,7 @@
 					</div>
 
 					<aside class="stacked-rail whatsapp-rail">
-						<div class="widget-frame stacked-rail" data-widget-id="whatsapp-sync-controls" data-widget-hidden="false">
+						<div class="widget-frame stacked-rail" class:editing={isLayoutEditing} data-widget-id="whatsapp-sync-controls" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Account Setup</h2>
 								<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void setupWhatsappWebFixture(); }}>
@@ -4263,7 +4308,7 @@
 					</button>
 				</div>
 
-				<div class="widget-frame" data-widget-id="settings-metrics" data-widget-hidden="false">
+				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-metrics" data-widget-hidden="false">
 					<div class="metric-grid settings-metrics">
 						<article class="metric-card"><span>Settings</span><strong>{applicationSettings.length}</strong><small>Editable runtime values</small></article>
 						<article class="metric-card"><span>Accounts</span><strong>{providerAccounts.length}</strong><small>Email, Telegram, WhatsApp</small></article>
@@ -4292,7 +4337,7 @@
 
 				{#if selectedSettingsSection === 'application'}
 					<div class="settings-layout">
-						<div class="widget-frame" data-widget-id="settings-application-list-editor" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-application-list-editor" data-widget-hidden="false">
 							<section class="panel settings-list-panel">
 								<header class="panel-title-row">
 									<div><h2>Application Settings</h2><p>All non-secret settings except database connectivity; secret-like keys are rejected.</p></div>
@@ -4360,7 +4405,7 @@
 						</div>
 
 						<aside class="stacked-rail settings-rail">
-							<div class="widget-frame" data-widget-id="settings-account-detail-status" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-account-detail-status" data-widget-hidden="false">
 								<section class="panel info-card">
 									<h2>Runtime Source</h2>
 									<div class="health-row"><span>Backend bind</span><strong>{settingValueText('server.http_addr')}</strong></div>
@@ -4371,7 +4416,7 @@
 									<div class="health-row"><span>Embedding</span><strong>{settingValueText('ai.embedding_model')}</strong></div>
 								</section>
 							</div>
-							<div class="widget-frame" data-widget-id="settings-security-runtime-status" data-widget-hidden="false">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-security-runtime-status" data-widget-hidden="false">
 								<section class="panel info-card">
 									<h2>Boundaries</h2>
 									<ul class="detail-list">
@@ -4387,7 +4432,7 @@
 					</div>
 				{:else}
 					<div class="settings-account-layout">
-						<div class="widget-frame" data-widget-id="settings-accounts-list" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-accounts-list" data-widget-hidden="false">
 							<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Mail Accounts</h2><p>Gmail OAuth, iCloud app-password and generic IMAP records.</p></div>
@@ -4413,7 +4458,7 @@
 							</section>
 						</div>
 
-						<div class="widget-frame settings-account-layout" data-widget-id="settings-account-setup-cards" data-widget-hidden="false">
+						<div class="widget-frame settings-account-layout" class:editing={isLayoutEditing} data-widget-id="settings-account-setup-cards" data-widget-hidden="false">
 							<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Telegram Accounts</h2><p>User and bot accounts used by Telegram ingestion and automation policies.</p></div>
@@ -4471,7 +4516,7 @@
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:robot" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
 					<button type="button" class="primary-button" onclick={() => void loadAiWorkspace()} disabled={isAiLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
-				<div class="widget-frame" data-widget-id="ai-runtime-metrics" data-widget-hidden="false">
+				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="ai-runtime-metrics" data-widget-hidden="false">
 					<div class="metric-grid agent-metrics">
 						<article class="metric-card"><span>Runtime</span><strong>{aiRuntimeSummary()}</strong><small>{aiStatus?.version ? `Ollama ${aiStatus.version}` : 'Ollama'}</small></article>
 						<article class="metric-card"><span>Agents</span><strong>{aiAgents.length}</strong><small>{aiAgents.length ? 'Registered' : 'Not loaded'}</small></article>
@@ -4487,7 +4532,7 @@
 				<div class="filter-bar"><button type="button" class="active">Local Agents</button><button type="button" disabled>{aiModelSummary()}</button><button type="button" disabled>{aiStatus?.chat_model_available ? 'Chat model ready' : 'Chat model missing'}</button><button type="button" disabled>{aiStatus?.embedding_model_available ? 'Embedding ready' : 'Embedding missing'}</button></div>
 				<div class="agents-layout">
 					<section class="agent-main">
-						<div class="widget-frame" data-widget-id="ai-agent-list" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="ai-agent-list" data-widget-hidden="false">
 							<div class="agent-grid">
 								{#if isAiLoading && agentCards.length === 0}
 									<div class="graph-strip-message"><span>Loading local AI agents.</span></div>
@@ -4504,7 +4549,7 @@
 								{/if}
 							</div>
 						</div>
-						<div class="widget-frame" data-widget-id="ai-selected-agent-detail" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="ai-selected-agent-detail" data-widget-hidden="false">
 							<section class="panel agent-detail">
 								{#if selectedAgent}
 									<header><span class="round-icon {selectedAgent.tone}"><Icon icon={selectedAgent.icon} width="26" height="26" /></span><div><h2>{selectedAgent.name}</h2><em>{selectedAgent.model}</em></div></header>
@@ -4559,13 +4604,13 @@
 						</div>
 					</section>
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="ai-runtime-status" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="ai-runtime-status" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Runtime</h2><div class="health-row"><span>Status</span><strong>{aiRuntimeSummary()}</strong></div><div class="health-row"><span>Chat</span><strong>{aiStatus?.chat_model ?? 'unknown'}</strong></div><div class="health-row"><span>Embedding</span><strong>{aiStatus?.embedding_model ?? 'unknown'}</strong></div></section>
 						</div>
-						<div class="widget-frame" data-widget-id="ai-run-history" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="ai-run-history" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Run History</h2>{#if aiRuns.length}{#each aiRuns.slice(0,6) as run}<div class="deadline"><span>{run.agent_id} · {runStatusLabel(run)}</span><time>{formatDateTime(run.started_at)} · {formatDuration(run.duration_ms)}</time></div>{/each}{:else}<p>No AI runs persisted yet.</p>{/if}</section>
 						</div>
-						<div class="widget-frame" data-widget-id="ai-citations" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="ai-citations" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Latest Citations</h2>{#if aiRuns[0] && safeCitations(aiRuns[0].citations).length}{#each safeCitations(aiRuns[0].citations).slice(0,3) as citation}<div class="evidence-row"><strong>{citation.title}</strong><p>{citation.excerpt}</p></div>{/each}{:else}<p>Citations appear after an answer or briefing run.</p>{/if}</section>
 						</div>
 					</aside>
@@ -4575,14 +4620,14 @@
 			<section class="timeline-page">
 				<div class="view-header"><div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:timeline-event" width="28" height="28" /></span><div><h1>Timeline</h1><p>Chronological activity across connected sources.</p></div></div></div>
 				<div class="timeline-layout">
-					<div class="widget-frame" data-widget-id="timeline-stream" data-widget-hidden="false">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="timeline-stream" data-widget-hidden="false">
 						<section class="panel feed-panel large-timeline">
 							<header class="panel-title-row"><h2>Today</h2><button type="button" class="ghost-button" disabled>All Events</button></header>
 							{#each whatsNew.concat(whatsNew) as item, index}<article class="timeline-event-row"><time>{18 - index}:42</time><span class="rail-dot"></span><span class="round-icon {item.tone}"><Icon icon={item.icon} width="20" height="20" /></span><div><strong>{item.title}</strong><p>{item.meta}</p>{#if item.tag}<em>{item.tag}</em>{/if}</div></article>{/each}
 						</section>
 					</div>
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="timeline-filters" data-widget-hidden="false">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="timeline-filters" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Timeline Filters</h2>{#each ['Messages','Documents','Tasks','Calendar','Notes','Decisions'] as item}<label class="mini-check"><input type="checkbox" checked />{item}</label>{/each}</section>
 						</div>
 					</aside>
