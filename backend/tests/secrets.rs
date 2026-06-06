@@ -25,12 +25,17 @@ fn secret_reference_enums_reject_unsupported_values() {
         SecretStoreKind::try_from("os_keychain").expect("os keychain store kind"),
         SecretStoreKind::OsKeychain
     );
+    assert_eq!(
+        SecretStoreKind::try_from("database_encrypted_vault")
+            .expect("database encrypted vault store kind"),
+        SecretStoreKind::DatabaseEncryptedVault
+    );
     assert!(SecretKind::try_from("plain_text").is_err());
     assert!(SecretStoreKind::try_from("postgres").is_err());
 }
 
-#[test]
-fn in_memory_secret_resolver_resolves_test_double_references_without_debug_leaking_value() {
+#[tokio::test]
+async fn in_memory_secret_resolver_resolves_test_double_references_without_debug_leaking_value() {
     let mut resolver = InMemorySecretResolver::new();
     resolver
         .insert("secret:test:oauth", "fake-runtime-secret")
@@ -41,14 +46,17 @@ fn in_memory_secret_resolver_resolves_test_double_references_without_debug_leaki
         SecretKind::OauthToken,
         SecretStoreKind::TestDouble,
     );
-    let resolved = resolver.resolve(&reference).expect("resolve test secret");
+    let resolved = resolver
+        .resolve(&reference)
+        .await
+        .expect("resolve test secret");
 
     assert_eq!(resolved.expose_for_runtime(), "fake-runtime-secret");
     assert!(!format!("{resolved:?}").contains("fake-runtime-secret"));
 }
 
-#[test]
-fn in_memory_secret_resolver_reports_missing_test_double_references() {
+#[tokio::test]
+async fn in_memory_secret_resolver_reports_missing_test_double_references() {
     let resolver = InMemorySecretResolver::new();
     let reference = test_secret_reference(
         "secret:test:missing",
@@ -58,6 +66,7 @@ fn in_memory_secret_resolver_reports_missing_test_double_references() {
 
     let error = resolver
         .resolve(&reference)
+        .await
         .expect_err("missing in-memory secret should fail");
 
     assert_eq!(
@@ -68,8 +77,8 @@ fn in_memory_secret_resolver_reports_missing_test_double_references() {
     );
 }
 
-#[test]
-fn in_memory_secret_resolver_rejects_non_test_double_store_kinds() {
+#[tokio::test]
+async fn in_memory_secret_resolver_rejects_non_test_double_store_kinds() {
     let mut resolver = InMemorySecretResolver::new();
     resolver
         .insert("secret:os:keychain", "fake-runtime-secret")
@@ -82,6 +91,7 @@ fn in_memory_secret_resolver_rejects_non_test_double_store_kinds() {
 
     let error = resolver
         .resolve(&reference)
+        .await
         .expect_err("non-test store kind should fail");
 
     assert_eq!(

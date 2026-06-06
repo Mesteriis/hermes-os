@@ -30,6 +30,7 @@ pub mod projects;
 pub mod search;
 pub mod secret_vault;
 pub mod secrets;
+pub mod settings;
 pub mod storage;
 pub mod task_candidates;
 pub mod telegram;
@@ -67,7 +68,9 @@ use crate::calls::{
     TelegramCall, TranscriptStatus,
 };
 use crate::capabilities::{CapabilityActionClass, CapabilityDecision};
-use crate::communications::{CommunicationIngestionStore, EmailProviderKind};
+use crate::communications::{
+    CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
+};
 use crate::config::AppConfig;
 use crate::contact_identity::{
     ContactIdentityCandidate, ContactIdentityDetail, ContactIdentityError,
@@ -96,8 +99,11 @@ use crate::project_link_reviews::{
     ProjectLinkReviewStore, ProjectLinkTargetKind,
 };
 use crate::projects::{ProjectListResponse, ProjectStore, ProjectStoreError};
-use crate::secret_vault::EncryptedSecretVault;
+use crate::secret_vault::DatabaseEncryptedSecretVault;
 use crate::secrets::{SecretKind, SecretReferenceStore};
+use crate::settings::{
+    AiRuntimeSettings, ApplicationSetting, ApplicationSettingsStore, SettingsError,
+};
 use crate::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
@@ -194,6 +200,15 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             put(put_task_candidate_review),
         )
         .route("/api/v2/tasks", get(get_tasks))
+        .route("/api/v2/settings", get(get_application_settings))
+        .route(
+            "/api/v2/settings/accounts",
+            get(get_application_settings_accounts),
+        )
+        .route(
+            "/api/v2/settings/{setting_key}",
+            put(put_application_setting),
+        )
         .route("/api/v3/ai/status", get(get_v3_ai_status))
         .route("/api/v3/agents", get(get_v3_agents))
         .route("/api/v3/ai/runs", get(get_v3_ai_runs))
@@ -768,6 +783,49 @@ async fn get_tasks(
     Ok(Json(TaskListResponse { items }))
 }
 
+async fn get_application_settings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApplicationSettingsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let items = settings_store(&state)?.list_settings().await?;
+
+    Ok(Json(ApplicationSettingsResponse { items }))
+}
+
+async fn get_application_settings_accounts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<ApplicationAccountsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let items = communication_ingestion_store(&state)?
+        .list_provider_accounts()
+        .await?;
+
+    Ok(Json(ApplicationAccountsResponse { items }))
+}
+
+async fn put_application_setting(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(setting_key): Path<String>,
+    Json(request): Json<ApplicationSettingUpdateRequest>,
+) -> Result<Json<ApplicationSetting>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::application_setting_set(
+            &actor.actor_id,
+            &setting_key,
+        ))
+        .await?;
+    let setting = settings_store(&state)?
+        .update_setting_value(&setting_key, &request.value, &actor.actor_id)
+        .await?;
+
+    Ok(Json(setting))
+}
+
 async fn get_document_processing(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -826,9 +884,7 @@ async fn post_gmail_oauth_start(
     Json(request): Json<GmailOAuthStartApiRequest>,
 ) -> Result<Json<GmailOAuthStartApiResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let service = EmailAccountSetupService::new_for_vault_only(
-        encrypted_vault(&state.config).ok_or(ApiError::SecretVaultNotConfigured)?,
-    );
+    let service = account_setup_service(&state)?;
     let pending = service.start_gmail_oauth(request.into_setup_request())?;
     let response = GmailOAuthStartApiResponse {
         setup_id: pending.setup_id.clone(),
@@ -922,11 +978,12 @@ async fn get_v3_ai_status(
     headers: HeaderMap,
 ) -> Result<Json<AiStatusResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let ollama = ollama_client(&state.config)?;
+    let runtime_settings = ai_runtime_settings(&state).await?;
+    let ollama = ollama_client(&runtime_settings)?;
     let version = ollama.version().await;
     let tags = ollama.tags().await;
-    let chat_model = state.config.ollama_chat_model().to_owned();
-    let embedding_model = state.config.ollama_embed_model().to_owned();
+    let chat_model = runtime_settings.chat_model;
+    let embedding_model = runtime_settings.embedding_model;
     let chat_model_available = tags
         .as_ref()
         .map(|models| models.iter().any(|model| model == &chat_model))
@@ -958,9 +1015,10 @@ async fn get_v3_agents(
     headers: HeaderMap,
 ) -> Result<Json<AiAgentListResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
+    let runtime_settings = ai_runtime_settings(&state).await?;
 
     Ok(Json(AiAgentListResponse {
-        items: v3_agents(state.config.ollama_chat_model()),
+        items: v3_agents(&runtime_settings.chat_model),
     }))
 }
 
@@ -995,7 +1053,7 @@ async fn post_v3_ai_answer(
     Json(request): Json<AiAnswerRequest>,
 ) -> Result<Json<crate::ai::AiAnswerResponse>, ApiError> {
     let actor = verify_local_api_capability(&state.config, &headers)?;
-    let service = ai_service(&state)?;
+    let service = ai_service(&state).await?;
     let response = service.answer(request, &actor.actor_id).await?;
 
     Ok(Json(response))
@@ -1007,7 +1065,7 @@ async fn post_v3_ai_task_candidates_refresh(
     Json(request): Json<AiTaskCandidateRefreshRequest>,
 ) -> Result<Json<crate::ai::AiTaskCandidateRefreshResponse>, ApiError> {
     let actor = verify_local_api_capability(&state.config, &headers)?;
-    let service = ai_service(&state)?;
+    let service = ai_service(&state).await?;
     let response = service
         .refresh_task_candidates(request, &actor.actor_id)
         .await?;
@@ -1021,7 +1079,7 @@ async fn post_v3_ai_meeting_prep(
     Json(request): Json<AiMeetingPrepRequest>,
 ) -> Result<Json<crate::ai::AiMeetingPrepResponse>, ApiError> {
     let actor = verify_local_api_capability(&state.config, &headers)?;
-    let service = ai_service(&state)?;
+    let service = ai_service(&state).await?;
     let response = service.meeting_prep(request, &actor.actor_id).await?;
 
     Ok(Json(response))
@@ -1391,6 +1449,16 @@ fn mail_storage_store(state: &AppState) -> Result<MailStorageStore, ApiError> {
     Ok(MailStorageStore::new(pool.clone()))
 }
 
+fn communication_ingestion_store(
+    state: &AppState,
+) -> Result<CommunicationIngestionStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(CommunicationIngestionStore::new(pool.clone()))
+}
+
 fn project_store(state: &AppState) -> Result<ProjectStore, ApiError> {
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
@@ -1423,17 +1491,18 @@ fn ai_run_store(state: &AppState) -> Result<crate::ai::AiRunStore, ApiError> {
     Ok(crate::ai::AiRunStore::new(pool.clone()))
 }
 
-fn ai_service(state: &AppState) -> Result<AiService, ApiError> {
+async fn ai_service(state: &AppState) -> Result<AiService, ApiError> {
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let ollama = ollama_client(&state.config)?;
+    let runtime_settings = ai_runtime_settings(state).await?;
+    let ollama = ollama_client(&runtime_settings)?;
 
     Ok(AiService::new(
         pool.clone(),
         ollama,
-        state.config.ollama_chat_model(),
-        state.config.ollama_embed_model(),
+        &runtime_settings.chat_model,
+        &runtime_settings.embedding_model,
     ))
 }
 
@@ -1469,14 +1538,32 @@ fn call_intelligence_store(state: &AppState) -> Result<CallIntelligenceStore, Ap
     Ok(CallIntelligenceStore::new(pool.clone()))
 }
 
-fn ollama_client(config: &AppConfig) -> Result<OllamaClient, ApiError> {
+fn settings_store(state: &AppState) -> Result<ApplicationSettingsStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(ApplicationSettingsStore::new(pool.clone()))
+}
+
+async fn ai_runtime_settings(state: &AppState) -> Result<AiRuntimeSettings, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Ok(AiRuntimeSettings::from_config(&state.config));
+    };
+
+    Ok(ApplicationSettingsStore::new(pool.clone())
+        .ai_runtime_settings(&state.config)
+        .await?)
+}
+
+fn ollama_client(settings: &AiRuntimeSettings) -> Result<OllamaClient, ApiError> {
     Ok(OllamaClient::new(
         OllamaClientConfig::new(
-            config.ollama_base_url(),
-            config.ollama_chat_model(),
-            config.ollama_embed_model(),
+            &settings.base_url,
+            &settings.chat_model,
+            &settings.embedding_model,
         )
-        .with_timeout_seconds(config.ollama_timeout_seconds()),
+        .with_timeout_seconds(settings.timeout_seconds),
     )?)
 }
 
@@ -1505,10 +1592,11 @@ fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
 }
 
 fn account_setup_service(state: &AppState) -> Result<EmailAccountSetupService, ApiError> {
-    let vault = encrypted_vault(&state.config).ok_or(ApiError::SecretVaultNotConfigured)?;
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
+    let vault = database_encrypted_vault(&state.config, pool.clone())
+        .ok_or(ApiError::SecretVaultNotConfigured)?;
 
     Ok(EmailAccountSetupService::new(
         CommunicationIngestionStore::new(pool.clone()),
@@ -1517,9 +1605,12 @@ fn account_setup_service(state: &AppState) -> Result<EmailAccountSetupService, A
     ))
 }
 
-fn encrypted_vault(config: &AppConfig) -> Option<EncryptedSecretVault> {
-    Some(EncryptedSecretVault::new(
-        config.secret_vault_path()?.to_path_buf(),
+fn database_encrypted_vault(
+    config: &AppConfig,
+    pool: sqlx::postgres::PgPool,
+) -> Option<DatabaseEncryptedSecretVault> {
+    Some(DatabaseEncryptedSecretVault::new(
+        pool,
         config.secret_vault_key()?.clone(),
     ))
 }
@@ -1602,6 +1693,21 @@ struct ReadinessResponse {
 struct ReadinessChecks {
     database: DatabaseReadiness,
     migrations: MigrationReadiness,
+}
+
+#[derive(Serialize)]
+struct ApplicationSettingsResponse {
+    items: Vec<ApplicationSetting>,
+}
+
+#[derive(Serialize)]
+struct ApplicationAccountsResponse {
+    items: Vec<ProviderAccount>,
+}
+
+#[derive(Deserialize)]
+struct ApplicationSettingUpdateRequest {
+    value: Value,
 }
 
 #[derive(Deserialize)]
@@ -2782,6 +2888,8 @@ enum ApiError {
     InvalidTaskCandidateReview(&'static str),
     InvalidContactIdentityReview(&'static str),
     InvalidDocumentProcessingQuery(&'static str),
+    Settings(SettingsError),
+    SettingNotFound,
     DocumentProcessing(DocumentProcessingError),
     TaskCandidateNotFound,
     TaskCandidate(TaskCandidateError),
@@ -2796,6 +2904,7 @@ enum ApiError {
     ContactIdentityNotFound,
     ContactIdentity(ContactIdentityError),
     Messages(MessageProjectionError),
+    CommunicationIngestion(CommunicationIngestionError),
     MailStorage(MailStorageError),
     InvalidCommunicationQuery(&'static str),
     CommunicationMessageNotFound,
@@ -2839,7 +2948,7 @@ impl axum::response::IntoResponse for ApiError {
             Self::SecretVaultNotConfigured => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "secret_vault_not_configured",
-                "HERMES_SECRET_VAULT_PATH and HERMES_SECRET_VAULT_KEY are required for account setup".to_owned(),
+                "HERMES_SECRET_VAULT_KEY is required for account setup".to_owned(),
                 false,
             ),
             Self::InvalidEnvelope(error) => (
@@ -2932,20 +3041,45 @@ impl axum::response::IntoResponse for ApiError {
                 message.to_owned(),
                 false,
             ),
+            Self::SettingNotFound => (
+                StatusCode::NOT_FOUND,
+                "setting_not_found",
+                "application setting was not found".to_owned(),
+                false,
+            ),
+            Self::Settings(error) if error.is_invalid_request() => (
+                StatusCode::BAD_REQUEST,
+                "invalid_application_setting",
+                error.to_string(),
+                false,
+            ),
+            Self::Settings(error) => {
+                tracing::error!(error = %error, "application settings operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "application_settings_error",
+                    "application settings operation failed".to_owned(),
+                    false,
+                )
+            }
             Self::DocumentProcessing(error) => {
                 let (status, message) = match error {
-                    DocumentProcessingError::InvalidLimit => {
-                        (StatusCode::BAD_REQUEST, "document processing limit must be between 1 and 100")
-                    }
+                    DocumentProcessingError::InvalidLimit => (
+                        StatusCode::BAD_REQUEST,
+                        "document processing limit must be between 1 and 100",
+                    ),
                     DocumentProcessingError::EmptyField(_)
                     | DocumentProcessingError::InvalidStep(_)
                     | DocumentProcessingError::InvalidStatus(_)
-                    | DocumentProcessingError::InvalidArtifactKind(_) => {
-                        (StatusCode::BAD_REQUEST, "invalid document processing request payload")
-                    }
-                    DocumentProcessingError::DocumentNotFound | DocumentProcessingError::JobNotFound => {
-                        (StatusCode::NOT_FOUND, "document processing job was not found")
-                    }
+                    | DocumentProcessingError::InvalidArtifactKind(_) => (
+                        StatusCode::BAD_REQUEST,
+                        "invalid document processing request payload",
+                    ),
+                    DocumentProcessingError::DocumentNotFound
+                    | DocumentProcessingError::JobNotFound => (
+                        StatusCode::NOT_FOUND,
+                        "document processing job was not found",
+                    ),
                     DocumentProcessingError::RetryRequiresFailedJob => (
                         StatusCode::BAD_REQUEST,
                         "document processing retry requires a failed job",
@@ -2960,11 +3094,19 @@ impl axum::response::IntoResponse for ApiError {
                     ),
                     _ => {
                         tracing::error!(error = %error, "document processing store operation failed");
-                        (StatusCode::INTERNAL_SERVER_ERROR, "document processing store operation failed")
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "document processing store operation failed",
+                        )
                     }
                 };
 
-                (status, "document_processing_store_error", message.to_owned(), false)
+                (
+                    status,
+                    "document_processing_store_error",
+                    message.to_owned(),
+                    false,
+                )
             }
             Self::TaskCandidateNotFound => (
                 StatusCode::NOT_FOUND,
@@ -3237,6 +3379,15 @@ impl axum::response::IntoResponse for ApiError {
                     false,
                 )
             }
+            Self::CommunicationIngestion(error) => {
+                tracing::error!(error = %error, "communication account API store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "communication_account_store_error",
+                    "communication account store operation failed".to_owned(),
+                    false,
+                )
+            }
             Self::MailStorage(error) => {
                 tracing::error!(error = %error, "communication attachment API store operation failed");
                 (
@@ -3427,6 +3578,21 @@ impl From<ContactIdentityError> for ApiError {
 impl From<DocumentProcessingError> for ApiError {
     fn from(error: DocumentProcessingError) -> Self {
         Self::DocumentProcessing(error)
+    }
+}
+
+impl From<SettingsError> for ApiError {
+    fn from(error: SettingsError) -> Self {
+        match error {
+            SettingsError::SettingNotFound { .. } => Self::SettingNotFound,
+            _ => Self::Settings(error),
+        }
+    }
+}
+
+impl From<CommunicationIngestionError> for ApiError {
+    fn from(error: CommunicationIngestionError) -> Self {
+        Self::CommunicationIngestion(error)
     }
 }
 

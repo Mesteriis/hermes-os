@@ -226,7 +226,7 @@ X-Hermes-Actor-Id: desktop-shell
 
 V3 task extraction writes only `suggested` task candidates. Existing review APIs remain the only path to active tasks.
 
-Account setup endpoints additionally require `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`; `make docker-env` adds local development defaults to `docker/.env`.
+Account setup endpoints additionally require `HERMES_SECRET_VAULT_KEY`; encrypted credential payloads are stored in PostgreSQL and the vault key must stay outside the database.
 
 Frontend/Tauri shell commands:
 

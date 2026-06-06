@@ -1,6 +1,8 @@
 # ADR-0042 Secret References for Provider Credentials
 
-Status: Proposed
+Status: Superseded by ADR-0053
+
+This decision was superseded by ADR-0053. The account-scoped secret reference and resolver boundary remains, but encrypted provider credential payloads now live in a dedicated PostgreSQL vault table instead of outside PostgreSQL.
 
 ## Context
 

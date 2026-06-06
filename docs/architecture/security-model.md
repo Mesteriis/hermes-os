@@ -36,9 +36,9 @@ ADR-0052 defines the long-term capability runtime direction: backend application
 
 ## Secrets
 
-Secrets must never be hardcoded or committed. Provider tokens, passwords, app passwords, private keys and recovery material belong in an OS-backed secret store or encrypted local vault.
+Secrets must never be hardcoded or committed. Provider tokens, passwords, app passwords, private keys and recovery material belong behind the secret resolver boundary.
 
-Current implementation stores only non-secret `secret_references` metadata in PostgreSQL. Secret values must remain outside ordinary application tables.
+Current implementation stores non-secret `secret_references` metadata and encrypted credential payloads in PostgreSQL. Secret values must remain out of ordinary application tables, provider account config, event payloads, audit records, logs, tests and docs. The database encrypted vault stores ciphertext only and requires `HERMES_SECRET_VAULT_KEY`, which must stay outside PostgreSQL.
 
 ## AI Tool Safety
 

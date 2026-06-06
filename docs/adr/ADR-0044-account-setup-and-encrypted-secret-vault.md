@@ -1,6 +1,8 @@
 # ADR-0044 Account Setup and Encrypted Secret Vault
 
-Status: Proposed
+Status: Superseded by ADR-0053
+
+This decision was superseded by ADR-0053, which keeps encrypted local account setup but replaces the file-backed vault path with a PostgreSQL-backed encrypted secret vault.
 
 ## Context
 

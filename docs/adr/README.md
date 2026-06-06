@@ -61,3 +61,5 @@ ADR status vocabulary:
 - [ADR-0050 V4 Telegram Client, Policy Automation and Call Intelligence](ADR-0050-v4-telegram-client-policy-and-call-intelligence.md)
 - [ADR-0051 V5 WhatsApp Web Companion Boundary](ADR-0051-v5-whatsapp-web-companion-boundary.md)
 - [ADR-0052 Capability Runtime and Action Confirmation Policy](ADR-0052-capability-runtime-and-action-confirmation-policy.md)
+- [ADR-0053 Database-Backed Encrypted Secret Vault](ADR-0053-database-backed-encrypted-secret-vault.md)
+- [ADR-0054 Application Settings Store](ADR-0054-application-settings-store.md)

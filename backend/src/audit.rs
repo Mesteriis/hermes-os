@@ -223,6 +223,23 @@ impl NewApiAuditRecord {
         }
     }
 
+    pub fn application_setting_set(
+        actor_id: impl Into<String>,
+        setting_key: impl Into<String>,
+    ) -> Self {
+        let setting_key = setting_key.into();
+        Self {
+            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "application_setting.set".to_owned(),
+            method: "PUT".to_owned(),
+            path_template: "/api/v2/settings/{setting_key}".to_owned(),
+            target_kind: "application_setting".to_owned(),
+            target_id: Some(setting_key),
+            metadata: json!({}),
+        }
+    }
+
     pub fn automation_telegram_send_dry_run(
         actor_id: impl Into<String>,
         outbound_message_id: impl Into<String>,

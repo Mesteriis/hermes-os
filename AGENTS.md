@@ -59,6 +59,8 @@
 - `ADR-0043` - read-only Gmail API and IMAP provider networking.
 - `ADR-0044` - account setup and encrypted secret vault.
 - `ADR-0046` - persistent dev mail cache and blob storage; mail bytes/attachments live under `docker/data/mail/`, PostgreSQL stores metadata, references and attachment scan state.
+- `ADR-0053` - database-backed encrypted secret vault; encrypted credential payloads live in PostgreSQL ciphertext rows, while the vault key remains outside PostgreSQL.
+- `ADR-0054` - application settings store; user-editable runtime/UI settings live in `application_settings`, while provider accounts remain domain records.
 
 ## 4. Implementation Phase
 
@@ -220,8 +222,10 @@ Use the repository-configured tool first. If no tool exists, report that validat
 - Multiple accounts for the same provider kind are required. Credential lookup must use `account_id` plus secret purpose, never provider kind alone.
 - Provider credential bindings must use compatible secret kinds: `oauth_token` -> `oauth_token`, `imap_password`/`smtp_password` -> `app_password` or `password`.
 - Raw communication provider records must remain append-only and preserve source provenance.
-- Secret references per `ADR-0042` store metadata only; never place secret values in PostgreSQL config, metadata, tests, logs or docs.
-- The in-memory secret resolver is allowed only for `test_double` references in tests and local adapter tests. Real provider adapters must use a real resolver for `os_keychain`, `encrypted_vault` or `external_vault`.
+- Secret references per `ADR-0053` store metadata only. Encrypted credential payloads may live only in `encrypted_secret_vault_entries`; never place plaintext secret values in PostgreSQL config, metadata, tests, logs or docs.
+- The database encrypted vault key must remain outside PostgreSQL. Do not derive it from hardware serial numbers; hardware IDs are not secrets.
+- The in-memory secret resolver is allowed only for `test_double` references in tests and local adapter tests. Real provider adapters must use a real resolver for `os_keychain`, `encrypted_vault`, `database_encrypted_vault` or `external_vault`.
+- Application settings per `ADR-0054` are allowlisted typed values. Do not store credentials or duplicate provider accounts in `application_settings`; surface account records from their domain tables in the Settings UI.
 - Mail blob and attachment bytes must stay out of PostgreSQL per `ADR-0046`; store only metadata, hashes and local blob paths in database tables.
 - Extracted attachment metadata must pass through the attachment safety scanner boundary from `ADR-0046`. The no-op scanner records `not_scanned`; do not mark attachments as `clean` without a real scanner backend.
 

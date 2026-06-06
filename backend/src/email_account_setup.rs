@@ -15,7 +15,7 @@ use crate::communications::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind,
     NewProviderAccount, NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
-use crate::secret_vault::{EncryptedSecretVault, EncryptedVaultError};
+use crate::secret_vault::{DatabaseEncryptedSecretVault, DatabaseEncryptedVaultError};
 use crate::secrets::{
     NewSecretReference, ResolvedSecret, SecretKind, SecretReference, SecretReferenceError,
     SecretReferenceStore, SecretResolutionError, SecretResolver, SecretStoreKind,
@@ -29,7 +29,7 @@ const GMAIL_READONLY_SCOPE: &str = "https://www.googleapis.com/auth/gmail.readon
 pub struct EmailAccountSetupService {
     communication_store: Option<CommunicationIngestionStore>,
     secret_store: Option<SecretReferenceStore>,
-    vault: EncryptedSecretVault,
+    vault: DatabaseEncryptedSecretVault,
     http: Client,
 }
 
@@ -37,7 +37,7 @@ impl EmailAccountSetupService {
     pub fn new(
         communication_store: CommunicationIngestionStore,
         secret_store: SecretReferenceStore,
-        vault: EncryptedSecretVault,
+        vault: DatabaseEncryptedSecretVault,
     ) -> Self {
         Self {
             communication_store: Some(communication_store),
@@ -47,7 +47,7 @@ impl EmailAccountSetupService {
         }
     }
 
-    pub fn new_for_vault_only(vault: EncryptedSecretVault) -> Self {
+    pub fn new_for_vault_only(vault: DatabaseEncryptedSecretVault) -> Self {
         Self {
             communication_store: None,
             secret_store: None,
@@ -117,10 +117,6 @@ impl EmailAccountSetupService {
             token_type: token.token_type,
             scope: token.scope,
         };
-        self.vault
-            .store_secret(&secret_ref, &serde_json::to_string(&token_bundle)?)
-            .map_err(EmailAccountSetupError::Vault)?;
-
         let secret_store = self.secret_store()?;
         let communication_store = self.communication_store()?;
         secret_store
@@ -128,7 +124,7 @@ impl EmailAccountSetupService {
                 &NewSecretReference::new(
                     &secret_ref,
                     SecretKind::OauthToken,
-                    SecretStoreKind::EncryptedVault,
+                    SecretStoreKind::DatabaseEncryptedVault,
                     format!(
                         "Gmail OAuth credential for {}",
                         pending.request.display_name
@@ -140,6 +136,10 @@ impl EmailAccountSetupService {
                 })),
             )
             .await?;
+        self.vault
+            .store_secret(&secret_ref, &serde_json::to_string(&token_bundle)?)
+            .await
+            .map_err(EmailAccountSetupError::DatabaseVault)?;
         communication_store
             .upsert_provider_account(
                 &NewProviderAccount::new(
@@ -168,7 +168,7 @@ impl EmailAccountSetupService {
             account_id: pending.account_id,
             secret_ref,
             secret_kind: SecretKind::OauthToken,
-            store_kind: SecretStoreKind::EncryptedVault,
+            store_kind: SecretStoreKind::DatabaseEncryptedVault,
         })
     }
 
@@ -178,7 +178,7 @@ impl EmailAccountSetupService {
     ) -> Result<ResolvedSecret, EmailAccountSetupError> {
         validate_non_empty("secret_ref", secret_ref)?;
         let reference = vault_secret_reference(secret_ref, SecretKind::OauthToken);
-        let resolved = self.vault.resolve(&reference)?;
+        let resolved = self.vault.resolve(&reference).await?;
         let mut bundle: GmailOAuthTokenBundle =
             serde_json::from_str(resolved.expose_for_runtime())?;
 
@@ -200,7 +200,8 @@ impl EmailAccountSetupService {
 
         self.vault
             .store_secret(secret_ref, &serde_json::to_string(&bundle)?)
-            .map_err(EmailAccountSetupError::Vault)?;
+            .await
+            .map_err(EmailAccountSetupError::DatabaseVault)?;
         ResolvedSecret::new(bundle.access_token).map_err(EmailAccountSetupError::Secret)
     }
 
@@ -210,9 +211,6 @@ impl EmailAccountSetupService {
     ) -> Result<EmailAccountSetupResult, EmailAccountSetupError> {
         request.validate()?;
         let secret_ref = imap_secret_ref(&request.account_id);
-        self.vault
-            .store_secret(&secret_ref, &request.password)
-            .map_err(EmailAccountSetupError::Vault)?;
 
         let secret_store = self.secret_store()?;
         let communication_store = self.communication_store()?;
@@ -221,7 +219,7 @@ impl EmailAccountSetupService {
                 &NewSecretReference::new(
                     &secret_ref,
                     request.secret_kind,
-                    SecretStoreKind::EncryptedVault,
+                    SecretStoreKind::DatabaseEncryptedVault,
                     format!("IMAP credential for {}", request.display_name),
                 )
                 .metadata(json!({
@@ -230,6 +228,10 @@ impl EmailAccountSetupService {
                 })),
             )
             .await?;
+        self.vault
+            .store_secret(&secret_ref, &request.password)
+            .await
+            .map_err(EmailAccountSetupError::DatabaseVault)?;
         communication_store
             .upsert_provider_account(
                 &NewProviderAccount::new(
@@ -259,7 +261,7 @@ impl EmailAccountSetupService {
             account_id: request.account_id,
             secret_ref,
             secret_kind: request.secret_kind,
-            store_kind: SecretStoreKind::EncryptedVault,
+            store_kind: SecretStoreKind::DatabaseEncryptedVault,
         })
     }
 
@@ -547,7 +549,7 @@ fn vault_secret_reference(secret_ref: &str, secret_kind: SecretKind) -> SecretRe
     SecretReference {
         secret_ref: secret_ref.to_owned(),
         secret_kind,
-        store_kind: SecretStoreKind::EncryptedVault,
+        store_kind: SecretStoreKind::DatabaseEncryptedVault,
         label: "encrypted vault secret".to_owned(),
         metadata: json!({}),
         created_at: now,
@@ -598,7 +600,7 @@ pub enum EmailAccountSetupError {
     Json(#[from] serde_json::Error),
 
     #[error(transparent)]
-    Vault(#[from] EncryptedVaultError),
+    DatabaseVault(#[from] DatabaseEncryptedVaultError),
 
     #[error(transparent)]
     SecretReference(#[from] SecretReferenceError),

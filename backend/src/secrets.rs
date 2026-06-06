@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::future::Future;
+use std::pin::Pin;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -138,6 +140,7 @@ impl TryFrom<&str> for SecretKind {
 pub enum SecretStoreKind {
     OsKeychain,
     EncryptedVault,
+    DatabaseEncryptedVault,
     ExternalVault,
     TestDouble,
 }
@@ -147,6 +150,7 @@ impl SecretStoreKind {
         match self {
             Self::OsKeychain => "os_keychain",
             Self::EncryptedVault => "encrypted_vault",
+            Self::DatabaseEncryptedVault => "database_encrypted_vault",
             Self::ExternalVault => "external_vault",
             Self::TestDouble => "test_double",
         }
@@ -160,6 +164,7 @@ impl TryFrom<&str> for SecretStoreKind {
         match value.trim() {
             "os_keychain" => Ok(Self::OsKeychain),
             "encrypted_vault" => Ok(Self::EncryptedVault),
+            "database_encrypted_vault" => Ok(Self::DatabaseEncryptedVault),
             "external_vault" => Ok(Self::ExternalVault),
             "test_double" => Ok(Self::TestDouble),
             other => Err(SecretReferenceError::UnsupportedStoreKind(other.to_owned())),
@@ -178,9 +183,11 @@ pub struct SecretReference {
     pub updated_at: DateTime<Utc>,
 }
 
+pub type SecretResolutionFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<ResolvedSecret, SecretResolutionError>> + Send + 'a>>;
+
 pub trait SecretResolver {
-    fn resolve(&self, reference: &SecretReference)
-    -> Result<ResolvedSecret, SecretResolutionError>;
+    fn resolve<'a>(&'a self, reference: &'a SecretReference) -> SecretResolutionFuture<'a>;
 }
 
 #[derive(Clone, Eq, PartialEq)]
@@ -236,10 +243,8 @@ impl InMemorySecretResolver {
 
         Ok(())
     }
-}
 
-impl SecretResolver for InMemorySecretResolver {
-    fn resolve(
+    fn resolve_reference(
         &self,
         reference: &SecretReference,
     ) -> Result<ResolvedSecret, SecretResolutionError> {
@@ -258,6 +263,12 @@ impl SecretResolver for InMemorySecretResolver {
             .ok_or_else(|| SecretResolutionError::MissingSecret {
                 secret_ref: secret_ref.to_owned(),
             })
+    }
+}
+
+impl SecretResolver for InMemorySecretResolver {
+    fn resolve<'a>(&'a self, reference: &'a SecretReference) -> SecretResolutionFuture<'a> {
+        Box::pin(std::future::ready(self.resolve_reference(reference)))
     }
 }
 

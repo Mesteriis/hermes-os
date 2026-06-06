@@ -26,6 +26,7 @@
 - relationship objects
 - task lifecycle
 - provider account metadata
+- encrypted provider credential payloads
 - ingestion checkpoints
 - projection offsets
 - permissions and capability grants
@@ -55,6 +56,6 @@ Backups must include:
 - object storage content
 - index rebuild metadata
 - application configuration excluding secrets where possible
-- encrypted secret export when explicitly requested
+- encrypted database secret vault entries and their external vault key handling plan
 
 Restore must verify schema versions, projection offsets and index consistency.

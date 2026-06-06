@@ -9,6 +9,47 @@ export type V1Status = {
 	};
 };
 
+export type SettingValueKind = 'boolean' | 'integer' | 'string' | 'json';
+
+export type ApplicationSetting = {
+	setting_key: string;
+	category: string;
+	value_kind: SettingValueKind;
+	value: boolean | number | string | Record<string, unknown> | unknown[];
+	label: string;
+	description: string;
+	metadata: Record<string, unknown>;
+	is_editable: boolean;
+	updated_by_actor_id: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type ApplicationSettingsResponse = {
+	items: ApplicationSetting[];
+};
+
+export type ProviderAccount = {
+	account_id: string;
+	provider_kind:
+		| 'gmail'
+		| 'icloud'
+		| 'imap'
+		| 'telegram_user'
+		| 'telegram_bot'
+		| 'whatsapp_web'
+		| string;
+	display_name: string;
+	external_account_id: string;
+	config: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type ProviderAccountListResponse = {
+	items: ProviderAccount[];
+};
+
 export type CommunicationMessageSummary = {
 	message_id: string;
 	raw_record_id: string;
@@ -816,7 +857,7 @@ export type EmailAccountSetupResponse = {
 	account_id: string;
 	secret_ref: string;
 	secret_kind: 'oauth_token' | 'app_password' | 'password';
-	store_kind: 'encrypted_vault';
+	store_kind: 'encrypted_vault' | 'database_encrypted_vault';
 };
 
 export type ImapAccountSetupRequest = {
@@ -839,6 +880,45 @@ export async function fetchV1Status(
 	actorId: string
 ): Promise<V1Status> {
 	return getJson(baseUrl, token, actorId, '/api/v1/status', 'V1 status request failed');
+}
+
+export async function fetchApplicationSettings(
+	baseUrl: string,
+	token: string,
+	actorId: string
+): Promise<ApplicationSettingsResponse> {
+	return getJson(baseUrl, token, actorId, '/api/v2/settings', 'Settings request failed');
+}
+
+export async function saveApplicationSetting(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	settingKey: string,
+	value: ApplicationSetting['value']
+): Promise<ApplicationSetting> {
+	return putJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v2/settings/${encodeURIComponent(settingKey)}`,
+		{ value },
+		'Setting update failed'
+	);
+}
+
+export async function fetchProviderAccounts(
+	baseUrl: string,
+	token: string,
+	actorId: string
+): Promise<ProviderAccountListResponse> {
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v2/settings/accounts',
+		'Provider accounts request failed'
+	);
 }
 
 export async function fetchCommunicationMessages(
@@ -1569,7 +1649,8 @@ async function putJson<TResponse>(
 	token: string,
 	actorId: string,
 	path: string,
-	body: unknown
+	body: unknown,
+	fallbackMessage = 'PUT request failed'
 ): Promise<TResponse> {
 	const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
 	const response = await fetch(`${normalizedBaseUrl}${path}`, {
@@ -1586,7 +1667,7 @@ async function putJson<TResponse>(
 		const error = (await response.json().catch(() => null)) as
 			| { message?: string }
 			| null;
-		throw new Error(error?.message ?? `Task candidate review request failed: ${response.status}`);
+		throw new Error(error?.message ?? `${fallbackMessage}: ${response.status}`);
 	}
 
 	return (await response.json()) as TResponse;

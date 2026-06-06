@@ -3,6 +3,7 @@
 	import {
 		completeGmailOAuthSetup,
 		dryRunTelegramSend,
+		fetchApplicationSettings,
 		fetchAutomationPolicies,
 		fetchAutomationTemplates,
 		fetchCallTranscript,
@@ -18,6 +19,7 @@
 		fetchAiRuns,
 		fetchAiStatus,
 		fetchIdentityCandidates,
+		fetchProviderAccounts,
 		fetchTaskCandidates,
 		fetchTasks,
 		fetchV4Capabilities,
@@ -37,6 +39,7 @@
 		requestAiAnswer,
 		requestAiMeetingPrep,
 		retryDocumentProcessingJob,
+		saveApplicationSetting,
 		searchGraphNodes,
 		saveAutomationPolicy,
 		saveAutomationTemplate,
@@ -47,6 +50,7 @@
 		setupWhatsappWebFixtureAccount,
 		startGmailOAuthSetup,
 		type ActiveTask,
+		type ApplicationSetting,
 		type AiAgent,
 		type AiAnswerResponse,
 		type AiCitation,
@@ -72,6 +76,7 @@
 		type GraphNodeKind,
 		type GraphRelationshipType,
 		type GraphSummary,
+		type ProviderAccount,
 		type ProjectDetail,
 		type ProjectDocumentSummary,
 		type ProjectMessageSummary,
@@ -107,7 +112,8 @@
 		| 'knowledge'
 		| 'telegram'
 		| 'whatsapp'
-		| 'agents';
+		| 'agents'
+		| 'settings';
 
 	type NavItem = {
 		id: ViewId;
@@ -206,7 +212,7 @@
 
 	const apiBaseUrl = import.meta.env.VITE_HERMES_API_BASE_URL ?? 'http://127.0.0.1:8080';
 	const apiToken = import.meta.env.VITE_HERMES_LOCAL_API_TOKEN ?? 'change-me-local-api-token';
-	const actorId = import.meta.env.VITE_HERMES_ACTOR_ID ?? 'desktop-shell';
+	let actorId = $state(import.meta.env.VITE_HERMES_ACTOR_ID ?? 'desktop-shell');
 
 	let currentView = $state<ViewId>('home');
 	let searchQuery = $state('');
@@ -404,6 +410,14 @@
 		language_code: 'en',
 		always_on_policy: true
 	});
+	let applicationSettings = $state<ApplicationSetting[]>([]);
+	let providerAccounts = $state<ProviderAccount[]>([]);
+	let settingDrafts = $state<Record<string, string>>({});
+	let settingsError = $state('');
+	let settingsActionMessage = $state('');
+	let isSettingsLoading = $state(false);
+	let savingSettingKey = $state<string | null>(null);
+	let selectedSettingsSection = $state<'application' | 'accounts'>('application');
 
 	const primaryNav: NavItem[] = [
 		{ id: 'home', label: 'Home', icon: 'tabler:home', enabled: true },
@@ -418,7 +432,8 @@
 		{ id: 'knowledge', label: 'Knowledge Graph', icon: 'tabler:share', enabled: true },
 		{ id: 'telegram', label: 'Telegram', icon: 'tabler:brand-telegram', enabled: true },
 		{ id: 'whatsapp', label: 'WhatsApp', icon: 'tabler:brand-whatsapp', enabled: true },
-		{ id: 'agents', label: 'AI Agents', icon: 'tabler:sparkles', enabled: true }
+		{ id: 'agents', label: 'AI Agents', icon: 'tabler:sparkles', enabled: true },
+		{ id: 'settings', label: 'Settings', icon: 'tabler:settings', enabled: true }
 	];
 
 	const viewCopy: Record<ViewId, { title: string; subtitle: string; search: string; icon: string }> = {
@@ -499,6 +514,12 @@
 			subtitle: 'Your intelligent assistants working across your data and tools',
 			search: 'Search agents, capabilities, tasks...',
 			icon: 'tabler:sparkles'
+		},
+		settings: {
+			title: 'Settings',
+			subtitle: 'Runtime settings and connected accounts.',
+			search: 'Search settings and accounts...',
+			icon: 'tabler:settings'
 		}
 	};
 
@@ -609,6 +630,12 @@
 			{ label: 'Templates', icon: 'tabler:template', badge: '15' },
 			{ label: 'Logs', icon: 'tabler:clipboard-list' },
 			{ label: 'Settings', icon: 'tabler:settings' }
+		],
+		settings: [
+			{ label: 'Application', icon: 'tabler:adjustments-horizontal', badge: 'DB' },
+			{ label: 'Accounts', icon: 'tabler:users' },
+			{ label: 'AI Runtime', icon: 'tabler:sparkles' },
+			{ label: 'Security', icon: 'tabler:shield-lock' }
 		]
 	};
 
@@ -789,6 +816,18 @@
 				!confirmedSplitCandidateForMerge(item)
 		)
 	);
+	const settingsByCategory = $derived(groupSettingsByCategory(applicationSettings));
+	const emailProviderAccounts = $derived(
+		providerAccounts.filter((account) => ['gmail', 'icloud', 'imap'].includes(account.provider_kind))
+	);
+	const telegramProviderAccounts = $derived(
+		providerAccounts.filter((account) =>
+			['telegram_user', 'telegram_bot'].includes(account.provider_kind)
+		)
+	);
+	const whatsappProviderAccounts = $derived(
+		providerAccounts.filter((account) => account.provider_kind === 'whatsapp_web')
+	);
 
 	onMount(() => {
 		void loadV1Status();
@@ -802,6 +841,7 @@
 		void loadAiWorkspace();
 		void loadTelegramWorkspace();
 		void loadWhatsappWebWorkspace();
+		void loadSettingsWorkspace();
 	});
 
 	async function loadV1Status() {
@@ -810,6 +850,68 @@
 			statusError = '';
 		} catch (error) {
 			statusError = error instanceof Error ? error.message : 'Unknown status error';
+		}
+	}
+
+	async function loadSettingsWorkspace() {
+		isSettingsLoading = true;
+		try {
+			const [settingsResponse, accountsResponse] = await Promise.all([
+				fetchApplicationSettings(apiBaseUrl, apiToken, actorId),
+				fetchProviderAccounts(apiBaseUrl, apiToken, actorId)
+			]);
+			applicationSettings = settingsResponse.items;
+			providerAccounts = accountsResponse.items;
+			applyLoadedFrontendSettings(settingsResponse.items);
+			settingDrafts = Object.fromEntries(
+				settingsResponse.items.map((setting) => [setting.setting_key, settingDraftValue(setting)])
+			);
+			settingsError = '';
+		} catch (error) {
+			settingsError = error instanceof Error ? error.message : 'Unknown settings error';
+		} finally {
+			isSettingsLoading = false;
+		}
+	}
+
+	async function saveSetting(setting: ApplicationSetting) {
+		const draft = settingDrafts[setting.setting_key] ?? '';
+		let nextValue: ApplicationSetting['value'];
+		try {
+			nextValue = settingDraftToValue(setting, draft);
+		} catch (error) {
+			settingsError = error instanceof Error ? error.message : 'Invalid setting value';
+			return;
+		}
+
+		savingSettingKey = setting.setting_key;
+		try {
+			const updated = await saveApplicationSetting(
+				apiBaseUrl,
+				apiToken,
+				actorId,
+				setting.setting_key,
+				nextValue
+			);
+			applicationSettings = applicationSettings.map((item) =>
+				item.setting_key === updated.setting_key ? updated : item
+			);
+			settingDrafts = {
+				...settingDrafts,
+				[updated.setting_key]: settingDraftValue(updated)
+			};
+			settingsActionMessage = `${updated.label} saved`;
+			settingsError = '';
+			if (updated.setting_key.startsWith('ai.')) {
+				void loadAiWorkspace();
+			}
+			if (updated.setting_key === 'frontend.actor_id') {
+				applyLoadedFrontendSettings([updated]);
+			}
+		} catch (error) {
+			settingsError = error instanceof Error ? error.message : 'Unknown setting update error';
+		} finally {
+			savingSettingKey = null;
 		}
 	}
 
@@ -1328,6 +1430,135 @@
 		}).format(date);
 	}
 
+	function groupSettingsByCategory(settings: ApplicationSetting[]) {
+		return settings.reduce<Record<string, ApplicationSetting[]>>((groups, setting) => {
+			groups[setting.category] = [...(groups[setting.category] ?? []), setting];
+			return groups;
+		}, {});
+	}
+
+	function applyLoadedFrontendSettings(settings: ApplicationSetting[]) {
+		const configuredActorId = stringSettingValue(settings, 'frontend.actor_id');
+		if (configuredActorId) {
+			actorId = configuredActorId;
+		}
+	}
+
+	function settingDraftValue(setting: ApplicationSetting) {
+		if (setting.value_kind === 'json') {
+			return JSON.stringify(setting.value, null, 2);
+		}
+		return String(setting.value);
+	}
+
+	function updateSettingDraft(settingKey: string, value: string) {
+		settingDrafts = {
+			...settingDrafts,
+			[settingKey]: value
+		};
+		settingsActionMessage = '';
+	}
+
+	function inputEventValue(event: Event) {
+		return (event.currentTarget as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement).value;
+	}
+
+	function checkboxEventValue(event: Event) {
+		return (event.currentTarget as HTMLInputElement).checked ? 'true' : 'false';
+	}
+
+	function settingDraftToValue(setting: ApplicationSetting, draft: string): ApplicationSetting['value'] {
+		const value = draft.trim();
+		if (setting.value_kind === 'integer') {
+			const numberValue = Number(value);
+			if (!Number.isInteger(numberValue)) {
+				throw new Error(`${setting.label} must be an integer`);
+			}
+			return numberValue;
+		}
+		if (setting.value_kind === 'boolean') {
+			return value === 'true';
+		}
+		if (setting.value_kind === 'json') {
+			return JSON.parse(value);
+		}
+		return value;
+	}
+
+	function settingAllowedValues(setting: ApplicationSetting) {
+		const values = setting.metadata.allowed_values;
+		if (!Array.isArray(values)) {
+			return [];
+		}
+		return values.filter((value): value is string => typeof value === 'string');
+	}
+
+	function settingControl(setting: ApplicationSetting) {
+		const control = setting.metadata.ui_control;
+		return typeof control === 'string' ? control : '';
+	}
+
+	function stringSettingValue(settings: ApplicationSetting[], settingKey: string) {
+		const value = settings.find((setting) => setting.setting_key === settingKey)?.value;
+		return typeof value === 'string' && value.trim() ? value.trim() : '';
+	}
+
+	function settingValueText(settingKey: string) {
+		const setting = applicationSettings.find((item) => item.setting_key === settingKey);
+		if (!setting) {
+			return 'not set';
+		}
+		if (setting.value === null || setting.value === undefined) {
+			return 'not set';
+		}
+		if (typeof setting.value === 'object') {
+			return JSON.stringify(setting.value);
+		}
+		return String(setting.value);
+	}
+
+	function settingMetadataFlag(setting: ApplicationSetting, key: string) {
+		return setting.metadata[key] === true;
+	}
+
+	function settingMetadataText(setting: ApplicationSetting, key: string) {
+		const value = setting.metadata[key];
+		return typeof value === 'string' && value.trim() ? value.trim() : '';
+	}
+
+	function settingHasChanged(setting: ApplicationSetting) {
+		return (settingDrafts[setting.setting_key] ?? settingDraftValue(setting)) !== settingDraftValue(setting);
+	}
+
+	function settingsCategoryLabel(category: string) {
+		return category
+			.split('_')
+			.flatMap((part) => part.split('-'))
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+			.join(' ');
+	}
+
+	function accountProviderIcon(providerKind: string) {
+		if (providerKind === 'telegram_user' || providerKind === 'telegram_bot') {
+			return 'tabler:brand-telegram';
+		}
+		if (providerKind === 'whatsapp_web') {
+			return 'tabler:brand-whatsapp';
+		}
+		return 'tabler:mail';
+	}
+
+	function accountProviderLabel(providerKind: string) {
+		return providerKind
+			.split('_')
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+			.join(' ');
+	}
+
+	function accountUpdatedLabel(account: ProviderAccount) {
+		return formatDateTime(account.updated_at) || 'Never';
+	}
+
 	function agentCardView(agent: AiAgent) {
 		const visual = agentVisual(agent.agent_id);
 		const runs = aiRuns.filter((run) => run.agent_id === agent.agent_id);
@@ -1578,6 +1809,7 @@
 			setupMessage = `Gmail account ${result.account_id} saved`;
 			gmailAuthorizationCode = '';
 			gmailPending = null;
+			await loadSettingsWorkspace();
 		} catch (error) {
 			setupError = error instanceof Error ? error.message : 'Gmail setup failed';
 		} finally {
@@ -1606,6 +1838,7 @@
 			});
 			setupMessage = `Mail account ${result.account_id} saved`;
 			imapForm = { ...imapForm, password: '' };
+			await loadSettingsWorkspace();
 		} catch (error) {
 			setupError = error instanceof Error ? error.message : 'Mail account setup failed';
 		} finally {
@@ -1709,7 +1942,7 @@
 				account_id: result.account_id
 			};
 			whatsappActionMessage = `${providerKindLabel(result.provider_kind)} account ${result.account_id} saved`;
-			await loadWhatsappWebWorkspace();
+			await Promise.all([loadWhatsappWebWorkspace(), loadSettingsWorkspace()]);
 		} catch (error) {
 			whatsappError = error instanceof Error ? error.message : 'WhatsApp Web fixture setup failed';
 		} finally {
@@ -1788,7 +2021,7 @@
 				...transcriptForm,
 				account_id: result.account_id
 			};
-			await loadTelegramWorkspace();
+			await Promise.all([loadTelegramWorkspace(), loadSettingsWorkspace()]);
 		} catch (error) {
 			telegramError = error instanceof Error ? error.message : 'Telegram fixture setup failed';
 		} finally {
@@ -2454,7 +2687,7 @@
 		</div>
 
 		<div class="sidebar-tools" aria-label="Settings shortcuts">
-			<button type="button" disabled title="Settings are not available yet">
+			<button type="button" class:active={currentView === 'settings'} title="Open settings" onclick={() => (currentView = 'settings')}>
 				<Icon icon="tabler:settings" width="18" height="18" />
 			</button>
 			<button type="button" disabled title="Help is not available yet">
@@ -3838,6 +4071,208 @@
 					</aside>
 				</div>
 			</section>
+		{:else if currentView === 'settings'}
+			<section class="settings-page">
+				<div class="view-header">
+					<div class="view-title-with-icon">
+						<span class="hero-mark small"><Icon icon="tabler:settings" width="28" height="28" /></span>
+						<div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div>
+					</div>
+					<button type="button" class="primary-button" onclick={() => void loadSettingsWorkspace()} disabled={isSettingsLoading}>
+						<Icon icon="tabler:refresh" width="16" height="16" />Refresh
+					</button>
+				</div>
+
+				<div class="metric-grid settings-metrics">
+					<article class="metric-card"><span>Settings</span><strong>{applicationSettings.length}</strong><small>Editable runtime values</small></article>
+					<article class="metric-card"><span>Accounts</span><strong>{providerAccounts.length}</strong><small>Email, Telegram, WhatsApp</small></article>
+					<article class="metric-card"><span>Mail</span><strong>{emailProviderAccounts.length}</strong><small>Gmail, iCloud, IMAP</small></article>
+					<article class="metric-card"><span>Telegram</span><strong>{telegramProviderAccounts.length}</strong><small>User and bot records</small></article>
+					<article class="metric-card"><span>WhatsApp</span><strong>{whatsappProviderAccounts.length}</strong><small>Web sessions</small></article>
+					<article class="metric-card"><span>Secrets</span><strong>Vault</strong><small>Values stay out of settings</small></article>
+				</div>
+
+				{#if settingsActionMessage}
+					<p class="setup-state success">{settingsActionMessage}</p>
+				{/if}
+				{#if settingsError}
+					<p class="inline-error">{settingsError}</p>
+				{/if}
+
+				<div class="section-tabs settings-tabs" aria-label="Settings sections">
+					<button type="button" class:active={selectedSettingsSection === 'application'} onclick={() => (selectedSettingsSection = 'application')}>
+						<Icon icon="tabler:adjustments-horizontal" width="16" height="16" />Application
+					</button>
+					<button type="button" class:active={selectedSettingsSection === 'accounts'} onclick={() => (selectedSettingsSection = 'accounts')}>
+						<Icon icon="tabler:users" width="16" height="16" />Accounts <em>{providerAccounts.length}</em>
+					</button>
+				</div>
+
+				{#if selectedSettingsSection === 'application'}
+					<div class="settings-layout">
+						<section class="panel settings-list-panel">
+							<header class="panel-title-row">
+								<div><h2>Application Settings</h2><p>All non-secret settings except database connectivity; secret-like keys are rejected.</p></div>
+							</header>
+							{#if isSettingsLoading && applicationSettings.length === 0}
+								<div class="empty-panel fill">Loading settings...</div>
+							{:else if Object.entries(settingsByCategory).length === 0}
+								<div class="empty-panel fill">No application settings are declared yet.</div>
+							{:else}
+								<div class="settings-category-list">
+									{#each Object.entries(settingsByCategory) as [category, settings]}
+										<section class="settings-category">
+											<header>
+												<h3>{settingsCategoryLabel(category)}</h3>
+												<span>{settings.length}</span>
+											</header>
+											{#each settings as setting}
+												<form class="setting-row" onsubmit={(event) => { event.preventDefault(); void saveSetting(setting); }}>
+													<div class="setting-copy">
+														<strong>{setting.label}</strong>
+														<p>{setting.description}</p>
+														<div class="setting-meta-row">
+															<code>{setting.setting_key}</code>
+															{#if settingMetadataFlag(setting, 'bootstrap')}
+																<em>Bootstrap</em>
+															{/if}
+															{#if settingMetadataFlag(setting, 'restart_required')}
+																<em>Restart</em>
+															{/if}
+															{#if settingMetadataText(setting, 'env_var')}
+																<em>{settingMetadataText(setting, 'env_var')}</em>
+															{/if}
+														</div>
+													</div>
+													<div class="setting-control">
+														{#if settingAllowedValues(setting).length}
+															<select value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} disabled={!setting.is_editable} onchange={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))}>
+																{#each settingAllowedValues(setting) as value}
+																	<option value={value}>{settingsCategoryLabel(value)}</option>
+																{/each}
+															</select>
+														{:else if setting.value_kind === 'boolean'}
+															<label class="setting-toggle">
+																<input type="checkbox" checked={(settingDrafts[setting.setting_key] ?? settingDraftValue(setting)) === 'true'} disabled={!setting.is_editable} onchange={(event) => updateSettingDraft(setting.setting_key, checkboxEventValue(event))} />
+																<span>{(settingDrafts[setting.setting_key] ?? settingDraftValue(setting)) === 'true' ? 'Enabled' : 'Disabled'}</span>
+															</label>
+														{:else if setting.value_kind === 'integer'}
+															<input type="number" value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} min={String(setting.metadata.min ?? '')} max={String(setting.metadata.max ?? '')} step={String(setting.metadata.step ?? 1)} disabled={!setting.is_editable} oninput={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))} />
+														{:else if setting.value_kind === 'json' || settingControl(setting) === 'textarea'}
+															<textarea value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} disabled={!setting.is_editable} rows="4" oninput={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))}></textarea>
+														{:else}
+															<input value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} placeholder={String(setting.metadata.placeholder ?? '')} disabled={!setting.is_editable} oninput={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))} />
+														{/if}
+														<button type="submit" disabled={!setting.is_editable || savingSettingKey === setting.setting_key || !settingHasChanged(setting)}>
+															{savingSettingKey === setting.setting_key ? 'Saving' : 'Save'}
+														</button>
+													</div>
+												</form>
+											{/each}
+										</section>
+									{/each}
+								</div>
+							{/if}
+						</section>
+
+						<aside class="stacked-rail settings-rail">
+							<section class="panel info-card">
+								<h2>Runtime Source</h2>
+								<div class="health-row"><span>Backend bind</span><strong>{settingValueText('server.http_addr')}</strong></div>
+								<div class="health-row"><span>Frontend API</span><strong>{settingValueText('frontend.api_base_url')}</strong></div>
+								<div class="health-row"><span>Actor</span><strong>{settingValueText('frontend.actor_id')}</strong></div>
+								<div class="health-row"><span>AI URL</span><strong>{settingValueText('ai.ollama_base_url')}</strong></div>
+								<div class="health-row"><span>Chat</span><strong>{settingValueText('ai.chat_model')}</strong></div>
+								<div class="health-row"><span>Embedding</span><strong>{settingValueText('ai.embedding_model')}</strong></div>
+							</section>
+							<section class="panel info-card">
+								<h2>Boundaries</h2>
+								<ul class="detail-list">
+									<li>PostgreSQL stores declared setting values<em>JSONB</em></li>
+									<li>Database URL stays outside the panel<em>Bootstrap</em></li>
+									<li>API token and vault key stay outside DB<em>Secret boundary</em></li>
+									<li>Credentials stay in encrypted vault<em>No secret values</em></li>
+									<li>Settings updates are audited<em>No values in audit</em></li>
+								</ul>
+							</section>
+						</aside>
+					</div>
+				{:else}
+					<div class="settings-account-layout">
+						<section class="panel account-section">
+							<header class="panel-title-row">
+								<div><h2>Mail Accounts</h2><p>Gmail OAuth, iCloud app-password and generic IMAP records.</p></div>
+								<button type="button" class="primary-button" onclick={openAccountDrawer}><Icon icon="tabler:plus" width="16" height="16" />Add Mail</button>
+							</header>
+							<div class="account-card-grid">
+								{#if emailProviderAccounts.length === 0}
+									<div class="empty-panel fill">No mail accounts configured.</div>
+								{:else}
+									{#each emailProviderAccounts as account}
+										<article class="account-card">
+											<span class="round-icon cyan"><Icon icon={accountProviderIcon(account.provider_kind)} width="22" height="22" /></span>
+											<div>
+												<strong>{account.display_name}</strong>
+												<p>{account.external_account_id || account.account_id}</p>
+												<small>{accountProviderLabel(account.provider_kind)} · updated {accountUpdatedLabel(account)}</small>
+											</div>
+											<code>{account.account_id}</code>
+										</article>
+									{/each}
+								{/if}
+							</div>
+						</section>
+
+						<section class="panel account-section">
+							<header class="panel-title-row">
+								<div><h2>Telegram Accounts</h2><p>User and bot accounts used by Telegram ingestion and automation policies.</p></div>
+								<button type="button" class="primary-button" onclick={() => (currentView = 'telegram')}><Icon icon="tabler:brand-telegram" width="16" height="16" />Setup</button>
+							</header>
+							<div class="account-card-grid">
+								{#if telegramProviderAccounts.length === 0}
+									<div class="empty-panel fill">No Telegram accounts configured.</div>
+								{:else}
+									{#each telegramProviderAccounts as account}
+										<article class="account-card">
+											<span class="round-icon purple"><Icon icon={accountProviderIcon(account.provider_kind)} width="22" height="22" /></span>
+											<div>
+												<strong>{account.display_name}</strong>
+												<p>{account.external_account_id || account.account_id}</p>
+												<small>{accountProviderLabel(account.provider_kind)} · updated {accountUpdatedLabel(account)}</small>
+											</div>
+											<code>{account.account_id}</code>
+										</article>
+									{/each}
+								{/if}
+							</div>
+						</section>
+
+						<section class="panel account-section">
+							<header class="panel-title-row">
+								<div><h2>Other Provider Accounts</h2><p>WhatsApp Web and future communication providers.</p></div>
+								<button type="button" class="primary-button" onclick={() => (currentView = 'whatsapp')}><Icon icon="tabler:brand-whatsapp" width="16" height="16" />Setup</button>
+							</header>
+							<div class="account-card-grid">
+								{#if whatsappProviderAccounts.length === 0}
+									<div class="empty-panel fill">No WhatsApp Web accounts configured.</div>
+								{:else}
+									{#each whatsappProviderAccounts as account}
+										<article class="account-card">
+											<span class="round-icon green"><Icon icon={accountProviderIcon(account.provider_kind)} width="22" height="22" /></span>
+											<div>
+												<strong>{account.display_name}</strong>
+												<p>{account.external_account_id || account.account_id}</p>
+												<small>{accountProviderLabel(account.provider_kind)} · updated {accountUpdatedLabel(account)}</small>
+											</div>
+											<code>{account.account_id}</code>
+										</article>
+									{/each}
+								{/if}
+							</div>
+						</section>
+					</div>
+				{/if}
+			</section>
 		{:else if currentView === 'agents'}
 			<section class="agents-page">
 				<div class="view-header">
@@ -4262,6 +4697,12 @@
 		color: #b6cdcc;
 	}
 
+	.sidebar-tools button.active {
+		border-color: rgba(45, 240, 206, 0.42);
+		background: rgba(25, 154, 132, 0.2);
+		color: #2df0ce;
+	}
+
 	.workspace {
 		display: grid;
 		grid-template-rows: 58px minmax(0, 1fr);
@@ -4420,6 +4861,7 @@
 	.notes-page,
 	.knowledge-page,
 	.agents-page,
+	.settings-page,
 	.timeline-page {
 		min-height: 0;
 		overflow: auto;
@@ -5632,6 +6074,7 @@
 	.calendar-layout,
 	.knowledge-layout,
 	.agents-layout,
+	.settings-layout,
 	.timeline-layout {
 		display: grid;
 		grid-template-columns: minmax(740px, 1fr) 310px;
@@ -6915,6 +7358,267 @@
 		color: #41f3d3;
 	}
 
+	.settings-metrics {
+		grid-template-columns: repeat(6, 1fr);
+		margin-bottom: 12px;
+	}
+
+	.settings-tabs {
+		margin-top: 12px;
+	}
+
+	.settings-layout {
+		grid-template-columns: minmax(760px, 1fr) 330px;
+		align-items: start;
+	}
+
+	.settings-list-panel {
+		min-height: 640px;
+	}
+
+	.settings-category-list {
+		display: grid;
+		gap: 14px;
+		padding: 14px;
+	}
+
+	.settings-category {
+		display: grid;
+		gap: 8px;
+	}
+
+	.settings-category > header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		min-height: 34px;
+		border-bottom: 1px solid rgba(102, 189, 180, 0.1);
+		color: #dcefed;
+	}
+
+	.settings-category h3 {
+		color: #f6fffe;
+		font-size: 14px;
+		font-weight: 560;
+	}
+
+	.settings-category header span {
+		border: 1px solid rgba(45, 240, 206, 0.14);
+		border-radius: 999px;
+		background: rgba(45, 240, 206, 0.08);
+		color: #9ee8df;
+		font-size: 11px;
+		padding: 2px 8px;
+	}
+
+	.setting-row {
+		display: grid;
+		grid-template-columns: minmax(280px, 1fr) minmax(360px, 0.92fr);
+		gap: 14px;
+		align-items: center;
+		min-height: 92px;
+		border: 1px solid rgba(111, 205, 195, 0.1);
+		border-radius: 8px;
+		background: rgba(4, 21, 24, 0.44);
+		padding: 12px;
+	}
+
+	.setting-copy {
+		display: grid;
+		gap: 5px;
+		min-width: 0;
+	}
+
+	.setting-copy strong {
+		color: #eefefb;
+		font-size: 13px;
+		font-weight: 650;
+	}
+
+	.setting-copy p {
+		color: #91a8a8;
+		font-size: 12px;
+		line-height: 1.45;
+	}
+
+	.setting-meta-row {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+		align-items: center;
+		min-width: 0;
+	}
+
+	.setting-copy code,
+	.account-card code {
+		overflow: hidden;
+		border: 1px solid rgba(111, 205, 195, 0.1);
+		border-radius: 999px;
+		background: rgba(2, 9, 11, 0.56);
+		color: #8fece1;
+		font-size: 11px;
+		padding: 3px 8px;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.setting-meta-row em {
+		max-width: 210px;
+		overflow: hidden;
+		border: 1px solid rgba(45, 240, 206, 0.12);
+		border-radius: 999px;
+		background: rgba(45, 240, 206, 0.07);
+		color: #9ee8df;
+		font-size: 10px;
+		font-style: normal;
+		padding: 3px 8px;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.setting-control {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 82px;
+		gap: 8px;
+		align-items: center;
+		min-width: 0;
+	}
+
+	.setting-control input,
+	.setting-control select,
+	.setting-control textarea {
+		width: 100%;
+		min-width: 0;
+		border: 1px solid rgba(111, 205, 195, 0.18);
+		border-radius: 7px;
+		background: rgba(2, 12, 16, 0.72);
+		color: #eefefb;
+		padding: 0 10px;
+	}
+
+	.setting-control input,
+	.setting-control select {
+		height: 38px;
+	}
+
+	.setting-control textarea {
+		min-height: 86px;
+		padding: 9px 10px;
+		resize: vertical;
+	}
+
+	.setting-control button {
+		height: 38px;
+		border-radius: 7px;
+		background: #2df0ce;
+		color: #032522;
+		font-size: 12px;
+		font-weight: 760;
+	}
+
+	.setting-control button:disabled {
+		background: rgba(111, 205, 195, 0.14);
+		color: #789b98;
+	}
+
+	.setting-toggle {
+		display: inline-flex;
+		align-items: center;
+		gap: 9px;
+		min-height: 38px;
+		border: 1px solid rgba(111, 205, 195, 0.18);
+		border-radius: 7px;
+		background: rgba(2, 12, 16, 0.72);
+		color: #dcefed;
+		padding: 0 10px;
+	}
+
+	.setting-toggle input {
+		width: 16px;
+		height: 16px;
+		accent-color: #2df0ce;
+	}
+
+	.setting-toggle span {
+		font-size: 12px;
+	}
+
+	.settings-rail {
+		display: grid;
+		gap: 12px;
+		align-content: start;
+	}
+
+	.settings-rail .detail-list li {
+		grid-template-columns: minmax(0, 1fr) auto;
+	}
+
+	.settings-account-layout {
+		display: grid;
+		gap: 12px;
+	}
+
+	.account-section {
+		min-height: 188px;
+	}
+
+	.account-card-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 10px;
+		padding: 14px;
+	}
+
+	.account-card {
+		display: grid;
+		grid-template-columns: 38px minmax(0, 1fr);
+		gap: 10px;
+		min-height: 118px;
+		border: 1px solid rgba(111, 205, 195, 0.1);
+		border-radius: 8px;
+		background: rgba(4, 21, 24, 0.5);
+		padding: 12px;
+	}
+
+	.account-card div {
+		min-width: 0;
+	}
+
+	.account-card strong {
+		display: block;
+		overflow: hidden;
+		color: #eefefb;
+		font-size: 13px;
+		font-weight: 650;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.account-card p,
+	.account-card small {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.account-card p {
+		margin-top: 4px;
+		color: #c7d9d8;
+		font-size: 12px;
+	}
+
+	.account-card small {
+		margin-top: 6px;
+		color: #91a8a8;
+		font-size: 11px;
+	}
+
+	.account-card code {
+		grid-column: 1 / -1;
+	}
+
 	.setup-state {
 		border-radius: 8px;
 		font-size: 12px;
@@ -6950,6 +7654,7 @@
 		.calendar-layout,
 		.knowledge-layout,
 		.agents-layout,
+		.settings-layout,
 		.timeline-layout {
 			transform-origin: top left;
 		}
@@ -6959,6 +7664,10 @@
 		}
 
 		.agent-grid {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+
+		.account-card-grid {
 			grid-template-columns: repeat(2, minmax(0, 1fr));
 		}
 	}

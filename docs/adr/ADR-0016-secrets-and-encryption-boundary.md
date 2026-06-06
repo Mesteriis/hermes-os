@@ -1,6 +1,8 @@
 # ADR-0016 Secrets and Encryption Boundary
 
-Status: Proposed
+Status: Superseded by ADR-0053
+
+This decision was superseded by ADR-0053, which keeps the secret boundary but moves encrypted provider credential payloads into a dedicated PostgreSQL vault table while keeping the vault key outside PostgreSQL.
 
 ## Context
 

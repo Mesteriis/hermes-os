@@ -22,6 +22,7 @@ use hermes_hub_backend::config::AppConfig;
 use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
 use hermes_hub_backend::projects::{NewProject, ProjectStore};
+use hermes_hub_backend::settings::ApplicationSettingsStore;
 use hermes_hub_backend::storage::Database;
 use hermes_hub_backend::{build_router, build_router_with_database};
 
@@ -114,6 +115,7 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
+    configure_fake_ollama_setting(&pool, &ollama_base_url).await;
     let suffix = unique_suffix();
     let retrieval_token = format!("V3AIAnswer{suffix}");
     let message_id = seed_message(
@@ -191,6 +193,7 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
+    configure_fake_ollama_setting(&pool, &ollama_base_url).await;
     let suffix = unique_suffix();
     let message_id = seed_message(
         &pool,
@@ -260,6 +263,7 @@ async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
+    configure_fake_ollama_setting(&pool, &ollama_base_url).await;
     let suffix = unique_suffix();
     let project_id = format!("project:v1:ai-meeting:{suffix}");
     ProjectStore::new(pool.clone())
@@ -404,6 +408,17 @@ async fn spawn_fake_ollama() -> String {
     });
 
     format!("http://{address}")
+}
+
+async fn configure_fake_ollama_setting(pool: &PgPool, ollama_base_url: &str) {
+    ApplicationSettingsStore::new(pool.clone())
+        .update_setting_value(
+            "ai.ollama_base_url",
+            &json!(ollama_base_url),
+            LOCAL_API_ACTOR_ID,
+        )
+        .await
+        .expect("fake Ollama setting");
 }
 
 fn unit_embedding(active_index: usize) -> Vec<f32> {

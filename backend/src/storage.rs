@@ -3,6 +3,7 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use thiserror::Error;
 
 use crate::event_log::{EventStoreError, expected_migration_summary, run_migrations};
+use crate::settings::{ApplicationSettingsStore, SettingsError};
 
 #[derive(Clone)]
 pub struct Database {
@@ -20,6 +21,17 @@ impl Database {
             .connect(database_url)
             .await?;
         run_migrations(&pool).await?;
+        let settings_repair = ApplicationSettingsStore::new(pool.clone())
+            .repair_declared_settings()
+            .await?;
+        if settings_repair.changed() {
+            tracing::warn!(
+                inserted = settings_repair.inserted,
+                repaired = settings_repair.repaired,
+                reset_values = settings_repair.reset_values,
+                "application settings were repaired during database startup"
+            );
+        }
 
         Ok(Self { pool: Some(pool) })
     }
@@ -188,4 +200,7 @@ pub enum StorageError {
 
     #[error(transparent)]
     EventStore(#[from] EventStoreError),
+
+    #[error(transparent)]
+    Settings(#[from] SettingsError),
 }

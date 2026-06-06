@@ -511,6 +511,7 @@ async fn communication_ingestion_scopes_secret_refs_by_provider_account_against_
             .expect("secret reference exists");
         let resolved = resolver
             .resolve(&reference)
+            .await
             .expect("resolve account-scoped secret");
         assert_eq!(resolved.expose_for_runtime(), *runtime_value);
     }

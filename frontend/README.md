@@ -81,7 +81,7 @@ POST http://127.0.0.1:8080/api/v3/ai/task-candidates/refresh
 POST http://127.0.0.1:8080/api/v3/ai/meeting-prep
 ```
 
-Requests use `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. The graph dashboard reads `/api/v2/graph/summary`; the graph explorer searches non-empty queries through `/api/v2/graph/search` and loads depth-1 neighborhoods through `/api/v2/graph/neighborhood`. The workflow tabs use protected project, task candidate, active task, contact identity and document-processing endpoints. Account setup also requires backend `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`.
+Requests use `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. The graph dashboard reads `/api/v2/graph/summary`; the graph explorer searches non-empty queries through `/api/v2/graph/search` and loads depth-1 neighborhoods through `/api/v2/graph/neighborhood`. The workflow tabs use protected project, task candidate, active task, contact identity and document-processing endpoints. Account setup also requires backend PostgreSQL and `HERMES_SECRET_VAULT_KEY`.
 
 The AI Agents tab reads V3 runtime status, registered agents, persisted run history and citation-backed workflow responses. Communications exposes scoped Ask AI for the selected message, Projects exposes scoped Prepare brief for the selected project, and Tasks exposes AI refresh for suggested task candidates. AI refresh writes only suggested candidates; the existing task review queue remains the path to active tasks.
 

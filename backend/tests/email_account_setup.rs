@@ -8,7 +8,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
-use tempfile::tempdir;
 use tower::ServiceExt;
 
 use hermes_hub_backend::build_router_with_database;
@@ -19,9 +18,10 @@ use hermes_hub_backend::config::AppConfig;
 use hermes_hub_backend::email_account_setup::{
     EmailAccountSetupService, GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
-use hermes_hub_backend::secret_vault::EncryptedSecretVault;
+use hermes_hub_backend::secret_vault::DatabaseEncryptedSecretVault;
 use hermes_hub_backend::secrets::{
-    ResolvedSecret, SecretKind, SecretReferenceStore, SecretResolver, SecretStoreKind,
+    NewSecretReference, ResolvedSecret, SecretKind, SecretReferenceStore, SecretResolver,
+    SecretStoreKind,
 };
 use hermes_hub_backend::storage::Database;
 
@@ -37,9 +37,8 @@ async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_pos
         return;
     };
     let token_server = MockTokenServer::start();
-    let vault_dir = tempdir().expect("vault tempdir");
-    let vault = EncryptedSecretVault::new(
-        vault_dir.path().join("vault.json"),
+    let vault = DatabaseEncryptedSecretVault::new(
+        database.pool().expect("configured pool").clone(),
         ResolvedSecret::new("gmail oauth vault key").expect("vault key"),
     );
 
@@ -80,7 +79,10 @@ async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_pos
 
     assert_eq!(completed.account_id, pending.account_id);
     assert_eq!(completed.secret_kind, SecretKind::OauthToken);
-    assert_eq!(completed.store_kind, SecretStoreKind::EncryptedVault);
+    assert_eq!(
+        completed.store_kind,
+        SecretStoreKind::DatabaseEncryptedVault
+    );
 
     let account = communication_store
         .provider_account(&pending.account_id)
@@ -109,10 +111,16 @@ async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_pos
         .await
         .expect("load secret reference")
         .expect("secret reference exists");
-    assert_eq!(reference.store_kind, SecretStoreKind::EncryptedVault);
+    assert_eq!(
+        reference.store_kind,
+        SecretStoreKind::DatabaseEncryptedVault
+    );
     assert_eq!(reference.secret_kind, SecretKind::OauthToken);
 
-    let token_bundle = vault.resolve(&reference).expect("resolve token bundle");
+    let token_bundle = vault
+        .resolve(&reference)
+        .await
+        .expect("resolve token bundle");
     let token_bundle: Value =
         serde_json::from_str(token_bundle.expose_for_runtime()).expect("token bundle json");
     assert_eq!(token_bundle["access_token"], "gmail-access-token");
@@ -130,16 +138,29 @@ async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_pos
 
 #[tokio::test]
 async fn gmail_oauth_refresh_returns_runtime_access_token_and_updates_vault() {
+    let Some((database, _communication_store, secret_store, suffix)) =
+        live_setup_context("gmail oauth refresh").await
+    else {
+        return;
+    };
     let token_server = MockTokenServer::start();
-    let vault_dir = tempdir().expect("vault tempdir");
-    let vault = EncryptedSecretVault::new(
-        vault_dir.path().join("vault.json"),
+    let vault = DatabaseEncryptedSecretVault::new(
+        database.pool().expect("configured pool").clone(),
         ResolvedSecret::new("refresh vault key").expect("vault key"),
     );
-    let secret_ref = "secret:gmail:oauth:refresh-test";
+    let secret_ref = format!("secret:gmail:oauth:refresh-test:{suffix}");
+    secret_store
+        .upsert_secret_reference(&NewSecretReference::new(
+            &secret_ref,
+            SecretKind::OauthToken,
+            SecretStoreKind::DatabaseEncryptedVault,
+            "Gmail refresh credential",
+        ))
+        .await
+        .expect("store refresh secret reference");
     vault
         .store_secret(
-            secret_ref,
+            &secret_ref,
             &json!({
                 "token_url": format!("{}/token", token_server.base_url()),
                 "client_id": "desktop-client-id",
@@ -149,11 +170,12 @@ async fn gmail_oauth_refresh_returns_runtime_access_token_and_updates_vault() {
             })
             .to_string(),
         )
+        .await
         .expect("store expired token bundle");
 
     let service = EmailAccountSetupService::new_for_vault_only(vault.clone());
     let access_token = service
-        .refresh_gmail_access_token(secret_ref)
+        .refresh_gmail_access_token(&secret_ref)
         .await
         .expect("refresh gmail access token");
 
@@ -163,7 +185,8 @@ async fn gmail_oauth_refresh_returns_runtime_access_token_and_updates_vault() {
     );
 
     let refreshed = vault
-        .resolve(&secret_reference(secret_ref))
+        .resolve(&secret_reference(&secret_ref))
+        .await
         .expect("resolve refreshed token bundle");
     let refreshed: Value =
         serde_json::from_str(refreshed.expose_for_runtime()).expect("refreshed token bundle json");
@@ -178,18 +201,19 @@ async fn gmail_oauth_refresh_returns_runtime_access_token_and_updates_vault() {
             .body
             .contains("refresh_token=gmail-refresh-token")
     );
+
+    drop(database);
 }
 
 #[tokio::test]
-async fn imap_account_setup_stores_only_secret_reference_metadata_against_postgres() {
+async fn imap_account_setup_stores_encrypted_secret_in_database_against_postgres() {
     let Some((database, communication_store, secret_store, suffix)) =
         live_setup_context("imap account setup").await
     else {
         return;
     };
-    let vault_dir = tempdir().expect("vault tempdir");
-    let vault = EncryptedSecretVault::new(
-        vault_dir.path().join("vault.json"),
+    let vault = DatabaseEncryptedSecretVault::new(
+        database.pool().expect("configured pool").clone(),
         ResolvedSecret::new("imap vault key").expect("vault key"),
     );
     let service = EmailAccountSetupService::new(
@@ -240,11 +264,15 @@ async fn imap_account_setup_stores_only_secret_reference_metadata_against_postgr
         .await
         .expect("load secret reference")
         .expect("secret reference exists");
-    assert_eq!(reference.store_kind, SecretStoreKind::EncryptedVault);
+    assert_eq!(
+        reference.store_kind,
+        SecretStoreKind::DatabaseEncryptedVault
+    );
     assert_eq!(reference.secret_kind, SecretKind::AppPassword);
     assert_eq!(
         vault
             .resolve(&reference)
+            .await
             .expect("resolve imap password")
             .expose_for_runtime(),
         "icloud-app-password"
@@ -254,7 +282,7 @@ async fn imap_account_setup_stores_only_secret_reference_metadata_against_postgr
 }
 
 #[tokio::test]
-async fn imap_account_setup_api_requires_configured_encrypted_vault() {
+async fn imap_account_setup_api_requires_configured_database() {
     let app = build_router_with_database(
         AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)]).expect("config"),
         Database::disabled(),
@@ -273,6 +301,49 @@ async fn imap_account_setup_api_requires_configured_encrypted_vault() {
                 "tls": true,
                 "mailbox": "INBOX",
                 "username": "no-vault@example.net",
+                "password": "secret"
+            }),
+            LOCAL_API_TOKEN,
+            LOCAL_API_ACTOR_ID,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], "database_not_configured");
+}
+
+#[tokio::test]
+async fn imap_account_setup_api_requires_configured_database_vault_key_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live account setup missing vault key test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)]).expect("config"),
+        database.clone(),
+    );
+
+    let response = app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/email-accounts/imap",
+            json!({
+                "account_id": "acct_no_vault_key",
+                "provider_kind": "imap",
+                "display_name": "No vault key",
+                "external_account_id": "no-vault-key@example.net",
+                "host": "imap.example.net",
+                "port": 993,
+                "tls": true,
+                "mailbox": "INBOX",
+                "username": "no-vault-key@example.net",
                 "password": "secret"
             }),
             LOCAL_API_TOKEN,
@@ -428,7 +499,7 @@ fn secret_reference(secret_ref: &str) -> hermes_hub_backend::secrets::SecretRefe
     hermes_hub_backend::secrets::SecretReference {
         secret_ref: secret_ref.to_owned(),
         secret_kind: SecretKind::OauthToken,
-        store_kind: SecretStoreKind::EncryptedVault,
+        store_kind: SecretStoreKind::DatabaseEncryptedVault,
         label: "Gmail OAuth".to_owned(),
         metadata: json!({}),
         created_at: now,

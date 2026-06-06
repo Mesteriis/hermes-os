@@ -92,6 +92,29 @@ impl CommunicationIngestionStore {
         row.map(row_to_provider_account).transpose()
     }
 
+    pub async fn list_provider_accounts(
+        &self,
+    ) -> Result<Vec<ProviderAccount>, CommunicationIngestionError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            FROM communication_provider_accounts
+            ORDER BY provider_kind ASC, display_name ASC, account_id ASC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_provider_account).collect()
+    }
+
     pub async fn record_raw_source(
         &self,
         record: &NewRawCommunicationRecord,
@@ -377,7 +400,7 @@ impl<'a, R: SecretResolver + ?Sized> ProviderCredentialReader<'a, R> {
             });
         }
 
-        let secret = self.resolver.resolve(&reference)?;
+        let secret = self.resolver.resolve(&reference).await?;
 
         Ok(ProviderCredential {
             binding,

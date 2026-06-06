@@ -78,10 +78,6 @@ docker-env:
 			fi; \
 			printf '%s\n' 'Added HERMES_LOCAL_API_TOKEN to docker/.env. Review it before running services.'; \
 		fi; \
-		if ! grep -q '^HERMES_SECRET_VAULT_PATH=' docker/.env; then \
-			printf '\nHERMES_SECRET_VAULT_PATH=docker/data/secrets/hermes-secrets.vault.json\n' >> docker/.env; \
-			printf '%s\n' 'Added HERMES_SECRET_VAULT_PATH to docker/.env. Review it before running services.'; \
-		fi; \
 		if ! grep -q '^HERMES_SECRET_VAULT_KEY=' docker/.env; then \
 			printf '\nHERMES_SECRET_VAULT_KEY=change-me-local-secret-vault-key\n' >> docker/.env; \
 			printf '%s\n' 'Added HERMES_SECRET_VAULT_KEY to docker/.env. Review it before running services.'; \
@@ -164,7 +160,6 @@ dev: docker-env
 		$(MAKE) db-up; \
 		export DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}"; \
 		export HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}"; \
-		export HERMES_SECRET_VAULT_PATH="$${HERMES_SECRET_VAULT_PATH}"; \
 		export HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}"; \
 		export HERMES_HTTP_ADDR="$$backend_bind:$$backend_port"; \
 		if command -v watchexec >/dev/null 2>&1; then \
@@ -264,7 +259,6 @@ backend-run-dev: docker-env
 	@set -a; . docker/.env; set +a; \
 		DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
 		HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}" \
-		HERMES_SECRET_VAULT_PATH="$${HERMES_SECRET_VAULT_PATH}" \
 		HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}" \
 		cargo run --manifest-path $(BACKEND_MANIFEST)
 
@@ -286,7 +280,6 @@ backend-watch-dev: docker-env
 		fi; \
 		export DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}"; \
 		export HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}"; \
-		export HERMES_SECRET_VAULT_PATH="$${HERMES_SECRET_VAULT_PATH}"; \
 		export HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}"; \
 		export HERMES_HTTP_ADDR="$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080}"; \
 		printf '%s\n' "Backend: http://$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080} (auto-restart)"; \
