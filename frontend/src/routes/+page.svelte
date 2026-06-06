@@ -1235,7 +1235,7 @@
 				topic,
 				project_id: projectId
 			});
-			currentView = 'agents';
+			setCurrentView('agents');
 			await loadAiRunsOnly();
 		} catch (error) {
 			aiError = error instanceof Error ? error.message : 'Unknown AI meeting prep error';
@@ -1442,7 +1442,7 @@
 			return;
 		}
 		aiQuestion = `Answer from local sources for message ${message.message_id}: ${message.subject}`;
-		currentView = 'agents';
+		setCurrentView('agents');
 		await submitAiAnswer();
 	}
 
@@ -1927,12 +1927,17 @@
 		return 'tabler:file';
 	}
 
+	function setCurrentView(viewId: ViewId) {
+		currentView = viewId;
+		isWidgetDrawerOpen = false;
+		searchQuery = '';
+	}
+
 	function setView(item: NavItem) {
 		if (!item.enabled) {
 			return;
 		}
-		currentView = item.id;
-		searchQuery = '';
+		setCurrentView(item.id);
 	}
 
 	function openAccountDrawer() {
@@ -2925,7 +2930,7 @@
 		</div>
 
 		<div class="sidebar-tools" aria-label="Settings shortcuts">
-			<button type="button" class:active={currentView === 'settings'} title="Open settings" onclick={() => (currentView = 'settings')}>
+			<button type="button" class:active={currentView === 'settings'} title="Open settings" onclick={() => setCurrentView('settings')}>
 				<Icon icon="tabler:settings" width="18" height="18" />
 			</button>
 			<button type="button" disabled title="Help is not available yet">
@@ -3116,7 +3121,7 @@
 					<section class="panel full-band">
 						<header class="panel-title-row">
 							<h2>Active Projects</h2>
-							<button type="button" class="link-button" onclick={() => (currentView = 'projects')}>View all projects</button>
+							<button type="button" class="link-button" onclick={() => setCurrentView('projects')}>View all projects</button>
 						</header>
 						<div class="project-card-row">
 							{#each projects as project}
@@ -4727,7 +4732,7 @@
 							<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Telegram Accounts</h2><p>User and bot accounts used by Telegram ingestion and automation policies.</p></div>
-									<button type="button" class="primary-button" onclick={() => (currentView = 'telegram')}><Icon icon="tabler:brand-telegram" width="16" height="16" />Setup</button>
+									<button type="button" class="primary-button" onclick={() => setCurrentView('telegram')}><Icon icon="tabler:brand-telegram" width="16" height="16" />Setup</button>
 								</header>
 								<div class="account-card-grid">
 									{#if telegramProviderAccounts.length === 0}
@@ -4751,7 +4756,7 @@
 							<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Other Provider Accounts</h2><p>WhatsApp Web and future communication providers.</p></div>
-									<button type="button" class="primary-button" onclick={() => (currentView = 'whatsapp')}><Icon icon="tabler:brand-whatsapp" width="16" height="16" />Setup</button>
+									<button type="button" class="primary-button" onclick={() => setCurrentView('whatsapp')}><Icon icon="tabler:brand-whatsapp" width="16" height="16" />Setup</button>
 								</header>
 								<div class="account-card-grid">
 									{#if whatsappProviderAccounts.length === 0}
