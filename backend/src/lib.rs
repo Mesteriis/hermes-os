@@ -1,3 +1,4 @@
+pub mod ai;
 pub mod audit;
 pub mod communications;
 pub mod config;
@@ -19,6 +20,7 @@ pub mod graph;
 pub mod graph_projection;
 pub mod mail_storage;
 pub mod messages;
+pub mod ollama;
 pub mod project_link_reviews;
 pub mod projections;
 pub mod projects;
@@ -45,6 +47,10 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 use url::form_urlencoded;
 
+use crate::ai::{
+    AI_EMBEDDING_DIMENSION, AiAgentListResponse, AiAgentRun, AiAnswerRequest, AiError,
+    AiMeetingPrepRequest, AiService, AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
+};
 use crate::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
 use crate::communications::{CommunicationIngestionStore, EmailProviderKind};
 use crate::config::AppConfig;
@@ -69,6 +75,7 @@ use crate::mail_storage::{MailStorageError, MailStorageStore, StoredMailAttachme
 use crate::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
 };
+use crate::ollama::{OllamaClient, OllamaClientConfig};
 use crate::project_link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewError, ProjectLinkReviewState,
     ProjectLinkReviewStore, ProjectLinkTargetKind,
@@ -163,6 +170,16 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             put(put_task_candidate_review),
         )
         .route("/api/v2/tasks", get(get_tasks))
+        .route("/api/v3/ai/status", get(get_v3_ai_status))
+        .route("/api/v3/agents", get(get_v3_agents))
+        .route("/api/v3/ai/runs", get(get_v3_ai_runs))
+        .route("/api/v3/ai/runs/{run_id}", get(get_v3_ai_run))
+        .route("/api/v3/ai/answers", post(post_v3_ai_answer))
+        .route(
+            "/api/v3/ai/task-candidates/refresh",
+            post(post_v3_ai_task_candidates_refresh),
+        )
+        .route("/api/v3/ai/meeting-prep", post(post_v3_ai_meeting_prep))
         .route(
             "/api/v1/email-accounts/gmail/oauth/start",
             post(post_gmail_oauth_start),
@@ -839,6 +856,116 @@ async fn post_imap_account_setup(
     Ok(Json(result.into()))
 }
 
+async fn get_v3_ai_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<AiStatusResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let ollama = ollama_client(&state.config)?;
+    let version = ollama.version().await;
+    let tags = ollama.tags().await;
+    let chat_model = state.config.ollama_chat_model().to_owned();
+    let embedding_model = state.config.ollama_embed_model().to_owned();
+    let chat_model_available = tags
+        .as_ref()
+        .map(|models| models.iter().any(|model| model == &chat_model))
+        .unwrap_or(false);
+    let embedding_model_available = tags
+        .as_ref()
+        .map(|models| models.iter().any(|model| model == &embedding_model))
+        .unwrap_or(false);
+
+    Ok(Json(AiStatusResponse {
+        runtime: "ollama".to_owned(),
+        status: if version.is_ok() && chat_model_available && embedding_model_available {
+            "ok"
+        } else {
+            "unavailable"
+        }
+        .to_owned(),
+        version: version.ok(),
+        chat_model,
+        embedding_model,
+        embedding_dimension: AI_EMBEDDING_DIMENSION,
+        chat_model_available,
+        embedding_model_available,
+    }))
+}
+
+async fn get_v3_agents(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<AiAgentListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(AiAgentListResponse {
+        items: v3_agents(state.config.ollama_chat_model()),
+    }))
+}
+
+async fn get_v3_ai_runs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AiRunsQuery>,
+) -> Result<Json<AiRunListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let limit = query.limit.unwrap_or(25).clamp(1, 100);
+    let runs = ai_run_store(&state)?.list_runs(limit).await?;
+
+    Ok(Json(AiRunListResponse { items: runs }))
+}
+
+async fn get_v3_ai_run(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(run_id): Path<String>,
+) -> Result<Json<AiAgentRun>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let Some(run) = ai_run_store(&state)?.get_run(&run_id).await? else {
+        return Err(ApiError::AiRunNotFound);
+    };
+
+    Ok(Json(run))
+}
+
+async fn post_v3_ai_answer(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<AiAnswerRequest>,
+) -> Result<Json<crate::ai::AiAnswerResponse>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let service = ai_service(&state)?;
+    let response = service.answer(request, &actor.actor_id).await?;
+
+    Ok(Json(response))
+}
+
+async fn post_v3_ai_task_candidates_refresh(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<AiTaskCandidateRefreshRequest>,
+) -> Result<Json<crate::ai::AiTaskCandidateRefreshResponse>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let service = ai_service(&state)?;
+    let response = service
+        .refresh_task_candidates(request, &actor.actor_id)
+        .await?;
+
+    Ok(Json(response))
+}
+
+async fn post_v3_ai_meeting_prep(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<AiMeetingPrepRequest>,
+) -> Result<Json<crate::ai::AiMeetingPrepResponse>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let service = ai_service(&state)?;
+    let response = service.meeting_prep(request, &actor.actor_id).await?;
+
+    Ok(Json(response))
+}
+
 fn event_store(state: &AppState) -> Result<EventStore, ApiError> {
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
@@ -893,6 +1020,39 @@ fn task_candidate_store(state: &AppState) -> Result<TaskCandidateStore, ApiError
     };
 
     Ok(TaskCandidateStore::new(pool.clone()))
+}
+
+fn ai_run_store(state: &AppState) -> Result<crate::ai::AiRunStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(crate::ai::AiRunStore::new(pool.clone()))
+}
+
+fn ai_service(state: &AppState) -> Result<AiService, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let ollama = ollama_client(&state.config)?;
+
+    Ok(AiService::new(
+        pool.clone(),
+        ollama,
+        state.config.ollama_chat_model(),
+        state.config.ollama_embed_model(),
+    ))
+}
+
+fn ollama_client(config: &AppConfig) -> Result<OllamaClient, ApiError> {
+    Ok(OllamaClient::new(
+        OllamaClientConfig::new(
+            config.ollama_base_url(),
+            config.ollama_chat_model(),
+            config.ollama_embed_model(),
+        )
+        .with_timeout_seconds(config.ollama_timeout_seconds()),
+    )?)
 }
 
 fn document_processing_store(state: &AppState) -> Result<DocumentProcessingStore, ApiError> {
@@ -1253,6 +1413,16 @@ struct ProjectLinkCandidateListResponse {
 #[derive(Serialize)]
 struct TaskCandidateListResponse {
     items: Vec<TaskCandidate>,
+}
+
+#[derive(Deserialize)]
+struct AiRunsQuery {
+    limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct AiRunListResponse {
+    items: Vec<AiAgentRun>,
 }
 
 #[derive(Serialize)]
@@ -1837,6 +2007,8 @@ enum ApiError {
     DocumentProcessing(DocumentProcessingError),
     TaskCandidateNotFound,
     TaskCandidate(TaskCandidateError),
+    AiRunNotFound,
+    Ai(AiError),
     ProjectLinkTargetNotFound,
     ProjectLinkReview(ProjectLinkReviewError),
     ContactIdentityNotFound,
@@ -2027,6 +2199,86 @@ impl axum::response::IntoResponse for ApiError {
                     false,
                 )
             }
+            Self::AiRunNotFound => (
+                StatusCode::NOT_FOUND,
+                "ai_run_not_found",
+                "AI run was not found".to_owned(),
+                false,
+            ),
+            Self::Ai(error) => match error {
+                AiError::InvalidRequest(message) => (
+                    StatusCode::BAD_REQUEST,
+                    "invalid_ai_request",
+                    message.to_owned(),
+                    false,
+                ),
+                AiError::UnknownAgent(agent_id) => (
+                    StatusCode::BAD_REQUEST,
+                    "unknown_ai_agent",
+                    format!("unknown AI agent `{agent_id}`"),
+                    false,
+                ),
+                AiError::RunNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "ai_run_not_found",
+                    "AI run was not found".to_owned(),
+                    false,
+                ),
+                AiError::Ollama(error) => (
+                    StatusCode::BAD_GATEWAY,
+                    "ollama_runtime_error",
+                    error.to_string(),
+                    false,
+                ),
+                AiError::InvalidEmbeddingDimension { .. } => (
+                    StatusCode::BAD_GATEWAY,
+                    "invalid_embedding_dimension",
+                    "embedding provider returned an unexpected vector dimension".to_owned(),
+                    false,
+                ),
+                AiError::Json(error) => (
+                    StatusCode::BAD_GATEWAY,
+                    "ai_provider_json_error",
+                    error.to_string(),
+                    false,
+                ),
+                AiError::InvalidSourceKind(value) => {
+                    tracing::error!(source_kind = %value, "AI runtime saw invalid semantic source kind");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ai_runtime_error",
+                        "AI runtime operation failed".to_owned(),
+                        false,
+                    )
+                }
+                AiError::EventEnvelope(error) => {
+                    tracing::error!(error = %error, "AI runtime operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ai_runtime_error",
+                        "AI runtime operation failed".to_owned(),
+                        false,
+                    )
+                }
+                AiError::EventStore(error) => {
+                    tracing::error!(error = %error, "AI event store operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ai_runtime_error",
+                        "AI runtime operation failed".to_owned(),
+                        false,
+                    )
+                }
+                AiError::Sqlx(error) => {
+                    tracing::error!(error = %error, "AI database operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ai_runtime_error",
+                        "AI runtime operation failed".to_owned(),
+                        false,
+                    )
+                }
+            },
             Self::ProjectLinkTargetNotFound => (
                 StatusCode::NOT_FOUND,
                 "project_link_target_not_found",
@@ -2195,6 +2447,21 @@ impl From<TaskCandidateError> for ApiError {
             TaskCandidateError::TaskCandidateNotFound => Self::TaskCandidateNotFound,
             _ => Self::TaskCandidate(error),
         }
+    }
+}
+
+impl From<AiError> for ApiError {
+    fn from(error: AiError) -> Self {
+        match error {
+            AiError::RunNotFound => Self::AiRunNotFound,
+            _ => Self::Ai(error),
+        }
+    }
+}
+
+impl From<crate::ollama::OllamaError> for ApiError {
+    fn from(error: crate::ollama::OllamaError) -> Self {
+        Self::Ai(AiError::Ollama(error))
     }
 }
 

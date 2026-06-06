@@ -10,18 +10,31 @@
 		fetchGraphSummary,
 		fetchProjectDetail,
 		fetchDocumentProcessingJobs,
+		fetchAiAgents,
+		fetchAiRuns,
+		fetchAiStatus,
 		fetchIdentityCandidates,
 		fetchTaskCandidates,
 		fetchTasks,
 		fetchProjects,
 		fetchV1Status,
+		refreshAiTaskCandidates,
 		reviewIdentityCandidate,
 		reviewTaskCandidate,
+		requestAiAnswer,
+		requestAiMeetingPrep,
 		retryDocumentProcessingJob,
 		searchGraphNodes,
 		setupImapAccount,
 		startGmailOAuthSetup,
 		type ActiveTask,
+		type AiAgent,
+		type AiAnswerResponse,
+		type AiCitation,
+		type AiMeetingPrepResponse,
+		type AiRun,
+		type AiStatus,
+		type AiTaskCandidateRefreshResponse,
 		type ContactIdentityCandidate,
 		type ContactIdentityReviewState,
 		type CommunicationMessageDetail,
@@ -210,6 +223,20 @@
 	let selectedConversationIndex = $state(0);
 	let selectedContactIndex = $state(0);
 	let selectedAgentIndex = $state(0);
+	let aiStatus = $state<AiStatus | null>(null);
+	let aiAgents = $state<AiAgent[]>([]);
+	let aiRuns = $state<AiRun[]>([]);
+	let aiError = $state('');
+	let isAiLoading = $state(false);
+	let isAiAnswerSubmitting = $state(false);
+	let isAiTaskRefreshSubmitting = $state(false);
+	let isAiMeetingPrepSubmitting = $state(false);
+	let aiQuestion = $state('What does the local memory say about Hermes Hub V3?');
+	let aiMeetingTopic = $state('Prepare a V3 implementation review brief');
+	let aiTaskQuery = $state('Find open task candidates from local messages and documents');
+	let aiAnswerResult = $state<AiAnswerResponse | null>(null);
+	let aiMeetingPrepResult = $state<AiMeetingPrepResponse | null>(null);
+	let aiTaskRefreshResult = $state<AiTaskCandidateRefreshResponse | null>(null);
 	let selectedProvider = $state<Provider>('gmail');
 	let isAccountDrawerOpen = $state(false);
 	let isSetupSubmitting = $state(false);
@@ -498,18 +525,6 @@
 		{ title: 'Email: Partnership Opportunity', body: 'Интересное предложение о партнерстве. Нужно обсудить с командой...', source: 'Outlook', tag: '#partnership', time: 'May 12, 16:20', icon: 'tabler:mail' }
 	];
 
-	const agentCards = [
-		{ name: 'Research Analyst', summary: 'Researches topics, finds information, and creates comprehensive reports.', icon: 'tabler:zoom-scan', tasks: 124, success: '92%', status: 'Active', tone: 'purple' },
-		{ name: 'Email Assistant', summary: 'Manages emails, drafts responses, categorizes and summarizes.', icon: 'tabler:mail', tasks: 532, success: '96%', status: 'Active', tone: 'blue' },
-		{ name: 'Meeting Summarizer', summary: 'Joins meetings, transcribes, and creates action items.', icon: 'tabler:calendar', tasks: 312, success: '94%', status: 'Active', tone: 'mint' },
-		{ name: 'Task Manager', summary: 'Organizes tasks, sets priorities, and tracks progress.', icon: 'tabler:checkbox', tasks: 218, success: '91%', status: 'Active', tone: 'amber' },
-		{ name: 'Knowledge Curator', summary: 'Organizes information and connects insights.', icon: 'tabler:folders', tasks: 423, success: '95%', status: 'Active', tone: 'purple' },
-		{ name: 'Data Analyst', summary: 'Analyzes data and generates visualizations.', icon: 'tabler:chart-bar', tasks: 98, success: '89%', status: 'Inactive', tone: 'cyan' },
-		{ name: 'Project Scout', summary: 'Monitors project updates, risks, and opportunities.', icon: 'tabler:target-arrow', tasks: 156, success: '90%', status: 'Active', tone: 'orange' },
-		{ name: 'Content Creator', summary: 'Creates content, drafts documents, and helps with writing.', icon: 'tabler:pencil', tasks: 278, success: '93%', status: 'Active', tone: 'pink' },
-		{ name: 'Automation Builder', summary: 'Builds and manages automations across workflows.', icon: 'tabler:bolt', tasks: 24, success: '88%', status: 'Inactive', tone: 'cyan' }
-	];
-
 	const weekColumns = ['MON 12', 'TUE 13', 'WED 14', 'THU 15', 'FRI 16', 'SAT 17', 'SUN 18'];
 	const calendarBlocks = [
 		{ day: 0, top: 24, height: 52, title: 'Team Standup', meta: 'Google Calendar', tone: 'blue' },
@@ -528,7 +543,8 @@
 	const selectedCommunication = $derived(communicationMessages[selectedConversationIndex] ?? null);
 	const selectedConversation = $derived(conversations[selectedConversationIndex] ?? conversations[0]);
 	const selectedContact = $derived(contactList[selectedContactIndex] ?? contactList[0]);
-	const selectedAgent = $derived(agentCards[selectedAgentIndex] ?? agentCards[0]);
+	const agentCards = $derived(aiAgents.map(agentCardView));
+	const selectedAgent = $derived(agentCards[selectedAgentIndex] ?? agentCards[0] ?? null);
 	const activeView = $derived(viewCopy[currentView]);
 	const activeShortcuts = $derived(shortcutsByView[currentView]);
 	const selectedGraphNode = $derived(graphNeighborhood?.selected_node ?? null);
@@ -577,6 +593,7 @@
 		void loadProjects();
 		void loadIdentityCandidates();
 		void loadTaskReviewState();
+		void loadAiWorkspace();
 	});
 
 	async function loadV1Status() {
@@ -756,6 +773,105 @@
 			tasksError = error instanceof Error ? error.message : 'Unknown task candidate error';
 		} finally {
 			isTasksLoading = false;
+		}
+	}
+
+	async function loadAiWorkspace() {
+		isAiLoading = true;
+		try {
+			const [agentResponse, runResponse] = await Promise.all([
+				fetchAiAgents(apiBaseUrl, apiToken, actorId),
+				fetchAiRuns(apiBaseUrl, apiToken, actorId, 25)
+			]);
+			aiAgents = agentResponse.items;
+			aiRuns = runResponse.items;
+			if (selectedAgentIndex >= aiAgents.length) {
+				selectedAgentIndex = 0;
+			}
+			aiError = '';
+			try {
+				aiStatus = await fetchAiStatus(apiBaseUrl, apiToken, actorId);
+			} catch (statusError) {
+				aiStatus = null;
+				aiError =
+					statusError instanceof Error ? statusError.message : 'Unknown AI status error';
+			}
+		} catch (error) {
+			aiError = error instanceof Error ? error.message : 'Unknown AI runtime error';
+		} finally {
+			isAiLoading = false;
+		}
+	}
+
+	async function submitAiAnswer() {
+		const query = aiQuestion.trim();
+		if (!query || isAiAnswerSubmitting) {
+			return;
+		}
+		isAiAnswerSubmitting = true;
+		aiError = '';
+		try {
+			aiAnswerResult = await requestAiAnswer(apiBaseUrl, apiToken, actorId, {
+				command_id: `ai-answer-${crypto.randomUUID()}`,
+				query,
+				agent_id: selectedAgent?.agentId ?? 'MNEMOSYNE'
+			});
+			await loadAiRunsOnly();
+		} catch (error) {
+			aiError = error instanceof Error ? error.message : 'Unknown AI answer error';
+		} finally {
+			isAiAnswerSubmitting = false;
+		}
+	}
+
+	async function refreshTasksFromAi() {
+		const query = aiTaskQuery.trim();
+		if (!query || isAiTaskRefreshSubmitting) {
+			return;
+		}
+		isAiTaskRefreshSubmitting = true;
+		aiError = '';
+		try {
+			aiTaskRefreshResult = await refreshAiTaskCandidates(apiBaseUrl, apiToken, actorId, {
+				command_id: `ai-task-refresh-${crypto.randomUUID()}`,
+				query
+			});
+			await Promise.all([loadTaskReviewState(), loadAiRunsOnly()]);
+		} catch (error) {
+			aiError = error instanceof Error ? error.message : 'Unknown AI task refresh error';
+		} finally {
+			isAiTaskRefreshSubmitting = false;
+		}
+	}
+
+	async function prepareAiBrief(projectId = selectedProjectRecord?.project_id) {
+		const topic = aiMeetingTopic.trim();
+		if (!topic || isAiMeetingPrepSubmitting) {
+			return;
+		}
+		isAiMeetingPrepSubmitting = true;
+		aiError = '';
+		try {
+			aiMeetingPrepResult = await requestAiMeetingPrep(apiBaseUrl, apiToken, actorId, {
+				command_id: `ai-meeting-prep-${crypto.randomUUID()}`,
+				topic,
+				project_id: projectId
+			});
+			currentView = 'agents';
+			await loadAiRunsOnly();
+		} catch (error) {
+			aiError = error instanceof Error ? error.message : 'Unknown AI meeting prep error';
+		} finally {
+			isAiMeetingPrepSubmitting = false;
+		}
+	}
+
+	async function loadAiRunsOnly() {
+		try {
+			const response = await fetchAiRuns(apiBaseUrl, apiToken, actorId, 25);
+			aiRuns = response.items;
+		} catch (error) {
+			aiError = error instanceof Error ? error.message : 'Unknown AI run history error';
 		}
 	}
 
@@ -942,6 +1058,16 @@
 		}
 	}
 
+	async function askAiAboutSelectedMessage() {
+		const message = selectedCommunicationDetail?.message ?? selectedCommunication;
+		if (!message) {
+			return;
+		}
+		aiQuestion = `Answer from local sources for message ${message.message_id}: ${message.subject}`;
+		currentView = 'agents';
+		await submitAiAnswer();
+	}
+
 	function senderLabel(sender: string) {
 		const match = sender.match(/^"?([^"<]+)"?\s*</);
 		return (match?.[1] ?? senderEmail(sender) ?? sender).trim();
@@ -984,6 +1110,92 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		}).format(date);
+	}
+
+	function agentCardView(agent: AiAgent) {
+		const visual = agentVisual(agent.agent_id);
+		const runs = aiRuns.filter((run) => run.agent_id === agent.agent_id);
+		const completed = runs.filter((run) => run.status === 'completed').length;
+		const success = runs.length > 0 ? Math.round((completed / runs.length) * 100) : 0;
+
+		return {
+			agentId: agent.agent_id,
+			name: agent.display_name,
+			summary: agent.role,
+			icon: visual.icon,
+			tasks: runs.length,
+			success: runs.length > 0 ? `${success}%` : 'n/a',
+			status: agent.status,
+			tone: visual.tone,
+			model: agent.default_model
+		};
+	}
+
+	function agentVisual(agentId: string) {
+		switch (agentId) {
+			case 'HESTIA':
+				return { icon: 'tabler:calendar-stats', tone: 'mint' };
+			case 'HERMES':
+				return { icon: 'tabler:route', tone: 'blue' };
+			case 'MNEMOSYNE':
+				return { icon: 'tabler:database-search', tone: 'purple' };
+			case 'ATHENA':
+				return { icon: 'tabler:target-arrow', tone: 'amber' };
+			default:
+				return { icon: 'tabler:sparkles', tone: 'cyan' };
+		}
+	}
+
+	function runStatusLabel(run: AiRun) {
+		if (run.status === 'completed') {
+			return 'Completed';
+		}
+		if (run.status === 'failed') {
+			return 'Failed';
+		}
+		return 'Requested';
+	}
+
+	function aiRuntimeSummary() {
+		if (!aiStatus) {
+			return isAiLoading ? 'Loading' : 'Unknown';
+		}
+		return aiStatus.status === 'ok' ? 'Ready' : 'Unavailable';
+	}
+
+	function aiModelSummary() {
+		if (!aiStatus) {
+			return 'No status';
+		}
+		return `${aiStatus.chat_model} / ${aiStatus.embedding_model}`;
+	}
+
+	function formatDuration(durationMs: number | null | undefined) {
+		if (durationMs == null) {
+			return 'n/a';
+		}
+		if (durationMs < 1000) {
+			return `${durationMs} ms`;
+		}
+		return `${(durationMs / 1000).toFixed(1)} s`;
+	}
+
+	function safeCitations(value: unknown): AiCitation[] {
+		if (!Array.isArray(value)) {
+			return [];
+		}
+		return value.filter(isAiCitation);
+	}
+
+	function isAiCitation(value: unknown): value is AiCitation {
+		return (
+			typeof value === 'object' &&
+			value !== null &&
+			typeof (value as { source_kind?: unknown }).source_kind === 'string' &&
+			typeof (value as { source_id?: unknown }).source_id === 'string' &&
+			typeof (value as { title?: unknown }).title === 'string' &&
+			typeof (value as { excerpt?: unknown }).excerpt === 'string'
+		);
 	}
 
 	function formatProjectDate(value: string | null) {
@@ -1724,6 +1936,7 @@
 								<img src="/assets/hermes-reference-avatar.png" alt="" />
 								<div><h2>{senderLabel(selectedCommunication.sender)}</h2><p>{selectedCommunication.subject}</p></div>
 								<div class="chat-actions">
+									<button type="button" onclick={() => void askAiAboutSelectedMessage()} disabled={isAiAnswerSubmitting}><Icon icon="tabler:sparkles" width="17" height="17" /></button>
 									<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
 									<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
 									<button type="button" disabled><Icon icon="tabler:info-circle" width="17" height="17" /></button>
@@ -1918,7 +2131,7 @@
 							<p>{selectedProjectRecord.kind}</p>
 							<small>{selectedProjectRecord.description}</small>
 						</div>
-						<button type="button" class="primary-button" disabled><Icon icon="tabler:plus" width="16" height="16" />New</button>
+						<button type="button" class="primary-button" onclick={() => void prepareAiBrief(selectedProjectRecord.project_id)} disabled={isAiMeetingPrepSubmitting}><Icon icon="tabler:calendar-stats" width="16" height="16" />Prepare brief</button>
 					</header>
 					<div class="project-meta-strip panel">
 						<article><span>Owner</span><strong>{selectedProjectRecord.owner_display_name}</strong></article>
@@ -2089,6 +2302,7 @@
 							<small>{tasksError ? 'Show message below' : 'Live API'}</small>
 						</article>
 					</div>
+					<button type="button" class="primary-button" onclick={() => void refreshTasksFromAi()} disabled={isAiTaskRefreshSubmitting}><Icon icon="tabler:sparkles" width="16" height="16" />AI refresh</button>
 				</div>
 				{#if tasksError}
 					<p class="inline-error">{tasksError}</p>
@@ -2529,23 +2743,93 @@
 			<section class="agents-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:robot" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
-					<button type="button" class="primary-button" disabled>New Agent</button>
+					<button type="button" class="primary-button" onclick={() => void loadAiWorkspace()} disabled={isAiLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
-				<div class="metric-grid agent-metrics">{#each [{label:'Total Agents',value:'12',delta:'20%'},{label:'Active Now',value:'6',delta:'6 running'},{label:'Tasks Completed',value:'1,842',delta:'18%'},{label:'Success Rate',value:'94.2%',delta:'2.1%'},{label:'Time Saved',value:'128h',delta:'32h'},{label:'Tokens Used',value:'2.4M',delta:'8%'}] as metric}<article class="metric-card"><span>{metric.label}</span><strong>{metric.value}</strong><small>{metric.delta}</small></article>{/each}</div>
-				<div class="filter-bar"><button type="button" class="active">All Agents</button><button type="button" disabled>Active</button><button type="button" disabled>Inactive</button><button type="button" disabled>Templates</button><button type="button" disabled>Marketplace</button><button type="button" disabled>All Types</button><button type="button" disabled>All Status</button></div>
+				<div class="metric-grid agent-metrics">
+					<article class="metric-card"><span>Runtime</span><strong>{aiRuntimeSummary()}</strong><small>{aiStatus?.version ? `Ollama ${aiStatus.version}` : 'Ollama'}</small></article>
+					<article class="metric-card"><span>Agents</span><strong>{aiAgents.length}</strong><small>{aiAgents.length ? 'Registered' : 'Not loaded'}</small></article>
+					<article class="metric-card"><span>Run History</span><strong>{aiRuns.length}</strong><small>Persisted runs</small></article>
+					<article class="metric-card"><span>Embedding</span><strong>{aiStatus?.embedding_dimension ?? 0}</strong><small>{aiStatus?.embedding_model ?? 'No model'}</small></article>
+					<article class="metric-card"><span>Suggested Tasks</span><strong>{suggestedTaskCandidates.length}</strong><small>Review queue</small></article>
+					<article class="metric-card"><span>Latest Duration</span><strong>{formatDuration(aiRuns[0]?.duration_ms)}</strong><small>{aiRuns[0]?.agent_id ?? 'No runs'}</small></article>
+				</div>
+				{#if aiError}
+					<p class="inline-error">{aiError}</p>
+				{/if}
+				<div class="filter-bar"><button type="button" class="active">Local Agents</button><button type="button" disabled>{aiModelSummary()}</button><button type="button" disabled>{aiStatus?.chat_model_available ? 'Chat model ready' : 'Chat model missing'}</button><button type="button" disabled>{aiStatus?.embedding_model_available ? 'Embedding ready' : 'Embedding missing'}</button></div>
 				<div class="agents-layout">
 					<section class="agent-main">
-						<div class="agent-grid">{#each agentCards as agent, index}<button type="button" class="agent-card panel" class:active={selectedAgentIndex === index} onclick={() => (selectedAgentIndex = index)}><span class="round-icon {agent.tone}"><Icon icon={agent.icon} width="22" height="22" /></span><div><strong>{agent.name}</strong><p>{agent.summary}</p><em>{agent.status}</em></div><footer><span>{agent.tasks} tasks</span><span>{agent.success} success</span></footer></button>{/each}</div>
+						<div class="agent-grid">
+							{#if isAiLoading && agentCards.length === 0}
+								<div class="graph-strip-message"><span>Loading local AI agents.</span></div>
+							{:else if agentCards.length === 0}
+								<div class="graph-strip-message"><span>No V3 agents returned by the backend.</span></div>
+							{:else}
+								{#each agentCards as agent, index}
+									<button type="button" class="agent-card panel" class:active={selectedAgentIndex === index} onclick={() => (selectedAgentIndex = index)}>
+										<span class="round-icon {agent.tone}"><Icon icon={agent.icon} width="22" height="22" /></span>
+										<div><strong>{agent.name}</strong><p>{agent.summary}</p><em>{agent.status}</em></div>
+										<footer><span>{agent.tasks} runs</span><span>{agent.success} success</span></footer>
+									</button>
+								{/each}
+							{/if}
+						</div>
 						<section class="panel agent-detail">
-							<header><span class="round-icon {selectedAgent.tone}"><Icon icon={selectedAgent.icon} width="26" height="26" /></span><div><h2>{selectedAgent.name}</h2><em>{selectedAgent.status}</em></div></header>
-							<div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Capabilities</button><button type="button" disabled>Tasks</button><button type="button" disabled>Logs</button><button type="button" disabled>Settings</button></div>
-							<div class="agent-detail-grid"><p>{selectedAgent.summary} Specialized in researching connected sources, then generating work products with citations.</p><div class="spark-chart"></div><ul>{#each ['Web Search','Document Analysis','Data Synthesis','Report Generation','Source Citation'] as capability}<li><Icon icon="tabler:circle-check" width="16" height="16" />{capability}</li>{/each}</ul></div>
+							{#if selectedAgent}
+								<header><span class="round-icon {selectedAgent.tone}"><Icon icon={selectedAgent.icon} width="26" height="26" /></span><div><h2>{selectedAgent.name}</h2><em>{selectedAgent.model}</em></div></header>
+								<div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Run History</button><button type="button" disabled>Citations</button><button type="button" disabled>Settings</button></div>
+								<div class="agent-detail-grid"><p>{selectedAgent.summary}. This V3 agent reads local memory projections, retrieves citations and records every run in the backend.</p><div class="spark-chart"></div><ul>{#each ['Ollama Runtime','pgvector Retrieval','Source Citations','Run Provenance','Review Queue'] as capability}<li><Icon icon="tabler:circle-check" width="16" height="16" />{capability}</li>{/each}</ul></div>
+							{:else}
+								<header><span class="round-icon cyan"><Icon icon="tabler:robot-off" width="26" height="26" /></span><div><h2>No agent selected</h2><em>Backend status required</em></div></header>
+							{/if}
+							<div class="ai-workflow-grid">
+								<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void submitAiAnswer(); }}>
+									<label><span>Ask AI</span><textarea bind:value={aiQuestion} rows="4"></textarea></label>
+									<button type="submit" disabled={isAiAnswerSubmitting || !aiQuestion.trim()}><Icon icon="tabler:sparkles" width="16" height="16" />Ask</button>
+								</form>
+								<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void prepareAiBrief(); }}>
+									<label><span>Prepare brief</span><textarea bind:value={aiMeetingTopic} rows="4"></textarea></label>
+									<button type="submit" disabled={isAiMeetingPrepSubmitting || !aiMeetingTopic.trim()}><Icon icon="tabler:calendar-stats" width="16" height="16" />Prepare</button>
+								</form>
+								<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void refreshTasksFromAi(); }}>
+									<label><span>Task extraction</span><textarea bind:value={aiTaskQuery} rows="4"></textarea></label>
+									<button type="submit" disabled={isAiTaskRefreshSubmitting || !aiTaskQuery.trim()}><Icon icon="tabler:checkbox" width="16" height="16" />Refresh candidates</button>
+								</form>
+							</div>
+							{#if aiAnswerResult}
+								<div class="ai-result-block">
+									<h3>Answer</h3>
+									<p>{aiAnswerResult.answer}</p>
+									<div class="citation-list">
+										{#each aiAnswerResult.citations as citation}
+											<div class="citation-row"><strong>{citation.title}</strong><span>{citation.source_kind}:{citation.source_id}</span><p>{citation.excerpt}</p></div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+							{#if aiMeetingPrepResult}
+								<div class="ai-result-block">
+									<h3>Meeting Brief</h3>
+									<p>{aiMeetingPrepResult.briefing}</p>
+									<div class="citation-list">
+										{#each aiMeetingPrepResult.citations as citation}
+											<div class="citation-row"><strong>{citation.title}</strong><span>{citation.source_kind}:{citation.source_id}</span><p>{citation.excerpt}</p></div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+							{#if aiTaskRefreshResult}
+								<div class="ai-result-block">
+									<h3>Task Candidates</h3>
+									<p>{aiTaskRefreshResult.created_count} suggested candidates refreshed. Review them in Tasks.</p>
+								</div>
+							{/if}
 						</section>
 					</section>
 					<aside class="stacked-rail">
-						<section class="panel info-card"><h2>Agent Activity</h2>{#each agentCards.slice(0,5) as agent, index}<div class="deadline"><span>{agent.name} completed task</span><time>{index * 5 + 2} min ago</time></div>{/each}</section>
-						<section class="panel info-card"><h2>Tasks Queue</h2>{#each ['Research: Competitor Analysis','Email: Draft Partnership Proposal','Meeting: Weekly Standup Summary','Analysis: Q1 Performance Review'] as item}<div class="deadline"><span>{item}</span><time>Due in 1h</time></div>{/each}</section>
-						<section class="panel info-card"><h2>AI Insights</h2><p>Your agents saved 128 hours this month. Research Analyst has the highest success rate at 96%.</p></section>
+						<section class="panel info-card"><h2>Runtime</h2><div class="health-row"><span>Status</span><strong>{aiRuntimeSummary()}</strong></div><div class="health-row"><span>Chat</span><strong>{aiStatus?.chat_model ?? 'unknown'}</strong></div><div class="health-row"><span>Embedding</span><strong>{aiStatus?.embedding_model ?? 'unknown'}</strong></div></section>
+						<section class="panel info-card"><h2>Run History</h2>{#if aiRuns.length}{#each aiRuns.slice(0,6) as run}<div class="deadline"><span>{run.agent_id} · {runStatusLabel(run)}</span><time>{formatDateTime(run.started_at)} · {formatDuration(run.duration_ms)}</time></div>{/each}{:else}<p>No AI runs persisted yet.</p>{/if}</section>
+						<section class="panel info-card"><h2>Latest Citations</h2>{#if aiRuns[0] && safeCitations(aiRuns[0].citations).length}{#each safeCitations(aiRuns[0].citations).slice(0,3) as citation}<div class="evidence-row"><strong>{citation.title}</strong><p>{citation.excerpt}</p></div>{/each}{:else}<p>Citations appear after an answer or briefing run.</p>{/if}</section>
 					</aside>
 				</div>
 			</section>
@@ -2643,7 +2927,8 @@
 	}
 
 	:global(button),
-	:global(input) {
+	:global(input),
+	:global(textarea) {
 		font: inherit;
 		letter-spacing: 0;
 	}
@@ -2659,6 +2944,11 @@
 
 	:global(button:focus-visible),
 	:global(input:focus-visible) {
+		outline: 1px solid rgba(45, 240, 206, 0.62);
+		outline-offset: 2px;
+	}
+
+	:global(textarea:focus-visible) {
 		outline: 1px solid rgba(45, 240, 206, 0.62);
 		outline-offset: 2px;
 	}
@@ -5156,6 +5446,123 @@
 		display: flex;
 		align-items: center;
 		gap: 8px;
+	}
+
+	.ai-workflow-grid {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 10px;
+		margin-top: 16px;
+	}
+
+	.ai-workflow-block {
+		display: grid;
+		gap: 10px;
+		min-height: 190px;
+		border: 1px solid rgba(111, 205, 195, 0.1);
+		border-radius: 8px;
+		background: rgba(5, 22, 25, 0.54);
+		padding: 12px;
+	}
+
+	.ai-workflow-block label {
+		display: grid;
+		gap: 8px;
+	}
+
+	.ai-workflow-block span {
+		color: #dcefed;
+		font-size: 12px;
+		font-weight: 650;
+	}
+
+	.ai-workflow-block textarea {
+		width: 100%;
+		min-height: 92px;
+		max-height: 130px;
+		resize: vertical;
+		border: 1px solid rgba(111, 205, 195, 0.16);
+		border-radius: 8px;
+		background: rgba(2, 9, 11, 0.7);
+		color: #eefefb;
+		font-size: 12px;
+		line-height: 1.45;
+		padding: 9px 10px;
+	}
+
+	.ai-workflow-block button {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 7px;
+		min-height: 34px;
+		border-radius: 8px;
+		background: #2df0ce;
+		color: #032522;
+		font-size: 12px;
+		font-weight: 760;
+	}
+
+	.ai-workflow-block button:disabled {
+		background: rgba(111, 205, 195, 0.16);
+		color: #789b98;
+	}
+
+	.ai-result-block {
+		display: grid;
+		gap: 10px;
+		margin-top: 14px;
+		border-top: 1px solid rgba(102, 189, 180, 0.1);
+		padding-top: 14px;
+	}
+
+	.ai-result-block h3 {
+		margin: 0;
+		color: #fff;
+		font-size: 15px;
+	}
+
+	.ai-result-block > p {
+		margin: 0;
+		color: #dcefed;
+		font-size: 13px;
+		line-height: 1.55;
+	}
+
+	.citation-list {
+		display: grid;
+		gap: 8px;
+	}
+
+	.citation-row {
+		display: grid;
+		gap: 4px;
+		border-left: 2px solid rgba(45, 240, 206, 0.42);
+		background: rgba(45, 240, 206, 0.045);
+		padding: 8px 10px;
+	}
+
+	.citation-row strong,
+	.citation-row span,
+	.citation-row p {
+		overflow-wrap: anywhere;
+	}
+
+	.citation-row strong {
+		color: #eefefb;
+		font-size: 12px;
+	}
+
+	.citation-row span {
+		color: #7ea4a0;
+		font-size: 10px;
+	}
+
+	.citation-row p {
+		margin: 0;
+		color: #bcd3d1;
+		font-size: 12px;
+		line-height: 1.45;
 	}
 
 	.spark-chart {

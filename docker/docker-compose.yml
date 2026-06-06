@@ -2,7 +2,7 @@ name: hermes-hub-dev
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.2-pg16
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${HERMES_POSTGRES_DB:?Set HERMES_POSTGRES_DB in docker/.env}
@@ -31,6 +31,10 @@ services:
       DATABASE_URL: postgres://${HERMES_POSTGRES_USER}:${HERMES_POSTGRES_PASSWORD}@postgres:5432/${HERMES_POSTGRES_DB}
       HERMES_HTTP_ADDR: 0.0.0.0:${HERMES_BACKEND_PORT:-8080}
       HERMES_LOCAL_API_TOKEN: ${HERMES_LOCAL_API_TOKEN:?Set HERMES_LOCAL_API_TOKEN in docker/.env}
+      HERMES_OLLAMA_BASE_URL: ${HERMES_OLLAMA_BASE_URL:-http://127.0.0.1:11434}
+      HERMES_OLLAMA_CHAT_MODEL: ${HERMES_OLLAMA_CHAT_MODEL:-qwen3:4b}
+      HERMES_OLLAMA_EMBED_MODEL: ${HERMES_OLLAMA_EMBED_MODEL:-qwen3-embedding:4b}
+      HERMES_OLLAMA_TIMEOUT_SECONDS: ${HERMES_OLLAMA_TIMEOUT_SECONDS:-120}
       RUST_LOG: debug
     ports:
       - "${HERMES_BACKEND_BIND:-127.0.0.1}:${HERMES_BACKEND_PORT:-8080}:${HERMES_BACKEND_PORT:-8080}"

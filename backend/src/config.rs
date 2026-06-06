@@ -1,5 +1,6 @@
 use std::env;
 use std::net::{AddrParseError, SocketAddr};
+use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 
 use thiserror::Error;
@@ -8,6 +9,10 @@ use crate::secrets::{ResolvedSecret, SecretResolutionError};
 
 const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_SERVICE_NAME: &str = "hermes-hub-backend";
+const DEFAULT_OLLAMA_BASE_URL: &str = "http://127.0.0.1:11434";
+const DEFAULT_OLLAMA_CHAT_MODEL: &str = "qwen3:4b";
+const DEFAULT_OLLAMA_EMBED_MODEL: &str = "qwen3-embedding:4b";
+const DEFAULT_OLLAMA_TIMEOUT_SECONDS: u64 = 120;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppConfig {
@@ -17,6 +22,10 @@ pub struct AppConfig {
     local_api_token: Option<String>,
     secret_vault_path: Option<PathBuf>,
     secret_vault_key: Option<ResolvedSecret>,
+    ollama_base_url: String,
+    ollama_chat_model: String,
+    ollama_embed_model: String,
+    ollama_timeout_seconds: u64,
 }
 
 impl AppConfig {
@@ -81,6 +90,45 @@ impl AppConfig {
                     }
                     config.secret_vault_key = Some(ResolvedSecret::new(raw_key)?);
                 }
+                "HERMES_OLLAMA_BASE_URL" => {
+                    let raw_url = value.as_ref().trim();
+                    if raw_url.is_empty() {
+                        return Err(ConfigError::EmptyOllamaBaseUrl);
+                    }
+                    config.ollama_base_url = raw_url.trim_end_matches('/').to_owned();
+                }
+                "HERMES_OLLAMA_CHAT_MODEL" => {
+                    let raw_model = value.as_ref().trim();
+                    if raw_model.is_empty() {
+                        return Err(ConfigError::EmptyOllamaChatModel);
+                    }
+                    config.ollama_chat_model = raw_model.to_owned();
+                }
+                "HERMES_OLLAMA_EMBED_MODEL" => {
+                    let raw_model = value.as_ref().trim();
+                    if raw_model.is_empty() {
+                        return Err(ConfigError::EmptyOllamaEmbedModel);
+                    }
+                    config.ollama_embed_model = raw_model.to_owned();
+                }
+                "HERMES_OLLAMA_TIMEOUT_SECONDS" => {
+                    let raw_timeout = value.as_ref().trim();
+                    let timeout = raw_timeout.parse::<u64>().map_err(|source| {
+                        ConfigError::InvalidOllamaTimeout {
+                            value: raw_timeout.to_owned(),
+                            reason: "must be a positive integer",
+                            source: Some(source),
+                        }
+                    })?;
+                    if timeout == 0 {
+                        return Err(ConfigError::InvalidOllamaTimeout {
+                            value: raw_timeout.to_owned(),
+                            reason: "must be greater than zero",
+                            source: None,
+                        });
+                    }
+                    config.ollama_timeout_seconds = timeout;
+                }
                 _ => {}
             }
         }
@@ -111,6 +159,22 @@ impl AppConfig {
     pub fn secret_vault_key(&self) -> Option<&ResolvedSecret> {
         self.secret_vault_key.as_ref()
     }
+
+    pub fn ollama_base_url(&self) -> &str {
+        &self.ollama_base_url
+    }
+
+    pub fn ollama_chat_model(&self) -> &str {
+        &self.ollama_chat_model
+    }
+
+    pub fn ollama_embed_model(&self) -> &str {
+        &self.ollama_embed_model
+    }
+
+    pub fn ollama_timeout_seconds(&self) -> u64 {
+        self.ollama_timeout_seconds
+    }
 }
 
 impl Default for AppConfig {
@@ -124,6 +188,10 @@ impl Default for AppConfig {
             local_api_token: None,
             secret_vault_path: None,
             secret_vault_key: None,
+            ollama_base_url: DEFAULT_OLLAMA_BASE_URL.to_owned(),
+            ollama_chat_model: DEFAULT_OLLAMA_CHAT_MODEL.to_owned(),
+            ollama_embed_model: DEFAULT_OLLAMA_EMBED_MODEL.to_owned(),
+            ollama_timeout_seconds: DEFAULT_OLLAMA_TIMEOUT_SECONDS,
         }
     }
 }
@@ -151,6 +219,23 @@ pub enum ConfigError {
 
     #[error("HERMES_SECRET_VAULT_KEY is set but empty")]
     EmptySecretVaultKey,
+
+    #[error("HERMES_OLLAMA_BASE_URL is set but empty")]
+    EmptyOllamaBaseUrl,
+
+    #[error("HERMES_OLLAMA_CHAT_MODEL is set but empty")]
+    EmptyOllamaChatModel,
+
+    #[error("HERMES_OLLAMA_EMBED_MODEL is set but empty")]
+    EmptyOllamaEmbedModel,
+
+    #[error("invalid HERMES_OLLAMA_TIMEOUT_SECONDS `{value}`: {reason}")]
+    InvalidOllamaTimeout {
+        value: String,
+        reason: &'static str,
+        #[source]
+        source: Option<ParseIntError>,
+    },
 
     #[error(transparent)]
     SecretResolution(#[from] SecretResolutionError),

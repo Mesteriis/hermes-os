@@ -70,6 +70,32 @@ fn config_from_pairs_accepts_secret_vault_path_and_key() {
 }
 
 #[test]
+fn config_from_pairs_accepts_ollama_runtime_overrides() {
+    let config = AppConfig::from_pairs([
+        ("HERMES_OLLAMA_BASE_URL", "http://192.168.1.2:11434"),
+        ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),
+        ("HERMES_OLLAMA_EMBED_MODEL", "qwen3-embedding:4b"),
+        ("HERMES_OLLAMA_TIMEOUT_SECONDS", "120"),
+    ])
+    .expect("valid Ollama config");
+
+    assert_eq!(config.ollama_base_url(), "http://192.168.1.2:11434");
+    assert_eq!(config.ollama_chat_model(), "qwen3:4b");
+    assert_eq!(config.ollama_embed_model(), "qwen3-embedding:4b");
+    assert_eq!(config.ollama_timeout_seconds(), 120);
+}
+
+#[test]
+fn default_config_uses_local_ollama_and_qwen_models() {
+    let config = AppConfig::default();
+
+    assert_eq!(config.ollama_base_url(), "http://127.0.0.1:11434");
+    assert_eq!(config.ollama_chat_model(), "qwen3:4b");
+    assert_eq!(config.ollama_embed_model(), "qwen3-embedding:4b");
+    assert_eq!(config.ollama_timeout_seconds(), 120);
+}
+
+#[test]
 fn config_from_pairs_accepts_legacy_local_write_token_as_fallback() {
     let config = AppConfig::from_pairs([("HERMES_LOCAL_WRITE_TOKEN", "legacy-write-token")])
         .expect("valid legacy local write token");
@@ -134,4 +160,23 @@ fn config_from_pairs_rejects_empty_secret_vault_key() {
         .expect_err("empty secret vault key must fail");
 
     assert!(matches!(error, ConfigError::EmptySecretVaultKey));
+}
+
+#[test]
+fn config_from_pairs_rejects_invalid_ollama_values() {
+    let error = AppConfig::from_pairs([("HERMES_OLLAMA_BASE_URL", "   ")])
+        .expect_err("empty Ollama base URL must fail");
+    assert!(matches!(error, ConfigError::EmptyOllamaBaseUrl));
+
+    let error = AppConfig::from_pairs([("HERMES_OLLAMA_CHAT_MODEL", "   ")])
+        .expect_err("empty Ollama chat model must fail");
+    assert!(matches!(error, ConfigError::EmptyOllamaChatModel));
+
+    let error = AppConfig::from_pairs([("HERMES_OLLAMA_EMBED_MODEL", "   ")])
+        .expect_err("empty Ollama embed model must fail");
+    assert!(matches!(error, ConfigError::EmptyOllamaEmbedModel));
+
+    let error = AppConfig::from_pairs([("HERMES_OLLAMA_TIMEOUT_SECONDS", "0")])
+        .expect_err("zero Ollama timeout must fail");
+    assert!(matches!(error, ConfigError::InvalidOllamaTimeout { .. }));
 }

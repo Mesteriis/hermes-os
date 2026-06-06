@@ -319,6 +319,124 @@ export type DocumentProcessingRetryResponse = {
 	event_id: string;
 };
 
+export type AiStatus = {
+	runtime: string;
+	status: string;
+	version: string | null;
+	chat_model: string;
+	embedding_model: string;
+	embedding_dimension: number;
+	chat_model_available: boolean;
+	embedding_model_available: boolean;
+};
+
+export type AiAgent = {
+	agent_id: 'HESTIA' | 'HERMES' | 'MNEMOSYNE' | 'ATHENA' | string;
+	display_name: string;
+	role: string;
+	default_model: string;
+	status: string;
+};
+
+export type AiAgentListResponse = {
+	items: AiAgent[];
+};
+
+export type AiCitation = {
+	source_kind: string;
+	source_id: string;
+	title: string;
+	excerpt: string;
+	score: number;
+	graph_node_id?: string;
+};
+
+export type AiRun = {
+	run_id: string;
+	agent_id: string;
+	status: 'requested' | 'completed' | 'failed' | string;
+	chat_model: string;
+	embedding_model: string;
+	prompt_template_version: string;
+	model_config: Record<string, unknown>;
+	query: string;
+	answer: string | null;
+	citations: AiCitation[] | unknown[];
+	error_summary: string | null;
+	actor_id: string;
+	causation_id: string | null;
+	correlation_id: string | null;
+	requested_event_id: string | null;
+	completed_event_id: string | null;
+	failed_event_id: string | null;
+	started_at: string;
+	completed_at: string | null;
+	duration_ms: number | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type AiRunListResponse = {
+	items: AiRun[];
+};
+
+export type AiAnswerRequest = {
+	command_id: string;
+	query: string;
+	agent_id?: string;
+	correlation_id?: string;
+};
+
+export type AiAnswerResponse = {
+	run_id: string;
+	agent_id: string;
+	status: string;
+	answer: string;
+	citations: AiCitation[];
+	model: string;
+	embedding_model: string;
+	created_at: string;
+	duration_ms: number;
+};
+
+export type AiTaskCandidateRefreshRequest = {
+	command_id: string;
+	query: string;
+	correlation_id?: string;
+};
+
+export type AiTaskCandidateRefreshResponse = {
+	run_id: string;
+	agent_id: string;
+	status: string;
+	created_count: number;
+	citations: AiCitation[];
+	model: string;
+	embedding_model: string;
+	created_at: string;
+	duration_ms: number;
+};
+
+export type AiMeetingPrepRequest = {
+	command_id: string;
+	topic: string;
+	project_id?: string;
+	contact_id?: string;
+	correlation_id?: string;
+};
+
+export type AiMeetingPrepResponse = {
+	run_id: string;
+	agent_id: string;
+	status: string;
+	briefing: string;
+	citations: AiCitation[];
+	model: string;
+	embedding_model: string;
+	created_at: string;
+	duration_ms: number;
+};
+
 export async function fetchIdentityCandidates(
 	baseUrl: string,
 	token: string,
@@ -677,6 +795,79 @@ export async function setupImapAccount(
 	request: ImapAccountSetupRequest
 ): Promise<EmailAccountSetupResponse> {
 	return postJson(baseUrl, token, actorId, '/api/v1/email-accounts/imap', request);
+}
+
+export async function fetchAiStatus(
+	baseUrl: string,
+	token: string,
+	actorId: string
+): Promise<AiStatus> {
+	return getJson(baseUrl, token, actorId, '/api/v3/ai/status', 'AI status request failed');
+}
+
+export async function fetchAiAgents(
+	baseUrl: string,
+	token: string,
+	actorId: string
+): Promise<AiAgentListResponse> {
+	return getJson(baseUrl, token, actorId, '/api/v3/agents', 'AI agents request failed');
+}
+
+export async function fetchAiRuns(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	limit = 25
+): Promise<AiRunListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v3/ai/runs?${params.toString()}`,
+		'AI run history request failed'
+	);
+}
+
+export async function requestAiAnswer(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: AiAnswerRequest
+): Promise<AiAnswerResponse> {
+	return postJson(baseUrl, token, actorId, '/api/v3/ai/answers', request, 'AI answer request failed');
+}
+
+export async function refreshAiTaskCandidates(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: AiTaskCandidateRefreshRequest
+): Promise<AiTaskCandidateRefreshResponse> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v3/ai/task-candidates/refresh',
+		request,
+		'AI task candidate refresh request failed'
+	);
+}
+
+export async function requestAiMeetingPrep(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: AiMeetingPrepRequest
+): Promise<AiMeetingPrepResponse> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v3/ai/meeting-prep',
+		request,
+		'AI meeting prep request failed'
+	);
 }
 
 async function getJson<TResponse>(

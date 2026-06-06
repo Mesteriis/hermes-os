@@ -2,7 +2,7 @@
 
 Rust backend for Hermes Hub.
 
-Current scope is intentionally small: an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, local mail blob/attachment metadata storage, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, V2 graph core projection/read APIs, and protected V2 workflow APIs for projects, task candidates, contact identity review and document processing. OS keychain resolver, full MIME parsing, attachment extraction, graph editing, AI/entity extraction, richer graph inference and agent runtime are not implemented yet.
+Current scope includes an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, local mail blob/attachment metadata storage, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, V2 graph core projection/read APIs, protected V2 workflow APIs for projects, task candidates, contact identity review and document processing, and V3 local AI workflow APIs backed by Ollama plus pgvector semantic retrieval. OS keychain resolver, full MIME parsing, attachment extraction, graph editing, richer graph inference and autonomous agents are not implemented yet.
 
 ## Commands
 
@@ -30,6 +30,7 @@ make backend-contacts-smoke-dev
 make backend-documents-smoke-dev
 make backend-graph-smoke-dev
 make backend-v2-workflow-smoke-dev
+make backend-ai-smoke-dev
 make backend-graph-project-dev
 make backend-search-smoke-dev
 make backend-projection-smoke-dev
@@ -54,6 +55,14 @@ make backend-v2-workflow-smoke-dev
 ```
 
 This starts the local PostgreSQL container, creates isolated temporary databases on the dev PostgreSQL server, and runs the project, project API, project link review, task candidate, task candidate API, contact identity, contact identity API, document processing and document processing API integration suites serially. The target is included in `make validate`.
+
+V3 AI smoke:
+
+```bash
+make backend-ai-smoke-dev
+```
+
+This starts the local PostgreSQL container for pgvector/API integration tests and runs live Ollama validation against `http://192.168.1.2:11434` by default. Override the smoke endpoint with `HERMES_AI_SMOKE_OLLAMA_BASE_URL`.
 
 Project current V1 data into the V2 graph tables:
 
@@ -125,6 +134,10 @@ Supported environment variables:
 - `HERMES_LOCAL_WRITE_TOKEN` - legacy fallback for `HERMES_LOCAL_API_TOKEN` during transition from ADR-0037.
 - `HERMES_SECRET_VAULT_PATH` - local encrypted vault file used by account setup.
 - `HERMES_SECRET_VAULT_KEY` - local encrypted vault master key; do not commit or log this value.
+- `HERMES_OLLAMA_BASE_URL` - Ollama runtime URL, defaults to `http://127.0.0.1:11434`.
+- `HERMES_OLLAMA_CHAT_MODEL` - Ollama chat model, defaults to `qwen3:4b`.
+- `HERMES_OLLAMA_EMBED_MODEL` - Ollama embedding model, defaults to `qwen3-embedding:4b`.
+- `HERMES_OLLAMA_TIMEOUT_SECONDS` - Ollama request timeout, defaults to `120`.
 
 ## Endpoints
 
@@ -162,6 +175,18 @@ Available endpoints below require both `Authorization: Bearer <HERMES_LOCAL_API_
 - `GET /api/v2/document-processing/jobs` - lists recent document processing jobs.
 - `POST /api/v2/document-processing/jobs/{job_id}/retry` - requeues a failed processing job through a canonical retry event. The JSON body requires `command_id`; the response returns `job_id`, `status` and `event_id`.
 
+## V3 AI APIs
+
+Available endpoints below require both `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+
+- `GET /api/v3/ai/status` - returns Ollama runtime/model availability.
+- `GET /api/v3/agents` - lists V3 agents `HESTIA`, `HERMES`, `MNEMOSYNE` and `ATHENA`.
+- `GET /api/v3/ai/runs` - lists persisted local AI runs.
+- `GET /api/v3/ai/runs/{run_id}` - returns one persisted AI run.
+- `POST /api/v3/ai/answers` - creates a source-backed answer with citations.
+- `POST /api/v3/ai/task-candidates/refresh` - refreshes AI-suggested task candidates only.
+- `POST /api/v3/ai/meeting-prep` - creates a source-backed local meeting prep packet without calendar/provider writes.
+
 ## Migrations
 
 Backend startup applies local PostgreSQL migrations when `DATABASE_URL` is configured.
@@ -184,6 +209,8 @@ Current schema:
 - `graph_nodes` - rebuildable graph projection nodes derived from contacts, messages and documents.
 - `graph_edges` - rebuildable graph projection relationships with confidence and review state.
 - `graph_evidence` - rebuildable graph projection evidence records that preserve edge provenance.
+- `ai_agent_runs` - persisted local AI run provenance, answer/citation payloads and timings.
+- `semantic_embeddings` - rebuildable pgvector `halfvec(2560)` embeddings for local source retrieval.
 
 Relevant design documents:
 

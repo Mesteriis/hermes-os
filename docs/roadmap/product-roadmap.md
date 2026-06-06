@@ -145,6 +145,10 @@ Dependencies:
 - permission model
 - graph/search retrieval planner
 
+Closure tracking:
+
+- [V3 Closure Checklist](v3-closure-checklist.md)
+
 ## Version 4.0 - Automation, Plugins and Multi-Channel Depth
 
 Goals:

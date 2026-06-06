@@ -25,6 +25,9 @@ Hermes Hub - персональная локальная платформа ко
 - V1 status API for desktop shell bootstrapping
 - desktop-only SvelteKit/Tauri status and account setup shell
 - Docker Compose окружение для локальной разработки
+- local Ollama AI runtime boundary for V3 workflows
+- pgvector semantic embeddings with `halfvec(2560)`
+- protected V3 AI APIs for status, agents, run history, cited answers, task candidate refresh and meeting prep
 
 ## Принципы
 
@@ -91,6 +94,14 @@ make backend-validate
 ```sh
 make backend-run
 ```
+
+Проверить V3 AI runtime, pgvector integration и live Ollama:
+
+```sh
+make backend-ai-smoke-dev
+```
+
+Live AI smoke по умолчанию использует локальный V3 тестовый endpoint `http://192.168.1.2:11434`. Для другого smoke endpoint задай `HERMES_AI_SMOKE_OLLAMA_BASE_URL`.
 
 Запустить полный dev loop с PostgreSQL, backend auto-restart и frontend HMR:
 
@@ -184,6 +195,22 @@ X-Hermes-Actor-Id: desktop-shell
 ```
 
 The message list reads canonical `communication_messages`; message detail returns canonical body text plus attachment metadata and local blob references. It does not read or return attachment bytes.
+
+V3 AI APIs use the same local token and actor header:
+
+```sh
+GET /api/v3/ai/status
+GET /api/v3/agents
+GET /api/v3/ai/runs
+GET /api/v3/ai/runs/<run_id>
+POST /api/v3/ai/answers
+POST /api/v3/ai/task-candidates/refresh
+POST /api/v3/ai/meeting-prep
+Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
+X-Hermes-Actor-Id: desktop-shell
+```
+
+V3 task extraction writes only `suggested` task candidates. Existing review APIs remain the only path to active tasks.
 
 Account setup endpoints additionally require `HERMES_SECRET_VAULT_PATH` and `HERMES_SECRET_VAULT_KEY`; `make docker-env` adds local development defaults to `docker/.env`.
 
