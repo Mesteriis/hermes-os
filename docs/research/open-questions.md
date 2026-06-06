@@ -29,5 +29,5 @@
 ## Security and Privacy
 
 - Which OS-backed secret store should be used per platform?
-- What plugin sandbox model is realistic for Tauri plus Rust?
-- What confirmation policies are needed for sending messages and deleting data?
+- What plugin sandbox runtime isolation model is realistic for Tauri plus Rust after ADR-0052 defines capability manifests and scoped data views?
+- What confirmation policies are needed for sending messages and deleting data? Answered by ADR-0052: high-risk actions require explicit confirmation unless an enabled scoped automation policy authorizes the action, and all allowed/rejected high-risk decisions must be audited without secrets or private content.

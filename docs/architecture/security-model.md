@@ -32,6 +32,8 @@ Current implementation uses a temporary `HERMES_LOCAL_API_TOKEN` guard for local
 
 Authorized local event API reads and writes require a non-secret `X-Hermes-Actor-Id` client identity header and are recorded in an append-only `api_audit_log` without storing API tokens or secrets.
 
+ADR-0052 defines the long-term capability runtime direction: backend application-layer policy checks, scoped capability grants, explicit confirmation for high-risk actions unless a scoped automation policy applies, and audit metadata for allowed and rejected high-risk decisions.
+
 ## Secrets
 
 Secrets must never be hardcoded or committed. Provider tokens, passwords, app passwords, private keys and recovery material belong in an OS-backed secret store or encrypted local vault.
