@@ -3396,8 +3396,8 @@
 					<p class="inline-error">{tasksError}</p>
 				{/if}
 				<div class="tasks-layout">
-					<section class="panel task-table">
-						<div class="widget-frame" data-widget-id="tasks-active-list" data-widget-hidden="false">
+					<div class="widget-frame" data-widget-id="tasks-active-list" data-widget-hidden="false">
+						<section class="panel task-table">
 							<h3 class="task-group">Active Tasks <em>{activeTasks.length}</em></h3>
 							<div class="table-head task-table-head"><span>Task</span><span>Source</span><span>Project</span><span>Created</span><span>Status</span></div>
 							{#if isTasksLoading}
@@ -3409,31 +3409,31 @@
 									<label class="task-row"><input type="checkbox" disabled checked /><strong>{item.title}</strong><span>{taskSourceLabel(item)}</span><span>{item.project_id ?? 'Unassigned'}</span><time>{taskCreatedTime(item.created_at)}</time><em>{item.status}</em></label>
 								{/each}
 							{/if}
-						</div>
 
-						<div class="widget-frame" data-widget-id="tasks-candidate-review" data-widget-hidden="false">
-							<h3 class="task-group">Review Queue <em>{suggestedTaskCandidates.length}</em></h3>
-							<div class="table-head task-table-head"><span>Candidate</span><span>Source</span><span>Project</span><span>Confidence</span><span>Action</span></div>
-							{#if isTasksLoading}
-								<p class="inline-copy">Loading task candidates…</p>
-							{:else if suggestedTaskCandidates.length === 0}
-								<p class="inline-copy">No suggested candidates.</p>
-							{:else}
-								{#each suggestedTaskCandidates as candidate}
-									<div class="task-row task-row-actions">
-										<strong>{candidate.title}</strong>
-										<span>{taskSourceLabel(candidate)}</span>
-										<span>{candidate.project_id ?? 'Unassigned'}</span>
-										<em>{taskConfidence(candidate)}</em>
-										<div class="task-actions">
-											<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_confirmed')}><Icon icon="tabler:check" width="15" height="15" /> Confirm</button>
-											<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_rejected')}><Icon icon="tabler:x" width="15" height="15" /> Reject</button>
+							<div class="widget-frame" data-widget-id="tasks-candidate-review" data-widget-hidden="false">
+								<h3 class="task-group">Review Queue <em>{suggestedTaskCandidates.length}</em></h3>
+								<div class="table-head task-table-head"><span>Candidate</span><span>Source</span><span>Project</span><span>Confidence</span><span>Action</span></div>
+								{#if isTasksLoading}
+									<p class="inline-copy">Loading task candidates…</p>
+								{:else if suggestedTaskCandidates.length === 0}
+									<p class="inline-copy">No suggested candidates.</p>
+								{:else}
+									{#each suggestedTaskCandidates as candidate}
+										<div class="task-row task-row-actions">
+											<strong>{candidate.title}</strong>
+											<span>{taskSourceLabel(candidate)}</span>
+											<span>{candidate.project_id ?? 'Unassigned'}</span>
+											<em>{taskConfidence(candidate)}</em>
+											<div class="task-actions">
+												<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_confirmed')}><Icon icon="tabler:check" width="15" height="15" /> Confirm</button>
+												<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_rejected')}><Icon icon="tabler:x" width="15" height="15" /> Reject</button>
+											</div>
 										</div>
-									</div>
-								{/each}
-							{/if}
-						</div>
-					</section>
+									{/each}
+								{/if}
+							</div>
+						</section>
+					</div>
 					<aside class="stacked-rail">
 						<div class="widget-frame" data-widget-id="tasks-ai-refresh-status" data-widget-hidden="false">
 							<section class="panel chart-panel"><h2>Review Stats</h2><div class="donut"><strong>{taskCandidates.length}</strong><span>Suggestions</span></div><ul><li>{`${suggestedTaskCandidates.length} Suggested`}</li><li>{`${activeTasks.length} Active`}</li><li>{`${taskCandidates.length - suggestedTaskCandidates.length - activeTasks.length} Done`}</li></ul></section>
@@ -3506,9 +3506,7 @@
 				</div>
 				<div class="filter-bar"><button type="button" disabled>All Accounts</button><button type="button" disabled>All Types</button><button type="button" disabled>All Projects</button><button type="button" disabled>All Folders</button><button type="button" disabled>Filters</button></div>
 				<div class="docs-layout">
-					<div class="widget-frame" data-widget-id="documents-detail-preview" data-widget-hidden="false">
-						<aside class="left-panels"><section class="panel info-card"><h2>Smart Collections</h2>{#each ['Recently Added 48', 'Recently Opened 24', 'Important 32', 'Shared with Me 18', 'Requires Review 7', 'Contracts & Legal 23', 'Financial 15'] as item}<div class="collection-row">{item}</div>{/each}</section><section class="panel info-card"><h2>My Folders</h2>{#each ['Hermes Hub', 'Projects', 'Personal', 'Work', 'Archive 2024', 'Clients', 'References'] as folder}<div class="collection-row"><Icon icon="tabler:folder" width="16" height="16" />{folder}</div>{/each}</section></aside>
-					</div>
+					<aside class="left-panels"><section class="panel info-card"><h2>Smart Collections</h2>{#each ['Recently Added 48', 'Recently Opened 24', 'Important 32', 'Shared with Me 18', 'Requires Review 7', 'Contracts & Legal 23', 'Financial 15'] as item}<div class="collection-row">{item}</div>{/each}</section><section class="panel info-card"><h2>My Folders</h2>{#each ['Hermes Hub', 'Projects', 'Personal', 'Work', 'Archive 2024', 'Clients', 'References'] as folder}<div class="collection-row"><Icon icon="tabler:folder" width="16" height="16" />{folder}</div>{/each}</section></aside>
 					<div class="widget-frame" data-widget-id="documents-list" data-widget-hidden="false">
 						<section class="panel docs-table">
 							<header><h2>Hermes Hub</h2><div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Documents <em>142</em></button><button type="button" disabled>Folders <em>16</em></button><button type="button" disabled>Links <em>28</em></button><button type="button" disabled>Activity</button></div></header>
@@ -3803,7 +3801,7 @@
 					</section>
 
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="knowledge-node-inspector" data-widget-hidden="false">
+						<div class="widget-frame stacked-rail" data-widget-id="knowledge-node-inspector" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Selected Node</h2>
 								{#if selectedGraphNode}
@@ -3829,21 +3827,21 @@
 									<p class="inline-error" role="status" aria-live="polite">{graphNeighborhoodError}</p>
 								{/if}
 							</section>
-						</div>
 
-						<section class="panel info-card">
-							<h2>Connections</h2>
-							{#if graphNeighborCounts.length > 0}
-								{#each graphNeighborCounts as item}
-									<div class="collection-row">
-										<span>{formatGraphKind(item.kind)}</span>
-										<em>{item.count}</em>
-									</div>
-								{/each}
-							{:else}
-								<p>No returned connections.</p>
-							{/if}
-						</section>
+							<section class="panel info-card">
+								<h2>Connections</h2>
+								{#if graphNeighborCounts.length > 0}
+									{#each graphNeighborCounts as item}
+										<div class="collection-row">
+											<span>{formatGraphKind(item.kind)}</span>
+											<em>{item.count}</em>
+										</div>
+									{/each}
+								{:else}
+									<p>No returned connections.</p>
+								{/if}
+							</section>
+						</div>
 
 						<div class="widget-frame" data-widget-id="knowledge-evidence-context" data-widget-hidden="false">
 							<section class="panel info-card">
@@ -4561,7 +4559,9 @@
 						</div>
 					</section>
 					<aside class="stacked-rail">
-						<section class="panel info-card"><h2>Runtime</h2><div class="health-row"><span>Status</span><strong>{aiRuntimeSummary()}</strong></div><div class="health-row"><span>Chat</span><strong>{aiStatus?.chat_model ?? 'unknown'}</strong></div><div class="health-row"><span>Embedding</span><strong>{aiStatus?.embedding_model ?? 'unknown'}</strong></div></section>
+						<div class="widget-frame" data-widget-id="ai-runtime-metrics" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Runtime</h2><div class="health-row"><span>Status</span><strong>{aiRuntimeSummary()}</strong></div><div class="health-row"><span>Chat</span><strong>{aiStatus?.chat_model ?? 'unknown'}</strong></div><div class="health-row"><span>Embedding</span><strong>{aiStatus?.embedding_model ?? 'unknown'}</strong></div></section>
+						</div>
 						<div class="widget-frame" data-widget-id="ai-run-history" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Run History</h2>{#if aiRuns.length}{#each aiRuns.slice(0,6) as run}<div class="deadline"><span>{run.agent_id} · {runStatusLabel(run)}</span><time>{formatDateTime(run.started_at)} · {formatDuration(run.duration_ms)}</time></div>{/each}{:else}<p>No AI runs persisted yet.</p>{/if}</section>
 						</div>
