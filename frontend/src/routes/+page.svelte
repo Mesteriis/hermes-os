@@ -2922,121 +2922,139 @@
 					<button type="button" disabled>More <Icon icon="tabler:chevron-down" width="14" height="14" /></button>
 				</div>
 				<div class="three-pane communications-grid">
-					<section class="panel conversation-list">
-						<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search conversations..." /></label>
-						{#if isCommunicationsLoading}
-							<div class="empty-panel">Loading messages...</div>
-						{:else if communicationsError}
-							<div class="empty-panel error">{communicationsError}</div>
-						{:else if communicationMessages.length === 0}
-							<div class="empty-panel">No local messages yet.</div>
-						{:else}
-							{#each communicationMessages as message, index}
-								<button type="button" class:active={selectedConversationIndex === index} onclick={() => selectCommunication(index)}>
-									<span class="round-icon cyan">
-										<Icon icon={communicationChannelIcon(message.channel_kind)} width="22" height="22" />
-									</span>
-									<img src="/assets/hermes-reference-avatar.png" alt="" />
-									<span>
-										<strong>{senderLabel(message.sender)}</strong>
-										<small>{message.subject}</small>
-										<em>{message.body_text_preview}</em>
-									</span>
-									<time>{messageTime(message)}</time>
-									{#if message.attachment_count > 0}<b>{message.attachment_count}</b>{/if}
-								</button>
-							{/each}
-						{/if}
-					</section>
-					<section class="panel chat-pane">
-						{#if selectedCommunication}
-							<header>
-								<img src="/assets/hermes-reference-avatar.png" alt="" />
-								<div><h2>{senderLabel(selectedCommunication.sender)}</h2><p>{selectedCommunication.subject}</p></div>
-								<div class="chat-actions">
-									<button type="button" onclick={() => void askAiAboutSelectedMessage()} disabled={isAiAnswerSubmitting}><Icon icon="tabler:sparkles" width="17" height="17" /></button>
-									<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
-									<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
-									<button type="button" disabled><Icon icon="tabler:info-circle" width="17" height="17" /></button>
-								</div>
-							</header>
-							<div class="chat-body">
-								<div class="date-divider">{messageTime(selectedCommunicationDetail?.message ?? selectedCommunication)}</div>
-								<article class="bubble inbound">
-									<strong>{selectedCommunication.subject}</strong><br />
-									{selectedCommunicationDetail?.message.body_text ?? selectedCommunication.body_text_preview}
-									<time>{messageTime(selectedCommunicationDetail?.message ?? selectedCommunication)}</time>
-								</article>
-								{#each selectedCommunicationDetail?.attachments ?? [] as attachment}
-									<article class="attachment-bubble">
-										<Icon icon={attachmentIcon(attachment.content_type)} width="34" height="34" />
-										<span>
-											<strong>{attachment.filename ?? attachment.provider_attachment_id}</strong>
-											<small>{formatBytes(attachment.size_bytes)} · {attachment.content_type} · {attachment.scan_status}</small>
+					<div class="widget-frame" data-widget-id="communications-conversation-list" data-widget-hidden="false">
+						<section class="panel conversation-list">
+							<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search conversations..." /></label>
+							{#if isCommunicationsLoading}
+								<div class="empty-panel">Loading messages...</div>
+							{:else if communicationsError}
+								<div class="empty-panel error">{communicationsError}</div>
+							{:else if communicationMessages.length === 0}
+								<div class="empty-panel">No local messages yet.</div>
+							{:else}
+								{#each communicationMessages as message, index}
+									<button type="button" class:active={selectedConversationIndex === index} onclick={() => selectCommunication(index)}>
+										<span class="round-icon cyan">
+											<Icon icon={communicationChannelIcon(message.channel_kind)} width="22" height="22" />
 										</span>
-										<button type="button" disabled><Icon icon="tabler:download" width="16" height="16" /></button>
-									</article>
+										<img src="/assets/hermes-reference-avatar.png" alt="" />
+										<span>
+											<strong>{senderLabel(message.sender)}</strong>
+											<small>{message.subject}</small>
+											<em>{message.body_text_preview}</em>
+										</span>
+										<time>{messageTime(message)}</time>
+										{#if message.attachment_count > 0}<b>{message.attachment_count}</b>{/if}
+									</button>
 								{/each}
-							</div>
-							<footer class="composer">
-								<input placeholder="Sending is not available yet" disabled />
-								<button type="button" disabled><Icon icon="tabler:paperclip" width="17" height="17" /></button>
-								<button type="button" disabled><Icon icon="tabler:send" width="18" height="18" /></button>
-							</footer>
-						{:else}
-							<div class="empty-panel fill">Select a local message.</div>
-						{/if}
-					</section>
-					<aside class="context-rail">
-						<section class="panel profile-panel">
-							<div class="profile-head"><img src="/assets/hermes-reference-avatar.png" alt="" /><div><h2>{selectedCommunication ? senderLabel(selectedCommunication.sender) : 'No sender selected'}</h2><p>{selectedCommunication ? communicationChannelLabel(selectedCommunication.channel_kind) : 'No channel'}</p><small>{selectedCommunication ? senderEmail(selectedCommunication.sender) : 'No local message selected'}</small></div></div>
-							<div class="quick-icons">
-								<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
-								<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
-								<button type="button" disabled><Icon icon="tabler:brand-telegram" width="17" height="17" /></button>
-								<button type="button" disabled><Icon icon="tabler:brand-whatsapp" width="17" height="17" /></button>
-							</div>
+							{/if}
 						</section>
-						<section class="panel info-card"><h2>Summary</h2><p>{selectedCommunication ? `Stored from ${selectedCommunication.account_id}. Channel ${communicationChannelLabel(selectedCommunication.channel_kind)}. Provider record ${selectedCommunication.provider_record_id}.` : 'Local communication metadata will appear after messages are imported.'}</p><button type="button" class="link-row" disabled>View full profile <Icon icon="tabler:arrow-right" width="15" height="15" /></button></section>
-						<section class="panel info-card"><h2>Message Metadata</h2>{#if selectedCommunication}<ul class="detail-list"><li><Icon icon="tabler:users" width="17" height="17" /> {selectedCommunication.recipients.length} recipients</li><li><Icon icon="tabler:paperclip" width="17" height="17" /> {selectedCommunication.attachment_count} attachments</li><li><Icon icon="tabler:clock" width="17" height="17" /> {messageTime(selectedCommunication)}</li></ul>{:else}<p>No message selected.</p>{/if}</section>
-						<section class="panel info-card"><h2>Related Projects</h2>{#each projects.slice(0, 2) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
-						<section class="panel info-card"><h2>Active Tasks</h2>{#each tasks.slice(0, 3) as task}<label class="mini-check"><input type="checkbox" />{task.title}<em>{task.due.split(' ')[0]}</em></label>{/each}</section>
+					</div>
+					<div class="widget-frame" data-widget-id="communications-message-detail" data-widget-hidden="false">
+						<section class="panel chat-pane">
+							{#if selectedCommunication}
+								<header>
+									<img src="/assets/hermes-reference-avatar.png" alt="" />
+									<div><h2>{senderLabel(selectedCommunication.sender)}</h2><p>{selectedCommunication.subject}</p></div>
+									<div class="chat-actions">
+										<button type="button" onclick={() => void askAiAboutSelectedMessage()} disabled={isAiAnswerSubmitting}><Icon icon="tabler:sparkles" width="17" height="17" /></button>
+										<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
+										<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
+										<button type="button" disabled><Icon icon="tabler:info-circle" width="17" height="17" /></button>
+									</div>
+								</header>
+								<div class="chat-body">
+									<div class="date-divider">{messageTime(selectedCommunicationDetail?.message ?? selectedCommunication)}</div>
+									<article class="bubble inbound">
+										<strong>{selectedCommunication.subject}</strong><br />
+										{selectedCommunicationDetail?.message.body_text ?? selectedCommunication.body_text_preview}
+										<time>{messageTime(selectedCommunicationDetail?.message ?? selectedCommunication)}</time>
+									</article>
+									{#each selectedCommunicationDetail?.attachments ?? [] as attachment}
+										<article class="attachment-bubble">
+											<Icon icon={attachmentIcon(attachment.content_type)} width="34" height="34" />
+											<span>
+												<strong>{attachment.filename ?? attachment.provider_attachment_id}</strong>
+												<small>{formatBytes(attachment.size_bytes)} · {attachment.content_type} · {attachment.scan_status}</small>
+											</span>
+											<button type="button" disabled><Icon icon="tabler:download" width="16" height="16" /></button>
+										</article>
+									{/each}
+								</div>
+								<footer class="composer">
+									<input placeholder="Sending is not available yet" disabled />
+									<button type="button" disabled><Icon icon="tabler:paperclip" width="17" height="17" /></button>
+									<button type="button" disabled><Icon icon="tabler:send" width="18" height="18" /></button>
+								</footer>
+							{:else}
+								<div class="empty-panel fill">Select a local message.</div>
+							{/if}
+						</section>
+					</div>
+					<aside class="context-rail">
+						<div class="widget-frame" data-widget-id="communications-sender-profile" data-widget-hidden="false">
+							<section class="panel profile-panel">
+								<div class="profile-head"><img src="/assets/hermes-reference-avatar.png" alt="" /><div><h2>{selectedCommunication ? senderLabel(selectedCommunication.sender) : 'No sender selected'}</h2><p>{selectedCommunication ? communicationChannelLabel(selectedCommunication.channel_kind) : 'No channel'}</p><small>{selectedCommunication ? senderEmail(selectedCommunication.sender) : 'No local message selected'}</small></div></div>
+								<div class="quick-icons">
+									<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
+									<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
+									<button type="button" disabled><Icon icon="tabler:brand-telegram" width="17" height="17" /></button>
+									<button type="button" disabled><Icon icon="tabler:brand-whatsapp" width="17" height="17" /></button>
+								</div>
+							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="communications-summary" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Summary</h2><p>{selectedCommunication ? `Stored from ${selectedCommunication.account_id}. Channel ${communicationChannelLabel(selectedCommunication.channel_kind)}. Provider record ${selectedCommunication.provider_record_id}.` : 'Local communication metadata will appear after messages are imported.'}</p><button type="button" class="link-row" disabled>View full profile <Icon icon="tabler:arrow-right" width="15" height="15" /></button></section>
+						</div>
+						<div class="widget-frame" data-widget-id="communications-message-metadata" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Message Metadata</h2>{#if selectedCommunication}<ul class="detail-list"><li><Icon icon="tabler:users" width="17" height="17" /> {selectedCommunication.recipients.length} recipients</li><li><Icon icon="tabler:paperclip" width="17" height="17" /> {selectedCommunication.attachment_count} attachments</li><li><Icon icon="tabler:clock" width="17" height="17" /> {messageTime(selectedCommunication)}</li></ul>{:else}<p>No message selected.</p>{/if}</section>
+						</div>
+						<div class="widget-frame" data-widget-id="communications-related-projects" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Related Projects</h2>{#each projects.slice(0, 2) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
+						</div>
+						<div class="widget-frame" data-widget-id="communications-active-tasks" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Active Tasks</h2>{#each tasks.slice(0, 3) as task}<label class="mini-check"><input type="checkbox" />{task.title}<em>{task.due.split(' ')[0]}</em></label>{/each}</section>
+						</div>
 					</aside>
 				</div>
 			</section>
 		{:else if currentView === 'contacts'}
 			<section class="contacts-page">
 				<div class="contacts-layout">
-					<section class="panel contacts-list-panel">
-						<header>
-							<div><h1>Contacts</h1><p>642 contacts</p></div>
-							<button type="button" class="primary-button" disabled>New Contact</button>
-						</header>
-						<div class="filter-tabs compact">
-							<button type="button" class="active">All</button>
-							<button type="button" disabled>People <em>532</em></button>
-							<button type="button" disabled>Companies <em>110</em></button>
-						</div>
-						<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search contacts..." /></label>
-						{#each contactList as contact, index}
-							<button type="button" class="contact-row" class:active={selectedContactIndex === index} onclick={() => (selectedContactIndex = index)}>
-								<img src="/assets/hermes-reference-avatar.png" alt="" />
-								<span><strong>{contact.name}</strong><small>{contact.role}</small><em>{contact.company}</em></span>
-								<small>{contact.status ?? contact.channel ?? 'Email'}</small>
-							</button>
-						{/each}
-					</section>
-					<section class="contact-detail">
-						<header class="contact-hero panel">
-							<img src="/assets/hermes-reference-avatar.png" alt="" />
-							<div><h1>{selectedContact.name}</h1><p>{selectedContact.role} at {selectedContact.company}</p><small>Online</small></div>
-							<div class="chat-actions">
-								<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
-								<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
-								<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
-								<button type="button" disabled><Icon icon="tabler:brand-whatsapp" width="17" height="17" /></button>
+					<div class="widget-frame" data-widget-id="contacts-list" data-widget-hidden="false">
+						<section class="panel contacts-list-panel">
+							<header>
+								<div><h1>Contacts</h1><p>642 contacts</p></div>
+								<button type="button" class="primary-button" disabled>New Contact</button>
+							</header>
+							<div class="filter-tabs compact">
+								<button type="button" class="active">All</button>
+								<button type="button" disabled>People <em>532</em></button>
+								<button type="button" disabled>Companies <em>110</em></button>
 							</div>
-						</header>
+							<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search contacts..." /></label>
+							{#each contactList as contact, index}
+								<button type="button" class="contact-row" class:active={selectedContactIndex === index} onclick={() => (selectedContactIndex = index)}>
+									<img src="/assets/hermes-reference-avatar.png" alt="" />
+									<span><strong>{contact.name}</strong><small>{contact.role}</small><em>{contact.company}</em></span>
+									<small>{contact.status ?? contact.channel ?? 'Email'}</small>
+								</button>
+							{/each}
+						</section>
+					</div>
+					<section class="contact-detail">
+						<div class="widget-frame" data-widget-id="contacts-hero" data-widget-hidden="false">
+							<header class="contact-hero panel">
+								<img src="/assets/hermes-reference-avatar.png" alt="" />
+								<div><h1>{selectedContact.name}</h1><p>{selectedContact.role} at {selectedContact.company}</p><small>Online</small></div>
+								<div class="chat-actions">
+									<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
+									<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
+									<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
+									<button type="button" disabled><Icon icon="tabler:brand-whatsapp" width="17" height="17" /></button>
+								</div>
+							</header>
+						</div>
 						<div class="section-tabs">
 							<button type="button" class="active">Overview</button>
 							<button type="button" disabled>Communications</button>
@@ -3046,255 +3064,305 @@
 							<button type="button" disabled>Notes</button>
 						</div>
 						<div class="contact-cards">
-							<section class="panel info-card">
-								<h2>Contact Information</h2>
-								<ul class="detail-list">
-									<li><Icon icon="tabler:mail" width="17" height="17" /> jsmith@smithpartners.com <em>Work</em></li>
-									<li><Icon icon="tabler:phone" width="17" height="17" /> +1 (555) 123-4567 <em>Mobile</em></li>
-									<li><Icon icon="tabler:brand-telegram" width="17" height="17" /> @john.smith <em>Telegram</em></li>
-									<li><Icon icon="tabler:map-pin" width="17" height="17" /> New York, USA <em>Local Time: 18:42</em></li>
-								</ul>
-							</section>
-							<section class="panel info-card"><h2>About</h2><p>John is a strategic consulting partner. We have been working together since 2021 on multiple projects including Hermes Hub and IRIS platform development.</p><div class="tag-cloud"><span>Decision Maker</span><span>Executive</span><span>Strategic</span><span>Tech Enthusiast</span></div></section>
-							<section class="panel info-card"><h2>Relationship Strength</h2><div class="big-score">85</div><strong>Strong</strong><p>Last interaction 2 hours ago</p></section>
-							<section class="panel info-card span-2"><h2>Recent Interactions</h2>{#each whatsNew.slice(0, 3) as item}<div class="feed-row compact-row"><span class="round-icon {item.tone}"><Icon icon={item.icon} width="18" height="18" /></span><div><strong>{item.title}</strong><p>{item.meta}</p></div><time>{item.time}</time></div>{/each}</section>
-							<section class="panel info-card"><h2>Active Projects</h2>{#each projects.slice(0, 3) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
+							<div class="widget-frame" data-widget-id="contacts-information" data-widget-hidden="false">
+								<section class="panel info-card">
+									<h2>Contact Information</h2>
+									<ul class="detail-list">
+										<li><Icon icon="tabler:mail" width="17" height="17" /> jsmith@smithpartners.com <em>Work</em></li>
+										<li><Icon icon="tabler:phone" width="17" height="17" /> +1 (555) 123-4567 <em>Mobile</em></li>
+										<li><Icon icon="tabler:brand-telegram" width="17" height="17" /> @john.smith <em>Telegram</em></li>
+										<li><Icon icon="tabler:map-pin" width="17" height="17" /> New York, USA <em>Local Time: 18:42</em></li>
+									</ul>
+								</section>
+							</div>
+							<div class="widget-frame" data-widget-id="contacts-about" data-widget-hidden="false">
+								<section class="panel info-card"><h2>About</h2><p>John is a strategic consulting partner. We have been working together since 2021 on multiple projects including Hermes Hub and IRIS platform development.</p><div class="tag-cloud"><span>Decision Maker</span><span>Executive</span><span>Strategic</span><span>Tech Enthusiast</span></div></section>
+							</div>
+							<div class="widget-frame" data-widget-id="contacts-relationship-strength" data-widget-hidden="false">
+								<section class="panel info-card"><h2>Relationship Strength</h2><div class="big-score">85</div><strong>Strong</strong><p>Last interaction 2 hours ago</p></section>
+							</div>
+							<div class="widget-frame span-2" data-widget-id="contacts-recent-interactions" data-widget-hidden="false">
+								<section class="panel info-card span-2"><h2>Recent Interactions</h2>{#each whatsNew.slice(0, 3) as item}<div class="feed-row compact-row"><span class="round-icon {item.tone}"><Icon icon={item.icon} width="18" height="18" /></span><div><strong>{item.title}</strong><p>{item.meta}</p></div><time>{item.time}</time></div>{/each}</section>
+							</div>
+							<div class="widget-frame" data-widget-id="contacts-active-projects" data-widget-hidden="false">
+								<section class="panel info-card"><h2>Active Projects</h2>{#each projects.slice(0, 3) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
+							</div>
 						</div>
 					</section>
 					<aside class="stacked-rail">
-						<section class="panel info-card"><h2>AI Summary</h2><p>John is a key strategic partner and decision maker. You have a strong professional relationship with frequent communication across multiple projects.</p></section>
-						<section class="panel info-card">
-							<h2>Contact Identity Review</h2>
-							<p class="identity-note">Contact merges are only suggested and are not applied until confirmed.</p>
-							{#if isIdentityCandidatesLoading}
-								<p class="inline-copy">Loading identity suggestions…</p>
-							{:else if identityCandidatesError}
-								<p class="inline-error">{identityCandidatesError}</p>
-							{:else if suggestedIdentityCandidates.length === 0 && confirmedMergeIdentityCandidates.length === 0}
-								<p class="inline-copy">No identity suggestions right now.</p>
-							{:else}
-								{#each suggestedIdentityCandidates as candidate}
-									<div class="identity-candidate-row">
-										<div>
+						<div class="widget-frame" data-widget-id="contacts-ai-summary" data-widget-hidden="false">
+							<section class="panel info-card"><h2>AI Summary</h2><p>John is a key strategic partner and decision maker. You have a strong professional relationship with frequent communication across multiple projects.</p></section>
+						</div>
+						<div class="widget-frame" data-widget-id="contacts-identity-review" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Contact Identity Review</h2>
+								<p class="identity-note">Contact merges are only suggested and are not applied until confirmed.</p>
+								{#if isIdentityCandidatesLoading}
+									<p class="inline-copy">Loading identity suggestions…</p>
+								{:else if identityCandidatesError}
+									<p class="inline-error">{identityCandidatesError}</p>
+								{:else if suggestedIdentityCandidates.length === 0 && confirmedMergeIdentityCandidates.length === 0}
+									<p class="inline-copy">No identity suggestions right now.</p>
+								{:else}
+									{#each suggestedIdentityCandidates as candidate}
+										<div class="identity-candidate-row">
+											<div>
+												<strong>{candidate.candidate_kind}</strong>
+												<p>{candidate.evidence_summary}</p>
+												<small>Left: {candidate.left_contact_id}</small>
+												<small>Right: {candidate.right_contact_id ?? 'N/A'}</small>
+												<small>Confidence: {identityConfidence(candidate)} · {candidate.review_state}</small>
+											</div>
+											<div class="identity-actions">
+												<button type="button" onclick={() => void setIdentityCandidateReview(candidate, 'user_confirmed')}>
+													<Icon icon="tabler:check" width="15" height="15" />
+													Confirm
+												</button>
+												<button type="button" onclick={() => void setIdentityCandidateReview(candidate, 'user_rejected')}>
+													<Icon icon="tabler:x" width="15" height="15" />
+													Reject
+												</button>
+											</div>
+										</div>
+									{/each}
+									{#each confirmedMergeIdentityCandidates as candidate}
+										{@const splitCandidate = splitCandidateForConfirmedMerge(candidate)}
+										<div class="identity-candidate-row">
+											<div>
 											<strong>{candidate.candidate_kind}</strong>
 											<p>{candidate.evidence_summary}</p>
 											<small>Left: {candidate.left_contact_id}</small>
 											<small>Right: {candidate.right_contact_id ?? 'N/A'}</small>
 											<small>Confidence: {identityConfidence(candidate)} · {candidate.review_state}</small>
+											</div>
+											<div class="identity-actions">
+												<button
+													type="button"
+													disabled={splitCandidate === null}
+													title={splitCandidate === null
+														? 'Refresh identity candidates to create a split review for this confirmed link'
+														: undefined}
+													onclick={() => void splitConfirmedIdentityMerge(candidate)}
+												>
+													<Icon icon="tabler:arrows-split" width="15" height="15" />
+													Split
+												</button>
+											</div>
 										</div>
-										<div class="identity-actions">
-											<button type="button" onclick={() => void setIdentityCandidateReview(candidate, 'user_confirmed')}>
-												<Icon icon="tabler:check" width="15" height="15" />
-												Confirm
-											</button>
-											<button type="button" onclick={() => void setIdentityCandidateReview(candidate, 'user_rejected')}>
-												<Icon icon="tabler:x" width="15" height="15" />
-												Reject
-											</button>
-										</div>
-									</div>
-								{/each}
-								{#each confirmedMergeIdentityCandidates as candidate}
-									{@const splitCandidate = splitCandidateForConfirmedMerge(candidate)}
-									<div class="identity-candidate-row">
-										<div>
-											<strong>{candidate.candidate_kind}</strong>
-											<p>{candidate.evidence_summary}</p>
-											<small>Left: {candidate.left_contact_id}</small>
-											<small>Right: {candidate.right_contact_id ?? 'N/A'}</small>
-											<small>Confidence: {identityConfidence(candidate)} · {candidate.review_state}</small>
-										</div>
-										<div class="identity-actions">
-											<button
-												type="button"
-												disabled={splitCandidate === null}
-												title={splitCandidate === null
-													? 'Refresh identity candidates to create a split review for this confirmed link'
-													: undefined}
-												onclick={() => void splitConfirmedIdentityMerge(candidate)}
-											>
-												<Icon icon="tabler:arrows-split" width="15" height="15" />
-												Split
-											</button>
-										</div>
-									</div>
-								{/each}
-							{/if}
-						</section>
-						<section class="panel info-card"><h2>Related Documents</h2>{#each documents.slice(0, 4) as doc}<div class="doc-mini"><Icon icon={doc.icon} width="20" height="20" /><span><strong>{doc.name}</strong><small>{doc.size} · {doc.date}</small></span></div>{/each}</section>
-						<section class="panel info-card"><h2>Recent Notes</h2><p>Discussed expansion to EU market</p><p>Prefers email for official communication</p><p>Interested in AI/ML integration</p></section>
+									{/each}
+								{/if}
+							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="contacts-related-documents" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Related Documents</h2>{#each documents.slice(0, 4) as doc}<div class="doc-mini"><Icon icon={doc.icon} width="20" height="20" /><span><strong>{doc.name}</strong><small>{doc.size} · {doc.date}</small></span></div>{/each}</section>
+						</div>
+						<div class="widget-frame" data-widget-id="contacts-recent-notes" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Recent Notes</h2><p>Discussed expansion to EU market</p><p>Prefers email for official communication</p><p>Interested in AI/ML integration</p></section>
+						</div>
 					</aside>
 				</div>
 			</section>
 		{:else if currentView === 'projects'}
 			<section class="projects-page">
 				{#if projectsError && !selectedProjectRecord}
-					<section class="panel info-card project-empty-state">
-						<Icon icon="tabler:alert-circle" width="28" height="28" />
-						<h2>Projects unavailable</h2>
-						<p>{projectsError}</p>
-						<button type="button" onclick={() => void loadProjects()}>Retry</button>
-					</section>
+					<div class="widget-frame" data-widget-id="projects-hero" data-widget-hidden="false">
+						<section class="panel info-card project-empty-state">
+							<Icon icon="tabler:alert-circle" width="28" height="28" />
+							<h2>Projects unavailable</h2>
+							<p>{projectsError}</p>
+							<button type="button" onclick={() => void loadProjects()}>Retry</button>
+						</section>
+					</div>
 				{:else if !selectedProjectRecord}
-					<section class="panel info-card project-empty-state">
-						<Icon icon="tabler:cube" width="30" height="30" />
-						<h2>No projects returned</h2>
-						<p>{isProjectsLoading ? 'Loading local projects...' : 'Local project records are empty.'}</p>
-					</section>
+					<div class="widget-frame" data-widget-id="projects-hero" data-widget-hidden="false">
+						<section class="panel info-card project-empty-state">
+							<Icon icon="tabler:cube" width="30" height="30" />
+							<h2>No projects returned</h2>
+							<p>{isProjectsLoading ? 'Loading local projects...' : 'Local project records are empty.'}</p>
+						</section>
+					</div>
 				{:else}
-					<header class="project-hero panel">
-						<div class="project-logo"><Icon icon="tabler:cube" width="48" height="48" /></div>
-						<div>
-							<h1>{selectedProjectRecord.name} <em>{projectStatusLabel(selectedProjectRecord.status)}</em></h1>
-							<p>{selectedProjectRecord.kind}</p>
-							<small>{selectedProjectRecord.description}</small>
+					<div class="widget-frame" data-widget-id="projects-hero" data-widget-hidden="false">
+						<header class="project-hero panel">
+							<div class="project-logo"><Icon icon="tabler:cube" width="48" height="48" /></div>
+							<div>
+								<h1>{selectedProjectRecord.name} <em>{projectStatusLabel(selectedProjectRecord.status)}</em></h1>
+								<p>{selectedProjectRecord.kind}</p>
+								<small>{selectedProjectRecord.description}</small>
+							</div>
+							<button type="button" class="primary-button" onclick={() => void prepareAiBrief(selectedProjectRecord.project_id)} disabled={isAiMeetingPrepSubmitting}><Icon icon="tabler:calendar-stats" width="16" height="16" />Prepare brief</button>
+						</header>
+					</div>
+					<div class="widget-frame" data-widget-id="projects-metadata-strip" data-widget-hidden="false">
+						<div class="project-meta-strip panel">
+							<article><span>Owner</span><strong>{selectedProjectRecord.owner_display_name}</strong></article>
+							<article><span>People</span><strong>{formatNumber(selectedProjectStats.people_count)}</strong></article>
+							<article><span>Start Date</span><strong>{formatProjectDate(selectedProjectRecord.start_date)}</strong></article>
+							<article><span>Target Date</span><strong>{formatProjectDate(selectedProjectRecord.target_date)}</strong></article>
+							<article><span>Progress</span><progress class="progress" max="100" value={selectedProjectRecord.progress_percent} aria-label={`${selectedProjectRecord.name} progress`}>{selectedProjectRecord.progress_percent}%</progress><strong>{selectedProjectRecord.progress_percent}%</strong></article>
 						</div>
-						<button type="button" class="primary-button" onclick={() => void prepareAiBrief(selectedProjectRecord.project_id)} disabled={isAiMeetingPrepSubmitting}><Icon icon="tabler:calendar-stats" width="16" height="16" />Prepare brief</button>
-					</header>
-					<div class="project-meta-strip panel">
-						<article><span>Owner</span><strong>{selectedProjectRecord.owner_display_name}</strong></article>
-						<article><span>People</span><strong>{formatNumber(selectedProjectStats.people_count)}</strong></article>
-						<article><span>Start Date</span><strong>{formatProjectDate(selectedProjectRecord.start_date)}</strong></article>
-						<article><span>Target Date</span><strong>{formatProjectDate(selectedProjectRecord.target_date)}</strong></article>
-						<article><span>Progress</span><progress class="progress" max="100" value={selectedProjectRecord.progress_percent} aria-label={`${selectedProjectRecord.name} progress`}>{selectedProjectRecord.progress_percent}%</progress><strong>{selectedProjectRecord.progress_percent}%</strong></article>
 					</div>
 					{#if projectSummaries.length > 1}
-						<div class="project-switcher panel">
-							{#each projectSummaries as item}
-								<button
-									type="button"
-									class:active={item.project.project_id === selectedProjectRecord.project_id}
-									onclick={() => selectProject(item)}
-								>
-									<Icon icon="tabler:cube" width="16" height="16" />
-									<span>{item.project.name}</span>
-									<em>{item.project.progress_percent}%</em>
-								</button>
-							{/each}
+						<div class="widget-frame" data-widget-id="projects-switcher" data-widget-hidden="false">
+							<div class="project-switcher panel">
+								{#each projectSummaries as item}
+									<button
+										type="button"
+										class:active={item.project.project_id === selectedProjectRecord.project_id}
+										onclick={() => selectProject(item)}
+									>
+										<Icon icon="tabler:cube" width="16" height="16" />
+										<span>{item.project.name}</span>
+										<em>{item.project.progress_percent}%</em>
+									</button>
+								{/each}
+							</div>
 						</div>
 					{/if}
-					<div class="section-tabs">
-						<button type="button" class="active">Overview</button>
-						<button type="button" disabled>Communications <em>{selectedProjectStats.message_count}</em></button>
-						<button type="button" disabled>Tasks</button>
-						<button type="button" disabled>Documents <em>{selectedProjectStats.document_count}</em></button>
-						<button type="button" disabled>Calendar</button>
-						<button type="button" disabled>Team <em>{selectedProjectStats.people_count}</em></button>
-						<button type="button" disabled>Notes</button>
-						<button type="button" disabled>Files</button>
-						<button type="button" disabled>Settings</button>
+					<div class="widget-frame" data-widget-id="projects-section-tabs" data-widget-hidden="false">
+						<div class="section-tabs">
+							<button type="button" class="active">Overview</button>
+							<button type="button" disabled>Communications <em>{selectedProjectStats.message_count}</em></button>
+							<button type="button" disabled>Tasks</button>
+							<button type="button" disabled>Documents <em>{selectedProjectStats.document_count}</em></button>
+							<button type="button" disabled>Calendar</button>
+							<button type="button" disabled>Team <em>{selectedProjectStats.people_count}</em></button>
+							<button type="button" disabled>Notes</button>
+							<button type="button" disabled>Files</button>
+							<button type="button" disabled>Settings</button>
+						</div>
 					</div>
 					{#if projectsError}
 						<p class="inline-error">{projectsError}</p>
 					{/if}
 					<div class="project-dashboard-grid">
-						<section class="panel info-card">
-							<h2>Project Summary</h2>
-							<div class="summary-numbers">
-								<article><strong>{formatNumber(selectedProjectStats.document_count)}</strong><span>Documents</span></article>
-								<article><strong>{formatNumber(selectedProjectStats.message_count)}</strong><span>Messages</span></article>
-								<article><strong>{formatNumber(selectedProjectStats.people_count)}</strong><span>People</span></article>
-								<article><strong>{formatNumber(selectedProjectStats.graph_connection_count)}</strong><span>Graph links</span></article>
-							</div>
-						</section>
-						<section class="panel graph-card-large">
-							<h2>Knowledge Graph</h2>
-							<div class="radial-graph">
-								<div class="graph-center"><Icon icon="tabler:cube" width="30" height="30" /><span>{selectedProjectRecord.name}</span></div>
-								<span class="graph-chip graph-chip-messages">Messages {formatNumber(selectedProjectStats.message_count)}</span>
-								<span class="graph-chip graph-chip-documents">Documents {formatNumber(selectedProjectStats.document_count)}</span>
-								<span class="graph-chip graph-chip-people">People {formatNumber(selectedProjectStats.people_count)}</span>
-								<span class="graph-chip graph-chip-links">Links {formatNumber(selectedProjectStats.graph_connection_count)}</span>
-							</div>
-						</section>
-						<section class="panel info-card">
-							<h2>Project Timeline</h2>
-							{#if selectedProjectDetail?.timeline.length}
-								{#each selectedProjectDetail.timeline as item}
-									<div class="timeline-mini">
-										<Icon icon={projectTimelineIcon(item)} width="16" height="16" />
-										<time>{formatProjectDateTime(item.occurred_at)}</time>
-										<strong>{item.title}</strong>
-									</div>
-								{/each}
-							{:else}
-								<p class="muted-copy">No timeline items from local sources.</p>
-							{/if}
-						</section>
-						<section class="panel info-card">
-							<h2>Recent Communications</h2>
-							{#if selectedProjectDetail?.recent_messages.length}
-								{#each selectedProjectDetail.recent_messages as message}
-									<div class="related-row">
-										<span class="round-icon cyan"><Icon icon="tabler:mail" width="16" height="16" /></span>
-										<strong>{projectMessageSender(message)}</strong>
-										<em>{formatProjectDateTime(message.occurred_at)}</em>
-									</div>
-								{/each}
-							{:else}
-								<p class="muted-copy">No linked communications.</p>
-							{/if}
-						</section>
-						<section class="panel info-card">
-							<h2>Top Documents</h2>
-							{#if selectedProjectDetail?.documents.length}
-								{#each selectedProjectDetail.documents as document}
-									<div class="doc-mini">
-										<Icon icon={projectDocumentIcon(document)} width="20" height="20" />
-										<span><strong>{document.title}</strong><small>{document.document_kind} · {formatProjectDateTime(document.imported_at)}</small></span>
-									</div>
-								{/each}
-							{:else}
-								<p class="muted-copy">No linked documents.</p>
-							{/if}
-						</section>
-						<section class="panel info-card">
-							<h2>Source Evidence</h2>
-							<div class="summary-numbers compact">
-								<article><strong>{formatNumber(selectedProjectStats.message_count + selectedProjectStats.document_count)}</strong><span>Matched records</span></article>
-								<article><strong>{formatProjectDateTime(selectedProjectStats.latest_activity_at)}</strong><span>Last activity</span></article>
-							</div>
-						</section>
-						<section class="panel info-card">
-							<h2>Open Promises</h2>
-							<p class="muted-copy">No task candidates connected to this project.</p>
-							<button type="button" class="link-row" disabled>View all promises <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
-						</section>
-						<aside class="stacked-rail project-side">
+						<div class="widget-frame" data-widget-id="projects-summary" data-widget-hidden="false">
 							<section class="panel info-card">
-								<h2>Project Health</h2>
-								<div class="health-row"><span>Status</span><strong>{projectStatusLabel(selectedProjectRecord.status)}</strong></div>
-								<div class="health-row"><span>Progress</span><strong>{selectedProjectRecord.progress_percent}%</strong></div>
-								<div class="health-row"><span>Graph Links</span><strong>{formatNumber(selectedProjectStats.graph_connection_count)}</strong></div>
+								<h2>Project Summary</h2>
+								<div class="summary-numbers">
+									<article><strong>{formatNumber(selectedProjectStats.document_count)}</strong><span>Documents</span></article>
+									<article><strong>{formatNumber(selectedProjectStats.message_count)}</strong><span>Messages</span></article>
+									<article><strong>{formatNumber(selectedProjectStats.people_count)}</strong><span>People</span></article>
+									<article><strong>{formatNumber(selectedProjectStats.graph_connection_count)}</strong><span>Graph links</span></article>
+								</div>
 							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="projects-graph-preview" data-widget-hidden="false">
+							<section class="panel graph-card-large">
+								<h2>Knowledge Graph</h2>
+								<div class="radial-graph">
+									<div class="graph-center"><Icon icon="tabler:cube" width="30" height="30" /><span>{selectedProjectRecord.name}</span></div>
+									<span class="graph-chip graph-chip-messages">Messages {formatNumber(selectedProjectStats.message_count)}</span>
+									<span class="graph-chip graph-chip-documents">Documents {formatNumber(selectedProjectStats.document_count)}</span>
+									<span class="graph-chip graph-chip-people">People {formatNumber(selectedProjectStats.people_count)}</span>
+									<span class="graph-chip graph-chip-links">Links {formatNumber(selectedProjectStats.graph_connection_count)}</span>
+								</div>
+							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="projects-timeline" data-widget-hidden="false">
 							<section class="panel info-card">
-								<h2>Key People</h2>
-								{#if selectedProjectDetail?.key_people.length}
-									{#each selectedProjectDetail.key_people as person}
-										<div class="person-compact">
-											<img src="/assets/hermes-reference-avatar.png" alt="" />
-											<span><strong>{person.display_name}</strong><small>{person.email_address}</small></span>
-											<em>{formatNumber(person.interaction_count)}</em>
+								<h2>Project Timeline</h2>
+								{#if selectedProjectDetail?.timeline.length}
+									{#each selectedProjectDetail.timeline as item}
+										<div class="timeline-mini">
+											<Icon icon={projectTimelineIcon(item)} width="16" height="16" />
+											<time>{formatProjectDateTime(item.occurred_at)}</time>
+											<strong>{item.title}</strong>
 										</div>
 									{/each}
 								{:else}
-									<p class="muted-copy">No linked people.</p>
+									<p class="muted-copy">No timeline items from local sources.</p>
 								{/if}
 							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="projects-recent-communications" data-widget-hidden="false">
 							<section class="panel info-card">
-								<h2>Related Projects</h2>
-								{#if relatedProjectSummaries.length}
-									{#each relatedProjectSummaries.slice(0, 4) as item}
+								<h2>Recent Communications</h2>
+								{#if selectedProjectDetail?.recent_messages.length}
+									{#each selectedProjectDetail.recent_messages as message}
 										<div class="related-row">
-											<span class="round-icon cyan"><Icon icon="tabler:cube" width="16" height="16" /></span>
-											<strong>{item.project.name}</strong>
-											<em>{item.project.progress_percent}%</em>
+											<span class="round-icon cyan"><Icon icon="tabler:mail" width="16" height="16" /></span>
+											<strong>{projectMessageSender(message)}</strong>
+											<em>{formatProjectDateTime(message.occurred_at)}</em>
 										</div>
 									{/each}
 								{:else}
-									<p class="muted-copy">No related project records.</p>
+									<p class="muted-copy">No linked communications.</p>
 								{/if}
 							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="projects-top-documents" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Top Documents</h2>
+								{#if selectedProjectDetail?.documents.length}
+									{#each selectedProjectDetail.documents as document}
+										<div class="doc-mini">
+											<Icon icon={projectDocumentIcon(document)} width="20" height="20" />
+											<span><strong>{document.title}</strong><small>{document.document_kind} · {formatProjectDateTime(document.imported_at)}</small></span>
+										</div>
+									{/each}
+								{:else}
+									<p class="muted-copy">No linked documents.</p>
+								{/if}
+							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="projects-source-evidence" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Source Evidence</h2>
+								<div class="summary-numbers compact">
+									<article><strong>{formatNumber(selectedProjectStats.message_count + selectedProjectStats.document_count)}</strong><span>Matched records</span></article>
+									<article><strong>{formatProjectDateTime(selectedProjectStats.latest_activity_at)}</strong><span>Last activity</span></article>
+								</div>
+							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="projects-open-promises" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Open Promises</h2>
+								<p class="muted-copy">No task candidates connected to this project.</p>
+								<button type="button" class="link-row" disabled>View all promises <Icon icon="tabler:arrow-right" width="15" height="15" /></button>
+							</section>
+						</div>
+						<aside class="stacked-rail project-side">
+							<div class="widget-frame" data-widget-id="projects-health" data-widget-hidden="false">
+								<section class="panel info-card">
+									<h2>Project Health</h2>
+									<div class="health-row"><span>Status</span><strong>{projectStatusLabel(selectedProjectRecord.status)}</strong></div>
+									<div class="health-row"><span>Progress</span><strong>{selectedProjectRecord.progress_percent}%</strong></div>
+									<div class="health-row"><span>Graph Links</span><strong>{formatNumber(selectedProjectStats.graph_connection_count)}</strong></div>
+								</section>
+							</div>
+							<div class="widget-frame" data-widget-id="projects-key-people" data-widget-hidden="false">
+								<section class="panel info-card">
+									<h2>Key People</h2>
+									{#if selectedProjectDetail?.key_people.length}
+										{#each selectedProjectDetail.key_people as person}
+											<div class="person-compact">
+												<img src="/assets/hermes-reference-avatar.png" alt="" />
+												<span><strong>{person.display_name}</strong><small>{person.email_address}</small></span>
+												<em>{formatNumber(person.interaction_count)}</em>
+											</div>
+										{/each}
+									{:else}
+										<p class="muted-copy">No linked people.</p>
+									{/if}
+								</section>
+							</div>
+							<div class="widget-frame" data-widget-id="projects-related-projects" data-widget-hidden="false">
+								<section class="panel info-card">
+									<h2>Related Projects</h2>
+									{#if relatedProjectSummaries.length}
+										{#each relatedProjectSummaries.slice(0, 4) as item}
+											<div class="related-row">
+												<span class="round-icon cyan"><Icon icon="tabler:cube" width="16" height="16" /></span>
+												<strong>{item.project.name}</strong>
+												<em>{item.project.progress_percent}%</em>
+											</div>
+										{/each}
+									{:else}
+										<p class="muted-copy">No related project records.</p>
+									{/if}
+								</section>
+							</div>
 						</aside>
 					</div>
 				{/if}
@@ -3303,22 +3371,24 @@
 			<section class="tasks-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:hexagon" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
-					<div class="metric-grid inline-metrics">
-						<article class="metric-card">
-							<span>Active Tasks</span>
-							<strong>{activeTasks.length}</strong>
-							<small>Active records</small>
-						</article>
-						<article class="metric-card">
-							<span>Suggested Candidates</span>
-							<strong>{suggestedTaskCandidates.length}</strong>
-							<small>Ready for review</small>
-						</article>
-						<article class="metric-card">
-							<span>Review State</span>
-							<strong>{tasksError ? 'Error' : 'Ready'}</strong>
-							<small>{tasksError ? 'Show message below' : 'Live API'}</small>
-						</article>
+					<div class="widget-frame inline-metrics" data-widget-id="tasks-metrics" data-widget-hidden="false">
+						<div class="metric-grid inline-metrics">
+							<article class="metric-card">
+								<span>Active Tasks</span>
+								<strong>{activeTasks.length}</strong>
+								<small>Active records</small>
+							</article>
+							<article class="metric-card">
+								<span>Suggested Candidates</span>
+								<strong>{suggestedTaskCandidates.length}</strong>
+								<small>Ready for review</small>
+							</article>
+							<article class="metric-card">
+								<span>Review State</span>
+								<strong>{tasksError ? 'Error' : 'Ready'}</strong>
+								<small>{tasksError ? 'Show message below' : 'Live API'}</small>
+							</article>
+						</div>
 					</div>
 					<button type="button" class="primary-button" onclick={() => void refreshTasksFromAi()} disabled={isAiTaskRefreshSubmitting}><Icon icon="tabler:sparkles" width="16" height="16" />AI refresh</button>
 				</div>
@@ -3327,78 +3397,96 @@
 				{/if}
 				<div class="tasks-layout">
 					<section class="panel task-table">
-						<h3 class="task-group">Active Tasks <em>{activeTasks.length}</em></h3>
+						<div class="widget-frame" data-widget-id="tasks-active-list" data-widget-hidden="false">
+							<h3 class="task-group">Active Tasks <em>{activeTasks.length}</em></h3>
 							<div class="table-head task-table-head"><span>Task</span><span>Source</span><span>Project</span><span>Created</span><span>Status</span></div>
-						{#if isTasksLoading}
-							<p class="inline-copy">Loading task state…</p>
-						{:else if activeTasks.length === 0}
-							<p class="inline-copy">No active tasks yet.</p>
-						{:else}
-							{#each activeTasks as item}
-								<label class="task-row"><input type="checkbox" disabled checked /><strong>{item.title}</strong><span>{taskSourceLabel(item)}</span><span>{item.project_id ?? 'Unassigned'}</span><time>{taskCreatedTime(item.created_at)}</time><em>{item.status}</em></label>
-							{/each}
-						{/if}
-
-						<h3 class="task-group">Review Queue <em>{suggestedTaskCandidates.length}</em></h3>
-							<div class="table-head task-table-head"><span>Candidate</span><span>Source</span><span>Project</span><span>Confidence</span><span>Action</span></div>
-						{#if isTasksLoading}
-							<p class="inline-copy">Loading task candidates…</p>
-						{:else if suggestedTaskCandidates.length === 0}
-							<p class="inline-copy">No suggested candidates.</p>
-						{:else}
-							{#each suggestedTaskCandidates as candidate}
-								<div class="task-row task-row-actions">
-									<strong>{candidate.title}</strong>
-									<span>{taskSourceLabel(candidate)}</span>
-									<span>{candidate.project_id ?? 'Unassigned'}</span>
-									<em>{taskConfidence(candidate)}</em>
-									<div class="task-actions">
-										<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_confirmed')}><Icon icon="tabler:check" width="15" height="15" /> Confirm</button>
-										<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_rejected')}><Icon icon="tabler:x" width="15" height="15" /> Reject</button>
-									</div>
-								</div>
-							{/each}
-						{/if}
-					</section>
-					<aside class="stacked-rail">
-						<section class="panel chart-panel"><h2>Review Stats</h2><div class="donut"><strong>{taskCandidates.length}</strong><span>Suggestions</span></div><ul><li>{`${suggestedTaskCandidates.length} Suggested`}</li><li>{`${activeTasks.length} Active`}</li><li>{`${taskCandidates.length - suggestedTaskCandidates.length - activeTasks.length} Done`}</li></ul></section>
-						<section class="panel info-card">
-							<h2>Recent Candidate Signals</h2>
-							{#if suggestedTaskCandidates.length === 0}
-								<p class="muted-copy">No pending candidate signals.</p>
+							{#if isTasksLoading}
+								<p class="inline-copy">Loading task state…</p>
+							{:else if activeTasks.length === 0}
+								<p class="inline-copy">No active tasks yet.</p>
 							{:else}
-								{#each suggestedTaskCandidates.slice(0, 5) as candidate}
-									<div class="deadline"><span>{candidate.title}</span><time>{candidate.source_kind}</time></div>
+								{#each activeTasks as item}
+									<label class="task-row"><input type="checkbox" disabled checked /><strong>{item.title}</strong><span>{taskSourceLabel(item)}</span><span>{item.project_id ?? 'Unassigned'}</span><time>{taskCreatedTime(item.created_at)}</time><em>{item.status}</em></label>
 								{/each}
 							{/if}
-						</section>
-						<section class="panel info-card"><h2>Active Task Sources</h2>{#each ['message','document'] as source}<div class="bar-row"><span>{source}</span><div><i></i></div></div>{/each}</section>
+						</div>
+
+						<div class="widget-frame" data-widget-id="tasks-candidate-review" data-widget-hidden="false">
+							<h3 class="task-group">Review Queue <em>{suggestedTaskCandidates.length}</em></h3>
+							<div class="table-head task-table-head"><span>Candidate</span><span>Source</span><span>Project</span><span>Confidence</span><span>Action</span></div>
+							{#if isTasksLoading}
+								<p class="inline-copy">Loading task candidates…</p>
+							{:else if suggestedTaskCandidates.length === 0}
+								<p class="inline-copy">No suggested candidates.</p>
+							{:else}
+								{#each suggestedTaskCandidates as candidate}
+									<div class="task-row task-row-actions">
+										<strong>{candidate.title}</strong>
+										<span>{taskSourceLabel(candidate)}</span>
+										<span>{candidate.project_id ?? 'Unassigned'}</span>
+										<em>{taskConfidence(candidate)}</em>
+										<div class="task-actions">
+											<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_confirmed')}><Icon icon="tabler:check" width="15" height="15" /> Confirm</button>
+											<button type="button" onclick={() => void setTaskCandidateReview(candidate, 'user_rejected')}><Icon icon="tabler:x" width="15" height="15" /> Reject</button>
+										</div>
+									</div>
+								{/each}
+							{/if}
+						</div>
+					</section>
+					<aside class="stacked-rail">
+						<div class="widget-frame" data-widget-id="tasks-ai-refresh-status" data-widget-hidden="false">
+							<section class="panel chart-panel"><h2>Review Stats</h2><div class="donut"><strong>{taskCandidates.length}</strong><span>Suggestions</span></div><ul><li>{`${suggestedTaskCandidates.length} Suggested`}</li><li>{`${activeTasks.length} Active`}</li><li>{`${taskCandidates.length - suggestedTaskCandidates.length - activeTasks.length} Done`}</li></ul></section>
+						</div>
+						<div class="widget-frame" data-widget-id="tasks-context" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Recent Candidate Signals</h2>
+								{#if suggestedTaskCandidates.length === 0}
+									<p class="muted-copy">No pending candidate signals.</p>
+								{:else}
+									{#each suggestedTaskCandidates.slice(0, 5) as candidate}
+										<div class="deadline"><span>{candidate.title}</span><time>{candidate.source_kind}</time></div>
+									{/each}
+								{/if}
+							</section>
+						</div>
+						<div class="widget-frame" data-widget-id="tasks-deadlines-priority" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Active Task Sources</h2>{#each ['message','document'] as source}<div class="bar-row"><span>{source}</span><div><i></i></div></div>{/each}</section>
+						</div>
 					</aside>
 				</div>
 			</section>
 		{:else if currentView === 'calendar'}
 			<section class="calendar-page">
-				<div class="view-header">
-					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:calendar" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
-					<div class="section-tabs pill-tabs"><button type="button" disabled>Day</button><button type="button" class="active">Week</button><button type="button" disabled>Month</button><button type="button" disabled>Agenda</button></div>
-					<button type="button" class="primary-button" disabled>New Event</button>
+				<div class="widget-frame" data-widget-id="calendar-toolbar" data-widget-hidden="false">
+					<div class="view-header">
+						<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:calendar" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+						<div class="section-tabs pill-tabs"><button type="button" disabled>Day</button><button type="button" class="active">Week</button><button type="button" disabled>Month</button><button type="button" disabled>Agenda</button></div>
+						<button type="button" class="primary-button" disabled>New Event</button>
+					</div>
 				</div>
 				<div class="filter-bar"><button type="button" disabled>All Accounts (8)</button><button type="button" disabled>All Calendars (24)</button><button type="button" disabled>All Event Types</button><button type="button" disabled>Filters</button></div>
 				<div class="calendar-layout">
-					<section class="panel week-board">
-						<div class="week-header">{#each weekColumns as day}<strong>{day}</strong>{/each}</div>
-						<div class="time-grid">
-							{#each calendarBlocks as block}
-								<article class="event-block {block.tone} {block.layoutClass}"><strong>{block.title}</strong><span>{block.meta}</span></article>
-							{/each}
-							<div class="now-line"><span>11:42</span></div>
-						</div>
-						<footer>Legend: <span>Google Calendar</span><span>Microsoft 365</span><span>YouTrack</span><span>Personal</span></footer>
-					</section>
+					<div class="widget-frame" data-widget-id="calendar-week-grid" data-widget-hidden="false">
+						<section class="panel week-board">
+							<div class="week-header">{#each weekColumns as day}<strong>{day}</strong>{/each}</div>
+							<div class="time-grid">
+								{#each calendarBlocks as block}
+									<article class="event-block {block.tone} {block.layoutClass}"><strong>{block.title}</strong><span>{block.meta}</span></article>
+								{/each}
+								<div class="now-line"><span>11:42</span></div>
+							</div>
+							<footer>Legend: <span>Google Calendar</span><span>Microsoft 365</span><span>YouTrack</span><span>Personal</span></footer>
+						</section>
+					</div>
 					<aside class="stacked-rail">
-						<section class="panel info-card"><h2>Upcoming Events</h2>{#each ['1:1 with Maria', 'Roadmap Review', 'Product Review', 'Engineering Sync', 'Architecture Discussion'] as event, index}<div class="deadline"><span>{index < 2 ? 'Today' : 'Tomorrow'} · {event}</span><time>{index + 9}:00</time></div>{/each}</section>
-						<section class="panel info-card"><h2>Calendars</h2>{#each ['Google Work', 'Google Personal', 'Microsoft Work', 'YouTrack Events'] as item}<label class="mini-check"><input type="checkbox" checked />{item}<em></em></label>{/each}<button type="button" class="link-row" disabled>Add Calendar</button></section>
-						<section class="panel info-card"><h2>Time Insights</h2>{#each ['Meetings 18h 30m', 'Focus Time 12h 15m', 'Personal 8h 45m', 'Other 3h 30m'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
+						<div class="widget-frame" data-widget-id="calendar-upcoming" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Upcoming Events</h2>{#each ['1:1 with Maria', 'Roadmap Review', 'Product Review', 'Engineering Sync', 'Architecture Discussion'] as event, index}<div class="deadline"><span>{index < 2 ? 'Today' : 'Tomorrow'} · {event}</span><time>{index + 9}:00</time></div>{/each}</section>
+						</div>
+						<div class="widget-frame stacked-rail" data-widget-id="calendar-source-status" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Calendars</h2>{#each ['Google Work', 'Google Personal', 'Microsoft Work', 'YouTrack Events'] as item}<label class="mini-check"><input type="checkbox" checked />{item}<em></em></label>{/each}<button type="button" class="link-row" disabled>Add Calendar</button></section>
+							<section class="panel info-card"><h2>Time Insights</h2>{#each ['Meetings 18h 30m', 'Focus Time 12h 15m', 'Personal 8h 45m', 'Other 3h 30m'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
+						</div>
 					</aside>
 				</div>
 			</section>
@@ -3408,69 +3496,81 @@
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:file-text" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
 					<button type="button" class="primary-button" disabled>Upload</button>
 				</div>
-				<div class="source-strip">
-					{#each ['Google Drive 1,243', 'OneDrive 812', 'Dropbox 342', 'Notion 256'] as source, index}
-						<article class="source-card"><Icon icon={index === 0 ? 'tabler:brand-google-drive' : index === 1 ? 'tabler:cloud' : index === 2 ? 'tabler:brand-dropbox' : 'tabler:brand-notion'} width="28" height="28" /><span>{source}</span></article>
-					{/each}
-					<button type="button" class="source-card add" disabled><Icon icon="tabler:plus" width="20" height="20" />Add Source</button>
+				<div class="widget-frame" data-widget-id="documents-source-cards" data-widget-hidden="false">
+					<div class="source-strip">
+						{#each ['Google Drive 1,243', 'OneDrive 812', 'Dropbox 342', 'Notion 256'] as source, index}
+							<article class="source-card"><Icon icon={index === 0 ? 'tabler:brand-google-drive' : index === 1 ? 'tabler:cloud' : index === 2 ? 'tabler:brand-dropbox' : 'tabler:brand-notion'} width="28" height="28" /><span>{source}</span></article>
+						{/each}
+						<button type="button" class="source-card add" disabled><Icon icon="tabler:plus" width="20" height="20" />Add Source</button>
+					</div>
 				</div>
 				<div class="filter-bar"><button type="button" disabled>All Accounts</button><button type="button" disabled>All Types</button><button type="button" disabled>All Projects</button><button type="button" disabled>All Folders</button><button type="button" disabled>Filters</button></div>
 				<div class="docs-layout">
-					<aside class="left-panels"><section class="panel info-card"><h2>Smart Collections</h2>{#each ['Recently Added 48', 'Recently Opened 24', 'Important 32', 'Shared with Me 18', 'Requires Review 7', 'Contracts & Legal 23', 'Financial 15'] as item}<div class="collection-row">{item}</div>{/each}</section><section class="panel info-card"><h2>My Folders</h2>{#each ['Hermes Hub', 'Projects', 'Personal', 'Work', 'Archive 2024', 'Clients', 'References'] as folder}<div class="collection-row"><Icon icon="tabler:folder" width="16" height="16" />{folder}</div>{/each}</section></aside>
-					<section class="panel docs-table">
-						<header><h2>Hermes Hub</h2><div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Documents <em>142</em></button><button type="button" disabled>Folders <em>16</em></button><button type="button" disabled>Links <em>28</em></button><button type="button" disabled>Activity</button></div></header>
-						<div class="category-grid">{#each ['Architecture 23 documents','Product 31 documents','Design 18 documents','Meetings 24 documents','Contracts 12 documents','Research 15 documents','Reports 11 documents','Other 8 documents'] as category}<article><Icon icon="tabler:folder" width="20" height="20" /><span>{category}</span></article>{/each}</div>
-						<div class="table-head docs"><span>Name</span><span>Source</span><span>Project</span><span>Type</span><span>Last Modified</span><span>Size</span></div>
-						{#each documents as doc}
-							<div class="doc-row"><Icon icon={doc.icon} width="19" height="19" /><strong>{doc.name}</strong><span>{doc.source}</span><span>{doc.project}</span><span>{doc.type}</span><time>{doc.date}</time><em>{doc.size}</em></div>
-						{/each}
-					</section>
-					<aside class="stacked-rail">
-						<section class="panel info-card">
-							<h2>Document Processing</h2>
-							{#if isDocumentProcessingJobsLoading}
-								<p class="muted-copy">Loading document processing status…</p>
-							{:else if documentProcessingJobsError}
-								<p class="muted-copy">{documentProcessingJobsError}</p>
-							{:else if documentProcessingJobs.length === 0}
-								<p class="muted-copy">No processing jobs yet.</p>
-							{:else}
-								{#each documentProcessingJobs.slice(0, 5) as job}
-									<div class="deadline">
-										<div>
-											<span>{job.document_id} · {job.step}</span>
-											<small>{job.status}{job.last_error_summary ? ` — ${job.last_error_summary}` : ''}</small>
-										</div>
-										{#if job.status === 'failed'}
-											<button
-												type="button"
-												disabled={retryingDocumentProcessingJobId === job.job_id}
-												onclick={() => void retryFailedDocumentProcessingJob(job)}
-											>
-												Retry
-											</button>
-										{/if}
-									</div>
-								{/each}
-								{#if documentProcessingDetailError}
-									<p class="muted-copy">{documentProcessingDetailError}</p>
-								{/if}
-							{/if}
+					<div class="widget-frame" data-widget-id="documents-detail-preview" data-widget-hidden="false">
+						<aside class="left-panels"><section class="panel info-card"><h2>Smart Collections</h2>{#each ['Recently Added 48', 'Recently Opened 24', 'Important 32', 'Shared with Me 18', 'Requires Review 7', 'Contracts & Legal 23', 'Financial 15'] as item}<div class="collection-row">{item}</div>{/each}</section><section class="panel info-card"><h2>My Folders</h2>{#each ['Hermes Hub', 'Projects', 'Personal', 'Work', 'Archive 2024', 'Clients', 'References'] as folder}<div class="collection-row"><Icon icon="tabler:folder" width="16" height="16" />{folder}</div>{/each}</section></aside>
+					</div>
+					<div class="widget-frame" data-widget-id="documents-list" data-widget-hidden="false">
+						<section class="panel docs-table">
+							<header><h2>Hermes Hub</h2><div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Documents <em>142</em></button><button type="button" disabled>Folders <em>16</em></button><button type="button" disabled>Links <em>28</em></button><button type="button" disabled>Activity</button></div></header>
+							<div class="category-grid">{#each ['Architecture 23 documents','Product 31 documents','Design 18 documents','Meetings 24 documents','Contracts 12 documents','Research 15 documents','Reports 11 documents','Other 8 documents'] as category}<article><Icon icon="tabler:folder" width="20" height="20" /><span>{category}</span></article>{/each}</div>
+							<div class="table-head docs"><span>Name</span><span>Source</span><span>Project</span><span>Type</span><span>Last Modified</span><span>Size</span></div>
+							{#each documents as doc}
+								<div class="doc-row"><Icon icon={doc.icon} width="19" height="19" /><strong>{doc.name}</strong><span>{doc.source}</span><span>{doc.project}</span><span>{doc.type}</span><time>{doc.date}</time><em>{doc.size}</em></div>
+							{/each}
 						</section>
-						<section class="panel chart-panel"><h2>Documents Insights</h2><strong>2,653</strong><span>Total Documents</span><div class="donut small"><strong>24%</strong></div></section>
-						<section class="panel info-card"><h2>Document Types</h2>{#each ['PDF 1,234 (46%)', 'Documents 623 (23%)', 'Spreadsheets 312 (12%)', 'Presentations 198 (7%)', 'Images 142 (5%)'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
-						<section class="panel info-card"><h2>Recent Activity</h2>{#each contactList.slice(1,5) as person}<div class="person-compact"><img src="/assets/hermes-reference-avatar.png" alt="" /><span><strong>{person.name}</strong><small>updated a document</small></span></div>{/each}</section>
+					</div>
+					<aside class="stacked-rail">
+						<div class="widget-frame" data-widget-id="documents-processing-jobs" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Document Processing</h2>
+								{#if isDocumentProcessingJobsLoading}
+									<p class="muted-copy">Loading document processing status…</p>
+								{:else if documentProcessingJobsError}
+									<p class="muted-copy">{documentProcessingJobsError}</p>
+								{:else if documentProcessingJobs.length === 0}
+									<p class="muted-copy">No processing jobs yet.</p>
+								{:else}
+									{#each documentProcessingJobs.slice(0, 5) as job}
+										<div class="deadline">
+											<div>
+												<span>{job.document_id} · {job.step}</span>
+												<small>{job.status}{job.last_error_summary ? ` — ${job.last_error_summary}` : ''}</small>
+											</div>
+											{#if job.status === 'failed'}
+												<button
+													type="button"
+													disabled={retryingDocumentProcessingJobId === job.job_id}
+													onclick={() => void retryFailedDocumentProcessingJob(job)}
+												>
+													Retry
+												</button>
+											{/if}
+										</div>
+									{/each}
+									{#if documentProcessingDetailError}
+										<p class="muted-copy">{documentProcessingDetailError}</p>
+									{/if}
+								{/if}
+							</section>
+						</div>
+						<div class="widget-frame stacked-rail" data-widget-id="documents-related-context" data-widget-hidden="false">
+							<section class="panel chart-panel"><h2>Documents Insights</h2><strong>2,653</strong><span>Total Documents</span><div class="donut small"><strong>24%</strong></div></section>
+							<section class="panel info-card"><h2>Document Types</h2>{#each ['PDF 1,234 (46%)', 'Documents 623 (23%)', 'Spreadsheets 312 (12%)', 'Presentations 198 (7%)', 'Images 142 (5%)'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
+							<section class="panel info-card"><h2>Recent Activity</h2>{#each contactList.slice(1,5) as person}<div class="person-compact"><img src="/assets/hermes-reference-avatar.png" alt="" /><span><strong>{person.name}</strong><small>updated a document</small></span></div>{/each}</section>
+						</div>
 					</aside>
 				</div>
 			</section>
 		{:else if currentView === 'notes'}
 			<section class="notes-page">
 				<div class="notes-layout">
-					<aside class="left-panels">
-						<section class="panel info-card"><h2>Sources</h2>{#each ['Apple Notes 1,243','Obsidian 872','Anytype 532','Gmail 1,156','Outlook 623'] as source}<div class="collection-row">{source}</div>{/each}<button type="button" class="link-row" disabled>Add Source</button></section>
-						<section class="panel info-card"><h2>Collections</h2>{#each ['Inbox 231','Starred 128','Today 89','To Review 74','Personal 312','Projects 482','Ideas 156','Research 203','Archive 1,024'] as item}<div class="collection-row">{item}</div>{/each}</section>
-						<section class="panel info-card"><h2>Tags</h2><div class="tag-cloud"><span># project 342</span><span># idea 156</span><span># meeting 213</span><span># research 182</span><span># reference 98</span><span># design 76</span></div></section>
-					</aside>
+					<div class="widget-frame" data-widget-id="notes-source-filters" data-widget-hidden="false">
+						<aside class="left-panels">
+							<section class="panel info-card"><h2>Sources</h2>{#each ['Apple Notes 1,243','Obsidian 872','Anytype 532','Gmail 1,156','Outlook 623'] as source}<div class="collection-row">{source}</div>{/each}<button type="button" class="link-row" disabled>Add Source</button></section>
+							<section class="panel info-card"><h2>Collections</h2>{#each ['Inbox 231','Starred 128','Today 89','To Review 74','Personal 312','Projects 482','Ideas 156','Research 203','Archive 1,024'] as item}<div class="collection-row">{item}</div>{/each}</section>
+							<section class="panel info-card"><h2>Tags</h2><div class="tag-cloud"><span># project 342</span><span># idea 156</span><span># meeting 213</span><span># research 182</span><span># reference 98</span><span># design 76</span></div></section>
+						</aside>
+					</div>
 					<section class="notes-main">
 						<div class="view-header">
 							<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:notes" width="28" height="28" /></span><div><h1>Notes</h1><p>All your notes from connected sources</p></div></div>
@@ -3478,15 +3578,21 @@
 							<button type="button" class="primary-button" disabled>New Note</button>
 						</div>
 						<div class="filter-bar"><button type="button" disabled>All Sources</button><button type="button" disabled>All Types</button><button type="button" disabled>All Collections</button><button type="button" disabled>All Tags</button><button type="button" disabled>Filters</button><button type="button" disabled>Sort: Updated</button></div>
-						<section class="notes-list panel">
-							<h3>Today</h3>{#each notes.slice(0,4) as note}<article><Icon icon={note.icon} width="22" height="22" /><div><strong>{note.title}</strong><p>{note.body}</p><small>{note.source} · {note.time}</small></div><em>{note.tag}</em></article>{/each}
-							<h3>Yesterday</h3>{#each notes.slice(4) as note}<article><Icon icon={note.icon} width="22" height="22" /><div><strong>{note.title}</strong><p>{note.body}</p><small>{note.source} · {note.time}</small></div><em>{note.tag}</em></article>{/each}
-						</section>
+						<div class="widget-frame" data-widget-id="notes-list" data-widget-hidden="false">
+							<section class="notes-list panel">
+								<h3>Today</h3>{#each notes.slice(0,4) as note}<article><Icon icon={note.icon} width="22" height="22" /><div><strong>{note.title}</strong><p>{note.body}</p><small>{note.source} · {note.time}</small></div><em>{note.tag}</em></article>{/each}
+								<h3>Yesterday</h3>{#each notes.slice(4) as note}<article><Icon icon={note.icon} width="22" height="22" /><div><strong>{note.title}</strong><p>{note.body}</p><small>{note.source} · {note.time}</small></div><em>{note.tag}</em></article>{/each}
+							</section>
+						</div>
 					</section>
 					<aside class="stacked-rail">
-						<section class="panel chart-panel"><h2>Notes Insights</h2><div class="donut"><strong>4,426</strong><span>Total Notes</span></div></section>
-						<section class="panel info-card"><h2>Activity</h2>{#each ['You created a note','Maria Petrova shared a note','Email processed','Note linked to project'] as item}<div class="deadline"><span>{item}</span><time>10:42</time></div>{/each}</section>
-						<section class="panel info-card"><h2>Unprocessed Items</h2>{#each ['23 Emails','34 Apple Notes','12 Attachments','8 Web Clippings'] as item}<div class="collection-row">{item}</div>{/each}<button type="button" class="link-row" disabled>Process All</button></section>
+						<div class="widget-frame" data-widget-id="notes-metadata" data-widget-hidden="false">
+							<section class="panel chart-panel"><h2>Notes Insights</h2><div class="donut"><strong>4,426</strong><span>Total Notes</span></div></section>
+						</div>
+						<div class="widget-frame stacked-rail" data-widget-id="notes-related-projects-documents" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Activity</h2>{#each ['You created a note','Maria Petrova shared a note','Email processed','Note linked to project'] as item}<div class="deadline"><span>{item}</span><time>10:42</time></div>{/each}</section>
+							<section class="panel info-card"><h2>Unprocessed Items</h2>{#each ['23 Emails','34 Apple Notes','12 Attachments','8 Web Clippings'] as item}<div class="collection-row">{item}</div>{/each}<button type="button" class="link-row" disabled>Process All</button></section>
+						</div>
 					</aside>
 				</div>
 			</section>
@@ -3512,174 +3618,180 @@
 
 				<div class="knowledge-layout">
 					<section class="panel graph-workbench">
-						<div class="graph-toolbar">
-							<form
-								class="graph-search-form"
-								onsubmit={(event) => {
-									event.preventDefault();
-									void runGraphSearch();
-								}}
-							>
-								<Icon icon="tabler:search" width="17" height="17" />
-								<input
-									bind:value={graphSearchQuery}
-									placeholder="Search graph nodes..."
-									aria-label="Search graph nodes"
-								/>
-								<button type="submit" disabled={isGraphSearchLoading || !graphSearchQuery.trim()}>
-									{isGraphSearchLoading ? 'Searching' : 'Search'}
-								</button>
-							</form>
-							<button type="button" disabled title="Pan and zoom engine is not part of this slice">
-								<Icon icon="tabler:hand-click" width="16" height="16" />
-							</button>
-							<button type="button" disabled title="Depth is fixed to 1 by the current graph API contract">
-								Depth 1
-							</button>
-						</div>
-
-						<div
-							class="graph-search-strip"
-							aria-live="polite"
-							aria-busy={isGraphSearchLoading || isGraphNodeChoicesLoading}
-						>
-							{#if graphSearchError}
-								<div class="graph-strip-message error">
-									<span>{graphSearchError}</span>
-									<button type="button" onclick={() => void runGraphSearch()}>Retry</button>
-								</div>
-							{:else if graphSearchResults.length > 0}
-								<div class="graph-picker">
-									<div class="graph-picker-head">
-										<span>Search results</span>
-										<em>{formatNumber(graphSearchResults.length)}</em>
-									</div>
-									<div class="graph-result-row" aria-label="Graph search results">
-										{#each graphSearchResults as node}
-											<button
-												type="button"
-												class:active={selectedGraphNode?.node_id === node.node_id}
-												onclick={() => void selectGraphNode(node)}
-											>
-												<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
-												<span>{node.label}</span>
-												<em>{formatGraphKind(node.node_kind)}</em>
-											</button>
-										{/each}
-									</div>
-								</div>
-							{:else if graphSearchSubmitted && lastSubmittedGraphSearchQuery}
-								<div class="graph-strip-message">
-									<span>No graph nodes found for "{lastSubmittedGraphSearchQuery}".</span>
-								</div>
-							{:else if graphNodeChoicesError}
-								<div class="graph-strip-message error">
-									<span>{graphNodeChoicesError}</span>
-									<button type="button" onclick={() => void loadGraphNodeChoices()}>Retry</button>
-								</div>
-							{:else if graphNodeChoices.length > 0}
-								<div class="graph-picker">
-									<div class="graph-picker-head">
-										<span>Suggested nodes</span>
-										<em>{formatNumber(graphNodeChoices.length)}</em>
-									</div>
-									<div class="graph-result-row" aria-label="Suggested graph nodes">
-										{#each graphNodeChoices as node}
-											<button
-												type="button"
-												class:active={selectedGraphNode?.node_id === node.node_id}
-												onclick={() => void selectGraphNode(node)}
-											>
-												<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
-												<span>{node.label}</span>
-												<em>{formatGraphKind(node.node_kind)}</em>
-											</button>
-										{/each}
-									</div>
-								</div>
-							{:else if isGraphNodeChoicesLoading}
-								<div class="graph-strip-message">
-									<span>Loading selectable graph nodes.</span>
-								</div>
-							{:else}
-								<div class="graph-strip-message">
-									<span>No selectable graph nodes returned by the local projection.</span>
-								</div>
-							{/if}
-						</div>
-
-						<div class="knowledge-canvas" aria-busy={isGraphNeighborhoodLoading}>
-							{#if graphError && !graphSummary}
-								<div class="graph-state-card error">
-									<Icon icon="tabler:alert-triangle" width="26" height="26" />
-									<h2>Graph summary unavailable</h2>
-									<p>{graphError}</p>
-									<button type="button" onclick={() => void loadGraphSummary()}>Retry summary</button>
-								</div>
-							{:else if isGraphSummaryLoading && !graphSummary}
-								<div class="graph-state-card">
-									<Icon icon="tabler:loader-2" width="26" height="26" />
-									<h2>Loading graph summary</h2>
-									<p>Reading local graph projection metadata.</p>
-								</div>
-							{:else if graphSummary?.is_empty}
-								<div class="graph-state-card">
-									<Icon icon="tabler:database-off" width="26" height="26" />
-									<h2>No graph projection yet</h2>
-									<p>Import contacts, messages or documents, then run the existing projection smoke command to create graph data.</p>
-								</div>
-							{:else if graphNeighborhood}
-								<svg class="graph-edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-									{#each graphCanvasEdges as edge}
-										<line
-											x1={edge.x1}
-											y1={edge.y1}
-											x2={edge.x2}
-											y2={edge.y2}
-											class:reviewed={edge.review_state === 'system_accepted' || edge.review_state === 'user_confirmed'}
-										/>
-									{/each}
-									{#each graphCanvasEdges as edge}
-										<text
-											class="graph-edge-label"
-											class:reviewed={edge.review_state === 'system_accepted' || edge.review_state === 'user_confirmed'}
-											x={(edge.x1 + edge.x2) / 2}
-											y={(edge.y1 + edge.y2) / 2}
-										>
-											{edge.label}
-										</text>
-									{/each}
-								</svg>
-								{#each graphCanvasNodes as node}
-									<button
-										type="button"
-										class="graph-node {node.layoutClass}"
-										class:kind-person={node.node_kind === 'person'}
-										class:kind-email_address={node.node_kind === 'email_address'}
-										class:kind-message={node.node_kind === 'message'}
-										class:kind-document={node.node_kind === 'document'}
-										class:selected={node.isSelected}
-										onclick={() => void selectGraphNode(node)}
-										title={`${node.label} - ${formatGraphKind(node.node_kind)}`}
-									>
-										<Icon icon={graphNodeKindIcon(node.node_kind)} width={node.isSelected ? 28 : 21} height={node.isSelected ? 28 : 21} />
-										<strong>{node.label}</strong>
-										<span>{formatGraphKind(node.node_kind)}</span>
+						<div class="widget-frame" data-widget-id="knowledge-toolbar" data-widget-hidden="false">
+							<div class="graph-toolbar">
+								<form
+									class="graph-search-form"
+									onsubmit={(event) => {
+										event.preventDefault();
+										void runGraphSearch();
+									}}
+								>
+									<Icon icon="tabler:search" width="17" height="17" />
+									<input
+										bind:value={graphSearchQuery}
+										placeholder="Search graph nodes..."
+										aria-label="Search graph nodes"
+									/>
+									<button type="submit" disabled={isGraphSearchLoading || !graphSearchQuery.trim()}>
+										{isGraphSearchLoading ? 'Searching' : 'Search'}
 									</button>
-								{/each}
-							{:else}
-								<div class="graph-state-card">
-									<img src="/assets/hermes-logo-mark.png" alt="" />
-									<h2>Select a graph node</h2>
-									<p>{formatNumber(graphNodeTotal())} nodes and {formatNumber(graphRelationshipTotal())} connections are available from the local projection. Use Suggested nodes or search to load a neighborhood.</p>
-								</div>
-							{/if}
-							{#if isGraphNeighborhoodLoading}
-								<div class="graph-loading-overlay" role="status" aria-live="polite">
-									<Icon icon="tabler:loader-2" width="22" height="22" />
-									<span>Loading neighborhood</span>
-								</div>
-							{/if}
+								</form>
+								<button type="button" disabled title="Pan and zoom engine is not part of this slice">
+									<Icon icon="tabler:hand-click" width="16" height="16" />
+								</button>
+								<button type="button" disabled title="Depth is fixed to 1 by the current graph API contract">
+									Depth 1
+								</button>
+							</div>
+						</div>
+
+						<div class="widget-frame" data-widget-id="knowledge-search-results" data-widget-hidden="false">
+							<div
+								class="graph-search-strip"
+								aria-live="polite"
+								aria-busy={isGraphSearchLoading || isGraphNodeChoicesLoading}
+							>
+								{#if graphSearchError}
+									<div class="graph-strip-message error">
+										<span>{graphSearchError}</span>
+										<button type="button" onclick={() => void runGraphSearch()}>Retry</button>
+									</div>
+								{:else if graphSearchResults.length > 0}
+									<div class="graph-picker">
+										<div class="graph-picker-head">
+											<span>Search results</span>
+											<em>{formatNumber(graphSearchResults.length)}</em>
+										</div>
+										<div class="graph-result-row" aria-label="Graph search results">
+											{#each graphSearchResults as node}
+												<button
+													type="button"
+													class:active={selectedGraphNode?.node_id === node.node_id}
+													onclick={() => void selectGraphNode(node)}
+												>
+													<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
+													<span>{node.label}</span>
+													<em>{formatGraphKind(node.node_kind)}</em>
+												</button>
+											{/each}
+										</div>
+									</div>
+								{:else if graphSearchSubmitted && lastSubmittedGraphSearchQuery}
+									<div class="graph-strip-message">
+										<span>No graph nodes found for "{lastSubmittedGraphSearchQuery}".</span>
+									</div>
+								{:else if graphNodeChoicesError}
+									<div class="graph-strip-message error">
+										<span>{graphNodeChoicesError}</span>
+										<button type="button" onclick={() => void loadGraphNodeChoices()}>Retry</button>
+									</div>
+								{:else if graphNodeChoices.length > 0}
+									<div class="graph-picker">
+										<div class="graph-picker-head">
+											<span>Suggested nodes</span>
+											<em>{formatNumber(graphNodeChoices.length)}</em>
+										</div>
+										<div class="graph-result-row" aria-label="Suggested graph nodes">
+											{#each graphNodeChoices as node}
+												<button
+													type="button"
+													class:active={selectedGraphNode?.node_id === node.node_id}
+													onclick={() => void selectGraphNode(node)}
+												>
+													<Icon icon={graphNodeKindIcon(node.node_kind)} width="16" height="16" />
+													<span>{node.label}</span>
+													<em>{formatGraphKind(node.node_kind)}</em>
+												</button>
+											{/each}
+										</div>
+									</div>
+								{:else if isGraphNodeChoicesLoading}
+									<div class="graph-strip-message">
+										<span>Loading selectable graph nodes.</span>
+									</div>
+								{:else}
+									<div class="graph-strip-message">
+										<span>No selectable graph nodes returned by the local projection.</span>
+									</div>
+								{/if}
+							</div>
+						</div>
+
+						<div class="widget-frame" data-widget-id="knowledge-graph-canvas" data-widget-hidden="false">
+							<div class="knowledge-canvas" aria-busy={isGraphNeighborhoodLoading}>
+								{#if graphError && !graphSummary}
+									<div class="graph-state-card error">
+										<Icon icon="tabler:alert-triangle" width="26" height="26" />
+										<h2>Graph summary unavailable</h2>
+										<p>{graphError}</p>
+										<button type="button" onclick={() => void loadGraphSummary()}>Retry summary</button>
+									</div>
+								{:else if isGraphSummaryLoading && !graphSummary}
+									<div class="graph-state-card">
+										<Icon icon="tabler:loader-2" width="26" height="26" />
+										<h2>Loading graph summary</h2>
+										<p>Reading local graph projection metadata.</p>
+									</div>
+								{:else if graphSummary?.is_empty}
+									<div class="graph-state-card">
+										<Icon icon="tabler:database-off" width="26" height="26" />
+										<h2>No graph projection yet</h2>
+										<p>Import contacts, messages or documents, then run the existing projection smoke command to create graph data.</p>
+									</div>
+								{:else if graphNeighborhood}
+									<svg class="graph-edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+										{#each graphCanvasEdges as edge}
+											<line
+												x1={edge.x1}
+												y1={edge.y1}
+												x2={edge.x2}
+												y2={edge.y2}
+												class:reviewed={edge.review_state === 'system_accepted' || edge.review_state === 'user_confirmed'}
+											/>
+										{/each}
+										{#each graphCanvasEdges as edge}
+											<text
+												class="graph-edge-label"
+												class:reviewed={edge.review_state === 'system_accepted' || edge.review_state === 'user_confirmed'}
+												x={(edge.x1 + edge.x2) / 2}
+												y={(edge.y1 + edge.y2) / 2}
+											>
+												{edge.label}
+											</text>
+										{/each}
+									</svg>
+									{#each graphCanvasNodes as node}
+										<button
+											type="button"
+											class="graph-node {node.layoutClass}"
+											class:kind-person={node.node_kind === 'person'}
+											class:kind-email_address={node.node_kind === 'email_address'}
+											class:kind-message={node.node_kind === 'message'}
+											class:kind-document={node.node_kind === 'document'}
+											class:selected={node.isSelected}
+											onclick={() => void selectGraphNode(node)}
+											title={`${node.label} - ${formatGraphKind(node.node_kind)}`}
+										>
+											<Icon icon={graphNodeKindIcon(node.node_kind)} width={node.isSelected ? 28 : 21} height={node.isSelected ? 28 : 21} />
+											<strong>{node.label}</strong>
+											<span>{formatGraphKind(node.node_kind)}</span>
+										</button>
+									{/each}
+								{:else}
+									<div class="graph-state-card">
+										<img src="/assets/hermes-logo-mark.png" alt="" />
+										<h2>Select a graph node</h2>
+										<p>{formatNumber(graphNodeTotal())} nodes and {formatNumber(graphRelationshipTotal())} connections are available from the local projection. Use Suggested nodes or search to load a neighborhood.</p>
+									</div>
+								{/if}
+								{#if isGraphNeighborhoodLoading}
+									<div class="graph-loading-overlay" role="status" aria-live="polite">
+										<Icon icon="tabler:loader-2" width="22" height="22" />
+										<span>Loading neighborhood</span>
+									</div>
+								{/if}
+							</div>
 						</div>
 
 						<footer class="graph-status-bar">
@@ -3691,31 +3803,33 @@
 					</section>
 
 					<aside class="stacked-rail">
-						<section class="panel info-card">
-							<h2>Selected Node</h2>
-							{#if selectedGraphNode}
-								<div class="doc-mini">
-									<Icon icon={graphNodeKindIcon(selectedGraphNode.node_kind)} width="24" height="24" />
-									<span>
-										<strong>{selectedGraphNode.label}</strong>
-										<small>{formatGraphKind(selectedGraphNode.node_kind)}</small>
-									</span>
-								</div>
-								<ul class="detail-list node-detail-list">
-									<li>Stable key <em>{selectedGraphNode.stable_key}</em></li>
-									<li>Created <em>{formatGraphTimestamp(selectedGraphNode.created_at)}</em></li>
-									<li>Updated <em>{formatGraphTimestamp(selectedGraphNode.updated_at)}</em></li>
-									{#each selectedGraphProperties as row}
-										<li>{formatGraphKind(row.key)} <em>{row.value}</em></li>
-									{/each}
-								</ul>
-							{:else}
-								<p>Select a graph node to inspect metadata and evidence.</p>
-							{/if}
-							{#if graphNeighborhoodError}
-								<p class="inline-error" role="status" aria-live="polite">{graphNeighborhoodError}</p>
-							{/if}
-						</section>
+						<div class="widget-frame" data-widget-id="knowledge-node-inspector" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Selected Node</h2>
+								{#if selectedGraphNode}
+									<div class="doc-mini">
+										<Icon icon={graphNodeKindIcon(selectedGraphNode.node_kind)} width="24" height="24" />
+										<span>
+											<strong>{selectedGraphNode.label}</strong>
+											<small>{formatGraphKind(selectedGraphNode.node_kind)}</small>
+										</span>
+									</div>
+									<ul class="detail-list node-detail-list">
+										<li>Stable key <em>{selectedGraphNode.stable_key}</em></li>
+										<li>Created <em>{formatGraphTimestamp(selectedGraphNode.created_at)}</em></li>
+										<li>Updated <em>{formatGraphTimestamp(selectedGraphNode.updated_at)}</em></li>
+										{#each selectedGraphProperties as row}
+											<li>{formatGraphKind(row.key)} <em>{row.value}</em></li>
+										{/each}
+									</ul>
+								{:else}
+									<p>Select a graph node to inspect metadata and evidence.</p>
+								{/if}
+								{#if graphNeighborhoodError}
+									<p class="inline-error" role="status" aria-live="polite">{graphNeighborhoodError}</p>
+								{/if}
+							</section>
+						</div>
 
 						<section class="panel info-card">
 							<h2>Connections</h2>
@@ -3731,30 +3845,34 @@
 							{/if}
 						</section>
 
-						<section class="panel info-card">
-							<h2>Evidence</h2>
-							{#if graphNeighborhood?.evidence.length}
-								{#each graphNeighborhood.evidence.slice(0, 5) as evidence}
-									<div class="evidence-row">
-										<strong>{formatGraphKind(evidence.source_kind)}</strong>
-										<p>{evidence.excerpt ?? graphEvidenceLabel(evidence)}</p>
-									</div>
-								{/each}
-							{:else}
-								<p>Evidence appears after selecting a node with returned edges.</p>
-							{/if}
-						</section>
+						<div class="widget-frame" data-widget-id="knowledge-evidence-context" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Evidence</h2>
+								{#if graphNeighborhood?.evidence.length}
+									{#each graphNeighborhood.evidence.slice(0, 5) as evidence}
+										<div class="evidence-row">
+											<strong>{formatGraphKind(evidence.source_kind)}</strong>
+											<p>{evidence.excerpt ?? graphEvidenceLabel(evidence)}</p>
+										</div>
+									{/each}
+								{:else}
+									<p>Evidence appears after selecting a node with returned edges.</p>
+								{/if}
+							</section>
+						</div>
 
-						<section class="panel info-card">
-							<h2>Graph Statistics</h2>
-							<div class="summary-numbers compact">
-								<article><strong>{formatNumber(graphNodeTotal())}</strong><span>Nodes</span></article>
-								<article><strong>{formatNumber(graphRelationshipTotal())}</strong><span>Connections</span></article>
-								<article><strong>{formatNumber(graphEvidenceTotal())}</strong><span>Evidence</span></article>
-								<article><strong>{formatNumber(graphNodeKindCount('person'))}</strong><span>People</span></article>
-							</div>
-							{#if graphError}<p class="inline-error">{graphError}</p>{/if}
-						</section>
+						<div class="widget-frame" data-widget-id="knowledge-graph-summary" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Graph Statistics</h2>
+								<div class="summary-numbers compact">
+									<article><strong>{formatNumber(graphNodeTotal())}</strong><span>Nodes</span></article>
+									<article><strong>{formatNumber(graphRelationshipTotal())}</strong><span>Connections</span></article>
+									<article><strong>{formatNumber(graphEvidenceTotal())}</strong><span>Evidence</span></article>
+									<article><strong>{formatNumber(graphNodeKindCount('person'))}</strong><span>People</span></article>
+								</div>
+								{#if graphError}<p class="inline-error">{graphError}</p>{/if}
+							</section>
+						</div>
 					</aside>
 				</div>
 			</section>
@@ -3765,13 +3883,15 @@
 					<button type="button" class="primary-button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
 
-				<div class="metric-grid">
-					<article class="metric-card"><span>Chats</span><strong>{telegramChats.length}</strong><small>{selectedTelegramChat?.sync_state ?? 'not synced'}</small></article>
-					<article class="metric-card"><span>Messages</span><strong>{telegramMessages.length}</strong><small>Projected channel records</small></article>
-					<article class="metric-card"><span>Templates</span><strong>{automationTemplates.length}</strong><small>UI-approved only</small></article>
-					<article class="metric-card"><span>Policies</span><strong>{automationPolicies.length}</strong><small>{automationPolicies.filter((policy) => policy.enabled).length} enabled</small></article>
-					<article class="metric-card"><span>Calls</span><strong>{telegramCalls.length}</strong><small>{selectedTelegramCall?.call_state ?? 'no history'}</small></article>
-					<article class="metric-card"><span>Transcript</span><strong>{callTranscript?.transcript_status ?? 'none'}</strong><small>{callTranscript?.stt_provider ?? 'fixture STT'}</small></article>
+				<div class="widget-frame" data-widget-id="telegram-account-status" data-widget-hidden="false">
+					<div class="metric-grid">
+						<article class="metric-card"><span>Chats</span><strong>{telegramChats.length}</strong><small>{selectedTelegramChat?.sync_state ?? 'not synced'}</small></article>
+						<article class="metric-card"><span>Messages</span><strong>{telegramMessages.length}</strong><small>Projected channel records</small></article>
+						<article class="metric-card"><span>Templates</span><strong>{automationTemplates.length}</strong><small>UI-approved only</small></article>
+						<article class="metric-card"><span>Policies</span><strong>{automationPolicies.length}</strong><small>{automationPolicies.filter((policy) => policy.enabled).length} enabled</small></article>
+						<article class="metric-card"><span>Calls</span><strong>{telegramCalls.length}</strong><small>{selectedTelegramCall?.call_state ?? 'no history'}</small></article>
+						<article class="metric-card"><span>Transcript</span><strong>{callTranscript?.transcript_status ?? 'none'}</strong><small>{callTranscript?.stt_provider ?? 'fixture STT'}</small></article>
+					</div>
 				</div>
 
 				{#if telegramActionMessage}
@@ -3782,65 +3902,70 @@
 				{/if}
 
 				<div class="three-pane communications-grid telegram-grid">
-					<section class="panel conversation-list">
-						<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search Telegram chats..." /></label>
-						{#if isTelegramLoading && telegramChats.length === 0}
-							<div class="empty-panel">Loading Telegram state...</div>
-						{:else if telegramChats.length === 0}
-							<div class="empty-panel">No Telegram chats projected yet.</div>
-						{:else}
-							{#each telegramChats as chat}
-								<button type="button" class:active={selectedTelegramChat?.provider_chat_id === chat.provider_chat_id} onclick={() => selectTelegramChat(chat)}>
-									<span class="round-icon cyan"><Icon icon="tabler:brand-telegram" width="22" height="22" /></span>
-									<img src="/assets/hermes-reference-avatar.png" alt="" />
-									<span>
-										<strong>{chat.title}</strong>
-										<small>{chat.account_id} · {chat.chat_kind}</small>
-										<em>{chat.sync_state}</em>
-									</span>
-									<time>{formatDateTime(chat.last_message_at ?? chat.updated_at)}</time>
-								</button>
-							{/each}
-						{/if}
-					</section>
+					<div class="widget-frame" data-widget-id="telegram-chat-list" data-widget-hidden="false">
+						<section class="panel conversation-list">
+							<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search Telegram chats..." /></label>
+							{#if isTelegramLoading && telegramChats.length === 0}
+								<div class="empty-panel">Loading Telegram state...</div>
+							{:else if telegramChats.length === 0}
+								<div class="empty-panel">No Telegram chats projected yet.</div>
+							{:else}
+								{#each telegramChats as chat}
+									<button type="button" class:active={selectedTelegramChat?.provider_chat_id === chat.provider_chat_id} onclick={() => selectTelegramChat(chat)}>
+										<span class="round-icon cyan"><Icon icon="tabler:brand-telegram" width="22" height="22" /></span>
+										<img src="/assets/hermes-reference-avatar.png" alt="" />
+										<span>
+											<strong>{chat.title}</strong>
+											<small>{chat.account_id} · {chat.chat_kind}</small>
+											<em>{chat.sync_state}</em>
+										</span>
+										<time>{formatDateTime(chat.last_message_at ?? chat.updated_at)}</time>
+									</button>
+								{/each}
+							{/if}
+						</section>
+					</div>
 
-					<section class="panel chat-pane telegram-chat-pane">
-						{#if selectedTelegramChat}
-							<header>
-								<span class="round-icon cyan"><Icon icon="tabler:brand-telegram" width="24" height="24" /></span>
-								<div><h2>{selectedTelegramChat.title}</h2><p>{selectedTelegramChat.account_id} · {selectedTelegramChat.provider_chat_id}</p></div>
-								<div class="chat-actions">
-									<button type="button" disabled title="1:1 audio call controls are backend-foundation only in this V4 slice"><Icon icon="tabler:phone" width="17" height="17" /></button>
-									<button type="button" disabled title="Video calls are V4.x"><Icon icon="tabler:video" width="17" height="17" /></button>
-									<button type="button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="17" height="17" /></button>
+					<div class="widget-frame" data-widget-id="telegram-message-thread" data-widget-hidden="false">
+						<section class="panel chat-pane telegram-chat-pane">
+							{#if selectedTelegramChat}
+								<header>
+									<span class="round-icon cyan"><Icon icon="tabler:brand-telegram" width="24" height="24" /></span>
+									<div><h2>{selectedTelegramChat.title}</h2><p>{selectedTelegramChat.account_id} · {selectedTelegramChat.provider_chat_id}</p></div>
+									<div class="chat-actions">
+										<button type="button" disabled title="1:1 audio call controls are backend-foundation only in this V4 slice"><Icon icon="tabler:phone" width="17" height="17" /></button>
+										<button type="button" disabled title="Video calls are V4.x"><Icon icon="tabler:video" width="17" height="17" /></button>
+										<button type="button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="17" height="17" /></button>
+									</div>
+								</header>
+								<div class="chat-body">
+									{#if selectedTelegramMessages.length === 0}
+										<div class="empty-panel fill">No messages for this chat.</div>
+									{:else}
+										{#each selectedTelegramMessages.slice().reverse() as message}
+											<article class="bubble" class:outbound={message.delivery_state === 'sent' || message.delivery_state === 'send_dry_run'} class:inbound={message.delivery_state !== 'sent' && message.delivery_state !== 'send_dry_run'}>
+												<strong>{message.sender_display_name ?? message.sender}</strong><br />
+												{message.text}
+												<time>{telegramMessageTime(message)}</time>
+											</article>
+										{/each}
+									{/if}
 								</div>
-							</header>
-							<div class="chat-body">
-								{#if selectedTelegramMessages.length === 0}
-									<div class="empty-panel fill">No messages for this chat.</div>
-								{:else}
-									{#each selectedTelegramMessages.slice().reverse() as message}
-										<article class="bubble" class:outbound={message.delivery_state === 'sent' || message.delivery_state === 'send_dry_run'} class:inbound={message.delivery_state !== 'sent' && message.delivery_state !== 'send_dry_run'}>
-											<strong>{message.sender_display_name ?? message.sender}</strong><br />
-											{message.text}
-											<time>{telegramMessageTime(message)}</time>
-										</article>
-									{/each}
-								{/if}
-							</div>
-							<form class="telegram-inline-form" onsubmit={(event) => { event.preventDefault(); void ingestTelegramMessageFixture(); }}>
-								<input bind:value={telegramMessageForm.provider_message_id} placeholder="Provider message ID" autocomplete="off" />
-								<input bind:value={telegramMessageForm.sender_display_name} placeholder="Sender" autocomplete="off" />
-								<input bind:value={telegramMessageForm.text} placeholder="Fixture message text" autocomplete="off" />
-								<button type="submit" disabled={isTelegramActionSubmitting || !telegramMessageForm.text.trim()}><Icon icon="tabler:send" width="17" height="17" />Ingest</button>
-							</form>
-						{:else}
-							<div class="empty-panel fill">Create a Telegram fixture account and ingest a message.</div>
-						{/if}
-					</section>
+								<form class="telegram-inline-form" onsubmit={(event) => { event.preventDefault(); void ingestTelegramMessageFixture(); }}>
+									<input bind:value={telegramMessageForm.provider_message_id} placeholder="Provider message ID" autocomplete="off" />
+									<input bind:value={telegramMessageForm.sender_display_name} placeholder="Sender" autocomplete="off" />
+									<input bind:value={telegramMessageForm.text} placeholder="Fixture message text" autocomplete="off" />
+									<button type="submit" disabled={isTelegramActionSubmitting || !telegramMessageForm.text.trim()}><Icon icon="tabler:send" width="17" height="17" />Ingest</button>
+								</form>
+							{:else}
+								<div class="empty-panel fill">Create a Telegram fixture account and ingest a message.</div>
+							{/if}
+						</section>
+					</div>
 
 					<aside class="stacked-rail telegram-rail">
-						<section class="panel info-card">
+						<div class="widget-frame stacked-rail" data-widget-id="telegram-sync-controls" data-widget-hidden="false">
+							<section class="panel info-card">
 							<h2>Account Setup</h2>
 							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void setupTelegramFixture(); }}>
 								<label><span>Account ID</span><input bind:value={telegramAccountForm.account_id} autocomplete="off" /></label>
@@ -3851,9 +3976,9 @@
 								<label class="checkbox-row"><input bind:checked={telegramAccountForm.transcription_enabled} type="checkbox" /><span>Transcription enabled</span></label>
 								<div class="form-actions"><button type="submit" disabled={isTelegramActionSubmitting}>Save Fixture</button></div>
 							</form>
-						</section>
+							</section>
 
-						<section class="panel info-card">
+							<section class="panel info-card">
 							<h2>Runtime Guardrails</h2>
 							<div class="health-row"><span>Mode</span><strong>{v4Capabilities?.runtime_mode ?? 'unknown'}</strong></div>
 							{#if v4ClosureCapabilities.length}
@@ -3877,9 +4002,9 @@
 									<p>{v4Capabilities.unsupported_features.map(capabilityLabel).join(', ')}</p>
 								</div>
 							{/if}
-						</section>
+							</section>
 
-						<section class="panel info-card">
+							<section class="panel info-card">
 							<h2>Template</h2>
 							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveV4AutomationTemplate(); }}>
 								<label><span>Template ID</span><input bind:value={automationTemplateForm.template_id} autocomplete="off" /></label>
@@ -3895,9 +4020,9 @@
 									{/each}
 								</ul>
 							{/if}
-						</section>
+							</section>
 
-						<section class="panel info-card">
+							<section class="panel info-card">
 							<h2>Policy</h2>
 							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveV4AutomationPolicy(); }}>
 								<label><span>Policy ID</span><input bind:value={automationPolicyForm.policy_id} autocomplete="off" /></label>
@@ -3912,9 +4037,9 @@
 								<label class="checkbox-row"><input bind:checked={automationPolicyForm.enabled} type="checkbox" /><span>Enabled</span></label>
 								<div class="form-actions"><button type="submit" disabled={isTelegramActionSubmitting}>Save Policy</button></div>
 							</form>
-						</section>
+							</section>
 
-						<section class="panel info-card">
+							<section class="panel info-card">
 							<h2>Dry Run</h2>
 							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void runTelegramAutomationDryRun(); }}>
 								<label><span>Policy ID</span><input bind:value={telegramSendForm.policy_id} autocomplete="off" /></label>
@@ -3930,9 +4055,11 @@
 									<small>{telegramSendDryRunResult.rendered_preview_hash}</small>
 								</div>
 							{/if}
-						</section>
+							</section>
+						</div>
 
-						<section class="panel info-card">
+						<div class="widget-frame stacked-rail" data-widget-id="telegram-selected-chat-metadata" data-widget-hidden="false">
+							<section class="panel info-card">
 							<h2>Calls</h2>
 							{#if telegramCalls.length}
 								{#each telegramCalls.slice(0, 4) as call}
@@ -3954,9 +4081,9 @@
 								<label class="wide"><span>Metadata JSON</span><textarea bind:value={telegramCallForm.metadata_text} rows="2"></textarea></label>
 								<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>Save Call</button></div>
 							</form>
-						</section>
+							</section>
 
-						<section class="panel info-card">
+							<section class="panel info-card">
 							<h2>Transcript</h2>
 							{#if selectedTelegramCall}
 								<div class="health-row"><span>Selected call</span><strong>{selectedTelegramCall.call_id}</strong></div>
@@ -3976,7 +4103,8 @@
 								<label class="checkbox-row"><input bind:checked={transcriptForm.always_on_policy} type="checkbox" /><span>Always-on policy</span></label>
 								<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting || !selectedTelegramCallId}>Save Transcript</button></div>
 							</form>
-						</section>
+							</section>
+						</div>
 					</aside>
 				</div>
 			</section>
@@ -3987,11 +4115,13 @@
 					<button type="button" class="primary-button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
 
-				<div class="metric-grid">
-					<article class="metric-card"><span>Sessions</span><strong>{whatsappSessions.length}</strong><small>{selectedWhatsappSession?.link_state ?? 'not linked'}</small></article>
-					<article class="metric-card"><span>Messages</span><strong>{whatsappMessages.length}</strong><small>Canonical WhatsApp Web records</small></article>
-					<article class="metric-card"><span>Runtime</span><strong>{v5Capabilities?.runtime_mode ?? 'unknown'}</strong><small>Fixture/manual foundation</small></article>
-					<article class="metric-card"><span>Blocked</span><strong>{v5BlockedCapabilities.length}</strong><small>Live runtime remains blocked</small></article>
+				<div class="widget-frame" data-widget-id="whatsapp-session-status" data-widget-hidden="false">
+					<div class="metric-grid">
+						<article class="metric-card"><span>Sessions</span><strong>{whatsappSessions.length}</strong><small>{selectedWhatsappSession?.link_state ?? 'not linked'}</small></article>
+						<article class="metric-card"><span>Messages</span><strong>{whatsappMessages.length}</strong><small>Canonical WhatsApp Web records</small></article>
+						<article class="metric-card"><span>Runtime</span><strong>{v5Capabilities?.runtime_mode ?? 'unknown'}</strong><small>Fixture/manual foundation</small></article>
+						<article class="metric-card"><span>Blocked</span><strong>{v5BlockedCapabilities.length}</strong><small>Live runtime remains blocked</small></article>
+					</div>
 				</div>
 
 				{#if whatsappActionMessage}
@@ -4002,114 +4132,120 @@
 				{/if}
 
 				<div class="three-pane communications-grid whatsapp-grid">
-					<section class="panel conversation-list">
-						<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search WhatsApp sessions..." /></label>
-						{#if isWhatsappLoading && whatsappSessions.length === 0}
-							<div class="empty-panel">Loading WhatsApp Web state...</div>
-						{:else if whatsappSessions.length === 0}
-							<div class="empty-panel">No WhatsApp Web sessions saved yet.</div>
-						{:else}
-							{#each whatsappSessions as session}
-								<button type="button" class:active={selectedWhatsappSession?.session_id === session.session_id} onclick={() => selectWhatsappSession(session)}>
-									<span class="round-icon cyan"><Icon icon="tabler:brand-whatsapp" width="22" height="22" /></span>
-									<img src="/assets/hermes-reference-avatar.png" alt="" />
-									<span>
-										<strong>{session.device_name}</strong>
-										<small>{session.account_id} · {session.companion_runtime}</small>
-										<em>{session.link_state}</em>
-									</span>
-									<time>{formatDateTime(session.last_sync_at ?? session.updated_at)}</time>
-								</button>
-							{/each}
-						{/if}
-					</section>
+					<div class="widget-frame" data-widget-id="whatsapp-account-session-metadata" data-widget-hidden="false">
+						<section class="panel conversation-list">
+							<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search WhatsApp sessions..." /></label>
+							{#if isWhatsappLoading && whatsappSessions.length === 0}
+								<div class="empty-panel">Loading WhatsApp Web state...</div>
+							{:else if whatsappSessions.length === 0}
+								<div class="empty-panel">No WhatsApp Web sessions saved yet.</div>
+							{:else}
+								{#each whatsappSessions as session}
+									<button type="button" class:active={selectedWhatsappSession?.session_id === session.session_id} onclick={() => selectWhatsappSession(session)}>
+										<span class="round-icon cyan"><Icon icon="tabler:brand-whatsapp" width="22" height="22" /></span>
+										<img src="/assets/hermes-reference-avatar.png" alt="" />
+										<span>
+											<strong>{session.device_name}</strong>
+											<small>{session.account_id} · {session.companion_runtime}</small>
+											<em>{session.link_state}</em>
+										</span>
+										<time>{formatDateTime(session.last_sync_at ?? session.updated_at)}</time>
+									</button>
+								{/each}
+							{/if}
+						</section>
+					</div>
 
-					<section class="panel chat-pane whatsapp-chat-pane">
-						{#if selectedWhatsappSession}
-							<header>
-								<span class="round-icon cyan"><Icon icon="tabler:brand-whatsapp" width="24" height="24" /></span>
-								<div><h2>{selectedWhatsappSession.device_name}</h2><p>{selectedWhatsappSession.account_id} · {selectedWhatsappSession.link_state}</p></div>
-								<div class="chat-actions">
-									<button type="button" disabled title="Live WhatsApp Web runtime is blocked in V5 foundation"><Icon icon="tabler:world" width="17" height="17" /></button>
-									<button type="button" disabled title="Outbound WhatsApp sends require a future policy and runtime contract"><Icon icon="tabler:send-off" width="17" height="17" /></button>
-									<button type="button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="17" height="17" /></button>
+					<div class="widget-frame" data-widget-id="whatsapp-chat-message-surface" data-widget-hidden="false">
+						<section class="panel chat-pane whatsapp-chat-pane">
+							{#if selectedWhatsappSession}
+								<header>
+									<span class="round-icon cyan"><Icon icon="tabler:brand-whatsapp" width="24" height="24" /></span>
+									<div><h2>{selectedWhatsappSession.device_name}</h2><p>{selectedWhatsappSession.account_id} · {selectedWhatsappSession.link_state}</p></div>
+									<div class="chat-actions">
+										<button type="button" disabled title="Live WhatsApp Web runtime is blocked in V5 foundation"><Icon icon="tabler:world" width="17" height="17" /></button>
+										<button type="button" disabled title="Outbound WhatsApp sends require a future policy and runtime contract"><Icon icon="tabler:send-off" width="17" height="17" /></button>
+										<button type="button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="17" height="17" /></button>
+									</div>
+								</header>
+								<div class="chat-body">
+									{#if selectedWhatsappMessages.length === 0}
+										<div class="empty-panel fill">No WhatsApp Web messages for this session.</div>
+									{:else}
+										{#each selectedWhatsappMessages.slice().reverse() as message}
+											<article class="bubble" class:outbound={message.delivery_state === 'sent' || message.delivery_state === 'send_dry_run'} class:inbound={message.delivery_state !== 'sent' && message.delivery_state !== 'send_dry_run'}>
+												<strong>{message.sender_display_name ?? message.sender}</strong><br />
+												{message.text}
+												<time>{whatsappMessageTime(message)}</time>
+											</article>
+										{/each}
+									{/if}
 								</div>
-							</header>
-							<div class="chat-body">
-								{#if selectedWhatsappMessages.length === 0}
-									<div class="empty-panel fill">No WhatsApp Web messages for this session.</div>
-								{:else}
-									{#each selectedWhatsappMessages.slice().reverse() as message}
-										<article class="bubble" class:outbound={message.delivery_state === 'sent' || message.delivery_state === 'send_dry_run'} class:inbound={message.delivery_state !== 'sent' && message.delivery_state !== 'send_dry_run'}>
-											<strong>{message.sender_display_name ?? message.sender}</strong><br />
-											{message.text}
-											<time>{whatsappMessageTime(message)}</time>
-										</article>
-									{/each}
-								{/if}
-							</div>
-							<form class="telegram-inline-form" onsubmit={(event) => { event.preventDefault(); void ingestWhatsappWebMessageFixture(); }}>
-								<input bind:value={whatsappMessageForm.provider_message_id} placeholder="Provider message ID" autocomplete="off" />
-								<input bind:value={whatsappMessageForm.sender_display_name} placeholder="Sender" autocomplete="off" />
-								<input bind:value={whatsappMessageForm.text} placeholder="Fixture message text" autocomplete="off" />
-								<button type="submit" disabled={isWhatsappActionSubmitting || !whatsappMessageForm.text.trim()}><Icon icon="tabler:send" width="17" height="17" />Ingest</button>
-							</form>
-						{:else}
-							<div class="empty-panel fill">Create a WhatsApp Web fixture account before ingesting messages.</div>
-						{/if}
-					</section>
+								<form class="telegram-inline-form" onsubmit={(event) => { event.preventDefault(); void ingestWhatsappWebMessageFixture(); }}>
+									<input bind:value={whatsappMessageForm.provider_message_id} placeholder="Provider message ID" autocomplete="off" />
+									<input bind:value={whatsappMessageForm.sender_display_name} placeholder="Sender" autocomplete="off" />
+									<input bind:value={whatsappMessageForm.text} placeholder="Fixture message text" autocomplete="off" />
+									<button type="submit" disabled={isWhatsappActionSubmitting || !whatsappMessageForm.text.trim()}><Icon icon="tabler:send" width="17" height="17" />Ingest</button>
+								</form>
+							{:else}
+								<div class="empty-panel fill">Create a WhatsApp Web fixture account before ingesting messages.</div>
+							{/if}
+						</section>
+					</div>
 
 					<aside class="stacked-rail whatsapp-rail">
-						<section class="panel info-card">
-							<h2>Account Setup</h2>
-							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void setupWhatsappWebFixture(); }}>
-								<label><span>Account ID</span><input bind:value={whatsappAccountForm.account_id} autocomplete="off" /></label>
-								<label><span>Display name</span><input bind:value={whatsappAccountForm.display_name} autocomplete="off" /></label>
-								<label><span>External ID</span><input bind:value={whatsappAccountForm.external_account_id} autocomplete="off" /></label>
-								<label><span>Device name</span><input bind:value={whatsappAccountForm.device_name} autocomplete="off" /></label>
-								<label class="wide"><span>Local state path</span><input bind:value={whatsappAccountForm.local_state_path} autocomplete="off" /></label>
-								<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting}>Save Fixture</button></div>
-							</form>
-						</section>
+						<div class="widget-frame stacked-rail" data-widget-id="whatsapp-sync-controls" data-widget-hidden="false">
+							<section class="panel info-card">
+								<h2>Account Setup</h2>
+								<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void setupWhatsappWebFixture(); }}>
+									<label><span>Account ID</span><input bind:value={whatsappAccountForm.account_id} autocomplete="off" /></label>
+									<label><span>Display name</span><input bind:value={whatsappAccountForm.display_name} autocomplete="off" /></label>
+									<label><span>External ID</span><input bind:value={whatsappAccountForm.external_account_id} autocomplete="off" /></label>
+									<label><span>Device name</span><input bind:value={whatsappAccountForm.device_name} autocomplete="off" /></label>
+									<label class="wide"><span>Local state path</span><input bind:value={whatsappAccountForm.local_state_path} autocomplete="off" /></label>
+									<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting}>Save Fixture</button></div>
+								</form>
+							</section>
 
-						<section class="panel info-card">
-							<h2>Runtime Guardrails</h2>
-							<div class="health-row"><span>Mode</span><strong>{v5Capabilities?.runtime_mode ?? 'unknown'}</strong></div>
-							{#if v5ClosureCapabilities.length}
-								<ul class="detail-list">
-									{#each v5ClosureCapabilities as capability}
-										<li>{capabilityLabel(capability.capability)}<em>{capability.status}</em></li>
-									{/each}
-								</ul>
-							{:else}
-								<p>Capability contract is not loaded yet.</p>
-							{/if}
-							{#if v5BlockedCapabilities.length}
-								<div class="evidence-row">
-									<strong>Live Scope</strong>
-									<p>{v5BlockedCapabilities.map((capability) => capabilityLabel(capability.capability)).join(', ')}</p>
-								</div>
-							{/if}
-							{#if v5Capabilities?.unsupported_features.length}
-								<div class="evidence-row">
-									<strong>Unsupported</strong>
-									<p>{v5Capabilities.unsupported_features.map(capabilityLabel).join(', ')}</p>
-								</div>
-							{/if}
-						</section>
+							<section class="panel info-card">
+								<h2>Runtime Guardrails</h2>
+								<div class="health-row"><span>Mode</span><strong>{v5Capabilities?.runtime_mode ?? 'unknown'}</strong></div>
+								{#if v5ClosureCapabilities.length}
+									<ul class="detail-list">
+										{#each v5ClosureCapabilities as capability}
+											<li>{capabilityLabel(capability.capability)}<em>{capability.status}</em></li>
+										{/each}
+									</ul>
+								{:else}
+									<p>Capability contract is not loaded yet.</p>
+								{/if}
+								{#if v5BlockedCapabilities.length}
+									<div class="evidence-row">
+										<strong>Live Scope</strong>
+										<p>{v5BlockedCapabilities.map((capability) => capabilityLabel(capability.capability)).join(', ')}</p>
+									</div>
+								{/if}
+								{#if v5Capabilities?.unsupported_features.length}
+									<div class="evidence-row">
+										<strong>Unsupported</strong>
+										<p>{v5Capabilities.unsupported_features.map(capabilityLabel).join(', ')}</p>
+									</div>
+								{/if}
+							</section>
 
-						<section class="panel info-card">
-							<h2>Fixture Message</h2>
-							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void ingestWhatsappWebMessageFixture(); }}>
-								<label><span>Account ID</span><input bind:value={whatsappMessageForm.account_id} autocomplete="off" /></label>
-								<label><span>Chat ID</span><input bind:value={whatsappMessageForm.provider_chat_id} autocomplete="off" /></label>
-								<label><span>Chat title</span><input bind:value={whatsappMessageForm.chat_title} autocomplete="off" /></label>
-								<label><span>Sender ID</span><input bind:value={whatsappMessageForm.sender_id} autocomplete="off" /></label>
-								<label><span>Sender</span><input bind:value={whatsappMessageForm.sender_display_name} autocomplete="off" /></label>
-								<label class="wide"><span>Text</span><textarea bind:value={whatsappMessageForm.text} rows="3"></textarea></label>
-								<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting || !whatsappMessageForm.text.trim()}>Ingest Fixture</button></div>
-							</form>
-						</section>
+							<section class="panel info-card">
+								<h2>Fixture Message</h2>
+								<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void ingestWhatsappWebMessageFixture(); }}>
+									<label><span>Account ID</span><input bind:value={whatsappMessageForm.account_id} autocomplete="off" /></label>
+									<label><span>Chat ID</span><input bind:value={whatsappMessageForm.provider_chat_id} autocomplete="off" /></label>
+									<label><span>Chat title</span><input bind:value={whatsappMessageForm.chat_title} autocomplete="off" /></label>
+									<label><span>Sender ID</span><input bind:value={whatsappMessageForm.sender_id} autocomplete="off" /></label>
+									<label><span>Sender</span><input bind:value={whatsappMessageForm.sender_display_name} autocomplete="off" /></label>
+									<label class="wide"><span>Text</span><textarea bind:value={whatsappMessageForm.text} rows="3"></textarea></label>
+									<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting || !whatsappMessageForm.text.trim()}>Ingest Fixture</button></div>
+								</form>
+							</section>
+						</div>
 					</aside>
 				</div>
 			</section>
@@ -4125,13 +4261,15 @@
 					</button>
 				</div>
 
-				<div class="metric-grid settings-metrics">
-					<article class="metric-card"><span>Settings</span><strong>{applicationSettings.length}</strong><small>Editable runtime values</small></article>
-					<article class="metric-card"><span>Accounts</span><strong>{providerAccounts.length}</strong><small>Email, Telegram, WhatsApp</small></article>
-					<article class="metric-card"><span>Mail</span><strong>{emailProviderAccounts.length}</strong><small>Gmail, iCloud, IMAP</small></article>
-					<article class="metric-card"><span>Telegram</span><strong>{telegramProviderAccounts.length}</strong><small>User and bot records</small></article>
-					<article class="metric-card"><span>WhatsApp</span><strong>{whatsappProviderAccounts.length}</strong><small>Web sessions</small></article>
-					<article class="metric-card"><span>Secrets</span><strong>Vault</strong><small>Values stay out of settings</small></article>
+				<div class="widget-frame" data-widget-id="settings-metrics" data-widget-hidden="false">
+					<div class="metric-grid settings-metrics">
+						<article class="metric-card"><span>Settings</span><strong>{applicationSettings.length}</strong><small>Editable runtime values</small></article>
+						<article class="metric-card"><span>Accounts</span><strong>{providerAccounts.length}</strong><small>Email, Telegram, WhatsApp</small></article>
+						<article class="metric-card"><span>Mail</span><strong>{emailProviderAccounts.length}</strong><small>Gmail, iCloud, IMAP</small></article>
+						<article class="metric-card"><span>Telegram</span><strong>{telegramProviderAccounts.length}</strong><small>User and bot records</small></article>
+						<article class="metric-card"><span>WhatsApp</span><strong>{whatsappProviderAccounts.length}</strong><small>Web sessions</small></article>
+						<article class="metric-card"><span>Secrets</span><strong>Vault</strong><small>Values stay out of settings</small></article>
+					</div>
 				</div>
 
 				{#if settingsActionMessage}
@@ -4152,166 +4290,176 @@
 
 				{#if selectedSettingsSection === 'application'}
 					<div class="settings-layout">
-						<section class="panel settings-list-panel">
-							<header class="panel-title-row">
-								<div><h2>Application Settings</h2><p>All non-secret settings except database connectivity; secret-like keys are rejected.</p></div>
-							</header>
-							{#if isSettingsLoading && applicationSettings.length === 0}
-								<div class="empty-panel fill">Loading settings...</div>
-							{:else if Object.entries(settingsByCategory).length === 0}
-								<div class="empty-panel fill">No application settings are declared yet.</div>
-							{:else}
-								<div class="settings-category-list">
-									{#each Object.entries(settingsByCategory) as [category, settings]}
-										<section class="settings-category">
-											<header>
-												<h3>{settingsCategoryLabel(category)}</h3>
-												<span>{settings.length}</span>
-											</header>
-											{#each settings as setting}
-												<form class="setting-row" onsubmit={(event) => { event.preventDefault(); void saveSetting(setting); }}>
-													<div class="setting-copy">
-														<strong>{setting.label}</strong>
-														<p>{setting.description}</p>
-														<div class="setting-meta-row">
-															<code>{setting.setting_key}</code>
-															{#if settingMetadataFlag(setting, 'bootstrap')}
-																<em>Bootstrap</em>
-															{/if}
-															{#if settingMetadataFlag(setting, 'restart_required')}
-																<em>Restart</em>
-															{/if}
-															{#if settingMetadataText(setting, 'env_var')}
-																<em>{settingMetadataText(setting, 'env_var')}</em>
-															{/if}
+						<div class="widget-frame" data-widget-id="settings-application-list-editor" data-widget-hidden="false">
+							<section class="panel settings-list-panel">
+								<header class="panel-title-row">
+									<div><h2>Application Settings</h2><p>All non-secret settings except database connectivity; secret-like keys are rejected.</p></div>
+								</header>
+								{#if isSettingsLoading && applicationSettings.length === 0}
+									<div class="empty-panel fill">Loading settings...</div>
+								{:else if Object.entries(settingsByCategory).length === 0}
+									<div class="empty-panel fill">No application settings are declared yet.</div>
+								{:else}
+									<div class="settings-category-list">
+										{#each Object.entries(settingsByCategory) as [category, settings]}
+											<section class="settings-category">
+												<header>
+													<h3>{settingsCategoryLabel(category)}</h3>
+													<span>{settings.length}</span>
+												</header>
+												{#each settings as setting}
+													<form class="setting-row" onsubmit={(event) => { event.preventDefault(); void saveSetting(setting); }}>
+														<div class="setting-copy">
+															<strong>{setting.label}</strong>
+															<p>{setting.description}</p>
+															<div class="setting-meta-row">
+																<code>{setting.setting_key}</code>
+																{#if settingMetadataFlag(setting, 'bootstrap')}
+																	<em>Bootstrap</em>
+																{/if}
+																{#if settingMetadataFlag(setting, 'restart_required')}
+																	<em>Restart</em>
+																{/if}
+																{#if settingMetadataText(setting, 'env_var')}
+																	<em>{settingMetadataText(setting, 'env_var')}</em>
+																{/if}
+															</div>
 														</div>
-													</div>
-													<div class="setting-control">
-														{#if settingAllowedValues(setting).length}
-															<select value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} disabled={!setting.is_editable} onchange={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))}>
-																{#each settingAllowedValues(setting) as value}
-																	<option value={value}>{settingsCategoryLabel(value)}</option>
-																{/each}
-															</select>
-														{:else if setting.value_kind === 'boolean'}
-															<label class="setting-toggle">
-																<input type="checkbox" checked={(settingDrafts[setting.setting_key] ?? settingDraftValue(setting)) === 'true'} disabled={!setting.is_editable} onchange={(event) => updateSettingDraft(setting.setting_key, checkboxEventValue(event))} />
-																<span>{(settingDrafts[setting.setting_key] ?? settingDraftValue(setting)) === 'true' ? 'Enabled' : 'Disabled'}</span>
-															</label>
-														{:else if setting.value_kind === 'integer'}
-															<input type="number" value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} min={String(setting.metadata.min ?? '')} max={String(setting.metadata.max ?? '')} step={String(setting.metadata.step ?? 1)} disabled={!setting.is_editable} oninput={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))} />
-														{:else if setting.value_kind === 'json' || settingControl(setting) === 'textarea'}
-															<textarea value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} disabled={!setting.is_editable} rows="4" oninput={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))}></textarea>
-														{:else}
-															<input value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} placeholder={String(setting.metadata.placeholder ?? '')} disabled={!setting.is_editable} oninput={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))} />
-														{/if}
-														<button type="submit" disabled={!setting.is_editable || savingSettingKey === setting.setting_key || !settingHasChanged(setting)}>
-															{savingSettingKey === setting.setting_key ? 'Saving' : 'Save'}
-														</button>
-													</div>
-												</form>
-											{/each}
-										</section>
-									{/each}
-								</div>
-							{/if}
-						</section>
+														<div class="setting-control">
+															{#if settingAllowedValues(setting).length}
+																<select value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} disabled={!setting.is_editable} onchange={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))}>
+																	{#each settingAllowedValues(setting) as value}
+																		<option value={value}>{settingsCategoryLabel(value)}</option>
+																	{/each}
+																</select>
+															{:else if setting.value_kind === 'boolean'}
+																<label class="setting-toggle">
+																	<input type="checkbox" checked={(settingDrafts[setting.setting_key] ?? settingDraftValue(setting)) === 'true'} disabled={!setting.is_editable} onchange={(event) => updateSettingDraft(setting.setting_key, checkboxEventValue(event))} />
+																	<span>{(settingDrafts[setting.setting_key] ?? settingDraftValue(setting)) === 'true' ? 'Enabled' : 'Disabled'}</span>
+																</label>
+															{:else if setting.value_kind === 'integer'}
+																<input type="number" value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} min={String(setting.metadata.min ?? '')} max={String(setting.metadata.max ?? '')} step={String(setting.metadata.step ?? 1)} disabled={!setting.is_editable} oninput={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))} />
+															{:else if setting.value_kind === 'json' || settingControl(setting) === 'textarea'}
+																<textarea value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} disabled={!setting.is_editable} rows="4" oninput={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))}></textarea>
+															{:else}
+																<input value={settingDrafts[setting.setting_key] ?? settingDraftValue(setting)} placeholder={String(setting.metadata.placeholder ?? '')} disabled={!setting.is_editable} oninput={(event) => updateSettingDraft(setting.setting_key, inputEventValue(event))} />
+															{/if}
+															<button type="submit" disabled={!setting.is_editable || savingSettingKey === setting.setting_key || !settingHasChanged(setting)}>
+																{savingSettingKey === setting.setting_key ? 'Saving' : 'Save'}
+															</button>
+														</div>
+													</form>
+												{/each}
+											</section>
+										{/each}
+									</div>
+								{/if}
+							</section>
+						</div>
 
 						<aside class="stacked-rail settings-rail">
-							<section class="panel info-card">
-								<h2>Runtime Source</h2>
-								<div class="health-row"><span>Backend bind</span><strong>{settingValueText('server.http_addr')}</strong></div>
-								<div class="health-row"><span>Frontend API</span><strong>{settingValueText('frontend.api_base_url')}</strong></div>
-								<div class="health-row"><span>Actor</span><strong>{settingValueText('frontend.actor_id')}</strong></div>
-								<div class="health-row"><span>AI URL</span><strong>{settingValueText('ai.ollama_base_url')}</strong></div>
-								<div class="health-row"><span>Chat</span><strong>{settingValueText('ai.chat_model')}</strong></div>
-								<div class="health-row"><span>Embedding</span><strong>{settingValueText('ai.embedding_model')}</strong></div>
-							</section>
-							<section class="panel info-card">
-								<h2>Boundaries</h2>
-								<ul class="detail-list">
-									<li>PostgreSQL stores declared setting values<em>JSONB</em></li>
-									<li>Database URL stays outside the panel<em>Bootstrap</em></li>
-									<li>API token and vault key stay outside DB<em>Secret boundary</em></li>
-									<li>Credentials stay in encrypted vault<em>No secret values</em></li>
-									<li>Settings updates are audited<em>No values in audit</em></li>
-								</ul>
-							</section>
+							<div class="widget-frame" data-widget-id="settings-account-detail-status" data-widget-hidden="false">
+								<section class="panel info-card">
+									<h2>Runtime Source</h2>
+									<div class="health-row"><span>Backend bind</span><strong>{settingValueText('server.http_addr')}</strong></div>
+									<div class="health-row"><span>Frontend API</span><strong>{settingValueText('frontend.api_base_url')}</strong></div>
+									<div class="health-row"><span>Actor</span><strong>{settingValueText('frontend.actor_id')}</strong></div>
+									<div class="health-row"><span>AI URL</span><strong>{settingValueText('ai.ollama_base_url')}</strong></div>
+									<div class="health-row"><span>Chat</span><strong>{settingValueText('ai.chat_model')}</strong></div>
+									<div class="health-row"><span>Embedding</span><strong>{settingValueText('ai.embedding_model')}</strong></div>
+								</section>
+							</div>
+							<div class="widget-frame" data-widget-id="settings-security-runtime-status" data-widget-hidden="false">
+								<section class="panel info-card">
+									<h2>Boundaries</h2>
+									<ul class="detail-list">
+										<li>PostgreSQL stores declared setting values<em>JSONB</em></li>
+										<li>Database URL stays outside the panel<em>Bootstrap</em></li>
+										<li>API token and vault key stay outside DB<em>Secret boundary</em></li>
+										<li>Credentials stay in encrypted vault<em>No secret values</em></li>
+										<li>Settings updates are audited<em>No values in audit</em></li>
+									</ul>
+								</section>
+							</div>
 						</aside>
 					</div>
 				{:else}
 					<div class="settings-account-layout">
-						<section class="panel account-section">
-							<header class="panel-title-row">
-								<div><h2>Mail Accounts</h2><p>Gmail OAuth, iCloud app-password and generic IMAP records.</p></div>
-								<button type="button" class="primary-button" onclick={openAccountDrawer}><Icon icon="tabler:plus" width="16" height="16" />Add Mail</button>
-							</header>
-							<div class="account-card-grid">
-								{#if emailProviderAccounts.length === 0}
-									<div class="empty-panel fill">No mail accounts configured.</div>
-								{:else}
-									{#each emailProviderAccounts as account}
-										<article class="account-card">
-											<span class="round-icon cyan"><Icon icon={accountProviderIcon(account.provider_kind)} width="22" height="22" /></span>
-											<div>
-												<strong>{account.display_name}</strong>
-												<p>{account.external_account_id || account.account_id}</p>
-												<small>{accountProviderLabel(account.provider_kind)} · updated {accountUpdatedLabel(account)}</small>
-											</div>
-											<code>{account.account_id}</code>
-										</article>
-									{/each}
-								{/if}
-							</div>
-						</section>
+						<div class="widget-frame" data-widget-id="settings-accounts-list" data-widget-hidden="false">
+							<section class="panel account-section">
+								<header class="panel-title-row">
+									<div><h2>Mail Accounts</h2><p>Gmail OAuth, iCloud app-password and generic IMAP records.</p></div>
+									<button type="button" class="primary-button" onclick={openAccountDrawer}><Icon icon="tabler:plus" width="16" height="16" />Add Mail</button>
+								</header>
+								<div class="account-card-grid">
+									{#if emailProviderAccounts.length === 0}
+										<div class="empty-panel fill">No mail accounts configured.</div>
+									{:else}
+										{#each emailProviderAccounts as account}
+											<article class="account-card">
+												<span class="round-icon cyan"><Icon icon={accountProviderIcon(account.provider_kind)} width="22" height="22" /></span>
+												<div>
+													<strong>{account.display_name}</strong>
+													<p>{account.external_account_id || account.account_id}</p>
+													<small>{accountProviderLabel(account.provider_kind)} · updated {accountUpdatedLabel(account)}</small>
+												</div>
+												<code>{account.account_id}</code>
+											</article>
+										{/each}
+									{/if}
+								</div>
+							</section>
+						</div>
 
-						<section class="panel account-section">
-							<header class="panel-title-row">
-								<div><h2>Telegram Accounts</h2><p>User and bot accounts used by Telegram ingestion and automation policies.</p></div>
-								<button type="button" class="primary-button" onclick={() => (currentView = 'telegram')}><Icon icon="tabler:brand-telegram" width="16" height="16" />Setup</button>
-							</header>
-							<div class="account-card-grid">
-								{#if telegramProviderAccounts.length === 0}
-									<div class="empty-panel fill">No Telegram accounts configured.</div>
-								{:else}
-									{#each telegramProviderAccounts as account}
-										<article class="account-card">
-											<span class="round-icon purple"><Icon icon={accountProviderIcon(account.provider_kind)} width="22" height="22" /></span>
-											<div>
-												<strong>{account.display_name}</strong>
-												<p>{account.external_account_id || account.account_id}</p>
-												<small>{accountProviderLabel(account.provider_kind)} · updated {accountUpdatedLabel(account)}</small>
-											</div>
-											<code>{account.account_id}</code>
-										</article>
-									{/each}
-								{/if}
-							</div>
-						</section>
+						<div class="widget-frame settings-account-layout" data-widget-id="settings-account-setup-cards" data-widget-hidden="false">
+							<section class="panel account-section">
+								<header class="panel-title-row">
+									<div><h2>Telegram Accounts</h2><p>User and bot accounts used by Telegram ingestion and automation policies.</p></div>
+									<button type="button" class="primary-button" onclick={() => (currentView = 'telegram')}><Icon icon="tabler:brand-telegram" width="16" height="16" />Setup</button>
+								</header>
+								<div class="account-card-grid">
+									{#if telegramProviderAccounts.length === 0}
+										<div class="empty-panel fill">No Telegram accounts configured.</div>
+									{:else}
+										{#each telegramProviderAccounts as account}
+											<article class="account-card">
+												<span class="round-icon purple"><Icon icon={accountProviderIcon(account.provider_kind)} width="22" height="22" /></span>
+												<div>
+													<strong>{account.display_name}</strong>
+													<p>{account.external_account_id || account.account_id}</p>
+													<small>{accountProviderLabel(account.provider_kind)} · updated {accountUpdatedLabel(account)}</small>
+												</div>
+												<code>{account.account_id}</code>
+											</article>
+										{/each}
+									{/if}
+								</div>
+							</section>
 
-						<section class="panel account-section">
-							<header class="panel-title-row">
-								<div><h2>Other Provider Accounts</h2><p>WhatsApp Web and future communication providers.</p></div>
-								<button type="button" class="primary-button" onclick={() => (currentView = 'whatsapp')}><Icon icon="tabler:brand-whatsapp" width="16" height="16" />Setup</button>
-							</header>
-							<div class="account-card-grid">
-								{#if whatsappProviderAccounts.length === 0}
-									<div class="empty-panel fill">No WhatsApp Web accounts configured.</div>
-								{:else}
-									{#each whatsappProviderAccounts as account}
-										<article class="account-card">
-											<span class="round-icon green"><Icon icon={accountProviderIcon(account.provider_kind)} width="22" height="22" /></span>
-											<div>
-												<strong>{account.display_name}</strong>
-												<p>{account.external_account_id || account.account_id}</p>
-												<small>{accountProviderLabel(account.provider_kind)} · updated {accountUpdatedLabel(account)}</small>
-											</div>
-											<code>{account.account_id}</code>
-										</article>
-									{/each}
-								{/if}
-							</div>
-						</section>
+							<section class="panel account-section">
+								<header class="panel-title-row">
+									<div><h2>Other Provider Accounts</h2><p>WhatsApp Web and future communication providers.</p></div>
+									<button type="button" class="primary-button" onclick={() => (currentView = 'whatsapp')}><Icon icon="tabler:brand-whatsapp" width="16" height="16" />Setup</button>
+								</header>
+								<div class="account-card-grid">
+									{#if whatsappProviderAccounts.length === 0}
+										<div class="empty-panel fill">No WhatsApp Web accounts configured.</div>
+									{:else}
+										{#each whatsappProviderAccounts as account}
+											<article class="account-card">
+												<span class="round-icon green"><Icon icon={accountProviderIcon(account.provider_kind)} width="22" height="22" /></span>
+												<div>
+													<strong>{account.display_name}</strong>
+													<p>{account.external_account_id || account.account_id}</p>
+													<small>{accountProviderLabel(account.provider_kind)} · updated {accountUpdatedLabel(account)}</small>
+												</div>
+												<code>{account.account_id}</code>
+											</article>
+										{/each}
+									{/if}
+								</div>
+							</section>
+						</div>
 					</div>
 				{/if}
 			</section>
@@ -4321,13 +4469,15 @@
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:robot" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
 					<button type="button" class="primary-button" onclick={() => void loadAiWorkspace()} disabled={isAiLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
-				<div class="metric-grid agent-metrics">
-					<article class="metric-card"><span>Runtime</span><strong>{aiRuntimeSummary()}</strong><small>{aiStatus?.version ? `Ollama ${aiStatus.version}` : 'Ollama'}</small></article>
-					<article class="metric-card"><span>Agents</span><strong>{aiAgents.length}</strong><small>{aiAgents.length ? 'Registered' : 'Not loaded'}</small></article>
-					<article class="metric-card"><span>Run History</span><strong>{aiRuns.length}</strong><small>Persisted runs</small></article>
-					<article class="metric-card"><span>Embedding</span><strong>{aiStatus?.embedding_dimension ?? 0}</strong><small>{aiStatus?.embedding_model ?? 'No model'}</small></article>
-					<article class="metric-card"><span>Suggested Tasks</span><strong>{suggestedTaskCandidates.length}</strong><small>Review queue</small></article>
-					<article class="metric-card"><span>Latest Duration</span><strong>{formatDuration(aiRuns[0]?.duration_ms)}</strong><small>{aiRuns[0]?.agent_id ?? 'No runs'}</small></article>
+				<div class="widget-frame" data-widget-id="ai-runtime-metrics" data-widget-hidden="false">
+					<div class="metric-grid agent-metrics">
+						<article class="metric-card"><span>Runtime</span><strong>{aiRuntimeSummary()}</strong><small>{aiStatus?.version ? `Ollama ${aiStatus.version}` : 'Ollama'}</small></article>
+						<article class="metric-card"><span>Agents</span><strong>{aiAgents.length}</strong><small>{aiAgents.length ? 'Registered' : 'Not loaded'}</small></article>
+						<article class="metric-card"><span>Run History</span><strong>{aiRuns.length}</strong><small>Persisted runs</small></article>
+						<article class="metric-card"><span>Embedding</span><strong>{aiStatus?.embedding_dimension ?? 0}</strong><small>{aiStatus?.embedding_model ?? 'No model'}</small></article>
+						<article class="metric-card"><span>Suggested Tasks</span><strong>{suggestedTaskCandidates.length}</strong><small>Review queue</small></article>
+						<article class="metric-card"><span>Latest Duration</span><strong>{formatDuration(aiRuns[0]?.duration_ms)}</strong><small>{aiRuns[0]?.agent_id ?? 'No runs'}</small></article>
+					</div>
 				</div>
 				{#if aiError}
 					<p class="inline-error">{aiError}</p>
@@ -4335,77 +4485,89 @@
 				<div class="filter-bar"><button type="button" class="active">Local Agents</button><button type="button" disabled>{aiModelSummary()}</button><button type="button" disabled>{aiStatus?.chat_model_available ? 'Chat model ready' : 'Chat model missing'}</button><button type="button" disabled>{aiStatus?.embedding_model_available ? 'Embedding ready' : 'Embedding missing'}</button></div>
 				<div class="agents-layout">
 					<section class="agent-main">
-						<div class="agent-grid">
-							{#if isAiLoading && agentCards.length === 0}
-								<div class="graph-strip-message"><span>Loading local AI agents.</span></div>
-							{:else if agentCards.length === 0}
-								<div class="graph-strip-message"><span>No V3 agents returned by the backend.</span></div>
-							{:else}
-								{#each agentCards as agent, index}
-									<button type="button" class="agent-card panel" class:active={selectedAgentIndex === index} onclick={() => (selectedAgentIndex = index)}>
-										<span class="round-icon {agent.tone}"><Icon icon={agent.icon} width="22" height="22" /></span>
-										<div><strong>{agent.name}</strong><p>{agent.summary}</p><em>{agent.status}</em></div>
-										<footer><span>{agent.tasks} runs</span><span>{agent.success} success</span></footer>
-									</button>
-								{/each}
-							{/if}
-						</div>
-						<section class="panel agent-detail">
-							{#if selectedAgent}
-								<header><span class="round-icon {selectedAgent.tone}"><Icon icon={selectedAgent.icon} width="26" height="26" /></span><div><h2>{selectedAgent.name}</h2><em>{selectedAgent.model}</em></div></header>
-								<div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Run History</button><button type="button" disabled>Citations</button><button type="button" disabled>Settings</button></div>
-								<div class="agent-detail-grid"><p>{selectedAgent.summary}. This V3 agent reads local memory projections, retrieves citations and records every run in the backend.</p><div class="spark-chart"></div><ul>{#each ['Ollama Runtime','pgvector Retrieval','Source Citations','Run Provenance','Review Queue'] as capability}<li><Icon icon="tabler:circle-check" width="16" height="16" />{capability}</li>{/each}</ul></div>
-							{:else}
-								<header><span class="round-icon cyan"><Icon icon="tabler:robot-off" width="26" height="26" /></span><div><h2>No agent selected</h2><em>Backend status required</em></div></header>
-							{/if}
-							<div class="ai-workflow-grid">
-								<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void submitAiAnswer(); }}>
-									<label><span>Ask AI</span><textarea bind:value={aiQuestion} rows="4"></textarea></label>
-									<button type="submit" disabled={isAiAnswerSubmitting || !aiQuestion.trim()}><Icon icon="tabler:sparkles" width="16" height="16" />Ask</button>
-								</form>
-								<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void prepareAiBrief(); }}>
-									<label><span>Prepare brief</span><textarea bind:value={aiMeetingTopic} rows="4"></textarea></label>
-									<button type="submit" disabled={isAiMeetingPrepSubmitting || !aiMeetingTopic.trim()}><Icon icon="tabler:calendar-stats" width="16" height="16" />Prepare</button>
-								</form>
-								<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void refreshTasksFromAi(); }}>
-									<label><span>Task extraction</span><textarea bind:value={aiTaskQuery} rows="4"></textarea></label>
-									<button type="submit" disabled={isAiTaskRefreshSubmitting || !aiTaskQuery.trim()}><Icon icon="tabler:checkbox" width="16" height="16" />Refresh candidates</button>
-								</form>
+						<div class="widget-frame" data-widget-id="ai-agent-list" data-widget-hidden="false">
+							<div class="agent-grid">
+								{#if isAiLoading && agentCards.length === 0}
+									<div class="graph-strip-message"><span>Loading local AI agents.</span></div>
+								{:else if agentCards.length === 0}
+									<div class="graph-strip-message"><span>No V3 agents returned by the backend.</span></div>
+								{:else}
+									{#each agentCards as agent, index}
+										<button type="button" class="agent-card panel" class:active={selectedAgentIndex === index} onclick={() => (selectedAgentIndex = index)}>
+											<span class="round-icon {agent.tone}"><Icon icon={agent.icon} width="22" height="22" /></span>
+											<div><strong>{agent.name}</strong><p>{agent.summary}</p><em>{agent.status}</em></div>
+											<footer><span>{agent.tasks} runs</span><span>{agent.success} success</span></footer>
+										</button>
+									{/each}
+								{/if}
 							</div>
-							{#if aiAnswerResult}
-								<div class="ai-result-block">
-									<h3>Answer</h3>
-									<p>{aiAnswerResult.answer}</p>
-									<div class="citation-list">
-										{#each aiAnswerResult.citations as citation}
-											<div class="citation-row"><strong>{citation.title}</strong><span>{citation.source_kind}:{citation.source_id}</span><p>{citation.excerpt}</p></div>
-										{/each}
+						</div>
+						<div class="widget-frame" data-widget-id="ai-selected-agent-detail" data-widget-hidden="false">
+							<section class="panel agent-detail">
+								{#if selectedAgent}
+									<header><span class="round-icon {selectedAgent.tone}"><Icon icon={selectedAgent.icon} width="26" height="26" /></span><div><h2>{selectedAgent.name}</h2><em>{selectedAgent.model}</em></div></header>
+									<div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Run History</button><button type="button" disabled>Citations</button><button type="button" disabled>Settings</button></div>
+									<div class="agent-detail-grid"><p>{selectedAgent.summary}. This V3 agent reads local memory projections, retrieves citations and records every run in the backend.</p><div class="spark-chart"></div><ul>{#each ['Ollama Runtime','pgvector Retrieval','Source Citations','Run Provenance','Review Queue'] as capability}<li><Icon icon="tabler:circle-check" width="16" height="16" />{capability}</li>{/each}</ul></div>
+								{:else}
+									<header><span class="round-icon cyan"><Icon icon="tabler:robot-off" width="26" height="26" /></span><div><h2>No agent selected</h2><em>Backend status required</em></div></header>
+								{/if}
+								<div class="widget-frame" data-widget-id="ai-workflow-panels" data-widget-hidden="false">
+									<div class="ai-workflow-grid">
+										<div class="widget-frame" data-widget-id="ai-answer-form" data-widget-hidden="false">
+											<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void submitAiAnswer(); }}>
+												<label><span>Ask AI</span><textarea bind:value={aiQuestion} rows="4"></textarea></label>
+												<button type="submit" disabled={isAiAnswerSubmitting || !aiQuestion.trim()}><Icon icon="tabler:sparkles" width="16" height="16" />Ask</button>
+											</form>
+										</div>
+										<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void prepareAiBrief(); }}>
+											<label><span>Prepare brief</span><textarea bind:value={aiMeetingTopic} rows="4"></textarea></label>
+											<button type="submit" disabled={isAiMeetingPrepSubmitting || !aiMeetingTopic.trim()}><Icon icon="tabler:calendar-stats" width="16" height="16" />Prepare</button>
+										</form>
+										<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void refreshTasksFromAi(); }}>
+											<label><span>Task extraction</span><textarea bind:value={aiTaskQuery} rows="4"></textarea></label>
+											<button type="submit" disabled={isAiTaskRefreshSubmitting || !aiTaskQuery.trim()}><Icon icon="tabler:checkbox" width="16" height="16" />Refresh candidates</button>
+										</form>
 									</div>
 								</div>
-							{/if}
-							{#if aiMeetingPrepResult}
-								<div class="ai-result-block">
-									<h3>Meeting Brief</h3>
-									<p>{aiMeetingPrepResult.briefing}</p>
-									<div class="citation-list">
-										{#each aiMeetingPrepResult.citations as citation}
-											<div class="citation-row"><strong>{citation.title}</strong><span>{citation.source_kind}:{citation.source_id}</span><p>{citation.excerpt}</p></div>
-										{/each}
+								{#if aiAnswerResult}
+									<div class="ai-result-block">
+										<h3>Answer</h3>
+										<p>{aiAnswerResult.answer}</p>
+										<div class="citation-list">
+											{#each aiAnswerResult.citations as citation}
+												<div class="citation-row"><strong>{citation.title}</strong><span>{citation.source_kind}:{citation.source_id}</span><p>{citation.excerpt}</p></div>
+											{/each}
+										</div>
 									</div>
-								</div>
-							{/if}
-							{#if aiTaskRefreshResult}
-								<div class="ai-result-block">
-									<h3>Task Candidates</h3>
-									<p>{aiTaskRefreshResult.created_count} suggested candidates refreshed. Review them in Tasks.</p>
-								</div>
-							{/if}
-						</section>
+								{/if}
+								{#if aiMeetingPrepResult}
+									<div class="ai-result-block">
+										<h3>Meeting Brief</h3>
+										<p>{aiMeetingPrepResult.briefing}</p>
+										<div class="citation-list">
+											{#each aiMeetingPrepResult.citations as citation}
+												<div class="citation-row"><strong>{citation.title}</strong><span>{citation.source_kind}:{citation.source_id}</span><p>{citation.excerpt}</p></div>
+											{/each}
+										</div>
+									</div>
+								{/if}
+								{#if aiTaskRefreshResult}
+									<div class="ai-result-block">
+										<h3>Task Candidates</h3>
+										<p>{aiTaskRefreshResult.created_count} suggested candidates refreshed. Review them in Tasks.</p>
+									</div>
+								{/if}
+							</section>
+						</div>
 					</section>
 					<aside class="stacked-rail">
 						<section class="panel info-card"><h2>Runtime</h2><div class="health-row"><span>Status</span><strong>{aiRuntimeSummary()}</strong></div><div class="health-row"><span>Chat</span><strong>{aiStatus?.chat_model ?? 'unknown'}</strong></div><div class="health-row"><span>Embedding</span><strong>{aiStatus?.embedding_model ?? 'unknown'}</strong></div></section>
-						<section class="panel info-card"><h2>Run History</h2>{#if aiRuns.length}{#each aiRuns.slice(0,6) as run}<div class="deadline"><span>{run.agent_id} · {runStatusLabel(run)}</span><time>{formatDateTime(run.started_at)} · {formatDuration(run.duration_ms)}</time></div>{/each}{:else}<p>No AI runs persisted yet.</p>{/if}</section>
-						<section class="panel info-card"><h2>Latest Citations</h2>{#if aiRuns[0] && safeCitations(aiRuns[0].citations).length}{#each safeCitations(aiRuns[0].citations).slice(0,3) as citation}<div class="evidence-row"><strong>{citation.title}</strong><p>{citation.excerpt}</p></div>{/each}{:else}<p>Citations appear after an answer or briefing run.</p>{/if}</section>
+						<div class="widget-frame" data-widget-id="ai-run-history" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Run History</h2>{#if aiRuns.length}{#each aiRuns.slice(0,6) as run}<div class="deadline"><span>{run.agent_id} · {runStatusLabel(run)}</span><time>{formatDateTime(run.started_at)} · {formatDuration(run.duration_ms)}</time></div>{/each}{:else}<p>No AI runs persisted yet.</p>{/if}</section>
+						</div>
+						<div class="widget-frame" data-widget-id="ai-citations" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Latest Citations</h2>{#if aiRuns[0] && safeCitations(aiRuns[0].citations).length}{#each safeCitations(aiRuns[0].citations).slice(0,3) as citation}<div class="evidence-row"><strong>{citation.title}</strong><p>{citation.excerpt}</p></div>{/each}{:else}<p>Citations appear after an answer or briefing run.</p>{/if}</section>
+						</div>
 					</aside>
 				</div>
 			</section>
@@ -4413,11 +4575,17 @@
 			<section class="timeline-page">
 				<div class="view-header"><div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:timeline-event" width="28" height="28" /></span><div><h1>Timeline</h1><p>Chronological activity across connected sources.</p></div></div></div>
 				<div class="timeline-layout">
-					<section class="panel feed-panel large-timeline">
-						<header class="panel-title-row"><h2>Today</h2><button type="button" class="ghost-button" disabled>All Events</button></header>
-						{#each whatsNew.concat(whatsNew) as item, index}<article class="timeline-event-row"><time>{18 - index}:42</time><span class="rail-dot"></span><span class="round-icon {item.tone}"><Icon icon={item.icon} width="20" height="20" /></span><div><strong>{item.title}</strong><p>{item.meta}</p>{#if item.tag}<em>{item.tag}</em>{/if}</div></article>{/each}
-					</section>
-					<aside class="stacked-rail"><section class="panel info-card"><h2>Timeline Filters</h2>{#each ['Messages','Documents','Tasks','Calendar','Notes','Decisions'] as item}<label class="mini-check"><input type="checkbox" checked />{item}</label>{/each}</section></aside>
+					<div class="widget-frame" data-widget-id="timeline-stream" data-widget-hidden="false">
+						<section class="panel feed-panel large-timeline">
+							<header class="panel-title-row"><h2>Today</h2><button type="button" class="ghost-button" disabled>All Events</button></header>
+							{#each whatsNew.concat(whatsNew) as item, index}<article class="timeline-event-row"><time>{18 - index}:42</time><span class="rail-dot"></span><span class="round-icon {item.tone}"><Icon icon={item.icon} width="20" height="20" /></span><div><strong>{item.title}</strong><p>{item.meta}</p>{#if item.tag}<em>{item.tag}</em>{/if}</div></article>{/each}
+						</section>
+					</div>
+					<aside class="stacked-rail">
+						<div class="widget-frame" data-widget-id="timeline-filters" data-widget-hidden="false">
+							<section class="panel info-card"><h2>Timeline Filters</h2>{#each ['Messages','Documents','Tasks','Calendar','Notes','Decisions'] as item}<label class="mini-check"><input type="checkbox" checked />{item}</label>{/each}</section>
+						</div>
+					</aside>
 				</div>
 			</section>
 		{/if}
