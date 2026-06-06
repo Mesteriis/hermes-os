@@ -425,10 +425,55 @@
 	let applicationSettings = $state<ApplicationSetting[]>([]);
 	let layoutSettings = $state<LayoutSettings>(defaultLayoutSettings());
 	let isLayoutEditing = $state(false);
+	let isWidgetDrawerOpen = $state(false);
 	let layoutDraft = $state<LayoutSettings | null>(null);
 	let layoutError = $state('');
 	const effectiveLayoutSettings = $derived(layoutDraft ?? layoutSettings);
 	const activeLayout = $derived(resolveActiveLayout(currentView, effectiveLayoutSettings));
+	const renderedWidgetIdsForCurrentView = $derived.by(() => {
+		if (!isWidgetDrawerOpen || typeof document === 'undefined') {
+			return null;
+		}
+
+		return new Set(
+			Array.from(document.querySelectorAll<HTMLElement>('.widget-frame[data-widget-id]'))
+				.map((element) => element.dataset.widgetId)
+				.filter((widgetId): widgetId is string => Boolean(widgetId))
+		);
+	});
+	const addableWidgetsForCurrentView = $derived.by(() => {
+		const layout = activeLayout;
+		const preset = layout?.preset ?? findPresetForView(currentView);
+		if (!preset) {
+			return [];
+		}
+
+		const currentWidgetIds = new Set(preset.widgets.map((widget) => widget.widgetId));
+		for (const widget of layout?.hiddenByUser ?? []) {
+			currentWidgetIds.add(widget.widgetId);
+		}
+
+		const hiddenWidgetIds = new Set((layout?.hiddenByUser ?? []).map((widget) => widget.widgetId));
+
+		return widgetRegistry
+			.filter(
+				(widget) =>
+					widget.canAdd &&
+					widget.viewScope.includes(preset.viewId) &&
+					currentWidgetIds.has(widget.id) &&
+					(renderedWidgetIdsForCurrentView === null ||
+						renderedWidgetIdsForCurrentView.has(widget.id))
+			)
+			.sort((left, right) => {
+				const leftHidden = hiddenWidgetIds.has(left.id);
+				const rightHidden = hiddenWidgetIds.has(right.id);
+				if (leftHidden !== rightHidden) {
+					return leftHidden ? -1 : 1;
+				}
+
+				return left.title.localeCompare(right.title);
+			});
+	});
 	let providerAccounts = $state<ProviderAccount[]>([]);
 	let settingDrafts = $state<Record<string, string>>({});
 	let settingsError = $state('');
@@ -1503,6 +1548,7 @@
 	function cancelLayoutEditing() {
 		layoutDraft = null;
 		isLayoutEditing = false;
+		isWidgetDrawerOpen = false;
 		layoutError = '';
 	}
 
@@ -1575,6 +1621,14 @@
 				hiddenWidgetIds: [...override.hiddenWidgetIds, widgetId]
 			};
 		});
+	}
+
+	function showWidget(widgetId: string) {
+		updateCurrentViewOverride((override) => ({
+			...override,
+			hiddenWidgetIds: override.hiddenWidgetIds.filter((id) => id !== widgetId)
+		}));
+		isWidgetDrawerOpen = false;
 	}
 
 	function moveWidgetInZone(widgetId: string, direction: -1 | 1) {
@@ -2913,6 +2967,10 @@
 					Edit Layout
 				</button>
 			{:else}
+				<button type="button" class="ghost-button" onclick={() => (isWidgetDrawerOpen = true)}>
+					<Icon icon="tabler:plus" width="16" height="16" />
+					Add widget
+				</button>
 				<button type="button" class="ghost-button" onclick={cancelLayoutEditing}>Cancel</button>
 				<button type="button" class="ghost-button" onclick={resetCurrentViewLayout}>Reset</button>
 				<button type="button" class="primary-button" disabled>Save</button>
@@ -4850,6 +4908,33 @@
 			</section>
 		{/if}
 	</section>
+
+	{#if isLayoutEditing && isWidgetDrawerOpen}
+		<div class="widget-drawer" role="dialog" aria-label="Add widget">
+			<header>
+				<h2>Add widget</h2>
+				<button
+					type="button"
+					class="icon-button"
+					onclick={() => (isWidgetDrawerOpen = false)}
+					title="Close add widget drawer"
+					aria-label="Close add widget drawer"
+				>
+					<Icon icon="tabler:x" width="16" height="16" />
+				</button>
+			</header>
+			<div class="widget-drawer-list">
+				{#each addableWidgetsForCurrentView as widget}
+					<button type="button" onclick={() => showWidget(widget.id)}>
+						<strong>{widget.title}</strong>
+						<span>{widget.defaultZone}</span>
+					</button>
+				{:else}
+					<p>No widgets available.</p>
+				{/each}
+			</div>
+		</div>
+	{/if}
 </main>
 
 {#if isAccountDrawerOpen}

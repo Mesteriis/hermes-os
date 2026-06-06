@@ -3054,6 +3054,59 @@ input[type='checkbox'] {
 	background: rgba(0, 0, 0, 0.48);
 }
 
+.widget-drawer {
+	position: fixed;
+	top: 72px;
+	right: 18px;
+	z-index: 80;
+	display: grid;
+	gap: 12px;
+	width: min(320px, calc(100vw - 36px));
+	max-height: calc(100dvh - 96px);
+	overflow: auto;
+	border: 1px solid var(--hh-border-accent-soft);
+	border-radius: var(--hh-radius-md);
+	background: rgba(4, 18, 21, 0.98);
+	box-shadow: var(--hh-shadow-modal);
+	padding: 14px;
+}
+
+.widget-drawer header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+}
+
+.widget-drawer h2 {
+	color: var(--hh-color-text-bright);
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.widget-drawer-list {
+	display: grid;
+	gap: 8px;
+}
+
+.widget-drawer-list button {
+	display: grid;
+	gap: 4px;
+	width: 100%;
+	border: 1px solid rgba(111, 205, 195, 0.14);
+	border-radius: var(--hh-radius-control);
+	background: rgba(8, 29, 33, 0.94);
+	color: var(--hh-color-text-soft);
+	padding: 10px;
+	text-align: left;
+}
+
+.widget-drawer-list span,
+.widget-drawer-list p {
+	color: var(--hh-color-text-muted);
+	font-size: 11px;
+}
+
 .account-drawer {
 	position: fixed;
 	top: 18px;
