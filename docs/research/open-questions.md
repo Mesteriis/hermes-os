@@ -30,4 +30,4 @@
 
 - Which OS-backed secret store should be used per platform?
 - What plugin sandbox runtime isolation model is realistic for Tauri plus Rust after ADR-0052 defines capability manifests and scoped data views?
-- What confirmation policies are needed for sending messages and deleting data? Answered by ADR-0052: high-risk actions require explicit confirmation unless an enabled scoped automation policy authorizes the action, and all allowed/rejected high-risk decisions must be audited without secrets or private content.
+- What confirmation policies are needed for sending messages and deleting data? Partially implemented by ADR-0052 and the V4 Telegram send policy audit slice: high-risk sends require explicit confirmation unless scoped automation authorizes them, and allowed/rejected dry-run decisions are audited without secrets or private content. Full live-send, delete, export, secret-access and plugin confirmation runtime remains open.

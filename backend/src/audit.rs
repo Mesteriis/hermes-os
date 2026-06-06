@@ -5,6 +5,8 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::capabilities::CapabilityDecision;
+
 const LOCAL_API_TOKEN_ACTOR_KIND: &str = "local_api_token";
 const EVENT_TARGET_KIND: &str = "event";
 
@@ -236,6 +238,67 @@ impl NewApiAuditRecord {
         let account_id = account_id.into();
         let provider_chat_id = provider_chat_id.into();
         let rendered_preview_hash = rendered_preview_hash.into();
+        let decision =
+            CapabilityDecision::scoped_automation_allowed("telegram.send", policy_id.clone());
+
+        Self::automation_telegram_send_dry_run_decision(
+            actor_id,
+            TelegramSendDryRunAuditDecision {
+                target_kind: "telegram_outbound_message",
+                target_id: Some(outbound_message_id),
+                policy_id,
+                template_id: Some(template_id),
+                account_id: Some(account_id),
+                provider_chat_id,
+                rendered_preview_hash: Some(rendered_preview_hash),
+                decision: &decision,
+            },
+        )
+    }
+
+    pub fn automation_telegram_send_dry_run_rejected(
+        actor_id: impl Into<String>,
+        command_id: impl Into<String>,
+        policy_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+        decision: &CapabilityDecision,
+    ) -> Self {
+        Self::automation_telegram_send_dry_run_decision(
+            actor_id,
+            TelegramSendDryRunAuditDecision {
+                target_kind: "telegram_send_request",
+                target_id: non_empty_optional(command_id.into()),
+                policy_id: policy_id.into(),
+                template_id: None,
+                account_id: None,
+                provider_chat_id: provider_chat_id.into(),
+                rendered_preview_hash: None,
+                decision,
+            },
+        )
+    }
+
+    fn automation_telegram_send_dry_run_decision(
+        actor_id: impl Into<String>,
+        audit_decision: TelegramSendDryRunAuditDecision<'_>,
+    ) -> Self {
+        let mut metadata = audit_decision.decision.audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "policy_id", audit_decision.policy_id);
+        insert_optional(metadata_object, "template_id", audit_decision.template_id);
+        insert_optional(metadata_object, "account_id", audit_decision.account_id);
+        insert_non_empty(
+            metadata_object,
+            "provider_chat_id",
+            audit_decision.provider_chat_id,
+        );
+        insert_optional(
+            metadata_object,
+            "rendered_preview_hash",
+            audit_decision.rendered_preview_hash,
+        );
 
         Self {
             actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
@@ -243,15 +306,9 @@ impl NewApiAuditRecord {
             operation: "automation.telegram_send.dry_run".to_owned(),
             method: "POST".to_owned(),
             path_template: "/api/v4/policies/telegram-send/dry-run".to_owned(),
-            target_kind: "telegram_outbound_message".to_owned(),
-            target_id: Some(outbound_message_id),
-            metadata: json!({
-                "policy_id": policy_id,
-                "template_id": template_id,
-                "account_id": account_id,
-                "provider_chat_id": provider_chat_id,
-                "rendered_preview_hash": rendered_preview_hash,
-            }),
+            target_kind: audit_decision.target_kind.to_owned(),
+            target_id: audit_decision.target_id,
+            metadata,
         }
     }
 
@@ -270,6 +327,47 @@ impl NewApiAuditRecord {
             target_id: Some(job_id),
             metadata: json!({}),
         }
+    }
+}
+
+struct TelegramSendDryRunAuditDecision<'a> {
+    target_kind: &'static str,
+    target_id: Option<String>,
+    policy_id: String,
+    template_id: Option<String>,
+    account_id: Option<String>,
+    provider_chat_id: String,
+    rendered_preview_hash: Option<String>,
+    decision: &'a CapabilityDecision,
+}
+
+fn insert_non_empty(
+    metadata: &mut serde_json::Map<String, Value>,
+    key: &'static str,
+    value: String,
+) {
+    let value = value.trim();
+    if !value.is_empty() {
+        metadata.insert(key.to_owned(), json!(value));
+    }
+}
+
+fn insert_optional(
+    metadata: &mut serde_json::Map<String, Value>,
+    key: &'static str,
+    value: Option<String>,
+) {
+    if let Some(value) = value {
+        insert_non_empty(metadata, key, value);
+    }
+}
+
+fn non_empty_optional(value: String) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_owned())
     }
 }
 

@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::build_router_with_database;
@@ -192,14 +193,16 @@ async fn v4_api_exercises_telegram_policy_and_call_foundation() {
     )
     .await;
 
+    let blocked_command_id = format!("dry-run-blocked-{suffix}");
+    let blocked_chat_id = format!("other-chat-{suffix}");
     let blocked = app
         .clone()
         .oneshot(json_post_request_with_actor(
             "/api/v4/policies/telegram-send/dry-run",
             json!({
-                "command_id": format!("dry-run-blocked-{suffix}"),
+                "command_id": blocked_command_id,
                 "policy_id": policy_id,
-                "provider_chat_id": format!("other-chat-{suffix}"),
+                "provider_chat_id": blocked_chat_id,
                 "variables": {"name": "Maria", "topic": "V4"},
                 "source_context": {"source": "test"}
             }),
@@ -208,6 +211,47 @@ async fn v4_api_exercises_telegram_policy_and_call_foundation() {
         .await
         .expect("blocked dry-run");
     assert_eq!(blocked.status(), StatusCode::FORBIDDEN);
+
+    let rejected_audit = sqlx::query(
+        r#"
+        SELECT target_kind, target_id, metadata
+        FROM api_audit_log
+        WHERE operation = 'automation.telegram_send.dry_run'
+          AND actor_id = $1
+          AND metadata->>'decision' = 'rejected'
+          AND metadata->>'provider_chat_id' = $2
+        ORDER BY audit_id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(LOCAL_API_ACTOR_ID)
+    .bind(&blocked_chat_id)
+    .fetch_one(&pool)
+    .await
+    .expect("rejected dry-run audit");
+    let rejected_target_kind: String = rejected_audit.try_get("target_kind").expect("target kind");
+    let rejected_target_id: Option<String> =
+        rejected_audit.try_get("target_id").expect("target id");
+    let rejected_metadata: Value = rejected_audit.try_get("metadata").expect("metadata");
+    assert_eq!(rejected_target_kind, "telegram_send_request");
+    assert_eq!(
+        rejected_target_id.as_deref(),
+        Some(blocked_command_id.as_str())
+    );
+    assert_eq!(rejected_metadata["action_class"], json!("automation"));
+    assert_eq!(rejected_metadata["capability"], json!("telegram.send"));
+    assert_eq!(rejected_metadata["decision"], json!("rejected"));
+    assert_eq!(
+        rejected_metadata["reason"],
+        json!("provider_chat_not_allowed")
+    );
+    assert_eq!(rejected_metadata["confirmation_required"], json!(true));
+    assert_eq!(rejected_metadata["scoped_automation_policy"], json!(false));
+    assert_eq!(rejected_metadata["automation_policy_id"], json!(policy_id));
+    assert!(rejected_metadata.get("variables").is_none());
+    assert!(rejected_metadata.get("source_context").is_none());
+    assert!(rejected_metadata.get("rendered_text").is_none());
+    assert!(rejected_metadata.get("rendered_preview_hash").is_none());
 
     let dry_run = app
         .clone()
@@ -233,6 +277,9 @@ async fn v4_api_exercises_telegram_policy_and_call_foundation() {
             .expect("hash")
             .starts_with("sha256:")
     );
+    let outbound_message_id = dry_run_body["outbound_message_id"]
+        .as_str()
+        .expect("outbound message id");
 
     let audit_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM api_audit_log WHERE operation = 'automation.telegram_send.dry_run' AND actor_id = $1",
@@ -241,7 +288,42 @@ async fn v4_api_exercises_telegram_policy_and_call_foundation() {
     .fetch_one(&pool)
     .await
     .expect("audit count");
-    assert!(audit_count >= 1);
+    assert!(audit_count >= 2);
+
+    let allowed_metadata: Value = sqlx::query_scalar(
+        r#"
+        SELECT metadata
+        FROM api_audit_log
+        WHERE operation = 'automation.telegram_send.dry_run'
+          AND actor_id = $1
+          AND target_id = $2
+          AND metadata->>'decision' = 'allowed'
+        ORDER BY audit_id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(LOCAL_API_ACTOR_ID)
+    .bind(outbound_message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("allowed dry-run audit metadata");
+    assert_eq!(allowed_metadata["action_class"], json!("automation"));
+    assert_eq!(allowed_metadata["capability"], json!("telegram.send"));
+    assert_eq!(allowed_metadata["decision"], json!("allowed"));
+    assert_eq!(
+        allowed_metadata["reason"],
+        json!("scoped_automation_policy_authorized")
+    );
+    assert_eq!(allowed_metadata["confirmation_required"], json!(false));
+    assert_eq!(allowed_metadata["scoped_automation_policy"], json!(true));
+    assert_eq!(allowed_metadata["automation_policy_id"], json!(policy_id));
+    assert_eq!(
+        allowed_metadata["rendered_preview_hash"],
+        dry_run_body["rendered_preview_hash"]
+    );
+    assert!(allowed_metadata.get("variables").is_none());
+    assert!(allowed_metadata.get("source_context").is_none());
+    assert!(allowed_metadata.get("rendered_text").is_none());
 
     assert_ok(
         app.clone(),
