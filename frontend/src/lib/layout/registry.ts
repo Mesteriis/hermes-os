@@ -120,6 +120,7 @@ export const widgetRegistry: WidgetDefinition[] = [
 	widget('calendar-upcoming', 'Upcoming', ['calendar'], 'inspector', ['inspector']),
 	widget('calendar-source-status', 'Source Status', ['calendar'], 'inspector', ['inspector']),
 	widget('documents-source-cards', 'Source Cards', ['documents'], 'header', ['header']),
+	widget('documents-navigation', 'Document Navigation', ['documents'], 'list', ['list', 'rail']),
 	widget('documents-list', 'Documents List', ['documents'], 'list', ['list']),
 	widget('documents-detail-preview', 'Document Detail', ['documents'], 'detail', ['detail']),
 	widget(
@@ -162,6 +163,14 @@ export const widgetRegistry: WidgetDefinition[] = [
 	widget(
 		'knowledge-node-inspector',
 		'Node Inspector',
+		['knowledge-graph'],
+		'inspector',
+		['inspector'],
+		'api_backed'
+	),
+	widget(
+		'knowledge-connections',
+		'Connections',
 		['knowledge-graph'],
 		'inspector',
 		['inspector'],
@@ -234,6 +243,7 @@ export const widgetRegistry: WidgetDefinition[] = [
 		['rail']
 	),
 	widget('ai-runtime-metrics', 'Runtime Metrics', ['ai-agents'], 'metrics', ['metrics'], 'api_backed'),
+	widget('ai-runtime-status', 'Runtime Status', ['ai-agents'], 'rail', ['rail'], 'api_backed'),
 	widget('ai-agent-list', 'Agent List', ['ai-agents'], 'main', ['main'], 'api_backed'),
 	widget(
 		'ai-selected-agent-detail',

@@ -3506,7 +3506,9 @@
 				</div>
 				<div class="filter-bar"><button type="button" disabled>All Accounts</button><button type="button" disabled>All Types</button><button type="button" disabled>All Projects</button><button type="button" disabled>All Folders</button><button type="button" disabled>Filters</button></div>
 				<div class="docs-layout">
-					<aside class="left-panels"><section class="panel info-card"><h2>Smart Collections</h2>{#each ['Recently Added 48', 'Recently Opened 24', 'Important 32', 'Shared with Me 18', 'Requires Review 7', 'Contracts & Legal 23', 'Financial 15'] as item}<div class="collection-row">{item}</div>{/each}</section><section class="panel info-card"><h2>My Folders</h2>{#each ['Hermes Hub', 'Projects', 'Personal', 'Work', 'Archive 2024', 'Clients', 'References'] as folder}<div class="collection-row"><Icon icon="tabler:folder" width="16" height="16" />{folder}</div>{/each}</section></aside>
+					<div class="widget-frame" data-widget-id="documents-navigation" data-widget-hidden="false">
+						<aside class="left-panels"><section class="panel info-card"><h2>Smart Collections</h2>{#each ['Recently Added 48', 'Recently Opened 24', 'Important 32', 'Shared with Me 18', 'Requires Review 7', 'Contracts & Legal 23', 'Financial 15'] as item}<div class="collection-row">{item}</div>{/each}</section><section class="panel info-card"><h2>My Folders</h2>{#each ['Hermes Hub', 'Projects', 'Personal', 'Work', 'Archive 2024', 'Clients', 'References'] as folder}<div class="collection-row"><Icon icon="tabler:folder" width="16" height="16" />{folder}</div>{/each}</section></aside>
+					</div>
 					<div class="widget-frame" data-widget-id="documents-list" data-widget-hidden="false">
 						<section class="panel docs-table">
 							<header><h2>Hermes Hub</h2><div class="section-tabs"><button type="button" class="active">Overview</button><button type="button" disabled>Documents <em>142</em></button><button type="button" disabled>Folders <em>16</em></button><button type="button" disabled>Links <em>28</em></button><button type="button" disabled>Activity</button></div></header>
@@ -3801,7 +3803,7 @@
 					</section>
 
 					<aside class="stacked-rail">
-						<div class="widget-frame stacked-rail" data-widget-id="knowledge-node-inspector" data-widget-hidden="false">
+						<div class="widget-frame" data-widget-id="knowledge-node-inspector" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Selected Node</h2>
 								{#if selectedGraphNode}
@@ -3827,7 +3829,9 @@
 									<p class="inline-error" role="status" aria-live="polite">{graphNeighborhoodError}</p>
 								{/if}
 							</section>
+						</div>
 
+						<div class="widget-frame" data-widget-id="knowledge-connections" data-widget-hidden="false">
 							<section class="panel info-card">
 								<h2>Connections</h2>
 								{#if graphNeighborCounts.length > 0}
@@ -4559,7 +4563,7 @@
 						</div>
 					</section>
 					<aside class="stacked-rail">
-						<div class="widget-frame" data-widget-id="ai-runtime-metrics" data-widget-hidden="false">
+						<div class="widget-frame" data-widget-id="ai-runtime-status" data-widget-hidden="false">
 							<section class="panel info-card"><h2>Runtime</h2><div class="health-row"><span>Status</span><strong>{aiRuntimeSummary()}</strong></div><div class="health-row"><span>Chat</span><strong>{aiStatus?.chat_model ?? 'unknown'}</strong></div><div class="health-row"><span>Embedding</span><strong>{aiStatus?.embedding_model ?? 'unknown'}</strong></div></section>
 						</div>
 						<div class="widget-frame" data-widget-id="ai-run-history" data-widget-hidden="false">

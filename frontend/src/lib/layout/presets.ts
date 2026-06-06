@@ -153,7 +153,8 @@ export const layoutPresets: LayoutPreset[] = [
 	]),
 	preset('documents', 'master_detail_workbench', workbenchZones, [
 		instance('documents-source-cards', 'header', 10),
-		instance('documents-list', 'list', 10),
+		instance('documents-navigation', 'list', 10),
+		instance('documents-list', 'list', 20),
 		instance('documents-detail-preview', 'detail', 10),
 		instance('documents-processing-jobs', 'rail', 10),
 		instance('documents-failed-retry-status', 'rail', 20),
@@ -170,9 +171,10 @@ export const layoutPresets: LayoutPreset[] = [
 		instance('knowledge-toolbar', 'toolbar', 10),
 		instance('knowledge-graph-canvas', 'canvas', 10),
 		instance('knowledge-node-inspector', 'inspector', 10),
-		instance('knowledge-graph-summary', 'inspector', 20),
-		instance('knowledge-search-results', 'inspector', 30),
-		instance('knowledge-evidence-context', 'inspector', 40)
+		instance('knowledge-connections', 'inspector', 20),
+		instance('knowledge-graph-summary', 'inspector', 30),
+		instance('knowledge-search-results', 'inspector', 40),
+		instance('knowledge-evidence-context', 'inspector', 50)
 	]),
 	preset('telegram', 'master_detail_workbench', workbenchZones, [
 		instance('telegram-chat-list', 'list', 10),
@@ -192,9 +194,10 @@ export const layoutPresets: LayoutPreset[] = [
 		instance('ai-agent-list', 'main', 10),
 		instance('ai-selected-agent-detail', 'main', 20),
 		instance('ai-answer-form', 'main', 30),
-		instance('ai-run-history', 'rail', 10),
-		instance('ai-workflow-panels', 'rail', 20),
-		instance('ai-citations', 'rail', 30)
+		instance('ai-runtime-status', 'rail', 10),
+		instance('ai-run-history', 'rail', 20),
+		instance('ai-workflow-panels', 'rail', 30),
+		instance('ai-citations', 'rail', 40)
 	]),
 	preset('settings', 'operational_board', boardZones, [
 		instance('settings-metrics', 'metrics', 10),
