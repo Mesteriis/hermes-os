@@ -221,6 +221,40 @@ impl NewApiAuditRecord {
         }
     }
 
+    pub fn automation_telegram_send_dry_run(
+        actor_id: impl Into<String>,
+        outbound_message_id: impl Into<String>,
+        policy_id: impl Into<String>,
+        template_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+        rendered_preview_hash: impl Into<String>,
+    ) -> Self {
+        let outbound_message_id = outbound_message_id.into();
+        let policy_id = policy_id.into();
+        let template_id = template_id.into();
+        let account_id = account_id.into();
+        let provider_chat_id = provider_chat_id.into();
+        let rendered_preview_hash = rendered_preview_hash.into();
+
+        Self {
+            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "automation.telegram_send.dry_run".to_owned(),
+            method: "POST".to_owned(),
+            path_template: "/api/v4/policies/telegram-send/dry-run".to_owned(),
+            target_kind: "telegram_outbound_message".to_owned(),
+            target_id: Some(outbound_message_id),
+            metadata: json!({
+                "policy_id": policy_id,
+                "template_id": template_id,
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+                "rendered_preview_hash": rendered_preview_hash,
+            }),
+        }
+    }
+
     pub fn document_processing_job_retry(
         actor_id: impl Into<String>,
         job_id: impl Into<String>,

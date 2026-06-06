@@ -2,6 +2,10 @@
 	import Icon from '@iconify/svelte';
 	import {
 		completeGmailOAuthSetup,
+		dryRunTelegramSend,
+		fetchAutomationPolicies,
+		fetchAutomationTemplates,
+		fetchCallTranscript,
 		fetchCommunicationMessage,
 		fetchCommunicationMessages,
 		fetchDocumentProcessing,
@@ -16,8 +20,17 @@
 		fetchIdentityCandidates,
 		fetchTaskCandidates,
 		fetchTasks,
+		fetchV4Capabilities,
+		fetchV5Capabilities,
+		fetchTelegramCalls,
+		fetchTelegramChats,
+		fetchTelegramMessages,
+		fetchWhatsappWebMessages,
+		fetchWhatsappWebSessions,
 		fetchProjects,
 		fetchV1Status,
+		ingestTelegramFixtureMessage,
+		ingestWhatsappWebFixtureMessage,
 		refreshAiTaskCandidates,
 		reviewIdentityCandidate,
 		reviewTaskCandidate,
@@ -25,7 +38,13 @@
 		requestAiMeetingPrep,
 		retryDocumentProcessingJob,
 		searchGraphNodes,
+		saveAutomationPolicy,
+		saveAutomationTemplate,
+		saveCallTranscriptFixture,
+		saveTelegramCall,
 		setupImapAccount,
+		setupTelegramFixtureAccount,
+		setupWhatsappWebFixtureAccount,
 		startGmailOAuthSetup,
 		type ActiveTask,
 		type AiAgent,
@@ -35,6 +54,9 @@
 		type AiRun,
 		type AiStatus,
 		type AiTaskCandidateRefreshResponse,
+		type AutomationPolicy,
+		type AutomationTemplate,
+		type CallTranscript,
 		type ContactIdentityCandidate,
 		type ContactIdentityReviewState,
 		type CommunicationMessageDetail,
@@ -58,6 +80,15 @@
 		type ProjectTimelineItem,
 		type TaskCandidate,
 		type TaskCandidateReviewState,
+		type TelegramCall,
+		type TelegramChat,
+		type TelegramMessage,
+		type TelegramProviderKind,
+		type TelegramSendDryRunResponse,
+		type V4CapabilitiesResponse,
+		type V5CapabilitiesResponse,
+		type WhatsappWebMessage,
+		type WhatsappWebSession,
 		type V1Status
 	} from '$lib/api';
 	import { onMount } from 'svelte';
@@ -74,6 +105,8 @@
 		| 'documents'
 		| 'notes'
 		| 'knowledge'
+		| 'telegram'
+		| 'whatsapp'
 		| 'agents';
 
 	type NavItem = {
@@ -264,6 +297,113 @@
 		password: '',
 		secret_kind: 'app_password' as 'app_password' | 'password'
 	});
+	let telegramChats = $state<TelegramChat[]>([]);
+	let telegramMessages = $state<TelegramMessage[]>([]);
+	let automationTemplates = $state<AutomationTemplate[]>([]);
+	let automationPolicies = $state<AutomationPolicy[]>([]);
+	let telegramCalls = $state<TelegramCall[]>([]);
+	let v4Capabilities = $state<V4CapabilitiesResponse | null>(null);
+	let selectedTelegramChatId = $state('');
+	let selectedTelegramCallId = $state('');
+	let callTranscript = $state<CallTranscript | null>(null);
+	let telegramError = $state('');
+	let telegramActionMessage = $state('');
+	let isTelegramLoading = $state(false);
+	let isTelegramActionSubmitting = $state(false);
+	let telegramSendDryRunResult = $state<TelegramSendDryRunResponse | null>(null);
+	let telegramAccountForm = $state({
+		account_id: 'telegram-primary',
+		provider_kind: 'telegram_user' as TelegramProviderKind,
+		display_name: 'Primary Telegram',
+		external_account_id: '@telegram_fixture',
+		tdlib_data_path: 'docker/data/telegram/telegram-primary',
+		transcription_enabled: true
+	});
+	let telegramMessageForm = $state({
+		account_id: 'telegram-primary',
+		provider_chat_id: 'fixture-chat-1',
+		provider_message_id: 'fixture-msg-1',
+		chat_kind: 'private' as 'private' | 'group' | 'channel' | 'bot',
+		chat_title: 'V4 Planning',
+		sender_id: 'telegram-fixture-user',
+		sender_display_name: 'Telegram Fixture',
+		text: 'V4 fixture Telegram message for policy and graph smoke coverage.',
+		import_batch_id: 'telegram-fixture-ui',
+		occurred_at: new Date().toISOString(),
+		delivery_state: 'received' as 'received' | 'sent' | 'send_dry_run' | 'send_blocked'
+	});
+	let automationTemplateForm = $state({
+		template_id: 'template-v4-followup',
+		name: 'V4 Follow-up',
+		body_template: 'Hi {{name}}, I will follow up about {{topic}}.',
+		required_variables_text: 'name, topic'
+	});
+	let automationPolicyForm = $state({
+		policy_id: 'policy-v4-followup',
+		template_id: 'template-v4-followup',
+		name: 'V4 follow-up allowlist',
+		enabled: true,
+		account_id: 'telegram-primary',
+		allowed_chat_ids_text: 'fixture-chat-1',
+		trigger_kind: 'manual_dry_run',
+		max_sends_per_hour: 3,
+		quiet_hours_text: '{}',
+		expires_at: '',
+		conditions_text: '{}'
+	});
+	let telegramSendForm = $state({
+		policy_id: 'policy-v4-followup',
+		provider_chat_id: 'fixture-chat-1',
+		variables_text: '{ "name": "Maria", "topic": "V4 Telegram client" }',
+		source_context_text: '{ "source": "desktop_ui_fixture" }'
+	});
+	let telegramCallForm = $state({
+		call_id: 'call-v4-fixture-1',
+		account_id: 'telegram-primary',
+		provider_call_id: 'provider-call-v4-fixture-1',
+		provider_chat_id: 'fixture-chat-1',
+		direction: 'incoming' as 'incoming' | 'outgoing',
+		call_state: 'ended' as 'ringing' | 'active' | 'ended' | 'missed' | 'declined' | 'failed',
+		started_at: new Date().toISOString(),
+		ended_at: '',
+		transcription_policy_id: '',
+		metadata_text: '{ "runtime": "fixture", "visible_recording_state": true }'
+	});
+	let whatsappSessions = $state<WhatsappWebSession[]>([]);
+	let whatsappMessages = $state<WhatsappWebMessage[]>([]);
+	let v5Capabilities = $state<V5CapabilitiesResponse | null>(null);
+	let selectedWhatsappSessionId = $state('');
+	let whatsappError = $state('');
+	let whatsappActionMessage = $state('');
+	let isWhatsappLoading = $state(false);
+	let isWhatsappActionSubmitting = $state(false);
+	let whatsappAccountForm = $state({
+		account_id: 'whatsapp-primary',
+		display_name: 'Primary WhatsApp Web',
+		external_account_id: 'whatsapp-fixture-device',
+		device_name: 'Hermes Desktop Fixture',
+		local_state_path: 'docker/data/whatsapp/whatsapp-primary'
+	});
+	let whatsappMessageForm = $state({
+		account_id: 'whatsapp-primary',
+		provider_chat_id: 'wa-fixture-chat-1',
+		provider_message_id: 'wa-fixture-msg-1',
+		chat_title: 'V5 Planning',
+		sender_id: 'wa-fixture-user',
+		sender_display_name: 'WhatsApp Fixture',
+		text: 'V5 fixture WhatsApp Web message for local memory and graph recall.',
+		import_batch_id: 'whatsapp-web-fixture-ui',
+		occurred_at: new Date().toISOString(),
+		delivery_state: 'received' as 'received' | 'sent' | 'send_dry_run' | 'send_blocked'
+	});
+	let transcriptForm = $state({
+		transcript_id: 'transcript-v4-fixture-1',
+		account_id: 'telegram-primary',
+		provider_chat_id: 'fixture-chat-1',
+		source_audio_ref: 'docker/data/calls/fixture-call.wav',
+		language_code: 'en',
+		always_on_policy: true
+	});
 
 	const primaryNav: NavItem[] = [
 		{ id: 'home', label: 'Home', icon: 'tabler:home', enabled: true },
@@ -276,6 +416,8 @@
 		{ id: 'documents', label: 'Documents', icon: 'tabler:file-text', enabled: true },
 		{ id: 'notes', label: 'Notes', icon: 'tabler:notes', enabled: true },
 		{ id: 'knowledge', label: 'Knowledge Graph', icon: 'tabler:share', enabled: true },
+		{ id: 'telegram', label: 'Telegram', icon: 'tabler:brand-telegram', enabled: true },
+		{ id: 'whatsapp', label: 'WhatsApp', icon: 'tabler:brand-whatsapp', enabled: true },
 		{ id: 'agents', label: 'AI Agents', icon: 'tabler:sparkles', enabled: true }
 	];
 
@@ -339,6 +481,18 @@
 			subtitle: 'Explore relationships across people, projects, documents, messages and tasks.',
 			search: 'Search anything in your knowledge graph...',
 			icon: 'tabler:share'
+		},
+		telegram: {
+			title: 'Telegram Client',
+			subtitle: 'V4 messaging, policy automation and call intelligence.',
+			search: 'Search Telegram chats, policies, calls...',
+			icon: 'tabler:brand-telegram'
+		},
+		whatsapp: {
+			title: 'WhatsApp Web',
+			subtitle: 'V5 companion sessions, fixture ingestion and live-runtime guardrails.',
+			search: 'Search WhatsApp sessions and messages...',
+			icon: 'tabler:brand-whatsapp'
 		},
 		agents: {
 			title: 'AI Agents',
@@ -432,6 +586,21 @@
 			{ label: 'Important', icon: 'tabler:shield-star', badge: '15' },
 			{ label: 'Shared with me', icon: 'tabler:star', badge: '7' },
 			{ label: 'Trash', icon: 'tabler:trash' }
+		],
+		telegram: [
+			{ label: 'Chats', icon: 'tabler:messages', badge: 'V4' },
+			{ label: 'Policies', icon: 'tabler:shield-check' },
+			{ label: 'Templates', icon: 'tabler:template' },
+			{ label: 'Calls', icon: 'tabler:phone-call' },
+			{ label: 'Transcripts', icon: 'tabler:file-text' },
+			{ label: 'Audit', icon: 'tabler:clipboard-list' }
+		],
+		whatsapp: [
+			{ label: 'Sessions', icon: 'tabler:devices', badge: 'V5' },
+			{ label: 'Messages', icon: 'tabler:messages' },
+			{ label: 'Fixture', icon: 'tabler:flask' },
+			{ label: 'Guardrails', icon: 'tabler:shield-lock' },
+			{ label: 'Provenance', icon: 'tabler:git-branch' }
 		],
 		agents: [
 			{ label: 'My Agents', icon: 'tabler:robot', badge: '12' },
@@ -541,6 +710,43 @@
 	];
 
 	const selectedCommunication = $derived(communicationMessages[selectedConversationIndex] ?? null);
+	const selectedTelegramChat = $derived(
+		telegramChats.find((chat) => chat.provider_chat_id === selectedTelegramChatId) ??
+			telegramChats[0] ??
+			null
+	);
+	const selectedTelegramMessages = $derived(
+		selectedTelegramChat
+			? telegramMessages.filter(
+					(message) => message.provider_chat_id === selectedTelegramChat.provider_chat_id
+				)
+			: telegramMessages
+	);
+	const selectedTelegramCall = $derived(
+		telegramCalls.find((call) => call.call_id === selectedTelegramCallId) ?? telegramCalls[0] ?? null
+	);
+	const v4ClosureCapabilities = $derived(
+		v4Capabilities?.capabilities.filter((capability) => capability.closure_gate) ?? []
+	);
+	const v4BlockedCapabilities = $derived(
+		v4Capabilities?.capabilities.filter((capability) => capability.status === 'blocked') ?? []
+	);
+	const selectedWhatsappSession = $derived(
+		whatsappSessions.find((session) => session.session_id === selectedWhatsappSessionId) ??
+			whatsappSessions[0] ??
+			null
+	);
+	const selectedWhatsappMessages = $derived(
+		selectedWhatsappSession
+			? whatsappMessages.filter((message) => message.account_id === selectedWhatsappSession.account_id)
+			: whatsappMessages
+	);
+	const v5ClosureCapabilities = $derived(
+		v5Capabilities?.capabilities.filter((capability) => capability.closure_gate) ?? []
+	);
+	const v5BlockedCapabilities = $derived(
+		v5Capabilities?.capabilities.filter((capability) => capability.status === 'blocked') ?? []
+	);
 	const selectedConversation = $derived(conversations[selectedConversationIndex] ?? conversations[0]);
 	const selectedContact = $derived(contactList[selectedContactIndex] ?? contactList[0]);
 	const agentCards = $derived(aiAgents.map(agentCardView));
@@ -594,6 +800,8 @@
 		void loadIdentityCandidates();
 		void loadTaskReviewState();
 		void loadAiWorkspace();
+		void loadTelegramWorkspace();
+		void loadWhatsappWebWorkspace();
 	});
 
 	async function loadV1Status() {
@@ -1086,6 +1294,14 @@
 		return formatDateTime(message.occurred_at ?? message.projected_at);
 	}
 
+	function telegramMessageTime(message: TelegramMessage) {
+		return formatDateTime(message.occurred_at ?? message.projected_at);
+	}
+
+	function whatsappMessageTime(message: WhatsappWebMessage) {
+		return formatDateTime(message.occurred_at ?? message.projected_at);
+	}
+
 	function emptyProjectStats(): ProjectStats {
 		return {
 			message_count: 0,
@@ -1395,6 +1611,534 @@
 		} finally {
 			isSetupSubmitting = false;
 		}
+	}
+
+	async function loadTelegramWorkspace() {
+		isTelegramLoading = true;
+		try {
+			const [
+				capabilityResponse,
+				chatResponse,
+				messageResponse,
+				templateResponse,
+				policyResponse,
+				callResponse
+			] =
+				await Promise.all([
+					fetchV4Capabilities(apiBaseUrl, apiToken, actorId),
+					fetchTelegramChats(apiBaseUrl, apiToken, actorId),
+					fetchTelegramMessages(apiBaseUrl, apiToken, actorId),
+					fetchAutomationTemplates(apiBaseUrl, apiToken, actorId),
+					fetchAutomationPolicies(apiBaseUrl, apiToken, actorId),
+					fetchTelegramCalls(apiBaseUrl, apiToken, actorId)
+				]);
+
+			v4Capabilities = capabilityResponse;
+			telegramChats = chatResponse.items;
+			telegramMessages = messageResponse.items;
+			automationTemplates = templateResponse.items;
+			automationPolicies = policyResponse.items;
+			telegramCalls = callResponse.items;
+
+			if (!telegramChats.some((chat) => chat.provider_chat_id === selectedTelegramChatId)) {
+				selectedTelegramChatId = telegramChats[0]?.provider_chat_id ?? '';
+			}
+			if (!telegramCalls.some((call) => call.call_id === selectedTelegramCallId)) {
+				selectedTelegramCallId = telegramCalls[0]?.call_id ?? '';
+			}
+			if (selectedTelegramCallId) {
+				await loadSelectedCallTranscript(selectedTelegramCallId);
+			} else {
+				callTranscript = null;
+			}
+
+			telegramError = '';
+		} catch (error) {
+			telegramError = error instanceof Error ? error.message : 'Unknown Telegram workspace error';
+			callTranscript = null;
+		} finally {
+			isTelegramLoading = false;
+		}
+	}
+
+	async function loadWhatsappWebWorkspace() {
+		isWhatsappLoading = true;
+		try {
+			const [capabilityResponse, sessionResponse, messageResponse] = await Promise.all([
+				fetchV5Capabilities(apiBaseUrl, apiToken, actorId),
+				fetchWhatsappWebSessions(apiBaseUrl, apiToken, actorId),
+				fetchWhatsappWebMessages(apiBaseUrl, apiToken, actorId)
+			]);
+
+			v5Capabilities = capabilityResponse;
+			whatsappSessions = sessionResponse.items;
+			whatsappMessages = messageResponse.items;
+
+			if (!whatsappSessions.some((session) => session.session_id === selectedWhatsappSessionId)) {
+				selectedWhatsappSessionId = whatsappSessions[0]?.session_id ?? '';
+			}
+
+			whatsappError = '';
+		} catch (error) {
+			whatsappError = error instanceof Error ? error.message : 'Unknown WhatsApp Web workspace error';
+		} finally {
+			isWhatsappLoading = false;
+		}
+	}
+
+	async function setupWhatsappWebFixture() {
+		if (isWhatsappActionSubmitting) {
+			return;
+		}
+
+		isWhatsappActionSubmitting = true;
+		whatsappActionMessage = '';
+		whatsappError = '';
+		try {
+			const result = await setupWhatsappWebFixtureAccount(apiBaseUrl, apiToken, actorId, {
+				account_id: whatsappAccountForm.account_id,
+				provider_kind: 'whatsapp_web',
+				display_name: whatsappAccountForm.display_name,
+				external_account_id: whatsappAccountForm.external_account_id,
+				device_name: whatsappAccountForm.device_name,
+				local_state_path: whatsappAccountForm.local_state_path
+			});
+			selectedWhatsappSessionId = result.session.session_id;
+			whatsappMessageForm = {
+				...whatsappMessageForm,
+				account_id: result.account_id
+			};
+			whatsappActionMessage = `${providerKindLabel(result.provider_kind)} account ${result.account_id} saved`;
+			await loadWhatsappWebWorkspace();
+		} catch (error) {
+			whatsappError = error instanceof Error ? error.message : 'WhatsApp Web fixture setup failed';
+		} finally {
+			isWhatsappActionSubmitting = false;
+		}
+	}
+
+	async function ingestWhatsappWebMessageFixture() {
+		if (isWhatsappActionSubmitting) {
+			return;
+		}
+
+		isWhatsappActionSubmitting = true;
+		whatsappActionMessage = '';
+		whatsappError = '';
+		try {
+			const providerMessageId =
+				whatsappMessageForm.provider_message_id.trim() || `wa-fixture-msg-${crypto.randomUUID()}`;
+			const result = await ingestWhatsappWebFixtureMessage(apiBaseUrl, apiToken, actorId, {
+				account_id: whatsappMessageForm.account_id,
+				provider_chat_id: whatsappMessageForm.provider_chat_id,
+				provider_message_id: providerMessageId,
+				chat_title: whatsappMessageForm.chat_title,
+				sender_id: whatsappMessageForm.sender_id,
+				sender_display_name: whatsappMessageForm.sender_display_name,
+				text: whatsappMessageForm.text,
+				import_batch_id: whatsappMessageForm.import_batch_id,
+				occurred_at: whatsappMessageForm.occurred_at || new Date().toISOString(),
+				delivery_state: whatsappMessageForm.delivery_state
+			});
+			whatsappActionMessage = `WhatsApp Web message ${result.message_id} projected`;
+			whatsappMessageForm = {
+				...whatsappMessageForm,
+				provider_message_id: `wa-fixture-msg-${crypto.randomUUID()}`,
+				occurred_at: new Date().toISOString()
+			};
+			await Promise.all([loadWhatsappWebWorkspace(), loadCommunications()]);
+		} catch (error) {
+			whatsappError = error instanceof Error ? error.message : 'WhatsApp Web fixture ingest failed';
+		} finally {
+			isWhatsappActionSubmitting = false;
+		}
+	}
+
+	async function setupTelegramFixture() {
+		if (isTelegramActionSubmitting) {
+			return;
+		}
+
+		isTelegramActionSubmitting = true;
+		telegramActionMessage = '';
+		telegramError = '';
+		try {
+			const result = await setupTelegramFixtureAccount(apiBaseUrl, apiToken, actorId, {
+				account_id: telegramAccountForm.account_id,
+				provider_kind: telegramAccountForm.provider_kind,
+				display_name: telegramAccountForm.display_name,
+				external_account_id: telegramAccountForm.external_account_id,
+				tdlib_data_path: telegramAccountForm.tdlib_data_path || undefined,
+				transcription_enabled: telegramAccountForm.transcription_enabled
+			});
+			telegramActionMessage = `${providerKindLabel(result.provider_kind)} account ${result.account_id} saved`;
+			telegramMessageForm = {
+				...telegramMessageForm,
+				account_id: result.account_id
+			};
+			automationPolicyForm = {
+				...automationPolicyForm,
+				account_id: result.account_id
+			};
+			telegramCallForm = {
+				...telegramCallForm,
+				account_id: result.account_id
+			};
+			transcriptForm = {
+				...transcriptForm,
+				account_id: result.account_id
+			};
+			await loadTelegramWorkspace();
+		} catch (error) {
+			telegramError = error instanceof Error ? error.message : 'Telegram fixture setup failed';
+		} finally {
+			isTelegramActionSubmitting = false;
+		}
+	}
+
+	async function ingestTelegramMessageFixture() {
+		if (isTelegramActionSubmitting) {
+			return;
+		}
+
+		isTelegramActionSubmitting = true;
+		telegramActionMessage = '';
+		telegramError = '';
+		try {
+			const providerMessageId =
+				telegramMessageForm.provider_message_id.trim() || `fixture-msg-${crypto.randomUUID()}`;
+			const result = await ingestTelegramFixtureMessage(apiBaseUrl, apiToken, actorId, {
+				account_id: telegramMessageForm.account_id,
+				provider_chat_id: telegramMessageForm.provider_chat_id,
+				provider_message_id: providerMessageId,
+				chat_kind: telegramMessageForm.chat_kind,
+				chat_title: telegramMessageForm.chat_title,
+				sender_id: telegramMessageForm.sender_id,
+				sender_display_name: telegramMessageForm.sender_display_name,
+				text: telegramMessageForm.text,
+				import_batch_id: telegramMessageForm.import_batch_id,
+				occurred_at: telegramMessageForm.occurred_at || new Date().toISOString(),
+				delivery_state: telegramMessageForm.delivery_state
+			});
+			selectedTelegramChatId = telegramMessageForm.provider_chat_id;
+			telegramActionMessage = `Telegram message ${result.message_id} projected`;
+			telegramMessageForm = {
+				...telegramMessageForm,
+				provider_message_id: `fixture-msg-${crypto.randomUUID()}`,
+				occurred_at: new Date().toISOString()
+			};
+			await Promise.all([loadTelegramWorkspace(), loadCommunications()]);
+		} catch (error) {
+			telegramError = error instanceof Error ? error.message : 'Telegram fixture ingest failed';
+		} finally {
+			isTelegramActionSubmitting = false;
+		}
+	}
+
+	async function saveV4AutomationTemplate() {
+		if (isTelegramActionSubmitting) {
+			return;
+		}
+
+		isTelegramActionSubmitting = true;
+		telegramActionMessage = '';
+		telegramError = '';
+		try {
+			const template = await saveAutomationTemplate(apiBaseUrl, apiToken, actorId, {
+				template_id: automationTemplateForm.template_id,
+				name: automationTemplateForm.name,
+				body_template: automationTemplateForm.body_template,
+				required_variables: splitList(automationTemplateForm.required_variables_text)
+			});
+			telegramActionMessage = `Template ${template.template_id} saved`;
+			automationPolicyForm = {
+				...automationPolicyForm,
+				template_id: template.template_id
+			};
+			await loadTelegramWorkspace();
+		} catch (error) {
+			telegramError = error instanceof Error ? error.message : 'Automation template save failed';
+		} finally {
+			isTelegramActionSubmitting = false;
+		}
+	}
+
+	async function saveV4AutomationPolicy() {
+		if (isTelegramActionSubmitting) {
+			return;
+		}
+
+		isTelegramActionSubmitting = true;
+		telegramActionMessage = '';
+		telegramError = '';
+		try {
+			const policy = await saveAutomationPolicy(apiBaseUrl, apiToken, actorId, {
+				policy_id: automationPolicyForm.policy_id,
+				template_id: automationPolicyForm.template_id,
+				name: automationPolicyForm.name,
+				enabled: automationPolicyForm.enabled,
+				account_id: automationPolicyForm.account_id,
+				allowed_chat_ids: splitList(automationPolicyForm.allowed_chat_ids_text),
+				trigger_kind: automationPolicyForm.trigger_kind,
+				max_sends_per_hour: Number(automationPolicyForm.max_sends_per_hour),
+				quiet_hours: parseJsonObject(automationPolicyForm.quiet_hours_text, 'quiet hours'),
+				expires_at: automationPolicyForm.expires_at.trim() || null,
+				conditions: parseJsonObject(automationPolicyForm.conditions_text, 'conditions')
+			});
+			telegramActionMessage = `Policy ${policy.policy_id} saved`;
+			telegramSendForm = {
+				...telegramSendForm,
+				policy_id: policy.policy_id
+			};
+			await loadTelegramWorkspace();
+		} catch (error) {
+			telegramError = error instanceof Error ? error.message : 'Automation policy save failed';
+		} finally {
+			isTelegramActionSubmitting = false;
+		}
+	}
+
+	async function runTelegramAutomationDryRun() {
+		if (isTelegramActionSubmitting) {
+			return;
+		}
+
+		isTelegramActionSubmitting = true;
+		telegramActionMessage = '';
+		telegramError = '';
+		telegramSendDryRunResult = null;
+		try {
+			const result = await dryRunTelegramSend(apiBaseUrl, apiToken, actorId, {
+				command_id: `telegram-dry-run-${crypto.randomUUID()}`,
+				policy_id: telegramSendForm.policy_id,
+				provider_chat_id: telegramSendForm.provider_chat_id,
+				variables: parseStringMap(telegramSendForm.variables_text, 'variables'),
+				source_context: parseJsonObject(telegramSendForm.source_context_text, 'source context')
+			});
+			telegramSendDryRunResult = result;
+			telegramActionMessage = `Dry-run accepted with preview hash ${result.rendered_preview_hash}`;
+			await loadTelegramWorkspace();
+		} catch (error) {
+			telegramError = error instanceof Error ? error.message : 'Telegram send dry-run failed';
+		} finally {
+			isTelegramActionSubmitting = false;
+		}
+	}
+
+	async function saveTelegramCallFixture() {
+		if (isTelegramActionSubmitting) {
+			return;
+		}
+
+		isTelegramActionSubmitting = true;
+		telegramActionMessage = '';
+		telegramError = '';
+		try {
+			const call = await saveTelegramCall(apiBaseUrl, apiToken, actorId, {
+				call_id: telegramCallForm.call_id,
+				account_id: telegramCallForm.account_id,
+				provider_call_id: telegramCallForm.provider_call_id,
+				provider_chat_id: telegramCallForm.provider_chat_id,
+				direction: telegramCallForm.direction,
+				call_state: telegramCallForm.call_state,
+				started_at: telegramCallForm.started_at.trim() || null,
+				ended_at: telegramCallForm.ended_at.trim() || null,
+				transcription_policy_id: telegramCallForm.transcription_policy_id.trim() || null,
+				metadata: parseJsonObject(telegramCallForm.metadata_text, 'call metadata')
+			});
+			selectedTelegramCallId = call.call_id;
+			telegramActionMessage = `Call ${call.call_id} saved`;
+			await loadTelegramWorkspace();
+		} catch (error) {
+			telegramError = error instanceof Error ? error.message : 'Telegram call save failed';
+		} finally {
+			isTelegramActionSubmitting = false;
+		}
+	}
+
+	async function saveCallTranscriptFixtureFromUi() {
+		if (isTelegramActionSubmitting || !selectedTelegramCallId) {
+			return;
+		}
+
+		isTelegramActionSubmitting = true;
+		telegramActionMessage = '';
+		telegramError = '';
+		try {
+			callTranscript = await saveCallTranscriptFixture(
+				apiBaseUrl,
+				apiToken,
+				actorId,
+				selectedTelegramCallId,
+				{
+					transcript_id: transcriptForm.transcript_id,
+					account_id: transcriptForm.account_id,
+					provider_chat_id: transcriptForm.provider_chat_id,
+					source_audio_ref: transcriptForm.source_audio_ref,
+					language_code: transcriptForm.language_code || undefined,
+					always_on_policy: transcriptForm.always_on_policy
+				}
+			);
+			telegramActionMessage = `Transcript ${callTranscript.transcript_id} saved`;
+			await loadTelegramWorkspace();
+		} catch (error) {
+			telegramError = error instanceof Error ? error.message : 'Call transcript save failed';
+		} finally {
+			isTelegramActionSubmitting = false;
+		}
+	}
+
+	async function loadSelectedCallTranscript(callId = selectedTelegramCallId) {
+		if (!callId) {
+			callTranscript = null;
+			return;
+		}
+
+		try {
+			const response = await fetchCallTranscript(apiBaseUrl, apiToken, actorId, callId);
+			callTranscript = response.transcript;
+			telegramError = '';
+		} catch (error) {
+			callTranscript = null;
+			telegramError = error instanceof Error ? error.message : 'Call transcript request failed';
+		}
+	}
+
+	function selectTelegramChat(chat: TelegramChat) {
+		selectedTelegramChatId = chat.provider_chat_id;
+		telegramMessageForm = {
+			...telegramMessageForm,
+			account_id: chat.account_id,
+			provider_chat_id: chat.provider_chat_id,
+			chat_kind: telegramChatKindValue(chat.chat_kind),
+			chat_title: chat.title
+		};
+		automationPolicyForm = {
+			...automationPolicyForm,
+			account_id: chat.account_id,
+			allowed_chat_ids_text: chat.provider_chat_id
+		};
+		telegramSendForm = {
+			...telegramSendForm,
+			provider_chat_id: chat.provider_chat_id
+		};
+		telegramCallForm = {
+			...telegramCallForm,
+			account_id: chat.account_id,
+			provider_chat_id: chat.provider_chat_id
+		};
+		transcriptForm = {
+			...transcriptForm,
+			account_id: chat.account_id,
+			provider_chat_id: chat.provider_chat_id
+		};
+	}
+
+	function selectTelegramCall(call: TelegramCall) {
+		selectedTelegramCallId = call.call_id;
+		telegramCallForm = {
+			...telegramCallForm,
+			call_id: call.call_id,
+			account_id: call.account_id,
+			provider_call_id: call.provider_call_id,
+			provider_chat_id: call.provider_chat_id,
+			direction: call.direction,
+			call_state: call.call_state,
+			started_at: call.started_at ?? '',
+			ended_at: call.ended_at ?? '',
+			transcription_policy_id: call.transcription_policy_id ?? '',
+			metadata_text: JSON.stringify(call.metadata, null, 2)
+		};
+		transcriptForm = {
+			...transcriptForm,
+			account_id: call.account_id,
+			provider_chat_id: call.provider_chat_id
+		};
+		void loadSelectedCallTranscript(call.call_id);
+	}
+
+	function selectWhatsappSession(session: WhatsappWebSession) {
+		selectedWhatsappSessionId = session.session_id;
+		whatsappMessageForm = {
+			...whatsappMessageForm,
+			account_id: session.account_id
+		};
+	}
+
+	function splitList(value: string) {
+		return value
+			.split(',')
+			.map((item) => item.trim())
+			.filter(Boolean);
+	}
+
+	function parseJsonObject(value: string, field: string): Record<string, unknown> {
+		const trimmed = value.trim();
+		if (!trimmed) {
+			return {};
+		}
+
+		const parsed = JSON.parse(trimmed) as unknown;
+		if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+			throw new Error(`${field} must be a JSON object`);
+		}
+		return parsed as Record<string, unknown>;
+	}
+
+	function parseStringMap(value: string, field: string): Record<string, string> {
+		const parsed = parseJsonObject(value, field);
+		return Object.fromEntries(
+			Object.entries(parsed).map(([key, rawValue]) => {
+				if (typeof rawValue !== 'string') {
+					throw new Error(`${field}.${key} must be a string`);
+				}
+				return [key, rawValue];
+			})
+		);
+	}
+
+	function telegramChatKindValue(value: string): 'private' | 'group' | 'channel' | 'bot' {
+		if (value === 'group' || value === 'channel' || value === 'bot') {
+			return value;
+		}
+		return 'private';
+	}
+
+	function providerKindLabel(value: string) {
+		return value
+			.split('_')
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+			.join(' ');
+	}
+
+	function capabilityLabel(value: string) {
+		return value
+			.split('_')
+			.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+			.join(' ');
+	}
+
+	function communicationChannelIcon(channelKind: string) {
+		if (channelKind === 'telegram_user' || channelKind === 'telegram_bot') {
+			return 'tabler:brand-telegram';
+		}
+		if (channelKind === 'whatsapp_web') {
+			return 'tabler:brand-whatsapp';
+		}
+		return 'tabler:mail';
+	}
+
+	function communicationChannelLabel(channelKind: string) {
+		if (channelKind === 'telegram_user') {
+			return 'Telegram user';
+		}
+		if (channelKind === 'telegram_bot') {
+			return 'Telegram bot';
+		}
+		if (channelKind === 'whatsapp_web') {
+			return 'WhatsApp Web';
+		}
+		return 'Email';
 	}
 
 	function graphNodeTotal() {
@@ -1916,7 +2660,7 @@
 							{#each communicationMessages as message, index}
 								<button type="button" class:active={selectedConversationIndex === index} onclick={() => selectCommunication(index)}>
 									<span class="round-icon cyan">
-										<Icon icon="tabler:mail" width="22" height="22" />
+										<Icon icon={communicationChannelIcon(message.channel_kind)} width="22" height="22" />
 									</span>
 									<img src="/assets/hermes-reference-avatar.png" alt="" />
 									<span>
@@ -1971,7 +2715,7 @@
 					</section>
 					<aside class="context-rail">
 						<section class="panel profile-panel">
-							<div class="profile-head"><img src="/assets/hermes-reference-avatar.png" alt="" /><div><h2>{selectedCommunication ? senderLabel(selectedCommunication.sender) : 'No sender selected'}</h2><p>Email</p><small>{selectedCommunication ? senderEmail(selectedCommunication.sender) : 'No local message selected'}</small></div></div>
+							<div class="profile-head"><img src="/assets/hermes-reference-avatar.png" alt="" /><div><h2>{selectedCommunication ? senderLabel(selectedCommunication.sender) : 'No sender selected'}</h2><p>{selectedCommunication ? communicationChannelLabel(selectedCommunication.channel_kind) : 'No channel'}</p><small>{selectedCommunication ? senderEmail(selectedCommunication.sender) : 'No local message selected'}</small></div></div>
 							<div class="quick-icons">
 								<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
 								<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
@@ -1979,7 +2723,7 @@
 								<button type="button" disabled><Icon icon="tabler:brand-whatsapp" width="17" height="17" /></button>
 							</div>
 						</section>
-						<section class="panel info-card"><h2>Summary</h2><p>{selectedCommunication ? `Stored from ${selectedCommunication.account_id}. Provider record ${selectedCommunication.provider_record_id}.` : 'Local communication metadata will appear after messages are imported.'}</p><button type="button" class="link-row" disabled>View full profile <Icon icon="tabler:arrow-right" width="15" height="15" /></button></section>
+						<section class="panel info-card"><h2>Summary</h2><p>{selectedCommunication ? `Stored from ${selectedCommunication.account_id}. Channel ${communicationChannelLabel(selectedCommunication.channel_kind)}. Provider record ${selectedCommunication.provider_record_id}.` : 'Local communication metadata will appear after messages are imported.'}</p><button type="button" class="link-row" disabled>View full profile <Icon icon="tabler:arrow-right" width="15" height="15" /></button></section>
 						<section class="panel info-card"><h2>Message Metadata</h2>{#if selectedCommunication}<ul class="detail-list"><li><Icon icon="tabler:users" width="17" height="17" /> {selectedCommunication.recipients.length} recipients</li><li><Icon icon="tabler:paperclip" width="17" height="17" /> {selectedCommunication.attachment_count} attachments</li><li><Icon icon="tabler:clock" width="17" height="17" /> {messageTime(selectedCommunication)}</li></ul>{:else}<p>No message selected.</p>{/if}</section>
 						<section class="panel info-card"><h2>Related Projects</h2>{#each projects.slice(0, 2) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
 						<section class="panel info-card"><h2>Active Tasks</h2>{#each tasks.slice(0, 3) as task}<label class="mini-check"><input type="checkbox" />{task.title}<em>{task.due.split(' ')[0]}</em></label>{/each}</section>
@@ -2735,6 +3479,361 @@
 								<article><strong>{formatNumber(graphNodeKindCount('person'))}</strong><span>People</span></article>
 							</div>
 							{#if graphError}<p class="inline-error">{graphError}</p>{/if}
+						</section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'telegram'}
+			<section class="telegram-page communications-page">
+				<div class="view-header">
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-telegram" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<button type="button" class="primary-button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
+				</div>
+
+				<div class="metric-grid">
+					<article class="metric-card"><span>Chats</span><strong>{telegramChats.length}</strong><small>{selectedTelegramChat?.sync_state ?? 'not synced'}</small></article>
+					<article class="metric-card"><span>Messages</span><strong>{telegramMessages.length}</strong><small>Projected channel records</small></article>
+					<article class="metric-card"><span>Templates</span><strong>{automationTemplates.length}</strong><small>UI-approved only</small></article>
+					<article class="metric-card"><span>Policies</span><strong>{automationPolicies.length}</strong><small>{automationPolicies.filter((policy) => policy.enabled).length} enabled</small></article>
+					<article class="metric-card"><span>Calls</span><strong>{telegramCalls.length}</strong><small>{selectedTelegramCall?.call_state ?? 'no history'}</small></article>
+					<article class="metric-card"><span>Transcript</span><strong>{callTranscript?.transcript_status ?? 'none'}</strong><small>{callTranscript?.stt_provider ?? 'fixture STT'}</small></article>
+				</div>
+
+				{#if telegramActionMessage}
+					<p class="setup-state success">{telegramActionMessage}</p>
+				{/if}
+				{#if telegramError}
+					<p class="inline-error">{telegramError}</p>
+				{/if}
+
+				<div class="three-pane communications-grid telegram-grid">
+					<section class="panel conversation-list">
+						<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search Telegram chats..." /></label>
+						{#if isTelegramLoading && telegramChats.length === 0}
+							<div class="empty-panel">Loading Telegram state...</div>
+						{:else if telegramChats.length === 0}
+							<div class="empty-panel">No Telegram chats projected yet.</div>
+						{:else}
+							{#each telegramChats as chat}
+								<button type="button" class:active={selectedTelegramChat?.provider_chat_id === chat.provider_chat_id} onclick={() => selectTelegramChat(chat)}>
+									<span class="round-icon cyan"><Icon icon="tabler:brand-telegram" width="22" height="22" /></span>
+									<img src="/assets/hermes-reference-avatar.png" alt="" />
+									<span>
+										<strong>{chat.title}</strong>
+										<small>{chat.account_id} · {chat.chat_kind}</small>
+										<em>{chat.sync_state}</em>
+									</span>
+									<time>{formatDateTime(chat.last_message_at ?? chat.updated_at)}</time>
+								</button>
+							{/each}
+						{/if}
+					</section>
+
+					<section class="panel chat-pane telegram-chat-pane">
+						{#if selectedTelegramChat}
+							<header>
+								<span class="round-icon cyan"><Icon icon="tabler:brand-telegram" width="24" height="24" /></span>
+								<div><h2>{selectedTelegramChat.title}</h2><p>{selectedTelegramChat.account_id} · {selectedTelegramChat.provider_chat_id}</p></div>
+								<div class="chat-actions">
+									<button type="button" disabled title="1:1 audio call controls are backend-foundation only in this V4 slice"><Icon icon="tabler:phone" width="17" height="17" /></button>
+									<button type="button" disabled title="Video calls are V4.x"><Icon icon="tabler:video" width="17" height="17" /></button>
+									<button type="button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="17" height="17" /></button>
+								</div>
+							</header>
+							<div class="chat-body">
+								{#if selectedTelegramMessages.length === 0}
+									<div class="empty-panel fill">No messages for this chat.</div>
+								{:else}
+									{#each selectedTelegramMessages.slice().reverse() as message}
+										<article class="bubble" class:outbound={message.delivery_state === 'sent' || message.delivery_state === 'send_dry_run'} class:inbound={message.delivery_state !== 'sent' && message.delivery_state !== 'send_dry_run'}>
+											<strong>{message.sender_display_name ?? message.sender}</strong><br />
+											{message.text}
+											<time>{telegramMessageTime(message)}</time>
+										</article>
+									{/each}
+								{/if}
+							</div>
+							<form class="telegram-inline-form" onsubmit={(event) => { event.preventDefault(); void ingestTelegramMessageFixture(); }}>
+								<input bind:value={telegramMessageForm.provider_message_id} placeholder="Provider message ID" autocomplete="off" />
+								<input bind:value={telegramMessageForm.sender_display_name} placeholder="Sender" autocomplete="off" />
+								<input bind:value={telegramMessageForm.text} placeholder="Fixture message text" autocomplete="off" />
+								<button type="submit" disabled={isTelegramActionSubmitting || !telegramMessageForm.text.trim()}><Icon icon="tabler:send" width="17" height="17" />Ingest</button>
+							</form>
+						{:else}
+							<div class="empty-panel fill">Create a Telegram fixture account and ingest a message.</div>
+						{/if}
+					</section>
+
+					<aside class="stacked-rail telegram-rail">
+						<section class="panel info-card">
+							<h2>Account Setup</h2>
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void setupTelegramFixture(); }}>
+								<label><span>Account ID</span><input bind:value={telegramAccountForm.account_id} autocomplete="off" /></label>
+								<label><span>Provider</span><select bind:value={telegramAccountForm.provider_kind}><option value="telegram_user">User</option><option value="telegram_bot">Bot</option></select></label>
+								<label><span>Display name</span><input bind:value={telegramAccountForm.display_name} autocomplete="off" /></label>
+								<label><span>External ID</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="off" /></label>
+								<label class="wide"><span>TDLib data path</span><input bind:value={telegramAccountForm.tdlib_data_path} autocomplete="off" /></label>
+								<label class="checkbox-row"><input bind:checked={telegramAccountForm.transcription_enabled} type="checkbox" /><span>Transcription enabled</span></label>
+								<div class="form-actions"><button type="submit" disabled={isTelegramActionSubmitting}>Save Fixture</button></div>
+							</form>
+						</section>
+
+						<section class="panel info-card">
+							<h2>Runtime Guardrails</h2>
+							<div class="health-row"><span>Mode</span><strong>{v4Capabilities?.runtime_mode ?? 'unknown'}</strong></div>
+							{#if v4ClosureCapabilities.length}
+								<ul class="detail-list">
+									{#each v4ClosureCapabilities as capability}
+										<li>{capabilityLabel(capability.capability)}<em>{capability.status}</em></li>
+									{/each}
+								</ul>
+							{:else}
+								<p>Capability contract is not loaded yet.</p>
+							{/if}
+							{#if v4BlockedCapabilities.length}
+								<div class="evidence-row">
+									<strong>Blocked Live Runtime</strong>
+									<p>{v4BlockedCapabilities.map((capability) => capabilityLabel(capability.capability)).join(', ')}</p>
+								</div>
+							{/if}
+							{#if v4Capabilities?.unsupported_features.length}
+								<div class="evidence-row">
+									<strong>V4.x Scope</strong>
+									<p>{v4Capabilities.unsupported_features.map(capabilityLabel).join(', ')}</p>
+								</div>
+							{/if}
+						</section>
+
+						<section class="panel info-card">
+							<h2>Template</h2>
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveV4AutomationTemplate(); }}>
+								<label><span>Template ID</span><input bind:value={automationTemplateForm.template_id} autocomplete="off" /></label>
+								<label><span>Name</span><input bind:value={automationTemplateForm.name} autocomplete="off" /></label>
+								<label class="wide"><span>Body</span><textarea bind:value={automationTemplateForm.body_template} rows="3"></textarea></label>
+								<label class="wide"><span>Required variables</span><input bind:value={automationTemplateForm.required_variables_text} autocomplete="off" /></label>
+								<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>Save Template</button></div>
+							</form>
+							{#if automationTemplates.length}
+								<ul class="detail-list">
+									{#each automationTemplates.slice(0, 3) as template}
+										<li>{template.name}<em>{template.template_id}</em></li>
+									{/each}
+								</ul>
+							{/if}
+						</section>
+
+						<section class="panel info-card">
+							<h2>Policy</h2>
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveV4AutomationPolicy(); }}>
+								<label><span>Policy ID</span><input bind:value={automationPolicyForm.policy_id} autocomplete="off" /></label>
+								<label><span>Template ID</span><input bind:value={automationPolicyForm.template_id} autocomplete="off" /></label>
+								<label><span>Name</span><input bind:value={automationPolicyForm.name} autocomplete="off" /></label>
+								<label><span>Account ID</span><input bind:value={automationPolicyForm.account_id} autocomplete="off" /></label>
+								<label class="wide"><span>Allowed chat IDs</span><input bind:value={automationPolicyForm.allowed_chat_ids_text} autocomplete="off" /></label>
+								<label><span>Trigger</span><input bind:value={automationPolicyForm.trigger_kind} autocomplete="off" /></label>
+								<label><span>Max/hour</span><input bind:value={automationPolicyForm.max_sends_per_hour} type="number" min="1" max="100" /></label>
+								<label class="wide"><span>Quiet hours JSON</span><textarea bind:value={automationPolicyForm.quiet_hours_text} rows="2"></textarea></label>
+								<label class="wide"><span>Conditions JSON</span><textarea bind:value={automationPolicyForm.conditions_text} rows="2"></textarea></label>
+								<label class="checkbox-row"><input bind:checked={automationPolicyForm.enabled} type="checkbox" /><span>Enabled</span></label>
+								<div class="form-actions"><button type="submit" disabled={isTelegramActionSubmitting}>Save Policy</button></div>
+							</form>
+						</section>
+
+						<section class="panel info-card">
+							<h2>Dry Run</h2>
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void runTelegramAutomationDryRun(); }}>
+								<label><span>Policy ID</span><input bind:value={telegramSendForm.policy_id} autocomplete="off" /></label>
+								<label><span>Chat ID</span><input bind:value={telegramSendForm.provider_chat_id} autocomplete="off" /></label>
+								<label class="wide"><span>Variables JSON</span><textarea bind:value={telegramSendForm.variables_text} rows="3"></textarea></label>
+								<label class="wide"><span>Source context JSON</span><textarea bind:value={telegramSendForm.source_context_text} rows="2"></textarea></label>
+								<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>Run Dry-run</button></div>
+							</form>
+							{#if telegramSendDryRunResult}
+								<div class="evidence-row">
+									<strong>{telegramSendDryRunResult.status}</strong>
+									<p>{telegramSendDryRunResult.rendered_text}</p>
+									<small>{telegramSendDryRunResult.rendered_preview_hash}</small>
+								</div>
+							{/if}
+						</section>
+
+						<section class="panel info-card">
+							<h2>Calls</h2>
+							{#if telegramCalls.length}
+								{#each telegramCalls.slice(0, 4) as call}
+									<button type="button" class="collection-row as-button" class:active={selectedTelegramCall?.call_id === call.call_id} onclick={() => selectTelegramCall(call)}>
+										<span>{call.provider_chat_id}</span>
+										<em>{call.call_state}</em>
+									</button>
+								{/each}
+							{:else}
+								<p>No calls saved.</p>
+							{/if}
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveTelegramCallFixture(); }}>
+								<label><span>Call ID</span><input bind:value={telegramCallForm.call_id} autocomplete="off" /></label>
+								<label><span>Provider call ID</span><input bind:value={telegramCallForm.provider_call_id} autocomplete="off" /></label>
+								<label><span>Account ID</span><input bind:value={telegramCallForm.account_id} autocomplete="off" /></label>
+								<label><span>Chat ID</span><input bind:value={telegramCallForm.provider_chat_id} autocomplete="off" /></label>
+								<label><span>Direction</span><select bind:value={telegramCallForm.direction}><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select></label>
+								<label><span>State</span><select bind:value={telegramCallForm.call_state}><option value="ringing">Ringing</option><option value="active">Active</option><option value="ended">Ended</option><option value="missed">Missed</option><option value="declined">Declined</option><option value="failed">Failed</option></select></label>
+								<label class="wide"><span>Metadata JSON</span><textarea bind:value={telegramCallForm.metadata_text} rows="2"></textarea></label>
+								<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>Save Call</button></div>
+							</form>
+						</section>
+
+						<section class="panel info-card">
+							<h2>Transcript</h2>
+							{#if selectedTelegramCall}
+								<div class="health-row"><span>Selected call</span><strong>{selectedTelegramCall.call_id}</strong></div>
+							{/if}
+							{#if callTranscript}
+								<div class="evidence-row">
+									<strong>{callTranscript.transcript_status} · {callTranscript.stt_provider}</strong>
+									<p>{callTranscript.transcript_text}</p>
+								</div>
+							{:else}
+								<p>No transcript for selected call.</p>
+							{/if}
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveCallTranscriptFixtureFromUi(); }}>
+								<label><span>Transcript ID</span><input bind:value={transcriptForm.transcript_id} autocomplete="off" /></label>
+								<label><span>Audio ref</span><input bind:value={transcriptForm.source_audio_ref} autocomplete="off" /></label>
+								<label><span>Language</span><input bind:value={transcriptForm.language_code} autocomplete="off" /></label>
+								<label class="checkbox-row"><input bind:checked={transcriptForm.always_on_policy} type="checkbox" /><span>Always-on policy</span></label>
+								<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting || !selectedTelegramCallId}>Save Transcript</button></div>
+							</form>
+						</section>
+					</aside>
+				</div>
+			</section>
+		{:else if currentView === 'whatsapp'}
+			<section class="whatsapp-page communications-page">
+				<div class="view-header">
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-whatsapp" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<button type="button" class="primary-button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
+				</div>
+
+				<div class="metric-grid">
+					<article class="metric-card"><span>Sessions</span><strong>{whatsappSessions.length}</strong><small>{selectedWhatsappSession?.link_state ?? 'not linked'}</small></article>
+					<article class="metric-card"><span>Messages</span><strong>{whatsappMessages.length}</strong><small>Canonical WhatsApp Web records</small></article>
+					<article class="metric-card"><span>Runtime</span><strong>{v5Capabilities?.runtime_mode ?? 'unknown'}</strong><small>Fixture/manual foundation</small></article>
+					<article class="metric-card"><span>Blocked</span><strong>{v5BlockedCapabilities.length}</strong><small>Live runtime remains blocked</small></article>
+				</div>
+
+				{#if whatsappActionMessage}
+					<p class="setup-state success">{whatsappActionMessage}</p>
+				{/if}
+				{#if whatsappError}
+					<p class="inline-error">{whatsappError}</p>
+				{/if}
+
+				<div class="three-pane communications-grid whatsapp-grid">
+					<section class="panel conversation-list">
+						<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search WhatsApp sessions..." /></label>
+						{#if isWhatsappLoading && whatsappSessions.length === 0}
+							<div class="empty-panel">Loading WhatsApp Web state...</div>
+						{:else if whatsappSessions.length === 0}
+							<div class="empty-panel">No WhatsApp Web sessions saved yet.</div>
+						{:else}
+							{#each whatsappSessions as session}
+								<button type="button" class:active={selectedWhatsappSession?.session_id === session.session_id} onclick={() => selectWhatsappSession(session)}>
+									<span class="round-icon cyan"><Icon icon="tabler:brand-whatsapp" width="22" height="22" /></span>
+									<img src="/assets/hermes-reference-avatar.png" alt="" />
+									<span>
+										<strong>{session.device_name}</strong>
+										<small>{session.account_id} · {session.companion_runtime}</small>
+										<em>{session.link_state}</em>
+									</span>
+									<time>{formatDateTime(session.last_sync_at ?? session.updated_at)}</time>
+								</button>
+							{/each}
+						{/if}
+					</section>
+
+					<section class="panel chat-pane whatsapp-chat-pane">
+						{#if selectedWhatsappSession}
+							<header>
+								<span class="round-icon cyan"><Icon icon="tabler:brand-whatsapp" width="24" height="24" /></span>
+								<div><h2>{selectedWhatsappSession.device_name}</h2><p>{selectedWhatsappSession.account_id} · {selectedWhatsappSession.link_state}</p></div>
+								<div class="chat-actions">
+									<button type="button" disabled title="Live WhatsApp Web runtime is blocked in V5 foundation"><Icon icon="tabler:world" width="17" height="17" /></button>
+									<button type="button" disabled title="Outbound WhatsApp sends require a future policy and runtime contract"><Icon icon="tabler:send-off" width="17" height="17" /></button>
+									<button type="button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="17" height="17" /></button>
+								</div>
+							</header>
+							<div class="chat-body">
+								{#if selectedWhatsappMessages.length === 0}
+									<div class="empty-panel fill">No WhatsApp Web messages for this session.</div>
+								{:else}
+									{#each selectedWhatsappMessages.slice().reverse() as message}
+										<article class="bubble" class:outbound={message.delivery_state === 'sent' || message.delivery_state === 'send_dry_run'} class:inbound={message.delivery_state !== 'sent' && message.delivery_state !== 'send_dry_run'}>
+											<strong>{message.sender_display_name ?? message.sender}</strong><br />
+											{message.text}
+											<time>{whatsappMessageTime(message)}</time>
+										</article>
+									{/each}
+								{/if}
+							</div>
+							<form class="telegram-inline-form" onsubmit={(event) => { event.preventDefault(); void ingestWhatsappWebMessageFixture(); }}>
+								<input bind:value={whatsappMessageForm.provider_message_id} placeholder="Provider message ID" autocomplete="off" />
+								<input bind:value={whatsappMessageForm.sender_display_name} placeholder="Sender" autocomplete="off" />
+								<input bind:value={whatsappMessageForm.text} placeholder="Fixture message text" autocomplete="off" />
+								<button type="submit" disabled={isWhatsappActionSubmitting || !whatsappMessageForm.text.trim()}><Icon icon="tabler:send" width="17" height="17" />Ingest</button>
+							</form>
+						{:else}
+							<div class="empty-panel fill">Create a WhatsApp Web fixture account before ingesting messages.</div>
+						{/if}
+					</section>
+
+					<aside class="stacked-rail whatsapp-rail">
+						<section class="panel info-card">
+							<h2>Account Setup</h2>
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void setupWhatsappWebFixture(); }}>
+								<label><span>Account ID</span><input bind:value={whatsappAccountForm.account_id} autocomplete="off" /></label>
+								<label><span>Display name</span><input bind:value={whatsappAccountForm.display_name} autocomplete="off" /></label>
+								<label><span>External ID</span><input bind:value={whatsappAccountForm.external_account_id} autocomplete="off" /></label>
+								<label><span>Device name</span><input bind:value={whatsappAccountForm.device_name} autocomplete="off" /></label>
+								<label class="wide"><span>Local state path</span><input bind:value={whatsappAccountForm.local_state_path} autocomplete="off" /></label>
+								<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting}>Save Fixture</button></div>
+							</form>
+						</section>
+
+						<section class="panel info-card">
+							<h2>Runtime Guardrails</h2>
+							<div class="health-row"><span>Mode</span><strong>{v5Capabilities?.runtime_mode ?? 'unknown'}</strong></div>
+							{#if v5ClosureCapabilities.length}
+								<ul class="detail-list">
+									{#each v5ClosureCapabilities as capability}
+										<li>{capabilityLabel(capability.capability)}<em>{capability.status}</em></li>
+									{/each}
+								</ul>
+							{:else}
+								<p>Capability contract is not loaded yet.</p>
+							{/if}
+							{#if v5BlockedCapabilities.length}
+								<div class="evidence-row">
+									<strong>Live Scope</strong>
+									<p>{v5BlockedCapabilities.map((capability) => capabilityLabel(capability.capability)).join(', ')}</p>
+								</div>
+							{/if}
+							{#if v5Capabilities?.unsupported_features.length}
+								<div class="evidence-row">
+									<strong>Unsupported</strong>
+									<p>{v5Capabilities.unsupported_features.map(capabilityLabel).join(', ')}</p>
+								</div>
+							{/if}
+						</section>
+
+						<section class="panel info-card">
+							<h2>Fixture Message</h2>
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void ingestWhatsappWebMessageFixture(); }}>
+								<label><span>Account ID</span><input bind:value={whatsappMessageForm.account_id} autocomplete="off" /></label>
+								<label><span>Chat ID</span><input bind:value={whatsappMessageForm.provider_chat_id} autocomplete="off" /></label>
+								<label><span>Chat title</span><input bind:value={whatsappMessageForm.chat_title} autocomplete="off" /></label>
+								<label><span>Sender ID</span><input bind:value={whatsappMessageForm.sender_id} autocomplete="off" /></label>
+								<label><span>Sender</span><input bind:value={whatsappMessageForm.sender_display_name} autocomplete="off" /></label>
+								<label class="wide"><span>Text</span><textarea bind:value={whatsappMessageForm.text} rows="3"></textarea></label>
+								<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting || !whatsappMessageForm.text.trim()}>Ingest Fixture</button></div>
+							</form>
 						</section>
 					</aside>
 				</div>
@@ -5708,12 +6807,77 @@
 		font-weight: 600;
 	}
 
-	.setup-form input {
+	.setup-form input,
+	.setup-form select,
+	.setup-form textarea {
 		height: 38px;
 		border: 1px solid rgba(111, 205, 195, 0.18);
 		border-radius: 7px;
 		background: rgba(4, 21, 24, 0.76);
 		padding: 0 10px;
+	}
+
+	.setup-form textarea {
+		min-height: 74px;
+		padding: 9px 10px;
+		resize: vertical;
+	}
+
+	.setup-form select {
+		appearance: none;
+		color: #dffcf7;
+	}
+
+	.compact-form {
+		margin-top: 12px;
+	}
+
+	.telegram-grid,
+	.whatsapp-grid {
+		align-items: start;
+	}
+
+	.telegram-chat-pane,
+	.whatsapp-chat-pane {
+		min-height: 720px;
+	}
+
+	.telegram-inline-form {
+		display: grid;
+		grid-template-columns: minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(180px, 1.8fr) auto;
+		gap: 8px;
+		padding: 12px;
+		border-top: 1px solid rgba(111, 205, 195, 0.12);
+		background: rgba(2, 12, 16, 0.68);
+	}
+
+	.telegram-inline-form input {
+		min-width: 0;
+		height: 38px;
+		border: 1px solid rgba(111, 205, 195, 0.18);
+		border-radius: 7px;
+		background: rgba(4, 21, 24, 0.76);
+		padding: 0 10px;
+	}
+
+	.telegram-inline-form button {
+		height: 38px;
+		border-radius: 7px;
+		background: #25d8bd;
+		color: #02201f;
+		font-weight: 700;
+		padding: 0 14px;
+	}
+
+	.collection-row.as-button {
+		width: 100%;
+		border: 0;
+		text-align: left;
+	}
+
+	.collection-row.as-button.active {
+		background: rgba(38, 216, 189, 0.12);
+		color: #e9fffb;
 	}
 
 	.checkbox-row {

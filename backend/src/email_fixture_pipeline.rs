@@ -177,6 +177,9 @@ fn provider_config(provider_kind: EmailProviderKind) -> serde_json::Value {
         EmailProviderKind::Imap => {
             json!({"host": "localhost", "port": 993, "tls": true, "mailbox": "INBOX"})
         }
+        EmailProviderKind::TelegramUser
+        | EmailProviderKind::TelegramBot
+        | EmailProviderKind::WhatsappWeb => json!({}),
     }
 }
 

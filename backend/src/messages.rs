@@ -36,6 +36,11 @@ impl MessageProjectionStore {
                 m.body_text,
                 m.occurred_at,
                 m.projected_at,
+                m.channel_kind,
+                m.conversation_id,
+                m.sender_display_name,
+                m.delivery_state,
+                m.message_metadata,
                 count(a.attachment_id)::BIGINT AS attachment_count
             FROM communication_messages m
             LEFT JOIN communication_attachments a ON a.message_id = m.message_id
@@ -49,7 +54,12 @@ impl MessageProjectionStore {
                 m.recipients,
                 m.body_text,
                 m.occurred_at,
-                m.projected_at
+                m.projected_at,
+                m.channel_kind,
+                m.conversation_id,
+                m.sender_display_name,
+                m.delivery_state,
+                m.message_metadata
             ORDER BY
                 COALESCE(m.occurred_at, m.projected_at) DESC,
                 m.projected_at DESC,
@@ -84,7 +94,12 @@ impl MessageProjectionStore {
                 recipients,
                 body_text,
                 occurred_at,
-                projected_at
+                projected_at,
+                channel_kind,
+                conversation_id,
+                sender_display_name,
+                delivery_state,
+                message_metadata
             FROM communication_messages
             WHERE message_id = $1
             "#,
@@ -114,7 +129,12 @@ impl MessageProjectionStore {
                 sender,
                 recipients,
                 body_text,
-                occurred_at
+                occurred_at,
+                channel_kind,
+                conversation_id,
+                sender_display_name,
+                delivery_state,
+                message_metadata
             )
             SELECT
                 $1,
@@ -125,7 +145,12 @@ impl MessageProjectionStore {
                 $6,
                 $7,
                 $8,
-                $9
+                $9,
+                'email',
+                NULL,
+                $6,
+                'received',
+                '{}'::jsonb
             FROM communication_raw_records
             WHERE raw_record_id = $2
               AND account_id = $3
@@ -140,6 +165,11 @@ impl MessageProjectionStore {
                 recipients = EXCLUDED.recipients,
                 body_text = EXCLUDED.body_text,
                 occurred_at = EXCLUDED.occurred_at,
+                channel_kind = EXCLUDED.channel_kind,
+                conversation_id = EXCLUDED.conversation_id,
+                sender_display_name = EXCLUDED.sender_display_name,
+                delivery_state = EXCLUDED.delivery_state,
+                message_metadata = EXCLUDED.message_metadata,
                 projected_at = now()
             RETURNING
                 message_id,
@@ -151,7 +181,12 @@ impl MessageProjectionStore {
                 recipients,
                 body_text,
                 occurred_at,
-                projected_at
+                projected_at,
+                channel_kind,
+                conversation_id,
+                sender_display_name,
+                delivery_state,
+                message_metadata
             "#,
         )
         .bind(&canonical_message_id)
@@ -163,6 +198,110 @@ impl MessageProjectionStore {
         .bind(json!(message.recipients))
         .bind(&message.body_text)
         .bind(message.occurred_at)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let Some(row) = row else {
+            return Err(MessageProjectionError::RawRecordTupleMismatch {
+                raw_record_id: message.raw_record_id.clone(),
+                account_id: message.account_id.clone(),
+                provider_record_id: message.provider_record_id.clone(),
+            });
+        };
+
+        row_to_projected_message(row)
+    }
+
+    pub async fn upsert_channel_message(
+        &self,
+        message: &NewProjectedMessage,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        message.validate()?;
+
+        let row = sqlx::query(
+            r#"
+            INSERT INTO communication_messages (
+                message_id,
+                raw_record_id,
+                account_id,
+                provider_record_id,
+                subject,
+                sender,
+                recipients,
+                body_text,
+                occurred_at,
+                channel_kind,
+                conversation_id,
+                sender_display_name,
+                delivery_state,
+                message_metadata
+            )
+            SELECT
+                $1,
+                raw_record_id,
+                account_id,
+                provider_record_id,
+                $5,
+                $6,
+                $7,
+                $8,
+                $9,
+                $10,
+                $11,
+                $12,
+                $13,
+                $14
+            FROM communication_raw_records
+            WHERE raw_record_id = $2
+              AND account_id = $3
+              AND provider_record_id = $4
+            ON CONFLICT (account_id, provider_record_id)
+            DO UPDATE SET
+                message_id = EXCLUDED.message_id,
+                raw_record_id = EXCLUDED.raw_record_id,
+                subject = EXCLUDED.subject,
+                sender = EXCLUDED.sender,
+                recipients = EXCLUDED.recipients,
+                body_text = EXCLUDED.body_text,
+                occurred_at = EXCLUDED.occurred_at,
+                channel_kind = EXCLUDED.channel_kind,
+                conversation_id = EXCLUDED.conversation_id,
+                sender_display_name = EXCLUDED.sender_display_name,
+                delivery_state = EXCLUDED.delivery_state,
+                message_metadata = EXCLUDED.message_metadata,
+                projected_at = now()
+            RETURNING
+                message_id,
+                raw_record_id,
+                account_id,
+                provider_record_id,
+                subject,
+                sender,
+                recipients,
+                body_text,
+                occurred_at,
+                projected_at,
+                channel_kind,
+                conversation_id,
+                sender_display_name,
+                delivery_state,
+                message_metadata
+            "#,
+        )
+        .bind(&message.message_id)
+        .bind(&message.raw_record_id)
+        .bind(&message.account_id)
+        .bind(&message.provider_record_id)
+        .bind(&message.subject)
+        .bind(&message.sender)
+        .bind(json!(message.recipients))
+        .bind(&message.body_text)
+        .bind(message.occurred_at)
+        .bind(&message.channel_kind)
+        .bind(message.conversation_id.as_deref())
+        .bind(message.sender_display_name.as_deref())
+        .bind(&message.delivery_state)
+        .bind(&message.message_metadata)
         .fetch_optional(&self.pool)
         .await?;
 
@@ -189,16 +328,27 @@ pub struct NewProjectedMessage {
     pub recipients: Vec<String>,
     pub body_text: String,
     pub occurred_at: Option<DateTime<Utc>>,
+    pub channel_kind: String,
+    pub conversation_id: Option<String>,
+    pub sender_display_name: Option<String>,
+    pub delivery_state: String,
+    pub message_metadata: Value,
 }
 
 impl NewProjectedMessage {
     fn validate(&self) -> Result<(), MessageProjectionError> {
+        validate_non_empty("message_id", &self.message_id)?;
         validate_non_empty("raw_record_id", &self.raw_record_id)?;
         validate_non_empty("account_id", &self.account_id)?;
         validate_non_empty("provider_record_id", &self.provider_record_id)?;
         validate_non_empty("subject", &self.subject)?;
         validate_non_empty("sender", &self.sender)?;
         validate_non_empty("body_text", &self.body_text)?;
+        validate_non_empty("channel_kind", &self.channel_kind)?;
+        validate_non_empty("delivery_state", &self.delivery_state)?;
+        if !self.message_metadata.is_object() {
+            return Err(MessageProjectionError::InvalidMessageMetadata);
+        }
         for recipient in &self.recipients {
             validate_non_empty("to", recipient)?;
         }
@@ -219,6 +369,11 @@ pub struct ProjectedMessage {
     pub body_text: String,
     pub occurred_at: Option<DateTime<Utc>>,
     pub projected_at: DateTime<Utc>,
+    pub channel_kind: String,
+    pub conversation_id: Option<String>,
+    pub sender_display_name: Option<String>,
+    pub delivery_state: String,
+    pub message_metadata: Value,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -241,10 +396,15 @@ pub async fn project_raw_email_message(
         account_id: raw.account_id.clone(),
         provider_record_id: raw.provider_record_id.clone(),
         subject,
-        sender,
+        sender: sender.clone(),
         recipients,
         body_text,
         occurred_at: raw.occurred_at,
+        channel_kind: "email".to_owned(),
+        conversation_id: None,
+        sender_display_name: Some(sender.clone()),
+        delivery_state: "received".to_owned(),
+        message_metadata: json!({}),
     };
 
     store.upsert_message(&message).await
@@ -289,6 +449,11 @@ pub async fn project_parsed_raw_email_message(
         recipients: parsed.to.clone(),
         body_text: parsed.body_text.clone(),
         occurred_at: raw.occurred_at,
+        channel_kind: "email".to_owned(),
+        conversation_id: None,
+        sender_display_name: Some(parsed.from.clone()),
+        delivery_state: "received".to_owned(),
+        message_metadata: json!({}),
     };
 
     store.upsert_message(&message).await
@@ -316,6 +481,11 @@ fn row_to_projected_message(row: PgRow) -> Result<ProjectedMessage, MessageProje
         body_text: row.try_get("body_text")?,
         occurred_at: row.try_get("occurred_at")?,
         projected_at: row.try_get("projected_at")?,
+        channel_kind: row.try_get("channel_kind")?,
+        conversation_id: row.try_get("conversation_id")?,
+        sender_display_name: row.try_get("sender_display_name")?,
+        delivery_state: row.try_get("delivery_state")?,
+        message_metadata: row.try_get("message_metadata")?,
     })
 }
 
@@ -424,6 +594,9 @@ pub enum MessageProjectionError {
 
     #[error("stored communication message recipients must be a JSON array of strings")]
     InvalidStoredRecipients,
+
+    #[error("communication message metadata must be a JSON object")]
+    InvalidMessageMetadata,
 
     #[error("unsupported raw blob storage kind: {0}")]
     UnsupportedRawBlobStorageKind(String),

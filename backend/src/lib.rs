@@ -1,5 +1,7 @@
 pub mod ai;
 pub mod audit;
+pub mod automation;
+pub mod calls;
 pub mod communications;
 pub mod config;
 pub mod contact_identity;
@@ -29,6 +31,8 @@ pub mod secret_vault;
 pub mod secrets;
 pub mod storage;
 pub mod task_candidates;
+pub mod telegram;
+pub mod whatsapp;
 
 use std::collections::HashMap;
 use std::io;
@@ -52,6 +56,15 @@ use crate::ai::{
     AiMeetingPrepRequest, AiService, AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
 };
 use crate::audit::{ApiAuditError, ApiAuditLog, ApiAuditRecord, NewApiAuditRecord};
+use crate::automation::{
+    AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
+    NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
+};
+use crate::calls::{
+    CallDirection, CallError, CallIntelligenceStore, CallState, CallTranscript,
+    FixtureSpeechToTextProvider, NewCallTranscript, NewTelegramCall, SpeechToTextProvider,
+    TelegramCall, TranscriptStatus,
+};
 use crate::communications::{CommunicationIngestionStore, EmailProviderKind};
 use crate::config::AppConfig;
 use crate::contact_identity::{
@@ -89,6 +102,15 @@ use crate::storage::{
 use crate::task_candidates::{
     ActiveTask, TaskCandidate, TaskCandidateError, TaskCandidateReviewCommand,
     TaskCandidateReviewState, TaskCandidateStore,
+};
+use crate::telegram::{
+    NewTelegramMessage, TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat,
+    TelegramError, TelegramMessage, TelegramMessageIngestResult, TelegramStore,
+};
+use crate::whatsapp::{
+    NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
+    WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
+    WhatsappWebStore,
 };
 
 const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
@@ -180,6 +202,43 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             post(post_v3_ai_task_candidates_refresh),
         )
         .route("/api/v3/ai/meeting-prep", post(post_v3_ai_meeting_prep))
+        .route("/api/v4/capabilities", get(get_v4_capabilities))
+        .route("/api/v5/capabilities", get(get_v5_capabilities))
+        .route(
+            "/api/v4/telegram/accounts/fixture",
+            post(post_v4_telegram_fixture_account),
+        )
+        .route("/api/v4/telegram/chats", get(get_v4_telegram_chats))
+        .route(
+            "/api/v4/telegram/messages",
+            get(get_v4_telegram_messages).post(post_v4_telegram_fixture_message),
+        )
+        .route(
+            "/api/v4/policies/templates",
+            get(get_v4_policy_templates).post(post_v4_policy_template),
+        )
+        .route(
+            "/api/v4/policies",
+            get(get_v4_policies).post(post_v4_policy),
+        )
+        .route(
+            "/api/v4/policies/telegram-send/dry-run",
+            post(post_v4_telegram_send_dry_run),
+        )
+        .route("/api/v4/calls", get(get_v4_calls).post(post_v4_call))
+        .route(
+            "/api/v4/calls/{call_id}/transcript",
+            get(get_v4_call_transcript).post(post_v4_call_transcript_fixture),
+        )
+        .route(
+            "/api/v5/whatsapp/accounts/fixture",
+            post(post_v5_whatsapp_fixture_account),
+        )
+        .route("/api/v5/whatsapp/sessions", get(get_v5_whatsapp_sessions))
+        .route(
+            "/api/v5/whatsapp/messages",
+            get(get_v5_whatsapp_messages).post(post_v5_whatsapp_fixture_message),
+        )
         .route(
             "/api/v1/email-accounts/gmail/oauth/start",
             post(post_gmail_oauth_start),
@@ -966,6 +1025,286 @@ async fn post_v3_ai_meeting_prep(
     Ok(Json(response))
 }
 
+async fn get_v4_capabilities(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<V4CapabilitiesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(V4CapabilitiesResponse::current()))
+}
+
+async fn get_v5_capabilities(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<V5CapabilitiesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(V5CapabilitiesResponse::current()))
+}
+
+async fn post_v4_telegram_fixture_account(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<TelegramAccountSetupRequest>,
+) -> Result<Json<TelegramAccountSetupResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(
+        telegram_store(&state)?
+            .setup_fixture_account(&request)
+            .await?,
+    ))
+}
+
+async fn get_v4_telegram_chats(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<TelegramListQuery>,
+) -> Result<Json<TelegramChatListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let items = telegram_store(&state)?
+        .list_chats(query.account_id.as_deref(), query.limit.unwrap_or(50))
+        .await?;
+
+    Ok(Json(TelegramChatListResponse { items }))
+}
+
+async fn post_v4_telegram_fixture_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<NewTelegramMessage>,
+) -> Result<Json<TelegramMessageIngestResult>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(
+        telegram_store(&state)?
+            .ingest_fixture_message(&request)
+            .await?,
+    ))
+}
+
+async fn get_v4_telegram_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<TelegramListQuery>,
+) -> Result<Json<TelegramMessageListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let items = telegram_store(&state)?
+        .recent_messages(
+            query.account_id.as_deref(),
+            query.provider_chat_id.as_deref(),
+            query.limit.unwrap_or(50),
+        )
+        .await?;
+
+    Ok(Json(TelegramMessageListResponse { items }))
+}
+
+async fn post_v5_whatsapp_fixture_account(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<WhatsappWebAccountSetupRequest>,
+) -> Result<Json<WhatsappWebAccountSetupResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(
+        whatsapp_web_store(&state)?
+            .setup_fixture_account(&request)
+            .await?,
+    ))
+}
+
+async fn get_v5_whatsapp_sessions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<WhatsappWebListQuery>,
+) -> Result<Json<WhatsappWebSessionListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let items = whatsapp_web_store(&state)?
+        .list_sessions(query.account_id.as_deref(), query.limit.unwrap_or(50))
+        .await?;
+
+    Ok(Json(WhatsappWebSessionListResponse { items }))
+}
+
+async fn post_v5_whatsapp_fixture_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<NewWhatsappWebMessage>,
+) -> Result<Json<WhatsappWebMessageIngestResult>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(
+        whatsapp_web_store(&state)?
+            .ingest_fixture_message(&request)
+            .await?,
+    ))
+}
+
+async fn get_v5_whatsapp_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<WhatsappWebListQuery>,
+) -> Result<Json<WhatsappWebMessageListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let items = whatsapp_web_store(&state)?
+        .recent_messages(
+            query.account_id.as_deref(),
+            query.provider_chat_id.as_deref(),
+            query.limit.unwrap_or(50),
+        )
+        .await?;
+
+    Ok(Json(WhatsappWebMessageListResponse { items }))
+}
+
+async fn post_v4_policy_template(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<PolicyTemplateApiRequest>,
+) -> Result<Json<AutomationTemplate>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(
+        automation_store(&state)?
+            .upsert_template(&request.into_template())
+            .await?,
+    ))
+}
+
+async fn get_v4_policy_templates(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<PolicyTemplateListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let items = automation_store(&state)?.list_templates().await?;
+
+    Ok(Json(PolicyTemplateListResponse { items }))
+}
+
+async fn post_v4_policy(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<PolicyApiRequest>,
+) -> Result<Json<AutomationPolicy>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(
+        automation_store(&state)?
+            .upsert_policy(&request.into_policy())
+            .await?,
+    ))
+}
+
+async fn get_v4_policies(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<PolicyListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let items = automation_store(&state)?.list_policies().await?;
+
+    Ok(Json(PolicyListResponse { items }))
+}
+
+async fn post_v4_telegram_send_dry_run(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<TelegramSendDryRunRequest>,
+) -> Result<Json<TelegramSendDryRunResponse>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let response = automation_store(&state)?
+        .dry_run_send(&request, &actor.actor_id)
+        .await?;
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::automation_telegram_send_dry_run(
+            &actor.actor_id,
+            &response.outbound_message_id,
+            &response.policy_id,
+            &response.template_id,
+            &response.account_id,
+            &response.provider_chat_id,
+            &response.rendered_preview_hash,
+        ))
+        .await?;
+
+    Ok(Json(response))
+}
+
+async fn post_v4_call(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<CallApiRequest>,
+) -> Result<Json<TelegramCall>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+
+    Ok(Json(
+        call_intelligence_store(&state)?
+            .upsert_call(&request.into_call())
+            .await?,
+    ))
+}
+
+async fn get_v4_calls(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<TelegramListQuery>,
+) -> Result<Json<CallListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let items = call_intelligence_store(&state)?
+        .list_calls(query.account_id.as_deref(), query.limit.unwrap_or(50))
+        .await?;
+
+    Ok(Json(CallListResponse { items }))
+}
+
+async fn post_v4_call_transcript_fixture(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(call_id): Path<String>,
+    Json(request): Json<CallTranscriptFixtureApiRequest>,
+) -> Result<Json<CallTranscript>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let stt = FixtureSpeechToTextProvider;
+    let fixture = stt.transcribe_fixture(&request.source_audio_ref)?;
+    let transcript = NewCallTranscript {
+        transcript_id: request.transcript_id,
+        call_id,
+        account_id: request.account_id,
+        provider_chat_id: request.provider_chat_id,
+        transcript_status: TranscriptStatus::Succeeded,
+        stt_provider: stt.provider_name().to_owned(),
+        source_audio_ref: Some(request.source_audio_ref),
+        language_code: request.language_code,
+        transcript_text: fixture.text,
+        segments: fixture.segments,
+        provenance: json!({
+            "runtime": "fixture",
+            "source": "local_call_audio",
+            "always_on_policy": request.always_on_policy,
+        }),
+    };
+
+    Ok(Json(
+        call_intelligence_store(&state)?
+            .upsert_transcript(&transcript)
+            .await?,
+    ))
+}
+
+async fn get_v4_call_transcript(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(call_id): Path<String>,
+) -> Result<Json<CallTranscriptResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let transcript = call_intelligence_store(&state)?
+        .transcript_for_call(&call_id)
+        .await?;
+
+    Ok(Json(CallTranscriptResponse { transcript }))
+}
+
 fn event_store(state: &AppState) -> Result<EventStore, ApiError> {
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
@@ -1042,6 +1381,38 @@ fn ai_service(state: &AppState) -> Result<AiService, ApiError> {
         state.config.ollama_chat_model(),
         state.config.ollama_embed_model(),
     ))
+}
+
+fn telegram_store(state: &AppState) -> Result<TelegramStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(TelegramStore::new(pool.clone()))
+}
+
+fn whatsapp_web_store(state: &AppState) -> Result<WhatsappWebStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(WhatsappWebStore::new(pool.clone()))
+}
+
+fn automation_store(state: &AppState) -> Result<AutomationStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(AutomationStore::new(pool.clone()))
+}
+
+fn call_intelligence_store(state: &AppState) -> Result<CallIntelligenceStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+
+    Ok(CallIntelligenceStore::new(pool.clone()))
 }
 
 fn ollama_client(config: &AppConfig) -> Result<OllamaClient, ApiError> {
@@ -1283,6 +1654,11 @@ struct CommunicationMessageSummaryResponse {
     body_text_preview: String,
     occurred_at: Option<DateTime<Utc>>,
     projected_at: DateTime<Utc>,
+    channel_kind: String,
+    conversation_id: Option<String>,
+    sender_display_name: Option<String>,
+    delivery_state: String,
+    message_metadata: Value,
     attachment_count: i64,
 }
 
@@ -1299,6 +1675,11 @@ impl From<ProjectedMessageSummary> for CommunicationMessageSummaryResponse {
             body_text_preview: text_preview(&summary.message.body_text, 240),
             occurred_at: summary.message.occurred_at,
             projected_at: summary.message.projected_at,
+            channel_kind: summary.message.channel_kind,
+            conversation_id: summary.message.conversation_id,
+            sender_display_name: summary.message.sender_display_name,
+            delivery_state: summary.message.delivery_state,
+            message_metadata: summary.message.message_metadata,
             attachment_count: summary.attachment_count,
         }
     }
@@ -1322,6 +1703,11 @@ struct CommunicationMessageDetailItem {
     body_text: String,
     occurred_at: Option<DateTime<Utc>>,
     projected_at: DateTime<Utc>,
+    channel_kind: String,
+    conversation_id: Option<String>,
+    sender_display_name: Option<String>,
+    delivery_state: String,
+    message_metadata: Value,
 }
 
 impl From<ProjectedMessage> for CommunicationMessageDetailItem {
@@ -1337,6 +1723,11 @@ impl From<ProjectedMessage> for CommunicationMessageDetailItem {
             body_text: message.body_text,
             occurred_at: message.occurred_at,
             projected_at: message.projected_at,
+            channel_kind: message.channel_kind,
+            conversation_id: message.conversation_id,
+            sender_display_name: message.sender_display_name,
+            delivery_state: message.delivery_state,
+            message_metadata: message.message_metadata,
         }
     }
 }
@@ -1423,6 +1814,339 @@ struct AiRunsQuery {
 #[derive(Serialize)]
 struct AiRunListResponse {
     items: Vec<AiAgentRun>,
+}
+
+#[derive(Serialize)]
+struct V4CapabilitiesResponse {
+    version: &'static str,
+    runtime_mode: &'static str,
+    capabilities: Vec<V4CapabilityStatus>,
+    unsupported_features: Vec<&'static str>,
+}
+
+impl V4CapabilitiesResponse {
+    fn current() -> Self {
+        Self {
+            version: "v4",
+            runtime_mode: "fixture",
+            capabilities: vec![
+                V4CapabilityStatus::available(
+                    "telegram_fixture_runtime",
+                    "Fixture Telegram accounts, chats and message projection are available for CI and local smoke validation.",
+                    true,
+                ),
+                V4CapabilityStatus::blocked(
+                    "tdlib_live_runtime",
+                    "Live TDLib sessions require the native runtime adapter, account-scoped secret resolver and opt-in Telegram credentials.",
+                    false,
+                ),
+                V4CapabilityStatus::blocked(
+                    "telegram_bot_live_runtime",
+                    "Live bot sends require the Bot API runtime adapter and account-scoped bot token resolution.",
+                    false,
+                ),
+                V4CapabilityStatus::available(
+                    "automation_dry_run",
+                    "Policy/template validation and audited dry-run records are available.",
+                    true,
+                ),
+                V4CapabilityStatus::blocked(
+                    "automation_live_send",
+                    "Live automated sends remain blocked until a live Telegram runtime passes the same policy evaluator and audit contract.",
+                    false,
+                ),
+                V4CapabilityStatus::available(
+                    "call_state_and_transcript_storage",
+                    "1:1 call metadata and transcript artifact storage are available through fixture APIs.",
+                    true,
+                ),
+                V4CapabilityStatus::blocked(
+                    "desktop_audio_capture",
+                    "Desktop audio capture requires a visible recording runtime boundary and explicit platform permissions.",
+                    false,
+                ),
+                V4CapabilityStatus::available(
+                    "fixture_speech_to_text",
+                    "Fixture speech-to-text provider is available for deterministic tests.",
+                    true,
+                ),
+                V4CapabilityStatus::blocked(
+                    "whisper_rs_speech_to_text",
+                    "Real local transcription requires the whisper-rs provider adapter and local model configuration.",
+                    false,
+                ),
+            ],
+            unsupported_features: vec![
+                "video_calls",
+                "group_calls",
+                "screen_sharing",
+                "hidden_recording",
+                "telegram_data_fine_tuning",
+                "third_party_plugin_execution",
+            ],
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct V4CapabilityStatus {
+    capability: &'static str,
+    status: &'static str,
+    closure_gate: bool,
+    reason: &'static str,
+}
+
+impl V4CapabilityStatus {
+    fn available(capability: &'static str, reason: &'static str, closure_gate: bool) -> Self {
+        Self {
+            capability,
+            status: "available",
+            closure_gate,
+            reason,
+        }
+    }
+
+    fn blocked(capability: &'static str, reason: &'static str, closure_gate: bool) -> Self {
+        Self {
+            capability,
+            status: "blocked",
+            closure_gate,
+            reason,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct V5CapabilitiesResponse {
+    version: &'static str,
+    runtime_mode: &'static str,
+    capabilities: Vec<V5CapabilityStatus>,
+    unsupported_features: Vec<&'static str>,
+}
+
+impl V5CapabilitiesResponse {
+    fn current() -> Self {
+        Self {
+            version: "v5",
+            runtime_mode: "fixture",
+            capabilities: vec![
+                V5CapabilityStatus::available(
+                    "whatsapp_web_fixture_runtime",
+                    "Fixture WhatsApp Web accounts, session metadata and message projection are available for CI and local smoke validation.",
+                    true,
+                ),
+                V5CapabilityStatus::available(
+                    "whatsapp_web_manual_session_state",
+                    "Manual companion session metadata is stored without session secrets or pairing material in PostgreSQL.",
+                    true,
+                ),
+                V5CapabilityStatus::available(
+                    "whatsapp_web_fixture_ingestion",
+                    "Fixture WhatsApp Web messages preserve append-only raw provenance and project into canonical communication messages.",
+                    true,
+                ),
+                V5CapabilityStatus::blocked(
+                    "whatsapp_web_live_runtime",
+                    "Live WhatsApp Web requires a user-visible desktop runtime, explicit session lifecycle and smoke validation.",
+                    false,
+                ),
+                V5CapabilityStatus::blocked(
+                    "whatsapp_web_live_send",
+                    "Live outbound sends require a WhatsApp-specific policy, audit and visible runtime contract.",
+                    false,
+                ),
+            ],
+            unsupported_features: vec![
+                "hidden_web_scraping",
+                "reverse_engineered_protocol_runtime",
+                "bulk_messaging",
+                "auto_messaging",
+                "auto_dialing",
+                "whatsapp_data_fine_tuning",
+                "whatsapp_business_cloud_as_personal_provider",
+            ],
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct V5CapabilityStatus {
+    capability: &'static str,
+    status: &'static str,
+    closure_gate: bool,
+    reason: &'static str,
+}
+
+impl V5CapabilityStatus {
+    fn available(capability: &'static str, reason: &'static str, closure_gate: bool) -> Self {
+        Self {
+            capability,
+            status: "available",
+            closure_gate,
+            reason,
+        }
+    }
+
+    fn blocked(capability: &'static str, reason: &'static str, closure_gate: bool) -> Self {
+        Self {
+            capability,
+            status: "blocked",
+            closure_gate,
+            reason,
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct TelegramListQuery {
+    account_id: Option<String>,
+    provider_chat_id: Option<String>,
+    limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct TelegramChatListResponse {
+    items: Vec<TelegramChat>,
+}
+
+#[derive(Serialize)]
+struct TelegramMessageListResponse {
+    items: Vec<TelegramMessage>,
+}
+
+#[derive(Deserialize)]
+struct WhatsappWebListQuery {
+    account_id: Option<String>,
+    provider_chat_id: Option<String>,
+    limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct WhatsappWebSessionListResponse {
+    items: Vec<WhatsappWebSession>,
+}
+
+#[derive(Serialize)]
+struct WhatsappWebMessageListResponse {
+    items: Vec<WhatsappWebMessage>,
+}
+
+#[derive(Deserialize)]
+struct PolicyTemplateApiRequest {
+    template_id: String,
+    name: String,
+    body_template: String,
+    #[serde(default)]
+    required_variables: Vec<String>,
+}
+
+impl PolicyTemplateApiRequest {
+    fn into_template(self) -> NewAutomationTemplate {
+        NewAutomationTemplate {
+            template_id: self.template_id,
+            name: self.name,
+            body_template: self.body_template,
+            required_variables: self.required_variables,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct PolicyTemplateListResponse {
+    items: Vec<AutomationTemplate>,
+}
+
+#[derive(Deserialize)]
+struct PolicyApiRequest {
+    policy_id: String,
+    template_id: String,
+    name: String,
+    enabled: bool,
+    account_id: String,
+    allowed_chat_ids: Vec<String>,
+    trigger_kind: String,
+    max_sends_per_hour: i32,
+    #[serde(default = "empty_json_object")]
+    quiet_hours: Value,
+    expires_at: Option<DateTime<Utc>>,
+    #[serde(default = "empty_json_object")]
+    conditions: Value,
+}
+
+impl PolicyApiRequest {
+    fn into_policy(self) -> NewAutomationPolicy {
+        NewAutomationPolicy {
+            policy_id: self.policy_id,
+            template_id: self.template_id,
+            name: self.name,
+            enabled: self.enabled,
+            account_id: self.account_id,
+            allowed_chat_ids: self.allowed_chat_ids,
+            trigger_kind: self.trigger_kind,
+            max_sends_per_hour: self.max_sends_per_hour,
+            quiet_hours: self.quiet_hours,
+            expires_at: self.expires_at,
+            conditions: self.conditions,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct PolicyListResponse {
+    items: Vec<AutomationPolicy>,
+}
+
+#[derive(Deserialize)]
+struct CallApiRequest {
+    call_id: String,
+    account_id: String,
+    provider_call_id: String,
+    provider_chat_id: String,
+    direction: CallDirection,
+    call_state: CallState,
+    started_at: Option<DateTime<Utc>>,
+    ended_at: Option<DateTime<Utc>>,
+    transcription_policy_id: Option<String>,
+    #[serde(default = "empty_json_object")]
+    metadata: Value,
+}
+
+impl CallApiRequest {
+    fn into_call(self) -> NewTelegramCall {
+        NewTelegramCall {
+            call_id: self.call_id,
+            account_id: self.account_id,
+            provider_call_id: self.provider_call_id,
+            provider_chat_id: self.provider_chat_id,
+            direction: self.direction,
+            call_state: self.call_state,
+            started_at: self.started_at,
+            ended_at: self.ended_at,
+            transcription_policy_id: self.transcription_policy_id,
+            metadata: self.metadata,
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct CallListResponse {
+    items: Vec<TelegramCall>,
+}
+
+#[derive(Deserialize)]
+struct CallTranscriptFixtureApiRequest {
+    transcript_id: String,
+    account_id: String,
+    provider_chat_id: String,
+    source_audio_ref: String,
+    language_code: Option<String>,
+    #[serde(default)]
+    always_on_policy: bool,
+}
+
+#[derive(Serialize)]
+struct CallTranscriptResponse {
+    transcript: Option<CallTranscript>,
 }
 
 #[derive(Serialize)]
@@ -2009,6 +2733,10 @@ enum ApiError {
     TaskCandidate(TaskCandidateError),
     AiRunNotFound,
     Ai(AiError),
+    Telegram(TelegramError),
+    WhatsappWeb(WhatsappWebError),
+    Automation(AutomationError),
+    Call(CallError),
     ProjectLinkTargetNotFound,
     ProjectLinkReview(ProjectLinkReviewError),
     ContactIdentityNotFound,
@@ -2279,6 +3007,140 @@ impl axum::response::IntoResponse for ApiError {
                     )
                 }
             },
+            Self::Telegram(error) => match error {
+                TelegramError::InvalidRequest(message) => (
+                    StatusCode::BAD_REQUEST,
+                    "invalid_telegram_request",
+                    message,
+                    false,
+                ),
+                TelegramError::Communication(error) => {
+                    tracing::error!(error = %error, "Telegram communication store operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "telegram_store_error",
+                        "Telegram store operation failed".to_owned(),
+                        false,
+                    )
+                }
+                TelegramError::MessageProjection(error) => {
+                    tracing::error!(error = %error, "Telegram message projection failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "telegram_projection_error",
+                        "Telegram message projection failed".to_owned(),
+                        false,
+                    )
+                }
+                TelegramError::Sqlx(error) => {
+                    tracing::error!(error = %error, "Telegram database operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "telegram_store_error",
+                        "Telegram store operation failed".to_owned(),
+                        false,
+                    )
+                }
+            },
+            Self::WhatsappWeb(error) => match error {
+                WhatsappWebError::InvalidRequest(message) => (
+                    StatusCode::BAD_REQUEST,
+                    "invalid_whatsapp_web_request",
+                    message,
+                    false,
+                ),
+                WhatsappWebError::Communication(error) => {
+                    tracing::error!(error = %error, "WhatsApp Web communication store operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "whatsapp_web_store_error",
+                        "WhatsApp Web store operation failed".to_owned(),
+                        false,
+                    )
+                }
+                WhatsappWebError::MessageProjection(error) => {
+                    tracing::error!(error = %error, "WhatsApp Web message projection failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "whatsapp_web_projection_error",
+                        "WhatsApp Web message projection failed".to_owned(),
+                        false,
+                    )
+                }
+                WhatsappWebError::Sqlx(error) => {
+                    tracing::error!(error = %error, "WhatsApp Web database operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "whatsapp_web_store_error",
+                        "WhatsApp Web store operation failed".to_owned(),
+                        false,
+                    )
+                }
+            },
+            Self::Automation(error) => match error {
+                AutomationError::InvalidRequest(message) => (
+                    StatusCode::BAD_REQUEST,
+                    "invalid_automation_request",
+                    message,
+                    false,
+                ),
+                AutomationError::PolicyNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "automation_policy_not_found",
+                    "automation policy was not found".to_owned(),
+                    false,
+                ),
+                AutomationError::PolicyDisabled
+                | AutomationError::ChatNotAllowed
+                | AutomationError::MissingTemplateVariable(_)
+                | AutomationError::UndeclaredTemplateVariable(_) => (
+                    StatusCode::FORBIDDEN,
+                    "automation_policy_denied",
+                    error.to_string(),
+                    false,
+                ),
+                AutomationError::EventEnvelope(error) => (
+                    StatusCode::BAD_REQUEST,
+                    "invalid_automation_event",
+                    error.to_string(),
+                    false,
+                ),
+                AutomationError::EventStore(error) => {
+                    tracing::error!(error = %error, "automation event store operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "automation_store_error",
+                        "automation operation failed".to_owned(),
+                        false,
+                    )
+                }
+                AutomationError::Sqlx(error) => {
+                    tracing::error!(error = %error, "automation database operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "automation_store_error",
+                        "automation operation failed".to_owned(),
+                        false,
+                    )
+                }
+            },
+            Self::Call(error) => match error {
+                CallError::InvalidRequest(message) => (
+                    StatusCode::BAD_REQUEST,
+                    "invalid_call_request",
+                    message,
+                    false,
+                ),
+                CallError::Sqlx(error) => {
+                    tracing::error!(error = %error, "call intelligence database operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "call_store_error",
+                        "call intelligence operation failed".to_owned(),
+                        false,
+                    )
+                }
+            },
             Self::ProjectLinkTargetNotFound => (
                 StatusCode::NOT_FOUND,
                 "project_link_target_not_found",
@@ -2456,6 +3318,30 @@ impl From<AiError> for ApiError {
             AiError::RunNotFound => Self::AiRunNotFound,
             _ => Self::Ai(error),
         }
+    }
+}
+
+impl From<TelegramError> for ApiError {
+    fn from(error: TelegramError) -> Self {
+        Self::Telegram(error)
+    }
+}
+
+impl From<WhatsappWebError> for ApiError {
+    fn from(error: WhatsappWebError) -> Self {
+        Self::WhatsappWeb(error)
+    }
+}
+
+impl From<AutomationError> for ApiError {
+    fn from(error: AutomationError) -> Self {
+        Self::Automation(error)
+    }
+}
+
+impl From<CallError> for ApiError {
+    fn from(error: CallError) -> Self {
+        Self::Call(error)
     }
 }
 

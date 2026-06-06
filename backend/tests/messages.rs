@@ -332,6 +332,11 @@ async fn message_projection_derives_message_id_for_direct_upsert_against_postgre
         recipients: vec!["bob@example.com".to_owned()],
         body_text: "Direct identity body".to_owned(),
         occurred_at: raw.occurred_at,
+        channel_kind: "email".to_owned(),
+        conversation_id: None,
+        sender_display_name: Some("alice@example.com".to_owned()),
+        delivery_state: "received".to_owned(),
+        message_metadata: json!({}),
     };
 
     let projected = message_store
@@ -397,6 +402,11 @@ async fn message_projection_rejects_direct_upsert_with_mismatched_raw_tuple_agai
         recipients: vec!["bob@example.com".to_owned()],
         body_text: "Raw tuple body".to_owned(),
         occurred_at: raw.occurred_at,
+        channel_kind: "email".to_owned(),
+        conversation_id: None,
+        sender_display_name: Some("alice@example.com".to_owned()),
+        delivery_state: "received".to_owned(),
+        message_metadata: json!({}),
     };
 
     let error = message_store

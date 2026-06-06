@@ -396,23 +396,43 @@ pub struct ProviderCredential {
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum EmailProviderKind {
+pub enum CommunicationProviderKind {
     Gmail,
     Icloud,
     Imap,
+    TelegramUser,
+    TelegramBot,
+    WhatsappWeb,
 }
 
-impl EmailProviderKind {
+pub type EmailProviderKind = CommunicationProviderKind;
+
+impl CommunicationProviderKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Gmail => "gmail",
             Self::Icloud => "icloud",
             Self::Imap => "imap",
+            Self::TelegramUser => "telegram_user",
+            Self::TelegramBot => "telegram_bot",
+            Self::WhatsappWeb => "whatsapp_web",
         }
+    }
+
+    pub fn is_email(self) -> bool {
+        matches!(self, Self::Gmail | Self::Icloud | Self::Imap)
+    }
+
+    pub fn is_telegram(self) -> bool {
+        matches!(self, Self::TelegramUser | Self::TelegramBot)
+    }
+
+    pub fn is_whatsapp(self) -> bool {
+        matches!(self, Self::WhatsappWeb)
     }
 }
 
-impl TryFrom<&str> for EmailProviderKind {
+impl TryFrom<&str> for CommunicationProviderKind {
     type Error = CommunicationIngestionError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
@@ -420,6 +440,9 @@ impl TryFrom<&str> for EmailProviderKind {
             "gmail" => Ok(Self::Gmail),
             "icloud" => Ok(Self::Icloud),
             "imap" => Ok(Self::Imap),
+            "telegram_user" => Ok(Self::TelegramUser),
+            "telegram_bot" => Ok(Self::TelegramBot),
+            "whatsapp_web" => Ok(Self::WhatsappWeb),
             other => Err(CommunicationIngestionError::UnsupportedProviderKind(
                 other.to_owned(),
             )),
@@ -430,7 +453,7 @@ impl TryFrom<&str> for EmailProviderKind {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct ProviderAccount {
     pub account_id: String,
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub display_name: String,
     pub external_account_id: String,
     pub config: Value,
@@ -441,7 +464,7 @@ pub struct ProviderAccount {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewProviderAccount {
     pub account_id: String,
-    pub provider_kind: EmailProviderKind,
+    pub provider_kind: CommunicationProviderKind,
     pub display_name: String,
     pub external_account_id: String,
     pub config: Value,
@@ -450,7 +473,7 @@ pub struct NewProviderAccount {
 impl NewProviderAccount {
     pub fn new(
         account_id: impl Into<String>,
-        provider_kind: EmailProviderKind,
+        provider_kind: CommunicationProviderKind,
         display_name: impl Into<String>,
         external_account_id: impl Into<String>,
     ) -> Self {
@@ -589,6 +612,10 @@ pub enum ProviderAccountSecretPurpose {
     OauthToken,
     ImapPassword,
     SmtpPassword,
+    TelegramApiHash,
+    TelegramSessionKey,
+    TelegramBotToken,
+    WhatsappWebSessionKey,
 }
 
 impl ProviderAccountSecretPurpose {
@@ -597,6 +624,10 @@ impl ProviderAccountSecretPurpose {
             Self::OauthToken => "oauth_token",
             Self::ImapPassword => "imap_password",
             Self::SmtpPassword => "smtp_password",
+            Self::TelegramApiHash => "telegram_api_hash",
+            Self::TelegramSessionKey => "telegram_session_key",
+            Self::TelegramBotToken => "telegram_bot_token",
+            Self::WhatsappWebSessionKey => "whatsapp_web_session_key",
         }
     }
 
@@ -605,6 +636,13 @@ impl ProviderAccountSecretPurpose {
             Self::OauthToken => secret_kind == SecretKind::OauthToken,
             Self::ImapPassword | Self::SmtpPassword => {
                 matches!(secret_kind, SecretKind::AppPassword | SecretKind::Password)
+            }
+            Self::TelegramApiHash | Self::TelegramBotToken => secret_kind == SecretKind::ApiToken,
+            Self::TelegramSessionKey => {
+                matches!(secret_kind, SecretKind::PrivateKey | SecretKind::Other)
+            }
+            Self::WhatsappWebSessionKey => {
+                matches!(secret_kind, SecretKind::PrivateKey | SecretKind::Other)
             }
         }
     }
@@ -618,6 +656,10 @@ impl TryFrom<&str> for ProviderAccountSecretPurpose {
             "oauth_token" => Ok(Self::OauthToken),
             "imap_password" => Ok(Self::ImapPassword),
             "smtp_password" => Ok(Self::SmtpPassword),
+            "telegram_api_hash" => Ok(Self::TelegramApiHash),
+            "telegram_session_key" => Ok(Self::TelegramSessionKey),
+            "telegram_bot_token" => Ok(Self::TelegramBotToken),
+            "whatsapp_web_session_key" => Ok(Self::WhatsappWebSessionKey),
             other => Err(CommunicationIngestionError::UnsupportedSecretPurpose(
                 other.to_owned(),
             )),
@@ -662,7 +704,7 @@ impl NewProviderAccountSecretBinding {
 
 fn row_to_provider_account(row: PgRow) -> Result<ProviderAccount, CommunicationIngestionError> {
     let provider_kind =
-        EmailProviderKind::try_from(row.try_get::<String, _>("provider_kind")?.as_str())?;
+        CommunicationProviderKind::try_from(row.try_get::<String, _>("provider_kind")?.as_str())?;
 
     Ok(ProviderAccount {
         account_id: row.try_get("account_id")?,
@@ -744,7 +786,7 @@ pub enum CommunicationIngestionError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 
-    #[error("unsupported email provider kind: {0}")]
+    #[error("unsupported communication provider kind: {0}")]
     UnsupportedProviderKind(String),
 
     #[error("unsupported provider account secret purpose: {0}")]

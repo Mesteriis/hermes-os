@@ -184,6 +184,10 @@ Dependencies:
 - capability sandbox design
 - backup encryption model
 
+Closure tracking:
+
+- [V4 Closure Checklist](v4-closure-checklist.md)
+
 ## Version 5.0 - Long-Term Personal Knowledge OS
 
 Goals:
@@ -194,7 +198,8 @@ Goals:
 
 Key functions:
 
-- WhatsApp integration
+- WhatsApp Web companion integration
+- optional WhatsApp Business Platform provider research
 - optional SMS integration
 - cross-year analytics
 - decision history
@@ -220,5 +225,10 @@ Risks:
 Dependencies:
 
 - production-scale datasets
+- WhatsApp Web companion runtime validation
 - search and graph benchmarking
 - long-term backup/restore testing
+
+Closure tracking:
+
+- [V5 Closure Checklist](v5-closure-checklist.md)

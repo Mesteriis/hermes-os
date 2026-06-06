@@ -4,7 +4,7 @@
 
 - Which email access mode should be first: IMAP/SMTP, Gmail API or provider-specific OAuth?
 - What Telegram API constraints affect long-term archival and sending?
-- What is the reliable WhatsApp integration path for a local-first personal product? (V5)
+- What is the reliable WhatsApp integration path for a local-first personal product? Answered for V5 foundation by ADR-0051: use a user-visible `whatsapp_web` companion boundary; keep WhatsApp Business Platform Cloud API as a separate future provider shape.
 - How should SMS be handled on desktop without unsafe phone bridge assumptions? (V5)
 
 ## Storage

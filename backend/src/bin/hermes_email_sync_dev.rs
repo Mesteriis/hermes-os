@@ -130,7 +130,10 @@ impl DevEmailSyncConfig {
                 .unwrap_or_else(|| "icloud".to_owned())
                 .as_str(),
         )?;
-        if provider_kind == EmailProviderKind::Gmail {
+        if !matches!(
+            provider_kind,
+            EmailProviderKind::Icloud | EmailProviderKind::Imap
+        ) {
             return Err(DevEmailSyncConfigError::UnsupportedProviderForDevSync);
         }
 
@@ -201,7 +204,10 @@ fn default_host(provider_kind: EmailProviderKind) -> &'static str {
     match provider_kind {
         EmailProviderKind::Icloud => DEFAULT_ICLOUD_IMAP_HOST,
         EmailProviderKind::Imap => "localhost",
-        EmailProviderKind::Gmail => "",
+        EmailProviderKind::Gmail
+        | EmailProviderKind::TelegramUser
+        | EmailProviderKind::TelegramBot
+        | EmailProviderKind::WhatsappWeb => "",
     }
 }
 

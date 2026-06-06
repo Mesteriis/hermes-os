@@ -107,6 +107,12 @@ pub fn plan_email_sync(account: &ProviderAccount) -> Result<EmailSyncPlan, Email
                 },
             })
         }
+        EmailProviderKind::TelegramUser
+        | EmailProviderKind::TelegramBot
+        | EmailProviderKind::WhatsappWeb => Err(EmailSyncPlanError::InvalidProviderConfig {
+            field: "provider_kind",
+            message: "email sync supports only gmail, icloud or imap",
+        }),
     }
 }
 
@@ -430,6 +436,11 @@ fn raw_message_bytes(
                 }
             })
         }
+        EmailProviderKind::TelegramUser
+        | EmailProviderKind::TelegramBot
+        | EmailProviderKind::WhatsappWeb => Err(EmailSyncRecordError::UnsupportedProviderKind(
+            provider_kind.as_str().to_owned(),
+        )),
     }
 }
 
@@ -497,4 +508,7 @@ pub enum EmailSyncRecordError {
         #[source]
         source: base64::DecodeError,
     },
+
+    #[error("email sync does not support provider kind: {0}")]
+    UnsupportedProviderKind(String),
 }

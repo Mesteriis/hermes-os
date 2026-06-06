@@ -1,7 +1,7 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config validate dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-check frontend-build frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-v2-workflow-smoke-dev backend-ai-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
+.PHONY: help docker-env compose-config validate dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-check frontend-build frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-v2-workflow-smoke-dev backend-ai-smoke-dev backend-v4-smoke-dev backend-v5-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
@@ -49,6 +49,8 @@ help:
 	@printf '%s\n' '  make backend-graph-smoke-dev Run graph store/projection/API smoke tests with dev PostgreSQL'
 	@printf '%s\n' '  make backend-v2-workflow-smoke-dev Run V2 workflow smoke tests with dev PostgreSQL'
 	@printf '%s\n' '  make backend-ai-smoke-dev Run live Ollama AI smoke test'
+	@printf '%s\n' '  make backend-v4-smoke-dev Run V4 Telegram/policy/call fixture smoke test with dev PostgreSQL'
+	@printf '%s\n' '  make backend-v5-smoke-dev Run V5 WhatsApp Web fixture smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-graph-project-dev Project current dev V1 data into V2 graph tables'
 	@printf '%s\n' '  make backend-document-processing-dev Run queued document processing jobs with dev PostgreSQL'
 	@printf '%s\n' '  make backend-search-smoke-dev Run Tantivy search boundary smoke test'
@@ -114,7 +116,7 @@ docker-env:
 compose-config: docker-env
 	$(COMPOSE) config
 
-validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-v2-workflow-smoke-dev backend-ai-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev frontend-check frontend-build
+validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-v2-workflow-smoke-dev backend-ai-smoke-dev backend-v4-smoke-dev backend-v5-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev frontend-check frontend-build
 
 dev: docker-env
 	@set -eu; \
@@ -541,6 +543,28 @@ backend-ai-smoke-dev: docker-env
 		HERMES_OLLAMA_EMBED_MODEL="$${HERMES_OLLAMA_EMBED_MODEL:-qwen3-embedding:4b}" \
 		HERMES_OLLAMA_TIMEOUT_SECONDS="$${HERMES_OLLAMA_TIMEOUT_SECONDS:-120}" \
 		cargo test --manifest-path $(BACKEND_MANIFEST) --test ai --test ai_smoke -- --nocapture --test-threads=1
+
+backend-v4-smoke-dev: docker-env
+	@set -eu; \
+		cleanup() { \
+			$(MAKE) db-down >/dev/null 2>&1 || true; \
+		}; \
+		trap cleanup EXIT; \
+		$(MAKE) db-up; \
+		set -a; . docker/.env; set +a; \
+		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
+		cargo test --manifest-path $(BACKEND_MANIFEST) --test v4 -- --nocapture --test-threads=1
+
+backend-v5-smoke-dev: docker-env
+	@set -eu; \
+		cleanup() { \
+			$(MAKE) db-down >/dev/null 2>&1 || true; \
+		}; \
+		trap cleanup EXIT; \
+		$(MAKE) db-up; \
+		set -a; . docker/.env; set +a; \
+		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
+		cargo test --manifest-path $(BACKEND_MANIFEST) --test v5 -- --nocapture --test-threads=1
 
 backend-graph-project-dev: docker-env
 	@set -eu; \

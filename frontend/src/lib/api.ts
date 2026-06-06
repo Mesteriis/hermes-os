@@ -20,6 +20,11 @@ export type CommunicationMessageSummary = {
 	body_text_preview: string;
 	occurred_at: string | null;
 	projected_at: string;
+	channel_kind: string;
+	conversation_id: string | null;
+	sender_display_name: string | null;
+	delivery_state: string;
+	message_metadata: Record<string, unknown>;
 	attachment_count: number;
 };
 
@@ -34,6 +39,11 @@ export type CommunicationMessageDetailItem = {
 	body_text: string;
 	occurred_at: string | null;
 	projected_at: string;
+	channel_kind: string;
+	conversation_id: string | null;
+	sender_display_name: string | null;
+	delivery_state: string;
+	message_metadata: Record<string, unknown>;
 };
 
 export type CommunicationAttachment = {
@@ -437,6 +447,319 @@ export type AiMeetingPrepResponse = {
 	duration_ms: number;
 };
 
+export type TelegramProviderKind = 'telegram_user' | 'telegram_bot';
+
+export type TelegramAccountSetupRequest = {
+	account_id: string;
+	provider_kind: TelegramProviderKind;
+	display_name: string;
+	external_account_id: string;
+	tdlib_data_path?: string;
+	transcription_enabled: boolean;
+};
+
+export type TelegramAccountSetupResponse = {
+	account_id: string;
+	provider_kind: TelegramProviderKind;
+	runtime: string;
+	transcription_enabled: boolean;
+};
+
+export type V4CapabilityStatus = {
+	capability: string;
+	status: 'available' | 'blocked' | string;
+	closure_gate: boolean;
+	reason: string;
+};
+
+export type V4CapabilitiesResponse = {
+	version: string;
+	runtime_mode: string;
+	capabilities: V4CapabilityStatus[];
+	unsupported_features: string[];
+};
+
+export type WhatsappWebProviderKind = 'whatsapp_web';
+
+export type V5CapabilityStatus = {
+	capability: string;
+	status: 'available' | 'blocked' | string;
+	closure_gate: boolean;
+	reason: string;
+};
+
+export type V5CapabilitiesResponse = {
+	version: string;
+	runtime_mode: string;
+	capabilities: V5CapabilityStatus[];
+	unsupported_features: string[];
+};
+
+export type WhatsappWebSession = {
+	session_id: string;
+	account_id: string;
+	device_name: string;
+	companion_runtime: 'fixture' | 'manual_webview' | 'blocked';
+	link_state: 'fixture' | 'qr_pending' | 'linked' | 'degraded' | 'revoked' | 'blocked';
+	local_state_path: string;
+	last_sync_at: string | null;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type WhatsappWebSessionListResponse = {
+	items: WhatsappWebSession[];
+};
+
+export type WhatsappWebAccountSetupRequest = {
+	account_id: string;
+	provider_kind: WhatsappWebProviderKind;
+	display_name: string;
+	external_account_id: string;
+	device_name: string;
+	local_state_path: string;
+};
+
+export type WhatsappWebAccountSetupResponse = {
+	account_id: string;
+	provider_kind: WhatsappWebProviderKind;
+	runtime: string;
+	session: WhatsappWebSession;
+};
+
+export type WhatsappWebMessage = {
+	message_id: string;
+	raw_record_id: string;
+	account_id: string;
+	provider_message_id: string;
+	provider_chat_id: string | null;
+	chat_title: string;
+	sender: string;
+	sender_display_name: string | null;
+	text: string;
+	occurred_at: string | null;
+	projected_at: string;
+	channel_kind: WhatsappWebProviderKind;
+	delivery_state: string;
+	metadata: Record<string, unknown>;
+};
+
+export type WhatsappWebMessageListResponse = {
+	items: WhatsappWebMessage[];
+};
+
+export type WhatsappWebFixtureMessageRequest = {
+	account_id: string;
+	provider_chat_id: string;
+	provider_message_id: string;
+	chat_title: string;
+	sender_id: string;
+	sender_display_name: string;
+	text: string;
+	import_batch_id: string;
+	occurred_at: string;
+	delivery_state: 'received' | 'sent' | 'send_dry_run' | 'send_blocked';
+};
+
+export type WhatsappWebMessageIngestResponse = {
+	raw_record_id: string;
+	message_id: string;
+};
+
+export type TelegramChat = {
+	telegram_chat_id: string;
+	account_id: string;
+	provider_chat_id: string;
+	chat_kind: 'private' | 'group' | 'channel' | 'bot';
+	title: string;
+	username: string | null;
+	sync_state: 'fixture' | 'syncing' | 'synced' | 'degraded' | 'error';
+	last_message_at: string | null;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type TelegramChatListResponse = {
+	items: TelegramChat[];
+};
+
+export type TelegramMessage = {
+	message_id: string;
+	raw_record_id: string;
+	account_id: string;
+	provider_message_id: string;
+	provider_chat_id: string | null;
+	chat_title: string;
+	sender: string;
+	sender_display_name: string | null;
+	text: string;
+	occurred_at: string | null;
+	projected_at: string;
+	channel_kind: TelegramProviderKind;
+	delivery_state: string;
+	metadata: Record<string, unknown>;
+};
+
+export type TelegramMessageListResponse = {
+	items: TelegramMessage[];
+};
+
+export type TelegramFixtureMessageRequest = {
+	account_id: string;
+	provider_chat_id: string;
+	provider_message_id: string;
+	chat_kind: 'private' | 'group' | 'channel' | 'bot';
+	chat_title: string;
+	sender_id: string;
+	sender_display_name: string;
+	text: string;
+	import_batch_id: string;
+	occurred_at: string;
+	delivery_state: 'received' | 'sent' | 'send_dry_run' | 'send_blocked';
+};
+
+export type TelegramMessageIngestResponse = {
+	raw_record_id: string;
+	message_id: string;
+};
+
+export type AutomationTemplate = {
+	template_id: string;
+	name: string;
+	body_template: string;
+	required_variables: string[];
+	created_at: string;
+	updated_at: string;
+};
+
+export type AutomationTemplateListResponse = {
+	items: AutomationTemplate[];
+};
+
+export type AutomationPolicy = {
+	policy_id: string;
+	template_id: string;
+	name: string;
+	enabled: boolean;
+	account_id: string;
+	allowed_chat_ids: string[];
+	trigger_kind: string;
+	max_sends_per_hour: number;
+	quiet_hours: Record<string, unknown>;
+	expires_at: string | null;
+	conditions: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type AutomationPolicyListResponse = {
+	items: AutomationPolicy[];
+};
+
+export type AutomationTemplateRequest = {
+	template_id: string;
+	name: string;
+	body_template: string;
+	required_variables: string[];
+};
+
+export type AutomationPolicyRequest = {
+	policy_id: string;
+	template_id: string;
+	name: string;
+	enabled: boolean;
+	account_id: string;
+	allowed_chat_ids: string[];
+	trigger_kind: string;
+	max_sends_per_hour: number;
+	quiet_hours: Record<string, unknown>;
+	expires_at?: string | null;
+	conditions: Record<string, unknown>;
+};
+
+export type TelegramSendDryRunRequest = {
+	command_id: string;
+	policy_id: string;
+	provider_chat_id: string;
+	variables: Record<string, string>;
+	source_context: Record<string, unknown>;
+};
+
+export type TelegramSendDryRunResponse = {
+	outbound_message_id: string;
+	policy_id: string;
+	template_id: string;
+	account_id: string;
+	provider_chat_id: string;
+	rendered_text: string;
+	rendered_preview_hash: string;
+	status: string;
+	event_id: string;
+};
+
+export type TelegramCall = {
+	call_id: string;
+	account_id: string;
+	provider_call_id: string;
+	provider_chat_id: string;
+	direction: 'incoming' | 'outgoing';
+	call_state: 'ringing' | 'active' | 'ended' | 'missed' | 'declined' | 'failed';
+	started_at: string | null;
+	ended_at: string | null;
+	transcription_policy_id: string | null;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type TelegramCallListResponse = {
+	items: TelegramCall[];
+};
+
+export type TelegramCallRequest = {
+	call_id: string;
+	account_id: string;
+	provider_call_id: string;
+	provider_chat_id: string;
+	direction: 'incoming' | 'outgoing';
+	call_state: 'ringing' | 'active' | 'ended' | 'missed' | 'declined' | 'failed';
+	started_at?: string | null;
+	ended_at?: string | null;
+	transcription_policy_id?: string | null;
+	metadata: Record<string, unknown>;
+};
+
+export type CallTranscript = {
+	transcript_id: string;
+	call_id: string;
+	account_id: string;
+	provider_chat_id: string;
+	transcript_status: 'queued' | 'running' | 'succeeded' | 'failed';
+	stt_provider: string;
+	source_audio_ref: string | null;
+	language_code: string | null;
+	transcript_text: string;
+	segments: unknown[];
+	provenance: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type CallTranscriptResponse = {
+	transcript: CallTranscript | null;
+};
+
+export type CallTranscriptFixtureRequest = {
+	transcript_id: string;
+	account_id: string;
+	provider_chat_id: string;
+	source_audio_ref: string;
+	language_code?: string;
+	always_on_policy: boolean;
+};
+
 export async function fetchIdentityCandidates(
 	baseUrl: string,
 	token: string,
@@ -795,6 +1118,323 @@ export async function setupImapAccount(
 	request: ImapAccountSetupRequest
 ): Promise<EmailAccountSetupResponse> {
 	return postJson(baseUrl, token, actorId, '/api/v1/email-accounts/imap', request);
+}
+
+export async function setupTelegramFixtureAccount(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: TelegramAccountSetupRequest
+): Promise<TelegramAccountSetupResponse> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v4/telegram/accounts/fixture',
+		request,
+		'Telegram account setup request failed'
+	);
+}
+
+export async function fetchV4Capabilities(
+	baseUrl: string,
+	token: string,
+	actorId: string
+): Promise<V4CapabilitiesResponse> {
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v4/capabilities',
+		'V4 capabilities request failed'
+	);
+}
+
+export async function fetchV5Capabilities(
+	baseUrl: string,
+	token: string,
+	actorId: string
+): Promise<V5CapabilitiesResponse> {
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v5/capabilities',
+		'V5 capabilities request failed'
+	);
+}
+
+export async function setupWhatsappWebFixtureAccount(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: WhatsappWebAccountSetupRequest
+): Promise<WhatsappWebAccountSetupResponse> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v5/whatsapp/accounts/fixture',
+		request,
+		'WhatsApp Web account setup request failed'
+	);
+}
+
+export async function fetchWhatsappWebSessions(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	accountId?: string,
+	limit = 50
+): Promise<WhatsappWebSessionListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (accountId?.trim()) {
+		params.set('account_id', accountId.trim());
+	}
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v5/whatsapp/sessions?${params.toString()}`,
+		'WhatsApp Web sessions request failed'
+	);
+}
+
+export async function fetchWhatsappWebMessages(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	accountId?: string,
+	providerChatId?: string,
+	limit = 50
+): Promise<WhatsappWebMessageListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (accountId?.trim()) {
+		params.set('account_id', accountId.trim());
+	}
+	if (providerChatId?.trim()) {
+		params.set('provider_chat_id', providerChatId.trim());
+	}
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v5/whatsapp/messages?${params.toString()}`,
+		'WhatsApp Web messages request failed'
+	);
+}
+
+export async function ingestWhatsappWebFixtureMessage(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: WhatsappWebFixtureMessageRequest
+): Promise<WhatsappWebMessageIngestResponse> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v5/whatsapp/messages',
+		request,
+		'WhatsApp Web fixture message request failed'
+	);
+}
+
+export async function fetchTelegramChats(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	accountId?: string,
+	limit = 50
+): Promise<TelegramChatListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (accountId?.trim()) {
+		params.set('account_id', accountId.trim());
+	}
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v4/telegram/chats?${params.toString()}`,
+		'Telegram chats request failed'
+	);
+}
+
+export async function fetchTelegramMessages(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	accountId?: string,
+	providerChatId?: string,
+	limit = 50
+): Promise<TelegramMessageListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (accountId?.trim()) {
+		params.set('account_id', accountId.trim());
+	}
+	if (providerChatId?.trim()) {
+		params.set('provider_chat_id', providerChatId.trim());
+	}
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v4/telegram/messages?${params.toString()}`,
+		'Telegram messages request failed'
+	);
+}
+
+export async function ingestTelegramFixtureMessage(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: TelegramFixtureMessageRequest
+): Promise<TelegramMessageIngestResponse> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v4/telegram/messages',
+		request,
+		'Telegram fixture message request failed'
+	);
+}
+
+export async function fetchAutomationTemplates(
+	baseUrl: string,
+	token: string,
+	actorId: string
+): Promise<AutomationTemplateListResponse> {
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v4/policies/templates',
+		'Automation template request failed'
+	);
+}
+
+export async function saveAutomationTemplate(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: AutomationTemplateRequest
+): Promise<AutomationTemplate> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v4/policies/templates',
+		request,
+		'Automation template save failed'
+	);
+}
+
+export async function fetchAutomationPolicies(
+	baseUrl: string,
+	token: string,
+	actorId: string
+): Promise<AutomationPolicyListResponse> {
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v4/policies',
+		'Automation policy request failed'
+	);
+}
+
+export async function saveAutomationPolicy(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: AutomationPolicyRequest
+): Promise<AutomationPolicy> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v4/policies',
+		request,
+		'Automation policy save failed'
+	);
+}
+
+export async function dryRunTelegramSend(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: TelegramSendDryRunRequest
+): Promise<TelegramSendDryRunResponse> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		'/api/v4/policies/telegram-send/dry-run',
+		request,
+		'Telegram send dry-run failed'
+	);
+}
+
+export async function fetchTelegramCalls(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	accountId?: string,
+	limit = 50
+): Promise<TelegramCallListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (accountId?.trim()) {
+		params.set('account_id', accountId.trim());
+	}
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v4/calls?${params.toString()}`,
+		'Telegram call request failed'
+	);
+}
+
+export async function saveTelegramCall(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	request: TelegramCallRequest
+): Promise<TelegramCall> {
+	return postJson(baseUrl, token, actorId, '/api/v4/calls', request, 'Telegram call save failed');
+}
+
+export async function saveCallTranscriptFixture(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	callId: string,
+	request: CallTranscriptFixtureRequest
+): Promise<CallTranscript> {
+	return postJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v4/calls/${encodeURIComponent(callId)}/transcript`,
+		request,
+		'Call transcript save failed'
+	);
+}
+
+export async function fetchCallTranscript(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	callId: string
+): Promise<CallTranscriptResponse> {
+	return getJson(
+		baseUrl,
+		token,
+		actorId,
+		`/api/v4/calls/${encodeURIComponent(callId)}/transcript`,
+		'Call transcript request failed'
+	);
 }
 
 export async function fetchAiStatus(
