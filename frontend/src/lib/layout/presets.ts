@@ -193,11 +193,9 @@ export const layoutPresets: LayoutPreset[] = [
 		instance('ai-runtime-metrics', 'metrics', 10),
 		instance('ai-agent-list', 'main', 10),
 		instance('ai-selected-agent-detail', 'main', 20),
-		instance('ai-answer-form', 'main', 30),
 		instance('ai-runtime-status', 'rail', 10),
 		instance('ai-run-history', 'rail', 20),
-		instance('ai-workflow-panels', 'rail', 30),
-		instance('ai-citations', 'rail', 40)
+		instance('ai-citations', 'rail', 30)
 	]),
 	preset('settings', 'operational_board', boardZones, [
 		instance('settings-metrics', 'metrics', 10),

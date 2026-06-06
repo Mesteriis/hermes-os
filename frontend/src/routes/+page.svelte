@@ -4513,23 +4513,19 @@
 								{:else}
 									<header><span class="round-icon cyan"><Icon icon="tabler:robot-off" width="26" height="26" /></span><div><h2>No agent selected</h2><em>Backend status required</em></div></header>
 								{/if}
-								<div class="widget-frame" data-widget-id="ai-workflow-panels" data-widget-hidden="false">
-									<div class="ai-workflow-grid">
-										<div class="widget-frame" data-widget-id="ai-answer-form" data-widget-hidden="false">
-											<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void submitAiAnswer(); }}>
-												<label><span>Ask AI</span><textarea bind:value={aiQuestion} rows="4"></textarea></label>
-												<button type="submit" disabled={isAiAnswerSubmitting || !aiQuestion.trim()}><Icon icon="tabler:sparkles" width="16" height="16" />Ask</button>
-											</form>
-										</div>
-										<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void prepareAiBrief(); }}>
-											<label><span>Prepare brief</span><textarea bind:value={aiMeetingTopic} rows="4"></textarea></label>
-											<button type="submit" disabled={isAiMeetingPrepSubmitting || !aiMeetingTopic.trim()}><Icon icon="tabler:calendar-stats" width="16" height="16" />Prepare</button>
-										</form>
-										<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void refreshTasksFromAi(); }}>
-											<label><span>Task extraction</span><textarea bind:value={aiTaskQuery} rows="4"></textarea></label>
-											<button type="submit" disabled={isAiTaskRefreshSubmitting || !aiTaskQuery.trim()}><Icon icon="tabler:checkbox" width="16" height="16" />Refresh candidates</button>
-										</form>
-									</div>
+								<div class="ai-workflow-grid">
+									<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void submitAiAnswer(); }}>
+										<label><span>Ask AI</span><textarea bind:value={aiQuestion} rows="4"></textarea></label>
+										<button type="submit" disabled={isAiAnswerSubmitting || !aiQuestion.trim()}><Icon icon="tabler:sparkles" width="16" height="16" />Ask</button>
+									</form>
+									<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void prepareAiBrief(); }}>
+										<label><span>Prepare brief</span><textarea bind:value={aiMeetingTopic} rows="4"></textarea></label>
+										<button type="submit" disabled={isAiMeetingPrepSubmitting || !aiMeetingTopic.trim()}><Icon icon="tabler:calendar-stats" width="16" height="16" />Prepare</button>
+									</form>
+									<form class="ai-workflow-block" onsubmit={(event) => { event.preventDefault(); void refreshTasksFromAi(); }}>
+										<label><span>Task extraction</span><textarea bind:value={aiTaskQuery} rows="4"></textarea></label>
+										<button type="submit" disabled={isAiTaskRefreshSubmitting || !aiTaskQuery.trim()}><Icon icon="tabler:checkbox" width="16" height="16" />Refresh candidates</button>
+									</form>
 								</div>
 								{#if aiAnswerResult}
 									<div class="ai-result-block">
