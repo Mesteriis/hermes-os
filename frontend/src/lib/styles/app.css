@@ -526,6 +526,10 @@ input {
 	min-height: calc(var(--hh-widget-row) * 10);
 }
 
+.widget-frame[data-widget-id='communications-sender-profile'] {
+	min-height: calc(var(--hh-widget-row) * 5);
+}
+
 .widget-frame[data-widget-id='settings-account-detail-status'] {
 	min-height: calc(var(--hh-widget-row) * 11);
 }
@@ -1534,6 +1538,10 @@ input[type='checkbox'] {
 	display: grid;
 	gap: 12px;
 	align-content: start;
+}
+
+.communications-grid .context-rail {
+	gap: calc(var(--hh-widget-row) / 2);
 }
 
 .profile-panel {
@@ -4008,11 +4016,6 @@ input[type='checkbox'] {
 		min-height: 0;
 	}
 
-	.context-rail,
-	.settings-rail {
-		display: none;
-	}
-
 	.setting-row {
 		grid-template-columns: minmax(0, 1fr);
 	}
@@ -4050,6 +4053,13 @@ input[type='checkbox'] {
 	}
 
 	.graph-edge-layer text {
+		display: none;
+	}
+}
+
+@media (max-width: 900px) {
+	.context-rail,
+	.settings-rail {
 		display: none;
 	}
 }
