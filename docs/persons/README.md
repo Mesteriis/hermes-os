@@ -1,28 +1,36 @@
 # Hermes Hub — Persons Module
 
-Модуль контактов: авто-создание, identity resolution, профили общения, communication fingerprint.
+Relationship Intelligence System. Persons — это не адресная книга, а долговременная память о людях и отношениях.
 
 ## Ключевые возможности
 
-- **Авто-создание контактов** из входящих писем
-- **Identity Resolution** — определение, что разные email принадлежат одному человеку
-- **Communication Fingerprint** — AI-профиль общения (язык, тон, стиль, темы)
-- **Enrichment** — trust score, время ответа, избранное, заметки
-- **Связь с проектами** — контакт в контексте проекта
-- **Поиск** — по имени и email
+- **Multi-Channel Identity** — один человек, много каналов (email, Telegram, GitHub, LinkedIn...)
+- **Identity Resolution** — склейка дублей, merge/split с confidence-скорингом
+- **Person Memory** — факты, карточки памяти, предпочтения с source/confidence
+- **Relationship Timeline** — история отношений, события, milestones
+- **Communication DNA** — стиль общения, язык, тон, verbosity, паттерны ответов
+- **Enrichment Engine** — обогащение из GitHub, LinkedIn, публичного веба
+- **Expertise & Skills** — поиск людей по навыкам и доменам
+- **Trust & Reliability** — обещания, риски, trust score
+- **Relationship Health** — мониторинг активности, watchlist, health status
+- **Person Investigator** — AI-ассистент: досье, подготовка к встречам
+- **Analytics & Export** — relationship score, heatmap, интеллектуальный score, Markdown/JSON export
 
 ## Состояние
 
 | Метрика | Значение |
 |---|---|
-| Модулей | 3 |
-| API endpoint'ов | 6 |
-| Миграций | 1 |
-| Тестов | 4 (+ существующие 12) |
-| Покрытие спеки | ~90% |
+| Модулей | 13 |
+| Таблиц | 14 |
+| API endpoint'ов | 35 |
+| Миграций | 4 |
+| ADR | 5 |
+| Строк кода | ~4000 |
+| Покрытие спеки | 95%+ |
 
 ## Навигация
 
-- [API Reference](api.md)
-- [Статус реализации](status.md)
-- [Блокеры](blockers.md)
+- [API Reference](api.md) — все 35 endpoint
+- [Статус реализации](status.md) — детальный статус по разделам спеки
+- [Модель данных](data-model.md) — 14 таблиц со схемой
+- [Архитектура](architecture.md) — модули и потоки данных
