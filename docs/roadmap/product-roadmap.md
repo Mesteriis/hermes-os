@@ -44,7 +44,7 @@ Key functions:
 - event ingestion pipeline
 - fixture and read-only provider email import
 - local account setup for Gmail, iCloud and raw IMAP
-- basic contacts
+- basic persons
 - full text search
 - document import for Markdown/PDF
 
@@ -77,9 +77,9 @@ Goals:
 
 Key functions:
 
-- first graph core projection from contacts, messages and documents
+- first graph core projection from persons, messages and documents
 - graph relationships with provenance
-- contact merge/split
+- person merge/split
 - document OCR and extraction
 - project timelines
 - task candidates from messages and documents

@@ -4,7 +4,7 @@ export type V1Status = {
 	version: string;
 	surfaces: {
 		messages: boolean;
-		contacts: boolean;
+		persons: boolean;
 		search: boolean;
 		documents: boolean;
 		account_setup: boolean;
@@ -349,7 +349,7 @@ export type GraphReviewState =
 	| 'user_confirmed'
 	| 'user_rejected';
 
-export type GraphEvidenceSourceKind = 'contact' | 'message' | 'document' | 'raw_record';
+export type GraphEvidenceSourceKind = 'person' | 'message' | 'document' | 'raw_record';
 
 export type GraphNode = {
 	node_id: string;
@@ -464,27 +464,27 @@ export type ProjectDocumentSummary = {
 	imported_at: string;
 };
 
-export type ContactIdentityReviewState =
+export type PersonIdentityReviewState =
 	| 'suggested'
 	| 'user_confirmed'
 	| 'user_rejected';
 
-export type ContactIdentityCandidate = {
+export type PersonIdentityCandidate = {
 	identity_candidate_id: string;
-	candidate_kind: 'merge_contacts' | 'attach_email_address' | 'split_contact';
-	left_contact_id: string;
-	right_contact_id: string | null;
+	candidate_kind: 'merge_persons' | 'attach_email_address' | 'split_person';
+	left_person_id: string;
+	right_person_id: string | null;
 	email_address: string | null;
 	evidence_summary: string;
 	confidence: number;
-	review_state: ContactIdentityReviewState;
+	review_state: PersonIdentityReviewState;
 	generated_at: string;
 	reviewed_at: string | null;
 	updated_at: string;
 };
 
-export type ContactIdentityCandidateListResponse = {
-	items: ContactIdentityCandidate[];
+export type PersonIdentityCandidateListResponse = {
+	items: PersonIdentityCandidate[];
 };
 
 export type TaskCandidateReviewState =
@@ -684,7 +684,7 @@ export type AiMeetingPrepRequest = {
 	command_id: string;
 	topic: string;
 	project_id?: string;
-	contact_id?: string;
+	person_id?: string;
 	correlation_id?: string;
 };
 
@@ -1018,7 +1018,7 @@ export async function fetchIdentityCandidates(
 	token: string,
 	actorId: string,
 	limit = 50
-) : Promise<ContactIdentityCandidateListResponse> {
+) : Promise<PersonIdentityCandidateListResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	return getJson(
 		baseUrl,
@@ -1383,8 +1383,8 @@ export async function reviewIdentityCandidate(
 	token: string,
 	actorId: string,
 	identityCandidateId: string,
-	reviewState: ContactIdentityReviewState,
-	commandId = `contact-identity-review-${crypto.randomUUID()}`
+	reviewState: PersonIdentityReviewState,
+	commandId = `person-identity-review-${crypto.randomUUID()}`
 ) {
 	return putJson(
 		baseUrl,

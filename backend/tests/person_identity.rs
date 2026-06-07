@@ -5,40 +5,40 @@ use chrono::Utc;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
-use hermes_hub_backend::contact_identity::{
-    ContactIdentityError, ContactIdentityReviewCommand, ContactIdentityReviewState,
-    ContactIdentityStore,
+use hermes_hub_backend::person_identity::{
+    PersonIdentityError, PersonIdentityReviewCommand, PersonIdentityReviewState,
+    PersonIdentityStore,
 };
-use hermes_hub_backend::contacts::ContactProjectionStore;
+use hermes_hub_backend::persons::PersonProjectionStore;
 use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope};
 use hermes_hub_backend::storage::Database;
 
-const CONTACT_IDENTITY_REVIEW_EVENT_TYPE: &str = "contact_identity.review_state_changed";
+const CONTACT_IDENTITY_REVIEW_EVENT_TYPE: &str = "person_identity.review_state_changed";
 
 #[tokio::test]
-async fn contact_identity_refresh_creates_conservative_merge_candidate_against_postgres() {
+async fn person_identity_refresh_creates_conservative_merge_candidate_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live contact identity test: HERMES_TEST_DATABASE_URL is not set");
+        eprintln!("skipping live person identity test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
-    let context = contact_identity_context(&database_url)
+    let context = person_identity_context(&database_url)
         .await
         .expect("context");
     let suffix = unique_suffix();
     let shared_name = format!("Alex Meridian {suffix}");
 
     let left = context
-        .contact_store
-        .upsert_email_contact(&format!("alex.left-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("alex.left-{suffix}@example.com"))
         .await
-        .expect("upsert left contact");
+        .expect("upsert left person");
     let right = context
-        .contact_store
-        .upsert_email_contact(&format!("alex.right-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("alex.right-{suffix}@example.com"))
         .await
-        .expect("upsert right contact");
+        .expect("upsert right person");
 
-    seed_normalized_contacts(&context, &left.contact_id, &right.contact_id, &shared_name)
+    seed_normalized_persons(&context, &left.person_id, &right.person_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -49,12 +49,12 @@ async fn contact_identity_refresh_creates_conservative_merge_candidate_against_p
         .expect("refresh candidates");
     assert!(created >= 1);
 
-    let (left_id, right_id) = ordered_contact_ids(&left.contact_id, &right.contact_id);
-    let candidate_id = format!("identity_candidate:v1:merge_contacts:{left_id}:{right_id}");
+    let (left_id, right_id) = ordered_person_ids(&left.person_id, &right.person_id);
+    let candidate_id = format!("identity_candidate:v1:merge_persons:{left_id}:{right_id}");
     let row: (String, String, String) = sqlx::query_as(
         r#"
         SELECT identity_candidate_id, candidate_kind, review_state
-        FROM contact_identity_candidates
+        FROM person_identity_candidates
         WHERE identity_candidate_id = $1
         "#,
     )
@@ -63,34 +63,34 @@ async fn contact_identity_refresh_creates_conservative_merge_candidate_against_p
     .await
     .expect("candidate row");
     assert_eq!(row.0, candidate_id);
-    assert_eq!(row.1, "merge_contacts");
+    assert_eq!(row.1, "merge_persons");
     assert_eq!(row.2, "suggested");
 }
 
 #[tokio::test]
-async fn contact_identity_confirm_records_review_without_mutating_contacts_against_postgres() {
+async fn person_identity_confirm_records_review_without_mutating_persons_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live contact identity test: HERMES_TEST_DATABASE_URL is not set");
+        eprintln!("skipping live person identity test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
-    let context = contact_identity_context(&database_url)
+    let context = person_identity_context(&database_url)
         .await
         .expect("context");
     let suffix = unique_suffix();
     let shared_name = format!("Jordan Candidate {suffix}");
 
     let left = context
-        .contact_store
-        .upsert_email_contact(&format!("jordan.left-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("jordan.left-{suffix}@example.com"))
         .await
-        .expect("upsert left contact");
+        .expect("upsert left person");
     let right = context
-        .contact_store
-        .upsert_email_contact(&format!("jordan.right-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("jordan.right-{suffix}@example.com"))
         .await
-        .expect("upsert right contact");
+        .expect("upsert right person");
 
-    seed_normalized_contacts(&context, &left.contact_id, &right.contact_id, &shared_name)
+    seed_normalized_persons(&context, &left.person_id, &right.person_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -101,11 +101,11 @@ async fn contact_identity_confirm_records_review_without_mutating_contacts_again
         .expect("refresh");
 
     let identity_candidate_id =
-        identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
-    let command = ContactIdentityReviewCommand {
+        identity_candidate_id_from_persons(&left.person_id, &right.person_id);
+    let command = PersonIdentityReviewCommand {
         command_id: format!("identity-confirm-{suffix}"),
         identity_candidate_id: identity_candidate_id.clone(),
-        review_state: ContactIdentityReviewState::UserConfirmed,
+        review_state: PersonIdentityReviewState::UserConfirmed,
         actor_id: "tests-reviewer".to_owned(),
     };
 
@@ -116,11 +116,11 @@ async fn contact_identity_confirm_records_review_without_mutating_contacts_again
         .expect("confirm identity candidate");
     assert_eq!(
         result.review_state,
-        ContactIdentityReviewState::UserConfirmed
+        PersonIdentityReviewState::UserConfirmed
     );
 
     let state: String = sqlx::query_scalar(
-        "SELECT review_state FROM contact_identity_candidates WHERE identity_candidate_id = $1",
+        "SELECT review_state FROM person_identity_candidates WHERE identity_candidate_id = $1",
     )
     .bind(&identity_candidate_id)
     .fetch_one(&context.pool)
@@ -128,40 +128,40 @@ async fn contact_identity_confirm_records_review_without_mutating_contacts_again
     .expect("load state");
     assert_eq!(state, "user_confirmed");
 
-    let contacts =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM contacts WHERE contact_id IN ($1, $2)")
-            .bind(&left.contact_id)
-            .bind(&right.contact_id)
+    let persons =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM persons WHERE person_id IN ($1, $2)")
+            .bind(&left.person_id)
+            .bind(&right.person_id)
             .fetch_one(&context.pool)
             .await
-            .expect("contacts remain");
-    assert_eq!(contacts, 2);
+            .expect("persons remain");
+    assert_eq!(persons, 2);
 }
 
 #[tokio::test]
-async fn contact_identity_confirm_materializes_split_candidate_against_postgres() {
+async fn person_identity_confirm_materializes_split_candidate_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live contact identity test: HERMES_TEST_DATABASE_URL is not set");
+        eprintln!("skipping live person identity test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
-    let context = contact_identity_context(&database_url)
+    let context = person_identity_context(&database_url)
         .await
         .expect("context");
     let suffix = unique_suffix();
     let shared_name = format!("Morgan Split Candidate {suffix}");
 
     let left = context
-        .contact_store
-        .upsert_email_contact(&format!("morgan.left-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("morgan.left-{suffix}@example.com"))
         .await
-        .expect("upsert left contact");
+        .expect("upsert left person");
     let right = context
-        .contact_store
-        .upsert_email_contact(&format!("morgan.right-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("morgan.right-{suffix}@example.com"))
         .await
-        .expect("upsert right contact");
+        .expect("upsert right person");
 
-    seed_normalized_contacts(&context, &left.contact_id, &right.contact_id, &shared_name)
+    seed_normalized_persons(&context, &left.person_id, &right.person_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -171,25 +171,25 @@ async fn contact_identity_confirm_materializes_split_candidate_against_postgres(
         .await
         .expect("refresh merge candidates");
     let merge_candidate_id =
-        identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
+        identity_candidate_id_from_persons(&left.person_id, &right.person_id);
 
     let _ = context
         .store
-        .set_review_state(&ContactIdentityReviewCommand {
+        .set_review_state(&PersonIdentityReviewCommand {
             command_id: format!("identity-confirm-for-split-{suffix}"),
             identity_candidate_id: merge_candidate_id,
-            review_state: ContactIdentityReviewState::UserConfirmed,
+            review_state: PersonIdentityReviewState::UserConfirmed,
             actor_id: "tests-reviewer".to_owned(),
         })
         .await
         .expect("confirm merge candidate");
 
     let split_candidate_id =
-        split_identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
+        split_identity_candidate_id_from_persons(&left.person_id, &right.person_id);
     let row: (String, String, String, f64) = sqlx::query_as(
         r#"
         SELECT candidate_kind, review_state, evidence_summary, confidence
-        FROM contact_identity_candidates
+        FROM person_identity_candidates
         WHERE identity_candidate_id = $1
         "#,
     )
@@ -198,7 +198,7 @@ async fn contact_identity_confirm_materializes_split_candidate_against_postgres(
     .await
     .expect("split candidate row");
 
-    assert_eq!(row.0, "split_contact");
+    assert_eq!(row.0, "split_person");
     assert_eq!(row.1, "suggested");
     assert!(
         row.2
@@ -208,29 +208,29 @@ async fn contact_identity_confirm_materializes_split_candidate_against_postgres(
 }
 
 #[tokio::test]
-async fn contact_identity_confirmed_split_removes_merge_from_detail_against_postgres() {
+async fn person_identity_confirmed_split_removes_merge_from_detail_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live contact identity test: HERMES_TEST_DATABASE_URL is not set");
+        eprintln!("skipping live person identity test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
-    let context = contact_identity_context(&database_url)
+    let context = person_identity_context(&database_url)
         .await
         .expect("context");
     let suffix = unique_suffix();
     let shared_name = format!("Taylor Split Detail {suffix}");
 
     let left = context
-        .contact_store
-        .upsert_email_contact(&format!("taylor.left-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("taylor.left-{suffix}@example.com"))
         .await
-        .expect("upsert left contact");
+        .expect("upsert left person");
     let right = context
-        .contact_store
-        .upsert_email_contact(&format!("taylor.right-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("taylor.right-{suffix}@example.com"))
         .await
-        .expect("upsert right contact");
+        .expect("upsert right person");
 
-    seed_normalized_contacts(&context, &left.contact_id, &right.contact_id, &shared_name)
+    seed_normalized_persons(&context, &left.person_id, &right.person_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -240,14 +240,14 @@ async fn contact_identity_confirmed_split_removes_merge_from_detail_against_post
         .await
         .expect("refresh merge candidates");
     let merge_candidate_id =
-        identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
+        identity_candidate_id_from_persons(&left.person_id, &right.person_id);
 
     let _ = context
         .store
-        .set_review_state(&ContactIdentityReviewCommand {
+        .set_review_state(&PersonIdentityReviewCommand {
             command_id: format!("identity-confirm-detail-{suffix}"),
             identity_candidate_id: merge_candidate_id.clone(),
-            review_state: ContactIdentityReviewState::UserConfirmed,
+            review_state: PersonIdentityReviewState::UserConfirmed,
             actor_id: "tests-reviewer".to_owned(),
         })
         .await
@@ -255,9 +255,9 @@ async fn contact_identity_confirmed_split_removes_merge_from_detail_against_post
 
     let detail = context
         .store
-        .contact_identity(&left.contact_id)
+        .person_identity(&left.person_id)
         .await
-        .expect("contact identity detail");
+        .expect("person identity detail");
     assert!(
         detail
             .items
@@ -271,14 +271,14 @@ async fn contact_identity_confirmed_split_removes_merge_from_detail_against_post
         .await
         .expect("refresh split candidates");
     let split_candidate_id =
-        split_identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
+        split_identity_candidate_id_from_persons(&left.person_id, &right.person_id);
 
     let _ = context
         .store
-        .set_review_state(&ContactIdentityReviewCommand {
+        .set_review_state(&PersonIdentityReviewCommand {
             command_id: format!("identity-split-detail-{suffix}"),
             identity_candidate_id: split_candidate_id,
-            review_state: ContactIdentityReviewState::UserConfirmed,
+            review_state: PersonIdentityReviewState::UserConfirmed,
             actor_id: "tests-reviewer".to_owned(),
         })
         .await
@@ -286,59 +286,59 @@ async fn contact_identity_confirmed_split_removes_merge_from_detail_against_post
 
     let detail = context
         .store
-        .contact_identity(&left.contact_id)
+        .person_identity(&left.person_id)
         .await
-        .expect("contact identity detail after split");
+        .expect("person identity detail after split");
     assert!(!detail.items.iter().any(|item| {
-        item.candidate_kind == "merge_contacts" && item.identity_candidate_id == merge_candidate_id
+        item.candidate_kind == "merge_persons" && item.identity_candidate_id == merge_candidate_id
     }));
 }
 
 #[tokio::test]
-async fn contact_identity_refresh_skips_existing_split_when_generating_next_split_against_postgres()
+async fn person_identity_refresh_skips_existing_split_when_generating_next_split_against_postgres()
 {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live contact identity test: HERMES_TEST_DATABASE_URL is not set");
+        eprintln!("skipping live person identity test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
-    let context = contact_identity_context(&database_url)
+    let context = person_identity_context(&database_url)
         .await
         .expect("context");
     let suffix = unique_suffix();
 
     let first_left = context
-        .contact_store
-        .upsert_email_contact(&format!("first.left-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("first.left-{suffix}@example.com"))
         .await
-        .expect("upsert first left contact");
+        .expect("upsert first left person");
     let first_right = context
-        .contact_store
-        .upsert_email_contact(&format!("first.right-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("first.right-{suffix}@example.com"))
         .await
-        .expect("upsert first right contact");
+        .expect("upsert first right person");
     let second_left = context
-        .contact_store
-        .upsert_email_contact(&format!("second.left-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("second.left-{suffix}@example.com"))
         .await
-        .expect("upsert second left contact");
+        .expect("upsert second left person");
     let second_right = context
-        .contact_store
-        .upsert_email_contact(&format!("second.right-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("second.right-{suffix}@example.com"))
         .await
-        .expect("upsert second right contact");
+        .expect("upsert second right person");
 
-    seed_normalized_contacts(
+    seed_normalized_persons(
         &context,
-        &first_left.contact_id,
-        &first_right.contact_id,
+        &first_left.person_id,
+        &first_right.person_id,
         &format!("First Split Existing {suffix}"),
     )
     .await
     .expect("seed first pair display names");
-    seed_normalized_contacts(
+    seed_normalized_persons(
         &context,
-        &second_left.contact_id,
-        &second_right.contact_id,
+        &second_left.person_id,
+        &second_right.person_id,
         &format!("Second Split Pending {suffix}"),
     )
     .await
@@ -351,14 +351,14 @@ async fn contact_identity_refresh_skips_existing_split_when_generating_next_spli
         .expect("refresh merge candidates");
 
     let first_merge_candidate_id =
-        identity_candidate_id_from_contacts(&first_left.contact_id, &first_right.contact_id);
+        identity_candidate_id_from_persons(&first_left.person_id, &first_right.person_id);
     let second_merge_candidate_id =
-        identity_candidate_id_from_contacts(&second_left.contact_id, &second_right.contact_id);
+        identity_candidate_id_from_persons(&second_left.person_id, &second_right.person_id);
     let first_split_candidate_id =
-        split_identity_candidate_id_from_contacts(&first_left.contact_id, &first_right.contact_id);
-    let second_split_candidate_id = split_identity_candidate_id_from_contacts(
-        &second_left.contact_id,
-        &second_right.contact_id,
+        split_identity_candidate_id_from_persons(&first_left.person_id, &first_right.person_id);
+    let second_split_candidate_id = split_identity_candidate_id_from_persons(
+        &second_left.person_id,
+        &second_right.person_id,
     );
 
     confirm_identity_candidate(
@@ -376,18 +376,18 @@ async fn contact_identity_refresh_skips_existing_split_when_generating_next_spli
     .await
     .expect("confirm second merge candidate");
 
-    exclude_contacts_from_name_merge_refresh(
+    exclude_persons_from_name_merge_refresh(
         &context,
         &[
-            &first_left.contact_id,
-            &first_right.contact_id,
-            &second_left.contact_id,
-            &second_right.contact_id,
+            &first_left.person_id,
+            &first_right.person_id,
+            &second_left.person_id,
+            &second_right.person_id,
         ],
         suffix,
     )
     .await
-    .expect("exclude contacts from merge refresh");
+    .expect("exclude persons from merge refresh");
 
     promote_identity_candidate(&context, &first_merge_candidate_id)
         .await
@@ -433,29 +433,29 @@ async fn contact_identity_refresh_skips_existing_split_when_generating_next_spli
 }
 
 #[tokio::test]
-async fn contact_identity_reject_suppresses_candidate_against_postgres() {
+async fn person_identity_reject_suppresses_candidate_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live contact identity test: HERMES_TEST_DATABASE_URL is not set");
+        eprintln!("skipping live person identity test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
-    let context = contact_identity_context(&database_url)
+    let context = person_identity_context(&database_url)
         .await
         .expect("context");
     let suffix = unique_suffix();
     let shared_name = format!("Sam Candidate {suffix}");
 
     let left = context
-        .contact_store
-        .upsert_email_contact(&format!("sam.left-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("sam.left-{suffix}@example.com"))
         .await
-        .expect("upsert left contact");
+        .expect("upsert left person");
     let right = context
-        .contact_store
-        .upsert_email_contact(&format!("sam.right-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("sam.right-{suffix}@example.com"))
         .await
-        .expect("upsert right contact");
+        .expect("upsert right person");
 
-    seed_normalized_contacts(&context, &left.contact_id, &right.contact_id, &shared_name)
+    seed_normalized_persons(&context, &left.person_id, &right.person_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -465,14 +465,14 @@ async fn contact_identity_reject_suppresses_candidate_against_postgres() {
         .await
         .expect("refresh");
     let identity_candidate_id =
-        identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
+        identity_candidate_id_from_persons(&left.person_id, &right.person_id);
 
     let _ = context
         .store
-        .set_review_state(&ContactIdentityReviewCommand {
+        .set_review_state(&PersonIdentityReviewCommand {
             command_id: format!("identity-reject-{suffix}"),
             identity_candidate_id: identity_candidate_id.clone(),
-            review_state: ContactIdentityReviewState::UserRejected,
+            review_state: PersonIdentityReviewState::UserRejected,
             actor_id: "tests-reviewer".to_owned(),
         })
         .await
@@ -485,7 +485,7 @@ async fn contact_identity_reject_suppresses_candidate_against_postgres() {
         .expect("refresh again");
 
     let state: String = sqlx::query_scalar(
-        "SELECT review_state FROM contact_identity_candidates WHERE identity_candidate_id = $1",
+        "SELECT review_state FROM person_identity_candidates WHERE identity_candidate_id = $1",
     )
     .bind(&identity_candidate_id)
     .fetch_one(&context.pool)
@@ -495,29 +495,29 @@ async fn contact_identity_reject_suppresses_candidate_against_postgres() {
 }
 
 #[tokio::test]
-async fn contact_identity_review_event_rebuilds_state_against_postgres() {
+async fn person_identity_review_event_rebuilds_state_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live contact identity test: HERMES_TEST_DATABASE_URL is not set");
+        eprintln!("skipping live person identity test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
-    let context = contact_identity_context(&database_url)
+    let context = person_identity_context(&database_url)
         .await
         .expect("context");
     let suffix = unique_suffix();
     let shared_name = format!("Pat Candidate {suffix}");
 
     let left = context
-        .contact_store
-        .upsert_email_contact(&format!("pat.left-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("pat.left-{suffix}@example.com"))
         .await
-        .expect("upsert left contact");
+        .expect("upsert left person");
     let right = context
-        .contact_store
-        .upsert_email_contact(&format!("pat.right-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("pat.right-{suffix}@example.com"))
         .await
-        .expect("upsert right contact");
+        .expect("upsert right person");
 
-    seed_normalized_contacts(&context, &left.contact_id, &right.contact_id, &shared_name)
+    seed_normalized_persons(&context, &left.person_id, &right.person_id, &shared_name)
         .await
         .expect("seed display names");
 
@@ -527,17 +527,17 @@ async fn contact_identity_review_event_rebuilds_state_against_postgres() {
         .await
         .expect("refresh");
     let identity_candidate_id =
-        identity_candidate_id_from_contacts(&left.contact_id, &right.contact_id);
+        identity_candidate_id_from_persons(&left.person_id, &right.person_id);
 
     let confirm_event = build_review_event(
         &identity_candidate_id,
-        ContactIdentityReviewState::UserConfirmed,
+        PersonIdentityReviewState::UserConfirmed,
         "event-reviewer",
         &format!("identity-event-confirm-{suffix}"),
     );
     let reject_event = build_review_event(
         &identity_candidate_id,
-        ContactIdentityReviewState::UserRejected,
+        PersonIdentityReviewState::UserRejected,
         "event-reviewer",
         &format!("identity-event-reject-{suffix}"),
     );
@@ -578,7 +578,7 @@ async fn contact_identity_review_event_rebuilds_state_against_postgres() {
         .expect("apply reject event");
 
     let state: String = sqlx::query_scalar(
-        "SELECT review_state FROM contact_identity_candidates WHERE identity_candidate_id = $1",
+        "SELECT review_state FROM person_identity_candidates WHERE identity_candidate_id = $1",
     )
     .bind(&identity_candidate_id)
     .fetch_one(&context.pool)
@@ -587,7 +587,7 @@ async fn contact_identity_review_event_rebuilds_state_against_postgres() {
     assert_eq!(state, "user_rejected");
 
     let event_id: String = sqlx::query_scalar(
-        "SELECT event_id FROM contact_identity_candidates WHERE identity_candidate_id = $1",
+        "SELECT event_id FROM person_identity_candidates WHERE identity_candidate_id = $1",
     )
     .bind(&identity_candidate_id)
     .fetch_one(&context.pool)
@@ -595,47 +595,47 @@ async fn contact_identity_review_event_rebuilds_state_against_postgres() {
     .expect("load event id");
     assert_eq!(
         event_id,
-        format!("contact_identity_review:identity-event-reject-{suffix}")
+        format!("person_identity_review:identity-event-reject-{suffix}")
     );
 }
 
-struct ContactIdentityTestContext {
+struct PersonIdentityTestContext {
     pool: PgPool,
-    store: ContactIdentityStore,
+    store: PersonIdentityStore,
     event_store: EventStore,
-    contact_store: ContactProjectionStore,
+    person_store: PersonProjectionStore,
 }
 
-async fn contact_identity_context(database_url: &str) -> Option<ContactIdentityTestContext> {
+async fn person_identity_context(database_url: &str) -> Option<PersonIdentityTestContext> {
     let database = Database::connect(Some(database_url))
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
 
-    Some(ContactIdentityTestContext {
+    Some(PersonIdentityTestContext {
         pool: pool.clone(),
-        store: ContactIdentityStore::new(pool.clone()),
+        store: PersonIdentityStore::new(pool.clone()),
         event_store: EventStore::new(pool.clone()),
-        contact_store: ContactProjectionStore::new(pool.clone()),
+        person_store: PersonProjectionStore::new(pool.clone()),
     })
 }
 
-async fn seed_normalized_contacts(
-    context: &ContactIdentityTestContext,
-    left_contact_id: &str,
-    right_contact_id: &str,
+async fn seed_normalized_persons(
+    context: &PersonIdentityTestContext,
+    left_person_id: &str,
+    right_person_id: &str,
     display_name: &str,
-) -> Result<(), ContactIdentityError> {
+) -> Result<(), PersonIdentityError> {
     sqlx::query(
         r#"
-        UPDATE contacts
+        UPDATE persons
         SET display_name = $1
-        WHERE contact_id = $2 OR contact_id = $3
+        WHERE person_id = $2 OR person_id = $3
         "#,
     )
     .bind(display_name)
-    .bind(left_contact_id)
-    .bind(right_contact_id)
+    .bind(left_person_id)
+    .bind(right_person_id)
     .execute(&context.pool)
     .await?;
 
@@ -643,16 +643,16 @@ async fn seed_normalized_contacts(
 }
 
 async fn confirm_identity_candidate(
-    context: &ContactIdentityTestContext,
+    context: &PersonIdentityTestContext,
     identity_candidate_id: &str,
     command_id: &str,
-) -> Result<(), ContactIdentityError> {
+) -> Result<(), PersonIdentityError> {
     context
         .store
-        .set_review_state(&ContactIdentityReviewCommand {
+        .set_review_state(&PersonIdentityReviewCommand {
             command_id: command_id.to_owned(),
             identity_candidate_id: identity_candidate_id.to_owned(),
-            review_state: ContactIdentityReviewState::UserConfirmed,
+            review_state: PersonIdentityReviewState::UserConfirmed,
             actor_id: "tests-reviewer".to_owned(),
         })
         .await?;
@@ -660,23 +660,23 @@ async fn confirm_identity_candidate(
     Ok(())
 }
 
-async fn exclude_contacts_from_name_merge_refresh(
-    context: &ContactIdentityTestContext,
-    contact_ids: &[&str],
+async fn exclude_persons_from_name_merge_refresh(
+    context: &PersonIdentityTestContext,
+    person_ids: &[&str],
     suffix: u128,
-) -> Result<(), ContactIdentityError> {
-    for (index, contact_id) in contact_ids.iter().enumerate() {
+) -> Result<(), PersonIdentityError> {
+    for (index, person_id) in person_ids.iter().enumerate() {
         sqlx::query(
             r#"
-            UPDATE contacts
+            UPDATE persons
             SET display_name = $1
-            WHERE contact_id = $2
+            WHERE person_id = $2
             "#,
         )
         .bind(format!(
             "identity-refresh-skip-{suffix}-{index}@example.com"
         ))
-        .bind(contact_id)
+        .bind(person_id)
         .execute(&context.pool)
         .await?;
     }
@@ -685,12 +685,12 @@ async fn exclude_contacts_from_name_merge_refresh(
 }
 
 async fn promote_identity_candidate(
-    context: &ContactIdentityTestContext,
+    context: &PersonIdentityTestContext,
     identity_candidate_id: &str,
-) -> Result<(), ContactIdentityError> {
+) -> Result<(), PersonIdentityError> {
     sqlx::query(
         r#"
-        UPDATE contact_identity_candidates
+        UPDATE person_identity_candidates
         SET updated_at = clock_timestamp()
         WHERE identity_candidate_id = $1
         "#,
@@ -703,12 +703,12 @@ async fn promote_identity_candidate(
 }
 
 async fn age_identity_candidate(
-    context: &ContactIdentityTestContext,
+    context: &PersonIdentityTestContext,
     identity_candidate_id: &str,
-) -> Result<(), ContactIdentityError> {
+) -> Result<(), PersonIdentityError> {
     sqlx::query(
         r#"
-        UPDATE contact_identity_candidates
+        UPDATE person_identity_candidates
         SET updated_at = clock_timestamp() - INTERVAL '1 hour'
         WHERE identity_candidate_id = $1
         "#,
@@ -721,14 +721,14 @@ async fn age_identity_candidate(
 }
 
 async fn assert_identity_candidate_exists(
-    context: &ContactIdentityTestContext,
+    context: &PersonIdentityTestContext,
     identity_candidate_id: &str,
-) -> Result<(), ContactIdentityError> {
+) -> Result<(), PersonIdentityError> {
     sqlx::query_scalar::<_, bool>(
         r#"
         SELECT EXISTS (
             SELECT 1
-            FROM contact_identity_candidates
+            FROM person_identity_candidates
             WHERE identity_candidate_id = $1
         )
         "#,
@@ -737,17 +737,17 @@ async fn assert_identity_candidate_exists(
     .fetch_one(&context.pool)
     .await?
     .then_some(())
-    .ok_or(ContactIdentityError::IdentityCandidateNotFound)
+    .ok_or(PersonIdentityError::IdentityCandidateNotFound)
 }
 
 async fn identity_candidate_updated_at(
-    context: &ContactIdentityTestContext,
+    context: &PersonIdentityTestContext,
     identity_candidate_id: &str,
-) -> Result<chrono::DateTime<Utc>, ContactIdentityError> {
+) -> Result<chrono::DateTime<Utc>, PersonIdentityError> {
     let updated_at = sqlx::query_scalar(
         r#"
         SELECT updated_at
-        FROM contact_identity_candidates
+        FROM person_identity_candidates
         WHERE identity_candidate_id = $1
         "#,
     )
@@ -758,17 +758,17 @@ async fn identity_candidate_updated_at(
     Ok(updated_at)
 }
 
-fn identity_candidate_id_from_contacts(left_id: &str, right_id: &str) -> String {
-    let (left_contact_id, right_contact_id) = ordered_contact_ids(left_id, right_id);
-    format!("identity_candidate:v1:merge_contacts:{left_contact_id}:{right_contact_id}")
+fn identity_candidate_id_from_persons(left_id: &str, right_id: &str) -> String {
+    let (left_person_id, right_person_id) = ordered_person_ids(left_id, right_id);
+    format!("identity_candidate:v1:merge_persons:{left_person_id}:{right_person_id}")
 }
 
-fn split_identity_candidate_id_from_contacts(left_id: &str, right_id: &str) -> String {
-    let (left_contact_id, right_contact_id) = ordered_contact_ids(left_id, right_id);
-    format!("identity_candidate:v1:split_contact:{left_contact_id}:{right_contact_id}")
+fn split_identity_candidate_id_from_persons(left_id: &str, right_id: &str) -> String {
+    let (left_person_id, right_person_id) = ordered_person_ids(left_id, right_id);
+    format!("identity_candidate:v1:split_person:{left_person_id}:{right_person_id}")
 }
 
-fn ordered_contact_ids(left_id: &str, right_id: &str) -> (String, String) {
+fn ordered_person_ids(left_id: &str, right_id: &str) -> (String, String) {
     if left_id <= right_id {
         (left_id.to_owned(), right_id.to_owned())
     } else {
@@ -778,20 +778,20 @@ fn ordered_contact_ids(left_id: &str, right_id: &str) -> (String, String) {
 
 fn build_review_event(
     identity_candidate_id: &str,
-    review_state: ContactIdentityReviewState,
+    review_state: PersonIdentityReviewState,
     actor_id: &str,
     command_id: &str,
 ) -> NewEventEnvelope {
     NewEventEnvelope::builder(
-        format!("contact_identity_review:{command_id}"),
+        format!("person_identity_review:{command_id}"),
         CONTACT_IDENTITY_REVIEW_EVENT_TYPE,
         Utc::now(),
         json!({
-            "kind": "contact_identity_review",
+            "kind": "person_identity_review",
             "provider": "local_api",
             "source_id": command_id,
         }),
-        json!({"kind": "contact_identity_review"}),
+        json!({"kind": "person_identity_review"}),
     )
     .actor(json!({"actor_id": actor_id}))
     .payload(json!({

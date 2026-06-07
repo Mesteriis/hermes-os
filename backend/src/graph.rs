@@ -508,7 +508,7 @@ impl GraphReviewState {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GraphEvidenceSourceKind {
-    Contact,
+    Person,
     Message,
     Document,
     RawRecord,
@@ -517,7 +517,7 @@ pub enum GraphEvidenceSourceKind {
 impl GraphEvidenceSourceKind {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Contact => "contact",
+            Self::Person => "person",
             Self::Message => "message",
             Self::Document => "document",
             Self::RawRecord => "raw_record",
@@ -853,7 +853,7 @@ fn parse_review_state(value: String) -> Result<GraphReviewState, GraphStoreError
 
 fn parse_evidence_source_kind(value: String) -> Result<GraphEvidenceSourceKind, GraphStoreError> {
     match value.as_str() {
-        "contact" => Ok(GraphEvidenceSourceKind::Contact),
+        "person" => Ok(GraphEvidenceSourceKind::Person),
         "message" => Ok(GraphEvidenceSourceKind::Message),
         "document" => Ok(GraphEvidenceSourceKind::Document),
         "raw_record" => Ok(GraphEvidenceSourceKind::RawRecord),

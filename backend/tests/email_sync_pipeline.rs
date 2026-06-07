@@ -15,7 +15,7 @@ use hermes_hub_backend::mail_storage::LocalMailBlobStore;
 use hermes_hub_backend::storage::Database;
 
 #[tokio::test]
-async fn email_sync_pipeline_records_raw_blob_and_projects_message_contacts_against_postgres() {
+async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!("skipping live email sync pipeline test: HERMES_TEST_DATABASE_URL is not set");
         return;
@@ -74,7 +74,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_contacts_agai
     assert_eq!(report.attachment_blobs_upserted, 0);
     assert_eq!(report.attachments_extracted, 0);
     assert_eq!(report.attachments_not_scanned, 0);
-    assert_eq!(report.upserted_contacts, 2);
+    assert_eq!(report.upserted_persons, 2);
 
     let projected = sqlx::query(
         r#"

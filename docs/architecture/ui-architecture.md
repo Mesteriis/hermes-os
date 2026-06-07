@@ -13,7 +13,7 @@
 
 - unified inbox and communication timeline
 - command palette
-- contact profile
+- person profile
 - project workspace
 - document viewer
 - task view
@@ -27,7 +27,7 @@
 The UI should support:
 
 - global command palette
-- quick switcher for contacts, projects, documents and tasks
+- quick switcher for persons, projects, documents and tasks
 - keyboard shortcuts
 - split panes
 - contextual sidebars

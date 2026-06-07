@@ -18,7 +18,7 @@ async fn graph_store_upserts_node_idempotently_against_postgres() {
     let suffix = unique_suffix();
     let node = NewGraphNode::new(
         GraphNodeKind::Person,
-        format!("contact-{suffix}"),
+        format!("person-{suffix}"),
         format!("Alex {suffix}"),
     )
     .properties(json!({"email_address": format!("alex-{suffix}@example.com")}));
@@ -28,7 +28,7 @@ async fn graph_store_upserts_node_idempotently_against_postgres() {
 
     assert_eq!(first.node_id, second.node_id);
     assert_eq!(first.node_kind, GraphNodeKind::Person);
-    assert_eq!(first.stable_key, format!("contact-{suffix}"));
+    assert_eq!(first.stable_key, format!("person-{suffix}"));
 }
 
 #[tokio::test]
@@ -40,7 +40,7 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
     let person = store
         .upsert_node(&NewGraphNode::new(
             GraphNodeKind::Person,
-            format!("contact-{suffix}"),
+            format!("person-{suffix}"),
             format!("Person {suffix}"),
         ))
         .await
@@ -60,14 +60,14 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
         1.0,
         GraphReviewState::SystemAccepted,
     );
-    let evidence_source_id = format!("contact-{suffix}");
+    let evidence_source_id = format!("person-{suffix}");
     let first_evidence =
-        NewGraphEvidence::new(GraphEvidenceSourceKind::Contact, evidence_source_id.clone())
-            .excerpt("initial contact evidence")
+        NewGraphEvidence::new(GraphEvidenceSourceKind::Person, evidence_source_id.clone())
+            .excerpt("initial person evidence")
             .metadata(json!({"projection": "first"}));
     let second_evidence =
-        NewGraphEvidence::new(GraphEvidenceSourceKind::Contact, evidence_source_id.clone())
-            .excerpt("updated contact evidence")
+        NewGraphEvidence::new(GraphEvidenceSourceKind::Person, evidence_source_id.clone())
+            .excerpt("updated person evidence")
             .metadata(json!({"projection": "second", "source": "duplicate-upsert"}));
 
     let first = store
@@ -104,7 +104,7 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
         "#,
     )
     .bind(&first.edge_id)
-    .bind(GraphEvidenceSourceKind::Contact.as_str())
+    .bind(GraphEvidenceSourceKind::Person.as_str())
     .bind(&evidence_source_id)
     .fetch_one(&pool)
     .await
@@ -112,7 +112,7 @@ async fn graph_store_upserts_edge_with_evidence_idempotently_against_postgres() 
 
     let excerpt: Option<String> = evidence_row.try_get("excerpt").expect("evidence excerpt");
     let metadata: Value = evidence_row.try_get("metadata").expect("evidence metadata");
-    assert_eq!(excerpt.as_deref(), Some("updated contact evidence"));
+    assert_eq!(excerpt.as_deref(), Some("updated person evidence"));
     assert_eq!(
         metadata,
         json!({"projection": "second", "source": "duplicate-upsert"})
@@ -186,7 +186,7 @@ async fn graph_store_rejects_invalid_confidence_before_database_write() {
         1.1,
         GraphReviewState::SystemAccepted,
     );
-    let evidence = NewGraphEvidence::new(GraphEvidenceSourceKind::Contact, "contact-id");
+    let evidence = NewGraphEvidence::new(GraphEvidenceSourceKind::Person, "person-id");
 
     let error = store
         .upsert_edge_with_evidence(&edge, &[evidence])
@@ -207,7 +207,7 @@ async fn graph_store_rejects_closed_temporal_edge_before_database_write() {
         GraphReviewState::SystemAccepted,
     );
     edge.valid_to = Some(Utc::now());
-    let evidence = NewGraphEvidence::new(GraphEvidenceSourceKind::Contact, "contact-id");
+    let evidence = NewGraphEvidence::new(GraphEvidenceSourceKind::Person, "person-id");
 
     let error = store
         .upsert_edge_with_evidence(&edge, &[evidence])
@@ -226,8 +226,8 @@ fn graph_deterministic_ids_distinguish_delimiter_bearing_components() {
         edge_id("a", relationship_type, "b:c")
     );
     assert_ne!(
-        evidence_id("edge:a:b", GraphEvidenceSourceKind::Contact, "c"),
-        evidence_id("edge:a", GraphEvidenceSourceKind::Contact, "b:c")
+        evidence_id("edge:a:b", GraphEvidenceSourceKind::Person, "c"),
+        evidence_id("edge:a", GraphEvidenceSourceKind::Person, "b:c")
     );
 }
 

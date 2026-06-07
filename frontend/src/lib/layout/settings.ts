@@ -11,7 +11,7 @@ const layoutViewIds = [
 	'home',
 	'communications',
 	'timeline',
-	'contacts',
+	'persons',
 	'projects',
 	'tasks',
 	'calendar',

@@ -8,7 +8,7 @@ use sqlx::postgres::PgPool;
 use hermes_hub_backend::communications::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::contacts::ContactProjectionStore;
+use hermes_hub_backend::persons::PersonProjectionStore;
 use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
 use hermes_hub_backend::project_link_reviews::{
@@ -41,10 +41,10 @@ async fn project_detail_links_keyword_messages_documents_and_people_against_post
         .await
         .expect("upsert project");
     context
-        .contact_store
-        .upsert_email_contact(&format!("owner-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("owner-{suffix}@example.com"))
         .await
-        .expect("upsert owner contact");
+        .expect("upsert owner person");
 
     seed_message(
         &context,
@@ -242,7 +242,7 @@ async fn project_detail_includes_confirmed_non_keyword_message_against_postgres(
 
 struct LiveProjectContext {
     pool: PgPool,
-    contact_store: ContactProjectionStore,
+    person_store: PersonProjectionStore,
     communication_store: CommunicationIngestionStore,
     document_store: DocumentImportStore,
     message_store: MessageProjectionStore,
@@ -263,7 +263,7 @@ async fn live_project_context(test_name: &str) -> Option<LiveProjectContext> {
 
     Some(LiveProjectContext {
         pool: pool.clone(),
-        contact_store: ContactProjectionStore::new(pool.clone()),
+        person_store: PersonProjectionStore::new(pool.clone()),
         communication_store: CommunicationIngestionStore::new(pool.clone()),
         document_store: DocumentImportStore::new(pool.clone()),
         message_store: MessageProjectionStore::new(pool.clone()),

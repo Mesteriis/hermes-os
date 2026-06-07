@@ -6,10 +6,19 @@ pub mod calls;
 pub mod capabilities;
 pub mod communications;
 pub mod config;
-pub mod contact_enrichment;
-pub mod contact_identity;
-pub mod contact_intelligence;
-pub mod contacts;
+pub mod person_core;
+pub mod person_enrichment;
+pub mod person_identity;
+pub mod person_intelligence;
+pub mod person_memory;
+pub mod person_enrichment_engine;
+pub mod person_expertise;
+pub mod person_trust;
+pub mod person_health;
+pub mod person_investigator;
+pub mod person_analytics;
+pub mod person_export;
+pub mod persons;
 pub mod document_processing;
 pub mod documents;
 pub mod email_account_setup;
@@ -72,7 +81,7 @@ use std::sync::{Arc, Mutex};
 use axum::extract::{Path, Query, RawQuery, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::Html;
-use axum::routing::{get, post, put};
+use axum::routing::{delete, get, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -101,10 +110,30 @@ use crate::communications::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
 };
 use crate::config::AppConfig;
-use crate::contact_identity::{
-    ContactIdentityCandidate, ContactIdentityDetail, ContactIdentityError,
-    ContactIdentityReviewCommand, ContactIdentityReviewState, ContactIdentityStore,
+use crate::person_enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
+use crate::person_expertise::{PersonExpertiseError, PersonExpertiseStore};
+use crate::person_analytics::{AnalyticsError, PersonAnalyticsService};
+use crate::person_export::{ExportError, ExportFormat, PersonExportService};
+use crate::person_investigator::{InvestigatorError, PersonInvestigator};
+
+use crate::person_health::{PersonHealthError, PersonHealthStore};
+
+use crate::person_trust::{PersonPromiseStore, PersonRiskStore, PersonTrustError};
+
+use crate::person_memory::{
+    NewRelationshipEvent, PersonFactStore, PersonMemoryCardStore,
+    PersonMemoryError, PersonPreferenceStore, RelationshipEventStore,
 };
+
+use crate::person_identity::{
+    PersonIdentityCandidate, PersonIdentityDetail, PersonIdentityError,
+    PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
+};
+use crate::person_core::{
+    NewPersonPersona, PersonCoreError, PersonIdentity, PersonsIdentityStore,
+    PersonPersona, PersonPersonaStore, PersonRole, PersonRoleStore,
+};
+
 use crate::document_processing::{
     DocumentProcessingError, DocumentProcessingJob, DocumentProcessingRecord,
     DocumentProcessingRetryCommand, DocumentProcessingRetryCommandResult, DocumentProcessingStatus,
@@ -650,7 +679,7 @@ struct NewInvoiceRequest {
     tax_id: Option<String>,
     status: Option<String>,
     linked_project_id: Option<String>,
-    linked_contact_id: Option<String>,
+    linked_person_id: Option<String>,
     metadata: Option<Value>,
 }
 
@@ -703,7 +732,7 @@ async fn post_v1_invoice(
                 .and_then(crate::email_finance::InvoiceStatus::parse)
                 .unwrap_or(crate::email_finance::InvoiceStatus::Received),
             linked_project_id: req.linked_project_id,
-            linked_contact_id: req.linked_contact_id,
+            linked_person_id: req.linked_person_id,
             metadata: req.metadata.unwrap_or(serde_json::json!({})),
         })
         .await?;
@@ -1013,7 +1042,7 @@ async fn post_v1_legal_doc(
 }
 
 #[derive(Deserialize)]
-struct ExportQuery {
+struct PersonExportQuery {
     format: Option<String>,
 }
 
@@ -1028,7 +1057,7 @@ async fn get_v1_message_export(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(message_id): Path<String>,
-    Query(query): Query<ExportQuery>,
+    Query(query): Query<PersonDownloadQuery>,
 ) -> Result<Json<ExportResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     let msg_store = message_store(&state)?;
@@ -1594,58 +1623,58 @@ async fn post_v1_render_template(
 }
 
 #[derive(Deserialize)]
-struct ContactListQuery {
+struct PersonListQuery {
     favorites_only: Option<bool>,
     limit: Option<i64>,
 }
 #[derive(Serialize)]
-struct ContactListResponse {
-    items: Vec<crate::contact_enrichment::EnrichedContact>,
+struct PersonListResponse {
+    items: Vec<crate::person_enrichment::EnrichedPerson>,
 }
 
-async fn get_v2_contacts(
+async fn get_v2_persons(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(query): Query<ContactListQuery>,
-) -> Result<Json<ContactListResponse>, ApiError> {
+    Query(query): Query<PersonListQuery>,
+) -> Result<Json<PersonListResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
+    let store = crate::person_enrichment::PersonEnrichmentStore::new(pool);
     let items = store
         .list_enriched(
             query.favorites_only.unwrap_or(false),
             query.limit.unwrap_or(50),
         )
         .await?;
-    Ok(Json(ContactListResponse { items }))
+    Ok(Json(PersonListResponse { items }))
 }
 
-async fn get_v2_contact(
+async fn get_v2_person(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(contact_id): Path<String>,
-) -> Result<Json<crate::contact_enrichment::EnrichedContact>, ApiError> {
+    Path(person_id): Path<String>,
+) -> Result<Json<crate::person_enrichment::EnrichedPerson>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
-    match store.get_enriched(&contact_id).await? {
-        Some(contact) => Ok(Json(contact)),
-        None => Err(ApiError::ContactIdentityNotFound),
+    let store = crate::person_enrichment::PersonEnrichmentStore::new(pool);
+    match store.get_enriched(&person_id).await? {
+        Some(person) => Ok(Json(person)),
+        None => Err(ApiError::PersonIdentityNotFound),
     }
 }
 
-async fn post_v2_contact_fingerprint(
+async fn post_v2_person_fingerprint(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(contact_id): Path<String>,
+    Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     let pool = state
@@ -1654,34 +1683,34 @@ async fn post_v2_contact_fingerprint(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let msg_store = crate::messages::MessageProjectionStore::new(pool.clone());
-    // Build contact messages from this contact's email history
+    // Build person messages from this person's email history
     let messages = msg_store.recent_messages(50).await?;
-    let contact_msgs: Vec<crate::contact_intelligence::ContactMessage> = messages
+    let person_msgs: Vec<crate::person_intelligence::PersonMessage> = messages
         .into_iter()
         .filter(|m| {
-            m.message.sender.contains(&contact_id)
-                || m.message.recipients.iter().any(|r| r.contains(&contact_id))
+            m.message.sender.contains(&person_id)
+                || m.message.recipients.iter().any(|r| r.contains(&person_id))
         })
-        .map(|m| crate::contact_intelligence::ContactMessage {
+        .map(|m| crate::person_intelligence::PersonMessage {
             subject: m.message.subject,
             body_text: m.message.body_text,
             occurred_at: m.message.occurred_at,
         })
         .collect();
-    let fp = crate::contact_intelligence::ContactIntelligenceService::heuristic_fingerprint(
-        &contact_msgs,
+    let fp = crate::person_intelligence::PersonIntelligenceService::heuristic_fingerprint(
+        &person_msgs,
     );
-    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
-    store.enrich_contact(&contact_id, &fp).await?;
+    let store = crate::person_enrichment::PersonEnrichmentStore::new(pool);
+    store.enrich_person(&person_id, &fp).await?;
     Ok(Json(
         serde_json::json!({"enriched": true, "fingerprint": fp}),
     ))
 }
 
-async fn post_v2_contact_favorite(
+async fn post_v2_person_favorite(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(contact_id): Path<String>,
+    Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     let pool = state
@@ -1689,20 +1718,20 @@ async fn post_v2_contact_favorite(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
-    let fav = store.toggle_favorite(&contact_id).await?;
+    let store = crate::person_enrichment::PersonEnrichmentStore::new(pool);
+    let fav = store.toggle_favorite(&person_id).await?;
     Ok(Json(serde_json::json!({"is_favorite": fav})))
 }
 
 #[derive(Deserialize)]
-struct ContactNotesRequest {
+struct PersonNotesRequest {
     notes: String,
 }
-async fn put_v2_contact_notes(
+async fn put_v2_person_notes(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(contact_id): Path<String>,
-    Json(req): Json<ContactNotesRequest>,
+    Path(person_id): Path<String>,
+    Json(req): Json<PersonNotesRequest>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     let pool = state
@@ -1710,21 +1739,21 @@ async fn put_v2_contact_notes(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
-    store.set_notes(&contact_id, &req.notes).await?;
+    let store = crate::person_enrichment::PersonEnrichmentStore::new(pool);
+    store.set_notes(&person_id, &req.notes).await?;
     Ok(Json(serde_json::json!({"saved": true})))
 }
 
 #[derive(Deserialize)]
-struct ContactSearchQuery {
+struct PersonSearchQuery {
     q: String,
     limit: Option<i64>,
 }
-async fn get_v2_contact_search(
+async fn get_v2_person_search(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(query): Query<ContactSearchQuery>,
-) -> Result<Json<ContactListResponse>, ApiError> {
+    Query(query): Query<PersonSearchQuery>,
+) -> Result<Json<PersonListResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     if query.q.trim().is_empty() {
         return Err(ApiError::InvalidCommunicationQuery("search query required"));
@@ -1734,11 +1763,11 @@ async fn get_v2_contact_search(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
+    let store = crate::person_enrichment::PersonEnrichmentStore::new(pool);
     let items = store
-        .search_contacts(&query.q, query.limit.unwrap_or(20))
+        .search_persons(&query.q, query.limit.unwrap_or(20))
         .await?;
-    Ok(Json(ContactListResponse { items }))
+    Ok(Json(PersonListResponse { items }))
 }
 
 #[derive(Serialize)]
@@ -1946,29 +1975,159 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/document-processing/jobs/{job_id}/retry",
             post(post_document_processing_job_retry),
         )
-        .route("/api/v2/contacts", get(get_v2_contacts))
-        .route("/api/v2/contacts/{contact_id}", get(get_v2_contact))
+        .route("/api/v2/persons", get(get_v2_persons))
+        .route("/api/v2/persons/{person_id}", get(get_v2_person))
         .route(
-            "/api/v2/contacts/{contact_id}/fingerprint",
-            post(post_v2_contact_fingerprint),
+            "/api/v2/persons/{person_id}/fingerprint",
+            post(post_v2_person_fingerprint),
         )
         .route(
-            "/api/v2/contacts/{contact_id}/favorite",
-            post(post_v2_contact_favorite),
+            "/api/v2/persons/{person_id}/favorite",
+            post(post_v2_person_favorite),
         )
         .route(
-            "/api/v2/contacts/{contact_id}/notes",
-            put(put_v2_contact_notes),
+            "/api/v2/persons/{person_id}/notes",
+            put(put_v2_person_notes),
         )
-        .route("/api/v2/contacts/search", get(get_v2_contact_search))
+        .route("/api/v2/persons/search", get(get_v2_person_search))
         .route("/api/v2/identity-candidates", get(get_identity_candidates))
         .route(
             "/api/v2/identity-candidates/{identity_candidate_id}/review",
             put(put_identity_candidate_review),
         )
         .route(
-            "/api/v2/contacts/{contact_id}/identity",
-            get(get_contact_identity),
+            "/api/v2/persons/{person_id}/identity",
+            get(get_person_identity),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/identities",
+            get(get_person_identities),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/identities",
+            post(post_person_identity),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/identities/{identity_id}",
+            delete(delete_person_identity),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/roles",
+            get(get_person_roles),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/roles",
+            post(post_person_role),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/roles/{role}",
+            delete(delete_person_role),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/personas",
+            get(get_person_personas),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/personas",
+            post(post_person_persona),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/personas/{persona_id}",
+            delete(delete_person_persona),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/facts",
+            get(get_person_facts).post(post_person_fact),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/memory-cards",
+            get(get_person_memory_cards).post(post_person_memory_card),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/preferences",
+            get(get_person_preferences).post(post_person_preference),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/timeline",
+            get(get_person_timeline).post(post_relationship_event),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/snapshots",
+            get(get_person_snapshots),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/history-diff",
+            get(get_person_history_diff),
+        )
+        .route("/api/v2/persons/{person_id}/timeline",
+        get(get_person_timeline).post(post_relationship_event),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/enrichment",
+            get(get_person_enrichment),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/enrichment/{result_id}/apply",
+            post(post_person_enrichment_apply),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/enrichment/{result_id}/reject",
+            post(post_person_enrichment_reject),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/expertise",
+            get(get_person_expertise),
+        )
+        .route(
+            "/api/v2/persons/search/expertise",
+            get(get_person_expertise_search),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/promises",
+            get(get_person_promises),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/risks",
+            get(get_person_risks),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/investigate",
+            post(post_person_investigate),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/dossier",
+            get(get_person_dossier),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/meeting-prep",
+            get(get_person_meeting_prep),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/analytics",
+            get(get_person_analytics),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/export",
+            get(get_person_export_handler),
+        )
+        .route("/api/v2/persons/{person_id}/risks",
+        get(get_person_risks),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/health",
+            get(get_persons_health),
+        )
+        .route(
+            "/api/v2/persons/health",
+            get(get_persons_health),
+        )
+        .route(
+            "/api/v2/persons/watchlist",
+            get(get_persons_watchlist),
+        )
+        .route(
+            "/api/v2/persons/{person_id}/watchlist",
+            post(post_person_watchlist_toggle),
         )
         .route("/api/v2/task-candidates", get(get_task_candidates))
         .route(
@@ -2054,6 +2213,534 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             account_setup: AccountSetupState::default(),
         })
         .layer(local_frontend_cors_layer())
+}
+
+
+// ── Person Identities ───────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonIdentitiesResponse {
+    items: Vec<PersonIdentity>,
+}
+
+async fn get_person_identities(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+) -> Result<Json<PersonIdentitiesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let store = PersonsIdentityStore::new(pool);
+    let items = store.list_by_person(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonIdentitiesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewPersonIdentityRequest {
+    identity_type: String,
+    identity_value: String,
+    source: Option<String>,
+}
+
+async fn post_person_identity(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+    Json(req): Json<NewPersonIdentityRequest>,
+) -> Result<Json<PersonIdentity>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let store = PersonsIdentityStore::new(pool);
+    let identity = store
+        .upsert(&person_id, &req.identity_type, &req.identity_value, req.source.as_deref().unwrap_or("manual"))
+        .await
+        .map_err(|e| ApiError::from(e))?;
+    Ok(Json(identity))
+}
+
+async fn delete_person_identity(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((_person_id, identity_id)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let store = PersonsIdentityStore::new(pool);
+    let deleted = store.delete(&identity_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(json!({"deleted": deleted})))
+}
+
+// ── Person Roles ────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonRolesResponse {
+    items: Vec<PersonRole>,
+}
+
+async fn get_person_roles(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+) -> Result<Json<PersonRolesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let store = PersonRoleStore::new(pool);
+    let items = store.list_by_person(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonRolesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewPersonRoleRequest {
+    role: String,
+}
+
+async fn post_person_role(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+    Json(req): Json<NewPersonRoleRequest>,
+) -> Result<Json<PersonRole>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let store = PersonRoleStore::new(pool);
+    let role = store.assign(&person_id, &req.role, None).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(role))
+}
+
+async fn delete_person_role(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((person_id, role)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let store = PersonRoleStore::new(pool);
+    let deleted = store.remove(&person_id, &role).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(json!({"deleted": deleted})))
+}
+
+// ── Person Personas ─────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonPersonasResponse {
+    items: Vec<PersonPersona>,
+}
+
+async fn get_person_personas(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+) -> Result<Json<PersonPersonasResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let store = PersonPersonaStore::new(pool);
+    let items = store.list_by_person(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonPersonasResponse { items }))
+}
+
+async fn post_person_persona(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+    Json(req): Json<NewPersonPersona>,
+) -> Result<Json<PersonPersona>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let store = PersonPersonaStore::new(pool);
+    let persona = store.upsert(&NewPersonPersona {
+        person_id,
+        ..req
+    }).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(persona))
+}
+
+async fn delete_person_persona(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((_person_id, persona_id)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let store = PersonPersonaStore::new(pool);
+    let deleted = store.delete(&persona_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(json!({"deleted": deleted})))
+}
+
+
+// ── Person Facts ────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonFactsResponse { items: Vec<crate::person_memory::PersonFact> }
+
+async fn get_person_facts(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<PersonFactsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = PersonFactStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonFactsResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewPersonFactRequest { fact_type: String, value: String, source: Option<String>, confidence: Option<f64> }
+
+async fn post_person_fact(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    Json(req): Json<NewPersonFactRequest>,
+) -> Result<Json<crate::person_memory::PersonFact>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let fact = PersonFactStore::new(pool).upsert(&person_id, &req.fact_type, &req.value, req.source.as_deref().unwrap_or("manual"), req.confidence.unwrap_or(1.0)).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(fact))
+}
+
+// ── Person Memory Cards ─────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonMemoryCardsResponse { items: Vec<crate::person_memory::PersonMemoryCard> }
+
+async fn get_person_memory_cards(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<PersonMemoryCardsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = PersonMemoryCardStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonMemoryCardsResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewPersonMemoryCardRequest { title: String, description: String, source: Option<String>, importance: Option<i16> }
+
+async fn post_person_memory_card(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    Json(req): Json<NewPersonMemoryCardRequest>,
+) -> Result<Json<crate::person_memory::PersonMemoryCard>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let card = PersonMemoryCardStore::new(pool).upsert(&person_id, &req.title, &req.description, req.source.as_deref().unwrap_or("manual"), req.importance.unwrap_or(5)).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(card))
+}
+
+// ── Person Preferences ──────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonPreferencesResponse { items: Vec<crate::person_memory::PersonPreference> }
+
+async fn get_person_preferences(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<PersonPreferencesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = PersonPreferenceStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonPreferencesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewPersonPreferenceRequest { preference_type: String, value: String, source: Option<String> }
+
+async fn post_person_preference(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    Json(req): Json<NewPersonPreferenceRequest>,
+) -> Result<Json<crate::person_memory::PersonPreference>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pref = PersonPreferenceStore::new(pool).upsert(&person_id, &req.preference_type, &req.value, req.source.as_deref().unwrap_or("manual")).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(pref))
+}
+
+// ── Relationship Timeline ───────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct RelationshipTimelineResponse { items: Vec<crate::person_memory::RelationshipEvent> }
+
+async fn get_person_timeline(
+    State(state): State<AppState>, headers: HeaderMap,
+    Path(person_id): Path<String>, Query(query): Query<TimelineQuery>,
+) -> Result<Json<RelationshipTimelineResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = RelationshipEventStore::new(pool).timeline(&person_id, query.limit.unwrap_or(50)).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(RelationshipTimelineResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct TimelineQuery { limit: Option<i64> }
+
+async fn post_relationship_event(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    Json(req): Json<NewRelationshipEvent>,
+) -> Result<Json<crate::person_memory::RelationshipEvent>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let event = RelationshipEventStore::new(pool).add(&NewRelationshipEvent { person_id, ..req }).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(event))
+}
+
+impl From<EnrichmentEngineError> for ApiError {
+    fn from(error: EnrichmentEngineError) -> Self {
+        tracing::error!(error = %error, "enrichment engine operation failed");
+        ApiError::InvalidCommunicationQuery("enrichment engine operation failed")
+    }
+}
+
+impl From<PersonExpertiseError> for ApiError {
+    fn from(error: PersonExpertiseError) -> Self {
+        tracing::error!(error = %error, "expertise operation failed");
+        ApiError::InvalidCommunicationQuery("expertise operation failed")
+    }
+}
+
+impl From<PersonTrustError> for ApiError {
+    fn from(error: PersonTrustError) -> Self {
+        tracing::error!(error = %error, "trust operation failed");
+        ApiError::InvalidCommunicationQuery("trust operation failed")
+    }
+}
+
+
+// ── Person Enrichment ──────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct EnrichmentResultsResponse { items: Vec<crate::person_enrichment_engine::EnrichmentResult> }
+
+async fn get_person_enrichment(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<EnrichmentResultsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = EnrichmentResultStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(EnrichmentResultsResponse { items }))
+}
+
+async fn post_person_enrichment_apply(
+    State(state): State<AppState>, headers: HeaderMap, Path((_person_id, result_id)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    EnrichmentResultStore::new(pool).apply(&result_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(json!({"applied": true})))
+}
+
+async fn post_person_enrichment_reject(
+    State(state): State<AppState>, headers: HeaderMap, Path((_person_id, result_id)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    EnrichmentResultStore::new(pool).reject(&result_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(json!({"rejected": true})))
+}
+
+// ── Person Expertise ───────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonExpertiseResponse { items: Vec<crate::person_expertise::PersonExpertise> }
+
+async fn get_person_expertise(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<PersonExpertiseResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = PersonExpertiseStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonExpertiseResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct ExpertiseSearchQuery { skill: String, limit: Option<i64> }
+
+async fn get_person_expertise_search(
+    State(state): State<AppState>, headers: HeaderMap, Query(query): Query<ExpertiseSearchQuery>,
+) -> Result<Json<PersonExpertiseResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = PersonExpertiseStore::new(pool).search_by_skill(&query.skill, query.limit.unwrap_or(20)).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonExpertiseResponse { items }))
+}
+
+// ── Person Promises ────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonPromisesResponse { items: Vec<crate::person_trust::PersonPromise> }
+
+async fn get_person_promises(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<PersonPromisesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = PersonPromiseStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonPromisesResponse { items }))
+}
+
+// ── Person Risks ────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonRisksResponse { items: Vec<crate::person_trust::PersonRisk> }
+
+async fn get_person_risks(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<PersonRisksResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = PersonRiskStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonRisksResponse { items }))
+}
+
+impl From<PersonHealthError> for ApiError {
+    fn from(error: PersonHealthError) -> Self {
+        tracing::error!(error = %error, "health operation failed");
+        ApiError::InvalidCommunicationQuery("health operation failed")
+    }
+}
+
+
+// ── Person Health ──────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonHealthResponse { items: Vec<crate::person_health::PersonHealth> }
+
+async fn get_persons_health(
+    State(state): State<AppState>, headers: HeaderMap,
+) -> Result<Json<PersonHealthResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = PersonHealthStore::new(pool).list_health().await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonHealthResponse { items }))
+}
+
+async fn get_persons_watchlist(
+    State(state): State<AppState>, headers: HeaderMap,
+) -> Result<Json<PersonHealthResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = PersonHealthStore::new(pool).list_watchlist().await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonHealthResponse { items }))
+}
+
+async fn post_person_watchlist_toggle(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let on = PersonHealthStore::new(pool).toggle_watchlist(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(json!({"watchlist": on})))
+}
+
+impl From<InvestigatorError> for ApiError {
+    fn from(error: InvestigatorError) -> Self {
+        match error {
+            InvestigatorError::PersonNotFound => ApiError::PersonIdentityNotFound,
+            _ => {
+                tracing::error!(error = %error, "investigator operation failed");
+                ApiError::InvalidCommunicationQuery("investigator operation failed")
+            }
+        }
+    }
+}
+
+impl From<AnalyticsError> for ApiError {
+    fn from(error: AnalyticsError) -> Self {
+        tracing::error!(error = %error, "analytics operation failed");
+        ApiError::InvalidCommunicationQuery("analytics operation failed")
+    }
+}
+
+impl From<ExportError> for ApiError {
+    fn from(error: ExportError) -> Self {
+        tracing::error!(error = %error, "export operation failed");
+        ApiError::InvalidCommunicationQuery("export operation failed")
+    }
+}
+
+
+// ── Person Investigator ────────────────────────────────────────────────────
+
+async fn post_person_investigate(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let dossier = PersonInvestigator::new(pool).assemble_dossier(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&dossier).unwrap_or_default()))
+}
+
+async fn get_person_dossier(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let dossier = PersonInvestigator::new(pool).assemble_dossier(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&dossier).unwrap_or_default()))
+}
+
+async fn get_person_meeting_prep(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let prep = PersonInvestigator::new(pool).meeting_prep(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&prep).unwrap_or_default()))
+}
+
+// ── Person Analytics ────────────────────────────────────────────────────────
+
+async fn get_person_analytics(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let analytics = PersonAnalyticsService::new(pool).compute(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&analytics).unwrap_or_default()))
+}
+
+// ── Person Export ───────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct PersonDownloadQuery { format: Option<String> }
+
+async fn get_person_export_handler(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    Query(query): Query<PersonDownloadQuery>,
+) -> Result<(HeaderMap, String), ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let format = query.format.as_deref().and_then(ExportFormat::from_str).unwrap_or(ExportFormat::Json);
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let content = PersonExportService::new(pool).export(&person_id, format.clone()).await.map_err(|e| ApiError::from(e))?;
+    let mut headers_map = HeaderMap::new();
+    headers_map.insert(header::CONTENT_TYPE, HeaderValue::from_str(format.content_type()).unwrap_or(HeaderValue::from_static("application/json")));
+    headers_map.insert(
+        HeaderName::from_static("content-disposition"),
+        HeaderValue::from_str(&format!("attachment; filename=person_{}.{}", person_id, format.extension())).unwrap(),
+    );
+    Ok((headers_map, content))
+}
+
+
+// ── Person Snapshots & History Diff ─────────────────────────────────────────
+
+#[derive(Serialize)]
+struct PersonSnapshotsResponse { items: Vec<crate::person_memory::PersonSnapshot> }
+
+async fn get_person_snapshots(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+) -> Result<Json<PersonSnapshotsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::person_memory::PersonSnapshotStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(PersonSnapshotsResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct HistoryDiffQuery { from: String, to: String }
+
+async fn get_person_history_diff(
+    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    Query(query): Query<HistoryDiffQuery>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let from_date = DateTime::parse_from_rfc3339(&query.from).map_err(|_| ApiError::InvalidCommunicationQuery("invalid from date"))?.with_timezone(&Utc);
+    let to_date = DateTime::parse_from_rfc3339(&query.to).map_err(|_| ApiError::InvalidCommunicationQuery("invalid to date"))?.with_timezone(&Utc);
+    let diff = crate::person_memory::PersonSnapshotStore::new(pool).history_diff(&person_id, from_date, to_date).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&diff).unwrap_or_default()))
 }
 
 pub async fn run(config: AppConfig) -> Result<(), AppError> {
@@ -2219,7 +2906,7 @@ async fn get_v1_status(
         version: "1.0",
         surfaces: V1Surfaces {
             messages: true,
-            contacts: true,
+            persons: true,
             search: true,
             documents: true,
             account_setup: true,
@@ -2475,49 +3162,49 @@ async fn get_identity_candidates(
     State(state): State<AppState>,
     headers: HeaderMap,
     RawQuery(raw_query): RawQuery,
-) -> Result<Json<ContactIdentityCandidateListResponse>, ApiError> {
+) -> Result<Json<PersonIdentityCandidateListResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let query = parse_contact_identity_candidates_query(raw_query.as_deref())?;
-    let items = contact_identity_store(&state)?
+    let query = parse_person_identity_candidates_query(raw_query.as_deref())?;
+    let items = person_identity_store(&state)?
         .list_candidates(query.limit)
         .await?;
 
-    Ok(Json(ContactIdentityCandidateListResponse { items }))
+    Ok(Json(PersonIdentityCandidateListResponse { items }))
 }
 
 async fn put_identity_candidate_review(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(identity_candidate_id): Path<String>,
-    Json(request): Json<ContactIdentityReviewApiRequest>,
-) -> Result<Json<ContactIdentityReviewApiResponse>, ApiError> {
+    Json(request): Json<PersonIdentityReviewApiRequest>,
+) -> Result<Json<PersonIdentityReviewApiResponse>, ApiError> {
     let actor = verify_local_api_capability(&state.config, &headers)?;
     let command = request.into_command(identity_candidate_id, actor.actor_id)?;
 
     api_audit_log(&state)?
-        .record(&NewApiAuditRecord::contact_identity_review_set(
+        .record(&NewApiAuditRecord::person_identity_review_set(
             &command.actor_id,
             &command.identity_candidate_id,
         ))
         .await?;
 
-    let result = contact_identity_store(&state)?
+    let result = person_identity_store(&state)?
         .set_review_state(&command)
         .await?;
 
     Ok(Json(result.into()))
 }
 
-async fn get_contact_identity(
+async fn get_person_identity(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Path(contact_id): Path<String>,
-) -> Result<Json<ContactIdentityDetail>, ApiError> {
+    Path(person_id): Path<String>,
+) -> Result<Json<PersonIdentityDetail>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let _ = validate_non_empty_contact_identity_field("contact_id", &contact_id)?;
+    let _ = validate_non_empty_person_identity_field("person_id", &person_id)?;
 
-    let detail = contact_identity_store(&state)?
-        .contact_identity(&contact_id)
+    let detail = person_identity_store(&state)?
+        .person_identity(&person_id)
         .await?;
     Ok(Json(detail))
 }
@@ -3351,12 +4038,12 @@ fn document_processing_store(state: &AppState) -> Result<DocumentProcessingStore
     Ok(DocumentProcessingStore::new(pool.clone()))
 }
 
-fn contact_identity_store(state: &AppState) -> Result<ContactIdentityStore, ApiError> {
+fn person_identity_store(state: &AppState) -> Result<PersonIdentityStore, ApiError> {
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(ContactIdentityStore::new(pool.clone()))
+    Ok(PersonIdentityStore::new(pool.clone()))
 }
 
 fn email_multilingual_service(
@@ -3593,7 +4280,7 @@ struct V1StatusResponse {
 #[derive(Serialize)]
 struct V1Surfaces {
     messages: bool,
-    contacts: bool,
+    persons: bool,
     search: bool,
     documents: bool,
     account_setup: bool,
@@ -4112,30 +4799,30 @@ struct CallTranscriptResponse {
 }
 
 #[derive(Serialize)]
-struct ContactIdentityCandidateListResponse {
-    items: Vec<ContactIdentityCandidate>,
+struct PersonIdentityCandidateListResponse {
+    items: Vec<PersonIdentityCandidate>,
 }
 
 #[derive(Deserialize)]
-struct ContactIdentityReviewApiRequest {
+struct PersonIdentityReviewApiRequest {
     command_id: String,
     review_state: String,
 }
 
-impl ContactIdentityReviewApiRequest {
+impl PersonIdentityReviewApiRequest {
     fn into_command(
         self,
         identity_candidate_id: String,
         actor_id: String,
-    ) -> Result<ContactIdentityReviewCommand, ApiError> {
-        let command_id = validate_non_empty_contact_identity_field("command_id", &self.command_id)?;
-        let identity_candidate_id = validate_non_empty_contact_identity_field(
+    ) -> Result<PersonIdentityReviewCommand, ApiError> {
+        let command_id = validate_non_empty_person_identity_field("command_id", &self.command_id)?;
+        let identity_candidate_id = validate_non_empty_person_identity_field(
             "identity_candidate_id",
             &identity_candidate_id,
         )?;
-        let review_state = parse_contact_identity_review_state(&self.review_state)?;
+        let review_state = parse_person_identity_review_state(&self.review_state)?;
 
-        Ok(ContactIdentityReviewCommand {
+        Ok(PersonIdentityReviewCommand {
             command_id,
             identity_candidate_id,
             review_state,
@@ -4145,16 +4832,16 @@ impl ContactIdentityReviewApiRequest {
 }
 
 #[derive(Serialize)]
-struct ContactIdentityReviewApiResponse {
+struct PersonIdentityReviewApiResponse {
     identity_candidate_id: String,
     review_state: String,
     event_id: String,
 }
 
-impl From<crate::contact_identity::ContactIdentityReviewCommandResult>
-    for ContactIdentityReviewApiResponse
+impl From<crate::person_identity::PersonIdentityReviewCommandResult>
+    for PersonIdentityReviewApiResponse
 {
-    fn from(result: crate::contact_identity::ContactIdentityReviewCommandResult) -> Self {
+    fn from(result: crate::person_identity::PersonIdentityReviewCommandResult) -> Self {
         Self {
             identity_candidate_id: result.identity_candidate_id,
             review_state: result.review_state.as_str().to_owned(),
@@ -4519,14 +5206,14 @@ fn parse_document_processing_jobs_query(
     Ok(query)
 }
 
-struct ContactIdentityCandidatesQuery {
+struct PersonIdentityCandidatesQuery {
     limit: Option<i64>,
 }
 
-fn parse_contact_identity_candidates_query(
+fn parse_person_identity_candidates_query(
     raw_query: Option<&str>,
-) -> Result<ContactIdentityCandidatesQuery, ApiError> {
-    let mut query = ContactIdentityCandidatesQuery { limit: None };
+) -> Result<PersonIdentityCandidatesQuery, ApiError> {
+    let mut query = PersonIdentityCandidatesQuery { limit: None };
 
     if let Some(raw_query) = raw_query {
         for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
@@ -4535,7 +5222,7 @@ fn parse_contact_identity_candidates_query(
                     value
                         .parse::<i64>()
                         .map_err(|_| {
-                            ApiError::InvalidContactIdentityReview("limit must be an integer")
+                            ApiError::InvalidPersonIdentityReview("limit must be an integer")
                         })?
                         .clamp(1, 100),
                 );
@@ -4546,14 +5233,14 @@ fn parse_contact_identity_candidates_query(
     Ok(query)
 }
 
-fn parse_contact_identity_review_state(
+fn parse_person_identity_review_state(
     value: &str,
-) -> Result<ContactIdentityReviewState, ApiError> {
+) -> Result<PersonIdentityReviewState, ApiError> {
     match value.trim() {
-        "suggested" => Ok(ContactIdentityReviewState::Suggested),
-        "user_confirmed" => Ok(ContactIdentityReviewState::UserConfirmed),
-        "user_rejected" => Ok(ContactIdentityReviewState::UserRejected),
-        _ => Err(ApiError::InvalidContactIdentityReview(
+        "suggested" => Ok(PersonIdentityReviewState::Suggested),
+        "user_confirmed" => Ok(PersonIdentityReviewState::UserConfirmed),
+        "user_rejected" => Ok(PersonIdentityReviewState::UserRejected),
+        _ => Err(ApiError::InvalidPersonIdentityReview(
             "review_state must be suggested, user_confirmed, or user_rejected",
         )),
     }
@@ -4647,16 +5334,16 @@ fn validate_non_empty_document_processing_field(
     Ok(normalized.to_owned())
 }
 
-fn validate_non_empty_contact_identity_field(
+fn validate_non_empty_person_identity_field(
     field: &'static str,
     value: &str,
 ) -> Result<String, ApiError> {
     let normalized = value.trim();
     if normalized.is_empty() {
-        return Err(ApiError::InvalidContactIdentityReview(match field {
+        return Err(ApiError::InvalidPersonIdentityReview(match field {
             "command_id" => "command_id must not be empty",
             "identity_candidate_id" => "identity_candidate_id must not be empty",
-            "contact_id" => "contact_id must not be empty",
+            "person_id" => "person_id must not be empty",
             _ => "field must not be empty",
         }));
     }
@@ -4688,7 +5375,7 @@ enum ApiError {
     InvalidProjectLinkReview(&'static str),
     InvalidTaskCandidateQuery(&'static str),
     InvalidTaskCandidateReview(&'static str),
-    InvalidContactIdentityReview(&'static str),
+    InvalidPersonIdentityReview(&'static str),
     InvalidDocumentProcessingQuery(&'static str),
     Settings(SettingsError),
     SettingNotFound,
@@ -4703,8 +5390,8 @@ enum ApiError {
     Call(CallError),
     ProjectLinkTargetNotFound,
     ProjectLinkReview(ProjectLinkReviewError),
-    ContactIdentityNotFound,
-    ContactIdentity(ContactIdentityError),
+    PersonIdentityNotFound,
+    PersonIdentity(PersonIdentityError),
     Messages(MessageProjectionError),
     CommunicationIngestion(CommunicationIngestionError),
     MailStorage(MailStorageError),
@@ -4831,9 +5518,9 @@ impl axum::response::IntoResponse for ApiError {
                 message.to_owned(),
                 false,
             ),
-            Self::InvalidContactIdentityReview(message) => (
+            Self::InvalidPersonIdentityReview(message) => (
                 StatusCode::BAD_REQUEST,
-                "invalid_contact_identity_review",
+                "invalid_person_identity_review",
                 message.to_owned(),
                 false,
             ),
@@ -5154,21 +5841,21 @@ impl axum::response::IntoResponse for ApiError {
                     false,
                 )
             }
-            Self::ContactIdentityNotFound => (
+            Self::PersonIdentityNotFound => (
                 StatusCode::NOT_FOUND,
-                "contact_identity_candidate_not_found",
-                "contact identity candidate was not found".to_owned(),
+                "person_identity_candidate_not_found",
+                "person identity candidate was not found".to_owned(),
                 false,
             ),
-            Self::ContactIdentity(error) => {
+            Self::PersonIdentity(error) => {
                 tracing::error!(
                     error = %error,
-                    "contact identity store operation failed"
+                    "person identity store operation failed"
                 );
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "contact_identity_store_error",
-                    "contact identity store operation failed".to_owned(),
+                    "person_identity_store_error",
+                    "person identity store operation failed".to_owned(),
                     false,
                 )
             }
@@ -5358,21 +6045,21 @@ impl From<crate::ollama::OllamaError> for ApiError {
     }
 }
 
-impl From<ContactIdentityError> for ApiError {
-    fn from(error: ContactIdentityError) -> Self {
+impl From<PersonIdentityError> for ApiError {
+    fn from(error: PersonIdentityError) -> Self {
         match error {
-            ContactIdentityError::IdentityCandidateNotFound => Self::ContactIdentityNotFound,
-            ContactIdentityError::InvalidLimit | ContactIdentityError::InvalidReviewState(_) => {
-                Self::InvalidContactIdentityReview(
-                    "review_state or limit must be valid for contact identity candidates",
+            PersonIdentityError::IdentityCandidateNotFound => Self::PersonIdentityNotFound,
+            PersonIdentityError::InvalidLimit | PersonIdentityError::InvalidReviewState(_) => {
+                Self::InvalidPersonIdentityReview(
+                    "review_state or limit must be valid for person identity candidates",
                 )
             }
-            ContactIdentityError::InvalidPayload(_)
-            | ContactIdentityError::MissingPayloadField(_)
-            | ContactIdentityError::MissingActorId => {
-                Self::InvalidContactIdentityReview("invalid identity candidate review payload")
+            PersonIdentityError::InvalidPayload(_)
+            | PersonIdentityError::MissingPayloadField(_)
+            | PersonIdentityError::MissingActorId => {
+                Self::InvalidPersonIdentityReview("invalid identity candidate review payload")
             }
-            _ => Self::ContactIdentity(error),
+            _ => Self::PersonIdentity(error),
         }
     }
 }
@@ -5563,19 +6250,45 @@ impl From<crate::email_extract::ExtractError> for ApiError {
         ApiError::InvalidCommunicationQuery("extract failed")
     }
 }
-impl From<crate::contact_enrichment::ContactEnrichmentError> for ApiError {
-    fn from(error: crate::contact_enrichment::ContactEnrichmentError) -> Self {
+impl From<crate::person_enrichment::PersonEnrichmentError> for ApiError {
+    fn from(error: crate::person_enrichment::PersonEnrichmentError) -> Self {
         match error {
-            crate::contact_enrichment::ContactEnrichmentError::NotFound => {
-                ApiError::ContactIdentityNotFound
+            crate::person_enrichment::PersonEnrichmentError::NotFound => {
+                ApiError::PersonIdentityNotFound
             }
             _ => {
-                tracing::error!(error = %error, "contact enrichment failed");
-                ApiError::InvalidCommunicationQuery("contact enrichment failed")
+                tracing::error!(error = %error, "person enrichment failed");
+                ApiError::InvalidCommunicationQuery("person enrichment failed")
             }
         }
     }
 }
+impl From<PersonMemoryError> for ApiError {
+    fn from(error: PersonMemoryError) -> Self {
+        match error {
+            PersonMemoryError::NotFound => ApiError::PersonIdentityNotFound,
+            _ => {
+                tracing::error!(error = %error, "person memory operation failed");
+                ApiError::InvalidCommunicationQuery("person memory operation failed")
+            }
+        }
+    }
+}
+
+impl From<PersonCoreError> for ApiError {
+    fn from(error: PersonCoreError) -> Self {
+        match error {
+            PersonCoreError::IdentityNotFound | PersonCoreError::PersonaNotFound => {
+                ApiError::PersonIdentityNotFound
+            }
+            _ => {
+                tracing::error!(error = %error, "person core operation failed");
+                ApiError::InvalidCommunicationQuery("person core operation failed")
+            }
+        }
+    }
+}
+
 impl From<EmailAccountSetupError> for ApiError {
     fn from(error: EmailAccountSetupError) -> Self {
         Self::AccountSetup(error)

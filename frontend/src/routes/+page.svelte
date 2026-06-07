@@ -82,8 +82,8 @@
 		type AutomationPolicy,
 		type AutomationTemplate,
 		type CallTranscript,
-		type ContactIdentityCandidate,
-		type ContactIdentityReviewState,
+		type PersonIdentityCandidate,
+		type PersonIdentityReviewState,
 		type CommunicationMessageDetail,
 		type CommunicationMessageDetailItem,
 		type CommunicationMessageSummary,
@@ -134,7 +134,7 @@
 		| 'home'
 		| 'communications'
 		| 'timeline'
-		| 'contacts'
+		| 'persons'
 		| 'projects'
 		| 'tasks'
 		| 'calendar'
@@ -308,12 +308,12 @@
 	let documentProcessingJobsError = $state('');
 	let isTasksLoading = $state(false);
 	let tasksError = $state('');
-	let identityCandidates = $state<ContactIdentityCandidate[]>([]);
+	let identityCandidates = $state<PersonIdentityCandidate[]>([]);
 	let identityCandidatesError = $state('');
 	let isIdentityCandidatesLoading = $state(false);
 	let projectRequestSequence = 0;
 	let selectedConversationIndex = $state(0);
-	let selectedContactIndex = $state(0);
+	let selectedPersonIndex = $state(0);
 	let selectedAgentIndex = $state(0);
 	let aiStatus = $state<AiStatus | null>(null);
 	let aiAgents = $state<AiAgent[]>([]);
@@ -527,7 +527,7 @@
 		{ id: 'home', label: 'Home', icon: 'tabler:home', enabled: true },
 		{ id: 'communications', label: 'Communications', icon: 'tabler:messages', badge: '23', enabled: true },
 		{ id: 'timeline', label: 'Timeline', icon: 'tabler:timeline-event', enabled: true },
-		{ id: 'contacts', label: 'Contacts', icon: 'tabler:address-book', enabled: true },
+		{ id: 'persons', label: 'Persons', icon: 'tabler:address-book', enabled: true },
 		{ id: 'projects', label: 'Projects', icon: 'tabler:briefcase', enabled: true },
 		{ id: 'tasks', label: 'Tasks', icon: 'tabler:checkbox', enabled: true },
 		{ id: 'calendar', label: 'Calendar', icon: 'tabler:calendar', enabled: true },
@@ -559,10 +559,10 @@
 			search: 'Search timeline...',
 			icon: 'tabler:timeline-event'
 		},
-		contacts: {
-			title: 'Contacts',
-			subtitle: '642 contacts',
-			search: 'Search contacts, companies, emails...',
+		persons: {
+			title: 'Persons',
+			subtitle: '642 persons',
+			search: 'Search persons, companies, emails...',
 			icon: 'tabler:address-book'
 		},
 		projects: {
@@ -580,7 +580,7 @@
 		calendar: {
 			title: 'Calendar',
 			subtitle: 'All your events from connected calendars',
-			search: 'Search events, meetings, contacts...',
+			search: 'Search events, meetings, persons...',
 			icon: 'tabler:calendar'
 		},
 		documents: {
@@ -651,7 +651,7 @@
 			{ label: 'Documents', icon: 'tabler:file-text' },
 			{ label: 'Decisions', icon: 'tabler:git-pull-request' }
 		],
-		contacts: [
+		persons: [
 			{ label: 'All People', icon: 'tabler:users', badge: '642' },
 			{ label: 'Companies', icon: 'tabler:building', badge: '128' },
 			{ label: 'Clients', icon: 'tabler:shield-check' },
@@ -748,7 +748,7 @@
 		{ label: 'Needs Attention', value: '4', delta: '2', icon: 'tabler:alert-circle' },
 		{ label: 'Waiting For Reply', value: '3', delta: '1', icon: 'tabler:message-reply' },
 		{ label: 'New Documents', value: '2', delta: '1', icon: 'tabler:file-text' },
-		{ label: 'New Contacts', value: '1', delta: '1', icon: 'tabler:user-plus' }
+		{ label: 'New Persons', value: '1', delta: '1', icon: 'tabler:user-plus' }
 	];
 
 	const whatsNew: FeedItem[] = [
@@ -776,7 +776,7 @@
 		{ name: 'GitHub', role: 'Hermes Hub', project: 'Hermes Hub', channel: 'Email', time: 'Yesterday', preview: 'Pull request #128 was merged' }
 	];
 
-	const contactList: Person[] = [
+	const personList: Person[] = [
 		{ name: 'John Smith', role: 'CEO', company: 'Smith & Partners', status: 'Online' },
 		{ name: 'Maria Petrova', role: 'Lead Designer', company: 'Acme Corp', channel: 'Telegram' },
 		{ name: 'Michael Brown', role: 'CTO', company: 'TechFlow Inc.', status: 'Online' },
@@ -879,7 +879,7 @@
 		v5Capabilities?.capabilities.filter((capability) => capability.status === 'blocked') ?? []
 	);
 	const selectedConversation = $derived(conversations[selectedConversationIndex] ?? conversations[0]);
-	const selectedContact = $derived(contactList[selectedContactIndex] ?? contactList[0]);
+	const selectedPerson = $derived(personList[selectedPersonIndex] ?? personList[0]);
 	const agentCards = $derived(aiAgents.map(agentCardView));
 	const selectedAgent = $derived(agentCards[selectedAgentIndex] ?? agentCards[0] ?? null);
 	const activeView = $derived(viewCopy[currentView]);
@@ -915,7 +915,7 @@
 	const confirmedMergeIdentityCandidates = $derived(
 		identityCandidates.filter(
 			(item) =>
-				item.candidate_kind === 'merge_contacts' &&
+				item.candidate_kind === 'merge_persons' &&
 				item.review_state === 'user_confirmed' &&
 				!confirmedSplitCandidateForMerge(item)
 		)
@@ -1452,8 +1452,8 @@
 	}
 
 	async function setIdentityCandidateReview(
-		candidate: ContactIdentityCandidate,
-		reviewState: ContactIdentityReviewState
+		candidate: PersonIdentityCandidate,
+		reviewState: PersonIdentityReviewState
 	) {
 		try {
 			await reviewIdentityCandidate(
@@ -1470,13 +1470,13 @@
 		}
 	}
 
-	async function splitConfirmedIdentityMerge(candidate: ContactIdentityCandidate) {
+	async function splitConfirmedIdentityMerge(candidate: PersonIdentityCandidate) {
 		const splitCandidate = splitCandidateForConfirmedMerge(candidate);
 		if (!splitCandidate) {
 			return;
 		}
 
-		const commandId = `contact-identity-split-${Date.now()}-${candidate.identity_candidate_id}`;
+		const commandId = `person-identity-split-${Date.now()}-${candidate.identity_candidate_id}`;
 		try {
 			await reviewIdentityCandidate(
 				apiBaseUrl,
@@ -2911,41 +2911,41 @@
 		return `${Math.round(item.confidence * 100)}%`;
 	}
 
-	function identityConfidence(item: ContactIdentityCandidate) {
+	function identityConfidence(item: PersonIdentityCandidate) {
 		return `${Math.round(item.confidence * 100)}%`;
 	}
 
-	function splitCandidateForConfirmedMerge(candidate: ContactIdentityCandidate) {
+	function splitCandidateForConfirmedMerge(candidate: PersonIdentityCandidate) {
 		return splitCandidateForMerge(candidate, 'suggested');
 	}
 
-	function confirmedSplitCandidateForMerge(candidate: ContactIdentityCandidate) {
+	function confirmedSplitCandidateForMerge(candidate: PersonIdentityCandidate) {
 		return splitCandidateForMerge(candidate, 'user_confirmed');
 	}
 
 	function splitCandidateForMerge(
-		candidate: ContactIdentityCandidate,
-		reviewState: ContactIdentityReviewState
+		candidate: PersonIdentityCandidate,
+		reviewState: PersonIdentityReviewState
 	) {
-		if (!candidate.right_contact_id) {
+		if (!candidate.right_person_id) {
 			return null;
 		}
-		const pairKey = contactIdentityPairKey(candidate.left_contact_id, candidate.right_contact_id);
+		const pairKey = personIdentityPairKey(candidate.left_person_id, candidate.right_person_id);
 		return (
 			identityCandidates.find(
 				(item) =>
-					item.candidate_kind === 'split_contact' &&
+					item.candidate_kind === 'split_person' &&
 					item.review_state === reviewState &&
-					item.right_contact_id !== null &&
-					contactIdentityPairKey(item.left_contact_id, item.right_contact_id) === pairKey
+					item.right_person_id !== null &&
+					personIdentityPairKey(item.left_person_id, item.right_person_id) === pairKey
 			) ?? null
 		);
 	}
 
-	function contactIdentityPairKey(leftContactId: string, rightContactId: string) {
-		return leftContactId <= rightContactId
-			? `${leftContactId}:${rightContactId}`
-			: `${rightContactId}:${leftContactId}`;
+	function personIdentityPairKey(leftPersonId: string, rightPersonId: string) {
+		return leftPersonId <= rightPersonId
+			? `${leftPersonId}:${rightPersonId}`
+			: `${rightPersonId}:${leftPersonId}`;
 	}
 
 	function taskCreatedTime(value: string | null) {
@@ -3446,37 +3446,37 @@
 					</div>
 				{/if}
 			</section>
-		{:else if currentView === 'contacts'}
-			<section class="contacts-page">
-				<div class="contacts-layout">
-					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-list" data-widget-hidden={!isWidgetVisible('contacts-list')}>
-						{@render widgetEditChrome('contacts-list')}
-						<section class="panel contacts-list-panel">
+		{:else if currentView === 'persons'}
+			<section class="persons-page">
+				<div class="persons-layout">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-list" data-widget-hidden={!isWidgetVisible('persons-list')}>
+						{@render widgetEditChrome('persons-list')}
+						<section class="panel persons-list-panel">
 							<header>
-								<div><h1>Contacts</h1><p>642 contacts</p></div>
-								<button type="button" class="primary-button" disabled>New Contact</button>
+								<div><h1>Persons</h1><p>642 persons</p></div>
+								<button type="button" class="primary-button" disabled>New Person</button>
 							</header>
 							<div class="filter-tabs compact">
 								<button type="button" class="active">All</button>
 								<button type="button" disabled>People <em>532</em></button>
 								<button type="button" disabled>Companies <em>110</em></button>
 							</div>
-							<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search contacts..." /></label>
-							{#each contactList as contact, index}
-								<button type="button" class="contact-row" class:active={selectedContactIndex === index} onclick={() => (selectedContactIndex = index)}>
+							<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search persons..." /></label>
+							{#each personList as person, index}
+								<button type="button" class="person-row" class:active={selectedPersonIndex === index} onclick={() => (selectedPersonIndex = index)}>
 									<img src="/assets/hermes-reference-avatar.png" alt="" />
-									<span><strong>{contact.name}</strong><small>{contact.role}</small><em>{contact.company}</em></span>
-									<small>{contact.status ?? contact.channel ?? 'Email'}</small>
+									<span><strong>{person.name}</strong><small>{person.role}</small><em>{person.company}</em></span>
+									<small>{person.status ?? person.channel ?? 'Email'}</small>
 								</button>
 							{/each}
 						</section>
 					</div>
-					<section class="contact-detail">
-						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-hero" data-widget-hidden={!isWidgetVisible('contacts-hero')}>
-							{@render widgetEditChrome('contacts-hero')}
-							<header class="contact-hero panel">
+					<section class="person-detail">
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-hero" data-widget-hidden={!isWidgetVisible('persons-hero')}>
+							{@render widgetEditChrome('persons-hero')}
+							<header class="person-hero panel">
 								<img src="/assets/hermes-reference-avatar.png" alt="" />
-								<div><h1>{selectedContact.name}</h1><p>{selectedContact.role} at {selectedContact.company}</p><small>Online</small></div>
+								<div><h1>{selectedPerson.name}</h1><p>{selectedPerson.role} at {selectedPerson.company}</p><small>Online</small></div>
 								<div class="chat-actions">
 									<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
 									<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
@@ -3493,11 +3493,11 @@
 							<button type="button" disabled>Projects <em>5</em></button>
 							<button type="button" disabled>Notes</button>
 						</div>
-						<div class="contact-cards">
-							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-information" data-widget-hidden={!isWidgetVisible('contacts-information')}>
-								{@render widgetEditChrome('contacts-information')}
+						<div class="person-cards">
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-information" data-widget-hidden={!isWidgetVisible('persons-information')}>
+								{@render widgetEditChrome('persons-information')}
 								<section class="panel info-card">
-									<h2>Contact Information</h2>
+									<h2>Person Information</h2>
 									<ul class="detail-list">
 										<li><Icon icon="tabler:mail" width="17" height="17" /> jsmith@smithpartners.com <em>Work</em></li>
 										<li><Icon icon="tabler:phone" width="17" height="17" /> +1 (555) 123-4567 <em>Mobile</em></li>
@@ -3506,34 +3506,34 @@
 									</ul>
 								</section>
 							</div>
-							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-about" data-widget-hidden={!isWidgetVisible('contacts-about')}>
-								{@render widgetEditChrome('contacts-about')}
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-about" data-widget-hidden={!isWidgetVisible('persons-about')}>
+								{@render widgetEditChrome('persons-about')}
 								<section class="panel info-card"><h2>About</h2><p>John is a strategic consulting partner. We have been working together since 2021 on multiple projects including Hermes Hub and IRIS platform development.</p><div class="tag-cloud"><span>Decision Maker</span><span>Executive</span><span>Strategic</span><span>Tech Enthusiast</span></div></section>
 							</div>
-							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-relationship-strength" data-widget-hidden={!isWidgetVisible('contacts-relationship-strength')}>
-								{@render widgetEditChrome('contacts-relationship-strength')}
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-relationship-strength" data-widget-hidden={!isWidgetVisible('persons-relationship-strength')}>
+								{@render widgetEditChrome('persons-relationship-strength')}
 								<section class="panel info-card"><h2>Relationship Strength</h2><div class="big-score">85</div><strong>Strong</strong><p>Last interaction 2 hours ago</p></section>
 							</div>
-							<div class="widget-frame span-2" class:editing={isLayoutEditing} data-widget-id="contacts-recent-interactions" data-widget-hidden={!isWidgetVisible('contacts-recent-interactions')}>
-								{@render widgetEditChrome('contacts-recent-interactions')}
+							<div class="widget-frame span-2" class:editing={isLayoutEditing} data-widget-id="persons-recent-interactions" data-widget-hidden={!isWidgetVisible('persons-recent-interactions')}>
+								{@render widgetEditChrome('persons-recent-interactions')}
 								<section class="panel info-card span-2"><h2>Recent Interactions</h2>{#each whatsNew.slice(0, 3) as item}<div class="feed-row compact-row"><span class="round-icon {item.tone}"><Icon icon={item.icon} width="18" height="18" /></span><div><strong>{item.title}</strong><p>{item.meta}</p></div><time>{item.time}</time></div>{/each}</section>
 							</div>
-							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-active-projects" data-widget-hidden={!isWidgetVisible('contacts-active-projects')}>
-								{@render widgetEditChrome('contacts-active-projects')}
+							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-active-projects" data-widget-hidden={!isWidgetVisible('persons-active-projects')}>
+								{@render widgetEditChrome('persons-active-projects')}
 								<section class="panel info-card"><h2>Active Projects</h2>{#each projects.slice(0, 3) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
 							</div>
 						</div>
 					</section>
 					<aside class="stacked-rail">
-						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-ai-summary" data-widget-hidden={!isWidgetVisible('contacts-ai-summary')}>
-							{@render widgetEditChrome('contacts-ai-summary')}
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-ai-summary" data-widget-hidden={!isWidgetVisible('persons-ai-summary')}>
+							{@render widgetEditChrome('persons-ai-summary')}
 							<section class="panel info-card"><h2>AI Summary</h2><p>John is a key strategic partner and decision maker. You have a strong professional relationship with frequent communication across multiple projects.</p></section>
 						</div>
-						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-identity-review" data-widget-hidden={!isWidgetVisible('contacts-identity-review')}>
-							{@render widgetEditChrome('contacts-identity-review')}
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-identity-review" data-widget-hidden={!isWidgetVisible('persons-identity-review')}>
+							{@render widgetEditChrome('persons-identity-review')}
 							<section class="panel info-card">
-								<h2>Contact Identity Review</h2>
-								<p class="identity-note">Contact merges are only suggested and are not applied until confirmed.</p>
+								<h2>Person Identity Review</h2>
+								<p class="identity-note">Person merges are only suggested and are not applied until confirmed.</p>
 								{#if isIdentityCandidatesLoading}
 									<p class="inline-copy">Loading identity suggestions…</p>
 								{:else if identityCandidatesError}
@@ -3546,8 +3546,8 @@
 											<div>
 												<strong>{candidate.candidate_kind}</strong>
 												<p>{candidate.evidence_summary}</p>
-												<small>Left: {candidate.left_contact_id}</small>
-												<small>Right: {candidate.right_contact_id ?? 'N/A'}</small>
+												<small>Left: {candidate.left_person_id}</small>
+												<small>Right: {candidate.right_person_id ?? 'N/A'}</small>
 												<small>Confidence: {identityConfidence(candidate)} · {candidate.review_state}</small>
 											</div>
 											<div class="identity-actions">
@@ -3568,8 +3568,8 @@
 											<div>
 											<strong>{candidate.candidate_kind}</strong>
 											<p>{candidate.evidence_summary}</p>
-											<small>Left: {candidate.left_contact_id}</small>
-											<small>Right: {candidate.right_contact_id ?? 'N/A'}</small>
+											<small>Left: {candidate.left_person_id}</small>
+											<small>Right: {candidate.right_person_id ?? 'N/A'}</small>
 											<small>Confidence: {identityConfidence(candidate)} · {candidate.review_state}</small>
 											</div>
 											<div class="identity-actions">
@@ -3590,12 +3590,12 @@
 								{/if}
 							</section>
 						</div>
-						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-related-documents" data-widget-hidden={!isWidgetVisible('contacts-related-documents')}>
-							{@render widgetEditChrome('contacts-related-documents')}
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-related-documents" data-widget-hidden={!isWidgetVisible('persons-related-documents')}>
+							{@render widgetEditChrome('persons-related-documents')}
 							<section class="panel info-card"><h2>Related Documents</h2>{#each documents.slice(0, 4) as doc}<div class="doc-mini"><Icon icon={doc.icon} width="20" height="20" /><span><strong>{doc.name}</strong><small>{doc.size} · {doc.date}</small></span></div>{/each}</section>
 						</div>
-						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="contacts-recent-notes" data-widget-hidden={!isWidgetVisible('contacts-recent-notes')}>
-							{@render widgetEditChrome('contacts-recent-notes')}
+						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-recent-notes" data-widget-hidden={!isWidgetVisible('persons-recent-notes')}>
+							{@render widgetEditChrome('persons-recent-notes')}
 							<section class="panel info-card"><h2>Recent Notes</h2><p>Discussed expansion to EU market</p><p>Prefers email for official communication</p><p>Interested in AI/ML integration</p></section>
 						</div>
 					</aside>
@@ -4149,7 +4149,7 @@
 							{@render widgetEditChrome('documents-related-context')}
 							<section class="panel chart-panel"><h2>Documents Insights</h2><strong>2,653</strong><span>Total Documents</span><div class="donut small"><strong>24%</strong></div></section>
 							<section class="panel info-card"><h2>Document Types</h2>{#each ['PDF 1,234 (46%)', 'Documents 623 (23%)', 'Spreadsheets 312 (12%)', 'Presentations 198 (7%)', 'Images 142 (5%)'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
-							<section class="panel info-card"><h2>Recent Activity</h2>{#each contactList.slice(1,5) as person}<div class="person-compact"><img src="/assets/hermes-reference-avatar.png" alt="" /><span><strong>{person.name}</strong><small>updated a document</small></span></div>{/each}</section>
+							<section class="panel info-card"><h2>Recent Activity</h2>{#each personList.slice(1,5) as person}<div class="person-compact"><img src="/assets/hermes-reference-avatar.png" alt="" /><span><strong>{person.name}</strong><small>updated a document</small></span></div>{/each}</section>
 						</div>
 					</aside>
 				</div>
@@ -4419,7 +4419,7 @@
 									<div class="graph-state-card">
 										<Icon icon="tabler:database-off" width="26" height="26" />
 										<h2>No graph projection yet</h2>
-										<p>Import contacts, messages or documents, then run the existing projection smoke command to create graph data.</p>
+										<p>Import persons, messages or documents, then run the existing projection smoke command to create graph data.</p>
 									</div>
 								{:else if graphNeighborhood}
 									<svg class="graph-edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">

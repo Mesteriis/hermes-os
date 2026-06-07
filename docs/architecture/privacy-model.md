@@ -45,7 +45,7 @@ The user must be able to export:
 
 - raw imported records where legal and technically possible
 - normalized messages
-- contacts
+- persons
 - documents
 - tasks
 - graph edges

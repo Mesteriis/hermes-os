@@ -1,4 +1,4 @@
-# Hermes Hub — Contacts Module
+# Hermes Hub — Persons Module
 
 Модуль контактов: авто-создание, identity resolution, профили общения, communication fingerprint.
 

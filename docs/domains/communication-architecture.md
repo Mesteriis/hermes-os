@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Communications unify email, Telegram, WhatsApp and optional SMS into a single event-backed memory model. Provider-specific behavior is preserved, but user workflows operate over canonical messages, threads, contacts and events.
+Communications unify email, Telegram, WhatsApp and optional SMS into a single event-backed memory model. Provider-specific behavior is preserved, but user workflows operate over canonical messages, threads, persons and events.
 
 ## Channel Adapters
 

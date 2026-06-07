@@ -47,7 +47,7 @@ flowchart TB
 ### Domain Layer
 
 - communications
-- contacts
+- persons
 - documents
 - tasks
 - calendar

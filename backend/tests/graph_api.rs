@@ -171,7 +171,7 @@ async fn graph_nodes_returns_connected_picker_nodes_first() {
         .store
         .upsert_node(&NewGraphNode::new(
             GraphNodeKind::Person,
-            format!("contact:connected-picker:{suffix}"),
+            format!("person:connected-picker:{suffix}"),
             format!("Connected Picker {suffix}"),
         ))
         .await
@@ -189,7 +189,7 @@ async fn graph_nodes_returns_connected_picker_nodes_first() {
         .store
         .upsert_node(&NewGraphNode::new(
             GraphNodeKind::Person,
-            format!("contact:disconnected-picker:{suffix}"),
+            format!("person:disconnected-picker:{suffix}"),
             format!("Disconnected Picker {suffix}"),
         ))
         .await
@@ -205,8 +205,8 @@ async fn graph_nodes_returns_connected_picker_nodes_first() {
                 GraphReviewState::SystemAccepted,
             ),
             &[NewGraphEvidence::new(
-                GraphEvidenceSourceKind::Contact,
-                format!("contact-source:{suffix}"),
+                GraphEvidenceSourceKind::Person,
+                format!("person-source:{suffix}"),
             )],
         )
         .await
@@ -248,7 +248,7 @@ async fn graph_search_returns_matching_nodes() {
         .store
         .upsert_node(&NewGraphNode::new(
             GraphNodeKind::Person,
-            format!("contact:alex:{suffix}"),
+            format!("person:alex:{suffix}"),
             format!("Alex Morgan {suffix}"),
         ))
         .await
@@ -257,7 +257,7 @@ async fn graph_search_returns_matching_nodes() {
         .store
         .upsert_node(&NewGraphNode::new(
             GraphNodeKind::Person,
-            format!("contact:blair:{suffix}"),
+            format!("person:blair:{suffix}"),
             format!("Blair Morgan {suffix}"),
         ))
         .await
@@ -318,7 +318,7 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
         .store
         .upsert_node(&NewGraphNode::new(
             GraphNodeKind::Person,
-            format!("contact:alex-neighborhood:{suffix}"),
+            format!("person:alex-neighborhood:{suffix}"),
             format!("Alex Neighborhood {suffix}"),
         ))
         .await
@@ -343,10 +343,10 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
                 GraphReviewState::SystemAccepted,
             ),
             &[NewGraphEvidence::new(
-                GraphEvidenceSourceKind::Contact,
-                format!("contact-source:{suffix}"),
+                GraphEvidenceSourceKind::Person,
+                format!("person-source:{suffix}"),
             )
-            .excerpt("confirmed by contact record")
+            .excerpt("confirmed by person record")
             .metadata(json!({"source": "graph_api_test"}))],
         )
         .await
@@ -395,12 +395,12 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
     let evidence = body["evidence"].as_array().expect("evidence array");
     assert_eq!(evidence.len(), 1);
     assert_eq!(evidence[0]["edge_id"], json!(edge.edge_id));
-    assert_eq!(evidence[0]["source_kind"], json!("contact"));
+    assert_eq!(evidence[0]["source_kind"], json!("person"));
     assert_eq!(
         evidence[0]["source_id"],
-        json!(format!("contact-source:{suffix}"))
+        json!(format!("person-source:{suffix}"))
     );
-    assert_eq!(evidence[0]["excerpt"], json!("confirmed by contact record"));
+    assert_eq!(evidence[0]["excerpt"], json!("confirmed by person record"));
     assert_eq!(evidence[0]["metadata"], json!({"source": "graph_api_test"}));
 
     context.cleanup().await;
@@ -416,7 +416,7 @@ async fn graph_neighborhood_caps_depth_one_edges_nodes_and_evidence() {
         .store
         .upsert_node(&NewGraphNode::new(
             GraphNodeKind::Person,
-            format!("contact:alex-neighborhood-cap:{suffix}"),
+            format!("person:alex-neighborhood-cap:{suffix}"),
             format!("Alex Neighborhood Cap {suffix}"),
         ))
         .await
@@ -443,8 +443,8 @@ async fn graph_neighborhood_caps_depth_one_edges_nodes_and_evidence() {
                     GraphReviewState::SystemAccepted,
                 ),
                 &[NewGraphEvidence::new(
-                    GraphEvidenceSourceKind::Contact,
-                    format!("contact-source:{suffix}:{index:03}"),
+                    GraphEvidenceSourceKind::Person,
+                    format!("person-source:{suffix}:{index:03}"),
                 )],
             )
             .await
@@ -495,7 +495,7 @@ async fn graph_neighborhood_caps_evidence_for_returned_edges() {
         .store
         .upsert_node(&NewGraphNode::new(
             GraphNodeKind::Person,
-            format!("contact:alex-neighborhood-evidence-cap:{suffix}"),
+            format!("person:alex-neighborhood-evidence-cap:{suffix}"),
             format!("Alex Neighborhood Evidence Cap {suffix}"),
         ))
         .await
@@ -512,8 +512,8 @@ async fn graph_neighborhood_caps_evidence_for_returned_edges() {
     let evidence = (0..=EXPECTED_GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT)
         .map(|index| {
             NewGraphEvidence::new(
-                GraphEvidenceSourceKind::Contact,
-                format!("contact-source:{suffix}:{index:03}"),
+                GraphEvidenceSourceKind::Person,
+                format!("person-source:{suffix}:{index:03}"),
             )
         })
         .collect::<Vec<_>>();

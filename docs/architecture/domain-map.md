@@ -8,7 +8,7 @@ flowchart LR
     Documents --> Events
     Calendar --> Events
     Tasks --> Events
-    Contacts --> Graph
+    Persons --> Graph
     Projects --> Graph
     Events --> Graph
     Events --> Search
@@ -25,8 +25,8 @@ flowchart LR
 
 | Domain | Owns | Does not own |
 | --- | --- | --- |
-| Communications | messages, threads, channels, delivery metadata | contact identity truth |
-| Contacts | people, companies, channels, relationship graph | raw provider messages |
+| Communications | messages, threads, channels, delivery metadata | person identity truth |
+| Persons | people, companies, channels, relationship graph | raw provider messages |
 | Documents | document versions, OCR, extraction artifacts | task status |
 | Tasks | commitments, reminders, assignees, lifecycle | message delivery |
 | Calendar | meetings, attendance, schedule context | general project state |

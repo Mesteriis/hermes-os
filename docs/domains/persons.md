@@ -1,12 +1,12 @@
-# Contacts Domain
+# Persons Domain
 
 ## Responsibilities
 
-Contacts represent people, companies, organizations, communication channels and relationships. The contacts domain is the human entry point into long-term memory.
+Persons represent people, companies, organizations, communication channels and relationships. The persons domain is the human entry point into long-term memory.
 
-## Contact Profile
+## Person Profile
 
-A contact profile should show:
+A person profile should show:
 
 - canonical identity
 - known aliases
@@ -43,4 +43,4 @@ Identity resolution must support:
 - provider-specific identity preservation
 - audit trail
 
-Ambiguous contacts must not be silently collapsed.
+Ambiguous persons must not be silently collapsed.

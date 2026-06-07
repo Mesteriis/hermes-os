@@ -222,7 +222,7 @@ impl NewApiAuditRecord {
         }
     }
 
-    pub fn contact_identity_review_set(
+    pub fn person_identity_review_set(
         actor_id: impl Into<String>,
         identity_candidate_id: impl Into<String>,
     ) -> Self {
@@ -230,10 +230,10 @@ impl NewApiAuditRecord {
         Self {
             actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
-            operation: "contact_identity.review.set".to_owned(),
+            operation: "person_identity.review.set".to_owned(),
             method: "PUT".to_owned(),
             path_template: "/api/v2/identity-candidates/{identity_candidate_id}/review".to_owned(),
-            target_kind: "contact_identity_candidate".to_owned(),
+            target_kind: "person_identity_candidate".to_owned(),
             target_id: Some(identity_candidate_id),
             metadata: json!({}),
         }

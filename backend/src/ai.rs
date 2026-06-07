@@ -361,22 +361,22 @@ impl SemanticEmbeddingStore {
             });
         }
 
-        let contact_rows = sqlx::query(
+        let person_rows = sqlx::query(
             r#"
-            SELECT contact_id, display_name, email_address
-            FROM contacts
-            ORDER BY updated_at DESC, contact_id
+            SELECT person_id, display_name, email_address
+            FROM persons
+            ORDER BY updated_at DESC, person_id
             "#,
         )
         .fetch_all(&self.pool)
         .await?;
-        for row in contact_rows {
-            let contact_id: String = row.try_get("contact_id")?;
+        for row in person_rows {
+            let person_id: String = row.try_get("person_id")?;
             let display_name: String = row.try_get("display_name")?;
             let email_address: String = row.try_get("email_address")?;
             sources.push(SemanticSource {
-                source_kind: SemanticSourceKind::Contact,
-                source_id: contact_id,
+                source_kind: SemanticSourceKind::Person,
+                source_id: person_id,
                 title: display_name.clone(),
                 source_text: format!("{display_name}\nEmail: {email_address}"),
                 graph_node_id: None,
@@ -393,7 +393,7 @@ pub enum SemanticSourceKind {
     Document,
     Project,
     Task,
-    Contact,
+    Person,
 }
 
 impl SemanticSourceKind {
@@ -403,7 +403,7 @@ impl SemanticSourceKind {
             Self::Document => "document",
             Self::Project => "project",
             Self::Task => "task",
-            Self::Contact => "contact",
+            Self::Person => "person",
         }
     }
 
@@ -413,7 +413,7 @@ impl SemanticSourceKind {
             "document" => Ok(Self::Document),
             "project" => Ok(Self::Project),
             "task" => Ok(Self::Task),
-            "contact" => Ok(Self::Contact),
+            "person" => Ok(Self::Person),
             _ => Err(AiError::InvalidSourceKind(value.to_owned())),
         }
     }
@@ -972,7 +972,7 @@ impl AiService {
         let query = scoped_meeting_query(
             &topic,
             request.project_id.as_deref(),
-            request.contact_id.as_deref(),
+            request.person_id.as_deref(),
         );
 
         run_store
@@ -1000,7 +1000,7 @@ impl AiService {
             payload: json!({
                 "workflow": "meeting_prep",
                 "project_id": request.project_id,
-                "contact_id": request.contact_id,
+                "person_id": request.person_id,
             }),
             correlation_id: request.correlation_id.as_deref(),
         })
@@ -1236,7 +1236,7 @@ pub struct AiMeetingPrepRequest {
     pub command_id: String,
     pub topic: String,
     pub project_id: Option<String>,
-    pub contact_id: Option<String>,
+    pub person_id: Option<String>,
     pub causation_id: Option<String>,
     pub correlation_id: Option<String>,
 }
@@ -1513,15 +1513,15 @@ fn citation_for_draft<'a>(
         .find(|citation| citation.source_kind == source_kind && citation.source_id == source_id)
 }
 
-fn scoped_meeting_query(topic: &str, project_id: Option<&str>, contact_id: Option<&str>) -> String {
+fn scoped_meeting_query(topic: &str, project_id: Option<&str>, person_id: Option<&str>) -> String {
     let mut query = topic.to_owned();
     if let Some(project_id) = project_id {
         query.push_str("\nProject: ");
         query.push_str(project_id);
     }
-    if let Some(contact_id) = contact_id {
+    if let Some(person_id) = person_id {
         query.push_str("\nContact: ");
-        query.push_str(contact_id);
+        query.push_str(person_id);
     }
     query
 }

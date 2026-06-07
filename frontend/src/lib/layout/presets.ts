@@ -6,7 +6,7 @@ const layoutViewIds = [
 	'home',
 	'communications',
 	'timeline',
-	'contacts',
+	'persons',
 	'projects',
 	'tasks',
 	'calendar',
@@ -107,18 +107,18 @@ export const layoutPresets: LayoutPreset[] = [
 		instance('timeline-period-summary', 'inspector', 10),
 		instance('timeline-selected-event-context', 'inspector', 20)
 	]),
-	preset('contacts', 'master_detail_workbench', workbenchZones, [
-		instance('contacts-list', 'list', 10),
-		instance('contacts-hero', 'detail', 10),
-		instance('contacts-information', 'detail', 20),
-		instance('contacts-about', 'detail', 30),
-		instance('contacts-relationship-strength', 'detail', 40),
-		instance('contacts-recent-interactions', 'detail', 50),
-		instance('contacts-active-projects', 'detail', 60),
-		instance('contacts-ai-summary', 'rail', 10),
-		instance('contacts-identity-review', 'rail', 20),
-		instance('contacts-related-documents', 'rail', 30),
-		instance('contacts-recent-notes', 'rail', 40)
+	preset('persons', 'master_detail_workbench', workbenchZones, [
+		instance('persons-list', 'list', 10),
+		instance('persons-hero', 'detail', 10),
+		instance('persons-information', 'detail', 20),
+		instance('persons-about', 'detail', 30),
+		instance('persons-relationship-strength', 'detail', 40),
+		instance('persons-recent-interactions', 'detail', 50),
+		instance('persons-active-projects', 'detail', 60),
+		instance('persons-ai-summary', 'rail', 10),
+		instance('persons-identity-review', 'rail', 20),
+		instance('persons-related-documents', 'rail', 30),
+		instance('persons-recent-notes', 'rail', 40)
 	]),
 	preset('projects', 'entity_workspace', entityZones, [
 		instance('projects-hero', 'hero', 10),

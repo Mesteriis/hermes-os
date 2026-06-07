@@ -317,7 +317,7 @@ There are nine query parsing helpers in `lib.rs`, several of which parse `limit`
 - `parse_project_link_candidates_query`
 - `parse_task_candidates_query`
 - `parse_document_processing_jobs_query`
-- `parse_contact_identity_candidates_query`
+- `parse_person_identity_candidates_query`
 
 Solution:
 

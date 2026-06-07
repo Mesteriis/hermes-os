@@ -515,14 +515,14 @@ impl ProjectStore {
                      jsonb_array_elements_text(message.recipients) AS recipient(value)
             )
             SELECT
-                COALESCE(contact.display_name, participants.email_address) AS display_name,
+                COALESCE(person.display_name, participants.email_address) AS display_name,
                 participants.email_address,
                 count(*)::BIGINT AS interaction_count,
                 max(participants.occurred_at) AS last_interaction_at
             FROM participants
-            LEFT JOIN contacts contact ON contact.email_address = participants.email_address
+            LEFT JOIN persons person ON person.email_address = participants.email_address
             WHERE participants.email_address <> ''
-            GROUP BY participants.email_address, contact.display_name
+            GROUP BY participants.email_address, person.display_name
             ORDER BY interaction_count DESC, last_interaction_at DESC NULLS LAST, display_name
             LIMIT $2
             "#,

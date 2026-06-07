@@ -6,8 +6,8 @@ use thiserror::Error;
 use crate::communications::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use crate::contacts::{
-    ContactProjectionError, ContactProjectionStore, upsert_contacts_from_message_participants,
+use crate::persons::{
+    PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
 };
 use crate::email_import::{
     FixtureEmailImportError, FixtureEmailImportRequest, import_fixture_email_messages_with_records,
@@ -63,7 +63,7 @@ pub struct EmailFixtureProjectionPipelineReport {
     pub provider_kind: EmailProviderKind,
     pub imported_records: usize,
     pub projected_messages: usize,
-    pub upserted_contacts: usize,
+    pub upserted_persons: usize,
     pub graph_projection: GraphProjectionReport,
     pub graph_summary: GraphSummary,
     pub total_graph_nodes: i64,
@@ -111,7 +111,7 @@ pub async fn project_fixture_email_messages(
     .await?;
 
     let message_store = MessageProjectionStore::new(pool.clone());
-    let contact_store = ContactProjectionStore::new(pool.clone());
+    let person_store = PersonProjectionStore::new(pool.clone());
     let mut projected_messages = 0;
     let mut participants = Vec::new();
     for raw_record in &import_report.raw_records {
@@ -120,7 +120,7 @@ pub async fn project_fixture_email_messages(
         participants.extend(message.recipients.clone());
         projected_messages += 1;
     }
-    let contacts = upsert_contacts_from_message_participants(&contact_store, &participants).await?;
+    let persons = upsert_persons_from_message_participants(&person_store, &participants).await?;
 
     let graph_projection = GraphProjectionService::new(pool.clone())
         .project_from_v1()
@@ -143,7 +143,7 @@ pub async fn project_fixture_email_messages(
         provider_kind: request.provider_kind,
         imported_records: import_report.inserted_or_existing_records,
         projected_messages,
-        upserted_contacts: contacts.len(),
+        upserted_persons: persons.len(),
         graph_projection,
         graph_summary,
         total_graph_nodes,
@@ -195,7 +195,7 @@ pub enum EmailFixturePipelineError {
     Message(#[from] MessageProjectionError),
 
     #[error(transparent)]
-    Contact(#[from] ContactProjectionError),
+    Contact(#[from] PersonProjectionError),
 
     #[error(transparent)]
     GraphProjection(#[from] GraphProjectionError),

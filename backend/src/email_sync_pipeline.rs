@@ -3,8 +3,8 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::communications::{CommunicationIngestionStore, StoredRawCommunicationRecord};
-use crate::contacts::{
-    ContactProjectionError, ContactProjectionStore, upsert_contacts_from_message_participants,
+use crate::persons::{
+    PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
 };
 use crate::email_ingestion::analyze_ingested_message;
 use crate::email_rfc822::{ParsedEmailAttachment, ParsedEmailAttachmentDisposition};
@@ -29,7 +29,7 @@ pub struct EmailSyncPipelineReport {
     pub attachment_blobs_upserted: usize,
     pub attachments_extracted: usize,
     pub attachments_not_scanned: usize,
-    pub upserted_contacts: usize,
+    pub upserted_persons: usize,
     pub checkpoint_saved: bool,
 }
 
@@ -43,7 +43,7 @@ pub async fn project_email_sync_batch_with_mail_blobs(
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let mail_store = MailStorageStore::new(pool.clone());
     let message_store = MessageProjectionStore::new(pool.clone());
-    let contact_store = ContactProjectionStore::new(pool);
+    let person_store = PersonProjectionStore::new(pool);
     let attachment_scanner = NoopAttachmentSafetyScanner;
     let import_report = record_email_sync_batch_with_mail_blobs(
         &communication_store,
@@ -68,7 +68,7 @@ pub async fn project_email_sync_batch_with_mail_blobs(
         participants.push(message.sender.clone());
         participants.extend(message.recipients.clone());
     }
-    let contacts = upsert_contacts_from_message_participants(&contact_store, &participants).await?;
+    let persons = upsert_persons_from_message_participants(&person_store, &participants).await?;
 
     Ok(EmailSyncPipelineReport {
         imported_records: import_report.inserted_or_existing_records,
@@ -77,7 +77,7 @@ pub async fn project_email_sync_batch_with_mail_blobs(
         attachment_blobs_upserted: projection_report.attachment_blobs_upserted,
         attachments_extracted: projection_report.attachments_extracted,
         attachments_not_scanned: projection_report.attachments_not_scanned,
-        upserted_contacts: contacts.len(),
+        upserted_persons: persons.len(),
         checkpoint_saved: import_report.checkpoint_saved,
     })
 }
@@ -203,7 +203,7 @@ pub enum EmailSyncPipelineError {
     Message(#[from] MessageProjectionError),
 
     #[error(transparent)]
-    Contact(#[from] ContactProjectionError),
+    Contact(#[from] PersonProjectionError),
 
     #[error(transparent)]
     MailStorage(#[from] MailStorageError),

@@ -1,4 +1,4 @@
-# Contacts — API Reference
+# Persons — API Reference
 
 Base: `/api/v2/`
 
@@ -6,12 +6,12 @@ Base: `/api/v2/`
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/contacts` | Список контактов (?favorites_only, ?limit) |
-| GET | `/contacts/{id}` | Обогащённый профиль контакта |
-| POST | `/contacts/{id}/fingerprint` | Построить communication fingerprint |
-| POST | `/contacts/{id}/favorite` | Переключить избранное |
-| PUT | `/contacts/{id}/notes` | Сохранить заметки |
-| GET | `/contacts/search?q=...` | Поиск по имени/email |
+| GET | `/persons` | Список контактов (?favorites_only, ?limit) |
+| GET | `/persons/{id}` | Обогащённый профиль контакта |
+| POST | `/persons/{id}/fingerprint` | Построить communication fingerprint |
+| POST | `/persons/{id}/favorite` | Переключить избранное |
+| PUT | `/persons/{id}/notes` | Сохранить заметки |
+| GET | `/persons/search?q=...` | Поиск по имени/email |
 
 ## Identity Resolution
 
@@ -19,13 +19,13 @@ Base: `/api/v2/`
 |---|---|---|
 | GET | `/identity-candidates` | Список кандидатов на объединение |
 | PUT | `/identity-candidates/{id}/review` | Подтвердить/отклонить |
-| GET | `/contacts/{id}/identity` | Связанные identity |
+| GET | `/persons/{id}/identity` | Связанные identity |
 
-## Профиль контакта (EnrichedContact)
+## Профиль контакта (EnrichedPerson)
 
 ```json
 {
-  "contact_id": "contact:v1:email:11:alice@ex.com",
+  "person_id": "person:v1:email:11:alice@ex.com",
   "display_name": "Alice",
   "email_address": "alice@example.com",
   "language": "en",

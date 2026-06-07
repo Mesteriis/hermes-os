@@ -41,7 +41,7 @@ Retrieval combines:
 - full text matches
 - graph neighborhood expansion
 - event recency
-- project/contact relevance
+- project/person relevance
 - source reliability
 
 The response should include source references and confidence where applicable.

@@ -9,7 +9,7 @@ use sqlx::postgres::PgPool;
 use hermes_hub_backend::communications::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::contacts::ContactProjectionStore;
+use hermes_hub_backend::persons::PersonProjectionStore;
 use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::graph::{GraphNodeKind, node_id};
 use hermes_hub_backend::graph_projection::GraphProjectionService;
@@ -26,7 +26,7 @@ async fn graph_projection_is_idempotent_for_v1_sources_against_postgres() {
         return;
     };
     let suffix = unique_suffix();
-    seed_contact_message_and_document(&context, suffix).await;
+    seed_person_message_and_document(&context, suffix).await;
 
     let first = context
         .graph_projection
@@ -49,7 +49,7 @@ async fn graph_projection_is_idempotent_for_v1_sources_against_postgres() {
     let person_count = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM graph_nodes WHERE node_kind = 'person' AND stable_key LIKE $1",
     )
-    .bind(format!("contact:v1:email:%unknown-{suffix}%"))
+    .bind(format!("person:v1:email:%unknown-{suffix}%"))
     .fetch_one(&context.pool)
     .await
     .expect("unknown sender person count");
@@ -69,7 +69,7 @@ async fn graph_projection_is_idempotent_for_v1_sources_against_postgres() {
         "email_address_received_message",
     )
     .await;
-    assert_known_contact_endpoint_projected(&context.pool, suffix).await;
+    assert_known_person_endpoint_projected(&context.pool, suffix).await;
     assert_document_projected(&context.pool, suffix).await;
 }
 
@@ -98,7 +98,7 @@ async fn graph_projection_replaces_stale_unknown_message_edges_against_postgres(
         .graph_projection
         .project_from_v1()
         .await
-        .expect("first graph projection before contact exists");
+        .expect("first graph projection before person exists");
     assert_message_edge_with_evidence(
         &context.pool,
         "email_address",
@@ -110,15 +110,15 @@ async fn graph_projection_replaces_stale_unknown_message_edges_against_postgres(
     .await;
 
     context
-        .contact_store
-        .upsert_email_contact(&sender_email)
+        .person_store
+        .upsert_email_person(&sender_email)
         .await
-        .expect("upsert exact sender contact");
+        .expect("upsert exact sender person");
     context
         .graph_projection
         .project_from_v1()
         .await
-        .expect("second graph projection after contact exists");
+        .expect("second graph projection after person exists");
 
     assert_message_edge_with_evidence(
         &context.pool,
@@ -165,8 +165,8 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
         .await
         .expect("upsert graph project");
     let owner = context
-        .contact_store
-        .upsert_email_contact(&format!("graph-project-owner-{suffix}@example.com"))
+        .person_store
+        .upsert_email_person(&format!("graph-project-owner-{suffix}@example.com"))
         .await
         .expect("upsert graph project owner");
     let projected = seed_message(
@@ -204,7 +204,7 @@ async fn graph_projection_links_projects_to_keyword_messages_documents_and_peopl
     assert_eq!(counts_after_first, counts_after_second);
 
     let project_node_id = project_graph_node_id(&project_id);
-    let owner_node_id = node_id(GraphNodeKind::Person, &owner.contact_id);
+    let owner_node_id = node_id(GraphNodeKind::Person, &owner.person_id);
     let reviewer_node_id = node_id(
         GraphNodeKind::EmailAddress,
         &format!("graph-project-reviewer-{suffix}@example.com"),
@@ -416,7 +416,7 @@ async fn graph_projection_marks_confirmed_project_link_user_confirmed_against_po
 
 struct LiveProjectionContext {
     pool: PgPool,
-    contact_store: ContactProjectionStore,
+    person_store: PersonProjectionStore,
     communication_store: CommunicationIngestionStore,
     message_store: MessageProjectionStore,
     document_store: DocumentImportStore,
@@ -452,7 +452,7 @@ async fn live_projection_context(test_name: &str) -> Option<LiveProjectionContex
 
     Some(LiveProjectionContext {
         pool: pool.clone(),
-        contact_store: ContactProjectionStore::new(pool.clone()),
+        person_store: PersonProjectionStore::new(pool.clone()),
         communication_store: CommunicationIngestionStore::new(pool.clone()),
         message_store: MessageProjectionStore::new(pool.clone()),
         document_store: DocumentImportStore::new(pool.clone()),
@@ -462,12 +462,12 @@ async fn live_projection_context(test_name: &str) -> Option<LiveProjectionContex
     })
 }
 
-async fn seed_contact_message_and_document(context: &LiveProjectionContext, suffix: u128) {
+async fn seed_person_message_and_document(context: &LiveProjectionContext, suffix: u128) {
     context
-        .contact_store
-        .upsert_email_contact(&format!(" Known-{suffix}@Example.com "))
+        .person_store
+        .upsert_email_person(&format!(" Known-{suffix}@Example.com "))
         .await
-        .expect("upsert known contact");
+        .expect("upsert known person");
 
     seed_message(
         context,
@@ -806,7 +806,7 @@ async fn assert_message_edge_count(
     assert_eq!(edge_count, expected_count);
 }
 
-async fn assert_known_contact_endpoint_projected(pool: &PgPool, suffix: u128) {
+async fn assert_known_person_endpoint_projected(pool: &PgPool, suffix: u128) {
     let provider_record_id = format!("provider-graph-projection-{suffix}");
     let message = message_fixture_by_provider_record_id(pool, &provider_record_id).await;
     assert_message_edge_with_evidence(

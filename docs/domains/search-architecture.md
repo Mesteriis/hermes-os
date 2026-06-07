@@ -12,7 +12,7 @@
 
 ### Full Text Search
 
-Tantivy indexes normalized text from messages, documents, notes, tasks, contacts and projects. It supports exact terms, phrases, fields, dates and facets.
+Tantivy indexes normalized text from messages, documents, notes, tasks, persons and projects. It supports exact terms, phrases, fields, dates and facets.
 
 ### Semantic Search
 
@@ -36,7 +36,7 @@ Examples:
 - graph proximity
 - recency
 - source reliability
-- project/contact relevance
+- project/person relevance
 - user-pinned importance
 - task status
 

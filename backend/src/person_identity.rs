@@ -9,40 +9,40 @@ use crate::event_log::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };
 
-const CONTACT_IDENTITY_REVIEW_EVENT_TYPE: &str = "contact_identity.review_state_changed";
-const CONTACT_IDENTITY_REVIEW_SOURCE_KIND: &str = "contact_identity_review";
-const CONTACT_IDENTITY_REVIEW_SOURCE_PROVIDER: &str = "local_api";
-const CONTACT_IDENTITY_REVIEW_PREFIX: &str = "contact_identity_review:";
-const CONTACT_IDENTITY_ID_PREFIX: &str = "identity_candidate:v1:";
+const PERSON_IDENTITY_REVIEW_EVENT_TYPE: &str = "person_identity.review_state_changed";
+const PERSON_IDENTITY_REVIEW_SOURCE_KIND: &str = "person_identity_review";
+const PERSON_IDENTITY_REVIEW_SOURCE_PROVIDER: &str = "local_api";
+const PERSON_IDENTITY_REVIEW_PREFIX: &str = "person_identity_review:";
+const PERSON_IDENTITY_ID_PREFIX: &str = "identity_candidate:v1:";
 const DEFAULT_LIMIT: i64 = 50;
 const MAX_LIMIT: i64 = 100;
 const MIN_LIMIT: i64 = 1;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-pub enum ContactIdentityCandidateKind {
-    MergeContacts,
+pub enum PersonIdentityCandidateKind {
+    MergePersons,
     AttachEmailAddress,
-    SplitContact,
+    SplitPerson,
 }
 
-impl ContactIdentityCandidateKind {
+impl PersonIdentityCandidateKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::MergeContacts => "merge_contacts",
+            Self::MergePersons => "merge_persons",
             Self::AttachEmailAddress => "attach_email_address",
-            Self::SplitContact => "split_contact",
+            Self::SplitPerson => "split_person",
         }
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-pub enum ContactIdentityReviewState {
+pub enum PersonIdentityReviewState {
     Suggested,
     UserConfirmed,
     UserRejected,
 }
 
-impl ContactIdentityReviewState {
+impl PersonIdentityReviewState {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Suggested => "suggested",
@@ -51,12 +51,12 @@ impl ContactIdentityReviewState {
         }
     }
 
-    fn parse(value: impl AsRef<str>) -> Result<Self, ContactIdentityError> {
+    fn parse(value: impl AsRef<str>) -> Result<Self, PersonIdentityError> {
         match value.as_ref() {
             "suggested" => Ok(Self::Suggested),
             "user_confirmed" => Ok(Self::UserConfirmed),
             "user_rejected" => Ok(Self::UserRejected),
-            _ => Err(ContactIdentityError::InvalidReviewState(
+            _ => Err(PersonIdentityError::InvalidReviewState(
                 value.as_ref().to_owned(),
             )),
         }
@@ -64,26 +64,26 @@ impl ContactIdentityReviewState {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContactIdentityReviewCommand {
+pub struct PersonIdentityReviewCommand {
     pub command_id: String,
     pub identity_candidate_id: String,
-    pub review_state: ContactIdentityReviewState,
+    pub review_state: PersonIdentityReviewState,
     pub actor_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContactIdentityReviewCommandResult {
+pub struct PersonIdentityReviewCommandResult {
     pub identity_candidate_id: String,
-    pub review_state: ContactIdentityReviewState,
+    pub review_state: PersonIdentityReviewState,
     pub event_id: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct ContactIdentityCandidate {
+pub struct PersonIdentityCandidate {
     pub identity_candidate_id: String,
     pub candidate_kind: String,
-    pub left_contact_id: String,
-    pub right_contact_id: Option<String>,
+    pub left_person_id: String,
+    pub right_person_id: Option<String>,
     pub email_address: Option<String>,
     pub evidence_summary: String,
     pub confidence: f64,
@@ -94,38 +94,38 @@ pub struct ContactIdentityCandidate {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct ContactIdentityDetail {
-    pub items: Vec<ContactIdentityCandidate>,
+pub struct PersonIdentityDetail {
+    pub items: Vec<PersonIdentityCandidate>,
 }
 
 #[derive(Clone)]
-pub struct ContactIdentityStore {
+pub struct PersonIdentityStore {
     pool: PgPool,
 }
 
-impl ContactIdentityStore {
+impl PersonIdentityStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
-    pub async fn refresh_candidates(&self, limit: i64) -> Result<usize, ContactIdentityError> {
+    pub async fn refresh_candidates(&self, limit: i64) -> Result<usize, PersonIdentityError> {
         let limit = validate_limit(limit)?;
         let rows = sqlx::query(
             r#"
             SELECT
-                c1.contact_id AS left_contact_id,
-                c2.contact_id AS right_contact_id,
+                c1.person_id AS left_person_id,
+                c2.person_id AS right_person_id,
                 lower(trim(c1.display_name)) AS normalized_display_name
-            FROM contacts c1
-            JOIN contacts c2
-                ON c1.contact_id < c2.contact_id
+            FROM persons c1
+            JOIN persons c2
+                ON c1.person_id < c2.person_id
                AND lower(trim(c1.display_name)) = lower(trim(c2.display_name))
             WHERE position('@' in lower(trim(c1.display_name))) = 0
               AND position('@' in lower(trim(c2.display_name))) = 0
             ORDER BY
                 lower(trim(c1.display_name)),
-                c1.contact_id,
-                c2.contact_id
+                c1.person_id,
+                c2.person_id
             LIMIT $1
             "#,
         )
@@ -135,12 +135,12 @@ impl ContactIdentityStore {
 
         let mut count = 0usize;
         for row in rows {
-            let left = row.try_get::<String, _>("left_contact_id")?;
-            let right = row.try_get::<String, _>("right_contact_id")?;
-            let candidate = ContactIdentityCandidatePayload {
-                candidate_kind: ContactIdentityCandidateKind::MergeContacts,
-                left_contact_id: left,
-                right_contact_id: Some(right),
+            let left = row.try_get::<String, _>("left_person_id")?;
+            let right = row.try_get::<String, _>("right_person_id")?;
+            let candidate = PersonIdentityCandidatePayload {
+                candidate_kind: PersonIdentityCandidateKind::MergePersons,
+                left_person_id: left,
+                right_person_id: Some(right),
                 email_address: None,
                 evidence_summary: format!(
                     "Same normalized display name: {}",
@@ -152,7 +152,7 @@ impl ContactIdentityStore {
                 &self.pool,
                 &candidate,
                 candidate.identity_candidate_id(),
-                ContactIdentityReviewState::Suggested,
+                PersonIdentityReviewState::Suggested,
             )
             .await?;
             count += 1;
@@ -161,18 +161,18 @@ impl ContactIdentityStore {
         let rows = sqlx::query(
             r#"
             SELECT
-                merge.left_contact_id,
-                merge.right_contact_id
-            FROM contact_identity_candidates merge
-            WHERE merge.candidate_kind = 'merge_contacts'
+                merge.left_person_id,
+                merge.right_person_id
+            FROM person_identity_candidates merge
+            WHERE merge.candidate_kind = 'merge_persons'
               AND merge.review_state = 'user_confirmed'
-              AND merge.right_contact_id IS NOT NULL
+              AND merge.right_person_id IS NOT NULL
               AND NOT EXISTS (
                   SELECT 1
-                  FROM contact_identity_candidates split
-                  WHERE split.candidate_kind = 'split_contact'
-                    AND split.left_contact_id = merge.left_contact_id
-                    AND split.right_contact_id = merge.right_contact_id
+                  FROM person_identity_candidates split
+                  WHERE split.candidate_kind = 'split_person'
+                    AND split.left_person_id = merge.left_person_id
+                    AND split.right_person_id = merge.right_person_id
               )
             ORDER BY merge.updated_at DESC, merge.identity_candidate_id
             LIMIT $1
@@ -183,12 +183,12 @@ impl ContactIdentityStore {
         .await?;
 
         for row in rows {
-            let left = row.try_get::<String, _>("left_contact_id")?;
-            let right = row.try_get::<String, _>("right_contact_id")?;
-            let candidate = ContactIdentityCandidatePayload {
-                candidate_kind: ContactIdentityCandidateKind::SplitContact,
-                left_contact_id: left.clone(),
-                right_contact_id: Some(right.clone()),
+            let left = row.try_get::<String, _>("left_person_id")?;
+            let right = row.try_get::<String, _>("right_person_id")?;
+            let candidate = PersonIdentityCandidatePayload {
+                candidate_kind: PersonIdentityCandidateKind::SplitPerson,
+                left_person_id: left.clone(),
+                right_person_id: Some(right.clone()),
                 email_address: None,
                 evidence_summary: format!(
                     "Previously confirmed merge can be split: {left} and {right}"
@@ -199,7 +199,7 @@ impl ContactIdentityStore {
                 &self.pool,
                 &candidate,
                 candidate.identity_candidate_id(),
-                ContactIdentityReviewState::Suggested,
+                PersonIdentityReviewState::Suggested,
             )
             .await?;
             count += 1;
@@ -210,8 +210,8 @@ impl ContactIdentityStore {
 
     pub async fn set_review_state(
         &self,
-        command: &ContactIdentityReviewCommand,
-    ) -> Result<ContactIdentityReviewCommandResult, ContactIdentityError> {
+        command: &PersonIdentityReviewCommand,
+    ) -> Result<PersonIdentityReviewCommandResult, PersonIdentityError> {
         let command_id = validate_non_empty("command_id", &command.command_id)?;
         let identity_candidate_id =
             validate_non_empty("identity_candidate_id", &command.identity_candidate_id)?;
@@ -221,7 +221,7 @@ impl ContactIdentityStore {
         self.ensure_candidate_exists(&mut transaction, &identity_candidate_id)
             .await?;
 
-        let event_id = format!("{CONTACT_IDENTITY_REVIEW_PREFIX}{command_id}");
+        let event_id = format!("{PERSON_IDENTITY_REVIEW_PREFIX}{command_id}");
         let event = ReviewCommandEvent {
             command_id,
             identity_candidate_id: identity_candidate_id.clone(),
@@ -251,7 +251,7 @@ impl ContactIdentityStore {
 
         transaction.commit().await?;
 
-        Ok(ContactIdentityReviewCommandResult {
+        Ok(PersonIdentityReviewCommandResult {
             identity_candidate_id,
             review_state: command.review_state,
             event_id,
@@ -261,9 +261,9 @@ impl ContactIdentityStore {
     pub async fn apply_review_event(
         &self,
         event: &EventEnvelope,
-    ) -> Result<(), ContactIdentityError> {
-        if event.event_type != CONTACT_IDENTITY_REVIEW_EVENT_TYPE {
-            return Err(ContactIdentityError::InvalidEventType);
+    ) -> Result<(), PersonIdentityError> {
+        if event.event_type != PERSON_IDENTITY_REVIEW_EVENT_TYPE {
+            return Err(PersonIdentityError::InvalidEventType);
         }
 
         let parsed = ReviewEvent::from_payload(&event.payload)?;
@@ -272,7 +272,7 @@ impl ContactIdentityStore {
             .as_ref()
             .and_then(|value| value.get("actor_id"))
             .and_then(Value::as_str)
-            .ok_or(ContactIdentityError::MissingActorId)?;
+            .ok_or(PersonIdentityError::MissingActorId)?;
         let actor_id = validate_non_empty("actor_id", actor_id)?;
         let mut transaction = self.pool.begin().await?;
         self.ensure_candidate_exists(&mut transaction, &parsed.identity_candidate_id)
@@ -300,7 +300,7 @@ impl ContactIdentityStore {
     pub async fn list_candidates(
         &self,
         limit: Option<i64>,
-    ) -> Result<Vec<ContactIdentityCandidate>, ContactIdentityError> {
+    ) -> Result<Vec<PersonIdentityCandidate>, PersonIdentityError> {
         let limit = validate_optional_limit(limit)?;
 
         let rows = sqlx::query(
@@ -308,8 +308,8 @@ impl ContactIdentityStore {
             SELECT
                 identity_candidate_id,
                 candidate_kind,
-                left_contact_id,
-                right_contact_id,
+                left_person_id,
+                right_person_id,
                 email_address,
                 evidence_summary,
                 confidence,
@@ -317,7 +317,7 @@ impl ContactIdentityStore {
                 generated_at,
                 reviewed_at,
                 updated_at
-            FROM contact_identity_candidates
+            FROM person_identity_candidates
             ORDER BY updated_at DESC, identity_candidate_id
             LIMIT $1
             "#,
@@ -327,23 +327,23 @@ impl ContactIdentityStore {
         .await?;
 
         rows.into_iter()
-            .map(row_to_contact_identity_candidate)
+            .map(row_to_person_identity_candidate)
             .collect()
     }
 
-    pub async fn contact_identity(
+    pub async fn person_identity(
         &self,
-        contact_id: &str,
-    ) -> Result<ContactIdentityDetail, ContactIdentityError> {
-        let contact_id = validate_non_empty("contact_id", contact_id)?;
+        person_id: &str,
+    ) -> Result<PersonIdentityDetail, PersonIdentityError> {
+        let person_id = validate_non_empty("person_id", person_id)?;
 
         let rows = sqlx::query(
             r#"
             SELECT
                 identity_candidate_id,
                 candidate_kind,
-                left_contact_id,
-                right_contact_id,
+                left_person_id,
+                right_person_id,
                 email_address,
                 evidence_summary,
                 confidence,
@@ -351,49 +351,49 @@ impl ContactIdentityStore {
                 generated_at,
                 reviewed_at,
                 updated_at
-            FROM contact_identity_candidates merge
-            WHERE (merge.left_contact_id = $1 OR merge.right_contact_id = $1)
-              AND merge.candidate_kind = 'merge_contacts'
+            FROM person_identity_candidates merge
+            WHERE (merge.left_person_id = $1 OR merge.right_person_id = $1)
+              AND merge.candidate_kind = 'merge_persons'
               AND merge.review_state = 'user_confirmed'
               AND NOT EXISTS (
                   SELECT 1
-                  FROM contact_identity_candidates split
-                  WHERE split.candidate_kind = 'split_contact'
+                  FROM person_identity_candidates split
+                  WHERE split.candidate_kind = 'split_person'
                     AND split.review_state = 'user_confirmed'
-                    AND LEAST(split.left_contact_id, split.right_contact_id) =
-                        LEAST(merge.left_contact_id, merge.right_contact_id)
-                    AND GREATEST(split.left_contact_id, split.right_contact_id) =
-                        GREATEST(merge.left_contact_id, merge.right_contact_id)
+                    AND LEAST(split.left_person_id, split.right_person_id) =
+                        LEAST(merge.left_person_id, merge.right_person_id)
+                    AND GREATEST(split.left_person_id, split.right_person_id) =
+                        GREATEST(merge.left_person_id, merge.right_person_id)
               )
             ORDER BY updated_at DESC, identity_candidate_id
             "#,
         )
-        .bind(&contact_id)
+        .bind(&person_id)
         .fetch_all(&self.pool)
         .await?;
 
         let items = rows
             .into_iter()
-            .map(row_to_contact_identity_candidate)
+            .map(row_to_person_identity_candidate)
             .collect::<Result<Vec<_>, _>>()?;
 
-        Ok(ContactIdentityDetail { items })
+        Ok(PersonIdentityDetail { items })
     }
 
     async fn apply_review_state_in_transaction(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         identity_candidate_id: &str,
-        review_state: ContactIdentityReviewState,
+        review_state: PersonIdentityReviewState,
         event_id: &str,
         actor_id: &str,
         reviewed_at: DateTime<Utc>,
-    ) -> Result<(), ContactIdentityError> {
+    ) -> Result<(), PersonIdentityError> {
         match review_state {
-            ContactIdentityReviewState::Suggested => {
+            PersonIdentityReviewState::Suggested => {
                 sqlx::query(
                     r#"
-                    UPDATE contact_identity_candidates
+                    UPDATE person_identity_candidates
                     SET
                         review_state = $1,
                         event_id = NULL,
@@ -408,11 +408,11 @@ impl ContactIdentityStore {
                 .execute(&mut **transaction)
                 .await?;
             }
-            ContactIdentityReviewState::UserConfirmed
-            | ContactIdentityReviewState::UserRejected => {
+            PersonIdentityReviewState::UserConfirmed
+            | PersonIdentityReviewState::UserRejected => {
                 sqlx::query(
                     r#"
-                    UPDATE contact_identity_candidates
+                    UPDATE person_identity_candidates
                     SET
                         review_state = $1,
                         event_id = $2,
@@ -439,16 +439,16 @@ impl ContactIdentityStore {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         identity_candidate_id: &str,
-        review_state: ContactIdentityReviewState,
-    ) -> Result<(), ContactIdentityError> {
-        if review_state != ContactIdentityReviewState::UserConfirmed {
+        review_state: PersonIdentityReviewState,
+    ) -> Result<(), PersonIdentityError> {
+        if review_state != PersonIdentityReviewState::UserConfirmed {
             return Ok(());
         }
 
         let row = sqlx::query(
             r#"
-            SELECT candidate_kind, left_contact_id, right_contact_id
-            FROM contact_identity_candidates
+            SELECT candidate_kind, left_person_id, right_person_id
+            FROM person_identity_candidates
             WHERE identity_candidate_id = $1
             "#,
         )
@@ -457,18 +457,18 @@ impl ContactIdentityStore {
         .await?;
 
         let candidate_kind = row.try_get::<String, _>("candidate_kind")?;
-        if candidate_kind != ContactIdentityCandidateKind::MergeContacts.as_str() {
+        if candidate_kind != PersonIdentityCandidateKind::MergePersons.as_str() {
             return Ok(());
         }
 
-        let left = row.try_get::<String, _>("left_contact_id")?;
-        let Some(right) = row.try_get::<Option<String>, _>("right_contact_id")? else {
+        let left = row.try_get::<String, _>("left_person_id")?;
+        let Some(right) = row.try_get::<Option<String>, _>("right_person_id")? else {
             return Ok(());
         };
-        let candidate = ContactIdentityCandidatePayload {
-            candidate_kind: ContactIdentityCandidateKind::SplitContact,
-            left_contact_id: left.clone(),
-            right_contact_id: Some(right.clone()),
+        let candidate = PersonIdentityCandidatePayload {
+            candidate_kind: PersonIdentityCandidateKind::SplitPerson,
+            left_person_id: left.clone(),
+            right_person_id: Some(right.clone()),
             email_address: None,
             evidence_summary: format!(
                 "Previously confirmed merge can be split: {left} and {right}"
@@ -479,7 +479,7 @@ impl ContactIdentityStore {
             transaction,
             &candidate,
             candidate.identity_candidate_id(),
-            ContactIdentityReviewState::Suggested,
+            PersonIdentityReviewState::Suggested,
         )
         .await
     }
@@ -488,12 +488,12 @@ impl ContactIdentityStore {
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         identity_candidate_id: &str,
-    ) -> Result<(), ContactIdentityError> {
+    ) -> Result<(), PersonIdentityError> {
         let exists = sqlx::query_scalar::<_, bool>(
             r#"
             SELECT EXISTS (
                 SELECT 1
-                FROM contact_identity_candidates
+                FROM person_identity_candidates
                 WHERE identity_candidate_id = $1
             )
             "#,
@@ -503,7 +503,7 @@ impl ContactIdentityStore {
         .await?;
 
         if !exists {
-            return Err(ContactIdentityError::IdentityCandidateNotFound);
+            return Err(PersonIdentityError::IdentityCandidateNotFound);
         }
 
         Ok(())
@@ -511,32 +511,32 @@ impl ContactIdentityStore {
 }
 
 #[derive(Debug)]
-struct ContactIdentityCandidatePayload {
-    candidate_kind: ContactIdentityCandidateKind,
-    left_contact_id: String,
-    right_contact_id: Option<String>,
+struct PersonIdentityCandidatePayload {
+    candidate_kind: PersonIdentityCandidateKind,
+    left_person_id: String,
+    right_person_id: Option<String>,
     email_address: Option<String>,
     evidence_summary: String,
     confidence: f64,
 }
 
-impl ContactIdentityCandidatePayload {
+impl PersonIdentityCandidatePayload {
     fn identity_candidate_id(&self) -> String {
-        let left = self.left_contact_id.clone();
+        let left = self.left_person_id.clone();
         let right = self
-            .right_contact_id
+            .right_person_id
             .clone()
             .unwrap_or_else(|| String::from("single"));
 
         match self.candidate_kind {
-            ContactIdentityCandidateKind::MergeContacts => {
-                format!("{CONTACT_IDENTITY_ID_PREFIX}merge_contacts:{left}:{right}")
+            PersonIdentityCandidateKind::MergePersons => {
+                format!("{PERSON_IDENTITY_ID_PREFIX}merge_persons:{left}:{right}")
             }
-            ContactIdentityCandidateKind::AttachEmailAddress => {
-                format!("{CONTACT_IDENTITY_ID_PREFIX}attach_email_address:{left}:{right}")
+            PersonIdentityCandidateKind::AttachEmailAddress => {
+                format!("{PERSON_IDENTITY_ID_PREFIX}attach_email_address:{left}:{right}")
             }
-            ContactIdentityCandidateKind::SplitContact => {
-                format!("{CONTACT_IDENTITY_ID_PREFIX}split_contact:{left}:{right}")
+            PersonIdentityCandidateKind::SplitPerson => {
+                format!("{PERSON_IDENTITY_ID_PREFIX}split_person:{left}:{right}")
             }
         }
     }
@@ -545,25 +545,25 @@ impl ContactIdentityCandidatePayload {
 struct ReviewCommandEvent {
     command_id: String,
     identity_candidate_id: String,
-    review_state: ContactIdentityReviewState,
+    review_state: PersonIdentityReviewState,
     actor_id: String,
     event_id: String,
     occurred_at: DateTime<Utc>,
 }
 
 impl ReviewCommandEvent {
-    fn to_event(&self) -> Result<NewEventEnvelope, ContactIdentityError> {
+    fn to_event(&self) -> Result<NewEventEnvelope, PersonIdentityError> {
         Ok(NewEventEnvelope::builder(
             self.event_id.clone(),
-            CONTACT_IDENTITY_REVIEW_EVENT_TYPE,
+            PERSON_IDENTITY_REVIEW_EVENT_TYPE,
             self.occurred_at,
             json!({
-                "kind": CONTACT_IDENTITY_REVIEW_SOURCE_KIND,
-                "provider": CONTACT_IDENTITY_REVIEW_SOURCE_PROVIDER,
+                "kind": PERSON_IDENTITY_REVIEW_SOURCE_KIND,
+                "provider": PERSON_IDENTITY_REVIEW_SOURCE_PROVIDER,
                 "source_id": self.command_id.clone(),
             }),
             json!({
-                "kind": "contact_identity_review",
+                "kind": "person_identity_review",
             }),
         )
         .actor(json!({ "actor_id": self.actor_id.clone() }))
@@ -582,15 +582,15 @@ impl ReviewCommandEvent {
 #[derive(Debug)]
 struct ReviewEvent {
     identity_candidate_id: String,
-    review_state: ContactIdentityReviewState,
+    review_state: PersonIdentityReviewState,
 }
 
 impl ReviewEvent {
-    fn from_payload(payload: &Value) -> Result<Self, ContactIdentityError> {
+    fn from_payload(payload: &Value) -> Result<Self, PersonIdentityError> {
         let payload = as_object(payload)?;
         Ok(Self {
             identity_candidate_id: required_payload_string(payload, "identity_candidate_id")?,
-            review_state: ContactIdentityReviewState::parse(required_payload_string(
+            review_state: PersonIdentityReviewState::parse(required_payload_string(
                 payload,
                 "review_state",
             )?)?,
@@ -600,17 +600,17 @@ impl ReviewEvent {
 
 async fn upsert_candidate(
     pool: &PgPool,
-    payload: &ContactIdentityCandidatePayload,
+    payload: &PersonIdentityCandidatePayload,
     identity_candidate_id: String,
-    review_state: ContactIdentityReviewState,
-) -> Result<(), ContactIdentityError> {
+    review_state: PersonIdentityReviewState,
+) -> Result<(), PersonIdentityError> {
     sqlx::query(
         r#"
-        INSERT INTO contact_identity_candidates (
+        INSERT INTO person_identity_candidates (
             identity_candidate_id,
             candidate_kind,
-            left_contact_id,
-            right_contact_id,
+            left_person_id,
+            right_person_id,
             email_address,
             evidence_summary,
             confidence,
@@ -623,29 +623,29 @@ async fn upsert_candidate(
         ON CONFLICT (identity_candidate_id)
         DO UPDATE SET
             candidate_kind = EXCLUDED.candidate_kind,
-            left_contact_id = EXCLUDED.left_contact_id,
-            right_contact_id = EXCLUDED.right_contact_id,
+            left_person_id = EXCLUDED.left_person_id,
+            right_person_id = EXCLUDED.right_person_id,
             email_address = EXCLUDED.email_address,
             evidence_summary = EXCLUDED.evidence_summary,
             confidence = EXCLUDED.confidence,
             review_state = CASE
-                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN contact_identity_candidates.review_state
+                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN person_identity_candidates.review_state
                 ELSE EXCLUDED.review_state
             END,
             event_id = CASE
-                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN contact_identity_candidates.event_id
+                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN person_identity_candidates.event_id
                 ELSE NULL
             END,
             actor_id = CASE
-                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN contact_identity_candidates.actor_id
+                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN person_identity_candidates.actor_id
                 ELSE NULL
             END,
             reviewed_at = CASE
-                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN contact_identity_candidates.reviewed_at
+                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN person_identity_candidates.reviewed_at
                 ELSE NULL
             END,
             updated_at = now()
@@ -653,8 +653,8 @@ async fn upsert_candidate(
     )
     .bind(identity_candidate_id)
     .bind(payload.candidate_kind.as_str())
-    .bind(&payload.left_contact_id)
-    .bind(&payload.right_contact_id)
+    .bind(&payload.left_person_id)
+    .bind(&payload.right_person_id)
     .bind(&payload.email_address)
     .bind(&payload.evidence_summary)
     .bind(payload.confidence)
@@ -667,17 +667,17 @@ async fn upsert_candidate(
 
 async fn upsert_candidate_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
-    payload: &ContactIdentityCandidatePayload,
+    payload: &PersonIdentityCandidatePayload,
     identity_candidate_id: String,
-    review_state: ContactIdentityReviewState,
-) -> Result<(), ContactIdentityError> {
+    review_state: PersonIdentityReviewState,
+) -> Result<(), PersonIdentityError> {
     sqlx::query(
         r#"
-        INSERT INTO contact_identity_candidates (
+        INSERT INTO person_identity_candidates (
             identity_candidate_id,
             candidate_kind,
-            left_contact_id,
-            right_contact_id,
+            left_person_id,
+            right_person_id,
             email_address,
             evidence_summary,
             confidence,
@@ -690,29 +690,29 @@ async fn upsert_candidate_in_transaction(
         ON CONFLICT (identity_candidate_id)
         DO UPDATE SET
             candidate_kind = EXCLUDED.candidate_kind,
-            left_contact_id = EXCLUDED.left_contact_id,
-            right_contact_id = EXCLUDED.right_contact_id,
+            left_person_id = EXCLUDED.left_person_id,
+            right_person_id = EXCLUDED.right_person_id,
             email_address = EXCLUDED.email_address,
             evidence_summary = EXCLUDED.evidence_summary,
             confidence = EXCLUDED.confidence,
             review_state = CASE
-                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN contact_identity_candidates.review_state
+                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN person_identity_candidates.review_state
                 ELSE EXCLUDED.review_state
             END,
             event_id = CASE
-                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN contact_identity_candidates.event_id
+                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN person_identity_candidates.event_id
                 ELSE NULL
             END,
             actor_id = CASE
-                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN contact_identity_candidates.actor_id
+                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN person_identity_candidates.actor_id
                 ELSE NULL
             END,
             reviewed_at = CASE
-                WHEN contact_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
-                    THEN contact_identity_candidates.reviewed_at
+                WHEN person_identity_candidates.review_state IN ('user_confirmed', 'user_rejected')
+                    THEN person_identity_candidates.reviewed_at
                 ELSE NULL
             END,
             updated_at = now()
@@ -720,8 +720,8 @@ async fn upsert_candidate_in_transaction(
     )
     .bind(identity_candidate_id)
     .bind(payload.candidate_kind.as_str())
-    .bind(&payload.left_contact_id)
-    .bind(&payload.right_contact_id)
+    .bind(&payload.left_person_id)
+    .bind(&payload.right_person_id)
     .bind(&payload.email_address)
     .bind(&payload.evidence_summary)
     .bind(payload.confidence)
@@ -732,14 +732,14 @@ async fn upsert_candidate_in_transaction(
     Ok(())
 }
 
-fn row_to_contact_identity_candidate(
+fn row_to_person_identity_candidate(
     row: sqlx::postgres::PgRow,
-) -> Result<ContactIdentityCandidate, ContactIdentityError> {
-    Ok(ContactIdentityCandidate {
+) -> Result<PersonIdentityCandidate, PersonIdentityError> {
+    Ok(PersonIdentityCandidate {
         identity_candidate_id: row.try_get("identity_candidate_id")?,
         candidate_kind: row.try_get("candidate_kind")?,
-        left_contact_id: row.try_get("left_contact_id")?,
-        right_contact_id: row.try_get("right_contact_id")?,
+        left_person_id: row.try_get("left_person_id")?,
+        right_person_id: row.try_get("right_person_id")?,
         email_address: row.try_get("email_address")?,
         evidence_summary: row.try_get("evidence_summary")?,
         confidence: row.try_get("confidence")?,
@@ -750,48 +750,48 @@ fn row_to_contact_identity_candidate(
     })
 }
 
-fn as_object(value: &Value) -> Result<&serde_json::Map<String, Value>, ContactIdentityError> {
+fn as_object(value: &Value) -> Result<&serde_json::Map<String, Value>, PersonIdentityError> {
     value
         .as_object()
-        .ok_or_else(|| ContactIdentityError::InvalidPayload("payload".to_owned()))
+        .ok_or_else(|| PersonIdentityError::InvalidPayload("payload".to_owned()))
 }
 
 fn required_payload_string(
     payload: &serde_json::Map<String, Value>,
     field: &str,
-) -> Result<String, ContactIdentityError> {
+) -> Result<String, PersonIdentityError> {
     let raw = payload
         .get(field)
-        .ok_or_else(|| ContactIdentityError::MissingPayloadField(field.to_owned()))?;
+        .ok_or_else(|| PersonIdentityError::MissingPayloadField(field.to_owned()))?;
     let value = raw
         .as_str()
-        .ok_or_else(|| ContactIdentityError::InvalidPayload(field.to_owned()))?;
+        .ok_or_else(|| PersonIdentityError::InvalidPayload(field.to_owned()))?;
     validate_non_empty(field, value)
 }
 
-fn validate_non_empty(field: &str, value: &str) -> Result<String, ContactIdentityError> {
+fn validate_non_empty(field: &str, value: &str) -> Result<String, PersonIdentityError> {
     let normalized = value.trim();
     if normalized.is_empty() {
-        return Err(ContactIdentityError::EmptyField(field.to_owned()));
+        return Err(PersonIdentityError::EmptyField(field.to_owned()));
     }
 
     Ok(normalized.to_owned())
 }
 
-fn validate_limit(limit: i64) -> Result<i64, ContactIdentityError> {
+fn validate_limit(limit: i64) -> Result<i64, PersonIdentityError> {
     if !(MIN_LIMIT..=MAX_LIMIT).contains(&limit) {
-        return Err(ContactIdentityError::InvalidLimit);
+        return Err(PersonIdentityError::InvalidLimit);
     }
 
     Ok(limit)
 }
 
-fn validate_optional_limit(limit: Option<i64>) -> Result<i64, ContactIdentityError> {
+fn validate_optional_limit(limit: Option<i64>) -> Result<i64, PersonIdentityError> {
     validate_limit(limit.unwrap_or(DEFAULT_LIMIT))
 }
 
 #[derive(Debug, Error)]
-pub enum ContactIdentityError {
+pub enum PersonIdentityError {
     #[error("limit must be between 1 and 100")]
     InvalidLimit,
 

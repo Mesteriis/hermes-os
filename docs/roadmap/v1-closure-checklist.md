@@ -2,7 +2,7 @@
 
 ## Release Goal
 
-Version 1.0 is complete when a user can run Hermes Hub locally, add Gmail/iCloud/IMAP accounts, import email fixture data or read-only provider email batches, inspect canonical messages and contacts, search local memory, import Markdown/PDF files into the document boundary, and open a desktop-first shell connected to backend V1 status.
+Version 1.0 is complete when a user can run Hermes Hub locally, add Gmail/iCloud/IMAP accounts, import email fixture data or read-only provider email batches, inspect canonical messages and persons, search local memory, import Markdown/PDF files into the document boundary, and open a desktop-first shell connected to backend V1 status.
 
 ## In Scope
 
@@ -14,7 +14,7 @@ Version 1.0 is complete when a user can run Hermes Hub locally, add Gmail/iCloud
 - Read-only Gmail API and iCloud/raw IMAP provider networking that emits raw provider records.
 - Encrypted local secret vault and desktop account setup wizards for Gmail, iCloud and raw IMAP.
 - Canonical message projection from raw email records.
-- Basic contact projection from message participants.
+- Basic person projection from message participants.
 - Tantivy search boundary covered by message and document record tests.
 - Document import boundary for Markdown text and PDF metadata.
 - Desktop/laptop SvelteKit/Tauri status shell connected to `GET /api/v1/status`.
@@ -36,7 +36,7 @@ Version 1.0 is complete when a user can run Hermes Hub locally, add Gmail/iCloud
 - [x] Read-only Gmail API and iCloud/raw IMAP provider networking is covered by local network tests and live PostgreSQL batch persistence.
 - [x] Account setup stores Gmail OAuth and IMAP credentials in the encrypted vault without plaintext PostgreSQL leakage.
 - [x] Canonical messages projection is covered by live PostgreSQL tests.
-- [x] Contacts projection is covered by live PostgreSQL tests.
+- [x] Persons projection is covered by live PostgreSQL tests.
 - [x] Tantivy search boundary is covered by message/document record tests.
 - [x] Document import stores Markdown text and PDF metadata.
 - [x] Desktop shell shows backend V1 status.

@@ -6,26 +6,26 @@ use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
 #[derive(Clone)]
-pub struct ContactProjectionStore {
+pub struct PersonProjectionStore {
     pool: PgPool,
 }
 
-impl ContactProjectionStore {
+impl PersonProjectionStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
-    pub async fn upsert_email_contact(
+    pub async fn upsert_email_person(
         &self,
         email_address: &str,
-    ) -> Result<Contact, ContactProjectionError> {
+    ) -> Result<Person, PersonProjectionError> {
         let normalized_email = normalize_email_address(email_address)?;
-        let contact_id = contact_id_for_email(&normalized_email);
+        let person_id = person_id_for_email(&normalized_email);
 
         let row = sqlx::query(
             r#"
-            INSERT INTO contacts (
-                contact_id,
+            INSERT INTO persons (
+                person_id,
                 display_name,
                 email_address
             )
@@ -35,49 +35,49 @@ impl ContactProjectionStore {
                 display_name = EXCLUDED.display_name,
                 updated_at = now()
             RETURNING
-                contact_id,
+                person_id,
                 display_name,
                 email_address,
                 created_at,
                 updated_at
             "#,
         )
-        .bind(&contact_id)
+        .bind(&person_id)
         .bind(&normalized_email)
         .bind(&normalized_email)
         .fetch_one(&self.pool)
         .await?;
 
-        row_to_contact(row)
+        row_to_person(row)
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Contact {
-    pub contact_id: String,
+pub struct Person {
+    pub person_id: String,
     pub display_name: String,
     pub email_address: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-pub async fn upsert_contacts_from_message_participants(
-    store: &ContactProjectionStore,
+pub async fn upsert_persons_from_message_participants(
+    store: &PersonProjectionStore,
     email_addresses: &[String],
-) -> Result<Vec<Contact>, ContactProjectionError> {
+) -> Result<Vec<Person>, PersonProjectionError> {
     let normalized_email_addresses = normalize_email_addresses(email_addresses)?;
-    let mut contacts = Vec::new();
+    let mut persons = Vec::new();
 
     for email_address in normalized_email_addresses {
-        contacts.push(store.upsert_email_contact(&email_address).await?);
+        persons.push(store.upsert_email_person(&email_address).await?);
     }
 
-    Ok(contacts)
+    Ok(persons)
 }
 
 fn normalize_email_addresses(
     email_addresses: &[String],
-) -> Result<Vec<String>, ContactProjectionError> {
+) -> Result<Vec<String>, PersonProjectionError> {
     let mut seen = HashSet::new();
     let mut normalized_email_addresses = Vec::new();
 
@@ -91,9 +91,9 @@ fn normalize_email_addresses(
     Ok(normalized_email_addresses)
 }
 
-fn row_to_contact(row: PgRow) -> Result<Contact, ContactProjectionError> {
-    Ok(Contact {
-        contact_id: row.try_get("contact_id")?,
+fn row_to_person(row: PgRow) -> Result<Person, PersonProjectionError> {
+    Ok(Person {
+        person_id: row.try_get("person_id")?,
         display_name: row.try_get("display_name")?,
         email_address: row.try_get("email_address")?,
         created_at: row.try_get("created_at")?,
@@ -101,17 +101,17 @@ fn row_to_contact(row: PgRow) -> Result<Contact, ContactProjectionError> {
     })
 }
 
-fn normalize_email_address(email_address: &str) -> Result<String, ContactProjectionError> {
+fn normalize_email_address(email_address: &str) -> Result<String, PersonProjectionError> {
     let normalized_email = email_address.trim().to_ascii_lowercase();
     if normalized_email.is_empty() {
-        return Err(ContactProjectionError::EmptyEmailAddress);
+        return Err(PersonProjectionError::EmptyEmailAddress);
     }
 
     Ok(normalized_email)
 }
 
-fn contact_id_for_email(normalized_email: &str) -> String {
-    let mut encoded = String::from("contact:v1:email:");
+fn person_id_for_email(normalized_email: &str) -> String {
+    let mut encoded = String::from("person:v1:email:");
     encoded.push_str(&normalized_email.len().to_string());
     encoded.push(':');
     encoded.push_str(normalized_email);
@@ -119,7 +119,7 @@ fn contact_id_for_email(normalized_email: &str) -> String {
 }
 
 #[derive(Debug, Error)]
-pub enum ContactProjectionError {
+pub enum PersonProjectionError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 

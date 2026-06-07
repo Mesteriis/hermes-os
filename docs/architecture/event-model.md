@@ -10,7 +10,7 @@ The event model is the system spine. It records facts that happened in or around
 - document events
 - task events
 - calendar events
-- contact events
+- person events
 - project events
 - agent events
 - system events
@@ -71,7 +71,7 @@ The event model is the system spine. It records facts that happened in or around
 - `task_created`
 - `task_status_changed`
 - `meeting_completed`
-- `contact_created`
+- `person_created`
 - `relationship_created`
 - `payment_received`
 - `agent_tool_invoked`
@@ -83,7 +83,7 @@ Events feed projections for:
 
 - message threads
 - unified timeline
-- contact profiles
+- person profiles
 - project timelines
 - task views
 - graph edges

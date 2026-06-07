@@ -38,8 +38,8 @@ impl GraphProjectionService {
     pub async fn project_from_v1(&self) -> Result<GraphProjectionReport, GraphProjectionError> {
         let mut report = GraphProjectionReport::default();
 
-        for contact in self.list_contacts().await? {
-            self.project_contact(&contact, &mut report).await?;
+        for person in self.list_persons().await? {
+            self.project_person(&person, &mut report).await?;
         }
         for message in self.list_messages().await? {
             self.project_message(&message, &mut report).await?;
@@ -54,13 +54,13 @@ impl GraphProjectionService {
         Ok(report)
     }
 
-    async fn list_contacts(&self) -> Result<Vec<ContactRow>, GraphProjectionError> {
+    async fn list_persons(&self) -> Result<Vec<PersonRow>, GraphProjectionError> {
         let rows = sqlx::query(
-            "SELECT contact_id, display_name, email_address FROM contacts ORDER BY contact_id",
+            "SELECT person_id, display_name, email_address FROM persons ORDER BY person_id",
         )
         .fetch_all(&self.pool)
         .await?;
-        rows.into_iter().map(row_to_contact).collect()
+        rows.into_iter().map(row_to_person).collect()
     }
 
     async fn list_messages(&self) -> Result<Vec<MessageRow>, GraphProjectionError> {
@@ -98,19 +98,19 @@ impl GraphProjectionService {
         rows.into_iter().map(row_to_document).collect()
     }
 
-    async fn project_contact(
+    async fn project_person(
         &self,
-        contact: &ContactRow,
+        person: &PersonRow,
         report: &mut GraphProjectionReport,
     ) -> Result<(), GraphProjectionError> {
-        let normalized_email = normalize_email_address(&contact.email_address);
-        let person = self
+        let normalized_email = normalize_email_address(&person.email_address);
+        let person_node = self
             .graph
             .upsert_node(
                 &NewGraphNode::new(
                     GraphNodeKind::Person,
-                    &contact.contact_id,
-                    &contact.display_name,
+                    &person.person_id,
+                    &person.display_name,
                 )
                 .properties(json!({ "email_address": normalized_email.clone() })),
             )
@@ -130,15 +130,15 @@ impl GraphProjectionService {
         self.graph
             .upsert_edge_with_evidence(
                 &NewGraphEdge::new(
-                    person.node_id,
+                    person_node.node_id,
                     email.node_id,
                     RelationshipType::PersonHasEmailAddress,
                     1.0,
                     GraphReviewState::SystemAccepted,
                 ),
                 &[NewGraphEvidence::new(
-                    GraphEvidenceSourceKind::Contact,
-                    contact.contact_id.clone(),
+                    GraphEvidenceSourceKind::Person,
+                    person.person_id.clone(),
                 )],
             )
             .await?;
@@ -240,13 +240,13 @@ impl GraphProjectionService {
         report: &mut GraphProjectionReport,
     ) -> Result<MessageEndpoint, GraphProjectionError> {
         let normalized_email = normalize_email_address(email_address);
-        let contact = self
-            .contact_by_normalized_email(transaction, &normalized_email)
+        let person = self
+            .person_by_normalized_email(transaction, &normalized_email)
             .await?;
 
-        if let Some(contact) = contact {
+        if let Some(person) = person {
             return Ok(MessageEndpoint::Person {
-                node_id: node_id(GraphNodeKind::Person, &contact.contact_id),
+                node_id: node_id(GraphNodeKind::Person, &person.person_id),
             });
         }
 
@@ -266,19 +266,19 @@ impl GraphProjectionService {
         })
     }
 
-    async fn contact_by_normalized_email(
+    async fn person_by_normalized_email(
         &self,
         transaction: &mut Transaction<'_, Postgres>,
         normalized_email: &str,
-    ) -> Result<Option<ContactRow>, GraphProjectionError> {
+    ) -> Result<Option<PersonRow>, GraphProjectionError> {
         let row = sqlx::query(
-            "SELECT contact_id, display_name, email_address FROM contacts WHERE email_address = $1",
+            "SELECT person_id, display_name, email_address FROM persons WHERE email_address = $1",
         )
         .bind(normalized_email)
         .fetch_optional(&mut **transaction)
         .await?;
 
-        row.map(row_to_contact).transpose()
+        row.map(row_to_person).transpose()
     }
 
     async fn project_message_endpoint(
@@ -531,8 +531,8 @@ pub enum GraphProjectionError {
     InvalidRecipients,
 }
 
-struct ContactRow {
-    contact_id: String,
+struct PersonRow {
+    person_id: String,
     display_name: String,
     email_address: String,
 }
@@ -600,9 +600,9 @@ enum RelationshipDirection {
     Received,
 }
 
-fn row_to_contact(row: PgRow) -> Result<ContactRow, GraphProjectionError> {
-    Ok(ContactRow {
-        contact_id: row.try_get("contact_id")?,
+fn row_to_person(row: PgRow) -> Result<PersonRow, GraphProjectionError> {
+    Ok(PersonRow {
+        person_id: row.try_get("person_id")?,
         display_name: row.try_get("display_name")?,
         email_address: row.try_get("email_address")?,
     })

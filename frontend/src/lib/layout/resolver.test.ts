@@ -11,7 +11,7 @@ const expectedViews: LayoutViewId[] = [
 	'home',
 	'communications',
 	'timeline',
-	'contacts',
+	'persons',
 	'projects',
 	'tasks',
 	'calendar',

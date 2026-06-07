@@ -15,23 +15,23 @@ pub struct CommunicationFingerprint {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct ContactInsight {
-    pub contact_id: String,
+pub struct PersonInsight {
+    pub person_id: String,
     pub fingerprint: CommunicationFingerprint,
     pub suggested_actions: Vec<String>,
 }
 
 #[derive(Clone)]
-pub struct ContactIntelligenceService {
+pub struct PersonIntelligenceService {
     ollama: Option<OllamaClient>,
 }
 
-impl ContactIntelligenceService {
+impl PersonIntelligenceService {
     pub fn new(ollama: Option<OllamaClient>) -> Self {
         Self { ollama }
     }
 
-    pub fn heuristic_fingerprint(messages: &[ContactMessage]) -> CommunicationFingerprint {
+    pub fn heuristic_fingerprint(messages: &[PersonMessage]) -> CommunicationFingerprint {
         if messages.is_empty() {
             return CommunicationFingerprint {
                 avg_message_length: None,
@@ -81,7 +81,6 @@ impl ContactIntelligenceService {
 
         let lang = crate::email_multilingual::MultilingualService::detect_language(&combined_text);
 
-        // Trust score: starts at 50, adjusted by interaction history
         let trust = 50i16
             .saturating_add((messages.len() as i16 * 2).min(30))
             .saturating_add(if !topics.is_empty() { 10 } else { 0 });
@@ -106,8 +105,8 @@ impl ContactIntelligenceService {
 
     pub async fn llm_fingerprint(
         &self,
-        messages: &[ContactMessage],
-    ) -> Result<Option<CommunicationFingerprint>, ContactIntelligenceError> {
+        messages: &[PersonMessage],
+    ) -> Result<Option<CommunicationFingerprint>, PersonIntelligenceError> {
         let Some(ref ollama) = self.ollama else {
             return Ok(None);
         };
@@ -135,18 +134,18 @@ impl ContactIntelligenceService {
         let mut actions = Vec::new();
         if let Some(ref tone) = fingerprint.typical_tone {
             actions.push(format!(
-                "Contact tends to be {tone} — match tone in replies"
+                "Person tends to be {tone} — match tone in replies"
             ));
         }
         if let Some(ref lang) = fingerprint.detected_language {
             if lang != "en" {
                 actions.push(format!(
-                    "Contact writes in {lang} — consider translating replies"
+                    "Person writes in {lang} — consider translating replies"
                 ));
             }
         }
         if let Some(ref style) = fingerprint.writing_style {
-            actions.push(format!("Contact style: {style}"));
+            actions.push(format!("Person style: {style}"));
         }
         if let Some(score) = fingerprint.trust_score {
             if score < 30 {
@@ -158,14 +157,14 @@ impl ContactIntelligenceService {
 }
 
 #[derive(Clone, Debug)]
-pub struct ContactMessage {
+pub struct PersonMessage {
     pub subject: String,
     pub body_text: String,
     pub occurred_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 #[derive(Debug, Error)]
-pub enum ContactIntelligenceError {
+pub enum PersonIntelligenceError {
     #[error(transparent)]
     Ollama(#[from] OllamaError),
     #[error(transparent)]
@@ -175,14 +174,14 @@ pub enum ContactIntelligenceError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    fn sample_messages() -> Vec<ContactMessage> {
+    fn sample_messages() -> Vec<PersonMessage> {
         vec![
-            ContactMessage {
+            PersonMessage {
                 subject: "Invoice".into(),
                 body_text: "Please pay invoice #123 for $500".into(),
                 occurred_at: None,
             },
-            ContactMessage {
+            PersonMessage {
                 subject: "Thanks".into(),
                 body_text: "Thank you for your help with the project".into(),
                 occurred_at: None,
@@ -192,22 +191,22 @@ mod tests {
 
     #[test]
     fn fingerprint_detects_topics() {
-        let fp = ContactIntelligenceService::heuristic_fingerprint(&sample_messages());
+        let fp = PersonIntelligenceService::heuristic_fingerprint(&sample_messages());
         assert!(fp.frequent_topics.contains(&"finance".into()));
     }
     #[test]
     fn fingerprint_sets_trust() {
-        let fp = ContactIntelligenceService::heuristic_fingerprint(&sample_messages());
+        let fp = PersonIntelligenceService::heuristic_fingerprint(&sample_messages());
         assert!(fp.trust_score.unwrap() >= 50);
     }
     #[test]
     fn fingerprint_detects_tone() {
-        let fp = ContactIntelligenceService::heuristic_fingerprint(&sample_messages());
+        let fp = PersonIntelligenceService::heuristic_fingerprint(&sample_messages());
         assert!(fp.typical_tone.is_some());
     }
     #[test]
     fn empty_messages_returns_none() {
-        let fp = ContactIntelligenceService::heuristic_fingerprint(&[]);
+        let fp = PersonIntelligenceService::heuristic_fingerprint(&[]);
         assert!(fp.trust_score.is_none());
     }
 }

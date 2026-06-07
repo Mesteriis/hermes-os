@@ -12,7 +12,7 @@
 - threading, participants, attachments, delivery metadata
 - spam, marketing и relevance classification
 
-### Contacts
+### Persons
 
 - люди и организации
 - каналы связи
@@ -92,8 +92,8 @@
 
 | Capability | Core entities | Primary output |
 | --- | --- | --- |
-| Communication ingestion | Message, Event, Contact, Attachment | normalized events and messages |
-| Contact memory | Person, Company, Relationship | contact timeline and graph |
+| Communication ingestion | Message, Event, Person, Attachment | normalized events and messages |
+| Person memory | Person, Company, Relationship | person timeline and graph |
 | Document understanding | Document, Version, EntityMention | indexed and linked documents |
 | Task extraction | Task, Event, Person, Project | actionable task graph |
 | Search and recall | Message, Document, Event, Entity | ranked source-backed results |
