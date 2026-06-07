@@ -133,9 +133,7 @@ impl PersonIntelligenceService {
     pub fn suggested_actions(fingerprint: &CommunicationFingerprint) -> Vec<String> {
         let mut actions = Vec::new();
         if let Some(ref tone) = fingerprint.typical_tone {
-            actions.push(format!(
-                "Person tends to be {tone} — match tone in replies"
-            ));
+            actions.push(format!("Person tends to be {tone} — match tone in replies"));
         }
         if let Some(ref lang) = fingerprint.detected_language {
             if lang != "en" {

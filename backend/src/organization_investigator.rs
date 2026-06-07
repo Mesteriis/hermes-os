@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
 use crate::organizations::OrganizationError;
+use serde::Serialize;
+use serde_json::Value;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
@@ -46,10 +46,14 @@ pub struct OrgContextPack {
 }
 
 #[derive(Clone)]
-pub struct OrganizationInvestigator { pool: PgPool }
+pub struct OrganizationInvestigator {
+    pool: PgPool,
+}
 
 impl OrganizationInvestigator {
-    pub fn new(pool: PgPool) -> Self { Self { pool } }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 
     pub async fn dossier(&self, org_id: &str) -> Result<OrgDossier, InvestigatorError> {
         use crate::organizations::OrganizationStore;
@@ -58,14 +62,25 @@ impl OrganizationInvestigator {
         let org_json = serde_json::to_value(&org_data).unwrap_or_default();
 
         let mut parts = Vec::new();
-        if let Some(t) = &org_data.org_type { parts.push(format!("Type: {t}")); }
-        if org_data.interaction_count > 0 { parts.push(format!("{} interactions", org_data.interaction_count)); }
+        if let Some(t) = &org_data.org_type {
+            parts.push(format!("Type: {t}"));
+        }
+        if org_data.interaction_count > 0 {
+            parts.push(format!("{} interactions", org_data.interaction_count));
+        }
 
         Ok(OrgDossier {
             organization: org_json,
-            identities: vec![], domains: vec![], contacts: vec![],
-            facts: vec![], memory_cards: vec![], timeline: vec![],
-            contracts: vec![], risks: vec![], portals: vec![], procedures: vec![],
+            identities: vec![],
+            domains: vec![],
+            contacts: vec![],
+            facts: vec![],
+            memory_cards: vec![],
+            timeline: vec![],
+            contracts: vec![],
+            risks: vec![],
+            portals: vec![],
+            procedures: vec![],
             enrichment: vec![],
             summary: parts.join(" | "),
         })
@@ -75,7 +90,9 @@ impl OrganizationInvestigator {
         use crate::organizations::OrganizationStore;
         let org = OrganizationStore::new(self.pool.clone());
         let org_data = org.get(org_id).await?.ok_or(InvestigatorError::NotFound)?;
-        let last_days = org_data.last_interaction_at.map(|dt| (chrono::Utc::now() - dt).num_days());
+        let last_days = org_data
+            .last_interaction_at
+            .map(|dt| (chrono::Utc::now() - dt).num_days());
         Ok(OrgBrief {
             organization_id: org_data.organization_id,
             display_name: org_data.display_name,
@@ -93,9 +110,12 @@ impl OrganizationInvestigator {
         let brief = self.brief(org_id).await?;
         Ok(OrgContextPack {
             brief,
-            recent_events: vec![], key_contacts: vec![],
-            active_contracts: vec![], open_risks: vec![],
-            portals: vec![], procedures: vec![],
+            recent_events: vec![],
+            key_contacts: vec![],
+            active_contracts: vec![],
+            open_risks: vec![],
+            portals: vec![],
+            procedures: vec![],
         })
     }
 }
@@ -111,6 +131,8 @@ impl From<OrganizationError> for InvestigatorError {
 
 #[derive(Debug, Error)]
 pub enum InvestigatorError {
-    #[error(transparent)] Sqlx(#[from] sqlx::Error),
-    #[error("organization not found")] NotFound,
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+    #[error("organization not found")]
+    NotFound,
 }

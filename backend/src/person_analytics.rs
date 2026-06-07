@@ -41,19 +41,34 @@ pub struct PersonAnalyticsService {
 }
 
 impl PersonAnalyticsService {
-    pub fn new(pool: PgPool) -> Self { Self { pool } }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 
     /// Compute full analytics for a person.
     pub async fn compute(&self, person_id: &str) -> Result<PersonAnalytics, AnalyticsError> {
         let rel_score = self.relationship_score(person_id).await.unwrap_or(0.0);
         let intel_score = self.intelligence_score(person_id).await.unwrap_or(0.0);
-        let heatmap = self.interaction_heatmap(person_id).await.unwrap_or_default();
-        let costs = self.communication_costs(person_id).await.unwrap_or(CommunicationCosts {
-            avg_thread_length: 0.0, avg_response_hours: 0.0, follow_up_frequency: 0.0,
-        });
-        let ctx = self.shared_context(person_id).await.unwrap_or(SharedContext {
-            shared_projects: 0, shared_documents: 0, shared_tasks: 0,
-        });
+        let heatmap = self
+            .interaction_heatmap(person_id)
+            .await
+            .unwrap_or_default();
+        let costs = self
+            .communication_costs(person_id)
+            .await
+            .unwrap_or(CommunicationCosts {
+                avg_thread_length: 0.0,
+                avg_response_hours: 0.0,
+                follow_up_frequency: 0.0,
+            });
+        let ctx = self
+            .shared_context(person_id)
+            .await
+            .unwrap_or(SharedContext {
+                shared_projects: 0,
+                shared_documents: 0,
+                shared_tasks: 0,
+            });
 
         Ok(PersonAnalytics {
             person_id: person_id.to_string(),
@@ -93,13 +108,21 @@ impl PersonAnalyticsService {
                  CASE WHEN primary_role IS NOT NULL THEN 10 ELSE 0 END +
                  CASE WHEN organization_reference IS NOT NULL THEN 10 ELSE 0 END +
                  CASE WHEN notes IS NOT NULL THEN 10 ELSE 0 END) as score
-             FROM persons WHERE person_id = $1"#
-        ).bind(person_id).fetch_optional(&self.pool).await?;
-        Ok(row.map(|r| r.try_get::<i32, _>("score").unwrap_or(0) as f64).unwrap_or(0.0))
+             FROM persons WHERE person_id = $1"#,
+        )
+        .bind(person_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row
+            .map(|r| r.try_get::<i32, _>("score").unwrap_or(0) as f64)
+            .unwrap_or(0.0))
     }
 
     /// Interaction heatmap: message count by day-of-week and hour.
-    async fn interaction_heatmap(&self, person_id: &str) -> Result<Vec<HeatmapEntry>, AnalyticsError> {
+    async fn interaction_heatmap(
+        &self,
+        person_id: &str,
+    ) -> Result<Vec<HeatmapEntry>, AnalyticsError> {
         let rows = sqlx::query(
             r#"SELECT
                 extract(dow from occurred_at)::int as day_of_week,
@@ -108,17 +131,26 @@ impl PersonAnalyticsService {
              FROM communication_messages
              WHERE occurred_at IS NOT NULL
                AND (sender like $1 || '%' OR recipients like '%' || $1 || '%')
-             GROUP BY 1, 2 ORDER BY 1, 2 LIMIT 168"#
-        ).bind(person_id).fetch_all(&self.pool).await?;
-        Ok(rows.into_iter().map(|r| HeatmapEntry {
-            day_of_week: r.try_get("day_of_week").unwrap_or(0),
-            hour: r.try_get("hour").unwrap_or(0),
-            count: r.try_get("count").unwrap_or(0),
-        }).collect())
+             GROUP BY 1, 2 ORDER BY 1, 2 LIMIT 168"#,
+        )
+        .bind(person_id)
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| HeatmapEntry {
+                day_of_week: r.try_get("day_of_week").unwrap_or(0),
+                hour: r.try_get("hour").unwrap_or(0),
+                count: r.try_get("count").unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Communication costs: avg thread length, response time, follow-up rate.
-    async fn communication_costs(&self, person_id: &str) -> Result<CommunicationCosts, AnalyticsError> {
+    async fn communication_costs(
+        &self,
+        person_id: &str,
+    ) -> Result<CommunicationCosts, AnalyticsError> {
         // Simplified: use existing avg_response_hours and interaction_count from persons table
         let row = sqlx::query(
             "SELECT COALESCE(avg_response_hours, 0.0) as arh, interaction_count FROM persons WHERE person_id = $1"
@@ -127,12 +159,20 @@ impl PersonAnalyticsService {
             let arh: f64 = r.try_get("arh").unwrap_or(0.0);
             let ic: i32 = r.try_get("interaction_count").unwrap_or(0);
             Ok(CommunicationCosts {
-                avg_thread_length: if ic > 0 { (ic as f64 / 10.0).min(50.0) } else { 0.0 },
+                avg_thread_length: if ic > 0 {
+                    (ic as f64 / 10.0).min(50.0)
+                } else {
+                    0.0
+                },
                 avg_response_hours: arh,
                 follow_up_frequency: if ic > 0 { 0.3 } else { 0.0 },
             })
         } else {
-            Ok(CommunicationCosts { avg_thread_length: 0.0, avg_response_hours: 0.0, follow_up_frequency: 0.0 })
+            Ok(CommunicationCosts {
+                avg_thread_length: 0.0,
+                avg_response_hours: 0.0,
+                follow_up_frequency: 0.0,
+            })
         }
     }
 
@@ -152,5 +192,6 @@ impl PersonAnalyticsService {
 
 #[derive(Debug, Error)]
 pub enum AnalyticsError {
-    #[error(transparent)] Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
 }

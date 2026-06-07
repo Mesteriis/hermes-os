@@ -1,0 +1,23 @@
+repos:
+  - repo: local
+    hooks:
+      - id: hermes-architecture-guards
+        name: Hermes architecture and code guards
+        entry: make lint-architecture
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: hermes-rust-lint
+        name: Hermes Rust lint (fmt + clippy, no tests)
+        entry: make lint-rust
+        language: system
+        pass_filenames: false
+        files: ^(backend/(src|tests|migrations)/|backend/Cargo\.(toml|lock)$|Makefile$)
+
+      - id: hermes-frontend-lint
+        name: Hermes frontend lint (style + TS/Svelte, no tests)
+        entry: make lint-frontend
+        language: system
+        pass_filenames: false
+        files: ^frontend/(src|static|scripts)/|^frontend/(package\.json|pnpm-lock\.yaml|tsconfig\.json|svelte\.config\.js|vite\.config\.ts)$

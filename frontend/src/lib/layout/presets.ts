@@ -3,6 +3,7 @@ import type { LayoutPreset, LayoutViewId, LayoutWidgetInstance } from './types';
 export type AppShellLayoutViewId = LayoutViewId | 'knowledge' | 'agents';
 
 const layoutViewIds = [
+	'organizations',
 	'home',
 	'communications',
 	'timeline',
@@ -196,6 +197,13 @@ export const layoutPresets: LayoutPreset[] = [
 		instance('ai-runtime-status', 'rail', 10),
 		instance('ai-run-history', 'rail', 20),
 		instance('ai-citations', 'rail', 30)
+	]),
+	preset('organizations', 'master_detail_workbench', workbenchZones, [
+		instance('organizations-list', 'list', 10),
+		instance('organizations-detail', 'detail', 10),
+		instance('organizations-health', 'rail', 10),
+		instance('organizations-key-people', 'rail', 20),
+		instance('organizations-related-projects', 'rail', 30)
 	]),
 	preset('settings', 'operational_board', boardZones, [
 		instance('settings-metrics', 'metrics', 10),

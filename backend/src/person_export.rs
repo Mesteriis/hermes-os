@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::person_investigator::{InvestigatorError, PersonInvestigator, PersonDossier};
+use crate::person_investigator::{InvestigatorError, PersonDossier, PersonInvestigator};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum ExportFormat {
@@ -12,7 +12,7 @@ pub enum ExportFormat {
 }
 
 impl ExportFormat {
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "markdown" | "md" => Some(Self::Markdown),
             "json" => Some(Self::Json),
@@ -44,11 +44,15 @@ pub struct PersonExportService {
 }
 
 impl PersonExportService {
-    pub fn new(pool: PgPool) -> Self { Self { pool } }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 
     /// Export a person dossier in the requested format.
     pub async fn export(
-        &self, person_id: &str, format: ExportFormat,
+        &self,
+        person_id: &str,
+        format: ExportFormat,
     ) -> Result<String, ExportError> {
         let investigator = PersonInvestigator::new(self.pool.clone());
         let dossier = investigator.assemble_dossier(person_id).await?;
@@ -77,7 +81,10 @@ fn render_markdown(d: &PersonDossier) -> String {
     if let Some(score) = d.person.trust_score {
         md.push_str(&format!("**Trust**: {score}/100\n"));
     }
-    md.push_str(&format!("**Interactions**: {}\n\n", d.person.interaction_count));
+    md.push_str(&format!(
+        "**Interactions**: {}\n\n",
+        d.person.interaction_count
+    ));
 
     if !d.person.frequent_topics.is_empty() {
         md.push_str("## Topics\n\n");
@@ -90,7 +97,10 @@ fn render_markdown(d: &PersonDossier) -> String {
     if !d.memory_cards.is_empty() {
         md.push_str("## Memory Cards\n\n");
         for card in &d.memory_cards {
-            md.push_str(&format!("- **{}**: {} (importance: {})\n", card.title, card.description, card.importance));
+            md.push_str(&format!(
+                "- **{}**: {} (importance: {})\n",
+                card.title, card.description, card.importance
+            ));
         }
         md.push('\n');
     }
@@ -98,8 +108,13 @@ fn render_markdown(d: &PersonDossier) -> String {
     if !d.facts.is_empty() {
         md.push_str("## Facts\n\n");
         for fact in &d.facts {
-            md.push_str(&format!("- **{}**: {} (source: {}, confidence: {:.0}%)\n",
-                fact.fact_type, fact.value, fact.source, fact.confidence * 100.0));
+            md.push_str(&format!(
+                "- **{}**: {} (source: {}, confidence: {:.0}%)\n",
+                fact.fact_type,
+                fact.value,
+                fact.source,
+                fact.confidence * 100.0
+            ));
         }
         md.push('\n');
     }
@@ -107,10 +122,12 @@ fn render_markdown(d: &PersonDossier) -> String {
     if !d.timeline.is_empty() {
         md.push_str("## Timeline\n\n");
         for event in &d.timeline {
-            md.push_str(&format!("- **{}**: {} ({})\n",
+            md.push_str(&format!(
+                "- **{}**: {} ({})\n",
                 event.occurred_at.format("%Y-%m-%d"),
                 event.title,
-                event.event_type));
+                event.event_type
+            ));
         }
         md.push('\n');
     }
@@ -130,8 +147,12 @@ fn render_markdown(d: &PersonDossier) -> String {
 
 #[derive(Debug, Error)]
 pub enum ExportError {
-    #[error(transparent)] Investigator(#[from] InvestigatorError),
-    #[error(transparent)] Sqlx(#[from] sqlx::Error),
-    #[error(transparent)] Serde(#[from] serde_json::Error),
-    #[error("unsupported export format")] UnsupportedFormat,
+    #[error(transparent)]
+    Investigator(#[from] InvestigatorError),
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
+    #[error("unsupported export format")]
+    UnsupportedFormat,
 }

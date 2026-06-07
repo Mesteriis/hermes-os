@@ -55,10 +55,19 @@ pub struct OrganizationStore {
 }
 
 impl OrganizationStore {
-    pub fn new(pool: PgPool) -> Self { Self { pool } }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 
-    pub async fn create(&self, display_name: &str, org_type: Option<&str>) -> Result<Organization, OrganizationError> {
-        let ts = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
+    pub async fn create(
+        &self,
+        display_name: &str,
+        org_type: Option<&str>,
+    ) -> Result<Organization, OrganizationError> {
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
         let org_id = format!("org:v1:{:x}", ts);
         let row = sqlx::query(
             "INSERT INTO organizations (organization_id, display_name, org_type)
@@ -71,12 +80,20 @@ impl OrganizationStore {
                        legal_address, registry_source, registry_last_verified,
                        communication_style, verbosity, formality, secondary_languages,
                        preferred_tone, official_style_required,
-                       last_health_check, watchlist, created_at, updated_at"
-        ).bind(&org_id).bind(display_name).bind(org_type).fetch_one(&self.pool).await?;
+                       last_health_check, watchlist, created_at, updated_at",
+        )
+        .bind(&org_id)
+        .bind(display_name)
+        .bind(org_type)
+        .fetch_one(&self.pool)
+        .await?;
         row_to_org(row)
     }
 
-    pub async fn get(&self, organization_id: &str) -> Result<Option<Organization>, OrganizationError> {
+    pub async fn get(
+        &self,
+        organization_id: &str,
+    ) -> Result<Option<Organization>, OrganizationError> {
         let row = sqlx::query(
             "SELECT organization_id, display_name, legal_name, org_type, status, country, city,
                     address, website, industry, description, primary_language, timezone,
@@ -87,15 +104,23 @@ impl OrganizationStore {
                     communication_style, verbosity, formality, secondary_languages,
                     preferred_tone, official_style_required,
                     last_health_check, watchlist, created_at, updated_at
-             FROM organizations WHERE organization_id = $1"
-        ).bind(organization_id).fetch_optional(&self.pool).await?;
+             FROM organizations WHERE organization_id = $1",
+        )
+        .bind(organization_id)
+        .fetch_optional(&self.pool)
+        .await?;
         row.map(row_to_org).transpose()
     }
 
-    pub async fn list(&self, org_type: Option<&str>, limit: i64) -> Result<Vec<Organization>, OrganizationError> {
+    pub async fn list(
+        &self,
+        org_type: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<Organization>, OrganizationError> {
         let limit = limit.clamp(1, 100);
-        let rows = if let Some(t) = org_type {
-            sqlx::query(
+        let rows =
+            if let Some(t) = org_type {
+                sqlx::query(
                 "SELECT organization_id, display_name, legal_name, org_type, status, country, city,
                         address, website, industry, description, primary_language, timezone,
                         trust_score, health_status, priority, notes, tags, org_metadata,
@@ -107,8 +132,8 @@ impl OrganizationStore {
                         last_health_check, watchlist, created_at, updated_at
                  FROM organizations WHERE org_type = $1 ORDER BY interaction_count DESC LIMIT $2"
             ).bind(t).bind(limit).fetch_all(&self.pool).await?
-        } else {
-            sqlx::query(
+            } else {
+                sqlx::query(
                 "SELECT organization_id, display_name, legal_name, org_type, status, country, city,
                         address, website, industry, description, primary_language, timezone,
                         trust_score, health_status, priority, notes, tags, org_metadata,
@@ -120,11 +145,15 @@ impl OrganizationStore {
                         last_health_check, watchlist, created_at, updated_at
                  FROM organizations ORDER BY interaction_count DESC LIMIT $1"
             ).bind(limit).fetch_all(&self.pool).await?
-        };
+            };
         rows.into_iter().map(row_to_org).collect()
     }
 
-    pub async fn update(&self, organization_id: &str, update: &OrganizationUpdate) -> Result<Organization, OrganizationError> {
+    pub async fn update(
+        &self,
+        organization_id: &str,
+        update: &OrganizationUpdate,
+    ) -> Result<Organization, OrganizationError> {
         let row = sqlx::query(
             "UPDATE organizations SET
                 display_name = COALESCE($2, display_name),
@@ -153,25 +182,27 @@ impl OrganizationStore {
                        legal_address, registry_source, registry_last_verified,
                        communication_style, verbosity, formality, secondary_languages,
                        preferred_tone, official_style_required,
-                       last_health_check, watchlist, created_at, updated_at"
-        ).bind(organization_id)
-         .bind(update.display_name.as_deref())
-         .bind(update.legal_name.as_deref())
-         .bind(update.org_type.as_deref())
-         .bind(update.status.as_deref())
-         .bind(update.country.as_deref())
-         .bind(update.city.as_deref())
-         .bind(update.address.as_deref())
-         .bind(update.website.as_deref())
-         .bind(update.industry.as_deref())
-         .bind(update.description.as_deref())
-         .bind(update.primary_language.as_deref())
-         .bind(update.timezone.as_deref())
-         .bind(update.priority.as_deref())
-         .bind(update.notes.as_deref())
-         .bind(update.tags.as_ref())
-         .bind(update.org_metadata.as_ref())
-         .fetch_one(&self.pool).await?;
+                       last_health_check, watchlist, created_at, updated_at",
+        )
+        .bind(organization_id)
+        .bind(update.display_name.as_deref())
+        .bind(update.legal_name.as_deref())
+        .bind(update.org_type.as_deref())
+        .bind(update.status.as_deref())
+        .bind(update.country.as_deref())
+        .bind(update.city.as_deref())
+        .bind(update.address.as_deref())
+        .bind(update.website.as_deref())
+        .bind(update.industry.as_deref())
+        .bind(update.description.as_deref())
+        .bind(update.primary_language.as_deref())
+        .bind(update.timezone.as_deref())
+        .bind(update.priority.as_deref())
+        .bind(update.notes.as_deref())
+        .bind(update.tags.as_ref())
+        .bind(update.org_metadata.as_ref())
+        .fetch_one(&self.pool)
+        .await?;
         row_to_org(row)
     }
 
@@ -249,6 +280,8 @@ fn row_to_org(row: PgRow) -> Result<Organization, OrganizationError> {
 
 #[derive(Debug, Error)]
 pub enum OrganizationError {
-    #[error(transparent)] Sqlx(#[from] sqlx::Error),
-    #[error("organization not found")] NotFound,
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+    #[error("organization not found")]
+    NotFound,
 }

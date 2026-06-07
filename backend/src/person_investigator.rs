@@ -39,18 +39,27 @@ pub struct PersonInvestigator {
 }
 
 impl PersonInvestigator {
-    pub fn new(pool: PgPool) -> Self { Self { pool } }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 
-    pub async fn assemble_dossier(&self, person_id: &str) -> Result<PersonDossier, InvestigatorError> {
+    pub async fn assemble_dossier(
+        &self,
+        person_id: &str,
+    ) -> Result<PersonDossier, InvestigatorError> {
         use crate::person_enrichment::PersonEnrichmentStore;
-        use crate::person_memory::{PersonFactStore, PersonMemoryCardStore, RelationshipEventStore};
+        use crate::person_memory::{
+            PersonFactStore, PersonMemoryCardStore, RelationshipEventStore,
+        };
 
         let enrichment = PersonEnrichmentStore::new(self.pool.clone());
         let facts = PersonFactStore::new(self.pool.clone());
         let cards = PersonMemoryCardStore::new(self.pool.clone());
         let timeline = RelationshipEventStore::new(self.pool.clone());
 
-        let person = enrichment.get_enriched(person_id).await?
+        let person = enrichment
+            .get_enriched(person_id)
+            .await?
             .ok_or(InvestigatorError::PersonNotFound)?;
 
         let facts_list = facts.list(person_id).await.unwrap_or_default();
@@ -94,21 +103,35 @@ impl PersonInvestigator {
         use crate::person_trust::{PersonPromiseStore, PersonRiskStore};
 
         let enrichment = PersonEnrichmentStore::new(self.pool.clone());
-        let person = enrichment.get_enriched(person_id).await?
+        let person = enrichment
+            .get_enriched(person_id)
+            .await?
             .ok_or(InvestigatorError::PersonNotFound)?;
 
-        let last_interaction_days = person.last_interaction_at.map(|dt| {
-            (chrono::Utc::now() - dt).num_days()
-        });
+        let last_interaction_days = person
+            .last_interaction_at
+            .map(|dt| (chrono::Utc::now() - dt).num_days());
 
         let promises = PersonPromiseStore::new(self.pool.clone());
         let risks = PersonRiskStore::new(self.pool.clone());
-        let open_promises = promises.list(person_id).await.unwrap_or_default()
-            .iter().filter(|p| p.status == "pending").count() as i64;
-        let open_risks = risks.list(person_id).await.unwrap_or_default()
-            .iter().filter(|r| r.resolved_at.is_none()).count() as i64;
+        let open_promises = promises
+            .list(person_id)
+            .await
+            .unwrap_or_default()
+            .iter()
+            .filter(|p| p.status == "pending")
+            .count() as i64;
+        let open_risks = risks
+            .list(person_id)
+            .await
+            .unwrap_or_default()
+            .iter()
+            .filter(|r| r.resolved_at.is_none())
+            .count() as i64;
 
-        let mut tips = person.frequent_topics.iter()
+        let mut tips = person
+            .frequent_topics
+            .iter()
             .map(|t| format!("Discuss topic: {t}"))
             .collect::<Vec<_>>();
         if let Some(tone) = &person.tone {

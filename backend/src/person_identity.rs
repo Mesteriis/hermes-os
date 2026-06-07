@@ -408,8 +408,7 @@ impl PersonIdentityStore {
                 .execute(&mut **transaction)
                 .await?;
             }
-            PersonIdentityReviewState::UserConfirmed
-            | PersonIdentityReviewState::UserRejected => {
+            PersonIdentityReviewState::UserConfirmed | PersonIdentityReviewState::UserRejected => {
                 sqlx::query(
                     r#"
                     UPDATE person_identity_candidates

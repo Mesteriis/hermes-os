@@ -5,12 +5,12 @@ use chrono::Utc;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
+use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope};
 use hermes_hub_backend::person_identity::{
     PersonIdentityError, PersonIdentityReviewCommand, PersonIdentityReviewState,
     PersonIdentityStore,
 };
 use hermes_hub_backend::persons::PersonProjectionStore;
-use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope};
 use hermes_hub_backend::storage::Database;
 
 const CONTACT_IDENTITY_REVIEW_EVENT_TYPE: &str = "person_identity.review_state_changed";
@@ -170,8 +170,7 @@ async fn person_identity_confirm_materializes_split_candidate_against_postgres()
         .refresh_candidates(100)
         .await
         .expect("refresh merge candidates");
-    let merge_candidate_id =
-        identity_candidate_id_from_persons(&left.person_id, &right.person_id);
+    let merge_candidate_id = identity_candidate_id_from_persons(&left.person_id, &right.person_id);
 
     let _ = context
         .store
@@ -239,8 +238,7 @@ async fn person_identity_confirmed_split_removes_merge_from_detail_against_postg
         .refresh_candidates(100)
         .await
         .expect("refresh merge candidates");
-    let merge_candidate_id =
-        identity_candidate_id_from_persons(&left.person_id, &right.person_id);
+    let merge_candidate_id = identity_candidate_id_from_persons(&left.person_id, &right.person_id);
 
     let _ = context
         .store
@@ -356,10 +354,8 @@ async fn person_identity_refresh_skips_existing_split_when_generating_next_split
         identity_candidate_id_from_persons(&second_left.person_id, &second_right.person_id);
     let first_split_candidate_id =
         split_identity_candidate_id_from_persons(&first_left.person_id, &first_right.person_id);
-    let second_split_candidate_id = split_identity_candidate_id_from_persons(
-        &second_left.person_id,
-        &second_right.person_id,
-    );
+    let second_split_candidate_id =
+        split_identity_candidate_id_from_persons(&second_left.person_id, &second_right.person_id);
 
     confirm_identity_candidate(
         &context,

@@ -7,12 +7,14 @@
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
+		"lint": "pnpm lint:styles && pnpm lint:ts",
 		"lint:styles": "node scripts/check-no-inline-styles.mjs",
+		"lint:ts": "svelte-kit sync && svelte-check --fail-on-warnings --tsconfig ./tsconfig.json",
 		"capture:layout": "node scripts/capture-layout-screenshots.mjs",
 		"test:layout": "vitest run src/lib/layout",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"check": "pnpm lint:styles && pnpm test:layout && svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"check": "pnpm lint && pnpm test:layout",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
 	},
 	"devDependencies": {

@@ -25,9 +25,14 @@ pub struct EnrichmentResultStore {
 }
 
 impl EnrichmentResultStore {
-    pub fn new(pool: PgPool) -> Self { Self { pool } }
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
 
-    pub async fn list(&self, person_id: &str) -> Result<Vec<EnrichmentResult>, EnrichmentEngineError> {
+    pub async fn list(
+        &self,
+        person_id: &str,
+    ) -> Result<Vec<EnrichmentResult>, EnrichmentEngineError> {
         let rows = sqlx::query(
             "SELECT id::text, person_id, source, url, data, confidence, status, last_checked_at, applied_at, created_at
              FROM enrichment_results WHERE person_id = $1 ORDER BY created_at DESC"
@@ -36,7 +41,11 @@ impl EnrichmentResultStore {
     }
 
     pub async fn upsert(
-        &self, person_id: &str, source: &str, data: Value, confidence: f64,
+        &self,
+        person_id: &str,
+        source: &str,
+        data: Value,
+        confidence: f64,
     ) -> Result<EnrichmentResult, EnrichmentEngineError> {
         let row = sqlx::query(
             "INSERT INTO enrichment_results (person_id, source, data, confidence)
@@ -55,23 +64,32 @@ impl EnrichmentResultStore {
 
     pub async fn reject(&self, id: &str) -> Result<(), EnrichmentEngineError> {
         sqlx::query("UPDATE enrichment_results SET status = 'rejected' WHERE id::text = $1")
-            .bind(id).execute(&self.pool).await?;
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 }
 
 fn row_to_enrichment(row: PgRow) -> Result<EnrichmentResult, EnrichmentEngineError> {
     Ok(EnrichmentResult {
-        id: row.try_get("id")?, person_id: row.try_get("person_id")?,
-        source: row.try_get("source")?, url: row.try_get("url")?,
-        data: row.try_get("data")?, confidence: row.try_get("confidence")?,
-        status: row.try_get("status")?, last_checked_at: row.try_get("last_checked_at")?,
-        applied_at: row.try_get("applied_at")?, created_at: row.try_get("created_at")?,
+        id: row.try_get("id")?,
+        person_id: row.try_get("person_id")?,
+        source: row.try_get("source")?,
+        url: row.try_get("url")?,
+        data: row.try_get("data")?,
+        confidence: row.try_get("confidence")?,
+        status: row.try_get("status")?,
+        last_checked_at: row.try_get("last_checked_at")?,
+        applied_at: row.try_get("applied_at")?,
+        created_at: row.try_get("created_at")?,
     })
 }
 
 #[derive(Debug, Error)]
 pub enum EnrichmentEngineError {
-    #[error(transparent)] Sqlx(#[from] sqlx::Error),
-    #[error("enrichment not found")] NotFound,
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+    #[error("enrichment not found")]
+    NotFound,
 }

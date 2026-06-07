@@ -8,9 +8,9 @@ use sqlx::postgres::PgPool;
 use hermes_hub_backend::communications::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::persons::PersonProjectionStore;
 use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
+use hermes_hub_backend::persons::PersonProjectionStore;
 use hermes_hub_backend::project_link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkReviewStore, ProjectLinkTargetKind,
 };

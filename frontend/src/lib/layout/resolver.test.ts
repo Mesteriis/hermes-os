@@ -21,6 +21,7 @@ const expectedViews: LayoutViewId[] = [
 	'telegram',
 	'whatsapp',
 	'ai-agents',
+	'organizations',
 	'settings'
 ];
 

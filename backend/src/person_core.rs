@@ -76,11 +76,13 @@ impl PersonsIdentityStore {
         identity_id: &str,
         status: &str,
     ) -> Result<(), PersonCoreError> {
-        sqlx::query("UPDATE person_identities SET status = $2, updated_at = now() WHERE id::text = $1")
-            .bind(identity_id)
-            .bind(status)
-            .execute(&self.pool)
-            .await?;
+        sqlx::query(
+            "UPDATE person_identities SET status = $2, updated_at = now() WHERE id::text = $1",
+        )
+        .bind(identity_id)
+        .bind(status)
+        .execute(&self.pool)
+        .await?;
         Ok(())
     }
 
@@ -130,7 +132,10 @@ impl PersonRoleStore {
         Self { pool }
     }
 
-    pub async fn list_by_person(&self, person_id: &str) -> Result<Vec<PersonRole>, PersonCoreError> {
+    pub async fn list_by_person(
+        &self,
+        person_id: &str,
+    ) -> Result<Vec<PersonRole>, PersonCoreError> {
         let rows = sqlx::query(
             r#"SELECT id::text, person_id, role, assigned_by, assigned_at
                FROM person_roles WHERE person_id = $1 ORDER BY assigned_at"#,

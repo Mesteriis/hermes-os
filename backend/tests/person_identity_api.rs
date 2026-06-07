@@ -146,8 +146,7 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
         .refresh_candidates(100)
         .await
         .expect("refresh candidates");
-    let merge_candidate_id =
-        identity_candidate_id_from_persons(&left.person_id, &right.person_id);
+    let merge_candidate_id = identity_candidate_id_from_persons(&left.person_id, &right.person_id);
     let command_id = format!("identity-api-split-confirm-{suffix}");
 
     let app = build_router_with_database(

@@ -33,6 +33,7 @@ export type LayoutViewId =
 	| 'telegram'
 	| 'whatsapp'
 	| 'ai-agents'
+	| 'organizations'
 	| 'settings';
 
 export type WidgetMinimumSize = {
