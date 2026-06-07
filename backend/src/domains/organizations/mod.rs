@@ -2,6 +2,7 @@ pub mod api;
 pub mod core;
 pub mod enrichment;
 pub mod finance;
+pub mod handlers;
 pub mod health;
 pub mod investigator;
 pub mod memory;

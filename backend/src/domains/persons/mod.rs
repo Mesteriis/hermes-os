@@ -5,6 +5,7 @@ pub mod enrichment;
 pub mod enrichment_engine;
 pub mod expertise;
 pub mod export;
+pub mod handlers;
 pub mod health;
 pub mod identity;
 pub mod intelligence;
