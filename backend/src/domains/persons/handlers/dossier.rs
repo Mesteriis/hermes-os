@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::Path;
 use axum::extract::State;
 
-pub async fn dossier(
+pub(crate) async fn dossier(
     State(s): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

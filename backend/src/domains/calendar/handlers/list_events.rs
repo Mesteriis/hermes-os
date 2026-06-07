@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::calendar::events::{CalendarEventListQuery, CalendarEventStore};
 use axum::Json;
 use axum::extract::{Query, State};
-pub async fn list_events(
+pub(crate) async fn list_events(
     State(s): State<AppState>,
     Query(q): Query<CalendarEventListQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

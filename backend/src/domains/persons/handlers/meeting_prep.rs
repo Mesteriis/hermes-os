@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::Path;
 use axum::extract::State;
 
-pub async fn meeting_prep(
+pub(crate) async fn meeting_prep(
     State(s): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

@@ -8,7 +8,7 @@ use serde_json::Value;
 
 const ACTOR: &str = "hermes-frontend";
 
-pub async fn update(
+pub(crate) async fn update(
     State(state): State<AppState>,
     Path(key): Path<String>,
     Json(req): Json<UpdateRequest>,

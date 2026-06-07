@@ -1,16 +1,19 @@
 use crate::app::handlers::{ApiError, AppState};
-use crate::domains::calendar::core::EventAgendaStore;
+use crate::domains::calendar::meetings::MeetingOutcomeStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub(crate) async fn agenda(
-    State(s): State<AppState>,
+
+pub(crate) async fn follow_up(
+    State(state): State<AppState>,
     Path(event_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let pool = s
+    let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let agenda = EventAgendaStore::new(pool).get(&event_id).await?;
-    Ok(Json(serde_json::to_value(agenda).unwrap_or_default()))
+    let status = MeetingOutcomeStore::new(pool)
+        .follow_up_status(&event_id)
+        .await?;
+    Ok(Json(status))
 }

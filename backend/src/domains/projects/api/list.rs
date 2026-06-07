@@ -4,7 +4,7 @@ use crate::domains::projects::core::ProjectStore;
 use axum::Json;
 use axum::extract::{Query, State};
 
-pub async fn list(
+pub(crate) async fn list(
     State(state): State<AppState>,
     Query(q): Query<ProjectsQuery>,
 ) -> Result<Json<ProjectListResponse>, ApiError> {

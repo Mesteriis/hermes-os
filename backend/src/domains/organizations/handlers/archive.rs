@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::api::OrganizationStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn archive(
+pub(crate) async fn archive(
     State(s): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

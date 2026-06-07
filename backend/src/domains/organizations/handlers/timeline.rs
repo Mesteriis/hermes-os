@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::workflows::OrgTimelineStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn timeline(
+pub(crate) async fn timeline(
     State(s): State<AppState>,
     Path(org_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

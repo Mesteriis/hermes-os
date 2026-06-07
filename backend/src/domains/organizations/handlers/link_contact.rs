@@ -3,7 +3,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::core::OrgContactLinkStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn link_contact(
+pub(crate) async fn link_contact(
     State(s): State<AppState>,
     Path(org_id): Path<String>,
     Json(r): Json<LinkContact>,

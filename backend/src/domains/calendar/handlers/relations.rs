@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::calendar::core::EventRelationStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn relations(
+pub(crate) async fn relations(
     State(s): State<AppState>,
     Path(event_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

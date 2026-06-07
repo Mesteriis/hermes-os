@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::persons::enrichment::PersonEnrichmentStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn get(
+pub(crate) async fn get(
     State(s): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

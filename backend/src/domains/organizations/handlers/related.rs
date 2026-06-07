@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::core::RelatedOrgStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn related(
+pub(crate) async fn related(
     State(s): State<AppState>,
     Path(org_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

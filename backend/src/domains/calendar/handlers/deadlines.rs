@@ -8,7 +8,7 @@ pub struct DeadlineQuery {
     pub status: Option<String>,
     pub limit: Option<i64>,
 }
-pub async fn deadlines(
+pub(crate) async fn deadlines(
     State(s): State<AppState>,
     Query(q): Query<DeadlineQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

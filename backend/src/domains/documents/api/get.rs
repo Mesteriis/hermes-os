@@ -3,7 +3,7 @@ use crate::domains::documents::processing::{DocumentProcessingRecord, DocumentPr
 use axum::Json;
 use axum::extract::{Path, State};
 
-pub async fn get(
+pub(crate) async fn get(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<DocumentProcessingRecord>, ApiError> {

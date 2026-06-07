@@ -9,7 +9,7 @@ use axum::extract::{Path, State};
 
 const ACTOR: &str = "hermes-frontend";
 
-pub async fn review_link(
+pub(crate) async fn review_link(
     State(state): State<AppState>,
     Path(pid): Path<String>,
     req: Json<LinkReviewRequest>,

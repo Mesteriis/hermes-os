@@ -185,11 +185,10 @@ struct WorkflowStateCountsQuery {
 
 async fn put_v1_message_workflow_state(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(request): Json<WorkflowStateTransitionApiRequest>,
 ) -> Result<Json<WorkflowStateTransitionApiResponse>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let actor_id = "hermes-frontend".to_string();
     let store = message_store(&state)?;
 
     let current = store
@@ -212,7 +211,7 @@ async fn put_v1_message_workflow_state(
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::message_workflow_state_set(
-            &actor.actor_id,
+            &actor_id,
             &message_id,
         ))
         .await?;
@@ -230,10 +229,8 @@ async fn put_v1_message_workflow_state(
 
 async fn get_v1_message_workflow_state_counts(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<WorkflowStateCountsQuery>,
 ) -> Result<Json<WorkflowStateCountsApiResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let counts = message_store(&state)?
         .count_messages_by_state(query.account_id.as_deref())
         .await?
@@ -259,10 +256,8 @@ struct MessageAnalyzeResponse {
 
 async fn post_v1_message_analyze(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<MessageAnalyzeResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
 
     let message = store
@@ -330,10 +325,8 @@ struct ThreadMessagesResponse {
 
 async fn get_v1_threads(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<ThreadListQuery>,
 ) -> Result<Json<ThreadListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -349,10 +342,8 @@ async fn get_v1_threads(
 
 async fn get_v1_thread_messages(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<ThreadMessagesQuery>,
 ) -> Result<Json<ThreadMessagesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let account_id = query
         .account_id
         .as_deref()
@@ -396,10 +387,8 @@ struct SearchResultResponse {
 
 async fn get_v1_email_search(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<EmailSearchQuery>,
 ) -> Result<Json<EmailSearchResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     if query.q.trim().is_empty() {
         return Err(ApiError::InvalidCommunicationQuery(
             "search query is required",
@@ -457,9 +446,7 @@ struct NewPersonaRequest {
 
 async fn get_v1_personas(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<PersonaListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -472,10 +459,8 @@ async fn get_v1_personas(
 
 async fn post_v1_persona(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<NewPersonaRequest>,
 ) -> Result<Json<crate::domains::mail::personas::EmailPersona>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -529,10 +514,8 @@ struct NewDraftRequest {
 
 async fn get_v1_drafts(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<DraftListQuery>,
 ) -> Result<Json<DraftListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -549,10 +532,8 @@ async fn get_v1_drafts(
 
 async fn post_v1_draft(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewDraftRequest>,
 ) -> Result<Json<crate::domains::mail::drafts::EmailDraft>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -586,10 +567,8 @@ async fn post_v1_draft(
 
 async fn get_v1_draft(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(draft_id): Path<String>,
 ) -> Result<Json<crate::domains::mail::drafts::EmailDraft>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -605,10 +584,8 @@ async fn get_v1_draft(
 
 async fn delete_v1_draft(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(draft_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -648,10 +625,8 @@ struct NewInvoiceRequest {
 
 async fn get_v1_invoices(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<InvoiceListQuery>,
 ) -> Result<Json<InvoiceListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -668,10 +643,8 @@ async fn get_v1_invoices(
 
 async fn post_v1_invoice(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewInvoiceRequest>,
 ) -> Result<Json<crate::domains::mail::finance::InvoiceRecord>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -709,10 +682,8 @@ struct AnalyticsQuery {
 
 async fn get_v1_analytics_health(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<AnalyticsQuery>,
 ) -> Result<Json<crate::domains::mail::analytics::MailboxHealth>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -731,10 +702,8 @@ struct SendersQuery {
 
 async fn get_v1_analytics_senders(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<SendersQuery>,
 ) -> Result<Json<Vec<crate::domains::mail::analytics::SenderStats>>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -754,10 +723,8 @@ struct MessageExplainResponse {
 
 async fn get_v1_message_explain(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<MessageExplainResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let message = store
         .message(&message_id)
@@ -776,10 +743,8 @@ struct SmartCcResponse {
 
 async fn get_v1_message_smart_cc(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<SmartCcResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let message = store
         .message(&message_id)
@@ -797,10 +762,8 @@ struct PinToggleResponse {
 
 async fn post_v1_message_pin(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<PinToggleResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let pinned = crate::domains::mail::flags::MessageFlags::toggle_pin(&store, &message_id).await?;
     Ok(Json(PinToggleResponse { message_id, pinned }))
@@ -813,11 +776,9 @@ struct SnoozeRequest {
 
 async fn post_v1_message_snooze(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<SnoozeRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let until: DateTime<Utc> = req
         .until
         .parse()
@@ -829,10 +790,8 @@ async fn post_v1_message_snooze(
 
 async fn post_v1_message_mute(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<PinToggleResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let muted = crate::domains::mail::flags::MessageFlags::toggle_mute(&store, &message_id).await?;
     Ok(Json(PinToggleResponse {
@@ -848,11 +807,9 @@ struct LabelRequest {
 
 async fn post_v1_message_label(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<LabelRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     crate::domains::mail::flags::MessageFlags::add_label(&store, &message_id, &req.label).await?;
     Ok(Json(serde_json::json!({"labeled": true})))
@@ -860,11 +817,9 @@ async fn post_v1_message_label(
 
 async fn delete_v1_message_label(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<LabelRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     crate::domains::mail::flags::MessageFlags::remove_label(&store, &message_id, &req.label)
         .await?;
@@ -879,10 +834,8 @@ struct SubscriptionsQuery {
 
 async fn get_v1_subscriptions(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<SubscriptionsQuery>,
 ) -> Result<Json<Vec<crate::domains::mail::subscriptions::SubscriptionSource>>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -902,10 +855,8 @@ struct DupQuery {
 
 async fn get_v1_attachment_duplicates(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<DupQuery>,
 ) -> Result<Json<Vec<crate::domains::mail::attachment_dedup::DuplicateGroup>>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -929,10 +880,8 @@ struct LegalDocListResponse {
 
 async fn get_v1_legal_docs(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<LegalDocQuery>,
 ) -> Result<Json<LegalDocListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -970,10 +919,8 @@ struct NewLegalDocRequest {
 
 async fn post_v1_legal_doc(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewLegalDocRequest>,
 ) -> Result<Json<crate::domains::mail::legal::LegalDocument>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -1014,11 +961,9 @@ struct ExportResponse {
 
 async fn get_v1_message_export(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Query(query): Query<PersonDownloadQuery>,
 ) -> Result<Json<ExportResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let msg_store = message_store(&state)?;
     let att_store = mail_storage_store(&state)?;
     let format = match query.format.as_deref().unwrap_or("markdown") {
@@ -1059,11 +1004,9 @@ struct SendResponse {
 }
 
 async fn post_v1_send(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
     Json(req): Json<SendRequest>,
 ) -> Result<Json<SendResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let email = crate::domains::mail::send::OutgoingEmail {
         from: req.account_id.clone(),
         to: req.to,
@@ -1087,11 +1030,9 @@ async fn post_v1_send(
 
 async fn post_v1_reply(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<SendRequest>,
 ) -> Result<Json<SendResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1121,10 +1062,8 @@ async fn post_v1_reply(
 
 async fn post_v1_imap_mark_read(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     store
         .message(&message_id)
@@ -1138,10 +1077,8 @@ async fn post_v1_imap_mark_read(
 
 async fn post_v1_imap_delete(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     store
         .message(&message_id)
@@ -1163,11 +1100,7 @@ struct CertsListResponse {
     items: Vec<crate::domains::mail::signatures::CertificateRecord>,
 }
 
-async fn get_v1_certs(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<CertsListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+async fn get_v1_certs(State(state): State<AppState>) -> Result<Json<CertsListResponse>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -1201,10 +1134,8 @@ struct NewCertRequest {
 
 async fn post_v1_cert(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewCertRequest>,
 ) -> Result<Json<crate::domains::mail::signatures::CertificateRecord>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -1259,10 +1190,8 @@ struct ExpiringQuery {
 }
 async fn get_v1_certs_expiring(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<ExpiringQuery>,
 ) -> Result<Json<CertsListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -1276,10 +1205,8 @@ async fn get_v1_certs_expiring(
 
 async fn get_v1_signature_check(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<crate::domains::mail::signatures::SignatureDetection>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1299,11 +1226,9 @@ struct ForwardRequest {
 
 async fn post_v1_forward(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<ForwardRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1325,10 +1250,8 @@ async fn post_v1_forward(
 
 async fn get_v1_detect_language(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<crate::domains::mail::multilingual::LanguageDetection>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1346,11 +1269,9 @@ struct TranslateRequest {
 
 async fn post_v1_translate(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<TranslateRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1379,11 +1300,9 @@ struct AiReplyRequest {
 
 async fn post_v1_ai_reply(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<AiReplyRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1413,11 +1332,9 @@ struct AiReplyVariantsRequest {
 
 async fn post_v1_ai_reply_variants(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<AiReplyVariantsRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1443,11 +1360,9 @@ struct ReplyAllRequest {
 }
 async fn post_v1_reply_all(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<ReplyAllRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1471,11 +1386,9 @@ struct ForwardEmlRequest {
 }
 async fn post_v1_forward_eml(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
     Json(req): Json<ForwardEmlRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1495,10 +1408,8 @@ async fn post_v1_forward_eml(
 
 async fn get_v1_spf_dkim(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1511,10 +1422,8 @@ async fn get_v1_spf_dkim(
 
 async fn post_v1_extract_tasks(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1536,10 +1445,8 @@ async fn post_v1_extract_tasks(
 
 async fn post_v1_extract_notes(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
@@ -1555,15 +1462,11 @@ struct RenderTemplateRequest {
     template_id: String,
     variables: Option<HashMap<String, String>>,
 }
-async fn get_v1_rich_templates(
-    State(_state): State<AppState>,
-    _headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
+async fn get_v1_rich_templates(State(_state): State<AppState>) -> Result<Json<Value>, ApiError> {
     Ok(Json(serde_json::json!({"templates": []})))
 }
 async fn post_v1_rich_template(
     State(_state): State<AppState>,
-    _headers: HeaderMap,
     Json(_req): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     Ok(Json(serde_json::json!({"saved": true})))
@@ -1576,7 +1479,6 @@ async fn get_v1_blockers()
 
 async fn post_v1_render_template(
     State(_state): State<AppState>,
-    _headers: HeaderMap,
     Json(req): Json<RenderTemplateRequest>,
 ) -> Result<Json<Value>, ApiError> {
     let template_id = req.template_id;
@@ -1598,10 +1500,8 @@ struct PersonListResponse {
 
 async fn get_v2_persons(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<PersonListQuery>,
 ) -> Result<Json<PersonListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -1619,10 +1519,8 @@ async fn get_v2_persons(
 
 async fn get_v2_person(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<crate::domains::persons::enrichment::EnrichedPerson>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -1637,10 +1535,8 @@ async fn get_v2_person(
 
 async fn post_v2_person_fingerprint(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -1674,10 +1570,8 @@ async fn post_v2_person_fingerprint(
 
 async fn post_v2_person_favorite(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -1694,11 +1588,9 @@ struct PersonNotesRequest {
 }
 async fn put_v2_person_notes(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Json(req): Json<PersonNotesRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -1716,10 +1608,8 @@ struct PersonSearchQuery {
 }
 async fn get_v2_person_search(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<PersonSearchQuery>,
 ) -> Result<Json<PersonListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     if query.q.trim().is_empty() {
         return Err(ApiError::InvalidCommunicationQuery("search query required"));
     }
@@ -2455,10 +2345,8 @@ struct PersonIdentitiesResponse {
 
 async fn get_person_identities(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonIdentitiesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2481,11 +2369,9 @@ struct NewPersonIdentityRequest {
 
 async fn post_person_identity(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonIdentityRequest>,
 ) -> Result<Json<PersonIdentity>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2506,10 +2392,8 @@ async fn post_person_identity(
 
 async fn delete_person_identity(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((_person_id, identity_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2529,10 +2413,8 @@ struct PersonRolesResponse {
 
 async fn get_person_roles(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonRolesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2553,11 +2435,9 @@ struct NewPersonRoleRequest {
 
 async fn post_person_role(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonRoleRequest>,
 ) -> Result<Json<PersonRole>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2573,10 +2453,8 @@ async fn post_person_role(
 
 async fn delete_person_role(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((person_id, role)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2599,10 +2477,8 @@ struct PersonPersonasResponse {
 
 async fn get_person_personas(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonPersonasResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2618,11 +2494,9 @@ async fn get_person_personas(
 
 async fn post_person_persona(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonPersona>,
 ) -> Result<Json<PersonPersona>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2638,10 +2512,8 @@ async fn post_person_persona(
 
 async fn delete_person_persona(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((_person_id, persona_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2661,10 +2533,8 @@ struct PersonFactsResponse {
 
 async fn get_person_facts(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonFactsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2687,11 +2557,9 @@ struct NewPersonFactRequest {
 
 async fn post_person_fact(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonFactRequest>,
 ) -> Result<Json<crate::domains::persons::memory::PersonFact>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2719,10 +2587,8 @@ struct PersonMemoryCardsResponse {
 
 async fn get_person_memory_cards(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonMemoryCardsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2745,11 +2611,9 @@ struct NewPersonMemoryCardRequest {
 
 async fn post_person_memory_card(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonMemoryCardRequest>,
 ) -> Result<Json<crate::domains::persons::memory::PersonMemoryCard>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2777,10 +2641,8 @@ struct PersonPreferencesResponse {
 
 async fn get_person_preferences(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonPreferencesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2802,11 +2664,9 @@ struct NewPersonPreferenceRequest {
 
 async fn post_person_preference(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonPreferenceRequest>,
 ) -> Result<Json<crate::domains::persons::memory::PersonPreference>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2833,11 +2693,9 @@ struct RelationshipTimelineResponse {
 
 async fn get_person_timeline(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Query(query): Query<TimelineQuery>,
 ) -> Result<Json<RelationshipTimelineResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2857,11 +2715,9 @@ struct TimelineQuery {
 
 async fn post_relationship_event(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Json(req): Json<NewRelationshipEvent>,
 ) -> Result<Json<crate::domains::persons::memory::RelationshipEvent>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2904,10 +2760,8 @@ struct EnrichmentResultsResponse {
 
 async fn get_person_enrichment(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<EnrichmentResultsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2922,10 +2776,8 @@ async fn get_person_enrichment(
 
 async fn post_person_enrichment_apply(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((_person_id, result_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2940,10 +2792,8 @@ async fn post_person_enrichment_apply(
 
 async fn post_person_enrichment_reject(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((_person_id, result_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2965,10 +2815,8 @@ struct PersonExpertiseResponse {
 
 async fn get_person_expertise(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonExpertiseResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -2989,10 +2837,8 @@ struct ExpertiseSearchQuery {
 
 async fn get_person_expertise_search(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<ExpertiseSearchQuery>,
 ) -> Result<Json<PersonExpertiseResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3014,10 +2860,8 @@ struct PersonPromisesResponse {
 
 async fn get_person_promises(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonPromisesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3039,10 +2883,8 @@ struct PersonRisksResponse {
 
 async fn get_person_risks(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonRisksResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3071,10 +2913,8 @@ struct PersonHealthResponse {
 
 async fn get_person_health(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<crate::domains::persons::health::PersonHealth>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3090,9 +2930,7 @@ async fn get_person_health(
 
 async fn get_persons_health(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<PersonHealthResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3107,9 +2945,7 @@ async fn get_persons_health(
 
 async fn get_persons_watchlist(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<PersonHealthResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3124,10 +2960,8 @@ async fn get_persons_watchlist(
 
 async fn post_person_watchlist_toggle(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3170,10 +3004,8 @@ impl From<ExportError> for ApiError {
 
 async fn post_person_investigate(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3188,10 +3020,8 @@ async fn post_person_investigate(
 
 async fn get_person_dossier(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3206,10 +3036,8 @@ async fn get_person_dossier(
 
 async fn get_person_meeting_prep(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3226,10 +3054,8 @@ async fn get_person_meeting_prep(
 
 async fn get_person_analytics(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3251,11 +3077,9 @@ struct PersonDownloadQuery {
 
 async fn get_person_export_handler(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Query(query): Query<PersonDownloadQuery>,
 ) -> Result<(HeaderMap, String), ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let format = query
         .format
         .as_deref()
@@ -3297,10 +3121,8 @@ struct PersonSnapshotsResponse {
 
 async fn get_person_snapshots(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonSnapshotsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3321,11 +3143,9 @@ struct HistoryDiffQuery {
 
 async fn get_person_history_diff(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
     Query(query): Query<HistoryDiffQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3359,10 +3179,8 @@ struct OrganizationListQuery {
 
 async fn get_organizations(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<OrganizationListQuery>,
 ) -> Result<Json<OrganizationListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3382,10 +3200,8 @@ struct NewOrganizationRequest {
 
 async fn post_organization(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewOrganizationRequest>,
 ) -> Result<Json<crate::domains::organizations::api::Organization>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3399,10 +3215,8 @@ async fn post_organization(
 
 async fn get_organization(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<crate::domains::organizations::api::Organization>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3417,11 +3231,9 @@ async fn get_organization(
 
 async fn put_organization(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
     Json(update): Json<OrganizationUpdate>,
 ) -> Result<Json<crate::domains::organizations::api::Organization>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3441,10 +3253,8 @@ struct OrganizationSearchQuery {
 
 async fn get_organization_search(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<OrganizationSearchQuery>,
 ) -> Result<Json<OrganizationListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3475,10 +3285,8 @@ async fn get_organization_search(
 
 async fn post_organization_archive(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3497,10 +3305,8 @@ struct OrgIdentitiesResponse {
 
 async fn get_org_identities(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgIdentitiesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3522,11 +3328,9 @@ struct NewOrgIdentityRequest {
 
 async fn post_org_identity(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
     Json(req): Json<NewOrgIdentityRequest>,
 ) -> Result<Json<crate::domains::organizations::core::OrganizationIdentity>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3553,10 +3357,8 @@ struct OrgAliasesResponse {
 
 async fn get_org_aliases(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgAliasesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3578,11 +3380,9 @@ struct NewOrgAliasRequest {
 
 async fn post_org_alias(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
     Json(req): Json<NewOrgAliasRequest>,
 ) -> Result<Json<crate::domains::organizations::core::OrganizationAlias>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3609,10 +3409,8 @@ struct OrgDomainsResponse {
 
 async fn get_org_domains(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgDomainsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3634,10 +3432,8 @@ struct OrgDepartmentsResponse {
 
 async fn get_org_departments(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgDepartmentsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3659,11 +3455,9 @@ struct NewOrgDepartmentRequest {
 
 async fn post_org_department(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
     Json(req): Json<NewOrgDepartmentRequest>,
 ) -> Result<Json<crate::domains::organizations::core::OrgDepartment>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3690,10 +3484,8 @@ struct OrgContactsResponse {
 
 async fn get_org_contacts(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgContactsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3715,11 +3507,9 @@ struct LinkOrgContactRequest {
 
 async fn post_org_contact_link(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
     Json(req): Json<LinkOrgContactRequest>,
 ) -> Result<Json<crate::domains::organizations::core::OrgContactLink>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3746,10 +3536,8 @@ struct OrgRelatedResponse {
 
 async fn get_org_related(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgRelatedResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3775,11 +3563,9 @@ struct OrgTimelineQuery {
 
 async fn get_org_timeline(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
     Query(query): Query<OrgTimelineQuery>,
 ) -> Result<Json<OrgTimelineResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3801,10 +3587,8 @@ struct OrgPortalsResponse {
 
 async fn get_org_portals(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgPortalsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3826,10 +3610,8 @@ struct OrgProceduresResponse {
 
 async fn get_org_procedures(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgProceduresResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3851,10 +3633,8 @@ struct OrgPlaybooksResponse {
 
 async fn get_org_playbooks(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgPlaybooksResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3876,10 +3656,8 @@ struct OrgTemplatesResponse {
 
 async fn get_org_templates(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgTemplatesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3896,10 +3674,8 @@ async fn get_org_templates(
 
 async fn get_org_financial(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3921,10 +3697,8 @@ struct OrgContractsResponse {
 
 async fn get_org_contracts(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgContractsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3946,10 +3720,8 @@ struct OrgComplianceResponse {
 
 async fn get_org_compliance(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgComplianceResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3971,10 +3743,8 @@ struct OrgServicesResponse {
 
 async fn get_org_services(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgServicesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -3996,10 +3766,8 @@ struct OrgProductsResponse {
 
 async fn get_org_products(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgProductsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4021,10 +3789,8 @@ struct OrgEnrichmentResponse {
 
 async fn get_org_enrichment(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgEnrichmentResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4039,10 +3805,8 @@ async fn get_org_enrichment(
 
 async fn post_org_enrich_apply(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((_org_id, rid)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4064,10 +3828,8 @@ struct OrgRisksResponse {
 
 async fn get_org_risks(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgRisksResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4084,10 +3846,8 @@ async fn get_org_risks(
 
 async fn get_org_health(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4102,10 +3862,8 @@ async fn get_org_health(
 
 async fn post_org_watchlist_toggle(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4122,10 +3880,8 @@ async fn post_org_watchlist_toggle(
 
 async fn get_org_dossier(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4140,10 +3896,8 @@ async fn get_org_dossier(
 
 async fn get_org_brief(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4158,10 +3912,8 @@ async fn get_org_brief(
 
 async fn get_org_context_pack(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4188,10 +3940,8 @@ struct CalendarAccountQuery {
 
 async fn get_calendar_accounts(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<CalendarAccountQuery>,
 ) -> Result<Json<CalendarAccountsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4212,10 +3962,8 @@ struct NewCalendarAccountRequest {
 
 async fn post_calendar_account(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewCalendarAccountRequest>,
 ) -> Result<Json<crate::domains::calendar::events::CalendarAccount>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4229,10 +3977,8 @@ async fn post_calendar_account(
 
 async fn get_calendar_account(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(account_id): Path<String>,
 ) -> Result<Json<crate::domains::calendar::events::CalendarAccount>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4247,11 +3993,9 @@ async fn get_calendar_account(
 
 async fn put_calendar_account(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(account_id): Path<String>,
     Json(update): Json<CalendarAccountUpdate>,
 ) -> Result<Json<crate::domains::calendar::events::CalendarAccount>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4265,10 +4009,8 @@ async fn put_calendar_account(
 
 async fn delete_calendar_account(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(account_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4287,10 +4029,8 @@ struct CalendarSourcesResponse {
 
 async fn get_calendar_sources(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(account_id): Path<String>,
 ) -> Result<Json<CalendarSourcesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4312,11 +4052,9 @@ struct NewCalendarSourceRequest {
 
 async fn post_calendar_source(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(account_id): Path<String>,
     Json(req): Json<NewCalendarSourceRequest>,
 ) -> Result<Json<crate::domains::calendar::events::CalendarSource>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4354,10 +4092,8 @@ struct CalendarEventQuery {
 
 async fn get_calendar_events(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<CalendarEventQuery>,
 ) -> Result<Json<CalendarEventsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4378,10 +4114,8 @@ async fn get_calendar_events(
 
 async fn post_calendar_event(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewCalendarEvent>,
 ) -> Result<Json<crate::domains::calendar::events::CalendarEvent>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4393,10 +4127,8 @@ async fn post_calendar_event(
 
 async fn get_calendar_event(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<crate::domains::calendar::events::CalendarEvent>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4411,11 +4143,9 @@ async fn get_calendar_event(
 
 async fn put_calendar_event(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(update): Json<CalendarEventUpdate>,
 ) -> Result<Json<crate::domains::calendar::events::CalendarEvent>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4429,10 +4159,8 @@ async fn put_calendar_event(
 
 async fn delete_calendar_event(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4452,11 +4180,9 @@ struct RescheduleRequest {
 
 async fn post_calendar_event_reschedule(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<RescheduleRequest>,
 ) -> Result<Json<crate::domains::calendar::events::CalendarEvent>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4470,10 +4196,8 @@ async fn post_calendar_event_reschedule(
 
 async fn post_calendar_event_cancel(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4494,10 +4218,8 @@ struct EventParticipantsResponse {
 
 async fn get_event_participants(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<EventParticipantsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4521,11 +4243,9 @@ struct NewParticipantRequest {
 
 async fn post_event_participant(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<NewParticipantRequest>,
 ) -> Result<Json<crate::domains::calendar::core::EventParticipant>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4554,10 +4274,8 @@ struct EventRelationsResponse {
 
 async fn get_event_relations(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<EventRelationsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4579,11 +4297,9 @@ struct NewRelationRequest {
 
 async fn post_event_relation(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<NewRelationRequest>,
 ) -> Result<Json<crate::domains::calendar::core::EventRelation>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4605,10 +4321,8 @@ async fn post_event_relation(
 
 async fn get_event_context_pack(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4623,11 +4337,9 @@ async fn get_event_context_pack(
 
 async fn post_event_context_pack(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<ContextPackInput>,
 ) -> Result<Json<crate::domains::calendar::core::EventContextPack>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4644,10 +4356,8 @@ async fn post_event_context_pack(
 
 async fn get_event_agenda(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4668,11 +4378,9 @@ struct SetAgendaRequest {
 
 async fn post_event_agenda(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<SetAgendaRequest>,
 ) -> Result<Json<crate::domains::calendar::core::EventAgenda>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4693,10 +4401,8 @@ async fn post_event_agenda(
 
 async fn get_event_checklist(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4717,11 +4423,9 @@ struct SetChecklistRequest {
 
 async fn post_event_checklist(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<SetChecklistRequest>,
 ) -> Result<Json<crate::domains::calendar::core::EventChecklist>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4742,10 +4446,8 @@ async fn post_event_checklist(
 
 async fn post_event_classify(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4776,10 +4478,8 @@ async fn post_event_classify(
 
 async fn post_event_analyze(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4846,10 +4546,8 @@ async fn post_event_analyze(
 
 async fn get_event_risks(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4893,10 +4591,8 @@ struct MeetingNotesResponse {
 
 async fn get_meeting_notes(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<MeetingNotesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4918,11 +4614,9 @@ struct NewNoteRequest {
 
 async fn post_meeting_note(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<NewNoteRequest>,
 ) -> Result<Json<crate::domains::calendar::meetings::MeetingNote>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4949,10 +4643,8 @@ struct MeetingOutcomesResponse {
 
 async fn get_meeting_outcomes(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<MeetingOutcomesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -4976,11 +4668,9 @@ struct NewOutcomeRequest {
 
 async fn post_meeting_outcome(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<NewOutcomeRequest>,
 ) -> Result<Json<crate::domains::calendar::meetings::MeetingOutcome>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5002,10 +4692,8 @@ async fn post_meeting_outcome(
 
 async fn post_event_follow_up(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5019,10 +4707,8 @@ async fn post_event_follow_up(
 
 async fn get_event_follow_up_status(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5044,10 +4730,8 @@ struct EventRecordingsResponse {
 
 async fn get_event_recordings(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<EventRecordingsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5069,11 +4753,9 @@ struct NewRecordingRequest {
 
 async fn post_event_recording(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<NewRecordingRequest>,
 ) -> Result<Json<crate::domains::calendar::meetings::EventRecording>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5093,10 +4775,8 @@ async fn post_event_recording(
 
 async fn get_event_transcript(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5113,10 +4793,8 @@ async fn get_event_transcript(
 
 async fn get_event_brief(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5130,10 +4808,8 @@ async fn get_event_brief(
 
 async fn post_generate_agenda(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5160,10 +4836,8 @@ struct DeadlineQuery {
 
 async fn get_deadlines(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<DeadlineQuery>,
 ) -> Result<Json<DeadlinesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5187,10 +4861,8 @@ struct NewDeadlineRequest {
 
 async fn post_deadline(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewDeadlineRequest>,
 ) -> Result<Json<crate::domains::calendar::scheduling::DeadlineEvent>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5225,10 +4897,8 @@ struct FocusBlockQuery {
 
 async fn get_focus_blocks(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<FocusBlockQuery>,
 ) -> Result<Json<FocusBlocksResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5253,10 +4923,8 @@ struct NewFocusBlockRequest {
 
 async fn post_focus_block(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewFocusBlockRequest>,
 ) -> Result<Json<crate::domains::calendar::scheduling::FocusBlock>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5286,10 +4954,8 @@ struct SmartScheduleRequest {
 
 async fn post_smart_schedule(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<SmartScheduleRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5313,11 +4979,7 @@ async fn post_smart_schedule(
 
 // ── Calendar Watchtower ────────────────────────────────────────────────────
 
-async fn get_calendar_watchtower(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+async fn get_calendar_watchtower(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -5334,11 +4996,7 @@ async fn get_calendar_watchtower(
     ))
 }
 
-async fn get_calendar_health(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+async fn get_calendar_health(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -5352,11 +5010,7 @@ async fn get_calendar_health(
 
 // ── Weekly Brief ───────────────────────────────────────────────────────────
 
-async fn get_weekly_brief(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+async fn get_weekly_brief(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -5370,11 +5024,7 @@ async fn get_weekly_brief(
 
 // ── Calendar Analytics ─────────────────────────────────────────────────────
 
-async fn get_calendar_analytics(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+async fn get_calendar_analytics(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -5390,10 +5040,8 @@ async fn get_calendar_analytics(
 
 async fn post_calendar_brain(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<TaskBrainQueryParams>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5414,10 +5062,8 @@ struct CalendarSearchQuery {
 
 async fn get_calendar_search(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<CalendarSearchQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5438,9 +5084,7 @@ struct CalendarRulesResponse {
 
 async fn get_calendar_rules(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<CalendarRulesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5463,10 +5107,8 @@ struct NewRuleRequest {
 
 async fn post_calendar_rule(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewRuleRequest>,
 ) -> Result<Json<crate::domains::calendar::rules::CalendarRule>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5486,11 +5128,9 @@ async fn post_calendar_rule(
 
 async fn put_calendar_rule(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(rule_id): Path<String>,
     Json(update): Json<RuleUpdate>,
 ) -> Result<Json<crate::domains::calendar::rules::CalendarRule>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5505,10 +5145,8 @@ async fn put_calendar_rule(
 
 async fn delete_calendar_rule(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(rule_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5531,10 +5169,8 @@ struct CalendarImportRequest {
 
 async fn post_calendar_import(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<CalendarImportRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5581,10 +5217,8 @@ async fn post_calendar_import(
 
 async fn post_calendar_sync(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(account_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5611,11 +5245,9 @@ struct EventExportQuery {
 
 async fn get_event_export(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Query(query): Query<EventExportQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5662,10 +5294,8 @@ struct EventRemindersResponse {
 
 async fn get_event_reminders(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<EventRemindersResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5687,11 +5317,9 @@ struct NewReminderRequest {
 
 async fn post_event_reminder(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
     Json(req): Json<NewReminderRequest>,
 ) -> Result<Json<crate::domains::calendar::reminders::CalendarReminder>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5716,11 +5344,9 @@ struct ToggleReminderRequest {
 
 async fn post_event_reminder_toggle(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path((_event_id, reminder_id)): Path<(String, String)>,
     Json(req): Json<ToggleReminderRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5743,10 +5369,8 @@ struct AnalyticsRangeQuery {
 
 async fn get_time_distribution(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<AnalyticsRangeQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5771,10 +5395,8 @@ async fn get_time_distribution(
 
 async fn get_focus_balance(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<AnalyticsRangeQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5799,10 +5421,8 @@ async fn get_focus_balance(
 
 async fn get_back_to_back(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<AnalyticsRangeQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5841,10 +5461,8 @@ struct TaskListQueryParams {
 
 async fn get_tasks_v2(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(q): Query<TaskListQueryParams>,
 ) -> Result<Json<TaskRecordsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5863,10 +5481,8 @@ async fn get_tasks_v2(
 
 async fn post_task(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewTask>,
 ) -> Result<Json<crate::domains::tasks::api::Task>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5878,10 +5494,8 @@ async fn post_task(
 
 async fn get_task(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<crate::domains::tasks::api::Task>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5896,11 +5510,9 @@ async fn get_task(
 
 async fn put_task(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
     Json(update): Json<TaskUpdate>,
 ) -> Result<Json<crate::domains::tasks::api::Task>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5916,11 +5528,9 @@ struct TaskStatusRequest {
 }
 async fn post_task_status(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
     Json(req): Json<TaskStatusRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5934,10 +5544,8 @@ async fn post_task_status(
 
 async fn post_task_archive(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5951,10 +5559,8 @@ async fn post_task_archive(
 
 async fn get_task_context_pack(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -5977,11 +5583,9 @@ struct UpsertContextPackRequest {
 }
 async fn post_task_context_pack(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
     Json(req): Json<UpsertContextPackRequest>,
 ) -> Result<Json<crate::domains::tasks::core::TaskContextPack>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6009,10 +5613,8 @@ struct TaskEvidenceResponse {
 }
 async fn get_task_evidence(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskEvidenceResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6033,11 +5635,9 @@ struct NewEvidenceRequest {
 }
 async fn post_task_evidence(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
     Json(req): Json<NewEvidenceRequest>,
 ) -> Result<Json<crate::domains::tasks::core::TaskEvidence>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6064,10 +5664,8 @@ struct TaskRelationsResponse {
 }
 async fn get_task_relations(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskRelationsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6087,11 +5685,9 @@ struct NewRelationReq {
 }
 async fn post_task_relation(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
     Json(req): Json<NewRelationReq>,
 ) -> Result<Json<crate::domains::tasks::core::TaskRelation>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6113,10 +5709,8 @@ async fn post_task_relation(
 
 async fn get_task_checklist(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6135,11 +5729,9 @@ struct SetChecklistReq {
 }
 async fn post_task_checklist(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
     Json(req): Json<SetChecklistReq>,
 ) -> Result<Json<crate::domains::tasks::core::TaskChecklist>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6164,10 +5756,8 @@ struct TaskSubtasksResponse {
 }
 async fn get_task_subtasks(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskSubtasksResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6186,11 +5776,9 @@ struct NewSubtaskReq {
 }
 async fn post_task_subtask(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
     Json(req): Json<NewSubtaskReq>,
 ) -> Result<Json<crate::domains::tasks::core::TaskSubtask>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6207,10 +5795,8 @@ async fn post_task_subtask(
 
 async fn post_task_analyze(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6294,11 +5880,9 @@ struct TaskExportQuery {
 }
 async fn get_task_export(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
     Query(q): Query<TaskExportQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6330,10 +5914,8 @@ struct ExtIdentitiesResponse {
 }
 async fn get_task_external(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_id): Path<String>,
 ) -> Result<Json<ExtIdentitiesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6354,9 +5936,7 @@ struct TaskProvidersResponse {
 }
 async fn get_task_providers(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<TaskProvidersResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6375,10 +5955,8 @@ struct NewTaskProviderReq {
 }
 async fn post_task_provider(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewTaskProviderReq>,
 ) -> Result<Json<crate::domains::tasks::core::TaskProviderAccount>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6399,10 +5977,8 @@ struct TaskBrainQueryParams {
 }
 async fn post_task_brain(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<TaskBrainQueryParams>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6420,10 +5996,8 @@ struct TaskSearchQueryParams {
 }
 async fn get_task_search(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(q): Query<TaskSearchQueryParams>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6433,11 +6007,7 @@ async fn get_task_search(
     Ok(Json(results))
 }
 
-async fn get_task_daily_brief(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+async fn get_task_daily_brief(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -6455,9 +6025,7 @@ struct TaskRulesResponse {
 }
 async fn get_task_rules(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<TaskRulesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6478,10 +6046,8 @@ struct NewTaskRuleReq {
 }
 async fn post_task_rule(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(req): Json<NewTaskRuleReq>,
 ) -> Result<Json<crate::domains::tasks::rules::TaskRule>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6500,10 +6066,8 @@ async fn post_task_rule(
 }
 async fn delete_task_rule(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(rule_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6524,9 +6088,7 @@ struct TaskTemplatesResponse {
 }
 async fn get_task_templates(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<TaskTemplatesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6547,10 +6109,8 @@ struct WatchtowerQuery {
 }
 async fn get_task_watchtower(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(q): Query<WatchtowerQuery>,
 ) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
         .pool()
@@ -6571,11 +6131,7 @@ async fn get_task_watchtower(
     ))
 }
 
-async fn get_task_health(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+async fn get_task_health(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let pool = state
         .database
         .pool()
@@ -6590,11 +6146,7 @@ async fn get_task_health(
     Ok(Json(json!({"workload": wl, "cycle_time": ct})))
 }
 
-async fn get_task_analytics(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<Value>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+async fn get_task_analytics(State(state): State<AppState>) -> Result<Json<Value>, ApiError> {
     let _pool = state
         .database
         .pool()
@@ -6688,17 +6240,16 @@ async fn readyz(State(state): State<AppState>) -> (StatusCode, Json<ReadinessRes
 
 async fn post_event(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<AppendEventRequest>,
 ) -> Result<(StatusCode, Json<AppendEventResponse>), ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let actor_id = "hermes-frontend".to_string();
 
     let store = event_store(&state)?;
     let event = request.into_new_event()?;
     let audit_log = api_audit_log(&state)?;
     audit_log
         .record(&NewApiAuditRecord::event_append(
-            actor.actor_id,
+            actor_id,
             event.event_id.clone(),
         ))
         .await?;
@@ -6715,18 +6266,14 @@ async fn post_event(
 
 async fn get_event(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(event_id): Path<String>,
 ) -> Result<Json<EventEnvelope>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let actor_id = "hermes-frontend".to_string();
 
     let store = event_store(&state)?;
     let audit_log = api_audit_log(&state)?;
     audit_log
-        .record(&NewApiAuditRecord::event_get(
-            actor.actor_id,
-            event_id.clone(),
-        ))
+        .record(&NewApiAuditRecord::event_get(actor_id, event_id.clone()))
         .await?;
     let Some(event) = store.get_by_id(&event_id).await? else {
         return Err(ApiError::NotFound);
@@ -6737,11 +6284,8 @@ async fn get_event(
 
 async fn get_audit_events(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<AuditEventsQuery>,
 ) -> Result<Json<AuditEventsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     let audit_log = api_audit_log(&state)?;
     let items = audit_log
         .list_event_records(
@@ -6755,11 +6299,7 @@ async fn get_audit_events(
     Ok(Json(AuditEventsResponse { items }))
 }
 
-async fn get_v1_status(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-) -> Result<Json<V1StatusResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
+async fn get_v1_status(State(state): State<AppState>) -> Result<Json<V1StatusResponse>, ApiError> {
     let Some(_pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
@@ -6778,10 +6318,8 @@ async fn get_v1_status(
 
 async fn get_v1_communication_messages(
     State(state): State<AppState>,
-    headers: HeaderMap,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<CommunicationMessagesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let query = parse_communication_messages_query(raw_query.as_deref())?;
     let limit = query.limit.unwrap_or(50).clamp(1, 100);
     let items = message_store(&state)?
@@ -6796,10 +6334,8 @@ async fn get_v1_communication_messages(
 
 async fn get_v1_communication_message(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(message_id): Path<String>,
 ) -> Result<Json<CommunicationMessageDetailResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let Some(message) = message_store(&state)?.message(&message_id).await? else {
         return Err(ApiError::CommunicationMessageNotFound);
     };
@@ -6818,18 +6354,14 @@ async fn get_v1_communication_message(
 
 async fn get_graph_summary(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<crate::domains::graph::core::GraphSummary>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     Ok(Json(graph_store(&state)?.summary().await?))
 }
 
 async fn get_graph_nodes(
     State(state): State<AppState>,
-    headers: HeaderMap,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let query = parse_graph_nodes_query(raw_query.as_deref())?;
     let limit = query.limit.unwrap_or(20).clamp(1, 50);
     Ok(Json(
@@ -6839,10 +6371,8 @@ async fn get_graph_nodes(
 
 async fn get_graph_neighborhood(
     State(state): State<AppState>,
-    headers: HeaderMap,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<crate::domains::graph::core::GraphNeighborhood>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let query = parse_graph_neighborhood_query(raw_query.as_deref())?;
     if query.depth.unwrap_or(1) != 1 {
         return Err(ApiError::InvalidGraphQuery("depth supports only 1"));
@@ -6863,10 +6393,8 @@ async fn get_graph_neighborhood(
 
 async fn get_graph_search(
     State(state): State<AppState>,
-    headers: HeaderMap,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let query = parse_graph_search_query(raw_query.as_deref())?;
     let search = query.q.as_deref().unwrap_or_default().trim();
     if search.is_empty() {
@@ -6880,10 +6408,8 @@ async fn get_graph_search(
 
 async fn get_projects(
     State(state): State<AppState>,
-    headers: HeaderMap,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<ProjectListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let query = parse_projects_query(raw_query.as_deref())?;
     let items = project_store(&state)?.list_projects(query.limit).await?;
 
@@ -6892,10 +6418,8 @@ async fn get_projects(
 
 async fn get_project_detail(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(project_id): Path<String>,
 ) -> Result<Json<crate::domains::projects::core::ProjectDetail>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let Some(project) = project_store(&state)?.project_detail(&project_id).await? else {
         return Err(ApiError::ProjectNotFound);
     };
@@ -6905,11 +6429,9 @@ async fn get_project_detail(
 
 async fn get_project_link_candidates(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(project_id): Path<String>,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<ProjectLinkCandidateListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let query = parse_project_link_candidates_query(raw_query.as_deref())?;
     let project_id = validate_non_empty_project_link_field("project_id", &project_id)?;
 
@@ -6983,12 +6505,11 @@ async fn get_project_link_candidates(
 
 async fn put_project_link_review(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(project_id): Path<String>,
     Json(request): Json<ProjectLinkReviewApiRequest>,
 ) -> Result<Json<ProjectLinkReviewApiResponse>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
-    let command = request.into_command(project_id, actor.actor_id)?;
+    let actor_id = "hermes-frontend".to_string();
+    let command = request.into_command(project_id, actor_id)?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::project_link_review_set(
@@ -7008,10 +6529,8 @@ async fn put_project_link_review(
 
 async fn get_task_candidates(
     State(state): State<AppState>,
-    headers: HeaderMap,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<TaskCandidateListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let query = parse_task_candidates_query(raw_query.as_deref())?;
     let items = task_candidate_store(&state)?
         .list_candidates(query.limit)
@@ -7022,10 +6541,8 @@ async fn get_task_candidates(
 
 async fn get_identity_candidates(
     State(state): State<AppState>,
-    headers: HeaderMap,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<PersonIdentityCandidateListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let query = parse_person_identity_candidates_query(raw_query.as_deref())?;
     let items = person_identity_store(&state)?
         .list_candidates(query.limit)
@@ -7036,12 +6553,11 @@ async fn get_identity_candidates(
 
 async fn put_identity_candidate_review(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(identity_candidate_id): Path<String>,
     Json(request): Json<PersonIdentityReviewApiRequest>,
 ) -> Result<Json<PersonIdentityReviewApiResponse>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
-    let command = request.into_command(identity_candidate_id, actor.actor_id)?;
+    let actor_id = "hermes-frontend".to_string();
+    let command = request.into_command(identity_candidate_id, actor_id)?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::person_identity_review_set(
@@ -7059,10 +6575,8 @@ async fn put_identity_candidate_review(
 
 async fn get_person_identity(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonIdentityDetail>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let _ = validate_non_empty_person_identity_field("person_id", &person_id)?;
 
     let detail = person_identity_store(&state)?
@@ -7073,12 +6587,11 @@ async fn get_person_identity(
 
 async fn put_task_candidate_review(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(task_candidate_id): Path<String>,
     Json(request): Json<TaskCandidateReviewApiRequest>,
 ) -> Result<Json<TaskCandidateReviewApiResponse>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
-    let command = request.into_command(task_candidate_id, actor.actor_id)?;
+    let actor_id = "hermes-frontend".to_string();
+    let command = request.into_command(task_candidate_id, actor_id)?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::task_candidate_review_set(
@@ -7096,9 +6609,7 @@ async fn put_task_candidate_review(
 
 async fn get_application_settings(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<ApplicationSettingsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let items = settings_store(&state)?.list_settings().await?;
 
     Ok(Json(ApplicationSettingsResponse { items }))
@@ -7106,9 +6617,7 @@ async fn get_application_settings(
 
 async fn get_application_settings_accounts(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<ApplicationAccountsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let items = communication_ingestion_store(&state)?
         .list_provider_accounts()
         .await?;
@@ -7118,20 +6627,19 @@ async fn get_application_settings_accounts(
 
 async fn put_application_setting(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(setting_key): Path<String>,
     Json(request): Json<ApplicationSettingUpdateRequest>,
 ) -> Result<Json<ApplicationSetting>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let actor_id = "hermes-frontend".to_string();
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::application_setting_set(
-            &actor.actor_id,
+            &actor_id,
             &setting_key,
         ))
         .await?;
     let setting = settings_store(&state)?
-        .update_setting_value(&setting_key, &request.value, &actor.actor_id)
+        .update_setting_value(&setting_key, &request.value, &actor_id)
         .await?;
 
     Ok(Json(setting))
@@ -7139,10 +6647,8 @@ async fn put_application_setting(
 
 async fn get_document_processing(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(document_id): Path<String>,
 ) -> Result<Json<DocumentProcessingRecord>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let _ = validate_non_empty_document_id(document_id.as_str())?;
 
     Ok(Json(
@@ -7154,10 +6660,8 @@ async fn get_document_processing(
 
 async fn get_document_processing_jobs(
     State(state): State<AppState>,
-    headers: HeaderMap,
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<DocumentProcessingJobsResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let query = parse_document_processing_jobs_query(raw_query.as_deref())?;
     let items = document_processing_store(&state)?
         .list_jobs(query.limit)
@@ -7168,12 +6672,11 @@ async fn get_document_processing_jobs(
 
 async fn post_document_processing_job_retry(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(job_id): Path<String>,
     Json(request): Json<DocumentProcessingRetryApiRequest>,
 ) -> Result<Json<DocumentProcessingRetryApiResponse>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
-    let command = request.into_command(job_id, actor.actor_id)?;
+    let actor_id = "hermes-frontend".to_string();
+    let command = request.into_command(job_id, actor_id)?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::document_processing_job_retry(
@@ -7191,10 +6694,8 @@ async fn post_document_processing_job_retry(
 
 async fn post_gmail_oauth_start(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<GmailOAuthStartApiRequest>,
 ) -> Result<Json<GmailOAuthStartApiResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let service = account_setup_service(&state)?;
     let pending = service.start_gmail_oauth(request.into_setup_request())?;
     let response = GmailOAuthStartApiResponse {
@@ -7215,10 +6716,8 @@ async fn post_gmail_oauth_start(
 
 async fn post_gmail_oauth_complete(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<GmailOAuthCompleteApiRequest>,
 ) -> Result<Json<EmailAccountSetupApiResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let pending = {
         let mut pending_map = state
             .account_setup
@@ -7272,10 +6771,8 @@ async fn get_gmail_oauth_callback(Query(query): Query<GmailOAuthCallbackQuery>) 
 
 async fn post_imap_account_setup(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<ImapAccountSetupApiRequest>,
 ) -> Result<Json<EmailAccountSetupApiResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let service = account_setup_service(&state)?;
     let result = service
         .setup_imap_account(request.into_setup_request()?)
@@ -7286,9 +6783,7 @@ async fn post_imap_account_setup(
 
 async fn get_v3_ai_status(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<AiStatusResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let runtime_settings = ai_runtime_settings(&state).await?;
     let ollama = ollama_client(&runtime_settings)?;
     let version = ollama.version().await;
@@ -7323,9 +6818,7 @@ async fn get_v3_ai_status(
 
 async fn get_v3_agents(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<AiAgentListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let runtime_settings = ai_runtime_settings(&state).await?;
 
     Ok(Json(AiAgentListResponse {
@@ -7335,10 +6828,8 @@ async fn get_v3_agents(
 
 async fn get_v3_ai_runs(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<AiRunsQuery>,
 ) -> Result<Json<AiRunListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let limit = query.limit.unwrap_or(25).clamp(1, 100);
     let runs = ai_run_store(&state)?.list_runs(limit).await?;
 
@@ -7347,10 +6838,8 @@ async fn get_v3_ai_runs(
 
 async fn get_v3_ai_run(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(run_id): Path<String>,
 ) -> Result<Json<AiAgentRun>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let Some(run) = ai_run_store(&state)?.get_run(&run_id).await? else {
         return Err(ApiError::AiRunNotFound);
     };
@@ -7360,67 +6849,53 @@ async fn get_v3_ai_run(
 
 async fn post_v3_ai_answer(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<AiAnswerRequest>,
 ) -> Result<Json<crate::ai::core::AiAnswerResponse>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let actor_id = "hermes-frontend".to_string();
     let service = ai_service(&state).await?;
-    let response = service.answer(request, &actor.actor_id).await?;
+    let response = service.answer(request, &actor_id).await?;
 
     Ok(Json(response))
 }
 
 async fn post_v3_ai_task_candidates_refresh(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<AiTaskCandidateRefreshRequest>,
 ) -> Result<Json<crate::ai::core::AiTaskCandidateRefreshResponse>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let actor_id = "hermes-frontend".to_string();
     let service = ai_service(&state).await?;
-    let response = service
-        .refresh_task_candidates(request, &actor.actor_id)
-        .await?;
+    let response = service.refresh_task_candidates(request, &actor_id).await?;
 
     Ok(Json(response))
 }
 
 async fn post_v3_ai_meeting_prep(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<AiMeetingPrepRequest>,
 ) -> Result<Json<crate::ai::core::AiMeetingPrepResponse>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let actor_id = "hermes-frontend".to_string();
     let service = ai_service(&state).await?;
-    let response = service.meeting_prep(request, &actor.actor_id).await?;
+    let response = service.meeting_prep(request, &actor_id).await?;
 
     Ok(Json(response))
 }
 
 async fn get_v4_capabilities(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
 ) -> Result<Json<V4CapabilitiesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     Ok(Json(V4CapabilitiesResponse::current()))
 }
 
 async fn get_v5_capabilities(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(_state): State<AppState>,
 ) -> Result<Json<V5CapabilitiesResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     Ok(Json(V5CapabilitiesResponse::current()))
 }
 
 async fn post_v4_telegram_fixture_account(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<TelegramAccountSetupRequest>,
 ) -> Result<Json<TelegramAccountSetupResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     Ok(Json(
         telegram_store(&state)?
             .setup_fixture_account(&request)
@@ -7430,10 +6905,8 @@ async fn post_v4_telegram_fixture_account(
 
 async fn get_v4_telegram_chats(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<TelegramListQuery>,
 ) -> Result<Json<TelegramChatListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let items = telegram_store(&state)?
         .list_chats(query.account_id.as_deref(), query.limit.unwrap_or(50))
         .await?;
@@ -7443,11 +6916,8 @@ async fn get_v4_telegram_chats(
 
 async fn post_v4_telegram_fixture_message(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<NewTelegramMessage>,
 ) -> Result<Json<TelegramMessageIngestResult>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     Ok(Json(
         telegram_store(&state)?
             .ingest_fixture_message(&request)
@@ -7457,10 +6927,8 @@ async fn post_v4_telegram_fixture_message(
 
 async fn get_v4_telegram_messages(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<TelegramListQuery>,
 ) -> Result<Json<TelegramMessageListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let items = telegram_store(&state)?
         .recent_messages(
             query.account_id.as_deref(),
@@ -7474,11 +6942,8 @@ async fn get_v4_telegram_messages(
 
 async fn post_v5_whatsapp_fixture_account(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<WhatsappWebAccountSetupRequest>,
 ) -> Result<Json<WhatsappWebAccountSetupResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     Ok(Json(
         whatsapp_web_store(&state)?
             .setup_fixture_account(&request)
@@ -7488,10 +6953,8 @@ async fn post_v5_whatsapp_fixture_account(
 
 async fn get_v5_whatsapp_sessions(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<WhatsappWebListQuery>,
 ) -> Result<Json<WhatsappWebSessionListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let items = whatsapp_web_store(&state)?
         .list_sessions(query.account_id.as_deref(), query.limit.unwrap_or(50))
         .await?;
@@ -7501,11 +6964,8 @@ async fn get_v5_whatsapp_sessions(
 
 async fn post_v5_whatsapp_fixture_message(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<NewWhatsappWebMessage>,
 ) -> Result<Json<WhatsappWebMessageIngestResult>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     Ok(Json(
         whatsapp_web_store(&state)?
             .ingest_fixture_message(&request)
@@ -7515,10 +6975,8 @@ async fn post_v5_whatsapp_fixture_message(
 
 async fn get_v5_whatsapp_messages(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<WhatsappWebListQuery>,
 ) -> Result<Json<WhatsappWebMessageListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let items = whatsapp_web_store(&state)?
         .recent_messages(
             query.account_id.as_deref(),
@@ -7532,11 +6990,8 @@ async fn get_v5_whatsapp_messages(
 
 async fn post_v4_policy_template(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<PolicyTemplateApiRequest>,
 ) -> Result<Json<AutomationTemplate>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     Ok(Json(
         automation_store(&state)?
             .upsert_template(&request.into_template())
@@ -7546,9 +7001,7 @@ async fn post_v4_policy_template(
 
 async fn get_v4_policy_templates(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<PolicyTemplateListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let items = automation_store(&state)?.list_templates().await?;
 
     Ok(Json(PolicyTemplateListResponse { items }))
@@ -7556,11 +7009,8 @@ async fn get_v4_policy_templates(
 
 async fn post_v4_policy(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<PolicyApiRequest>,
 ) -> Result<Json<AutomationPolicy>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     Ok(Json(
         automation_store(&state)?
             .upsert_policy(&request.into_policy())
@@ -7570,9 +7020,7 @@ async fn post_v4_policy(
 
 async fn get_v4_policies(
     State(state): State<AppState>,
-    headers: HeaderMap,
 ) -> Result<Json<PolicyListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let items = automation_store(&state)?.list_policies().await?;
 
     Ok(Json(PolicyListResponse { items }))
@@ -7580,12 +7028,11 @@ async fn get_v4_policies(
 
 async fn post_v4_telegram_send_dry_run(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<TelegramSendDryRunRequest>,
 ) -> Result<Json<TelegramSendDryRunResponse>, ApiError> {
-    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let actor_id = "hermes-frontend".to_string();
     let response = match automation_store(&state)?
-        .dry_run_send(&request, &actor.actor_id)
+        .dry_run_send(&request, &actor_id)
         .await
     {
         Ok(response) => response,
@@ -7594,7 +7041,7 @@ async fn post_v4_telegram_send_dry_run(
                 api_audit_log(&state)?
                     .record(
                         &NewApiAuditRecord::automation_telegram_send_dry_run_rejected(
-                            &actor.actor_id,
+                            &actor_id,
                             &request.command_id,
                             &request.policy_id,
                             &request.provider_chat_id,
@@ -7608,7 +7055,7 @@ async fn post_v4_telegram_send_dry_run(
     };
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::automation_telegram_send_dry_run(
-            &actor.actor_id,
+            &actor_id,
             &response.outbound_message_id,
             &response.policy_id,
             &response.template_id,
@@ -7656,11 +7103,8 @@ fn non_empty_optional_string(value: &str) -> Option<String> {
 
 async fn post_v4_call(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Json(request): Json<CallApiRequest>,
 ) -> Result<Json<TelegramCall>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-
     Ok(Json(
         call_intelligence_store(&state)?
             .upsert_call(&request.into_call())
@@ -7670,10 +7114,8 @@ async fn post_v4_call(
 
 async fn get_v4_calls(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Query(query): Query<TelegramListQuery>,
 ) -> Result<Json<CallListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let items = call_intelligence_store(&state)?
         .list_calls(query.account_id.as_deref(), query.limit.unwrap_or(50))
         .await?;
@@ -7683,11 +7125,9 @@ async fn get_v4_calls(
 
 async fn post_v4_call_transcript_fixture(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(call_id): Path<String>,
     Json(request): Json<CallTranscriptFixtureApiRequest>,
 ) -> Result<Json<CallTranscript>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let stt = FixtureSpeechToTextProvider;
     let fixture = stt.transcribe_fixture(&request.source_audio_ref)?;
     let transcript = NewCallTranscript {
@@ -7717,10 +7157,8 @@ async fn post_v4_call_transcript_fixture(
 
 async fn get_v4_call_transcript(
     State(state): State<AppState>,
-    headers: HeaderMap,
     Path(call_id): Path<String>,
 ) -> Result<Json<CallTranscriptResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
     let transcript = call_intelligence_store(&state)?
         .transcript_for_call(&call_id)
         .await?;
@@ -7956,68 +7394,6 @@ fn database_encrypted_vault(
         pool,
         config.secret_vault_key()?.clone(),
     ))
-}
-
-pub(crate) fn verify_local_api_capability(
-    config: &AppConfig,
-    headers: &HeaderMap,
-) -> Result<LocalApiActor, ApiError> {
-    let Some(expected_token) = config.local_api_token() else {
-        return Err(ApiError::ApiTokenNotConfigured);
-    };
-
-    let Some(raw_authorization) = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-    else {
-        return Err(ApiError::InvalidApiToken);
-    };
-
-    let Some((scheme, token)) = raw_authorization.split_once(' ') else {
-        return Err(ApiError::InvalidApiToken);
-    };
-
-    if !scheme.eq_ignore_ascii_case("Bearer") || token != expected_token {
-        return Err(ApiError::InvalidApiToken);
-    }
-
-    local_api_actor(headers)
-}
-
-pub(crate) fn local_api_actor(headers: &HeaderMap) -> Result<LocalApiActor, ApiError> {
-    let Some(raw_actor_id) = headers
-        .get(LOCAL_API_ACTOR_ID_HEADER)
-        .and_then(|value| value.to_str().ok())
-    else {
-        return Err(ApiError::InvalidActorId);
-    };
-
-    let actor_id = raw_actor_id.trim();
-    if actor_id.is_empty()
-        || actor_id.len() > MAX_LOCAL_API_ACTOR_ID_LENGTH
-        || !actor_id.bytes().all(is_valid_actor_id_byte)
-    {
-        return Err(ApiError::InvalidActorId);
-    }
-
-    Ok(LocalApiActor {
-        actor_id: actor_id.to_owned(),
-    })
-}
-
-pub(crate) fn is_valid_actor_id_byte(byte: u8) -> bool {
-    matches!(
-        byte,
-        b'a'..=b'z'
-            | b'A'..=b'Z'
-            | b'0'..=b'9'
-            | b'.'
-            | b'_'
-            | b'-'
-            | b':'
-            | b'@'
-            | b'/'
-    )
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

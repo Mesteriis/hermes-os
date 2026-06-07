@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::tasks::core::ExternalTaskIdentityStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn external(
+pub(crate) async fn external(
     State(s): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

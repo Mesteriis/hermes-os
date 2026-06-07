@@ -3,7 +3,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::core::OrgIdentityStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn create_identity(
+pub(crate) async fn create_identity(
     State(s): State<AppState>,
     Path(org_id): Path<String>,
     Json(r): Json<NewIdentity>,

@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::enrichment::OrgEnrichmentStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn enrichment(
+pub(crate) async fn enrichment(
     State(s): State<AppState>,
     Path(org_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

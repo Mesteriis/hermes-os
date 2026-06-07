@@ -3,7 +3,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::persons::enrichment::PersonEnrichmentStore;
 use axum::Json;
 use axum::extract::{Query, State};
-pub async fn search(
+pub(crate) async fn search(
     State(s): State<AppState>,
     Query(q): Query<SearchQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

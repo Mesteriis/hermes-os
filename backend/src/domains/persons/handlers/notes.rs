@@ -3,7 +3,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::persons::enrichment::PersonEnrichmentStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn notes(
+pub(crate) async fn notes(
     State(s): State<AppState>,
     Path(id): Path<String>,
     Json(r): Json<NotesReq>,

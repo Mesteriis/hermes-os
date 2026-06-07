@@ -3,7 +3,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::api::{Organization, OrganizationStore};
 use axum::Json;
 use axum::extract::State;
-pub async fn create(
+pub(crate) async fn create(
     State(s): State<AppState>,
     Json(r): Json<NewOrg>,
 ) -> Result<Json<Organization>, ApiError> {

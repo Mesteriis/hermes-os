@@ -9,10 +9,10 @@ use axum::extract::{Path, State};
 
 const ACTOR: &str = "hermes-frontend";
 
-pub async fn retry(
+pub(crate) async fn retry(
     State(state): State<AppState>,
     Path(id): Path<String>,
-    Json(req): Json<RetryRequest>,
+    Json(_req): Json<RetryRequest>,
 ) -> Result<Json<RetryResponse>, ApiError> {
     let pool = state
         .database

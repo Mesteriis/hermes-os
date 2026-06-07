@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::calendar::meetings::MeetingOutcomeStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn meeting_outcomes(
+pub(crate) async fn meeting_outcomes(
     State(s): State<AppState>,
     Path(event_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

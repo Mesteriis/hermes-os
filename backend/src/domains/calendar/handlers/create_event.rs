@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::calendar::events::{CalendarEventStore, NewCalendarEvent};
 use axum::Json;
 use axum::extract::State;
-pub async fn create_event(
+pub(crate) async fn create_event(
     State(s): State<AppState>,
     Json(r): Json<NewCalendarEvent>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

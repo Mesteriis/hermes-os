@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::api::{Organization, OrganizationStore};
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn get(
+pub(crate) async fn get(
     State(s): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<Organization>, ApiError> {

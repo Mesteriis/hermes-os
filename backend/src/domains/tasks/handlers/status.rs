@@ -3,7 +3,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::tasks::api::TaskStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn status(
+pub(crate) async fn status(
     State(s): State<AppState>,
     Path(id): Path<String>,
     Json(r): Json<StatusUpdate>,

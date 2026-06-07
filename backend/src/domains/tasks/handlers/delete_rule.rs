@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::tasks::rules::TaskRuleStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn delete_rule(
+pub(crate) async fn delete_rule(
     State(s): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

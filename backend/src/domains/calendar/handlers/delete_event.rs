@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::calendar::events::CalendarEventStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn delete_event(
+pub(crate) async fn delete_event(
     State(s): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

@@ -3,7 +3,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::graph::core::{GraphNode, GraphStore};
 use axum::Json;
 use axum::extract::{Query, State};
-pub async fn nodes(
+pub(crate) async fn nodes(
     State(state): State<AppState>,
     Query(q): Query<NodesQuery>,
 ) -> Result<Json<Vec<GraphNode>>, ApiError> {

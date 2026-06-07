@@ -7,7 +7,7 @@ use serde::Deserialize;
 pub struct AccountQuery {
     pub provider: Option<String>,
 }
-pub async fn list_accounts(
+pub(crate) async fn list_accounts(
     State(s): State<AppState>,
     Query(q): Query<AccountQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

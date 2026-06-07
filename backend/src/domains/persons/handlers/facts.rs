@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::Path;
 use axum::extract::State;
 
-pub async fn facts(
+pub(crate) async fn facts(
     State(s): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

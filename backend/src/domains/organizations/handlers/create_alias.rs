@@ -3,7 +3,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::core::OrgAliasStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn create_alias(
+pub(crate) async fn create_alias(
     State(s): State<AppState>,
     Path(org_id): Path<String>,
     Json(r): Json<NewAlias>,

@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::organizations::finance::OrgContractStore;
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn contracts(
+pub(crate) async fn contracts(
     State(s): State<AppState>,
     Path(org_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

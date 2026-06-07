@@ -3,7 +3,7 @@ use crate::domains::projects::core::{ProjectDetail, ProjectStore};
 use axum::Json;
 use axum::extract::{Path, State};
 
-pub async fn get(
+pub(crate) async fn get(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<Json<ProjectDetail>, ApiError> {

@@ -9,7 +9,7 @@ pub struct NewAccount {
     pub account_name: String,
     pub email: Option<String>,
 }
-pub async fn create_account(
+pub(crate) async fn create_account(
     State(s): State<AppState>,
     Json(r): Json<NewAccount>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

@@ -3,7 +3,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::tasks::api::{TaskListQuery, TaskStore};
 use axum::Json;
 use axum::extract::{Query, State};
-pub async fn list(
+pub(crate) async fn list(
     State(s): State<AppState>,
     Query(q): Query<ListQuery>,
 ) -> Result<Json<TaskList>, ApiError> {

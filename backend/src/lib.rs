@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, unused_imports, unused_variables)]
 pub mod ai;
 pub mod app;
 pub mod domains;

@@ -2,7 +2,7 @@ use crate::app::handlers::{ApiError, AppState};
 use crate::domains::calendar::events::{CalendarEventStore, CalendarEventUpdate};
 use axum::Json;
 use axum::extract::{Path, State};
-pub async fn update_event(
+pub(crate) async fn update_event(
     State(s): State<AppState>,
     Path(id): Path<String>,
     Json(r): Json<CalendarEventUpdate>,

@@ -4,7 +4,7 @@ use crate::domains::documents::processing::DocumentProcessingStore;
 use axum::Json;
 use axum::extract::{Query, State};
 
-pub async fn jobs(
+pub(crate) async fn jobs(
     State(state): State<AppState>,
     Query(q): Query<JobsQuery>,
 ) -> Result<Json<JobsResponse>, ApiError> {

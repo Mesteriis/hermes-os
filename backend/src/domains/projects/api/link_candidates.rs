@@ -16,7 +16,7 @@ fn preview(s: &str, n: usize) -> String {
     p
 }
 
-pub async fn link_candidates(
+pub(crate) async fn link_candidates(
     State(state): State<AppState>,
     Path(pid): Path<String>,
     Query(q): Query<LinkCandidatesQuery>,

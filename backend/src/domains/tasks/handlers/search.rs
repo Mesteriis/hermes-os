@@ -7,7 +7,7 @@ use serde::Deserialize;
 pub struct SearchQuery {
     pub q: String,
 }
-pub async fn search(
+pub(crate) async fn search(
     State(s): State<AppState>,
     Query(q): Query<SearchQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {

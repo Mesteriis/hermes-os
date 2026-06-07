@@ -7,7 +7,7 @@ use serde::Deserialize;
 pub struct BrainQuery {
     pub q: Option<String>,
 }
-pub async fn brain(
+pub(crate) async fn brain(
     State(s): State<AppState>,
     Query(q): Query<BrainQuery>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
