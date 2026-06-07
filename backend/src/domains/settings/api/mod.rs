@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+
 pub mod accounts;
 pub mod dto;
 pub mod list;
