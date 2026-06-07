@@ -508,24 +508,8 @@ export type TaskCandidate = {
 	updated_at: string;
 };
 
-export type ActiveTask = {
-	task_id: string;
-	task_candidate_id: string;
-	title: string;
-	source_kind: 'message' | 'document';
-	source_id: string;
-	project_id: string | null;
-	status: 'active';
-	created_at: string;
-	updated_at: string;
-};
-
 export type TaskCandidateListResponse = {
 	items: TaskCandidate[];
-};
-
-export type TaskListResponse = {
-	items: ActiveTask[];
 };
 
 export type DocumentProcessingStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'skipped';
@@ -1292,22 +1276,6 @@ export async function fetchTaskCandidates(
 		actorId,
 		`/api/v2/task-candidates?${params.toString()}`,
 		'Task candidates request failed'
-	);
-}
-
-export async function fetchTasks(
-	baseUrl: string,
-	token: string,
-	actorId: string,
-	limit = 50
-): Promise<TaskListResponse> {
-	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
-	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/tasks?${params.toString()}`,
-		'Tasks request failed'
 	);
 }
 

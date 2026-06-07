@@ -43,7 +43,7 @@
 		fetchIdentityCandidates,
 		fetchProviderAccounts,
 		fetchTaskCandidates,
-		fetchTasks,
+		fetchTaskRecords,
 		fetchV4Capabilities,
 		fetchV5Capabilities,
 		fetchTelegramCalls,
@@ -90,7 +90,6 @@
 		setupTelegramFixtureAccount,
 		setupWhatsappWebFixtureAccount,
 		startGmailOAuthSetup,
-		type ActiveTask,
 		type ApplicationSetting,
 		type AiAgent,
 		type AiAnswerResponse,
@@ -126,6 +125,7 @@
 		type ProjectTimelineItem,
 		type TaskCandidate,
 		type TaskCandidateReviewState,
+		type Task,
 		type TelegramCall,
 		type TelegramChat,
 		type TelegramMessage,
@@ -320,7 +320,7 @@
 	let projectsError = $state('');
 	let isProjectsLoading = $state(false);
 	let taskCandidates = $state<TaskCandidate[]>([]);
-	let activeTasks = $state<ActiveTask[]>([]);
+	let activeTasks = $state<Task[]>([]);
 	let documentProcessingJobs = $state<DocumentProcessingJob[]>([]);
 	let selectedDocumentProcessingDetail = $state<DocumentProcessingRecord | null>(null);
 	let documentProcessingDetailError = $state('');
@@ -1397,7 +1397,7 @@
 		try {
 			const [candidateResponse, taskResponse] = await Promise.all([
 				fetchTaskCandidates(apiBaseUrl, apiToken, actorId, 50),
-				fetchTasks(apiBaseUrl, apiToken, actorId, 50)
+				fetchTaskRecords(apiBaseUrl, apiToken, actorId, { limit: 50 })
 			]);
 			taskCandidates = candidateResponse.items;
 			activeTasks = taskResponse.items;
@@ -3150,7 +3150,7 @@
 		return `${formatGraphKind(evidence.source_kind)} ${evidence.source_id}`;
 	}
 
-	function taskSourceLabel(item: TaskCandidate | ActiveTask) {
+	function taskSourceLabel(item: TaskCandidate | Task) {
 		return `${item.source_kind[0].toUpperCase()}${item.source_kind.slice(1)} · ${item.source_id}`;
 	}
 
@@ -4151,7 +4151,7 @@
 								<p class="inline-copy">No active tasks yet.</p>
 							{:else}
 								{#each activeTasks as item}
-									<label class="task-row"><input type="checkbox" disabled checked /><strong>{item.title}</strong><span>{taskSourceLabel(item)}</span><span>{item.project_id ?? 'Unassigned'}</span><time>{taskCreatedTime(item.created_at)}</time><em>{item.status}</em></label>
+									<label class="task-row"><input type="checkbox" disabled checked /><strong>{item.title}</strong><span>{taskSourceLabel(item)}</span><span>{item.project_id ?? 'Unassigned'}</span><time>{taskCreatedTime(item.created_at)}</time><em>{item.hermes_status}</em></label>
 								{/each}
 							{/if}
 

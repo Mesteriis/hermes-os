@@ -215,8 +215,8 @@ use crate::storage::{
 };
 use crate::task_brain::{TaskBrainError, TaskBrainService};
 use crate::task_candidates::{
-    ActiveTask, TaskCandidate, TaskCandidateError, TaskCandidateReviewCommand,
-    TaskCandidateReviewState, TaskCandidateStore,
+    TaskCandidate, TaskCandidateError, TaskCandidateReviewCommand, TaskCandidateReviewState,
+    TaskCandidateStore,
 };
 use crate::task_core::{
     ExternalTaskIdentityStore, TaskChecklistStore, TaskContextPackStore, TaskCoreError,
@@ -2104,10 +2104,6 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             get(get_person_history_diff),
         )
         .route(
-            "/api/v2/persons/{person_id}/timeline",
-            get(get_person_timeline).post(post_relationship_event),
-        )
-        .route(
             "/api/v2/persons/{person_id}/enrichment",
             get(get_person_enrichment),
         )
@@ -2152,11 +2148,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/persons/{person_id}/export",
             get(get_person_export_handler),
         )
-        .route("/api/v2/persons/{person_id}/risks", get(get_person_risks))
-        .route(
-            "/api/v2/persons/{person_id}/health",
-            get(get_persons_health),
-        )
+        .route("/api/v2/persons/{person_id}/health", get(get_person_health))
         .route("/api/v2/persons/health", get(get_persons_health))
         .route("/api/v2/persons/watchlist", get(get_persons_watchlist))
         .route(
@@ -2459,7 +2451,6 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/task-candidates/{task_candidate_id}/review",
             put(put_task_candidate_review),
         )
-        .route("/api/v2/tasks", get(get_tasks))
         .route("/api/v2/settings", get(get_application_settings))
         .route(
             "/api/v2/settings/accounts",
@@ -3161,6 +3152,25 @@ impl From<PersonHealthError> for ApiError {
 #[derive(Serialize)]
 struct PersonHealthResponse {
     items: Vec<crate::person_health::PersonHealth>,
+}
+
+async fn get_person_health(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+) -> Result<Json<crate::person_health::PersonHealth>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    PersonHealthStore::new(pool)
+        .get(&person_id)
+        .await
+        .map_err(ApiError::from)?
+        .map(Json)
+        .ok_or(ApiError::NotFound)
 }
 
 async fn get_persons_health(
@@ -5903,7 +5913,7 @@ async fn get_back_to_back(
 // ── Tasks v2 ──────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct TaskListResponseV2 {
+struct TaskRecordsResponse {
     items: Vec<crate::tasks::Task>,
 }
 #[derive(Deserialize)]
@@ -5918,7 +5928,7 @@ async fn get_tasks_v2(
     State(state): State<AppState>,
     headers: HeaderMap,
     Query(q): Query<TaskListQueryParams>,
-) -> Result<Json<TaskListResponseV2>, ApiError> {
+) -> Result<Json<TaskRecordsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     let pool = state
         .database
@@ -5933,7 +5943,7 @@ async fn get_tasks_v2(
             limit: q.limit,
         })
         .await?;
-    Ok(Json(TaskListResponseV2 { items }))
+    Ok(Json(TaskRecordsResponse { items }))
 }
 
 async fn post_task(
@@ -7167,20 +7177,6 @@ async fn put_task_candidate_review(
         .await?;
 
     Ok(Json(result.into()))
-}
-
-async fn get_tasks(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<TaskListResponse>, ApiError> {
-    verify_local_api_capability(&state.config, &headers)?;
-    let query = parse_task_candidates_query(raw_query.as_deref())?;
-    let items = task_candidate_store(&state)?
-        .list_tasks(query.limit)
-        .await?;
-
-    Ok(Json(TaskListResponse { items }))
 }
 
 async fn get_application_settings(
@@ -8785,11 +8781,6 @@ impl From<crate::person_identity::PersonIdentityReviewCommandResult>
             event_id: result.event_id,
         }
     }
-}
-
-#[derive(Serialize)]
-struct TaskListResponse {
-    items: Vec<ActiveTask>,
 }
 
 #[derive(Serialize)]

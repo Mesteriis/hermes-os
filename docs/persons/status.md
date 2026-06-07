@@ -116,7 +116,7 @@
 |---|---|
 | Relationship Map (§75) | Зависит от работающей graph projection |
 | Mutual Connections (§76) | Зависит от graph projection |
-| Organization Module (§77) | Отдельный модуль, `organization_reference` — placeholder |
+| Organization Module (§77) | Отдельный реализованный модуль; `organization_reference` остаётся compatibility/cache field |
 | Digital Twin (§78) | Композитный read-side view, требует UI |
 | Enrichment провайдеры (реальные API-вызовы) | Провайдеры спроектированы как pluggable traits, реализации — следующий шаг |
 

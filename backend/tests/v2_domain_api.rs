@@ -1,0 +1,208 @@
+use std::env;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use axum::body::{Body, to_bytes};
+use axum::http::{Request, StatusCode, header};
+use hermes_hub_backend::config::AppConfig;
+use hermes_hub_backend::persons::PersonProjectionStore;
+use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::tasks::{NewTask, TaskStore};
+use hermes_hub_backend::{build_router, build_router_with_database};
+use serde_json::{Value, json};
+use sqlx::PgPool;
+use tower::ServiceExt;
+
+const LOCAL_API_TOKEN: &str = "v2-domain-api-test-token";
+const LOCAL_API_ACTOR_ID: &str = "v2-domain-api-test-client";
+const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
+
+#[tokio::test]
+async fn v2_domain_routes_build_and_require_local_api_token() {
+    let app = build_router(config_with_api_token());
+
+    let response = app
+        .oneshot(get_request("/api/v2/tasks"))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        json_body(response).await,
+        json!({
+            "error": "invalid_api_token",
+            "message": "missing or invalid bearer token"
+        })
+    );
+
+    let missing_actor_response = build_router(config_with_api_token())
+        .oneshot(get_request_with_token("/api/v2/tasks", LOCAL_API_TOKEN))
+        .await
+        .expect("missing actor response");
+
+    assert_eq!(missing_actor_response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        json_body(missing_actor_response).await,
+        json!({
+            "error": "invalid_actor_id",
+            "message": "missing or invalid x-hermes-actor-id header"
+        })
+    );
+}
+
+#[tokio::test]
+async fn v2_tasks_endpoint_returns_first_class_task_payload_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skipping live V2 tasks API test: HERMES_TEST_DATABASE_URL is not set");
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let task = TaskStore::new(pool)
+        .create(&NewTask {
+            title: format!("V2 first-class task {suffix}"),
+            description: Some("contract test task".to_owned()),
+            source_kind: Some("manual".to_owned()),
+            source_id: Some(format!("manual-v2-task-{suffix}")),
+            source_type: Some("manual".to_owned()),
+            hermes_status: Some("ready".to_owned()),
+            priority_score: Some(0.7),
+            tags: Some(json!(["api-test"])),
+            ..Default::default()
+        })
+        .await
+        .expect("seed task");
+
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let response = app
+        .oneshot(get_request_with_token_and_actor(
+            "/api/v2/tasks?limit=100",
+            LOCAL_API_TOKEN,
+            LOCAL_API_ACTOR_ID,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    let item = body["items"]
+        .as_array()
+        .expect("items")
+        .iter()
+        .find(|item| item["task_id"] == task.task_id)
+        .expect("seeded task item");
+
+    assert_eq!(item["title"], json!(task.title));
+    assert_eq!(item["source_type"], json!("manual"));
+    assert_eq!(item["hermes_status"], json!("ready"));
+    assert_eq!(item["confidentiality"], json!("private_local"));
+    assert_eq!(item["task_metadata"], json!({}));
+}
+
+#[tokio::test]
+async fn v2_person_health_endpoint_returns_single_person_health_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skipping live V2 person health API test: HERMES_TEST_DATABASE_URL is not set");
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let person = PersonProjectionStore::new(pool.clone())
+        .upsert_email_person(&format!("health-{suffix}@example.com"))
+        .await
+        .expect("seed person");
+    seed_person_health(&pool, &person.person_id).await;
+
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let response = app
+        .oneshot(get_request_with_token_and_actor(
+            &format!("/api/v2/persons/{}/health", person.person_id),
+            LOCAL_API_TOKEN,
+            LOCAL_API_ACTOR_ID,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["person_id"], json!(person.person_id));
+    assert_eq!(body["health_status"], json!("at_risk"));
+    assert_eq!(body["communication_gap_days"], json!(42));
+    assert!(body.get("items").is_none());
+}
+
+fn config_with_api_token() -> AppConfig {
+    AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)])
+        .expect("valid local API token")
+}
+
+fn get_request(uri: &str) -> Request<Body> {
+    Request::builder()
+        .uri(uri)
+        .body(Body::empty())
+        .expect("request")
+}
+
+fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .uri(uri)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .body(Body::empty())
+        .expect("request")
+}
+
+fn get_request_with_token_and_actor(uri: &str, token: &str, actor_id: &str) -> Request<Body> {
+    Request::builder()
+        .uri(uri)
+        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header(LOCAL_API_ACTOR_ID_HEADER, actor_id)
+        .body(Body::empty())
+        .expect("request")
+}
+
+async fn json_body(response: axum::response::Response) -> Value {
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body");
+    serde_json::from_slice(&body).expect("json body")
+}
+
+async fn seed_person_health(pool: &PgPool, person_id: &str) {
+    sqlx::query(
+        "UPDATE persons SET health_status = 'at_risk', communication_gap_days = 42, watchlist = true WHERE person_id = $1",
+    )
+    .bind(person_id)
+    .execute(pool)
+    .await
+    .expect("update person health");
+}
+
+fn unique_suffix() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos()
+}

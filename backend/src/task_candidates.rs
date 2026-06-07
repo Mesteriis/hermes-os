@@ -98,19 +98,6 @@ pub struct TaskCandidate {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ActiveTask {
-    pub task_id: String,
-    pub task_candidate_id: String,
-    pub title: String,
-    pub source_kind: String,
-    pub source_id: String,
-    pub project_id: Option<String>,
-    pub status: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 #[derive(Clone)]
 pub struct TaskCandidateStore {
     pool: PgPool,
@@ -238,36 +225,6 @@ impl TaskCandidateStore {
         .await?;
 
         rows.into_iter().map(row_to_task_candidate).collect()
-    }
-
-    pub async fn list_tasks(
-        &self,
-        limit: Option<i64>,
-    ) -> Result<Vec<ActiveTask>, TaskCandidateError> {
-        let limit = validate_optional_limit(limit)?;
-
-        let rows = sqlx::query(
-            r#"
-            SELECT
-                task_id,
-                task_candidate_id,
-                title,
-                source_kind,
-                source_id,
-                project_id,
-                status,
-                created_at,
-                updated_at
-            FROM tasks
-            ORDER BY updated_at DESC, task_id
-            LIMIT $1
-            "#,
-        )
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await?;
-
-        rows.into_iter().map(row_to_active_task).collect()
     }
 
     async fn refresh_message_candidates(&self, limit: i64) -> Result<usize, TaskCandidateError> {
@@ -764,20 +721,6 @@ fn row_to_task_candidate(row: sqlx::postgres::PgRow) -> Result<TaskCandidate, Ta
         evidence_excerpt: row.try_get("evidence_excerpt")?,
         generated_at: row.try_get("generated_at")?,
         reviewed_at: row.try_get("reviewed_at")?,
-        updated_at: row.try_get("updated_at")?,
-    })
-}
-
-fn row_to_active_task(row: sqlx::postgres::PgRow) -> Result<ActiveTask, TaskCandidateError> {
-    Ok(ActiveTask {
-        task_id: row.try_get("task_id")?,
-        task_candidate_id: row.try_get("task_candidate_id")?,
-        title: row.try_get("title")?,
-        source_kind: row.try_get("source_kind")?,
-        source_id: row.try_get("source_id")?,
-        project_id: row.try_get("project_id")?,
-        status: row.try_get("status")?,
-        created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
     })
 }

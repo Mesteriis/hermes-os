@@ -1,6 +1,6 @@
 # Tasks — API Reference
 
-Base: `/api/v2/tasks`
+Base: `/api/v2`
 
 ## Core
 
