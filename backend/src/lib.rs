@@ -2811,11 +2811,16 @@ async fn get_organization_search(
 ) -> Result<Json<OrganizationListResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
     let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let pattern = format!("%{}%", query.q.trim().to_lowercase());
-    let rows = sqlx::query_as::<_, (String,)>(
-        "SELECT organization_id FROM organizations WHERE lower(display_name) LIKE $1 OR lower(coalesce(legal_name,'')) LIKE $1 ORDER BY interaction_count DESC LIMIT $2"
-    ).bind(&pattern).bind(query.limit.unwrap_or(20).clamp(1,100)).fetch_all(&pool).await.map_err(OrganizationError::from)?;
-    Ok(Json(OrganizationListResponse { items: vec![] }))
+    let store = OrganizationStore::new(pool);
+    let all = store.list(None, 200).await?;
+    let q = query.q.trim().to_lowercase();
+    let items: Vec<_> = all.into_iter()
+        .filter(|o| o.display_name.to_lowercase().contains(&q)
+                  || o.legal_name.as_deref().unwrap_or("").to_lowercase().contains(&q)
+                  || o.website.as_deref().unwrap_or("").to_lowercase().contains(&q))
+        .take(query.limit.unwrap_or(20).clamp(1, 100) as usize)
+        .collect();
+    Ok(Json(OrganizationListResponse { items }))
 }
 
 async fn post_organization_archive(
@@ -2825,6 +2830,347 @@ async fn post_organization_archive(
     let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
     OrganizationStore::new(pool).archive(&org_id).await?;
     Ok(Json(json!({"archived": true})))
+}
+
+// ── Organization Identities ────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct OrgIdentitiesResponse { items: Vec<crate::organization_core::OrganizationIdentity> }
+
+async fn get_org_identities(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgIdentitiesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_core::OrgIdentityStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgIdentitiesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewOrgIdentityRequest { identity_type: String, identity_value: String, source: Option<String> }
+
+async fn post_org_identity(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    Json(req): Json<NewOrgIdentityRequest>,
+) -> Result<Json<crate::organization_core::OrganizationIdentity>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let identity = crate::organization_core::OrgIdentityStore::new(pool).upsert(&org_id, &req.identity_type, &req.identity_value, req.source.as_deref().unwrap_or("manual")).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(identity))
+}
+
+// ── Organization Aliases ───────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgAliasesResponse { items: Vec<crate::organization_core::OrganizationAlias> }
+
+async fn get_org_aliases(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgAliasesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_core::OrgAliasStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgAliasesResponse { items }))
+}
+
+#[derive(Deserialize)] struct NewOrgAliasRequest { name: String, alias_type: String, source: Option<String> }
+
+async fn post_org_alias(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    Json(req): Json<NewOrgAliasRequest>,
+) -> Result<Json<crate::organization_core::OrganizationAlias>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let alias = crate::organization_core::OrgAliasStore::new(pool).add(&org_id, &req.name, &req.alias_type, req.source.as_deref().unwrap_or("manual")).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(alias))
+}
+
+// ── Organization Domains ───────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgDomainsResponse { items: Vec<crate::organization_core::OrganizationDomain> }
+
+async fn get_org_domains(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgDomainsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_core::OrgDomainStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgDomainsResponse { items }))
+}
+
+// ── Organization Departments ───────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgDepartmentsResponse { items: Vec<crate::organization_core::OrgDepartment> }
+
+async fn get_org_departments(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgDepartmentsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_core::OrgDepartmentStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgDepartmentsResponse { items }))
+}
+
+#[derive(Deserialize)] struct NewOrgDepartmentRequest { name: String, description: Option<String>, parent_id: Option<String> }
+
+async fn post_org_department(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    Json(req): Json<NewOrgDepartmentRequest>,
+) -> Result<Json<crate::organization_core::OrgDepartment>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let dept = crate::organization_core::OrgDepartmentStore::new(pool).add(&org_id, &req.name, req.description.as_deref(), req.parent_id.as_deref()).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(dept))
+}
+
+// ── Organization Contacts ──────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgContactsResponse { items: Vec<crate::organization_core::OrgContactLink> }
+
+async fn get_org_contacts(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgContactsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_core::OrgContactLinkStore::new(pool).list_by_org(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgContactsResponse { items }))
+}
+
+#[derive(Deserialize)] struct LinkOrgContactRequest { person_id: String, role: Option<String>, department: Option<String> }
+
+async fn post_org_contact_link(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    Json(req): Json<LinkOrgContactRequest>,
+) -> Result<Json<crate::organization_core::OrgContactLink>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let link = crate::organization_core::OrgContactLinkStore::new(pool).link(&org_id, &req.person_id, req.role.as_deref(), req.department.as_deref()).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(link))
+}
+
+// ── Organization Related ───────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgRelatedResponse { items: Vec<crate::organization_core::RelatedOrganization> }
+
+async fn get_org_related(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgRelatedResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_core::RelatedOrgStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgRelatedResponse { items }))
+}
+
+// ── Organization Timeline ──────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgTimelineResponse { items: Vec<crate::organization_workflows::OrgTimelineEvent> }
+#[derive(Deserialize)] struct OrgTimelineQuery { limit: Option<i64> }
+
+async fn get_org_timeline(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>, Query(query): Query<OrgTimelineQuery>,
+) -> Result<Json<OrgTimelineResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_workflows::OrgTimelineStore::new(pool).list(&org_id, query.limit.unwrap_or(50)).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgTimelineResponse { items }))
+}
+
+// ── Organization Portals ───────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgPortalsResponse { items: Vec<crate::organization_workflows::OrgPortal> }
+
+async fn get_org_portals(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgPortalsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_workflows::OrgPortalStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgPortalsResponse { items }))
+}
+
+// ── Organization Procedures ────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgProceduresResponse { items: Vec<crate::organization_workflows::OrgProcedure> }
+
+async fn get_org_procedures(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgProceduresResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_workflows::OrgProcedureStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgProceduresResponse { items }))
+}
+
+// ── Organization Playbooks ─────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgPlaybooksResponse { items: Vec<crate::organization_workflows::OrgPlaybook> }
+
+async fn get_org_playbooks(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgPlaybooksResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_workflows::OrgPlaybookStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgPlaybooksResponse { items }))
+}
+
+// ── Organization Templates ─────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgTemplatesResponse { items: Vec<crate::organization_workflows::OrgTemplate> }
+
+async fn get_org_templates(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgTemplatesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_workflows::OrgTemplateStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgTemplatesResponse { items }))
+}
+
+// ── Organization Financial ─────────────────────────────────────────────────
+
+async fn get_org_financial(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let info = crate::organization_finance::OrgFinancialStore::new(pool).get(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&info).unwrap_or_default()))
+}
+
+// ── Organization Contracts ─────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgContractsResponse { items: Vec<crate::organization_finance::OrgContract> }
+
+async fn get_org_contracts(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgContractsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_finance::OrgContractStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgContractsResponse { items }))
+}
+
+// ── Organization Compliance ────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgComplianceResponse { items: Vec<crate::organization_finance::OrgCompliance> }
+
+async fn get_org_compliance(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgComplianceResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_finance::OrgComplianceStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgComplianceResponse { items }))
+}
+
+// ── Organization Services ──────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgServicesResponse { items: Vec<crate::organization_finance::OrgService> }
+
+async fn get_org_services(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgServicesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_finance::OrgServiceStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgServicesResponse { items }))
+}
+
+// ── Organization Products ──────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgProductsResponse { items: Vec<crate::organization_finance::OrgProduct> }
+
+async fn get_org_products(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgProductsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_finance::OrgProductStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgProductsResponse { items }))
+}
+
+// ── Organization Enrichment ────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgEnrichmentResponse { items: Vec<crate::organization_enrichment::OrgEnrichmentResult> }
+
+async fn get_org_enrichment(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgEnrichmentResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_enrichment::OrgEnrichmentStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgEnrichmentResponse { items }))
+}
+
+async fn post_org_enrich_apply(
+    State(state): State<AppState>, headers: HeaderMap, Path((_org_id, rid)): Path<(String, String)>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    crate::organization_enrichment::OrgEnrichmentStore::new(pool).apply(&rid).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(json!({"applied": true})))
+}
+
+// ── Organization Risks ─────────────────────────────────────────────────────
+
+#[derive(Serialize)] struct OrgRisksResponse { items: Vec<crate::organization_health::OrgRisk> }
+
+async fn get_org_risks(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<OrgRisksResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = crate::organization_health::OrgRiskStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(OrgRisksResponse { items }))
+}
+
+// ── Organization Health ────────────────────────────────────────────────────
+
+async fn get_org_health(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let health = crate::organization_health::OrgHealthStore::new(pool).get(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&health).unwrap_or_default()))
+}
+
+async fn post_org_watchlist_toggle(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let on = crate::organization_health::OrgHealthStore::new(pool).toggle_watchlist(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(json!({"watchlist": on})))
+}
+
+// ── Organization Investigator ───────────────────────────────────────────────
+
+async fn get_org_dossier(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let dossier = crate::organization_investigator::OrganizationInvestigator::new(pool).dossier(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&dossier).unwrap_or_default()))
+}
+
+async fn get_org_brief(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let brief = crate::organization_investigator::OrganizationInvestigator::new(pool).brief(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&brief).unwrap_or_default()))
+}
+
+async fn get_org_context_pack(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pack = crate::organization_investigator::OrganizationInvestigator::new(pool).context_pack(&org_id).await.map_err(|e| ApiError::from(e))?;
+    Ok(Json(serde_json::to_value(&pack).unwrap_or_default()))
 }
 
 pub async fn run(config: AppConfig) -> Result<(), AppError> {
@@ -6368,6 +6714,54 @@ impl From<PersonCoreError> for ApiError {
             _ => {
                 tracing::error!(error = %error, "person core operation failed");
                 ApiError::InvalidCommunicationQuery("person core operation failed")
+            }
+        }
+    }
+}
+
+impl From<crate::organization_core::OrgCoreError> for ApiError {
+    fn from(error: crate::organization_core::OrgCoreError) -> Self {
+        tracing::error!(error = %error, "org core operation failed");
+        ApiError::InvalidCommunicationQuery("org core operation failed")
+    }
+}
+impl From<crate::organization_memory::OrgMemoryError> for ApiError {
+    fn from(error: crate::organization_memory::OrgMemoryError) -> Self {
+        tracing::error!(error = %error, "org memory operation failed");
+        ApiError::InvalidCommunicationQuery("org memory operation failed")
+    }
+}
+impl From<crate::organization_workflows::OrgWorkflowError> for ApiError {
+    fn from(error: crate::organization_workflows::OrgWorkflowError) -> Self {
+        tracing::error!(error = %error, "org workflow operation failed");
+        ApiError::InvalidCommunicationQuery("org workflow operation failed")
+    }
+}
+impl From<crate::organization_finance::OrgFinanceError> for ApiError {
+    fn from(error: crate::organization_finance::OrgFinanceError) -> Self {
+        tracing::error!(error = %error, "org finance operation failed");
+        ApiError::InvalidCommunicationQuery("org finance operation failed")
+    }
+}
+impl From<crate::organization_enrichment::OrgEnrichmentError> for ApiError {
+    fn from(error: crate::organization_enrichment::OrgEnrichmentError) -> Self {
+        tracing::error!(error = %error, "org enrichment operation failed");
+        ApiError::InvalidCommunicationQuery("org enrichment operation failed")
+    }
+}
+impl From<crate::organization_health::OrgHealthError> for ApiError {
+    fn from(error: crate::organization_health::OrgHealthError) -> Self {
+        tracing::error!(error = %error, "org health operation failed");
+        ApiError::InvalidCommunicationQuery("org health operation failed")
+    }
+}
+impl From<crate::organization_investigator::InvestigatorError> for ApiError {
+    fn from(error: crate::organization_investigator::InvestigatorError) -> Self {
+        match error {
+            crate::organization_investigator::InvestigatorError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "investigator operation failed");
+                ApiError::InvalidCommunicationQuery("investigator operation failed")
             }
         }
     }
