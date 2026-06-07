@@ -1,3 +1,4 @@
+
 pub mod analytics;
 pub mod delete_identity;
 pub mod delete_persona;
@@ -8,6 +9,7 @@ pub mod facts;
 pub mod favorite;
 pub mod get;
 pub mod health;
+pub mod identity_candidates;
 pub mod list_identities;
 pub mod list_personas;
 pub mod list_roles;
