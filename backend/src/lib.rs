@@ -18,6 +18,14 @@ pub mod person_health;
 pub mod person_investigator;
 pub mod person_analytics;
 pub mod person_export;
+pub mod organizations;
+pub mod organization_core;
+pub mod organization_enrichment;
+pub mod organization_finance;
+pub mod organization_health;
+pub mod organization_investigator;
+pub mod organization_memory;
+pub mod organization_workflows;
 pub mod persons;
 pub mod document_processing;
 pub mod documents;
@@ -154,6 +162,7 @@ use crate::messages::{
     WorkflowState,
 };
 use crate::ollama::{OllamaClient, OllamaClientConfig};
+use crate::organizations::{OrganizationError, OrganizationStore, OrganizationUpdate};
 use crate::project_link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewError, ProjectLinkReviewState,
     ProjectLinkReviewStore, ProjectLinkTargetKind,
@@ -2129,6 +2138,10 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/persons/{person_id}/watchlist",
             post(post_person_watchlist_toggle),
         )
+        .route("/api/v2/organizations", get(get_organizations).post(post_organization))
+        .route("/api/v2/organizations/search", get(get_organization_search))
+        .route("/api/v2/organizations/{org_id}", get(get_organization).put(put_organization))
+        .route("/api/v2/organizations/{org_id}/archive", post(post_organization_archive))
         .route("/api/v2/task-candidates", get(get_task_candidates))
         .route(
             "/api/v2/task-candidates/{task_candidate_id}/review",
@@ -2741,6 +2754,77 @@ async fn get_person_history_diff(
     let to_date = DateTime::parse_from_rfc3339(&query.to).map_err(|_| ApiError::InvalidCommunicationQuery("invalid to date"))?.with_timezone(&Utc);
     let diff = crate::person_memory::PersonSnapshotStore::new(pool).history_diff(&person_id, from_date, to_date).await.map_err(|e| ApiError::from(e))?;
     Ok(Json(serde_json::to_value(&diff).unwrap_or_default()))
+}
+
+// ── Organizations ───────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct OrganizationListResponse { items: Vec<crate::organizations::Organization> }
+
+#[derive(Deserialize)]
+struct OrganizationListQuery { org_type: Option<String>, limit: Option<i64> }
+
+async fn get_organizations(
+    State(state): State<AppState>, headers: HeaderMap, Query(query): Query<OrganizationListQuery>,
+) -> Result<Json<OrganizationListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let items = OrganizationStore::new(pool).list(query.org_type.as_deref(), query.limit.unwrap_or(50)).await?;
+    Ok(Json(OrganizationListResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewOrganizationRequest { display_name: String, org_type: Option<String> }
+
+async fn post_organization(
+    State(state): State<AppState>, headers: HeaderMap, Json(req): Json<NewOrganizationRequest>,
+) -> Result<Json<crate::organizations::Organization>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let org = OrganizationStore::new(pool).create(&req.display_name, req.org_type.as_deref()).await?;
+    Ok(Json(org))
+}
+
+async fn get_organization(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<crate::organizations::Organization>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    OrganizationStore::new(pool).get(&org_id).await?.map(Json).ok_or(ApiError::NotFound)
+}
+
+async fn put_organization(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    Json(update): Json<OrganizationUpdate>,
+) -> Result<Json<crate::organizations::Organization>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let org = OrganizationStore::new(pool).update(&org_id, &update).await?;
+    Ok(Json(org))
+}
+
+#[derive(Deserialize)]
+struct OrganizationSearchQuery { q: String, limit: Option<i64> }
+
+async fn get_organization_search(
+    State(state): State<AppState>, headers: HeaderMap, Query(query): Query<OrganizationSearchQuery>,
+) -> Result<Json<OrganizationListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pattern = format!("%{}%", query.q.trim().to_lowercase());
+    let rows = sqlx::query_as::<_, (String,)>(
+        "SELECT organization_id FROM organizations WHERE lower(display_name) LIKE $1 OR lower(coalesce(legal_name,'')) LIKE $1 ORDER BY interaction_count DESC LIMIT $2"
+    ).bind(&pattern).bind(query.limit.unwrap_or(20).clamp(1,100)).fetch_all(&pool).await.map_err(OrganizationError::from)?;
+    Ok(Json(OrganizationListResponse { items: vec![] }))
+}
+
+async fn post_organization_archive(
+    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    OrganizationStore::new(pool).archive(&org_id).await?;
+    Ok(Json(json!({"archived": true})))
 }
 
 pub async fn run(config: AppConfig) -> Result<(), AppError> {
@@ -6284,6 +6368,18 @@ impl From<PersonCoreError> for ApiError {
             _ => {
                 tracing::error!(error = %error, "person core operation failed");
                 ApiError::InvalidCommunicationQuery("person core operation failed")
+            }
+        }
+    }
+}
+
+impl From<OrganizationError> for ApiError {
+    fn from(error: OrganizationError) -> Self {
+        match error {
+            OrganizationError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "organization operation failed");
+                ApiError::InvalidCommunicationQuery("organization operation failed")
             }
         }
     }
