@@ -1,6 +1,7 @@
 pub mod brain;
 pub mod core;
 pub mod events;
+pub mod handlers;
 pub mod health;
 pub mod intelligence;
 pub mod meetings;

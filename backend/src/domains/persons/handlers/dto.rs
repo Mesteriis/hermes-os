@@ -13,6 +13,6 @@ pub struct SearchQuery {
     pub limit: Option<i64>,
 }
 #[derive(Deserialize)]
-pub struct NotesRequest {
+pub struct NotesReq {
     pub notes: String,
 }
