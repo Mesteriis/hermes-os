@@ -6,7 +6,9 @@ use axum::{Json, Router};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 
-use hermes_hub_backend::ollama::{OllamaClient, OllamaClientConfig, OllamaError};
+use hermes_hub_backend::integrations::ollama::client::{
+    OllamaClient, OllamaClientConfig, OllamaError,
+};
 
 #[tokio::test]
 async fn ollama_client_round_trips_chat_embed_tags_and_version() {

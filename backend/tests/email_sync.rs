@@ -3,12 +3,14 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
     ProviderAccountSecretPurpose,
 };
-use hermes_hub_backend::email_sync::{EmailSyncAdapterConfig, EmailSyncPlanError, plan_email_sync};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::domains::mail::sync::{
+    EmailSyncAdapterConfig, EmailSyncPlanError, plan_email_sync,
+};
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn email_sync_plan_selects_provider_specific_credentials_and_streams_against_postgres() {
@@ -298,14 +300,17 @@ async fn live_sync_context(test_name: &str) -> Option<(CommunicationIngestionSto
 }
 
 trait IntoTestProviderAccount {
-    fn into_test_provider_account(self) -> hermes_hub_backend::communications::ProviderAccount;
+    fn into_test_provider_account(self)
+    -> hermes_hub_backend::domains::mail::core::ProviderAccount;
 }
 
 impl IntoTestProviderAccount for NewProviderAccount {
-    fn into_test_provider_account(self) -> hermes_hub_backend::communications::ProviderAccount {
+    fn into_test_provider_account(
+        self,
+    ) -> hermes_hub_backend::domains::mail::core::ProviderAccount {
         let now = chrono::Utc::now();
 
-        hermes_hub_backend::communications::ProviderAccount {
+        hermes_hub_backend::domains::mail::core::ProviderAccount {
             account_id: self.account_id,
             provider_kind: self.provider_kind,
             display_name: self.display_name,

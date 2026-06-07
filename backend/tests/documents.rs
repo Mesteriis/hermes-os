@@ -1,8 +1,10 @@
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hermes_hub_backend::documents::{DocumentImportError, DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::domains::documents::core::{
+    DocumentImportError, DocumentImportStore, NewDocumentImport,
+};
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn document_import_stores_markdown_text_against_postgres() {

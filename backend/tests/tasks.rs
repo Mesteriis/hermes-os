@@ -2,16 +2,16 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{Duration, Utc};
-use hermes_hub_backend::storage::Database;
-use hermes_hub_backend::task_brain::TaskBrainService;
-use hermes_hub_backend::task_core::{
+use hermes_hub_backend::domains::tasks::api::{NewTask, TaskListQuery, TaskStore, TaskUpdate};
+use hermes_hub_backend::domains::tasks::brain::TaskBrainService;
+use hermes_hub_backend::domains::tasks::core::{
     TaskChecklistStore, TaskContextPackStore, TaskEvidenceStore, TaskProviderStore,
     TaskRelationStore, TaskSubtaskStore,
 };
-use hermes_hub_backend::task_health::TaskWatchtowerService;
-use hermes_hub_backend::task_intelligence::TaskIntelligenceService;
-use hermes_hub_backend::task_rules::{TaskRuleStore, TaskTemplateStore};
-use hermes_hub_backend::tasks::{NewTask, TaskListQuery, TaskStore, TaskUpdate};
+use hermes_hub_backend::domains::tasks::health::TaskWatchtowerService;
+use hermes_hub_backend::domains::tasks::intelligence::TaskIntelligenceService;
+use hermes_hub_backend::domains::tasks::rules::{TaskRuleStore, TaskTemplateStore};
+use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
@@ -470,7 +470,7 @@ async fn task_brain_against_postgres() {
 
 #[test]
 fn task_export_markdown() {
-    let md = hermes_hub_backend::task_sync::export_task_md(
+    let md = hermes_hub_backend::domains::tasks::sync::export_task_md(
         "Test",
         Some("desc"),
         "in_progress",
@@ -484,7 +484,7 @@ fn task_export_markdown() {
 
 #[test]
 fn task_export_json() {
-    let json = hermes_hub_backend::task_sync::export_task_json(
+    let json = hermes_hub_backend::domains::tasks::sync::export_task_json(
         "Test",
         Some("desc"),
         "done",

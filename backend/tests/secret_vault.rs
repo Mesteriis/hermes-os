@@ -5,12 +5,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use tempfile::tempdir;
 
-use hermes_hub_backend::secret_vault::{DatabaseEncryptedSecretVault, EncryptedSecretVault};
-use hermes_hub_backend::secrets::{
+use hermes_hub_backend::platform::secrets::{DatabaseEncryptedSecretVault, EncryptedSecretVault};
+use hermes_hub_backend::platform::secrets::{
     NewSecretReference, ResolvedSecret, SecretKind, SecretReference, SecretReferenceStore,
     SecretResolutionError, SecretResolver, SecretStoreKind,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn encrypted_vault_persists_secrets_without_plaintext_leakage() {

@@ -3,13 +3,13 @@ use std::fs;
 use std::path::PathBuf;
 
 use chrono::Utc;
-use hermes_hub_backend::communications::EmailProviderKind;
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::email_fixture_pipeline::{
+use hermes_hub_backend::domains::mail::core::EmailProviderKind;
+use hermes_hub_backend::domains::mail::fixtures::pipeline::{
     EmailFixturePipelineRequest, import_fixture_email_messages_for_dev,
     project_fixture_email_messages,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
 use thiserror::Error;
 
 const DEFAULT_FIXTURE_PATH: &str = "tmp/email-fixtures/icloud-inbox-redacted.json";
@@ -19,7 +19,7 @@ const DEFAULT_EXTERNAL_ACCOUNT_ID: &str = "redacted-icloud@example.invalid";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    hermes_hub_backend::init_tracing();
+    hermes_hub_backend::app::init_tracing();
 
     let config = EmailFixtureDevConfig::from_env()?;
     let app_config = AppConfig::from_env()?;

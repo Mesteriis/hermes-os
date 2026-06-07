@@ -8,9 +8,9 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::storage::Database;
-use hermes_hub_backend::{build_router, build_router_with_database};
+use hermes_hub_backend::app::{build_router, build_router_with_database};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "events-api-test-token";
 const LOCAL_API_ACTOR_ID: &str = "events-api-test-client";

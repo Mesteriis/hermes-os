@@ -2,11 +2,11 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
-use hermes_hub_backend::graph::{
+use hermes_hub_backend::domains::graph::core::{
     GraphEvidenceSourceKind, GraphNodeKind, GraphReviewState, GraphStore, GraphStoreError,
     NewGraphEdge, NewGraphEvidence, NewGraphNode, RelationshipType, edge_id, evidence_id,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 use serde_json::{Value, json};
 use sqlx::Row;
 

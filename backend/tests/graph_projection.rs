@@ -6,19 +6,23 @@ use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
+use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
+use hermes_hub_backend::domains::graph::projection::GraphProjectionService;
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::graph::{GraphNodeKind, node_id};
-use hermes_hub_backend::graph_projection::GraphProjectionService;
-use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
-use hermes_hub_backend::persons::PersonProjectionStore;
-use hermes_hub_backend::project_link_reviews::{
+use hermes_hub_backend::domains::mail::messages::{
+    MessageProjectionStore, project_raw_email_message,
+};
+use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::projects::core::{
+    NewProject, ProjectStore, project_graph_node_id,
+};
+use hermes_hub_backend::domains::projects::link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkReviewStore, ProjectLinkTargetKind,
 };
-use hermes_hub_backend::projects::{NewProject, ProjectStore, project_graph_node_id};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn graph_projection_is_idempotent_for_v1_sources_against_postgres() {

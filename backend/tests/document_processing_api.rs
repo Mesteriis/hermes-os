@@ -4,12 +4,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use chrono::Utc;
-use hermes_hub_backend::build_router_with_database;
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::document_processing::DocumentProcessingStore;
-use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
+use hermes_hub_backend::domains::documents::processing::DocumentProcessingStore;
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
+use hermes_hub_backend::platform::storage::Database;
 use serde_json::Value;
 use sqlx::query_scalar;
 use tower::ServiceExt;
@@ -20,7 +20,7 @@ const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 
 #[tokio::test]
 async fn get_document_processing_jobs_rejects_missing_local_api_token() {
-    let app = hermes_hub_backend::build_router(
+    let app = hermes_hub_backend::app::build_router(
         AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)]).expect("config"),
     );
 
@@ -199,7 +199,7 @@ async fn post_document_processing_job_retry_requires_actor_and_requeues_failed_j
     let extract_job = jobs
         .iter()
         .find(|job| {
-            job.step == hermes_hub_backend::document_processing::DocumentProcessingStep::ExtractText
+            job.step == hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::ExtractText
         })
         .expect("extract text job");
 
@@ -324,7 +324,7 @@ async fn post_document_processing_job_retry_rejects_non_failed_job_with_stable_b
     let extract_job = jobs
         .iter()
         .find(|job| {
-            job.step == hermes_hub_backend::document_processing::DocumentProcessingStep::ExtractText
+            job.step == hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::ExtractText
         })
         .expect("extract text job");
 
@@ -540,13 +540,13 @@ async fn create_failed_extract_text_job(
 }
 
 fn step_name(
-    step: &hermes_hub_backend::document_processing::DocumentProcessingStep,
+    step: &hermes_hub_backend::domains::documents::processing::DocumentProcessingStep,
 ) -> &'static str {
     match step {
-        hermes_hub_backend::document_processing::DocumentProcessingStep::ExtractText => {
+        hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::ExtractText => {
             "extract_text"
         }
-        hermes_hub_backend::document_processing::DocumentProcessingStep::Ocr => "ocr",
+        hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::Ocr => "ocr",
     }
 }
 

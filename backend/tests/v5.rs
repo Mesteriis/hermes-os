@@ -7,14 +7,14 @@ use serde_json::Value;
 use serde_json::json;
 use tower::ServiceExt;
 
-use hermes_hub_backend::build_router_with_database;
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::secrets::SecretKind;
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::secrets::SecretKind;
+use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "v5-api-test-token";
 const LOCAL_API_ACTOR_ID: &str = "v5-api-test-client";

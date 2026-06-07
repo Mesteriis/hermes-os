@@ -6,13 +6,13 @@ use chrono::{TimeZone, Utc};
 use serde_json::json;
 use sqlx::Row;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::email_sync::{EmailSyncBatch, FetchedEmailMessage};
-use hermes_hub_backend::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
-use hermes_hub_backend::mail_storage::LocalMailBlobStore;
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
+use hermes_hub_backend::domains::mail::sync::{EmailSyncBatch, FetchedEmailMessage};
+use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
 
 #[tokio::test]
 async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_against_postgres() {

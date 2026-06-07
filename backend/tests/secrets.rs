@@ -5,11 +5,11 @@ use serde_json::json;
 
 use chrono::Utc;
 
-use hermes_hub_backend::secrets::{
+use hermes_hub_backend::platform::secrets::{
     InMemorySecretResolver, NewSecretReference, SecretKind, SecretReference, SecretReferenceStore,
     SecretResolutionError, SecretResolver, SecretStoreKind,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 
 #[test]
 fn secret_reference_enums_reject_unsupported_values() {

@@ -1,10 +1,10 @@
 use std::env;
 
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::document_processing::{
+use hermes_hub_backend::domains::documents::processing::{
     DocumentProcessingRunReport, DocumentProcessingStore,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
 use serde::Serialize;
 use thiserror::Error;
 
@@ -18,7 +18,7 @@ struct DocumentProcessCommandReport {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    hermes_hub_backend::init_tracing();
+    hermes_hub_backend::app::init_tracing();
 
     let config = AppConfig::from_env()?;
     let database_url = config

@@ -5,17 +5,19 @@ use chrono::Utc;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
-use hermes_hub_backend::persons::PersonProjectionStore;
-use hermes_hub_backend::project_link_reviews::{
+use hermes_hub_backend::domains::mail::messages::{
+    MessageProjectionStore, project_raw_email_message,
+};
+use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
+use hermes_hub_backend::domains::projects::link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkReviewStore, ProjectLinkTargetKind,
 };
-use hermes_hub_backend::projects::{NewProject, ProjectStore};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn project_detail_links_keyword_messages_documents_and_people_against_postgres() {

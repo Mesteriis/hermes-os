@@ -4,16 +4,16 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use serde_json::json;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewIngestionCheckpoint, NewProviderAccount,
     NewProviderAccountSecretBinding, NewRawCommunicationRecord, ProviderAccountSecretPurpose,
     ProviderCredentialError, ProviderCredentialReader,
 };
-use hermes_hub_backend::secrets::{
+use hermes_hub_backend::platform::secrets::{
     InMemorySecretResolver, NewSecretReference, SecretKind, SecretReferenceStore,
     SecretResolutionError, SecretResolver, SecretStoreKind,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 
 #[test]
 fn email_provider_kind_supports_gmail_icloud_and_raw_imap() {

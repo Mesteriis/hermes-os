@@ -1,10 +1,10 @@
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hermes_hub_backend::persons::{
+use hermes_hub_backend::domains::persons::api::{
     PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn persons_projection_upserts_email_identities_against_postgres() {

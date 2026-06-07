@@ -6,13 +6,13 @@ use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use hermes_hub_backend::build_router_with_database;
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::settings::{ApplicationSettingsStore, SettingValueKind};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::settings::{ApplicationSettingsStore, SettingValueKind};
+use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "settings-api-test-token";
 const LOCAL_API_ACTOR_ID: &str = "settings-api-test-client";

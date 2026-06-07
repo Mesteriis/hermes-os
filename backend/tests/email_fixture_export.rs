@@ -3,11 +3,11 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 
-use hermes_hub_backend::communications::EmailProviderKind;
-use hermes_hub_backend::email_fixture_export::{
+use hermes_hub_backend::domains::mail::core::EmailProviderKind;
+use hermes_hub_backend::domains::mail::fixtures::export::{
     EmailFixtureExportOptions, export_fixture_messages_from_sync_batch,
 };
-use hermes_hub_backend::email_sync::{EmailSyncBatch, FetchedEmailMessage};
+use hermes_hub_backend::domains::mail::sync::{EmailSyncBatch, FetchedEmailMessage};
 
 #[test]
 fn imap_raw_message_exports_redacted_fixture_without_personal_content() {

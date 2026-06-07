@@ -5,16 +5,16 @@ use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
     StoredRawCommunicationRecord,
 };
-use hermes_hub_backend::mail_storage::LocalMailBlobStore;
-use hermes_hub_backend::messages::{
+use hermes_hub_backend::domains::mail::messages::{
     MessageProjectionError, MessageProjectionStore, NewProjectedMessage, project_raw_email_message,
     project_raw_email_message_from_blob,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn message_projection_upserts_canonical_message_against_postgres() {
@@ -549,7 +549,7 @@ fn unique_suffix() -> u128 {
 
 #[test]
 fn workflow_state_from_str_all_valid() {
-    use hermes_hub_backend::messages::WorkflowState;
+    use hermes_hub_backend::domains::mail::messages::WorkflowState;
 
     for (input, expected) in [
         ("new", WorkflowState::New),
@@ -568,7 +568,7 @@ fn workflow_state_from_str_all_valid() {
 
 #[test]
 fn workflow_state_from_str_invalid() {
-    use hermes_hub_backend::messages::WorkflowState;
+    use hermes_hub_backend::domains::mail::messages::WorkflowState;
 
     assert!("".parse::<WorkflowState>().is_err());
     assert!("invalid_state".parse::<WorkflowState>().is_err());
@@ -577,7 +577,7 @@ fn workflow_state_from_str_invalid() {
 
 #[test]
 fn workflow_state_as_str_roundtrips() {
-    use hermes_hub_backend::messages::WorkflowState;
+    use hermes_hub_backend::domains::mail::messages::WorkflowState;
 
     let states = [
         WorkflowState::New,
@@ -599,7 +599,7 @@ fn workflow_state_as_str_roundtrips() {
 
 #[test]
 fn workflow_state_valid_transitions() {
-    use hermes_hub_backend::messages::WorkflowState;
+    use hermes_hub_backend::domains::mail::messages::WorkflowState;
 
     // New can go to reviewed, needs_action, archived, muted, spam
     assert!(WorkflowState::is_valid_transition(
@@ -682,7 +682,7 @@ fn workflow_state_valid_transitions() {
 
 #[test]
 fn workflow_state_serde_roundtrips() {
-    use hermes_hub_backend::messages::WorkflowState;
+    use hermes_hub_backend::domains::mail::messages::WorkflowState;
 
     let json = serde_json::to_string(&WorkflowState::NeedsAction).expect("serialize");
     assert_eq!(json, "\"needs_action\"");
@@ -766,7 +766,7 @@ async fn message_workflow_state_transition_against_postgres() {
     let updated = message_store
         .transition_workflow_state(
             &projected.message_id,
-            hermes_hub_backend::messages::WorkflowState::NeedsAction,
+            hermes_hub_backend::domains::mail::messages::WorkflowState::NeedsAction,
         )
         .await
         .expect("transition to needs_action");
@@ -776,7 +776,7 @@ async fn message_workflow_state_transition_against_postgres() {
     let updated = message_store
         .transition_workflow_state(
             &updated.message_id,
-            hermes_hub_backend::messages::WorkflowState::Done,
+            hermes_hub_backend::domains::mail::messages::WorkflowState::Done,
         )
         .await
         .expect("transition to done");
@@ -786,7 +786,7 @@ async fn message_workflow_state_transition_against_postgres() {
     let updated = message_store
         .transition_workflow_state(
             &updated.message_id,
-            hermes_hub_backend::messages::WorkflowState::Archived,
+            hermes_hub_backend::domains::mail::messages::WorkflowState::Archived,
         )
         .await
         .expect("transition to archived");
@@ -857,7 +857,7 @@ async fn message_state_counts_against_postgres() {
     message_store
         .transition_workflow_state(
             &messages[0].message.message_id,
-            hermes_hub_backend::messages::WorkflowState::Done,
+            hermes_hub_backend::domains::mail::messages::WorkflowState::Done,
         )
         .await
         .expect("transition to done");
@@ -913,7 +913,7 @@ async fn message_list_filtering_by_state_against_postgres() {
     let new_messages = message_store
         .list_messages(
             Some(&account_id),
-            Some(hermes_hub_backend::messages::WorkflowState::New),
+            Some(hermes_hub_backend::domains::mail::messages::WorkflowState::New),
             None,
             10,
         )
@@ -925,7 +925,7 @@ async fn message_list_filtering_by_state_against_postgres() {
     let done_messages = message_store
         .list_messages(
             Some(&account_id),
-            Some(hermes_hub_backend::messages::WorkflowState::Done),
+            Some(hermes_hub_backend::domains::mail::messages::WorkflowState::Done),
             None,
             10,
         )
@@ -1034,7 +1034,7 @@ async fn message_set_ai_analysis_rejects_invalid_score() {
 
 #[test]
 fn workflow_state_count_serialization() {
-    use hermes_hub_backend::messages::{WorkflowState, WorkflowStateCount};
+    use hermes_hub_backend::domains::mail::messages::{WorkflowState, WorkflowStateCount};
 
     let count = WorkflowStateCount {
         state: WorkflowState::NeedsAction,

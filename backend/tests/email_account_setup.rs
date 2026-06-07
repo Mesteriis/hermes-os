@@ -10,20 +10,20 @@ use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use hermes_hub_backend::build_router_with_database;
-use hermes_hub_backend::communications::{
-    CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
-};
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::email_account_setup::{
+use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::mail::accounts::{
     EmailAccountSetupService, GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
-use hermes_hub_backend::secret_vault::DatabaseEncryptedSecretVault;
-use hermes_hub_backend::secrets::{
+use hermes_hub_backend::domains::mail::core::{
+    CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
+};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::secrets::DatabaseEncryptedSecretVault;
+use hermes_hub_backend::platform::secrets::{
     NewSecretReference, ResolvedSecret, SecretKind, SecretReferenceStore, SecretResolver,
     SecretStoreKind,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "account-setup-test-token";
 const LOCAL_API_ACTOR_ID: &str = "account-setup-test-client";
@@ -493,10 +493,10 @@ async fn live_setup_context(
     Some((database, communication_store, secret_store, unique_suffix()))
 }
 
-fn secret_reference(secret_ref: &str) -> hermes_hub_backend::secrets::SecretReference {
+fn secret_reference(secret_ref: &str) -> hermes_hub_backend::platform::secrets::SecretReference {
     let now = chrono::Utc::now();
 
-    hermes_hub_backend::secrets::SecretReference {
+    hermes_hub_backend::platform::secrets::SecretReference {
         secret_ref: secret_ref.to_owned(),
         secret_kind: SecretKind::OauthToken,
         store_kind: SecretStoreKind::DatabaseEncryptedVault,

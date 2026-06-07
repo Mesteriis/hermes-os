@@ -2,13 +2,13 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
-use hermes_hub_backend::document_processing::{
+use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
+use hermes_hub_backend::domains::documents::processing::{
     DocumentProcessingError, DocumentProcessingRetryCommand, DocumentProcessingStatus,
     DocumentProcessingStore,
 };
-use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
+use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 use sqlx::query_scalar;
@@ -537,13 +537,13 @@ fn unique_suffix() -> u128 {
 }
 
 fn step_name(
-    step: &hermes_hub_backend::document_processing::DocumentProcessingStep,
+    step: &hermes_hub_backend::domains::documents::processing::DocumentProcessingStep,
 ) -> &'static str {
     match step {
-        hermes_hub_backend::document_processing::DocumentProcessingStep::ExtractText => {
+        hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::ExtractText => {
             "extract_text"
         }
-        hermes_hub_backend::document_processing::DocumentProcessingStep::Ocr => "ocr",
+        hermes_hub_backend::domains::documents::processing::DocumentProcessingStep::Ocr => "ocr",
     }
 }
 

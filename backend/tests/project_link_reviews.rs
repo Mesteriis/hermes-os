@@ -4,17 +4,19 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use serde_json::json;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope};
-use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
-use hermes_hub_backend::project_link_reviews::{
+use hermes_hub_backend::domains::mail::messages::{
+    MessageProjectionStore, project_raw_email_message,
+};
+use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
+use hermes_hub_backend::domains::projects::link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewCommandResult, ProjectLinkReviewState,
     ProjectLinkReviewStore, ProjectLinkTargetKind,
 };
-use hermes_hub_backend::projects::{NewProject, ProjectStore};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
+use hermes_hub_backend::platform::storage::Database;
 
 const PROJECT_LINK_REVIEW_EVENT_TYPE: &str = "project.link_review_state_changed";
 

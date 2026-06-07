@@ -1,4 +1,4 @@
-use hermes_hub_backend::search::{SearchDocument, SearchError, SearchIndex};
+use hermes_hub_backend::engines::search::{SearchDocument, SearchError, SearchIndex};
 
 #[test]
 fn search_index_returns_message_by_body_term() {
@@ -113,7 +113,7 @@ fn search_index_replaces_existing_document_identity() {
     assert_eq!(old_results, Vec::new());
     assert_eq!(
         new_results,
-        vec![hermes_hub_backend::search::SearchResult {
+        vec![hermes_hub_backend::engines::search::SearchResult {
             object_id: "message-1".to_owned(),
             object_kind: "message".to_owned(),
             title: "Roadmap review".to_owned(),
@@ -155,7 +155,7 @@ fn search_index_replaces_committed_document_identity() {
     assert_eq!(old_results, Vec::new());
     assert_eq!(
         new_results,
-        vec![hermes_hub_backend::search::SearchResult {
+        vec![hermes_hub_backend::engines::search::SearchResult {
             object_id: "message-1".to_owned(),
             object_kind: "message".to_owned(),
             title: "Roadmap review".to_owned(),
@@ -182,7 +182,7 @@ fn search_index_accepts_blank_body_for_title_only_documents() {
 
     assert_eq!(
         results,
-        vec![hermes_hub_backend::search::SearchResult {
+        vec![hermes_hub_backend::engines::search::SearchResult {
             object_id: "document-1".to_owned(),
             object_kind: "document".to_owned(),
             title: "PDF metadata overview".to_owned(),

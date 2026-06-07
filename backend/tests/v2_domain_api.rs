@@ -3,11 +3,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::persons::PersonProjectionStore;
-use hermes_hub_backend::storage::Database;
-use hermes_hub_backend::tasks::{NewTask, TaskStore};
-use hermes_hub_backend::{build_router, build_router_with_database};
+use hermes_hub_backend::app::{build_router, build_router_with_database};
+use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::tasks::api::{NewTask, TaskStore};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
 use serde_json::{Value, json};
 use sqlx::PgPool;
 use tower::ServiceExt;

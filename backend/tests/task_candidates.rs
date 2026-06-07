@@ -5,16 +5,18 @@ use chrono::Utc;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::documents::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope};
-use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
-use hermes_hub_backend::storage::Database;
-use hermes_hub_backend::task_candidates::{
+use hermes_hub_backend::domains::mail::messages::{
+    MessageProjectionStore, project_raw_email_message,
+};
+use hermes_hub_backend::domains::tasks::candidates::{
     TaskCandidateReviewCommand, TaskCandidateReviewState, TaskCandidateStore,
 };
+use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
+use hermes_hub_backend::platform::storage::Database;
 
 const TASK_CANDIDATE_REVIEW_EVENT_TYPE: &str = "task_candidate.review_state_changed";
 

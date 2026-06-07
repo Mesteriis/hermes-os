@@ -5,16 +5,18 @@ use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::app::{build_router, build_router_with_database};
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::mail_storage::{
+use hermes_hub_backend::domains::mail::messages::{
+    MessageProjectionStore, project_raw_email_message,
+};
+use hermes_hub_backend::domains::mail::storage::{
     LocalMailBlobStore, MailAttachmentDisposition, MailStorageStore, NewMailAttachment, NewMailBlob,
 };
-use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
-use hermes_hub_backend::storage::Database;
-use hermes_hub_backend::{build_router, build_router_with_database};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "test-token";
 const LOCAL_API_ACTOR_ID: &str = "test-actor";

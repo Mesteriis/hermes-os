@@ -7,11 +7,13 @@ use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
-use hermes_hub_backend::build_router_with_database;
-use hermes_hub_backend::communications::{CommunicationProviderKind, ProviderAccountSecretPurpose};
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::secrets::SecretKind;
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::mail::core::{
+    CommunicationProviderKind, ProviderAccountSecretPurpose,
+};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::secrets::SecretKind;
+use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "v4-api-test-token";
 const LOCAL_API_ACTOR_ID: &str = "v4-api-test-client";

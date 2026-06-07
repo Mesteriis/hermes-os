@@ -1,15 +1,17 @@
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::mail_storage::{
+use hermes_hub_backend::domains::mail::messages::{
+    MessageProjectionStore, project_raw_email_message,
+};
+use hermes_hub_backend::domains::mail::storage::{
     AttachmentSafetyScanStatus, LocalMailBlobStore, MailAttachmentDisposition, MailStorageError,
     MailStorageStore, NewMailAttachment, NewMailBlob,
 };
-use hermes_hub_backend::messages::{MessageProjectionStore, project_raw_email_message};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
 
 #[tokio::test]

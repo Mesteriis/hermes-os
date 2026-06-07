@@ -1,7 +1,7 @@
 use std::env;
 
 use chrono::{DateTime, Utc};
-use hermes_hub_backend::storage::{Database, ReadinessStatus};
+use hermes_hub_backend::platform::storage::{Database, ReadinessStatus};
 
 #[tokio::test]
 async fn database_without_url_reports_not_configured() {

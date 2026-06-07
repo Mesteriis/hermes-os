@@ -9,19 +9,19 @@ use chrono::{TimeZone, Utc};
 use serde_json::json;
 use sqlx::Row;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::email_provider_network::{
-    GmailApiClient, GmailFetchOptions, ImapFetchOptions, ImapNetworkClient,
-};
-use hermes_hub_backend::email_sync::{
+use hermes_hub_backend::domains::mail::storage::{LocalMailBlobStore, MailStorageStore};
+use hermes_hub_backend::domains::mail::sync::{
     EmailSyncBatch, FetchedEmailMessage, record_email_sync_batch,
     record_email_sync_batch_with_mail_blobs,
 };
-use hermes_hub_backend::mail_storage::{LocalMailBlobStore, MailStorageStore};
-use hermes_hub_backend::secrets::ResolvedSecret;
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::integrations::gmail::client::{
+    GmailApiClient, GmailFetchOptions, ImapFetchOptions, ImapNetworkClient,
+};
+use hermes_hub_backend::platform::secrets::ResolvedSecret;
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn gmail_api_client_fetches_raw_messages_with_bearer_token() {

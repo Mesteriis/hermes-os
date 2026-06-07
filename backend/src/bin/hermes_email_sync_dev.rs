@@ -1,18 +1,18 @@
 use std::env;
 use std::path::PathBuf;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::email_provider_network::{ImapFetchOptions, ImapNetworkClient};
-use hermes_hub_backend::email_sync::imap_mailbox_stream_id;
-use hermes_hub_backend::email_sync_pipeline::{
+use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
+use hermes_hub_backend::domains::mail::sync::imap_mailbox_stream_id;
+use hermes_hub_backend::integrations::gmail::client::{ImapFetchOptions, ImapNetworkClient};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::secrets::ResolvedSecret;
+use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::email_sync_pipeline::{
     EmailSyncPipelineReport, project_email_sync_batch_with_mail_blobs,
 };
-use hermes_hub_backend::mail_storage::LocalMailBlobStore;
-use hermes_hub_backend::secrets::ResolvedSecret;
-use hermes_hub_backend::storage::Database;
 use serde::Serialize;
 use serde_json::json;
 use thiserror::Error;
@@ -25,7 +25,7 @@ const DEFAULT_BLOB_ROOT: &str = "docker/data/mail";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    hermes_hub_backend::init_tracing();
+    hermes_hub_backend::app::init_tracing();
 
     let config = DevEmailSyncConfig::from_env()?;
     let app_config = AppConfig::from_env()?;

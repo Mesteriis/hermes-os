@@ -5,13 +5,13 @@ use chrono::Utc;
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
-use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope};
-use hermes_hub_backend::person_identity::{
+use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::domains::persons::identity::{
     PersonIdentityError, PersonIdentityReviewCommand, PersonIdentityReviewState,
     PersonIdentityStore,
 };
-use hermes_hub_backend::persons::PersonProjectionStore;
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
+use hermes_hub_backend::platform::storage::Database;
 
 const CONTACT_IDENTITY_REVIEW_EVENT_TYPE: &str = "person_identity.review_state_changed";
 

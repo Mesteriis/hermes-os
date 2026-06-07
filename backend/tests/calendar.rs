@@ -2,21 +2,21 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{Duration, Utc};
-use hermes_hub_backend::calendar::{
-    CalendarAccountStore, CalendarAccountUpdate, CalendarEventListQuery, CalendarEventStore,
-    CalendarEventUpdate, CalendarSourceStore, NewCalendarEvent,
-};
-use hermes_hub_backend::calendar_brain::CalendarBrainService;
-use hermes_hub_backend::calendar_core::{
+use hermes_hub_backend::domains::calendar::brain::CalendarBrainService;
+use hermes_hub_backend::domains::calendar::core::{
     ContextPackInput, EventAgendaStore, EventChecklistStore, EventContextPackStore,
     EventParticipantStore, EventRelationStore,
 };
-use hermes_hub_backend::calendar_health::CalendarWatchtowerService;
-use hermes_hub_backend::calendar_intelligence::CalendarIntelligenceService;
-use hermes_hub_backend::calendar_meetings::{MeetingNoteStore, MeetingOutcomeStore};
-use hermes_hub_backend::calendar_rules::CalendarRuleStore;
-use hermes_hub_backend::calendar_scheduling::{DeadlineStore, FocusBlockStore};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::domains::calendar::events::{
+    CalendarAccountStore, CalendarAccountUpdate, CalendarEventListQuery, CalendarEventStore,
+    CalendarEventUpdate, CalendarSourceStore, NewCalendarEvent,
+};
+use hermes_hub_backend::domains::calendar::health::CalendarWatchtowerService;
+use hermes_hub_backend::domains::calendar::intelligence::CalendarIntelligenceService;
+use hermes_hub_backend::domains::calendar::meetings::{MeetingNoteStore, MeetingOutcomeStore};
+use hermes_hub_backend::domains::calendar::rules::CalendarRuleStore;
+use hermes_hub_backend::domains::calendar::scheduling::{DeadlineStore, FocusBlockStore};
+use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
 use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
@@ -700,7 +700,7 @@ async fn brain_services_against_postgres() {
 
 #[test]
 fn sync_ics_export() {
-    let ics = hermes_hub_backend::calendar_sync::export_event_ics(
+    let ics = hermes_hub_backend::domains::calendar::sync::export_event_ics(
         "Test Meeting",
         Some("Description"),
         Some("Office"),
@@ -716,7 +716,7 @@ fn sync_ics_export() {
 
 #[test]
 fn sync_markdown_export() {
-    let md = hermes_hub_backend::calendar_sync::export_event_md(
+    let md = hermes_hub_backend::domains::calendar::sync::export_event_md(
         "Test Meeting",
         Some("Description"),
         Some("Office"),

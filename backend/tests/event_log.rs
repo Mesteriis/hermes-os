@@ -4,10 +4,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::{DateTime, Utc};
 use serde_json::json;
 
-use hermes_hub_backend::event_log::{
+use hermes_hub_backend::platform::events::{
     EventEnvelope, EventStore, NewEventEnvelope, ProjectionCursorStore, StoredEventEnvelope,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 
 #[test]
 fn new_event_envelope_rejects_empty_event_type() {

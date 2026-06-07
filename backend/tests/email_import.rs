@@ -4,15 +4,17 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 
-use hermes_hub_backend::communications::{
+use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::email_import::{
+use hermes_hub_backend::domains::mail::import::{
     FixtureEmailImportRequest, import_fixture_email_messages,
     import_fixture_email_messages_with_records,
 };
-use hermes_hub_backend::email_sources::{FixtureEmailMessage, parse_fixture_email_messages};
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::domains::mail::sources::{
+    FixtureEmailMessage, parse_fixture_email_messages,
+};
+use hermes_hub_backend::platform::storage::Database;
 
 #[test]
 fn fixture_email_source_parses_account_scoped_messages() {

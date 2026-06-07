@@ -9,13 +9,13 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use tower::ServiceExt;
 use url::Url;
 
-use hermes_hub_backend::config::AppConfig;
-use hermes_hub_backend::graph::{
+use hermes_hub_backend::app::{build_router, build_router_with_database};
+use hermes_hub_backend::domains::graph::core::{
     GraphEvidenceSourceKind, GraphNodeKind, GraphReviewState, GraphStore, NewGraphEdge,
     NewGraphEvidence, NewGraphNode, RelationshipType,
 };
-use hermes_hub_backend::storage::Database;
-use hermes_hub_backend::{build_router, build_router_with_database};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "graph-api-test-token";
 const LOCAL_API_ACTOR_ID: &str = "graph-api-test-client";

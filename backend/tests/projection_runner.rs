@@ -5,11 +5,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use serde_json::json;
 
-use hermes_hub_backend::event_log::{EventStore, NewEventEnvelope, ProjectionCursorStore};
-use hermes_hub_backend::projections::{
+use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope, ProjectionCursorStore};
+use hermes_hub_backend::platform::projections::{
     ProjectionBatchOutcome, ProjectionHandlerError, run_projection_batch,
 };
-use hermes_hub_backend::storage::Database;
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn projection_runner_processes_batch_and_advances_cursor_against_postgres() {

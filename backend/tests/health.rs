@@ -5,8 +5,9 @@ use axum::http::{Request, StatusCode};
 use serde_json::json;
 use tower::ServiceExt;
 
-use hermes_hub_backend::storage::Database;
-use hermes_hub_backend::{build_router, build_router_with_database, config::AppConfig};
+use hermes_hub_backend::app::{build_router, build_router_with_database};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn healthz_returns_ok_status_and_service_name() {
