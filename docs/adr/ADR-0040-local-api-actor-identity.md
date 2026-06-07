@@ -1,6 +1,6 @@
 # ADR-0040 Local API Actor Identity
 
-Status: Temporary
+Status: Superseded by ADR-0056
 
 ## Context
 

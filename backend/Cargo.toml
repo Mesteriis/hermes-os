@@ -1,5 +1,6 @@
 [package]
 name = "hermes-hub-backend"
+publish = false
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
@@ -56,5 +57,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 url = "2"
 
 [dev-dependencies]
+insta = "1.42"
+mockall = "0.13"
 tempfile = "3.27.0"
+testkit = { path = "../crates/testkit" }
 tower = { version = "0.5", features = ["util"] }

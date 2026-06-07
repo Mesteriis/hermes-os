@@ -1,6 +1,6 @@
 # ADR-0038 Local Event API Capability Token
 
-Status: Temporary
+Status: Superseded by ADR-0056
 
 ## Context
 

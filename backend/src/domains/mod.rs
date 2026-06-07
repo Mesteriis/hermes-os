@@ -5,4 +5,5 @@ pub mod mail;
 pub mod organizations;
 pub mod persons;
 pub mod projects;
+pub mod settings;
 pub mod tasks;

@@ -144,15 +144,15 @@ const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 const MAX_LOCAL_API_ACTOR_ID_LENGTH: usize = 128;
 
 #[derive(Clone)]
-struct AppState {
-    config: AppConfig,
-    database: Database,
-    account_setup: AccountSetupState,
+pub(crate) struct AppState {
+    pub(crate) config: AppConfig,
+    pub(crate) database: Database,
+    pub(crate) account_setup: AccountSetupState,
 }
 
 #[derive(Clone, Default)]
-struct AccountSetupState {
-    pending_gmail_oauth: Arc<Mutex<HashMap<String, GmailOAuthPendingGrant>>>,
+pub(crate) struct AccountSetupState {
+    pub(crate) pending_gmail_oauth: Arc<Mutex<HashMap<String, GmailOAuthPendingGrant>>>,
 }
 
 #[derive(Deserialize)]
@@ -7728,7 +7728,7 @@ async fn get_v4_call_transcript(
     Ok(Json(CallTranscriptResponse { transcript }))
 }
 
-fn event_store(state: &AppState) -> Result<EventStore, ApiError> {
+pub(crate) fn event_store(state: &AppState) -> Result<EventStore, ApiError> {
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
@@ -7926,7 +7926,7 @@ fn email_ai_reply_service(
     ))
 }
 
-fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
+pub(crate) fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
@@ -7958,7 +7958,7 @@ fn database_encrypted_vault(
     ))
 }
 
-fn verify_local_api_capability(
+pub(crate) fn verify_local_api_capability(
     config: &AppConfig,
     headers: &HeaderMap,
 ) -> Result<LocalApiActor, ApiError> {
@@ -7984,7 +7984,7 @@ fn verify_local_api_capability(
     local_api_actor(headers)
 }
 
-fn local_api_actor(headers: &HeaderMap) -> Result<LocalApiActor, ApiError> {
+pub(crate) fn local_api_actor(headers: &HeaderMap) -> Result<LocalApiActor, ApiError> {
     let Some(raw_actor_id) = headers
         .get(LOCAL_API_ACTOR_ID_HEADER)
         .and_then(|value| value.to_str().ok())
@@ -8005,7 +8005,7 @@ fn local_api_actor(headers: &HeaderMap) -> Result<LocalApiActor, ApiError> {
     })
 }
 
-fn is_valid_actor_id_byte(byte: u8) -> bool {
+pub(crate) fn is_valid_actor_id_byte(byte: u8) -> bool {
     matches!(
         byte,
         b'a'..=b'z'
@@ -8021,8 +8021,8 @@ fn is_valid_actor_id_byte(byte: u8) -> bool {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct LocalApiActor {
-    actor_id: String,
+pub(crate) struct LocalApiActor {
+    pub(crate) actor_id: String,
 }
 
 #[derive(Serialize)]
@@ -9209,7 +9209,7 @@ fn text_preview(value: &str, max_chars: usize) -> String {
     preview
 }
 
-enum ApiError {
+pub enum ApiError {
     ApiTokenNotConfigured,
     InvalidApiToken,
     InvalidActorId,

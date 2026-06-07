@@ -1,6 +1,6 @@
 # ADR-0037 Local Write Capability Token
 
-Status: Superseded by ADR-0038
+Status: Superseded by ADR-0056
 
 ## Context
 
