@@ -1,0 +1,18 @@
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
+use crate::domains::mail::accounts::GmailOAuthPendingGrant;
+use crate::platform::config::AppConfig;
+use crate::platform::storage::Database;
+
+#[derive(Clone)]
+pub(crate) struct AppState {
+    pub(crate) config: AppConfig,
+    pub(crate) database: Database,
+    pub(crate) account_setup: AccountSetupState,
+}
+
+#[derive(Clone, Default)]
+pub(crate) struct AccountSetupState {
+    pub(crate) pending_gmail_oauth: Arc<Mutex<HashMap<String, GmailOAuthPendingGrant>>>,
+}

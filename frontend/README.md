@@ -2,7 +2,7 @@
 
 SvelteKit desktop UI for Hermes Hub, packaged by Tauri.
 
-Current scope is a desktop/laptop shell for the local backend APIs with provider account setup wizards for Gmail, iCloud and raw IMAP, V2 graph/project/task/contact/document workflow surfaces, and V3 local AI workflow surfaces. Mobile UI is out of scope while ADR-0031 is active.
+Current scope is a desktop/laptop shell for the local backend APIs with provider account setup wizards for Gmail, iCloud and raw IMAP, graph/project/task/contact/document workflow surfaces, and local AI workflow surfaces. Mobile UI is out of scope while ADR-0031 is active.
 
 ## UI Styling Contract
 
@@ -72,43 +72,42 @@ GET http://127.0.0.1:8080/api/v1/status
 POST http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/start
 POST http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/complete
 POST http://127.0.0.1:8080/api/v1/email-accounts/imap
-GET http://127.0.0.1:8080/api/v2/graph/summary
-GET http://127.0.0.1:8080/api/v2/graph/nodes?limit=<limit>
-GET http://127.0.0.1:8080/api/v2/graph/search?q=<query>&limit=<limit>
-GET http://127.0.0.1:8080/api/v2/graph/neighborhood?node_id=<node_id>&depth=1
-GET http://127.0.0.1:8080/api/v2/projects?limit=<limit>
-GET http://127.0.0.1:8080/api/v2/projects/{project_id}
-GET http://127.0.0.1:8080/api/v2/task-candidates?limit=<limit>
-PUT http://127.0.0.1:8080/api/v2/task-candidates/{task_candidate_id}/review
-GET http://127.0.0.1:8080/api/v2/tasks?limit=<limit>
-GET http://127.0.0.1:8080/api/v2/identity-candidates?limit=<limit>
-PUT http://127.0.0.1:8080/api/v2/identity-candidates/{identity_candidate_id}/review
-GET http://127.0.0.1:8080/api/v2/document-processing/jobs?limit=<limit>
-POST http://127.0.0.1:8080/api/v2/document-processing/jobs/{job_id}/retry
-GET http://127.0.0.1:8080/api/v3/ai/status
-GET http://127.0.0.1:8080/api/v3/agents
-GET http://127.0.0.1:8080/api/v3/ai/runs?limit=<limit>
-POST http://127.0.0.1:8080/api/v3/ai/answers
-POST http://127.0.0.1:8080/api/v3/ai/task-candidates/refresh
-POST http://127.0.0.1:8080/api/v3/ai/meeting-prep
+GET http://127.0.0.1:8080/api/v1/graph/summary
+GET http://127.0.0.1:8080/api/v1/graph/nodes?limit=<limit>
+GET http://127.0.0.1:8080/api/v1/graph/search?q=<query>&limit=<limit>
+GET http://127.0.0.1:8080/api/v1/graph/neighborhood?node_id=<node_id>&depth=1
+GET http://127.0.0.1:8080/api/v1/projects?limit=<limit>
+GET http://127.0.0.1:8080/api/v1/projects/{project_id}
+GET http://127.0.0.1:8080/api/v1/task-candidates?limit=<limit>
+PUT http://127.0.0.1:8080/api/v1/task-candidates/{task_candidate_id}/review
+GET http://127.0.0.1:8080/api/v1/tasks?limit=<limit>
+GET http://127.0.0.1:8080/api/v1/identity-candidates?limit=<limit>
+PUT http://127.0.0.1:8080/api/v1/identity-candidates/{identity_candidate_id}/review
+GET http://127.0.0.1:8080/api/v1/document-processing/jobs?limit=<limit>
+POST http://127.0.0.1:8080/api/v1/document-processing/jobs/{job_id}/retry
+GET http://127.0.0.1:8080/api/v1/ai/status
+GET http://127.0.0.1:8080/api/v1/ai/agents
+GET http://127.0.0.1:8080/api/v1/ai/runs?limit=<limit>
+POST http://127.0.0.1:8080/api/v1/ai/answers
+POST http://127.0.0.1:8080/api/v1/ai/task-candidates/refresh
+POST http://127.0.0.1:8080/api/v1/ai/meeting-prep
 ```
 
-Requests use `Authorization: Bearer <token>` and `X-Hermes-Actor-Id`. The graph dashboard reads `/api/v2/graph/summary`; the graph explorer searches non-empty queries through `/api/v2/graph/search` and loads depth-1 neighborhoods through `/api/v2/graph/neighborhood`. The workflow tabs use protected project, task candidate, active task, contact identity and document-processing endpoints. Account setup also requires backend PostgreSQL and `HERMES_SECRET_VAULT_KEY`.
+Requests use ``X-Hermes-Secret: <secret>``. The graph dashboard reads `/api/v1/graph/summary`; the graph explorer searches non-empty queries through `/api/v1/graph/search` and loads depth-1 neighborhoods through `/api/v1/graph/neighborhood`. The workflow tabs use protected project, task candidate, active task, contact identity and document-processing endpoints. Account setup also requires backend PostgreSQL and `HERMES_SECRET_VAULT_KEY`.
 
-The AI Agents tab reads V3 runtime status, registered agents, persisted run history and citation-backed workflow responses. Communications exposes scoped Ask AI for the selected message, Projects exposes scoped Prepare brief for the selected project, and Tasks exposes AI refresh for suggested task candidates. AI refresh writes only suggested candidates; the existing task review queue remains the path to active tasks.
+The AI Agents tab reads AI runtime status, registered agents, persisted run history and citation-backed workflow responses. Communications exposes scoped Ask AI for the selected message, Projects exposes scoped Prepare brief for the selected project, and Tasks exposes AI refresh for suggested task candidates. AI refresh writes only suggested candidates; the existing task review queue remains the path to active tasks.
 
-The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_TOKEN=change-me-local-api-token`, or the frontend must be started with matching Vite public overrides:
+The backend must be running on `127.0.0.1:8080` with `HERMES_LOCAL_API_SECRET=change-me-local-api-secret`, or the frontend must be started with matching Vite public overrides:
 
 ```sh
 VITE_HERMES_API_BASE_URL=http://127.0.0.1:8080 \
-VITE_HERMES_LOCAL_API_TOKEN=change-me-local-api-token \
-VITE_HERMES_ACTOR_ID=desktop-shell \
+VITE_HERMES_LOCAL_API_SECRET=change-me-local-api-secret \
 pnpm dev
 ```
 
-The placeholder token is for local development only and must match the backend local API token. `VITE_HERMES_ACTOR_ID` is a non-secret local client identity used by protected API requests and backend audit records.
+The placeholder secret is for local development only and must match the backend `HERMES_LOCAL_API_SECRET`.
 
-## V2 Desktop Surfaces
+## Workflow Desktop Surfaces
 
 The desktop shell is intentionally desktop/laptop scoped under ADR-0031. Current V2 desktop surfaces are:
 
@@ -118,7 +117,7 @@ The desktop shell is intentionally desktop/laptop scoped under ADR-0031. Current
 - Current: Contacts identity review surface using identity candidate list, review APIs and explicit split review controls.
 - Current: Document processing status surface using the document-processing jobs API and failed-job retry controls.
 
-## V3 Desktop Surfaces
+## AI Desktop Surfaces
 
 - Current: AI Agents tab using backend AI status, agent registry, run history, answer form, meeting prep, task extraction and citations.
 - Current: Communications scoped Ask AI action for the selected message.

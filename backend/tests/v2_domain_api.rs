@@ -2,7 +2,7 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
-use axum::http::{Request, StatusCode, header};
+use axum::http::{Request, StatusCode};
 use hermes_hub_backend::app::{build_router, build_router_with_database};
 use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
 use hermes_hub_backend::domains::tasks::api::{NewTask, TaskStore};
@@ -13,46 +13,47 @@ use sqlx::PgPool;
 use tower::ServiceExt;
 
 const LOCAL_API_TOKEN: &str = "v2-domain-api-test-token";
-const LOCAL_API_ACTOR_ID: &str = "v2-domain-api-test-client";
-const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 
 #[tokio::test]
-async fn v2_domain_routes_build_and_require_local_api_token() {
+async fn domain_routes_build_and_require_local_api_secret() {
     let app = build_router(config_with_api_token());
 
     let response = app
-        .oneshot(get_request("/api/v2/tasks"))
+        .oneshot(get_request("/api/v1/tasks"))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
     assert_eq!(
         json_body(response).await,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 
-    let missing_actor_response = build_router(config_with_api_token())
-        .oneshot(get_request_with_token("/api/v2/tasks", LOCAL_API_TOKEN))
+    let secret_only_response = build_router(config_with_api_token())
+        .oneshot(get_request_with_token("/api/v1/tasks", LOCAL_API_TOKEN))
         .await
-        .expect("missing actor response");
+        .expect("secret-only response");
 
-    assert_eq!(missing_actor_response.status(), StatusCode::BAD_REQUEST);
     assert_eq!(
-        json_body(missing_actor_response).await,
+        secret_only_response.status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    assert_eq!(
+        json_body(secret_only_response).await,
         json!({
-            "error": "invalid_actor_id",
-            "message": "missing or invalid x-hermes-actor-id header"
+            "error": "database_not_configured",
+            "message": "DATABASE_URL is not configured"
         })
     );
 }
 
 #[tokio::test]
-async fn v2_tasks_endpoint_returns_first_class_task_payload_against_postgres() {
+async fn tasks_endpoint_returns_first_class_task_payload_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live V2 tasks API test: HERMES_TEST_DATABASE_URL is not set");
+        eprintln!("skipping live tasks API test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
 
@@ -63,10 +64,10 @@ async fn v2_tasks_endpoint_returns_first_class_task_payload_against_postgres() {
     let suffix = unique_suffix();
     let task = TaskStore::new(pool)
         .create(&NewTask {
-            title: format!("V2 first-class task {suffix}"),
+            title: format!("V1 first-class task {suffix}"),
             description: Some("contract test task".to_owned()),
             source_kind: Some("manual".to_owned()),
-            source_id: Some(format!("manual-v2-task-{suffix}")),
+            source_id: Some(format!("manual-v1-task-{suffix}")),
             source_type: Some("manual".to_owned()),
             hermes_status: Some("ready".to_owned()),
             priority_score: Some(0.7),
@@ -78,7 +79,7 @@ async fn v2_tasks_endpoint_returns_first_class_task_payload_against_postgres() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -87,9 +88,9 @@ async fn v2_tasks_endpoint_returns_first_class_task_payload_against_postgres() {
 
     let response = app
         .oneshot(get_request_with_token_and_actor(
-            "/api/v2/tasks?limit=100",
+            "/api/v1/tasks?limit=100",
             LOCAL_API_TOKEN,
-            LOCAL_API_ACTOR_ID,
+            "hermes-frontend",
         ))
         .await
         .expect("response");
@@ -111,9 +112,9 @@ async fn v2_tasks_endpoint_returns_first_class_task_payload_against_postgres() {
 }
 
 #[tokio::test]
-async fn v2_person_health_endpoint_returns_single_person_health_against_postgres() {
+async fn person_health_endpoint_returns_single_person_health_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live V2 person health API test: HERMES_TEST_DATABASE_URL is not set");
+        eprintln!("skipping live person health API test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
 
@@ -130,7 +131,7 @@ async fn v2_person_health_endpoint_returns_single_person_health_against_postgres
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -139,9 +140,9 @@ async fn v2_person_health_endpoint_returns_single_person_health_against_postgres
 
     let response = app
         .oneshot(get_request_with_token_and_actor(
-            &format!("/api/v2/persons/{}/health", person.person_id),
+            &format!("/api/v1/persons/{}/health", person.person_id),
             LOCAL_API_TOKEN,
-            LOCAL_API_ACTOR_ID,
+            "hermes-frontend",
         ))
         .await
         .expect("response");
@@ -155,8 +156,8 @@ async fn v2_person_health_endpoint_returns_single_person_health_against_postgres
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)])
-        .expect("valid local API token")
+    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
+        .expect("valid local API secret")
 }
 
 fn get_request(uri: &str) -> Request<Body> {
@@ -169,16 +170,15 @@ fn get_request(uri: &str) -> Request<Body> {
 fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }
 
-fn get_request_with_token_and_actor(uri: &str, token: &str, actor_id: &str) -> Request<Body> {
+fn get_request_with_token_and_actor(uri: &str, token: &str, _actor_id: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, actor_id)
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }

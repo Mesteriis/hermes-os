@@ -141,56 +141,63 @@ use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntellig
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::*;
 
-pub(crate) async fn get_graph_summary(
+pub(crate) async fn post_event(
     State(state): State<AppState>,
-) -> Result<Json<crate::domains::graph::core::GraphSummary>, ApiError> {
-    Ok(Json(graph_store(&state)?.summary().await?))
-}
+    Json(request): Json<AppendEventRequest>,
+) -> Result<(StatusCode, Json<AppendEventResponse>), ApiError> {
+    let actor_id = "hermes-frontend".to_string();
 
-pub(crate) async fn get_graph_nodes(
-    State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_nodes_query(raw_query.as_deref())?;
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
-    Ok(Json(
-        graph_store(&state)?.list_nodes_for_picker(limit).await?,
+    let store = event_store(&state)?;
+    let event = request.into_new_event()?;
+    let audit_log = api_audit_log(&state)?;
+    audit_log
+        .record(&NewApiAuditRecord::event_append(
+            actor_id,
+            event.event_id.clone(),
+        ))
+        .await?;
+    let position = store.append(&event).await?;
+
+    Ok((
+        StatusCode::CREATED,
+        Json(AppendEventResponse {
+            event_id: event.event_id,
+            position,
+        }),
     ))
 }
 
-pub(crate) async fn get_graph_neighborhood(
+pub(crate) async fn get_event(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<crate::domains::graph::core::GraphNeighborhood>, ApiError> {
-    let query = parse_graph_neighborhood_query(raw_query.as_deref())?;
-    if query.depth.unwrap_or(1) != 1 {
-        return Err(ApiError::InvalidGraphQuery("depth supports only 1"));
-    }
-    let Some(node_id) = query
-        .node_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    else {
-        return Err(ApiError::GraphNotFound);
+    Path(event_id): Path<String>,
+) -> Result<Json<EventEnvelope>, ApiError> {
+    let actor_id = "hermes-frontend".to_string();
+
+    let store = event_store(&state)?;
+    let audit_log = api_audit_log(&state)?;
+    audit_log
+        .record(&NewApiAuditRecord::event_get(actor_id, event_id.clone()))
+        .await?;
+    let Some(event) = store.get_by_id(&event_id).await? else {
+        return Err(ApiError::NotFound);
     };
-    let Some(neighborhood) = graph_store(&state)?.neighborhood(node_id).await? else {
-        return Err(ApiError::GraphNotFound);
-    };
-    Ok(Json(neighborhood))
+
+    Ok(Json(event))
 }
 
-pub(crate) async fn get_graph_search(
+pub(crate) async fn get_audit_events(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_search_query(raw_query.as_deref())?;
-    let search = query.q.as_deref().unwrap_or_default().trim();
-    if search.is_empty() {
-        return Err(ApiError::InvalidGraphQuery("q must not be empty"));
-    }
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
-    Ok(Json(
-        graph_store(&state)?.search_nodes(search, limit).await?,
-    ))
+    Query(query): Query<AuditEventsQuery>,
+) -> Result<Json<AuditEventsResponse>, ApiError> {
+    let audit_log = api_audit_log(&state)?;
+    let items = audit_log
+        .list_event_records(
+            query.target_id.as_deref(),
+            query.actor_id.as_deref(),
+            query.after_audit_id.unwrap_or(0),
+            query.limit.unwrap_or(100),
+        )
+        .await?;
+
+    Ok(Json(AuditEventsResponse { items }))
 }

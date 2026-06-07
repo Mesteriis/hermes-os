@@ -181,7 +181,7 @@ Every handler follows this exact shape — 10-30 lines:
 
 ```rust
 // domains/persons/api/search.rs
-// GET /api/v2/persons/search
+// GET /api/v1/persons/search
 
 use axum::extract::{Query, State};
 use axum::http::HeaderMap;

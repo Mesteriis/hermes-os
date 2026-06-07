@@ -15,8 +15,6 @@ use hermes_hub_backend::platform::settings::{ApplicationSettingsStore, SettingVa
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "settings-api-test-token";
-const LOCAL_API_ACTOR_ID: &str = "settings-api-test-client";
-const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 
 static SETTINGS_DB_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
@@ -49,7 +47,7 @@ async fn application_settings_store_lists_seeded_settings_against_postgres() {
     assert!(
         settings
             .iter()
-            .any(|setting| setting.setting_key == "frontend.actor_id")
+            .any(|setting| setting.setting_key == "frontend.layout")
     );
     assert!(
         settings
@@ -111,7 +109,7 @@ async fn database_startup_repairs_declared_application_settings_against_postgres
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
 
-    sqlx::query("DELETE FROM application_settings WHERE setting_key = 'frontend.actor_id'")
+    sqlx::query("DELETE FROM application_settings WHERE setting_key = 'frontend.api_base_url'")
         .execute(&pool)
         .await
         .expect("delete declared setting");
@@ -165,13 +163,13 @@ async fn database_startup_repairs_declared_application_settings_against_postgres
         ApplicationSettingsStore::new(repaired_database.pool().expect("configured pool").clone());
     let settings = store.list_settings().await.expect("list repaired settings");
 
-    let actor_setting = settings
+    let api_base_url_setting = settings
         .iter()
-        .find(|setting| setting.setting_key == "frontend.actor_id")
-        .expect("frontend actor setting restored");
-    assert_eq!(actor_setting.value, json!("desktop-shell"));
+        .find(|setting| setting.setting_key == "frontend.api_base_url")
+        .expect("frontend API base URL setting restored");
+    assert_eq!(api_base_url_setting.value, json!("http://127.0.0.1:8080"));
     assert_eq!(
-        actor_setting.updated_by_actor_id.as_deref(),
+        api_base_url_setting.updated_by_actor_id.as_deref(),
         Some("system:settings_repair")
     );
 
@@ -208,7 +206,7 @@ async fn application_settings_api_updates_existing_setting_against_postgres() {
         .expect("database connection");
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -217,7 +215,7 @@ async fn application_settings_api_updates_existing_setting_against_postgres() {
     let response = app
         .clone()
         .oneshot(json_put_request_with_actor(
-            "/api/v2/settings/ui.theme",
+            "/api/v1/settings/ui.theme",
             json!({ "value": "dark" }),
             LOCAL_API_TOKEN,
         ))
@@ -228,11 +226,11 @@ async fn application_settings_api_updates_existing_setting_against_postgres() {
     let body = json_body(response).await;
     assert_eq!(body["setting_key"], json!("ui.theme"));
     assert_eq!(body["value"], json!("dark"));
-    assert_eq!(body["updated_by_actor_id"], json!(LOCAL_API_ACTOR_ID));
+    assert_eq!(body["updated_by_actor_id"], json!("hermes-frontend"));
 
     let list_response = app
         .clone()
-        .oneshot(get_request_with_token("/api/v2/settings", LOCAL_API_TOKEN))
+        .oneshot(get_request_with_token("/api/v1/settings", LOCAL_API_TOKEN))
         .await
         .expect("list response");
     assert_eq!(list_response.status(), StatusCode::OK);
@@ -245,7 +243,7 @@ async fn application_settings_api_updates_existing_setting_against_postgres() {
     let _ = app
         .clone()
         .oneshot(json_put_request_with_actor(
-            "/api/v2/settings/ui.theme",
+            "/api/v1/settings/ui.theme",
             json!({ "value": "system" }),
             LOCAL_API_TOKEN,
         ))
@@ -268,7 +266,7 @@ async fn application_settings_api_rejects_secret_like_setting_keys_against_postg
         .expect("database connection");
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -277,7 +275,7 @@ async fn application_settings_api_rejects_secret_like_setting_keys_against_postg
 
     let response = app
         .oneshot(json_put_request_with_actor(
-            "/api/v2/settings/mail.password",
+            "/api/v1/settings/mail.password",
             json!({ "value": "not-allowed" }),
             LOCAL_API_TOKEN,
         ))
@@ -315,7 +313,7 @@ async fn settings_accounts_api_lists_provider_accounts_against_postgres() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -324,7 +322,7 @@ async fn settings_accounts_api_lists_provider_accounts_against_postgres() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v2/settings/accounts",
+            "/api/v1/settings/accounts",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -342,8 +340,7 @@ fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method("GET")
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, LOCAL_API_ACTOR_ID)
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }
@@ -353,8 +350,7 @@ fn json_put_request_with_actor(uri: &str, body: Value, token: &str) -> Request<B
         .method("PUT")
         .uri(uri)
         .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, LOCAL_API_ACTOR_ID)
+        .header("x-hermes-secret", token)
         .body(Body::from(body.to_string()))
         .expect("request")
 }

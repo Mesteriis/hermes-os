@@ -141,56 +141,101 @@ use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntellig
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::*;
 
-pub(crate) async fn get_graph_summary(
+pub(crate) async fn get_ai_status(
     State(state): State<AppState>,
-) -> Result<Json<crate::domains::graph::core::GraphSummary>, ApiError> {
-    Ok(Json(graph_store(&state)?.summary().await?))
+) -> Result<Json<AiStatusResponse>, ApiError> {
+    let runtime_settings = ai_runtime_settings(&state).await?;
+    let ollama = ollama_client(&runtime_settings)?;
+    let version = ollama.version().await;
+    let tags = ollama.tags().await;
+    let chat_model = runtime_settings.chat_model;
+    let embedding_model = runtime_settings.embedding_model;
+    let chat_model_available = tags
+        .as_ref()
+        .map(|models| models.iter().any(|model| model == &chat_model))
+        .unwrap_or(false);
+    let embedding_model_available = tags
+        .as_ref()
+        .map(|models| models.iter().any(|model| model == &embedding_model))
+        .unwrap_or(false);
+
+    Ok(Json(AiStatusResponse {
+        runtime: "ollama".to_owned(),
+        status: if version.is_ok() && chat_model_available && embedding_model_available {
+            "ok"
+        } else {
+            "unavailable"
+        }
+        .to_owned(),
+        version: version.ok(),
+        chat_model,
+        embedding_model,
+        embedding_dimension: AI_EMBEDDING_DIMENSION,
+        chat_model_available,
+        embedding_model_available,
+    }))
 }
 
-pub(crate) async fn get_graph_nodes(
+pub(crate) async fn get_ai_agents(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_nodes_query(raw_query.as_deref())?;
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
-    Ok(Json(
-        graph_store(&state)?.list_nodes_for_picker(limit).await?,
-    ))
+) -> Result<Json<AiAgentListResponse>, ApiError> {
+    let runtime_settings = ai_runtime_settings(&state).await?;
+
+    Ok(Json(AiAgentListResponse {
+        items: v3_agents(&runtime_settings.chat_model),
+    }))
 }
 
-pub(crate) async fn get_graph_neighborhood(
+pub(crate) async fn get_ai_runs(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<crate::domains::graph::core::GraphNeighborhood>, ApiError> {
-    let query = parse_graph_neighborhood_query(raw_query.as_deref())?;
-    if query.depth.unwrap_or(1) != 1 {
-        return Err(ApiError::InvalidGraphQuery("depth supports only 1"));
-    }
-    let Some(node_id) = query
-        .node_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    else {
-        return Err(ApiError::GraphNotFound);
+    Query(query): Query<AiRunsQuery>,
+) -> Result<Json<AiRunListResponse>, ApiError> {
+    let limit = query.limit.unwrap_or(25).clamp(1, 100);
+    let runs = ai_run_store(&state)?.list_runs(limit).await?;
+
+    Ok(Json(AiRunListResponse { items: runs }))
+}
+
+pub(crate) async fn get_ai_run(
+    State(state): State<AppState>,
+    Path(run_id): Path<String>,
+) -> Result<Json<AiAgentRun>, ApiError> {
+    let Some(run) = ai_run_store(&state)?.get_run(&run_id).await? else {
+        return Err(ApiError::AiRunNotFound);
     };
-    let Some(neighborhood) = graph_store(&state)?.neighborhood(node_id).await? else {
-        return Err(ApiError::GraphNotFound);
-    };
-    Ok(Json(neighborhood))
+
+    Ok(Json(run))
 }
 
-pub(crate) async fn get_graph_search(
+pub(crate) async fn post_ai_answer(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_search_query(raw_query.as_deref())?;
-    let search = query.q.as_deref().unwrap_or_default().trim();
-    if search.is_empty() {
-        return Err(ApiError::InvalidGraphQuery("q must not be empty"));
-    }
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
-    Ok(Json(
-        graph_store(&state)?.search_nodes(search, limit).await?,
-    ))
+    Json(request): Json<AiAnswerRequest>,
+) -> Result<Json<crate::ai::core::AiAnswerResponse>, ApiError> {
+    let actor_id = "hermes-frontend".to_string();
+    let service = ai_service(&state).await?;
+    let response = service.answer(request, &actor_id).await?;
+
+    Ok(Json(response))
+}
+
+pub(crate) async fn post_ai_task_candidates_refresh(
+    State(state): State<AppState>,
+    Json(request): Json<AiTaskCandidateRefreshRequest>,
+) -> Result<Json<crate::ai::core::AiTaskCandidateRefreshResponse>, ApiError> {
+    let actor_id = "hermes-frontend".to_string();
+    let service = ai_service(&state).await?;
+    let response = service.refresh_task_candidates(request, &actor_id).await?;
+
+    Ok(Json(response))
+}
+
+pub(crate) async fn post_ai_meeting_prep(
+    State(state): State<AppState>,
+    Json(request): Json<AiMeetingPrepRequest>,
+) -> Result<Json<crate::ai::core::AiMeetingPrepResponse>, ApiError> {
+    let actor_id = "hermes-frontend".to_string();
+    let service = ai_service(&state).await?;
+    let response = service.meeting_prep(request, &actor_id).await?;
+
+    Ok(Json(response))
 }

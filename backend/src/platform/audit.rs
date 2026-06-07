@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use crate::platform::capabilities::CapabilityDecision;
 
-const LOCAL_API_TOKEN_ACTOR_KIND: &str = "local_api_token";
+const API_FRONTEND_ACTOR_KIND: &str = "frontend";
 const EVENT_TARGET_KIND: &str = "event";
 
 #[derive(Clone)]
@@ -140,11 +140,11 @@ pub struct NewApiAuditRecord {
 impl NewApiAuditRecord {
     pub fn event_append(actor_id: impl Into<String>, event_id: impl Into<String>) -> Self {
         Self {
-            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
             operation: "event.append".to_owned(),
             method: "POST".to_owned(),
-            path_template: "/api/events".to_owned(),
+            path_template: "/api/v1/events".to_owned(),
             target_kind: EVENT_TARGET_KIND.to_owned(),
             target_id: Some(event_id.into()),
             metadata: json!({}),
@@ -153,11 +153,11 @@ impl NewApiAuditRecord {
 
     pub fn event_get(actor_id: impl Into<String>, event_id: impl Into<String>) -> Self {
         Self {
-            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
             operation: "event.get".to_owned(),
             method: "GET".to_owned(),
-            path_template: "/api/events/{event_id}".to_owned(),
+            path_template: "/api/v1/events/{event_id}".to_owned(),
             target_kind: EVENT_TARGET_KIND.to_owned(),
             target_id: Some(event_id.into()),
             metadata: json!({}),
@@ -175,11 +175,11 @@ impl NewApiAuditRecord {
         let target_id = target_id.into();
 
         Self {
-            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
             operation: "project.link_review.set".to_owned(),
             method: "PUT".to_owned(),
-            path_template: "/api/v2/projects/{project_id}/link-reviews".to_owned(),
+            path_template: "/api/v1/projects/{project_id}/link-reviews".to_owned(),
             target_kind: "project_link".to_owned(),
             target_id: Some(format!("{project_id}:{target_kind}:{target_id}")),
             metadata: json!({
@@ -195,11 +195,11 @@ impl NewApiAuditRecord {
         task_candidate_id: impl Into<String>,
     ) -> Self {
         Self {
-            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
             operation: "task_candidate.review.set".to_owned(),
             method: "PUT".to_owned(),
-            path_template: "/api/v2/task-candidates/{task_candidate_id}/review".to_owned(),
+            path_template: "/api/v1/task-candidates/{task_candidate_id}/review".to_owned(),
             target_kind: "task_candidate".to_owned(),
             target_id: Some(task_candidate_id.into()),
             metadata: json!({}),
@@ -211,7 +211,7 @@ impl NewApiAuditRecord {
         message_id: impl Into<String>,
     ) -> Self {
         Self {
-            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
             operation: "message.workflow_state.set".to_owned(),
             method: "PUT".to_owned(),
@@ -228,11 +228,11 @@ impl NewApiAuditRecord {
     ) -> Self {
         let identity_candidate_id = identity_candidate_id.into();
         Self {
-            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
             operation: "person_identity.review.set".to_owned(),
             method: "PUT".to_owned(),
-            path_template: "/api/v2/identity-candidates/{identity_candidate_id}/review".to_owned(),
+            path_template: "/api/v1/identity-candidates/{identity_candidate_id}/review".to_owned(),
             target_kind: "person_identity_candidate".to_owned(),
             target_id: Some(identity_candidate_id),
             metadata: json!({}),
@@ -245,11 +245,11 @@ impl NewApiAuditRecord {
     ) -> Self {
         let setting_key = setting_key.into();
         Self {
-            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
             operation: "application_setting.set".to_owned(),
             method: "PUT".to_owned(),
-            path_template: "/api/v2/settings/{setting_key}".to_owned(),
+            path_template: "/api/v1/settings/{setting_key}".to_owned(),
             target_kind: "application_setting".to_owned(),
             target_id: Some(setting_key),
             metadata: json!({}),
@@ -334,11 +334,11 @@ impl NewApiAuditRecord {
         );
 
         Self {
-            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
             operation: "automation.telegram_send.dry_run".to_owned(),
             method: "POST".to_owned(),
-            path_template: "/api/v4/policies/telegram-send/dry-run".to_owned(),
+            path_template: "/api/v1/policies/telegram-send/dry-run".to_owned(),
             target_kind: audit_decision.target_kind.to_owned(),
             target_id: audit_decision.target_id,
             metadata,
@@ -351,11 +351,11 @@ impl NewApiAuditRecord {
     ) -> Self {
         let job_id = job_id.into();
         Self {
-            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
             actor_id: actor_id.into(),
             operation: "document_processing.job.retry".to_owned(),
             method: "POST".to_owned(),
-            path_template: "/api/v2/document-processing/jobs/{job_id}/retry".to_owned(),
+            path_template: "/api/v1/document-processing/jobs/{job_id}/retry".to_owned(),
             target_kind: "document_processing_job".to_owned(),
             target_id: Some(job_id),
             metadata: json!({}),

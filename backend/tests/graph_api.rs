@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::Router;
 use axum::body::{Body, to_bytes};
-use axum::http::{Request, StatusCode, header};
+use axum::http::{Request, StatusCode};
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use tower::ServiceExt;
@@ -18,117 +18,115 @@ use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "graph-api-test-token";
-const LOCAL_API_ACTOR_ID: &str = "graph-api-test-client";
-const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 const EXPECTED_GRAPH_NEIGHBORHOOD_EDGE_LIMIT: usize = 100;
 const EXPECTED_GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT: usize = 100;
 
 #[tokio::test]
-async fn graph_summary_rejects_missing_local_api_token() {
+async fn graph_summary_rejects_missing_local_api_secret() {
     let app = build_router(config_with_api_token());
 
     let response = app
-        .oneshot(get_request("/api/v2/graph/summary"))
+        .oneshot(get_request("/api/v1/graph/summary"))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
 
 #[tokio::test]
-async fn graph_summary_rejects_missing_local_api_actor_id() {
+async fn graph_summary_accepts_secret_without_actor_header() {
     let app = build_router(config_with_api_token());
 
     let response = app
         .oneshot(get_request_with_token_without_actor(
-            "/api/v2/graph/summary",
+            "/api/v1/graph/summary",
             LOCAL_API_TOKEN,
         ))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_actor_id",
-            "message": "missing or invalid x-hermes-actor-id header"
+            "error": "database_not_configured",
+            "message": "DATABASE_URL is not configured"
         })
     );
 }
 
 #[tokio::test]
-async fn graph_search_rejects_missing_local_api_token_before_missing_query_validation() {
+async fn graph_search_rejects_missing_local_api_secret_before_missing_query_validation() {
     let app = build_router(config_with_api_token());
 
     let response = app
-        .oneshot(get_request("/api/v2/graph/search"))
+        .oneshot(get_request("/api/v1/graph/search"))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
 
 #[tokio::test]
-async fn graph_nodes_rejects_missing_local_api_token() {
+async fn graph_nodes_rejects_missing_local_api_secret() {
     let app = build_router(config_with_api_token());
 
     let response = app
-        .oneshot(get_request("/api/v2/graph/nodes"))
+        .oneshot(get_request("/api/v1/graph/nodes"))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
 
 #[tokio::test]
-async fn graph_neighborhood_rejects_missing_local_api_token_before_malformed_query_validation() {
+async fn graph_neighborhood_rejects_missing_local_api_secret_before_malformed_query_validation() {
     let app = build_router(config_with_api_token());
 
     let response = app
         .oneshot(get_request(
-            "/api/v2/graph/neighborhood?node_id=graph:node:v1:person:alex&depth=not-a-number",
+            "/api/v1/graph/neighborhood?node_id=graph:node:v1:person:alex&depth=not-a-number",
         ))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
@@ -143,7 +141,7 @@ async fn graph_summary_returns_empty_state_for_empty_database() {
         .app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v2/graph/summary",
+            "/api/v1/graph/summary",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -216,7 +214,7 @@ async fn graph_nodes_returns_connected_picker_nodes_first() {
         .app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v2/graph/nodes?limit=2",
+            "/api/v1/graph/nodes?limit=2",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -267,7 +265,7 @@ async fn graph_search_returns_matching_nodes() {
         .app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v2/graph/search?q=alex",
+            "/api/v1/graph/search?q=alex",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -290,7 +288,7 @@ async fn graph_search_rejects_empty_query() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v2/graph/search?q=",
+            "/api/v1/graph/search?q=",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -357,7 +355,7 @@ async fn graph_neighborhood_returns_selected_node_neighbors_edges_and_evidence()
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v2/graph/neighborhood?node_id={}&depth=1",
+                "/api/v1/graph/neighborhood?node_id={}&depth=1",
                 person.node_id
             ),
             LOCAL_API_TOKEN,
@@ -455,7 +453,7 @@ async fn graph_neighborhood_caps_depth_one_edges_nodes_and_evidence() {
         .app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v2/graph/neighborhood?node_id={}", person.node_id),
+            &format!("/api/v1/graph/neighborhood?node_id={}", person.node_id),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -536,7 +534,7 @@ async fn graph_neighborhood_caps_evidence_for_returned_edges() {
         .app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v2/graph/neighborhood?node_id={}", person.node_id),
+            &format!("/api/v1/graph/neighborhood?node_id={}", person.node_id),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -565,7 +563,7 @@ async fn graph_neighborhood_returns_not_found_when_node_id_is_missing() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v2/graph/neighborhood?depth=1",
+            "/api/v1/graph/neighborhood?depth=1",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -589,7 +587,7 @@ async fn graph_neighborhood_rejects_unsupported_depth() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v2/graph/neighborhood?node_id=graph:node:v1:person:alex&depth=2",
+            "/api/v1/graph/neighborhood?node_id=graph:node:v1:person:alex&depth=2",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -680,7 +678,7 @@ async fn live_graph_api_context(test_name: &str) -> Option<LiveGraphApiContext> 
     let store = GraphStore::new(pool.clone());
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", test_database_url.as_str()),
         ])
         .expect("config"),
@@ -697,8 +695,8 @@ async fn live_graph_api_context(test_name: &str) -> Option<LiveGraphApiContext> 
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)])
-        .expect("valid local API token")
+    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
+        .expect("valid local API secret")
 }
 
 fn get_request(uri: &str) -> Request<Body> {
@@ -711,8 +709,7 @@ fn get_request(uri: &str) -> Request<Body> {
 fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, LOCAL_API_ACTOR_ID)
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }
@@ -720,7 +717,7 @@ fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
 fn get_request_with_token_without_actor(uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }

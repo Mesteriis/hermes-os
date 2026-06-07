@@ -19,7 +19,7 @@ pub struct AppConfig {
     service_name: String,
     http_addr: SocketAddr,
     database_url: Option<String>,
-    local_api_token: Option<String>,
+    local_api_secret: Option<String>,
     secret_vault_path: Option<PathBuf>,
     secret_vault_key: Option<ResolvedSecret>,
     ollama_base_url: String,
@@ -60,21 +60,12 @@ impl AppConfig {
                     }
                     config.database_url = Some(raw_url.to_owned());
                 }
-                "HERMES_LOCAL_API_TOKEN" => {
-                    let raw_token = value.as_ref().trim();
-                    if raw_token.is_empty() {
-                        return Err(ConfigError::EmptyLocalApiToken);
+                "HERMES_LOCAL_API_SECRET" => {
+                    let raw_secret = value.as_ref().trim();
+                    if raw_secret.is_empty() {
+                        return Err(ConfigError::EmptyLocalApiSecret);
                     }
-                    config.local_api_token = Some(raw_token.to_owned());
-                }
-                "HERMES_LOCAL_WRITE_TOKEN" => {
-                    let raw_token = value.as_ref().trim();
-                    if raw_token.is_empty() {
-                        return Err(ConfigError::EmptyLocalWriteToken);
-                    }
-                    if config.local_api_token.is_none() {
-                        config.local_api_token = Some(raw_token.to_owned());
-                    }
+                    config.local_api_secret = Some(raw_secret.to_owned());
                 }
                 "HERMES_SECRET_VAULT_PATH" => {
                     let raw_path = value.as_ref().trim();
@@ -148,8 +139,8 @@ impl AppConfig {
         self.database_url.as_deref()
     }
 
-    pub fn local_api_token(&self) -> Option<&str> {
-        self.local_api_token.as_deref()
+    pub fn local_api_secret(&self) -> Option<&str> {
+        self.local_api_secret.as_deref()
     }
 
     pub fn secret_vault_path(&self) -> Option<&Path> {
@@ -185,7 +176,7 @@ impl Default for AppConfig {
                 .parse()
                 .expect("default HTTP bind address must be valid"),
             database_url: None,
-            local_api_token: None,
+            local_api_secret: None,
             secret_vault_path: None,
             secret_vault_key: None,
             ollama_base_url: DEFAULT_OLLAMA_BASE_URL.to_owned(),
@@ -208,11 +199,8 @@ pub enum ConfigError {
     #[error("DATABASE_URL is set but empty")]
     EmptyDatabaseUrl,
 
-    #[error("HERMES_LOCAL_API_TOKEN is set but empty")]
-    EmptyLocalApiToken,
-
-    #[error("HERMES_LOCAL_WRITE_TOKEN is set but empty")]
-    EmptyLocalWriteToken,
+    #[error("HERMES_LOCAL_API_SECRET is set but empty")]
+    EmptyLocalApiSecret,
 
     #[error("HERMES_SECRET_VAULT_PATH is set but empty")]
     EmptySecretVaultPath,

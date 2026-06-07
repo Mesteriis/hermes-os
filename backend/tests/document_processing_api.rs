@@ -15,27 +15,25 @@ use sqlx::query_scalar;
 use tower::ServiceExt;
 
 const LOCAL_API_TOKEN: &str = "document-processing-api-test-token";
-const LOCAL_API_ACTOR_ID: &str = "document-processing-api-test-client";
-const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 
 #[tokio::test]
-async fn get_document_processing_jobs_rejects_missing_local_api_token() {
+async fn get_document_processing_jobs_rejects_missing_local_api_secret() {
     let app = hermes_hub_backend::app::build_router(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)]).expect("config"),
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
     );
 
     let response = app
-        .oneshot(get_request("/api/v2/document-processing/jobs"))
+        .oneshot(get_request("/api/v1/document-processing/jobs"))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
     let body = json_body(response).await;
     assert_eq!(
         body,
         serde_json::json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
@@ -54,7 +52,7 @@ async fn get_document_processing_for_missing_document_returns_404() {
         .expect("database connection");
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -64,7 +62,7 @@ async fn get_document_processing_for_missing_document_returns_404() {
 
     let response = app
         .oneshot(get_request_with_actor(
-            &format!("/api/v2/documents/{missing_document_id}/processing"),
+            &format!("/api/v1/documents/{missing_document_id}/processing"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -114,7 +112,7 @@ async fn document_processing_api_returns_expected_payloads() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -124,7 +122,7 @@ async fn document_processing_api_returns_expected_payloads() {
     let jobs_response = app
         .clone()
         .oneshot(get_request_with_actor(
-            "/api/v2/document-processing/jobs?limit=10",
+            "/api/v1/document-processing/jobs?limit=10",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -142,7 +140,7 @@ async fn document_processing_api_returns_expected_payloads() {
 
     let detail_response = app
         .oneshot(get_request_with_actor(
-            &format!("/api/v2/documents/{document_id}/processing"),
+            &format!("/api/v1/documents/{document_id}/processing"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -166,7 +164,7 @@ async fn document_processing_api_returns_expected_payloads() {
 }
 
 #[tokio::test]
-async fn post_document_processing_job_retry_requires_actor_and_requeues_failed_job() {
+async fn post_document_processing_job_retry_requeues_failed_job() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!(
             "skipping live document processing API retry test: HERMES_TEST_DATABASE_URL is not set"
@@ -222,7 +220,7 @@ async fn post_document_processing_job_retry_requires_actor_and_requeues_failed_j
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -230,21 +228,10 @@ async fn post_document_processing_job_retry_requires_actor_and_requeues_failed_j
     );
     let command_id = format!("document-processing-retry-{suffix:x}");
     let retry_path = format!(
-        "/api/v2/document-processing/jobs/{}/retry",
+        "/api/v1/document-processing/jobs/{}/retry",
         extract_job.job_id
     );
     let request_body = serde_json::json!({ "command_id": command_id });
-
-    let missing_actor_response = app
-        .clone()
-        .oneshot(post_json_request_without_actor(
-            &retry_path,
-            LOCAL_API_TOKEN,
-            request_body.clone(),
-        ))
-        .await
-        .expect("missing actor response");
-    assert_eq!(missing_actor_response.status(), StatusCode::BAD_REQUEST);
 
     let retry_response = app
         .oneshot(post_json_request(
@@ -279,11 +266,11 @@ async fn post_document_processing_job_retry_requires_actor_and_requeues_failed_j
         .await
         .expect("document processing retry audit record");
     assert_eq!(audit_record.0, "document_processing.job.retry");
-    assert_eq!(audit_record.1, LOCAL_API_ACTOR_ID);
+    assert_eq!(audit_record.1, "hermes-frontend");
     assert_eq!(audit_record.2, "POST");
     assert_eq!(
         audit_record.3,
-        "/api/v2/document-processing/jobs/{job_id}/retry"
+        "/api/v1/document-processing/jobs/{job_id}/retry"
     );
     assert_eq!(audit_record.4, "document_processing_job");
     assert_eq!(audit_record.5.as_deref(), Some(extract_job.job_id.as_str()));
@@ -330,14 +317,14 @@ async fn post_document_processing_job_retry_rejects_non_failed_job_with_stable_b
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
         database,
     );
     let retry_path = format!(
-        "/api/v2/document-processing/jobs/{}/retry",
+        "/api/v1/document-processing/jobs/{}/retry",
         extract_job.job_id
     );
 
@@ -401,13 +388,13 @@ async fn post_document_processing_job_retry_command_collision_returns_stable_con
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
         database,
     );
-    let retry_path = format!("/api/v2/document-processing/jobs/{target_job_id}/retry");
+    let retry_path = format!("/api/v1/document-processing/jobs/{target_job_id}/retry");
 
     let response = app
         .oneshot(post_json_request(
@@ -449,8 +436,7 @@ fn get_request(uri: &str) -> Request<Body> {
 fn get_request_with_actor(uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, LOCAL_API_ACTOR_ID)
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }
@@ -459,18 +445,7 @@ fn post_json_request(uri: &str, token: &str, body: Value) -> Request<Body> {
     Request::builder()
         .method("POST")
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, LOCAL_API_ACTOR_ID)
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(body.to_string()))
-        .expect("request")
-}
-
-fn post_json_request_without_actor(uri: &str, token: &str, body: Value) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-hermes-secret", token)
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .expect("request")

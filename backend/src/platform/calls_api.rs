@@ -141,56 +141,67 @@ use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntellig
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::*;
 
-pub(crate) async fn get_graph_summary(
+pub(crate) async fn post_call(
     State(state): State<AppState>,
-) -> Result<Json<crate::domains::graph::core::GraphSummary>, ApiError> {
-    Ok(Json(graph_store(&state)?.summary().await?))
-}
-
-pub(crate) async fn get_graph_nodes(
-    State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_nodes_query(raw_query.as_deref())?;
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    Json(request): Json<CallApiRequest>,
+) -> Result<Json<TelegramCall>, ApiError> {
     Ok(Json(
-        graph_store(&state)?.list_nodes_for_picker(limit).await?,
+        call_intelligence_store(&state)?
+            .upsert_call(&request.into_call())
+            .await?,
     ))
 }
 
-pub(crate) async fn get_graph_neighborhood(
+pub(crate) async fn get_calls(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<crate::domains::graph::core::GraphNeighborhood>, ApiError> {
-    let query = parse_graph_neighborhood_query(raw_query.as_deref())?;
-    if query.depth.unwrap_or(1) != 1 {
-        return Err(ApiError::InvalidGraphQuery("depth supports only 1"));
-    }
-    let Some(node_id) = query
-        .node_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    else {
-        return Err(ApiError::GraphNotFound);
-    };
-    let Some(neighborhood) = graph_store(&state)?.neighborhood(node_id).await? else {
-        return Err(ApiError::GraphNotFound);
-    };
-    Ok(Json(neighborhood))
+    Query(query): Query<TelegramListQuery>,
+) -> Result<Json<CallListResponse>, ApiError> {
+    let items = call_intelligence_store(&state)?
+        .list_calls(query.account_id.as_deref(), query.limit.unwrap_or(50))
+        .await?;
+
+    Ok(Json(CallListResponse { items }))
 }
 
-pub(crate) async fn get_graph_search(
+pub(crate) async fn post_call_transcript_fixture(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_search_query(raw_query.as_deref())?;
-    let search = query.q.as_deref().unwrap_or_default().trim();
-    if search.is_empty() {
-        return Err(ApiError::InvalidGraphQuery("q must not be empty"));
-    }
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    Path(call_id): Path<String>,
+    Json(request): Json<CallTranscriptFixtureApiRequest>,
+) -> Result<Json<CallTranscript>, ApiError> {
+    let stt = FixtureSpeechToTextProvider;
+    let fixture = stt.transcribe_fixture(&request.source_audio_ref)?;
+    let transcript = NewCallTranscript {
+        transcript_id: request.transcript_id,
+        call_id,
+        account_id: request.account_id,
+        provider_chat_id: request.provider_chat_id,
+        transcript_status: TranscriptStatus::Succeeded,
+        stt_provider: stt.provider_name().to_owned(),
+        source_audio_ref: Some(request.source_audio_ref),
+        language_code: request.language_code,
+        transcript_text: fixture.text,
+        segments: fixture.segments,
+        provenance: json!({
+            "runtime": "fixture",
+            "source": "local_call_audio",
+            "always_on_policy": request.always_on_policy,
+        }),
+    };
+
     Ok(Json(
-        graph_store(&state)?.search_nodes(search, limit).await?,
+        call_intelligence_store(&state)?
+            .upsert_transcript(&transcript)
+            .await?,
     ))
+}
+
+pub(crate) async fn get_call_transcript(
+    State(state): State<AppState>,
+    Path(call_id): Path<String>,
+) -> Result<Json<CallTranscriptResponse>, ApiError> {
+    let transcript = call_intelligence_store(&state)?
+        .transcript_for_call(&call_id)
+        .await?;
+
+    Ok(Json(CallTranscriptResponse { transcript }))
 }

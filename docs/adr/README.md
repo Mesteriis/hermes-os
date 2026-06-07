@@ -64,7 +64,7 @@ ADR status vocabulary:
 - [ADR-0053 Database-Backed Encrypted Secret Vault](ADR-0053-database-backed-encrypted-secret-vault.md)
 - [ADR-0054 Application Settings Store](ADR-0054-application-settings-store.md)
 - [ADR-0055 Full Email Provider Networking](ADR-0055-full-email-provider-networking.md)
-- [ADR-0056 Person Multi-Channel Identity Model](ADR-0056-person-multi-channel-identity-model.md)
+- [ADR-0074 Person Multi-Channel Identity Model](ADR-0074-person-multi-channel-identity-model.md)
 - [ADR-0057 Person Memory and Provenance](ADR-0057-person-memory-and-provenance.md)
 - [ADR-0058 Person Enrichment Engine](ADR-0058-person-enrichment-engine.md)
 - [ADR-0059 Person Communication DNA](ADR-0059-person-communication-dna.md)

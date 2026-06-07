@@ -29,8 +29,6 @@ use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "ai-api-test-token";
-const LOCAL_API_ACTOR_ID: &str = "ai-api-test-client";
-const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 
 #[tokio::test]
 async fn pgvector_semantic_store_indexes_and_searches_sources_against_postgres() {
@@ -133,7 +131,7 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
             ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
             ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),
@@ -145,7 +143,7 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
 
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v3/ai/answers",
+            "/api/v1/ai/answers",
             json!({
                 "command_id": format!("answer-{suffix}"),
                 "query": format!("V3 AI plan for {retrieval_token}"),
@@ -210,7 +208,7 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
             ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
         ])
@@ -220,7 +218,7 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
 
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v3/ai/task-candidates/refresh",
+            "/api/v1/ai/task-candidates/refresh",
             json!({
                 "command_id": format!("task-refresh-{suffix}"),
                 "query": format!("Please review the V3 implementation checklist {suffix}")
@@ -292,7 +290,7 @@ async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
             ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
         ])
@@ -302,7 +300,7 @@ async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
 
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v3/ai/meeting-prep",
+            "/api/v1/ai/meeting-prep",
             json!({
                 "command_id": format!("meeting-prep-{suffix}"),
                 "topic": "V3 AI implementation review",
@@ -330,13 +328,13 @@ async fn ai_status_and_agents_are_protected() {
 
     let missing_token = app
         .clone()
-        .oneshot(get_request("/api/v3/ai/status"))
+        .oneshot(get_request("/api/v1/ai/status"))
         .await
         .expect("response");
-    assert_eq!(missing_token.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(missing_token.status(), StatusCode::FORBIDDEN);
 
     let agents = app
-        .oneshot(get_request_with_token("/api/v3/agents", LOCAL_API_TOKEN))
+        .oneshot(get_request_with_token("/api/v1/ai/agents", LOCAL_API_TOKEN))
         .await
         .expect("response");
     assert_eq!(agents.status(), StatusCode::OK);
@@ -417,7 +415,7 @@ async fn configure_fake_ollama_setting(pool: &PgPool, ollama_base_url: &str) {
         .update_setting_value(
             "ai.ollama_base_url",
             &json!(ollama_base_url),
-            LOCAL_API_ACTOR_ID,
+            "hermes-frontend",
         )
         .await
         .expect("fake Ollama setting");
@@ -498,7 +496,7 @@ async fn seed_document(pool: &PgPool, fingerprint: &str, title: &str, text: &str
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)]).expect("config")
+    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config")
 }
 
 fn get_request(path: &str) -> Request<Body> {
@@ -513,8 +511,7 @@ fn get_request_with_token(path: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method("GET")
         .uri(path)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, LOCAL_API_ACTOR_ID)
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }
@@ -523,9 +520,8 @@ fn json_post_request_with_actor(path: &str, body: Value, token: &str) -> Request
     Request::builder()
         .method("POST")
         .uri(path)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-hermes-secret", token)
         .header(header::CONTENT_TYPE, "application/json")
-        .header(LOCAL_API_ACTOR_ID_HEADER, LOCAL_API_ACTOR_ID)
         .body(Body::from(body.to_string()))
         .expect("request")
 }

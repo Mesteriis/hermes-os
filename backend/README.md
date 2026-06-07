@@ -2,7 +2,7 @@
 
 Rust backend for Hermes Hub.
 
-Current scope includes an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, local mail blob/attachment metadata storage, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, V2 graph core projection/read APIs, protected V2 workflow APIs for projects, task candidates, contact identity review and document processing, and V3 local AI workflow APIs backed by Ollama plus pgvector semantic retrieval. OS keychain resolver, full MIME parsing, attachment extraction, graph editing, richer graph inference and autonomous agents are not implemented yet.
+Current scope includes an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, local mail blob/attachment metadata storage, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, graph core projection/read APIs, protected workflow APIs for projects, task candidates, contact identity review and document processing, and local AI workflow APIs backed by Ollama plus pgvector semantic retrieval. OS keychain resolver, full MIME parsing, attachment extraction, graph editing, richer graph inference and autonomous agents are not implemented yet.
 
 ## Commands
 
@@ -29,7 +29,7 @@ make backend-messages-smoke-dev
 make backend-contacts-smoke-dev
 make backend-documents-smoke-dev
 make backend-graph-smoke-dev
-make backend-v2-workflow-smoke-dev
+make backend-workflow-smoke-dev
 make backend-ai-smoke-dev
 make backend-graph-project-dev
 make backend-search-smoke-dev
@@ -48,15 +48,15 @@ make backend-graph-smoke-dev
 
 This starts the local PostgreSQL container, runs graph store, projection and read API tests with `HERMES_TEST_DATABASE_URL`, then stops the Compose PostgreSQL service on exit. Do not run this while relying on the same Compose PostgreSQL service for an active development database session.
 
-V2 workflow smoke:
+workflow smoke:
 
 ```bash
-make backend-v2-workflow-smoke-dev
+make backend-workflow-smoke-dev
 ```
 
 This starts the local PostgreSQL container, creates isolated temporary databases on the dev PostgreSQL server, and runs the project, project API, project link review, task candidate, task candidate API, contact identity, contact identity API, document processing and document processing API integration suites serially. The target is included in `make validate`.
 
-V3 AI smoke:
+AI smoke:
 
 ```bash
 make backend-ai-smoke-dev
@@ -64,7 +64,7 @@ make backend-ai-smoke-dev
 
 This starts the local PostgreSQL container for pgvector/API integration tests and runs live Ollama validation against `http://192.168.1.2:11434` by default. Override the smoke endpoint with `HERMES_AI_SMOKE_OLLAMA_BASE_URL`.
 
-Project current V1 data into the V2 graph tables:
+Project current V1 data into the graph tables:
 
 ```bash
 make backend-graph-project-dev
@@ -90,7 +90,7 @@ Import a redacted fixture JSON sample into the local development database:
 make backend-email-fixture-import-dev
 ```
 
-Project that fixture through canonical messages, contacts and V2 graph projection:
+Project that fixture through canonical messages, contacts and graph projection:
 
 ```bash
 make backend-email-fixture-project-dev
@@ -130,8 +130,7 @@ Supported environment variables:
 
 - `HERMES_HTTP_ADDR` - backend bind address, defaults to `127.0.0.1:8080`.
 - `DATABASE_URL` - optional PostgreSQL URL. The current health endpoint does not require a database connection.
-- `HERMES_LOCAL_API_TOKEN` - temporary local capability token required for local event API endpoints.
-- `HERMES_LOCAL_WRITE_TOKEN` - legacy fallback for `HERMES_LOCAL_API_TOKEN` during transition from ADR-0037.
+- `HERMES_LOCAL_API_SECRET` - temporary local shared secret required for local event API endpoints.
 - `HERMES_SECRET_VAULT_KEY` - database encrypted vault master key; do not commit, log or persist this value in PostgreSQL.
 - `HERMES_OLLAMA_BASE_URL` - Ollama runtime URL, defaults to `http://127.0.0.1:11434`.
 - `HERMES_OLLAMA_CHAT_MODEL` - Ollama chat model, defaults to `qwen3:4b`.
@@ -142,49 +141,49 @@ Supported environment variables:
 
 - `GET /healthz` - returns backend health status and service name.
 - `GET /readyz` - returns readiness status; it is `503` when PostgreSQL is not configured, unavailable or missing required SQLx migrations.
-- `GET /api/v1/status` - returns enabled V1 surfaces. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
-- `GET /api/v2/graph/summary` - returns graph node, edge and evidence summary counts. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
-- `GET /api/v2/graph/search` - searches graph nodes by `q` with optional `limit`. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
-- `GET /api/v2/graph/neighborhood` - returns the depth-1 graph neighborhood for `node_id`, including neighboring nodes, edges and evidence. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+- `GET /api/v1/status` - returns enabled V1 surfaces. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `GET /api/v1/graph/summary` - returns graph node, edge and evidence summary counts. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `GET /api/v1/graph/search` - searches graph nodes by `q` with optional `limit`. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `GET /api/v1/graph/neighborhood` - returns the depth-1 graph neighborhood for `node_id`, including neighboring nodes, edges and evidence. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `POST /api/v1/email-accounts/gmail/oauth/start` - starts Gmail OAuth account setup and returns a PKCE authorization URL. Requires local API headers, PostgreSQL and database encrypted vault key config.
 - `GET /api/v1/email-accounts/gmail/oauth/callback` - displays OAuth callback code/state for the desktop setup flow.
 - `POST /api/v1/email-accounts/gmail/oauth/complete` - exchanges a Gmail authorization code, stores the encrypted token bundle in PostgreSQL and creates provider account bindings. Requires local API headers, PostgreSQL and database encrypted vault key config.
 - `POST /api/v1/email-accounts/imap` - creates iCloud/raw IMAP account metadata and stores the password/app-password as encrypted PostgreSQL vault ciphertext. Requires local API headers, PostgreSQL and database encrypted vault key config.
-- `POST /api/events` - appends a canonical event through the application/API boundary. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
-- `GET /api/events/{event_id}` - loads a canonical event by ID. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
-- `GET /api/audit/events` - returns event API audit records. Supports `target_id`, `actor_id`, `after_audit_id` and `limit` query parameters. Requires `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+- `POST /api/v1/events` - appends a canonical event through the application/API boundary. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `GET /api/v1/events/{event_id}` - loads a canonical event by ID. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `GET /api/v1/audit/events` - returns event API audit records. Supports `target_id`, `actor_id`, `after_audit_id` and `limit` query parameters. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 
-Authorized event API calls are recorded in `api_audit_log` with `actor_kind` and `actor_id`. The API token value is never stored.
+Authorized event API calls are recorded in `api_audit_log` with the constant `hermes-frontend` actor. The API secret value is never stored.
 
-## V2 Workflow APIs
+## Workflow APIs
 
-Available endpoints below require both `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+Available endpoints below require `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 
-- `GET /api/v2/projects` - lists local project records with derived stats.
-- `GET /api/v2/projects/{project_id}` - returns project detail, timeline, messages, documents and people.
-- `GET /api/v2/projects/{project_id}/link-candidates` - returns safe project message/document link candidates.
-- `PUT /api/v2/projects/{project_id}/link-reviews` - records project link review state as a canonical event.
-- `GET /api/v2/task-candidates` - lists source-backed task candidates.
-- `PUT /api/v2/task-candidates/{task_candidate_id}/review` - records task candidate review state as a canonical event.
-- `GET /api/v2/tasks` - lists active local tasks created from confirmed candidates.
-- `GET /api/v2/identity-candidates` - lists contact identity candidates.
-- `PUT /api/v2/identity-candidates/{identity_candidate_id}/review` - records identity candidate review state as a canonical event.
-- `GET /api/v2/contacts/{contact_id}/identity` - returns confirmed identity links for one contact.
-- `GET /api/v2/documents/{document_id}/processing` - returns processing jobs and artifacts for one document.
-- `GET /api/v2/document-processing/jobs` - lists recent document processing jobs.
-- `POST /api/v2/document-processing/jobs/{job_id}/retry` - requeues a failed processing job through a canonical retry event. The JSON body requires `command_id`; the response returns `job_id`, `status` and `event_id`.
+- `GET /api/v1/projects` - lists local project records with derived stats.
+- `GET /api/v1/projects/{project_id}` - returns project detail, timeline, messages, documents and people.
+- `GET /api/v1/projects/{project_id}/link-candidates` - returns safe project message/document link candidates.
+- `PUT /api/v1/projects/{project_id}/link-reviews` - records project link review state as a canonical event.
+- `GET /api/v1/task-candidates` - lists source-backed task candidates.
+- `PUT /api/v1/task-candidates/{task_candidate_id}/review` - records task candidate review state as a canonical event.
+- `GET /api/v1/tasks` - lists active local tasks created from confirmed candidates.
+- `GET /api/v1/identity-candidates` - lists contact identity candidates.
+- `PUT /api/v1/identity-candidates/{identity_candidate_id}/review` - records identity candidate review state as a canonical event.
+- `GET /api/v1/contacts/{contact_id}/identity` - returns confirmed identity links for one contact.
+- `GET /api/v1/documents/{document_id}/processing` - returns processing jobs and artifacts for one document.
+- `GET /api/v1/document-processing/jobs` - lists recent document processing jobs.
+- `POST /api/v1/document-processing/jobs/{job_id}/retry` - requeues a failed processing job through a canonical retry event. The JSON body requires `command_id`; the response returns `job_id`, `status` and `event_id`.
 
-## V3 AI APIs
+## AI APIs
 
-Available endpoints below require both `Authorization: Bearer <HERMES_LOCAL_API_TOKEN>` and `X-Hermes-Actor-Id`.
+Available endpoints below require `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 
-- `GET /api/v3/ai/status` - returns Ollama runtime/model availability.
-- `GET /api/v3/agents` - lists V3 agents `HESTIA`, `HERMES`, `MNEMOSYNE` and `ATHENA`.
-- `GET /api/v3/ai/runs` - lists persisted local AI runs.
-- `GET /api/v3/ai/runs/{run_id}` - returns one persisted AI run.
-- `POST /api/v3/ai/answers` - creates a source-backed answer with citations.
-- `POST /api/v3/ai/task-candidates/refresh` - refreshes AI-suggested task candidates only.
-- `POST /api/v3/ai/meeting-prep` - creates a source-backed local meeting prep packet without calendar/provider writes.
+- `GET /api/v1/ai/status` - returns Ollama runtime/model availability.
+- `GET /api/v1/ai/agents` - lists agents `HESTIA`, `HERMES`, `MNEMOSYNE` and `ATHENA`.
+- `GET /api/v1/ai/runs` - lists persisted local AI runs.
+- `GET /api/v1/ai/runs/{run_id}` - returns one persisted AI run.
+- `POST /api/v1/ai/answers` - creates a source-backed answer with citations.
+- `POST /api/v1/ai/task-candidates/refresh` - refreshes AI-suggested task candidates only.
+- `POST /api/v1/ai/meeting-prep` - creates a source-backed local meeting prep packet without calendar/provider writes.
 
 ## Migrations
 
@@ -195,7 +194,7 @@ Current schema:
 
 - `event_log` - append-only canonical event log with JSONB envelope fields, replay ordering, idempotent source index and mutation-prevention triggers.
 - `projection_cursors` - monotonic per-projection replay cursor positions.
-- `api_audit_log` - append-only operational audit records for local event API access attempts, including non-secret local actor IDs.
+- `api_audit_log` - append-only operational audit records for local event API access attempts, including the constant `hermes-frontend` actor ID.
 - `secret_references` - non-secret metadata pointers to credential stores.
 - `encrypted_secret_vault_entries` - encrypted provider credential payloads keyed by `secret_ref`; plaintext values are never stored in PostgreSQL.
 - `communication_provider_accounts` - non-secret email provider account metadata for `gmail`, `icloud` and `imap`.

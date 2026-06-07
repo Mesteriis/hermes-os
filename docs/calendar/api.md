@@ -1,6 +1,6 @@
 # Calendar — API Reference
 
-Base: `/api/v2/calendar`
+Base: `/api/v1/calendar`
 
 ## Accounts
 

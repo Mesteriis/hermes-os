@@ -15,7 +15,7 @@ Hermes Hub - персональная локальная платформа ко
 - ADR по ключевым долгосрочным решениям
 - roadmap до версии 5.0
 - Rust backend foundation с конфигурацией и `GET /healthz`
-- local API-token guard for event API reads and writes
+- local API secret guard for event API reads and writes
 - append-only audit log for authorized event API access attempts
 - communication ingestion storage foundation for Gmail, iCloud Mail and generic IMAP
 - secret reference metadata boundary for provider credentials
@@ -25,12 +25,12 @@ Hermes Hub - персональная локальная платформа ко
 - V1 status API for desktop shell bootstrapping
 - desktop-only SvelteKit/Tauri status and account setup shell
 - Docker Compose окружение для локальной разработки
-- local Ollama AI runtime boundary for V3 workflows
+- local Ollama AI runtime boundary
 - pgvector semantic embeddings with `halfvec(2560)`
-- protected V3 AI APIs for status, agents, run history, cited answers, task candidate refresh and meeting prep
-- V4 Telegram fixture foundation with policy-backed automation dry-run and call transcript storage
-- V5 WhatsApp Web fixture/manual companion foundation
-- capability decision audit slice for V4 Telegram send policy decisions
+- protected AI APIs for status, agents, run history, cited answers, task candidate refresh and meeting prep
+- Telegram fixture foundation with policy-backed automation dry-run and call transcript storage
+- WhatsApp Web fixture/manual companion foundation
+- capability decision audit slice for Telegram send policy decisions
 
 ## Open Source
 
@@ -109,13 +109,13 @@ make backend-validate
 make backend-run
 ```
 
-Проверить V3 AI runtime, pgvector integration и live Ollama:
+Проверить AI runtime, pgvector integration и live Ollama:
 
 ```sh
 make backend-ai-smoke-dev
 ```
 
-Live AI smoke по умолчанию использует локальный V3 тестовый endpoint `http://192.168.1.2:11434`. Для другого smoke endpoint задай `HERMES_AI_SMOKE_OLLAMA_BASE_URL`.
+Live AI smoke по умолчанию использует локальный тестовый endpoint `http://192.168.1.2:11434`. Для другого smoke endpoint задай `HERMES_AI_SMOKE_OLLAMA_BASE_URL`.
 
 Запустить полный dev loop с PostgreSQL, backend auto-restart и frontend HMR:
 
@@ -136,7 +136,7 @@ make backend-run-dev
 make backend-watch-dev
 ```
 
-Пересобрать V2 graph projection из текущих V1 таблиц в локальной dev DB:
+Пересобрать graph projection из текущих V1 таблиц в локальной dev DB:
 
 ```sh
 make backend-graph-project-dev
@@ -170,7 +170,7 @@ make backend-email-fixture-import-dev
 make backend-email-fixture-project-dev
 ```
 
-Команда выполняет import, canonical message projection, contact projection, rebuild V2 graph projection и печатает JSON summary. Путь fixture и account metadata можно переопределить через `HERMES_EMAIL_FIXTURE_PATH`, `HERMES_EMAIL_FIXTURE_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_DISPLAY_NAME`, `HERMES_EMAIL_FIXTURE_EXTERNAL_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_IMPORT_BATCH_ID`, `HERMES_EMAIL_FIXTURE_PROVIDER`.
+Команда выполняет import, canonical message projection, contact projection, rebuild graph projection и печатает JSON summary. Путь fixture и account metadata можно переопределить через `HERMES_EMAIL_FIXTURE_PATH`, `HERMES_EMAIL_FIXTURE_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_DISPLAY_NAME`, `HERMES_EMAIL_FIXTURE_EXTERNAL_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_IMPORT_BATCH_ID`, `HERMES_EMAIL_FIXTURE_PROVIDER`.
 
 Скачать iCloud/raw IMAP почту в persistent dev cache без mailbox-мутаций:
 
@@ -184,47 +184,43 @@ make backend-email-sync-cache-dev
 
 Команда использует read-only IMAP, сохраняет raw `.eml` blobs под `docker/data/mail/`, кладет в PostgreSQL только metadata/blob references, проецирует canonical messages и contacts. Повторный запуск использует checkpoint, а `make dev` после этого работает с уже скачанными локальными данными.
 
-`/api/events` и `/api/audit/events` требуют локальный API token и non-secret actor ID:
+`/api/v1/events` и `/api/v1/audit/events` требуют локальный API secret header:
 
 ```sh
-Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
-X-Hermes-Actor-Id: local-cli
+X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
 ```
 
-`/api/v1/status` используется desktop shell и также требует локальный API token и non-secret actor ID:
+`/api/v1/status` используется desktop shell и также требует локальный API secret header:
 
 ```sh
 GET /api/v1/status
-Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
-X-Hermes-Actor-Id: desktop-shell
+X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
 ```
 
-Read-only Communications API for the desktop shell uses the same local API token and actor header:
+Read-only Communications API for the desktop shell uses the same local API secret and secret header:
 
 ```sh
 GET /api/v1/communications/messages?limit=50
 GET /api/v1/communications/messages/<message_id>
-Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
-X-Hermes-Actor-Id: desktop-shell
+X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
 ```
 
 The message list reads canonical `communication_messages`; message detail returns canonical body text plus attachment metadata and local blob references. It does not read or return attachment bytes.
 
-V3 AI APIs use the same local token and actor header:
+AI APIs use the same local secret and secret header:
 
 ```sh
-GET /api/v3/ai/status
-GET /api/v3/agents
-GET /api/v3/ai/runs
-GET /api/v3/ai/runs/<run_id>
-POST /api/v3/ai/answers
-POST /api/v3/ai/task-candidates/refresh
-POST /api/v3/ai/meeting-prep
-Authorization: Bearer <HERMES_LOCAL_API_TOKEN>
-X-Hermes-Actor-Id: desktop-shell
+GET /api/v1/ai/status
+GET /api/v1/ai/agents
+GET /api/v1/ai/runs
+GET /api/v1/ai/runs/<run_id>
+POST /api/v1/ai/answers
+POST /api/v1/ai/task-candidates/refresh
+POST /api/v1/ai/meeting-prep
+X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
 ```
 
-V3 task extraction writes only `suggested` task candidates. Existing review APIs remain the only path to active tasks.
+AI task extraction writes only `suggested` task candidates. Existing review APIs remain the only path to active tasks.
 
 Account setup endpoints additionally require `HERMES_SECRET_VAULT_KEY`; encrypted credential payloads are stored in PostgreSQL and the vault key must stay outside the database.
 

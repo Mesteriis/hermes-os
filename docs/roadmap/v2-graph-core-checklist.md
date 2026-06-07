@@ -34,9 +34,9 @@ The first Version 2 slice is complete when Hermes Hub builds a deterministic, re
 - [x] System-created graph edges require evidence.
 - [x] V1 graph projection from persons, messages and documents is idempotent.
 - [x] Exact email rules do not create fuzzy person merges.
-- [x] `GET /api/v2/graph/summary` has auth and response coverage.
-- [x] `GET /api/v2/graph/neighborhood` has auth, not-found, unsupported-depth and happy-path coverage.
-- [x] `GET /api/v2/graph/search` has auth, empty-query and happy-path coverage.
+- [x] `GET /api/v1/graph/summary` has auth and response coverage.
+- [x] `GET /api/v1/graph/neighborhood` has auth, not-found, unsupported-depth and happy-path coverage.
+- [x] `GET /api/v1/graph/search` has auth, empty-query and happy-path coverage.
 - [x] `make backend-graph-smoke-dev` passes against live PostgreSQL.
 - [x] `make validate` includes the graph smoke target.
 - [x] `pnpm --dir frontend check` passes after graph UI wiring.

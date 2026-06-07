@@ -114,7 +114,7 @@ persons.rs ← person_analytics.rs
 | ADR | Тема |
 |---|---|
 | [0019](../adr/ADR-0019-contact-identity-resolution.md) | Identity resolution (частично superseded) |
-| [0056](../adr/ADR-0056-person-multi-channel-identity-model.md) | Multi-channel identity model |
+| [0074](../adr/ADR-0074-person-multi-channel-identity-model.md) | Multi-channel identity model |
 | [0057](../adr/ADR-0057-person-memory-and-provenance.md) | Memory and provenance system |
 | [0058](../adr/ADR-0058-person-enrichment-engine.md) | Enrichment engine boundary |
 | [0059](../adr/ADR-0059-person-communication-dna.md) | Communication DNA and personas |

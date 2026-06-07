@@ -13,16 +13,14 @@ use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "events-api-test-token";
-const LOCAL_API_ACTOR_ID: &str = "events-api-test-client";
-const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 
 #[tokio::test]
-async fn post_event_returns_service_unavailable_when_local_api_token_is_not_configured() {
+async fn post_event_rejects_when_local_api_secret_is_not_configured() {
     let app = build_router(AppConfig::default());
 
     let response = app
         .oneshot(json_request(
-            "/api/events",
+            "/api/v1/events",
             json!({
                 "event_id": "evt_api_no_db",
                 "event_type": "system_api_test_event",
@@ -34,25 +32,25 @@ async fn post_event_returns_service_unavailable_when_local_api_token_is_not_conf
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "api_token_not_configured",
-            "message": "HERMES_LOCAL_API_TOKEN is not configured"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
 
 #[tokio::test]
-async fn post_event_rejects_missing_local_api_token() {
+async fn post_event_rejects_missing_local_api_secret() {
     let app = build_router(config_with_api_token());
 
     let response = app
         .oneshot(json_request(
-            "/api/events",
+            "/api/v1/events",
             json!({
                 "event_id": "evt_api_missing_token",
                 "event_type": "system_api_test_event",
@@ -64,25 +62,25 @@ async fn post_event_rejects_missing_local_api_token() {
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
 
 #[tokio::test]
-async fn post_event_rejects_invalid_local_api_token() {
+async fn post_event_rejects_invalid_local_api_secret() {
     let app = build_router(config_with_api_token());
 
     let response = app
         .oneshot(json_request_with_token(
-            "/api/events",
+            "/api/v1/events",
             json!({
                 "event_id": "evt_api_invalid_token",
                 "event_type": "system_api_test_event",
@@ -95,25 +93,25 @@ async fn post_event_rejects_invalid_local_api_token() {
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
 
 #[tokio::test]
-async fn post_event_rejects_missing_local_api_actor_id_before_database_access() {
+async fn post_event_accepts_secret_without_actor_header_before_database_access() {
     let app = build_router(config_with_api_token());
 
     let response = app
         .oneshot(json_request_with_token_without_actor(
-            "/api/events",
+            "/api/v1/events",
             json!({
                 "event_id": "evt_api_missing_actor",
                 "event_type": "system_api_test_event",
@@ -126,107 +124,107 @@ async fn post_event_rejects_missing_local_api_actor_id_before_database_access() 
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_actor_id",
-            "message": "missing or invalid x-hermes-actor-id header"
+            "error": "database_not_configured",
+            "message": "DATABASE_URL is not configured"
         })
     );
 }
 
 #[tokio::test]
-async fn get_event_rejects_invalid_local_api_actor_id_before_database_access() {
+async fn get_event_ignores_actor_header_before_database_access() {
     let app = build_router(config_with_api_token());
 
     let response = app
         .oneshot(get_request_with_token_and_actor(
-            "/api/events/evt_api_invalid_actor",
+            "/api/v1/events/evt_api_invalid_actor",
             LOCAL_API_TOKEN,
             "invalid actor",
         ))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_actor_id",
-            "message": "missing or invalid x-hermes-actor-id header"
+            "error": "database_not_configured",
+            "message": "DATABASE_URL is not configured"
         })
     );
 }
 
 #[tokio::test]
-async fn get_event_rejects_missing_local_api_token_before_database_access() {
+async fn get_event_rejects_missing_local_api_secret_before_database_access() {
     let app = build_router(config_with_api_token());
 
     let response = app
-        .oneshot(get_request("/api/events/evt_api_missing_token"))
+        .oneshot(get_request("/api/v1/events/evt_api_missing_token"))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
 
 #[tokio::test]
-async fn get_event_rejects_invalid_local_api_token_before_database_access() {
+async fn get_event_rejects_invalid_local_api_secret_before_database_access() {
     let app = build_router(config_with_api_token());
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/events/evt_api_invalid_token",
+            "/api/v1/events/evt_api_invalid_token",
             "wrong-token",
         ))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
 
 #[tokio::test]
-async fn get_audit_events_rejects_missing_local_api_token_before_database_access() {
+async fn get_audit_events_rejects_missing_local_api_secret_before_database_access() {
     let app = build_router(config_with_api_token());
 
     let response = app
         .oneshot(get_request(
-            "/api/audit/events?target_id=evt_api_audit_missing_token",
+            "/api/v1/audit/events?target_id=evt_api_audit_missing_token",
         ))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
@@ -237,7 +235,7 @@ async fn post_event_returns_service_unavailable_when_database_is_not_configured(
 
     let response = app
         .oneshot(json_request_with_token(
-            "/api/events",
+            "/api/v1/events",
             json!({
                 "event_id": "evt_api_no_db",
                 "event_type": "system_api_test_event",
@@ -273,7 +271,7 @@ async fn post_event_rejects_invalid_envelope() {
 
     let response = app
         .oneshot(json_request_with_token(
-            "/api/events",
+            "/api/v1/events",
             json!({
                 "event_id": "evt_api_invalid",
                 "event_type": " ",
@@ -316,7 +314,7 @@ async fn post_then_get_event_round_trips_against_postgres() {
     let create_response = app
         .clone()
         .oneshot(json_request_with_token(
-            "/api/events",
+            "/api/v1/events",
             json!({
                 "event_id": event_id,
                 "event_type": "system_api_test_event",
@@ -344,7 +342,7 @@ async fn post_then_get_event_round_trips_against_postgres() {
 
     let get_response = app
         .oneshot(get_request_with_token(
-            &format!("/api/events/{event_id}"),
+            &format!("/api/v1/events/{event_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -388,7 +386,7 @@ async fn get_event_returns_not_found_for_missing_event_against_postgres() {
 
     let response = app
         .oneshot(get_request_with_token(
-            &format!("/api/events/{event_id}"),
+            &format!("/api/v1/events/{event_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -418,7 +416,7 @@ async fn get_audit_events_returns_records_without_self_auditing_against_postgres
     let create_response = app
         .clone()
         .oneshot(json_request_with_token(
-            "/api/events",
+            "/api/v1/events",
             json!({
                 "event_id": event_id,
                 "event_type": "system_api_test_event",
@@ -439,7 +437,7 @@ async fn get_audit_events_returns_records_without_self_auditing_against_postgres
     let get_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/events/{event_id}"),
+            &format!("/api/v1/events/{event_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -451,7 +449,7 @@ async fn get_audit_events_returns_records_without_self_auditing_against_postgres
     let audit_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/audit/events?target_id={event_id}&limit=10"),
+            &format!("/api/v1/audit/events?target_id={event_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -471,8 +469,8 @@ async fn get_audit_events_returns_records_without_self_auditing_against_postgres
 
     for item in items {
         assert!(item["audit_id"].as_i64().expect("audit_id") > 0);
-        assert_eq!(item["actor_kind"], "local_api_token");
-        assert_eq!(item["actor_id"], LOCAL_API_ACTOR_ID);
+        assert_eq!(item["actor_kind"], "frontend");
+        assert_eq!(item["actor_id"], "hermes-frontend");
         assert_eq!(item["target_kind"], "event");
         assert_eq!(item["target_id"], event_id);
         assert!(
@@ -487,7 +485,7 @@ async fn get_audit_events_returns_records_without_self_auditing_against_postgres
     let first_page_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/audit/events?target_id={event_id}&limit=1"),
+            &format!("/api/v1/audit/events?target_id={event_id}&limit=1"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -505,7 +503,7 @@ async fn get_audit_events_returns_records_without_self_auditing_against_postgres
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/audit/events?target_id={event_id}&after_audit_id={first_page_audit_id}&limit=1"
+                "/api/v1/audit/events?target_id={event_id}&after_audit_id={first_page_audit_id}&limit=1"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -522,7 +520,7 @@ async fn get_audit_events_returns_records_without_self_auditing_against_postgres
 
     let actor_filtered_response = app
         .oneshot(get_request_with_token(
-            &format!("/api/audit/events?target_id={event_id}&actor_id={LOCAL_API_ACTOR_ID}"),
+            &format!("/api/v1/audit/events?target_id={event_id}&actor_id=hermes-frontend"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -557,8 +555,8 @@ async fn app_and_pool_with_database(database_url: &str) -> (axum::Router, PgPool
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)])
-        .expect("valid local API token")
+    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
+        .expect("valid local API secret")
 }
 
 fn json_request(uri: &str, value: serde_json::Value) -> Request<Body> {
@@ -571,7 +569,7 @@ fn json_request(uri: &str, value: serde_json::Value) -> Request<Body> {
 }
 
 fn json_request_with_token(uri: &str, value: serde_json::Value, token: &str) -> Request<Body> {
-    json_request_with_token_and_actor(uri, value, token, LOCAL_API_ACTOR_ID)
+    json_request_with_token_and_actor(uri, value, token, "hermes-frontend")
 }
 
 fn json_request_with_token_without_actor(
@@ -583,7 +581,7 @@ fn json_request_with_token_without_actor(
         .method("POST")
         .uri(uri)
         .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-hermes-secret", token)
         .body(Body::from(value.to_string()))
         .expect("request")
 }
@@ -592,14 +590,13 @@ fn json_request_with_token_and_actor(
     uri: &str,
     value: serde_json::Value,
     token: &str,
-    actor_id: &str,
+    _actor_id: &str,
 ) -> Request<Body> {
     Request::builder()
         .method("POST")
         .uri(uri)
         .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, actor_id)
+        .header("x-hermes-secret", token)
         .body(Body::from(value.to_string()))
         .expect("request")
 }
@@ -612,14 +609,13 @@ fn get_request(uri: &str) -> Request<Body> {
 }
 
 fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
-    get_request_with_token_and_actor(uri, token, LOCAL_API_ACTOR_ID)
+    get_request_with_token_and_actor(uri, token, "hermes-frontend")
 }
 
-fn get_request_with_token_and_actor(uri: &str, token: &str, actor_id: &str) -> Request<Body> {
+fn get_request_with_token_and_actor(uri: &str, token: &str, _actor_id: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, actor_id)
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }

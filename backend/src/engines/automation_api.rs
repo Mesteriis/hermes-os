@@ -141,56 +141,115 @@ use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntellig
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::*;
 
-pub(crate) async fn get_graph_summary(
+pub(crate) async fn post_policy_template(
     State(state): State<AppState>,
-) -> Result<Json<crate::domains::graph::core::GraphSummary>, ApiError> {
-    Ok(Json(graph_store(&state)?.summary().await?))
-}
-
-pub(crate) async fn get_graph_nodes(
-    State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_nodes_query(raw_query.as_deref())?;
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    Json(request): Json<PolicyTemplateApiRequest>,
+) -> Result<Json<AutomationTemplate>, ApiError> {
     Ok(Json(
-        graph_store(&state)?.list_nodes_for_picker(limit).await?,
+        automation_store(&state)?
+            .upsert_template(&request.into_template())
+            .await?,
     ))
 }
 
-pub(crate) async fn get_graph_neighborhood(
+pub(crate) async fn get_policy_templates(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<crate::domains::graph::core::GraphNeighborhood>, ApiError> {
-    let query = parse_graph_neighborhood_query(raw_query.as_deref())?;
-    if query.depth.unwrap_or(1) != 1 {
-        return Err(ApiError::InvalidGraphQuery("depth supports only 1"));
-    }
-    let Some(node_id) = query
-        .node_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    else {
-        return Err(ApiError::GraphNotFound);
-    };
-    let Some(neighborhood) = graph_store(&state)?.neighborhood(node_id).await? else {
-        return Err(ApiError::GraphNotFound);
-    };
-    Ok(Json(neighborhood))
+) -> Result<Json<PolicyTemplateListResponse>, ApiError> {
+    let items = automation_store(&state)?.list_templates().await?;
+
+    Ok(Json(PolicyTemplateListResponse { items }))
 }
 
-pub(crate) async fn get_graph_search(
+pub(crate) async fn post_policy(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_search_query(raw_query.as_deref())?;
-    let search = query.q.as_deref().unwrap_or_default().trim();
-    if search.is_empty() {
-        return Err(ApiError::InvalidGraphQuery("q must not be empty"));
-    }
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    Json(request): Json<PolicyApiRequest>,
+) -> Result<Json<AutomationPolicy>, ApiError> {
     Ok(Json(
-        graph_store(&state)?.search_nodes(search, limit).await?,
+        automation_store(&state)?
+            .upsert_policy(&request.into_policy())
+            .await?,
     ))
+}
+
+pub(crate) async fn get_policies(
+    State(state): State<AppState>,
+) -> Result<Json<PolicyListResponse>, ApiError> {
+    let items = automation_store(&state)?.list_policies().await?;
+
+    Ok(Json(PolicyListResponse { items }))
+}
+
+pub(crate) async fn post_telegram_send_dry_run(
+    State(state): State<AppState>,
+    Json(request): Json<TelegramSendDryRunRequest>,
+) -> Result<Json<TelegramSendDryRunResponse>, ApiError> {
+    let actor_id = "hermes-frontend".to_string();
+    let response = match automation_store(&state)?
+        .dry_run_send(&request, &actor_id)
+        .await
+    {
+        Ok(response) => response,
+        Err(error) => {
+            if let Some(decision) = telegram_send_dry_run_rejection_decision(&error, &request) {
+                api_audit_log(&state)?
+                    .record(
+                        &NewApiAuditRecord::automation_telegram_send_dry_run_rejected(
+                            &actor_id,
+                            &request.command_id,
+                            &request.policy_id,
+                            &request.provider_chat_id,
+                            &decision,
+                        ),
+                    )
+                    .await?;
+            }
+            return Err(error.into());
+        }
+    };
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::automation_telegram_send_dry_run(
+            &actor_id,
+            &response.outbound_message_id,
+            &response.policy_id,
+            &response.template_id,
+            &response.account_id,
+            &response.provider_chat_id,
+            &response.rendered_preview_hash,
+        ))
+        .await?;
+
+    Ok(Json(response))
+}
+
+pub(crate) fn telegram_send_dry_run_rejection_decision(
+    error: &AutomationError,
+    request: &TelegramSendDryRunRequest,
+) -> Option<CapabilityDecision> {
+    let reason = match error {
+        AutomationError::InvalidRequest(_) => "invalid_request",
+        AutomationError::PolicyNotFound => "policy_not_found",
+        AutomationError::PolicyDisabled => "policy_disabled",
+        AutomationError::ChatNotAllowed => "provider_chat_not_allowed",
+        AutomationError::MissingTemplateVariable(_) => "template_variable_missing",
+        AutomationError::UndeclaredTemplateVariable(_) => "template_variable_undeclared",
+        AutomationError::EventEnvelope(_)
+        | AutomationError::EventStore(_)
+        | AutomationError::Sqlx(_) => return None,
+    };
+
+    Some(CapabilityDecision::rejected_high_risk(
+        CapabilityActionClass::Automation,
+        "telegram.send",
+        reason,
+        non_empty_optional_string(&request.policy_id),
+    ))
+}
+
+pub(crate) fn non_empty_optional_string(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_owned())
+    }
 }

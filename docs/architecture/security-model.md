@@ -28,9 +28,9 @@ Initial product mode is single-user local desktop. The architecture must still d
 - agent tool permissions
 - export and backup permissions
 
-Current implementation uses a temporary `HERMES_LOCAL_API_TOKEN` guard for local event API reads and writes until the full capability runtime exists.
+Current implementation uses a temporary `HERMES_LOCAL_API_SECRET` guard for local event API reads and writes until the full capability runtime exists.
 
-Authorized local event API reads and writes require a non-secret `X-Hermes-Actor-Id` client identity header and are recorded in an append-only `api_audit_log` without storing API tokens or secrets.
+Authorized local API reads and writes require `X-Hermes-Secret`; audit records use the constant `hermes-frontend` actor and never store API secrets.
 
 ADR-0052 defines the long-term capability runtime direction: backend application-layer policy checks, scoped capability grants, explicit confirmation for high-risk actions unless a scoped automation policy applies, and audit metadata for allowed and rejected high-risk decisions.
 

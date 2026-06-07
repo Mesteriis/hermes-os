@@ -14,26 +14,24 @@ use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "person-identity-api-test-token";
-const LOCAL_API_ACTOR_ID: &str = "person-identity-api-test-client";
-const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 
 #[tokio::test]
-async fn identity_candidates_reject_missing_local_api_token() {
+async fn identity_candidates_reject_missing_local_api_secret() {
     let app = build_router(config_with_api_token());
 
     let response = app
-        .oneshot(get_request("/api/v2/identity-candidates"))
+        .oneshot(get_request("/api/v1/identity-candidates"))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
@@ -81,7 +79,7 @@ async fn identity_candidates_returns_safe_candidate_payload() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -90,7 +88,7 @@ async fn identity_candidates_returns_safe_candidate_payload() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v2/identity-candidates?limit=100",
+            "/api/v1/identity-candidates?limit=100",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -151,7 +149,7 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -161,7 +159,7 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
     let response = app
         .clone()
         .oneshot(json_put_request_with_actor(
-            &format!("/api/v2/identity-candidates/{merge_candidate_id}/review"),
+            &format!("/api/v1/identity-candidates/{merge_candidate_id}/review"),
             json!({
                 "command_id": command_id,
                 "review_state": "user_confirmed",
@@ -180,7 +178,7 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v2/identity-candidates?limit=100",
+            "/api/v1/identity-candidates?limit=100",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -205,7 +203,7 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
 }
 
 #[tokio::test]
-async fn put_identity_candidate_review_requires_actor_and_confirms_candidate() {
+async fn put_identity_candidate_review_confirms_candidate() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!(
             "skipping live person identity review API test: HERMES_TEST_DATABASE_URL is not set"
@@ -244,39 +242,16 @@ async fn put_identity_candidate_review_requires_actor_and_confirms_candidate() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
         database,
     );
 
-    let missing_actor = app
-        .clone()
-        .oneshot(json_put_request_with_token(
-            &format!("/api/v2/identity-candidates/{identity_candidate_id}/review"),
-            json!({
-                "command_id": command_id,
-                "review_state": "user_confirmed",
-            }),
-            LOCAL_API_TOKEN,
-        ))
-        .await
-        .expect("response");
-
-    assert_eq!(missing_actor.status(), StatusCode::BAD_REQUEST);
-    let missing_actor_body = json_body(missing_actor).await;
-    assert_eq!(
-        missing_actor_body,
-        json!({
-            "error": "invalid_actor_id",
-            "message": "missing or invalid x-hermes-actor-id header"
-        })
-    );
-
     let response = app
         .oneshot(json_put_request_with_actor(
-            &format!("/api/v2/identity-candidates/{identity_candidate_id}/review"),
+            &format!("/api/v1/identity-candidates/{identity_candidate_id}/review"),
             json!({
                 "command_id": command_id,
                 "review_state": "user_confirmed",
@@ -337,7 +312,7 @@ async fn person_identity_returns_confirmed_links_for_person() {
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -347,7 +322,7 @@ async fn person_identity_returns_confirmed_links_for_person() {
     let response = app
         .clone()
         .oneshot(json_put_request_with_actor(
-            &format!("/api/v2/identity-candidates/{identity_candidate_id}/review"),
+            &format!("/api/v1/identity-candidates/{identity_candidate_id}/review"),
             json!({
                 "command_id": format!("identity-detail-confirm-{suffix}"),
                 "review_state": "user_confirmed",
@@ -360,7 +335,7 @@ async fn person_identity_returns_confirmed_links_for_person() {
 
     let response = app
         .oneshot(get_request_with_token(
-            &format!("/api/v2/persons/{}/identity", left.person_id),
+            &format!("/api/v1/persons/{}/identity", left.person_id),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -383,8 +358,8 @@ struct PersonIdentityApiContext {
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)])
-        .expect("valid local API token")
+    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
+        .expect("valid local API secret")
 }
 
 fn get_request(uri: &str) -> Request<Body> {
@@ -397,19 +372,8 @@ fn get_request(uri: &str) -> Request<Body> {
 fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, LOCAL_API_ACTOR_ID)
+        .header("x-hermes-secret", token)
         .body(Body::empty())
-        .expect("request")
-}
-
-fn json_put_request_with_token(uri: &str, value: Value, token: &str) -> Request<Body> {
-    Request::builder()
-        .method("PUT")
-        .uri(uri)
-        .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .body(Body::from(value.to_string()))
         .expect("request")
 }
 
@@ -418,8 +382,7 @@ fn json_put_request_with_actor(uri: &str, value: Value, token: &str) -> Request<
         .method("PUT")
         .uri(uri)
         .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, LOCAL_API_ACTOR_ID)
+        .header("x-hermes-secret", token)
         .body(Body::from(value.to_string()))
         .expect("request")
 }

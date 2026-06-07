@@ -19,8 +19,6 @@ use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "test-token";
-const LOCAL_API_ACTOR_ID: &str = "test-actor";
-const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 
 #[tokio::test]
 async fn v1_status_returns_enabled_surfaces_against_postgres() {
@@ -34,7 +32,7 @@ async fn v1_status_returns_enabled_surfaces_against_postgres() {
         .expect("database connection");
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -45,14 +43,7 @@ async fn v1_status_returns_enabled_surfaces_against_postgres() {
         .oneshot(
             Request::builder()
                 .uri("/api/v1/status")
-                .header(
-                    header::AUTHORIZATION,
-                    HeaderValue::from_static("Bearer test-token"),
-                )
-                .header(
-                    LOCAL_API_ACTOR_ID_HEADER,
-                    HeaderValue::from_static(LOCAL_API_ACTOR_ID),
-                )
+                .header("x-hermes-secret", HeaderValue::from_static("test-token"))
                 .body(Body::empty())
                 .expect("request"),
         )
@@ -155,7 +146,7 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
 
     let app = build_router_with_database(
         AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN),
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -167,7 +158,7 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
         .oneshot(get_request_with_token_and_actor(
             "/api/v1/communications/messages?limit=100",
             LOCAL_API_TOKEN,
-            LOCAL_API_ACTOR_ID,
+            "hermes-frontend",
         ))
         .await
         .expect("list response");
@@ -186,7 +177,7 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
         .oneshot(get_request_with_token_and_actor(
             &format!("/api/v1/communications/messages/{}", message.message_id),
             LOCAL_API_TOKEN,
-            LOCAL_API_ACTOR_ID,
+            "hermes-frontend",
         ))
         .await
         .expect("detail response");
@@ -223,7 +214,7 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
 }
 
 #[tokio::test]
-async fn v1_status_rejects_missing_local_api_token_before_database_access() {
+async fn v1_status_rejects_missing_local_api_secret_before_database_access() {
     let app = build_router(config_with_api_token());
 
     let response = app
@@ -231,14 +222,14 @@ async fn v1_status_rejects_missing_local_api_token_before_database_access() {
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
@@ -271,7 +262,7 @@ async fn assert_local_cors_preflight(app: &axum::Router, origin: &'static str) {
                 )
                 .header(
                     header::ACCESS_CONTROL_REQUEST_HEADERS,
-                    HeaderValue::from_static("authorization,x-hermes-actor-id"),
+                    HeaderValue::from_static("x-hermes-secret"),
                 )
                 .body(Body::empty())
                 .expect("request"),
@@ -287,32 +278,32 @@ async fn assert_local_cors_preflight(app: &axum::Router, origin: &'static str) {
 }
 
 #[tokio::test]
-async fn v1_status_rejects_invalid_local_api_token_before_database_access() {
+async fn v1_status_rejects_invalid_local_api_secret_before_database_access() {
     let app = build_router(config_with_api_token());
 
     let response = app
         .oneshot(get_request_with_token_and_actor(
             "/api/v1/status",
             "wrong-token",
-            LOCAL_API_ACTOR_ID,
+            "hermes-frontend",
         ))
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_api_token",
-            "message": "missing or invalid bearer token"
+            "error": "invalid_api_secret",
+            "message": "missing or invalid x-hermes-secret header"
         })
     );
 }
 
 #[tokio::test]
-async fn v1_status_rejects_missing_local_api_actor_id_before_database_access() {
+async fn v1_status_accepts_secret_without_actor_header_before_database_access() {
     let app = build_router(config_with_api_token());
 
     let response = app
@@ -323,20 +314,20 @@ async fn v1_status_rejects_missing_local_api_actor_id_before_database_access() {
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_actor_id",
-            "message": "missing or invalid x-hermes-actor-id header"
+            "error": "database_not_configured",
+            "message": "DATABASE_URL is not configured"
         })
     );
 }
 
 #[tokio::test]
-async fn v1_status_rejects_invalid_local_api_actor_id_before_database_access() {
+async fn v1_status_ignores_actor_header_before_database_access() {
     let app = build_router(config_with_api_token());
 
     let response = app
@@ -348,14 +339,14 @@ async fn v1_status_rejects_invalid_local_api_actor_id_before_database_access() {
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
     assert_eq!(
         body,
         json!({
-            "error": "invalid_actor_id",
-            "message": "missing or invalid x-hermes-actor-id header"
+            "error": "database_not_configured",
+            "message": "DATABASE_URL is not configured"
         })
     );
 }
@@ -368,7 +359,7 @@ async fn v1_status_returns_service_unavailable_after_auth_when_database_is_not_c
         .oneshot(get_request_with_token_and_actor(
             "/api/v1/status",
             LOCAL_API_TOKEN,
-            LOCAL_API_ACTOR_ID,
+            "hermes-frontend",
         ))
         .await
         .expect("response");
@@ -386,8 +377,8 @@ async fn v1_status_returns_service_unavailable_after_auth_when_database_is_not_c
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)])
-        .expect("valid local API token")
+    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
+        .expect("valid local API secret")
 }
 
 fn get_request(uri: &str) -> Request<Body> {
@@ -400,16 +391,15 @@ fn get_request(uri: &str) -> Request<Body> {
 fn get_request_with_token_without_actor(uri: &str, token: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }
 
-fn get_request_with_token_and_actor(uri: &str, token: &str, actor_id: &str) -> Request<Body> {
+fn get_request_with_token_and_actor(uri: &str, token: &str, _actor_id: &str) -> Request<Body> {
     Request::builder()
         .uri(uri)
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, actor_id)
+        .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
 }

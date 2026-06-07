@@ -298,20 +298,6 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             is_editable: true,
         },
         DeclaredApplicationSetting {
-            setting_key: "frontend.actor_id",
-            category: "frontend",
-            value_kind: SettingValueKind::String,
-            default_value: json!("desktop-shell"),
-            label: "Frontend actor ID",
-            description: "Non-secret local actor identifier sent with protected API requests for audit records.",
-            metadata: json!({
-                "ui_control": "text",
-                "placeholder": "desktop-shell",
-                "env_var": "VITE_HERMES_ACTOR_ID"
-            }),
-            is_editable: true,
-        },
-        DeclaredApplicationSetting {
             setting_key: "frontend.layout",
             category: "frontend",
             value_kind: SettingValueKind::Json,

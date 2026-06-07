@@ -1,7 +1,7 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config validate lint lint-rust lint-frontend lint-architecture pre-commit-install pre-commit-run dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-lint frontend-lint-ts frontend-check frontend-build frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-v2-workflow-smoke-dev backend-ai-smoke-dev backend-v4-smoke-dev backend-v5-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-test-unit backend-test-integration backend-test-all backend-validate
+.PHONY: help docker-env compose-config validate lint lint-rust lint-frontend lint-architecture pre-commit-install pre-commit-run dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-lint frontend-lint-ts frontend-check frontend-build frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-workflow-smoke-dev backend-ai-smoke-dev backend-telegram-smoke-dev backend-whatsapp-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-test-unit backend-test-integration backend-test-all backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
@@ -54,11 +54,11 @@ help:
 	@printf '%s\n' '  make backend-contacts-smoke-dev Run contacts projection smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-documents-smoke-dev Run document import smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-graph-smoke-dev Run graph store/projection/API smoke tests with dev PostgreSQL'
-	@printf '%s\n' '  make backend-v2-workflow-smoke-dev Run V2 workflow smoke tests with dev PostgreSQL'
+	@printf '%s\n' '  make backend-workflow-smoke-dev Run domain workflow smoke tests with dev PostgreSQL'
 	@printf '%s\n' '  make backend-ai-smoke-dev Run live Ollama AI smoke test'
-	@printf '%s\n' '  make backend-v4-smoke-dev Run V4 Telegram/policy/call fixture smoke test with dev PostgreSQL'
-	@printf '%s\n' '  make backend-v5-smoke-dev Run V5 WhatsApp Web fixture smoke test with dev PostgreSQL'
-	@printf '%s\n' '  make backend-graph-project-dev Project current dev V1 data into V2 graph tables'
+	@printf '%s\n' '  make backend-telegram-smoke-dev Run Telegram/policy/call fixture smoke test with dev PostgreSQL'
+	@printf '%s\n' '  make backend-whatsapp-smoke-dev Run WhatsApp Web fixture smoke test with dev PostgreSQL'
+	@printf '%s\n' '  make backend-graph-project-dev Project current dev V1 data into graph tables'
 	@printf '%s\n' '  make backend-document-processing-dev Run queued document processing jobs with dev PostgreSQL'
 	@printf '%s\n' '  make backend-search-smoke-dev Run Tantivy search boundary smoke test'
 	@printf '%s\n' '  make backend-projection-smoke-dev Run replay/projection cursor smoke test with dev PostgreSQL'
@@ -76,14 +76,9 @@ docker-env:
 		cp docker/.env.example docker/.env; \
 		printf '%s\n' 'Created docker/.env from docker/.env.example. Review it before running services.'; \
 	else \
-		if ! grep -q '^HERMES_LOCAL_API_TOKEN=' docker/.env; then \
-			legacy_token="$$(awk -F= '$$1 == "HERMES_LOCAL_WRITE_TOKEN" { print $$2; exit }' docker/.env)"; \
-			if [ -n "$$legacy_token" ]; then \
-				printf '\nHERMES_LOCAL_API_TOKEN=%s\n' "$$legacy_token" >> docker/.env; \
-			else \
-				printf '\nHERMES_LOCAL_API_TOKEN=change-me-local-api-token\n' >> docker/.env; \
-			fi; \
-			printf '%s\n' 'Added HERMES_LOCAL_API_TOKEN to docker/.env. Review it before running services.'; \
+		if ! grep -q '^HERMES_LOCAL_API_SECRET=' docker/.env; then \
+			printf '\nHERMES_LOCAL_API_SECRET=change-me-local-api-secret\n' >> docker/.env; \
+			printf '%s\n' 'Added HERMES_LOCAL_API_SECRET to docker/.env. Review it before running services.'; \
 		fi; \
 		if ! grep -q '^HERMES_SECRET_VAULT_KEY=' docker/.env; then \
 			printf '\nHERMES_SECRET_VAULT_KEY=change-me-local-secret-vault-key\n' >> docker/.env; \
@@ -119,7 +114,7 @@ docker-env:
 compose-config: docker-env
 	$(COMPOSE) config
 
-validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-v2-workflow-smoke-dev backend-ai-smoke-dev backend-v4-smoke-dev backend-v5-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev frontend-check frontend-build
+validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-workflow-smoke-dev backend-ai-smoke-dev backend-telegram-smoke-dev backend-whatsapp-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev frontend-check frontend-build
 
 lint: lint-rust lint-frontend lint-architecture
 
@@ -182,7 +177,7 @@ dev: docker-env
 		trap cleanup EXIT INT TERM; \
 		$(MAKE) db-up; \
 		export DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}"; \
-		export HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}"; \
+		export HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}"; \
 		export HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}"; \
 		export HERMES_HTTP_ADDR="$$backend_bind:$$backend_port"; \
 		if command -v watchexec >/dev/null 2>&1; then \
@@ -195,8 +190,7 @@ dev: docker-env
 			cd frontend && \
 			exec env \
 				VITE_HERMES_API_BASE_URL="http://$$backend_bind:$$backend_port" \
-				VITE_HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}" \
-				VITE_HERMES_ACTOR_ID="$${HERMES_FRONTEND_ACTOR_ID:-desktop-shell}" \
+				VITE_HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}" \
 				pnpm dev --host "$$frontend_bind" --port "$$frontend_port" --strictPort \
 		) & \
 		frontend_pid="$$!"; \
@@ -259,8 +253,7 @@ frontend-dev: docker-env
 		fi; \
 		cd frontend && \
 		VITE_HERMES_API_BASE_URL="http://$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080}" \
-		VITE_HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}" \
-		VITE_HERMES_ACTOR_ID="$${HERMES_FRONTEND_ACTOR_ID:-desktop-shell}" \
+		VITE_HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}" \
 		pnpm dev --host "$${HERMES_FRONTEND_BIND:-127.0.0.1}" --port "$$frontend_port" --strictPort
 
 frontend-lint: frontend-lint-ts
@@ -287,7 +280,7 @@ backend-run:
 backend-run-dev: docker-env
 	@set -a; . docker/.env; set +a; \
 		DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
-		HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}" \
+		HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}" \
 		HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}" \
 		cargo run --manifest-path $(BACKEND_MANIFEST)
 
@@ -308,7 +301,7 @@ backend-watch-dev: docker-env
 			exit 1; \
 		fi; \
 		export DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}"; \
-		export HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}"; \
+		export HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}"; \
 		export HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}"; \
 		export HERMES_HTTP_ADDR="$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080}"; \
 		printf '%s\n' "Backend: http://$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080} (auto-restart)"; \
@@ -332,7 +325,7 @@ backend-smoke-dev: docker-env
 		set -a; . docker/.env; set +a; \
 		smoke_port="$${HERMES_BACKEND_SMOKE_PORT:-18081}"; \
 		DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
-		HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}" \
+		HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}" \
 		HERMES_HTTP_ADDR="127.0.0.1:$${smoke_port}" \
 		cargo run --manifest-path $(BACKEND_MANIFEST) >/tmp/hermes-hub-backend-smoke.log 2>&1 & \
 		backend_pid="$$!"; \
@@ -511,7 +504,7 @@ backend-graph-smoke-dev: docker-env
 		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
 		cargo test --manifest-path $(BACKEND_MANIFEST) --test graph --test graph_projection --test graph_api -- --nocapture --test-threads=1
 
-backend-v2-workflow-smoke-dev: docker-env
+backend-workflow-smoke-dev: docker-env
 	@set -eu; \
 		cleanup() { \
 			$(COMPOSE) stop postgres >/dev/null 2>&1 || true; \
@@ -566,7 +559,7 @@ backend-ai-smoke-dev: docker-env
 		HERMES_OLLAMA_TIMEOUT_SECONDS="$${HERMES_OLLAMA_TIMEOUT_SECONDS:-120}" \
 		cargo test --manifest-path $(BACKEND_MANIFEST) --test ai --test ai_smoke -- --nocapture --test-threads=1
 
-backend-v4-smoke-dev: docker-env
+backend-telegram-smoke-dev: docker-env
 	@set -eu; \
 		cleanup() { \
 			$(MAKE) db-down >/dev/null 2>&1 || true; \
@@ -575,9 +568,9 @@ backend-v4-smoke-dev: docker-env
 		$(MAKE) db-up; \
 		set -a; . docker/.env; set +a; \
 		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
-		cargo test --manifest-path $(BACKEND_MANIFEST) --test v4 -- --nocapture --test-threads=1
+		cargo test --manifest-path $(BACKEND_MANIFEST) --test telegram -- --nocapture --test-threads=1
 
-backend-v5-smoke-dev: docker-env
+backend-whatsapp-smoke-dev: docker-env
 	@set -eu; \
 		cleanup() { \
 			$(MAKE) db-down >/dev/null 2>&1 || true; \
@@ -586,7 +579,7 @@ backend-v5-smoke-dev: docker-env
 		$(MAKE) db-up; \
 		set -a; . docker/.env; set +a; \
 		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
-		cargo test --manifest-path $(BACKEND_MANIFEST) --test v5 -- --nocapture --test-threads=1
+		cargo test --manifest-path $(BACKEND_MANIFEST) --test whatsapp -- --nocapture --test-threads=1
 
 backend-graph-project-dev: docker-env
 	@set -eu; \
@@ -664,4 +657,3 @@ backend-test-integration:
 	cargo test --manifest-path $(BACKEND_MANIFEST) --test '*'
 
 backend-test-all: backend-test-unit backend-test-integration
-

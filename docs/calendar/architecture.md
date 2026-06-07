@@ -17,7 +17,7 @@
 ## Слои
 
 ```
-API (lib.rs handlers)
+API (`app::router` + `domains::calendar::handlers`)
   ↓
 Domain services (calendar_intelligence, calendar_brain, calendar_health)
   ↓
@@ -30,6 +30,6 @@ PostgreSQL (15 tables, 3 migrations)
 
 - **Store pattern**: каждый store принимает `PgPool::new(pool)`, все методы возвращают `Result<T, DomainError>`
 - **Error handling**: `#[derive(Error)]` enum → `From<X> for ApiError` в lib.rs
-- **API auth**: `verify_local_api_capability` с `X-Hermes-Actor-Id` header на всех handler'ах
+- **API auth**: router-level `x-hermes-secret`; audit actor is the constant `hermes-frontend`
 - **Heuristic-first intelligence**: все AI-фичи работают без Ollama
 - **No uuid crate**: ID генерируются как `{prefix}:v1:{timestamp_nanos_hex}`

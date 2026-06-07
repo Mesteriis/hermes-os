@@ -13,20 +13,20 @@ fn default_config_binds_to_localhost_without_database_url() {
     );
     assert_eq!(config.service_name(), "hermes-hub-backend");
     assert_eq!(config.database_url(), None);
-    assert_eq!(config.local_api_token(), None);
+    assert_eq!(config.local_api_secret(), None);
     assert_eq!(config.secret_vault_path(), None);
     assert_eq!(config.secret_vault_key(), None);
 }
 
 #[test]
-fn config_from_pairs_overrides_http_addr_database_url_and_local_api_token() {
+fn config_from_pairs_overrides_http_addr_database_url_and_local_api_secret() {
     let config = AppConfig::from_pairs([
         ("HERMES_HTTP_ADDR", "127.0.0.1:9090"),
         (
             "DATABASE_URL",
             "postgres://hermes:local-dev-password@postgres:5432/hermes_hub",
         ),
-        ("HERMES_LOCAL_API_TOKEN", "local-dev-api-token"),
+        ("HERMES_LOCAL_API_SECRET", "local-dev-api-secret"),
     ])
     .expect("valid config");
 
@@ -38,7 +38,7 @@ fn config_from_pairs_overrides_http_addr_database_url_and_local_api_token() {
         config.database_url(),
         Some("postgres://hermes:local-dev-password@postgres:5432/hermes_hub")
     );
-    assert_eq!(config.local_api_token(), Some("local-dev-api-token"));
+    assert_eq!(config.local_api_secret(), Some("local-dev-api-secret"));
 }
 
 #[test]
@@ -96,25 +96,6 @@ fn default_config_uses_local_ollama_and_qwen_models() {
 }
 
 #[test]
-fn config_from_pairs_accepts_legacy_local_write_token_as_fallback() {
-    let config = AppConfig::from_pairs([("HERMES_LOCAL_WRITE_TOKEN", "legacy-write-token")])
-        .expect("valid legacy local write token");
-
-    assert_eq!(config.local_api_token(), Some("legacy-write-token"));
-}
-
-#[test]
-fn config_from_pairs_prefers_local_api_token_over_legacy_write_token() {
-    let config = AppConfig::from_pairs([
-        ("HERMES_LOCAL_WRITE_TOKEN", "legacy-write-token"),
-        ("HERMES_LOCAL_API_TOKEN", "local-api-token"),
-    ])
-    .expect("valid local API token");
-
-    assert_eq!(config.local_api_token(), Some("local-api-token"));
-}
-
-#[test]
 fn config_from_pairs_rejects_invalid_http_addr() {
     let error = AppConfig::from_pairs([("HERMES_HTTP_ADDR", "not-a-socket")])
         .expect_err("invalid socket address must fail");
@@ -131,19 +112,11 @@ fn config_from_pairs_rejects_empty_database_url() {
 }
 
 #[test]
-fn config_from_pairs_rejects_empty_local_write_token() {
-    let error = AppConfig::from_pairs([("HERMES_LOCAL_WRITE_TOKEN", "   ")])
-        .expect_err("empty local write token must fail");
+fn config_from_pairs_rejects_empty_local_api_secret() {
+    let error = AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", "   ")])
+        .expect_err("empty local API secret must fail");
 
-    assert!(matches!(error, ConfigError::EmptyLocalWriteToken));
-}
-
-#[test]
-fn config_from_pairs_rejects_empty_local_api_token() {
-    let error = AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", "   ")])
-        .expect_err("empty local API token must fail");
-
-    assert!(matches!(error, ConfigError::EmptyLocalApiToken));
+    assert!(matches!(error, ConfigError::EmptyLocalApiSecret));
 }
 
 #[test]

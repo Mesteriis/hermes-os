@@ -141,56 +141,56 @@ use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntellig
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::*;
 
-pub(crate) async fn get_graph_summary(
-    State(state): State<AppState>,
-) -> Result<Json<crate::domains::graph::core::GraphSummary>, ApiError> {
-    Ok(Json(graph_store(&state)?.summary().await?))
+pub(crate) async fn get_whatsapp_capabilities(
+    State(_state): State<AppState>,
+) -> Result<Json<WhatsappCapabilitiesResponse>, ApiError> {
+    Ok(Json(WhatsappCapabilitiesResponse::current()))
 }
 
-pub(crate) async fn get_graph_nodes(
+pub(crate) async fn post_whatsapp_fixture_account(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_nodes_query(raw_query.as_deref())?;
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    Json(request): Json<WhatsappWebAccountSetupRequest>,
+) -> Result<Json<WhatsappWebAccountSetupResponse>, ApiError> {
     Ok(Json(
-        graph_store(&state)?.list_nodes_for_picker(limit).await?,
+        whatsapp_web_store(&state)?
+            .setup_fixture_account(&request)
+            .await?,
     ))
 }
 
-pub(crate) async fn get_graph_neighborhood(
+pub(crate) async fn get_whatsapp_sessions(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<crate::domains::graph::core::GraphNeighborhood>, ApiError> {
-    let query = parse_graph_neighborhood_query(raw_query.as_deref())?;
-    if query.depth.unwrap_or(1) != 1 {
-        return Err(ApiError::InvalidGraphQuery("depth supports only 1"));
-    }
-    let Some(node_id) = query
-        .node_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|id| !id.is_empty())
-    else {
-        return Err(ApiError::GraphNotFound);
-    };
-    let Some(neighborhood) = graph_store(&state)?.neighborhood(node_id).await? else {
-        return Err(ApiError::GraphNotFound);
-    };
-    Ok(Json(neighborhood))
+    Query(query): Query<WhatsappWebListQuery>,
+) -> Result<Json<WhatsappWebSessionListResponse>, ApiError> {
+    let items = whatsapp_web_store(&state)?
+        .list_sessions(query.account_id.as_deref(), query.limit.unwrap_or(50))
+        .await?;
+
+    Ok(Json(WhatsappWebSessionListResponse { items }))
 }
 
-pub(crate) async fn get_graph_search(
+pub(crate) async fn post_whatsapp_fixture_message(
     State(state): State<AppState>,
-    RawQuery(raw_query): RawQuery,
-) -> Result<Json<Vec<crate::domains::graph::core::GraphNode>>, ApiError> {
-    let query = parse_graph_search_query(raw_query.as_deref())?;
-    let search = query.q.as_deref().unwrap_or_default().trim();
-    if search.is_empty() {
-        return Err(ApiError::InvalidGraphQuery("q must not be empty"));
-    }
-    let limit = query.limit.unwrap_or(20).clamp(1, 50);
+    Json(request): Json<NewWhatsappWebMessage>,
+) -> Result<Json<WhatsappWebMessageIngestResult>, ApiError> {
     Ok(Json(
-        graph_store(&state)?.search_nodes(search, limit).await?,
+        whatsapp_web_store(&state)?
+            .ingest_fixture_message(&request)
+            .await?,
     ))
+}
+
+pub(crate) async fn get_whatsapp_messages(
+    State(state): State<AppState>,
+    Query(query): Query<WhatsappWebListQuery>,
+) -> Result<Json<WhatsappWebMessageListResponse>, ApiError> {
+    let items = whatsapp_web_store(&state)?
+        .recent_messages(
+            query.account_id.as_deref(),
+            query.provider_chat_id.as_deref(),
+            query.limit.unwrap_or(50),
+        )
+        .await?;
+
+    Ok(Json(WhatsappWebMessageListResponse { items }))
 }

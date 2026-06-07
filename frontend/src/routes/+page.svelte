@@ -44,8 +44,8 @@
 		fetchProviderAccounts,
 		fetchTaskCandidates,
 		fetchTaskRecords,
-		fetchV4Capabilities,
-		fetchV5Capabilities,
+		fetchTelegramCapabilities,
+		fetchWhatsappCapabilities,
 		fetchTelegramCalls,
 		fetchTelegramChats,
 		fetchTelegramMessages,
@@ -131,8 +131,8 @@
 		type TelegramMessage,
 		type TelegramProviderKind,
 		type TelegramSendDryRunResponse,
-		type V4CapabilitiesResponse,
-		type V5CapabilitiesResponse,
+		type TelegramCapabilitiesResponse,
+		type WhatsappCapabilitiesResponse,
 		type WhatsappWebMessage,
 		type WhatsappWebSession,
 		type V1Status
@@ -264,8 +264,7 @@
 	};
 
 	const apiBaseUrl = import.meta.env.VITE_HERMES_API_BASE_URL ?? 'http://127.0.0.1:8080';
-	const apiToken = import.meta.env.VITE_HERMES_LOCAL_API_TOKEN ?? 'change-me-local-api-token';
-	let actorId = $state(import.meta.env.VITE_HERMES_ACTOR_ID ?? 'desktop-shell');
+	const apiSecret = import.meta.env.VITE_HERMES_LOCAL_API_SECRET ?? 'change-me-local-api-secret';
 
 	let currentView = $state<ViewId>('home');
 	let searchQuery = $state('');
@@ -409,7 +408,7 @@
 	let automationTemplates = $state<AutomationTemplate[]>([]);
 	let automationPolicies = $state<AutomationPolicy[]>([]);
 	let telegramCalls = $state<TelegramCall[]>([]);
-	let v4Capabilities = $state<V4CapabilitiesResponse | null>(null);
+	let telegramCapabilities = $state<TelegramCapabilitiesResponse | null>(null);
 	let selectedTelegramChatId = $state('');
 	let selectedTelegramCallId = $state('');
 	let callTranscript = $state<CallTranscript | null>(null);
@@ -431,24 +430,24 @@
 		provider_chat_id: 'fixture-chat-1',
 		provider_message_id: 'fixture-msg-1',
 		chat_kind: 'private' as 'private' | 'group' | 'channel' | 'bot',
-		chat_title: 'V4 Planning',
+		chat_title: 'Telegram Planning',
 		sender_id: 'telegram-fixture-user',
 		sender_display_name: 'Telegram Fixture',
-		text: 'V4 fixture Telegram message for policy and graph smoke coverage.',
+		text: 'Telegram fixture Telegram message for policy and graph smoke coverage.',
 		import_batch_id: 'telegram-fixture-ui',
 		occurred_at: new Date().toISOString(),
 		delivery_state: 'received' as 'received' | 'sent' | 'send_dry_run' | 'send_blocked'
 	});
 	let automationTemplateForm = $state({
-		template_id: 'template-v4-followup',
-		name: 'V4 Follow-up',
+		template_id: 'template-telegram-followup',
+		name: 'Telegram Follow-up',
 		body_template: 'Hi {{name}}, I will follow up about {{topic}}.',
 		required_variables_text: 'name, topic'
 	});
 	let automationPolicyForm = $state({
-		policy_id: 'policy-v4-followup',
-		template_id: 'template-v4-followup',
-		name: 'V4 follow-up allowlist',
+		policy_id: 'policy-telegram-followup',
+		template_id: 'template-telegram-followup',
+		name: 'Telegram follow-up allowlist',
 		enabled: true,
 		account_id: 'telegram-primary',
 		allowed_chat_ids_text: 'fixture-chat-1',
@@ -459,15 +458,15 @@
 		conditions_text: '{}'
 	});
 	let telegramSendForm = $state({
-		policy_id: 'policy-v4-followup',
+		policy_id: 'policy-telegram-followup',
 		provider_chat_id: 'fixture-chat-1',
-		variables_text: '{ "name": "Maria", "topic": "V4 Telegram client" }',
+		variables_text: '{ "name": "Maria", "topic": "Telegram client" }',
 		source_context_text: '{ "source": "desktop_ui_fixture" }'
 	});
 	let telegramCallForm = $state({
-		call_id: 'call-v4-fixture-1',
+		call_id: 'call-telegram-fixture-1',
 		account_id: 'telegram-primary',
-		provider_call_id: 'provider-call-v4-fixture-1',
+		provider_call_id: 'provider-call-telegram-fixture-1',
 		provider_chat_id: 'fixture-chat-1',
 		direction: 'incoming' as 'incoming' | 'outgoing',
 		call_state: 'ended' as 'ringing' | 'active' | 'ended' | 'missed' | 'declined' | 'failed',
@@ -478,7 +477,7 @@
 	});
 	let whatsappSessions = $state<WhatsappWebSession[]>([]);
 	let whatsappMessages = $state<WhatsappWebMessage[]>([]);
-	let v5Capabilities = $state<V5CapabilitiesResponse | null>(null);
+	let whatsappCapabilities = $state<WhatsappCapabilitiesResponse | null>(null);
 	let selectedWhatsappSessionId = $state('');
 	let whatsappError = $state('');
 	let whatsappActionMessage = $state('');
@@ -495,16 +494,16 @@
 		account_id: 'whatsapp-primary',
 		provider_chat_id: 'wa-fixture-chat-1',
 		provider_message_id: 'wa-fixture-msg-1',
-		chat_title: 'V5 Planning',
+		chat_title: 'WhatsApp Planning',
 		sender_id: 'wa-fixture-user',
 		sender_display_name: 'WhatsApp Fixture',
-		text: 'V5 fixture WhatsApp Web message for local memory and graph recall.',
+		text: 'WhatsApp fixture WhatsApp Web message for local memory and graph recall.',
 		import_batch_id: 'whatsapp-web-fixture-ui',
 		occurred_at: new Date().toISOString(),
 		delivery_state: 'received' as 'received' | 'sent' | 'send_dry_run' | 'send_blocked'
 	});
 	let transcriptForm = $state({
-		transcript_id: 'transcript-v4-fixture-1',
+		transcript_id: 'transcript-telegram-fixture-1',
 		account_id: 'telegram-primary',
 		provider_chat_id: 'fixture-chat-1',
 		source_audio_ref: 'docker/data/calls/fixture-call.wav',
@@ -655,13 +654,13 @@
 		},
 		telegram: {
 			title: 'Telegram Client',
-			subtitle: 'V4 messaging, policy automation and call intelligence.',
+			subtitle: 'Telegram messaging, policy automation and call intelligence.',
 			search: 'Search Telegram chats, policies, calls...',
 			icon: 'tabler:brand-telegram'
 		},
 		whatsapp: {
 			title: 'WhatsApp Web',
-			subtitle: 'V5 companion sessions, fixture ingestion and live-runtime guardrails.',
+			subtitle: 'WhatsApp companion sessions, fixture ingestion and live-runtime guardrails.',
 			search: 'Search WhatsApp sessions and messages...',
 			icon: 'tabler:brand-whatsapp'
 		},
@@ -980,11 +979,11 @@
 	const selectedTelegramCall = $derived(
 		telegramCalls.find((call) => call.call_id === selectedTelegramCallId) ?? telegramCalls[0] ?? null
 	);
-	const v4ClosureCapabilities = $derived(
-		v4Capabilities?.capabilities.filter((capability) => capability.closure_gate) ?? []
+	const telegramClosureCapabilities = $derived(
+		telegramCapabilities?.capabilities.filter((capability) => capability.closure_gate) ?? []
 	);
-	const v4BlockedCapabilities = $derived(
-		v4Capabilities?.capabilities.filter((capability) => capability.status === 'blocked') ?? []
+	const telegramBlockedCapabilities = $derived(
+		telegramCapabilities?.capabilities.filter((capability) => capability.status === 'blocked') ?? []
 	);
 	const selectedWhatsappSession = $derived(
 		whatsappSessions.find((session) => session.session_id === selectedWhatsappSessionId) ??
@@ -996,11 +995,11 @@
 			? whatsappMessages.filter((message) => message.account_id === selectedWhatsappSession.account_id)
 			: whatsappMessages
 	);
-	const v5ClosureCapabilities = $derived(
-		v5Capabilities?.capabilities.filter((capability) => capability.closure_gate) ?? []
+	const whatsappClosureCapabilities = $derived(
+		whatsappCapabilities?.capabilities.filter((capability) => capability.closure_gate) ?? []
 	);
-	const v5BlockedCapabilities = $derived(
-		v5Capabilities?.capabilities.filter((capability) => capability.status === 'blocked') ?? []
+	const whatsappBlockedCapabilities = $derived(
+		whatsappCapabilities?.capabilities.filter((capability) => capability.status === 'blocked') ?? []
 	);
 	const selectedConversation = $derived(conversations[selectedConversationIndex] ?? conversations[0]);
 	const selectedPerson = $derived(personList[selectedPersonIndex] ?? personList[0]);
@@ -1078,7 +1077,7 @@
 
 	async function loadV1Status() {
 		try {
-			status = await fetchV1Status(apiBaseUrl, apiToken, actorId);
+			status = await fetchV1Status(apiBaseUrl, apiSecret);
 			statusError = '';
 		} catch (error) {
 			statusError = error instanceof Error ? error.message : 'Unknown status error';
@@ -1089,15 +1088,14 @@
 		isSettingsLoading = true;
 		try {
 			const [settingsResponse, accountsResponse] = await Promise.all([
-				fetchApplicationSettings(apiBaseUrl, apiToken, actorId),
-				fetchProviderAccounts(apiBaseUrl, apiToken, actorId)
+				fetchApplicationSettings(apiBaseUrl, apiSecret),
+				fetchProviderAccounts(apiBaseUrl, apiSecret)
 			]);
 			applicationSettings = settingsResponse.items;
 			const frontendLayoutSetting = findFrontendLayoutSetting(settingsResponse.items);
 			layoutSettings = parseLayoutSettings(frontendLayoutSetting?.value ?? null);
 			layoutError = '';
 			providerAccounts = accountsResponse.items;
-			applyLoadedFrontendSettings(settingsResponse.items);
 			settingDrafts = Object.fromEntries(
 				settingsResponse.items.map((setting) => [setting.setting_key, settingDraftValue(setting)])
 			);
@@ -1124,9 +1122,7 @@
 		savingSettingKey = setting.setting_key;
 		try {
 			const updated = await saveApplicationSetting(
-				apiBaseUrl,
-				apiToken,
-				actorId,
+				apiBaseUrl, apiSecret,
 				setting.setting_key,
 				nextValue
 			);
@@ -1142,9 +1138,6 @@
 			if (updated.setting_key.startsWith('ai.')) {
 				void loadAiWorkspace();
 			}
-			if (updated.setting_key === 'frontend.actor_id') {
-				applyLoadedFrontendSettings([updated]);
-			}
 		} catch (error) {
 			settingsError = error instanceof Error ? error.message : 'Unknown setting update error';
 		} finally {
@@ -1155,7 +1148,7 @@
 	async function loadGraphSummary() {
 		isGraphSummaryLoading = true;
 		try {
-			graphSummary = await fetchGraphSummary(apiBaseUrl, apiToken, actorId);
+			graphSummary = await fetchGraphSummary(apiBaseUrl, apiSecret);
 			graphError = '';
 		} catch (error) {
 			graphError = error instanceof Error ? error.message : 'Unknown graph summary error';
@@ -1168,7 +1161,7 @@
 		const requestSequence = ++graphNodeChoicesRequestSequence;
 		isGraphNodeChoicesLoading = true;
 		try {
-			const nodes = await fetchGraphNodes(apiBaseUrl, apiToken, actorId, 20);
+			const nodes = await fetchGraphNodes(apiBaseUrl, apiSecret, 20);
 			if (requestSequence !== graphNodeChoicesRequestSequence) {
 				return;
 			}
@@ -1202,7 +1195,7 @@
 
 		isGraphSearchLoading = true;
 		try {
-			const results = await searchGraphNodes(apiBaseUrl, apiToken, actorId, query, 20);
+			const results = await searchGraphNodes(apiBaseUrl, apiSecret, query, 20);
 			if (requestSequence !== graphSearchRequestSequence) {
 				return;
 			}
@@ -1228,9 +1221,7 @@
 		isGraphNeighborhoodLoading = true;
 		try {
 			const neighborhood = await fetchGraphNeighborhood(
-				apiBaseUrl,
-				apiToken,
-				actorId,
+				apiBaseUrl, apiSecret,
 				node.node_id,
 				1
 			);
@@ -1258,7 +1249,7 @@
 			isCommunicationsLoading = true;
 			communicationsError = '';
 			const response = await fetchMailMessages(
-				apiBaseUrl, apiToken, actorId,
+				apiBaseUrl, apiSecret,
 				undefined, filterState || undefined, undefined, 50
 			);
 			communicationMessages = response.items as unknown as CommunicationMessageSummary[];
@@ -1280,7 +1271,7 @@
 
 	async function loadMessageStateCounts() {
 		try {
-			const response = await fetchMessageStateCounts(apiBaseUrl, apiToken, actorId);
+			const response = await fetchMessageStateCounts(apiBaseUrl, apiSecret);
 			mailStateCounts = response.counts;
 		} catch {
 			mailStateCounts = [];
@@ -1291,7 +1282,7 @@
 		try {
 			isMailStateTransitioning = true;
 			mailStateError = '';
-			await transitionMessageWorkflowState(apiBaseUrl, apiToken, actorId, messageId, newState);
+			await transitionMessageWorkflowState(apiBaseUrl, apiSecret, messageId, newState);
 			await loadCommunicationMessagesFiltered(mailStateFilter || undefined);
 			await loadMessageStateCounts();
 		await loadMailboxHealth();
@@ -1307,24 +1298,24 @@
 
 
 	async function loadDrafts() {
-		try { const r = await fetchDrafts(apiBaseUrl, apiToken, actorId); drafts = r.items; } catch { drafts = []; }
+		try { const r = await fetchDrafts(apiBaseUrl, apiSecret); drafts = r.items; } catch { drafts = []; }
 	}
 	async function loadMailboxHealth() {
-		try { mailboxHealth = await fetchMailboxHealth(apiBaseUrl, apiToken, actorId); } catch { mailboxHealth = null; }
+		try { mailboxHealth = await fetchMailboxHealth(apiBaseUrl, apiSecret); } catch { mailboxHealth = null; }
 	}
 	async function loadTopSenders() {
-		try { topSenders = await fetchTopSenders(apiBaseUrl, apiToken, actorId); } catch { topSenders = []; }
+		try { topSenders = await fetchTopSenders(apiBaseUrl, apiSecret); } catch { topSenders = []; }
 	}
 	async function loadThreads() {
-		try { const r = await fetchThreads(apiBaseUrl, apiToken, actorId); threads = r.items; } catch { threads = []; }
+		try { const r = await fetchThreads(apiBaseUrl, apiSecret); threads = r.items; } catch { threads = []; }
 	}
 	async function handleAnalyzeMessage(messageId: string) {
-		try { isAnalyzing = true; aiAnalysisResult = await analyzeMessage(apiBaseUrl, apiToken, actorId, messageId); } catch { aiAnalysisResult = null; } finally { isAnalyzing = false; }
+		try { isAnalyzing = true; aiAnalysisResult = await analyzeMessage(apiBaseUrl, apiSecret, messageId); } catch { aiAnalysisResult = null; } finally { isAnalyzing = false; }
 	}
 	async function handleSaveDraft() {
 		if (!composeForm.draft_id || !composeForm.subject) return;
 		try {
-			await createDraft(apiBaseUrl, apiToken, actorId, {
+			await createDraft(apiBaseUrl, apiSecret, {
 				draft_id: composeForm.draft_id,
 				account_id: composeForm.account_id || 'gmail-primary',
 				to_recipients: composeForm.to_text.split(',').map(s => s.trim()).filter(Boolean),
@@ -1341,7 +1332,7 @@
 	async function loadCommunications() {
 		isCommunicationsLoading = true;
 		try {
-			const response = await fetchCommunicationMessages(apiBaseUrl, apiToken, actorId, 50);
+			const response = await fetchCommunicationMessages(apiBaseUrl, apiSecret, 50);
 			communicationMessages = response.items;
 			communicationsError = '';
 			if (selectedConversationIndex >= communicationMessages.length) {
@@ -1365,7 +1356,7 @@
 		const requestSequence = ++projectRequestSequence;
 		isProjectsLoading = true;
 		try {
-			const response = await fetchProjects(apiBaseUrl, apiToken, actorId, 25);
+			const response = await fetchProjects(apiBaseUrl, apiSecret, 25);
 			if (requestSequence !== projectRequestSequence) {
 				return;
 			}
@@ -1396,8 +1387,8 @@
 		isTasksLoading = true;
 		try {
 			const [candidateResponse, taskResponse] = await Promise.all([
-				fetchTaskCandidates(apiBaseUrl, apiToken, actorId, 50),
-				fetchTaskRecords(apiBaseUrl, apiToken, actorId, { limit: 50 })
+				fetchTaskCandidates(apiBaseUrl, apiSecret, 50),
+				fetchTaskRecords(apiBaseUrl, apiSecret, { limit: 50 })
 			]);
 			taskCandidates = candidateResponse.items;
 			activeTasks = taskResponse.items;
@@ -1413,7 +1404,7 @@
 	async function loadPersons() {
 		isPersonsLoading = true;
 		try {
-			const response = await fetchPersons(apiBaseUrl, apiToken, actorId);
+			const response = await fetchPersons(apiBaseUrl, apiSecret);
 			persons = response.items;
 			personsError = '';
 		} catch (error) {
@@ -1427,7 +1418,7 @@
 	async function loadOrganizations() {
 		isOrganizationsLoading = true;
 		try {
-			const response = await fetchOrganizations(apiBaseUrl, apiToken, actorId);
+			const response = await fetchOrganizations(apiBaseUrl, apiSecret);
 			organizations = response.items;
 			organizationsError = '';
 		} catch (error) {
@@ -1442,19 +1433,19 @@
 		isCalendarLoading = true;
 		try {
 			const [accts, events] = await Promise.all([
-				fetchCalendarAccounts(apiBaseUrl, apiToken, actorId),
-				fetchCalendarEvents(apiBaseUrl, apiToken, actorId, { limit: 200 })
+				fetchCalendarAccounts(apiBaseUrl, apiSecret),
+				fetchCalendarEvents(apiBaseUrl, apiSecret, { limit: 200 })
 			]);
 			calendarAccounts = accts.items;
 			calendarEvents = events.items;
 			calendarSources = [];
 			for (const acct of calendarAccounts) {
 				try {
-					const srcs = await fetchCalendarSources(apiBaseUrl, apiToken, actorId, acct.account_id);
+					const srcs = await fetchCalendarSources(apiBaseUrl, apiSecret, acct.account_id);
 					calendarSources.push(...srcs.items);
 				} catch (_) { /* sources optional */ }
 			}
-			fetchCalendarWatchtower(apiBaseUrl, apiToken, actorId).then(r => calendarWatchtower = r).catch(() => {});
+			fetchCalendarWatchtower(apiBaseUrl, apiSecret).then(r => calendarWatchtower = r).catch(() => {});
 			calendarError = '';
 		} catch (error) {
 			calendarError = error instanceof Error ? error.message : 'Calendar load failed';
@@ -1482,9 +1473,9 @@
 		selectedEvent = evt;
 		try {
 			const [ctx, brief, agenda] = await Promise.all([
-				fetchEventContextPack(apiBaseUrl, apiToken, actorId, evt.event_id),
-				fetchEventBrief(apiBaseUrl, apiToken, actorId, evt.event_id),
-				fetchEventAgenda(apiBaseUrl, apiToken, actorId, evt.event_id),
+				fetchEventContextPack(apiBaseUrl, apiSecret, evt.event_id),
+				fetchEventBrief(apiBaseUrl, apiSecret, evt.event_id),
+				fetchEventAgenda(apiBaseUrl, apiSecret, evt.event_id),
 			]);
 			eventContext = ctx;
 			eventBrief = brief;
@@ -1495,7 +1486,7 @@
 	async function completeEvent(evt: CalendarEvent) {
 		selectedEvent = evt;
 		try {
-			const notes = await fetchMeetingNotes(apiBaseUrl, apiToken, actorId, evt.event_id);
+			const notes = await fetchMeetingNotes(apiBaseUrl, apiSecret, evt.event_id);
 			eventContext = { notes: notes.items };
 		} catch (_) {}
 	}
@@ -1503,14 +1494,14 @@
 	async function searchCalendar() {
 		if (!calendarSearchQuery.trim()) { calendarSearchResults = []; return; }
 		try {
-			const result = await searchCalendarEvents(apiBaseUrl, apiToken, actorId, calendarSearchQuery);
+			const result = await searchCalendarEvents(apiBaseUrl, apiSecret, calendarSearchQuery);
 			calendarSearchResults = (result.results as CalendarEvent[]) || [];
 		} catch (_) { calendarSearchResults = []; }
 	}
 
 	async function loadWeeklyBrief() {
 		try {
-			const brief = await fetchWeeklyBrief(apiBaseUrl, apiToken, actorId);
+			const brief = await fetchWeeklyBrief(apiBaseUrl, apiSecret);
 			weeklyBrief = brief;
 		} catch (_) { weeklyBrief = null; }
 	}
@@ -1518,7 +1509,7 @@
 	async function handleCreateEvent() {
 		if (!newEventTitle || !newEventStart || !newEventEnd) return;
 		try {
-			await createCalendarEvent(apiBaseUrl, apiToken, actorId, {
+			await createCalendarEvent(apiBaseUrl, apiSecret, {
 				title: newEventTitle, start_at: new Date(newEventStart).toISOString(),
 				end_at: new Date(newEventEnd).toISOString(), event_type: newEventType
 			});
@@ -1532,8 +1523,8 @@
 		isAiLoading = true;
 		try {
 			const [agentResponse, runResponse] = await Promise.all([
-				fetchAiAgents(apiBaseUrl, apiToken, actorId),
-				fetchAiRuns(apiBaseUrl, apiToken, actorId, 25)
+				fetchAiAgents(apiBaseUrl, apiSecret),
+				fetchAiRuns(apiBaseUrl, apiSecret, 25)
 			]);
 			aiAgents = agentResponse.items;
 			aiRuns = runResponse.items;
@@ -1542,7 +1533,7 @@
 			}
 			aiError = '';
 			try {
-				aiStatus = await fetchAiStatus(apiBaseUrl, apiToken, actorId);
+				aiStatus = await fetchAiStatus(apiBaseUrl, apiSecret);
 			} catch (statusError) {
 				aiStatus = null;
 				aiError =
@@ -1563,7 +1554,7 @@
 		isAiAnswerSubmitting = true;
 		aiError = '';
 		try {
-			aiAnswerResult = await requestAiAnswer(apiBaseUrl, apiToken, actorId, {
+			aiAnswerResult = await requestAiAnswer(apiBaseUrl, apiSecret, {
 				command_id: `ai-answer-${crypto.randomUUID()}`,
 				query,
 				agent_id: selectedAgent?.agentId ?? 'MNEMOSYNE'
@@ -1584,7 +1575,7 @@
 		isAiTaskRefreshSubmitting = true;
 		aiError = '';
 		try {
-			aiTaskRefreshResult = await refreshAiTaskCandidates(apiBaseUrl, apiToken, actorId, {
+			aiTaskRefreshResult = await refreshAiTaskCandidates(apiBaseUrl, apiSecret, {
 				command_id: `ai-task-refresh-${crypto.randomUUID()}`,
 				query
 			});
@@ -1604,7 +1595,7 @@
 		isAiMeetingPrepSubmitting = true;
 		aiError = '';
 		try {
-			aiMeetingPrepResult = await requestAiMeetingPrep(apiBaseUrl, apiToken, actorId, {
+			aiMeetingPrepResult = await requestAiMeetingPrep(apiBaseUrl, apiSecret, {
 				command_id: `ai-meeting-prep-${crypto.randomUUID()}`,
 				topic,
 				project_id: projectId
@@ -1620,7 +1611,7 @@
 
 	async function loadAiRunsOnly() {
 		try {
-			const response = await fetchAiRuns(apiBaseUrl, apiToken, actorId, 25);
+			const response = await fetchAiRuns(apiBaseUrl, apiSecret, 25);
 			aiRuns = response.items;
 		} catch (error) {
 			aiError = error instanceof Error ? error.message : 'Unknown AI run history error';
@@ -1630,7 +1621,7 @@
 	async function loadIdentityCandidates() {
 		isIdentityCandidatesLoading = true;
 		try {
-			const response = await fetchIdentityCandidates(apiBaseUrl, apiToken, actorId, 50);
+			const response = await fetchIdentityCandidates(apiBaseUrl, apiSecret, 50);
 			identityCandidates = response.items;
 			identityCandidatesError = '';
 		} catch (error) {
@@ -1644,7 +1635,7 @@
 	async function loadDocumentProcessingJobs() {
 		isDocumentProcessingJobsLoading = true;
 		try {
-			const response = await fetchDocumentProcessingJobs(apiBaseUrl, apiToken, actorId, 50);
+			const response = await fetchDocumentProcessingJobs(apiBaseUrl, apiSecret, 50);
 			documentProcessingJobs = response.items;
 			documentProcessingJobsError = '';
 		} catch (error) {
@@ -1663,9 +1654,7 @@
 
 		try {
 			selectedDocumentProcessingDetail = await fetchDocumentProcessing(
-				apiBaseUrl,
-				apiToken,
-				actorId,
+				apiBaseUrl, apiSecret,
 				documentId
 			);
 			documentProcessingDetailError = '';
@@ -1683,7 +1672,7 @@
 		retryingDocumentProcessingJobId = job.job_id;
 		documentProcessingJobsError = '';
 		try {
-			await retryDocumentProcessingJob(apiBaseUrl, apiToken, actorId, job.job_id, {
+			await retryDocumentProcessingJob(apiBaseUrl, apiSecret, job.job_id, {
 				command_id: `document-processing-retry-${Date.now()}-${job.job_id}`
 			});
 			await loadDocumentProcessingJobs();
@@ -1704,9 +1693,7 @@
 	) {
 		try {
 			await reviewIdentityCandidate(
-				apiBaseUrl,
-				apiToken,
-				actorId,
+				apiBaseUrl, apiSecret,
 				candidate.identity_candidate_id,
 				reviewState
 			);
@@ -1726,9 +1713,7 @@
 		const commandId = `person-identity-split-${Date.now()}-${candidate.identity_candidate_id}`;
 		try {
 			await reviewIdentityCandidate(
-				apiBaseUrl,
-				apiToken,
-				actorId,
+				apiBaseUrl, apiSecret,
 				splitCandidate.identity_candidate_id,
 				'user_confirmed',
 				commandId
@@ -1745,7 +1730,7 @@
 		reviewState: TaskCandidateReviewState
 	) {
 		try {
-			await reviewTaskCandidate(apiBaseUrl, apiToken, actorId, candidate.task_candidate_id, reviewState);
+			await reviewTaskCandidate(apiBaseUrl, apiSecret, candidate.task_candidate_id, reviewState);
 			await loadTaskReviewState();
 		} catch (error) {
 			tasksError = error instanceof Error ? error.message : 'Unknown task candidate review error';
@@ -1759,7 +1744,7 @@
 		}
 		isProjectsLoading = true;
 		try {
-			const detail = await fetchProjectDetail(apiBaseUrl, apiToken, actorId, projectId);
+			const detail = await fetchProjectDetail(apiBaseUrl, apiSecret, projectId);
 			if (requestSequence !== projectRequestSequence) {
 				return;
 			}
@@ -1789,9 +1774,7 @@
 	async function loadCommunicationDetail(messageId: string) {
 		try {
 			selectedCommunicationDetail = await fetchCommunicationMessage(
-				apiBaseUrl,
-				apiToken,
-				actorId,
+				apiBaseUrl, apiSecret,
 				messageId
 			);
 			communicationsError = '';
@@ -1877,13 +1860,6 @@
 			groups[setting.category] = [...(groups[setting.category] ?? []), setting];
 			return groups;
 		}, {});
-	}
-
-	function applyLoadedFrontendSettings(settings: ApplicationSetting[]) {
-		const configuredActorId = stringSettingValue(settings, 'frontend.actor_id');
-		if (configuredActorId) {
-			actorId = configuredActorId;
-		}
 	}
 
 	function settingDraftValue(setting: ApplicationSetting) {
@@ -2076,11 +2052,6 @@
 	function settingControl(setting: ApplicationSetting) {
 		const control = setting.metadata.ui_control;
 		return typeof control === 'string' ? control : '';
-	}
-
-	function stringSettingValue(settings: ApplicationSetting[], settingKey: string) {
-		const value = settings.find((setting) => setting.setting_key === settingKey)?.value;
-		return typeof value === 'string' && value.trim() ? value.trim() : '';
 	}
 
 	function settingValueText(settingKey: string) {
@@ -2359,7 +2330,7 @@
 		setupError = '';
 
 		try {
-			gmailPending = await startGmailOAuthSetup(apiBaseUrl, apiToken, actorId, {
+			gmailPending = await startGmailOAuthSetup(apiBaseUrl, apiSecret, {
 				account_id: gmailForm.account_id,
 				display_name: gmailForm.display_name,
 				external_account_id: gmailForm.external_account_id,
@@ -2386,7 +2357,7 @@
 		setupError = '';
 
 		try {
-			const result = await completeGmailOAuthSetup(apiBaseUrl, apiToken, actorId, {
+			const result = await completeGmailOAuthSetup(apiBaseUrl, apiSecret, {
 				setup_id: gmailPending.setup_id,
 				state: gmailPending.state,
 				authorization_code: gmailAuthorizationCode
@@ -2408,7 +2379,7 @@
 		setupError = '';
 
 		try {
-			const result = await setupImapAccount(apiBaseUrl, apiToken, actorId, {
+			const result = await setupImapAccount(apiBaseUrl, apiSecret, {
 				account_id: imapForm.account_id,
 				provider_kind: selectedProvider === 'icloud' ? 'icloud' : 'imap',
 				display_name: imapForm.display_name,
@@ -2443,15 +2414,15 @@
 				callResponse
 			] =
 				await Promise.all([
-					fetchV4Capabilities(apiBaseUrl, apiToken, actorId),
-					fetchTelegramChats(apiBaseUrl, apiToken, actorId),
-					fetchTelegramMessages(apiBaseUrl, apiToken, actorId),
-					fetchAutomationTemplates(apiBaseUrl, apiToken, actorId),
-					fetchAutomationPolicies(apiBaseUrl, apiToken, actorId),
-					fetchTelegramCalls(apiBaseUrl, apiToken, actorId)
+					fetchTelegramCapabilities(apiBaseUrl, apiSecret),
+					fetchTelegramChats(apiBaseUrl, apiSecret),
+					fetchTelegramMessages(apiBaseUrl, apiSecret),
+					fetchAutomationTemplates(apiBaseUrl, apiSecret),
+					fetchAutomationPolicies(apiBaseUrl, apiSecret),
+					fetchTelegramCalls(apiBaseUrl, apiSecret)
 				]);
 
-			v4Capabilities = capabilityResponse;
+			telegramCapabilities = capabilityResponse;
 			telegramChats = chatResponse.items;
 			telegramMessages = messageResponse.items;
 			automationTemplates = templateResponse.items;
@@ -2483,12 +2454,12 @@
 		isWhatsappLoading = true;
 		try {
 			const [capabilityResponse, sessionResponse, messageResponse] = await Promise.all([
-				fetchV5Capabilities(apiBaseUrl, apiToken, actorId),
-				fetchWhatsappWebSessions(apiBaseUrl, apiToken, actorId),
-				fetchWhatsappWebMessages(apiBaseUrl, apiToken, actorId)
+				fetchWhatsappCapabilities(apiBaseUrl, apiSecret),
+				fetchWhatsappWebSessions(apiBaseUrl, apiSecret),
+				fetchWhatsappWebMessages(apiBaseUrl, apiSecret)
 			]);
 
-			v5Capabilities = capabilityResponse;
+			whatsappCapabilities = capabilityResponse;
 			whatsappSessions = sessionResponse.items;
 			whatsappMessages = messageResponse.items;
 
@@ -2513,7 +2484,7 @@
 		whatsappActionMessage = '';
 		whatsappError = '';
 		try {
-			const result = await setupWhatsappWebFixtureAccount(apiBaseUrl, apiToken, actorId, {
+			const result = await setupWhatsappWebFixtureAccount(apiBaseUrl, apiSecret, {
 				account_id: whatsappAccountForm.account_id,
 				provider_kind: 'whatsapp_web',
 				display_name: whatsappAccountForm.display_name,
@@ -2546,7 +2517,7 @@
 		try {
 			const providerMessageId =
 				whatsappMessageForm.provider_message_id.trim() || `wa-fixture-msg-${crypto.randomUUID()}`;
-			const result = await ingestWhatsappWebFixtureMessage(apiBaseUrl, apiToken, actorId, {
+			const result = await ingestWhatsappWebFixtureMessage(apiBaseUrl, apiSecret, {
 				account_id: whatsappMessageForm.account_id,
 				provider_chat_id: whatsappMessageForm.provider_chat_id,
 				provider_message_id: providerMessageId,
@@ -2581,7 +2552,7 @@
 		telegramActionMessage = '';
 		telegramError = '';
 		try {
-			const result = await setupTelegramFixtureAccount(apiBaseUrl, apiToken, actorId, {
+			const result = await setupTelegramFixtureAccount(apiBaseUrl, apiSecret, {
 				account_id: telegramAccountForm.account_id,
 				provider_kind: telegramAccountForm.provider_kind,
 				display_name: telegramAccountForm.display_name,
@@ -2625,7 +2596,7 @@
 		try {
 			const providerMessageId =
 				telegramMessageForm.provider_message_id.trim() || `fixture-msg-${crypto.randomUUID()}`;
-			const result = await ingestTelegramFixtureMessage(apiBaseUrl, apiToken, actorId, {
+			const result = await ingestTelegramFixtureMessage(apiBaseUrl, apiSecret, {
 				account_id: telegramMessageForm.account_id,
 				provider_chat_id: telegramMessageForm.provider_chat_id,
 				provider_message_id: providerMessageId,
@@ -2653,7 +2624,7 @@
 		}
 	}
 
-	async function saveV4AutomationTemplate() {
+	async function saveTelegramAutomationTemplate() {
 		if (isTelegramActionSubmitting) {
 			return;
 		}
@@ -2662,7 +2633,7 @@
 		telegramActionMessage = '';
 		telegramError = '';
 		try {
-			const template = await saveAutomationTemplate(apiBaseUrl, apiToken, actorId, {
+			const template = await saveAutomationTemplate(apiBaseUrl, apiSecret, {
 				template_id: automationTemplateForm.template_id,
 				name: automationTemplateForm.name,
 				body_template: automationTemplateForm.body_template,
@@ -2681,7 +2652,7 @@
 		}
 	}
 
-	async function saveV4AutomationPolicy() {
+	async function saveTelegramAutomationPolicy() {
 		if (isTelegramActionSubmitting) {
 			return;
 		}
@@ -2690,7 +2661,7 @@
 		telegramActionMessage = '';
 		telegramError = '';
 		try {
-			const policy = await saveAutomationPolicy(apiBaseUrl, apiToken, actorId, {
+			const policy = await saveAutomationPolicy(apiBaseUrl, apiSecret, {
 				policy_id: automationPolicyForm.policy_id,
 				template_id: automationPolicyForm.template_id,
 				name: automationPolicyForm.name,
@@ -2726,7 +2697,7 @@
 		telegramError = '';
 		telegramSendDryRunResult = null;
 		try {
-			const result = await dryRunTelegramSend(apiBaseUrl, apiToken, actorId, {
+			const result = await dryRunTelegramSend(apiBaseUrl, apiSecret, {
 				command_id: `telegram-dry-run-${crypto.randomUUID()}`,
 				policy_id: telegramSendForm.policy_id,
 				provider_chat_id: telegramSendForm.provider_chat_id,
@@ -2752,7 +2723,7 @@
 		telegramActionMessage = '';
 		telegramError = '';
 		try {
-			const call = await saveTelegramCall(apiBaseUrl, apiToken, actorId, {
+			const call = await saveTelegramCall(apiBaseUrl, apiSecret, {
 				call_id: telegramCallForm.call_id,
 				account_id: telegramCallForm.account_id,
 				provider_call_id: telegramCallForm.provider_call_id,
@@ -2784,9 +2755,7 @@
 		telegramError = '';
 		try {
 			callTranscript = await saveCallTranscriptFixture(
-				apiBaseUrl,
-				apiToken,
-				actorId,
+				apiBaseUrl, apiSecret,
 				selectedTelegramCallId,
 				{
 					transcript_id: transcriptForm.transcript_id,
@@ -2813,7 +2782,7 @@
 		}
 
 		try {
-			const response = await fetchCallTranscript(apiBaseUrl, apiToken, actorId, callId);
+			const response = await fetchCallTranscript(apiBaseUrl, apiSecret, callId);
 			callTranscript = response.transcript;
 			telegramError = '';
 		} catch (error) {
@@ -5010,8 +4979,8 @@
 									<span class="round-icon cyan"><Icon icon="tabler:brand-telegram" width="24" height="24" /></span>
 									<div><h2>{selectedTelegramChat.title}</h2><p>{selectedTelegramChat.account_id} · {selectedTelegramChat.provider_chat_id}</p></div>
 									<div class="chat-actions">
-										<button type="button" disabled title="1:1 audio call controls are backend-foundation only in this V4 slice"><Icon icon="tabler:phone" width="17" height="17" /></button>
-										<button type="button" disabled title="Video calls are V4.x"><Icon icon="tabler:video" width="17" height="17" /></button>
+										<button type="button" disabled title="1:1 audio call controls are backend-foundation only in this Telegram foundation"><Icon icon="tabler:phone" width="17" height="17" /></button>
+										<button type="button" disabled title="Video calls are outside this Telegram foundation"><Icon icon="tabler:video" width="17" height="17" /></button>
 										<button type="button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="17" height="17" /></button>
 									</div>
 								</header>
@@ -5067,33 +5036,33 @@
 
 							<section class="panel info-card">
 							<h2>Runtime Guardrails</h2>
-							<div class="health-row"><span>Mode</span><strong>{v4Capabilities?.runtime_mode ?? 'unknown'}</strong></div>
-							{#if v4ClosureCapabilities.length}
+							<div class="health-row"><span>Mode</span><strong>{telegramCapabilities?.runtime_mode ?? 'unknown'}</strong></div>
+							{#if telegramClosureCapabilities.length}
 								<ul class="detail-list">
-									{#each v4ClosureCapabilities as capability}
+									{#each telegramClosureCapabilities as capability}
 										<li>{capabilityLabel(capability.capability)}<em>{capability.status}</em></li>
 									{/each}
 								</ul>
 							{:else}
 								<p>Capability contract is not loaded yet.</p>
 							{/if}
-							{#if v4BlockedCapabilities.length}
+							{#if telegramBlockedCapabilities.length}
 								<div class="evidence-row">
 									<strong>Blocked Live Runtime</strong>
-									<p>{v4BlockedCapabilities.map((capability) => capabilityLabel(capability.capability)).join(', ')}</p>
+									<p>{telegramBlockedCapabilities.map((capability) => capabilityLabel(capability.capability)).join(', ')}</p>
 								</div>
 							{/if}
-							{#if v4Capabilities?.unsupported_features.length}
+							{#if telegramCapabilities?.unsupported_features.length}
 								<div class="evidence-row">
-									<strong>V4.x Scope</strong>
-									<p>{v4Capabilities.unsupported_features.map(capabilityLabel).join(', ')}</p>
+									<strong>Telegram Scope</strong>
+									<p>{telegramCapabilities.unsupported_features.map(capabilityLabel).join(', ')}</p>
 								</div>
 							{/if}
 							</section>
 
 							<section class="panel info-card">
 							<h2>Template</h2>
-							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveV4AutomationTemplate(); }}>
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveTelegramAutomationTemplate(); }}>
 								<label><span>Template ID</span><input bind:value={automationTemplateForm.template_id} autocomplete="off" /></label>
 								<label><span>Name</span><input bind:value={automationTemplateForm.name} autocomplete="off" /></label>
 								<label class="wide"><span>Body</span><textarea bind:value={automationTemplateForm.body_template} rows="3"></textarea></label>
@@ -5111,7 +5080,7 @@
 
 							<section class="panel info-card">
 							<h2>Policy</h2>
-							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveV4AutomationPolicy(); }}>
+							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveTelegramAutomationPolicy(); }}>
 								<label><span>Policy ID</span><input bind:value={automationPolicyForm.policy_id} autocomplete="off" /></label>
 								<label><span>Template ID</span><input bind:value={automationPolicyForm.template_id} autocomplete="off" /></label>
 								<label><span>Name</span><input bind:value={automationPolicyForm.name} autocomplete="off" /></label>
@@ -5249,8 +5218,8 @@
 					<div class="metric-grid">
 						<article class="metric-card"><span>Sessions</span><strong>{whatsappSessions.length}</strong><small>{selectedWhatsappSession?.link_state ?? 'not linked'}</small></article>
 						<article class="metric-card"><span>Messages</span><strong>{whatsappMessages.length}</strong><small>Canonical WhatsApp Web records</small></article>
-						<article class="metric-card"><span>Runtime</span><strong>{v5Capabilities?.runtime_mode ?? 'unknown'}</strong><small>Fixture/manual foundation</small></article>
-						<article class="metric-card"><span>Blocked</span><strong>{v5BlockedCapabilities.length}</strong><small>Live runtime remains blocked</small></article>
+						<article class="metric-card"><span>Runtime</span><strong>{whatsappCapabilities?.runtime_mode ?? 'unknown'}</strong><small>Fixture/manual foundation</small></article>
+						<article class="metric-card"><span>Blocked</span><strong>{whatsappBlockedCapabilities.length}</strong><small>Live runtime remains blocked</small></article>
 					</div>
 				</div>
 
@@ -5295,7 +5264,7 @@
 									<span class="round-icon cyan"><Icon icon="tabler:brand-whatsapp" width="24" height="24" /></span>
 									<div><h2>{selectedWhatsappSession.device_name}</h2><p>{selectedWhatsappSession.account_id} · {selectedWhatsappSession.link_state}</p></div>
 									<div class="chat-actions">
-										<button type="button" disabled title="Live WhatsApp Web runtime is blocked in V5 foundation"><Icon icon="tabler:world" width="17" height="17" /></button>
+										<button type="button" disabled title="Live WhatsApp Web runtime is blocked in WhatsApp foundation"><Icon icon="tabler:world" width="17" height="17" /></button>
 										<button type="button" disabled title="Outbound WhatsApp sends require a future policy and runtime contract"><Icon icon="tabler:send-off" width="17" height="17" /></button>
 										<button type="button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="17" height="17" /></button>
 									</div>
@@ -5351,26 +5320,26 @@
 
 							<section class="panel info-card">
 								<h2>Runtime Guardrails</h2>
-								<div class="health-row"><span>Mode</span><strong>{v5Capabilities?.runtime_mode ?? 'unknown'}</strong></div>
-								{#if v5ClosureCapabilities.length}
+								<div class="health-row"><span>Mode</span><strong>{whatsappCapabilities?.runtime_mode ?? 'unknown'}</strong></div>
+								{#if whatsappClosureCapabilities.length}
 									<ul class="detail-list">
-										{#each v5ClosureCapabilities as capability}
+										{#each whatsappClosureCapabilities as capability}
 											<li>{capabilityLabel(capability.capability)}<em>{capability.status}</em></li>
 										{/each}
 									</ul>
 								{:else}
 									<p>Capability contract is not loaded yet.</p>
 								{/if}
-								{#if v5BlockedCapabilities.length}
+								{#if whatsappBlockedCapabilities.length}
 									<div class="evidence-row">
 										<strong>Live Scope</strong>
-										<p>{v5BlockedCapabilities.map((capability) => capabilityLabel(capability.capability)).join(', ')}</p>
+										<p>{whatsappBlockedCapabilities.map((capability) => capabilityLabel(capability.capability)).join(', ')}</p>
 									</div>
 								{/if}
-								{#if v5Capabilities?.unsupported_features.length}
+								{#if whatsappCapabilities?.unsupported_features.length}
 									<div class="evidence-row">
 										<strong>Unsupported</strong>
-										<p>{v5Capabilities.unsupported_features.map(capabilityLabel).join(', ')}</p>
+										<p>{whatsappCapabilities.unsupported_features.map(capabilityLabel).join(', ')}</p>
 									</div>
 								{/if}
 							</section>
@@ -5549,7 +5518,6 @@
 									<h2>Runtime Source</h2>
 									<div class="health-row"><span>Backend bind</span><strong>{settingValueText('server.http_addr')}</strong></div>
 									<div class="health-row"><span>Frontend API</span><strong>{settingValueText('frontend.api_base_url')}</strong></div>
-									<div class="health-row"><span>Actor</span><strong>{settingValueText('frontend.actor_id')}</strong></div>
 									<div class="health-row"><span>AI URL</span><strong>{settingValueText('ai.ollama_base_url')}</strong></div>
 									<div class="health-row"><span>Chat</span><strong>{settingValueText('ai.chat_model')}</strong></div>
 									<div class="health-row"><span>Embedding</span><strong>{settingValueText('ai.embedding_model')}</strong></div>

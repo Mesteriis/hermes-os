@@ -1,6 +1,6 @@
 # Organizations — API Reference
 
-Base: `/api/v2/`
+Base: `/api/v1/`
 
 ## Core
 

@@ -11,10 +11,10 @@ Version 3.0 is complete when Hermes Hub exposes local, source-backed AI workflow
 - Semantic indexing from existing canonical projections.
 - Retrieval planner combining semantic nearest neighbors and local text match signals.
 - Prompt builder that treats retrieved source text as untrusted context.
-- Registered V3 agents: `HESTIA`, `HERMES`, `MNEMOSYNE`, `ATHENA`.
-- Persisted AI run history with model config, prompt template version, citations, answer, timings, actor ID and correlation IDs.
+- Registered agents: `HESTIA`, `HERMES`, `MNEMOSYNE`, `ATHENA`.
+- Persisted AI run history with model config, prompt template version, citations, answer, timings, constant frontend actor and correlation IDs.
 - Canonical events for AI run requested/completed/failed and task extraction completion.
-- Protected V3 AI APIs with local bearer token and `X-Hermes-Actor-Id`.
+- Protected AI APIs with local shared secret header.
 - AI task extraction that creates only `suggested` candidates linked to `agent_run_id`.
 - Meeting prep packets backed by local sources, without calendar/provider writes.
 - Desktop-only AI Agents and scoped ask/brief/task refresh surfaces.
@@ -38,8 +38,8 @@ Version 3.0 is complete when Hermes Hub exposes local, source-backed AI workflow
 - [x] Backend migration creates persisted AI agent run history.
 - [x] `task_candidates` supports `agent_run_id` for AI-suggested candidates.
 - [x] Ollama client covers `/api/version`, `/api/tags`, `/api/chat` and `/api/embed`.
-- [x] V3 APIs expose status, agents, run history, answers, task refresh and meeting prep.
-- [x] V3 APIs require local bearer token and actor ID.
+- [x] AI APIs expose status, agents, run history, answers, task refresh and meeting prep.
+- [x] AI APIs require `X-Hermes-Secret`.
 - [x] AI answers return citations and persist completed run history.
 - [x] AI task extraction creates suggested candidates only.
 - [x] Meeting prep returns a source-backed briefing without calendar writes.

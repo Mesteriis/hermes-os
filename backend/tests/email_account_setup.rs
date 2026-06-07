@@ -26,8 +26,6 @@ use hermes_hub_backend::platform::secrets::{
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "account-setup-test-token";
-const LOCAL_API_ACTOR_ID: &str = "account-setup-test-client";
-const LOCAL_API_ACTOR_ID_HEADER: &str = "x-hermes-actor-id";
 
 #[tokio::test]
 async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_postgres() {
@@ -284,7 +282,7 @@ async fn imap_account_setup_stores_encrypted_secret_in_database_against_postgres
 #[tokio::test]
 async fn imap_account_setup_api_requires_configured_database() {
     let app = build_router_with_database(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)]).expect("config"),
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
         Database::disabled(),
     );
 
@@ -304,7 +302,7 @@ async fn imap_account_setup_api_requires_configured_database() {
                 "password": "secret"
             }),
             LOCAL_API_TOKEN,
-            LOCAL_API_ACTOR_ID,
+            "hermes-frontend",
         ))
         .await
         .expect("response");
@@ -327,7 +325,7 @@ async fn imap_account_setup_api_requires_configured_database_vault_key_against_p
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_TOKEN", LOCAL_API_TOKEN)]).expect("config"),
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
         database.clone(),
     );
 
@@ -347,7 +345,7 @@ async fn imap_account_setup_api_requires_configured_database_vault_key_against_p
                 "password": "secret"
             }),
             LOCAL_API_TOKEN,
-            LOCAL_API_ACTOR_ID,
+            "hermes-frontend",
         ))
         .await
         .expect("response");
@@ -511,14 +509,13 @@ fn json_request_with_token_and_actor(
     uri: &str,
     body: Value,
     token: &str,
-    actor_id: &str,
+    _actor_id: &str,
 ) -> Request<Body> {
     Request::builder()
         .method("POST")
         .uri(uri)
         .header(header::CONTENT_TYPE, "application/json")
-        .header(header::AUTHORIZATION, format!("Bearer {token}"))
-        .header(LOCAL_API_ACTOR_ID_HEADER, actor_id)
+        .header("x-hermes-secret", token)
         .body(Body::from(body.to_string()))
         .expect("request")
 }

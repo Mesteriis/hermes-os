@@ -702,33 +702,33 @@ export type TelegramAccountSetupResponse = {
 	transcription_enabled: boolean;
 };
 
-export type V4CapabilityStatus = {
+export type TelegramCapabilityStatus = {
 	capability: string;
 	status: 'available' | 'blocked' | string;
 	closure_gate: boolean;
 	reason: string;
 };
 
-export type V4CapabilitiesResponse = {
+export type TelegramCapabilitiesResponse = {
 	version: string;
 	runtime_mode: string;
-	capabilities: V4CapabilityStatus[];
+	capabilities: TelegramCapabilityStatus[];
 	unsupported_features: string[];
 };
 
 export type WhatsappWebProviderKind = 'whatsapp_web';
 
-export type V5CapabilityStatus = {
+export type WhatsappCapabilityStatus = {
 	capability: string;
 	status: 'available' | 'blocked' | string;
 	closure_gate: boolean;
 	reason: string;
 };
 
-export type V5CapabilitiesResponse = {
+export type WhatsappCapabilitiesResponse = {
 	version: string;
 	runtime_mode: string;
-	capabilities: V5CapabilityStatus[];
+	capabilities: WhatsappCapabilityStatus[];
 	unsupported_features: string[];
 };
 
@@ -999,16 +999,12 @@ export type CallTranscriptFixtureRequest = {
 
 export async function fetchIdentityCandidates(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	limit = 50
 ) : Promise<PersonIdentityCandidateListResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/identity-candidates?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/identity-candidates?${params.toString()}`,
 		'Identity candidate request failed'
 	);
 }
@@ -1072,32 +1068,26 @@ export type ImapAccountSetupRequest = {
 
 export async function fetchV1Status(
 	baseUrl: string,
-	token: string,
-	actorId: string
+	apiSecret: string
 ): Promise<V1Status> {
-	return getJson(baseUrl, token, actorId, '/api/v1/status', 'V1 status request failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/status', 'V1 status request failed');
 }
 
 export async function fetchApplicationSettings(
 	baseUrl: string,
-	token: string,
-	actorId: string
+	apiSecret: string
 ): Promise<ApplicationSettingsResponse> {
-	return getJson(baseUrl, token, actorId, '/api/v2/settings', 'Settings request failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/settings', 'Settings request failed');
 }
 
 export async function saveApplicationSetting(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	settingKey: string,
 	value: ApplicationSetting['value']
 ): Promise<ApplicationSetting> {
 	return putJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/settings/${encodeURIComponent(settingKey)}`,
+		baseUrl, apiSecret, `/api/v1/settings/${encodeURIComponent(settingKey)}`,
 		{ value },
 		'Setting update failed'
 	);
@@ -1109,86 +1099,67 @@ export function findFrontendLayoutSetting(settings: ApplicationSetting[]): Appli
 
 export async function saveFrontendLayoutSetting(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	value: LayoutSettings
 ): Promise<ApplicationSetting> {
-	return saveApplicationSetting(baseUrl, token, actorId, FRONTEND_LAYOUT_SETTING_KEY, value);
+	return saveApplicationSetting(baseUrl, apiSecret, FRONTEND_LAYOUT_SETTING_KEY, value);
 }
 
 export async function fetchProviderAccounts(
 	baseUrl: string,
-	token: string,
-	actorId: string
+	apiSecret: string
 ): Promise<ProviderAccountListResponse> {
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v2/settings/accounts',
+		baseUrl, apiSecret, '/api/v1/settings/accounts',
 		'Provider accounts request failed'
 	);
 }
 
 export async function fetchCommunicationMessages(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	limit = 50
 ): Promise<CommunicationMessagesResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v1/communications/messages?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/communications/messages?${params.toString()}`,
 		'Communication messages request failed'
 	);
 }
 
 export async function fetchCommunicationMessage(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	messageId: string
 ): Promise<CommunicationMessageDetail> {
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v1/communications/messages/${encodeURIComponent(messageId)}`,
+		baseUrl, apiSecret, `/api/v1/communications/messages/${encodeURIComponent(messageId)}`,
 		'Communication message detail request failed'
 	);
 }
 
 export async function fetchGraphSummary(
 	baseUrl: string,
-	token: string,
-	actorId: string
+	apiSecret: string
 ): Promise<GraphSummary> {
-	return getJson(baseUrl, token, actorId, '/api/v2/graph/summary', 'Graph summary request failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/graph/summary', 'Graph summary request failed');
 }
 
 export async function fetchGraphNodes(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	limit = 20
 ): Promise<GraphNode[]> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/graph/nodes?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/graph/nodes?${params.toString()}`,
 		'Graph node picker request failed'
 	);
 }
 
 export async function searchGraphNodes(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	query: string,
 	limit = 20
 ): Promise<GraphNode[]> {
@@ -1203,18 +1174,14 @@ export async function searchGraphNodes(
 	});
 
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/graph/search?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/graph/search?${params.toString()}`,
 		'Graph search request failed'
 	);
 }
 
 export async function fetchGraphNeighborhood(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	nodeId: string,
 	depth = 1
 ): Promise<GraphNeighborhood> {
@@ -1224,104 +1191,77 @@ export async function fetchGraphNeighborhood(
 	});
 
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/graph/neighborhood?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/graph/neighborhood?${params.toString()}`,
 		'Graph neighborhood request failed'
 	);
 }
 
 export async function fetchProjects(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	limit = 25
 ): Promise<ProjectListResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/projects?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/projects?${params.toString()}`,
 		'Projects request failed'
 	);
 }
 
 export async function fetchProjectDetail(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	projectId: string
 ): Promise<ProjectDetail> {
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/projects/${encodeURIComponent(projectId)}`,
+		baseUrl, apiSecret, `/api/v1/projects/${encodeURIComponent(projectId)}`,
 		'Project detail request failed'
 	);
 }
 
 export async function fetchTaskCandidates(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	limit = 50
 ): Promise<TaskCandidateListResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/task-candidates?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/task-candidates?${params.toString()}`,
 		'Task candidates request failed'
 	);
 }
 
 export async function fetchDocumentProcessingJobs(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	limit = 50
 ): Promise<DocumentProcessingJobsResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/document-processing/jobs?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/document-processing/jobs?${params.toString()}`,
 		'Document processing jobs request failed'
 	);
 }
 
 export async function fetchDocumentProcessing(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	documentId: string
 ): Promise<DocumentProcessingRecord> {
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/documents/${encodeURIComponent(documentId)}/processing`,
+		baseUrl, apiSecret, `/api/v1/documents/${encodeURIComponent(documentId)}/processing`,
 		'Document processing request failed'
 	);
 }
 
 export async function retryDocumentProcessingJob(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	jobId: string,
 	request: DocumentProcessingRetryRequest
 ): Promise<DocumentProcessingRetryResponse> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/document-processing/jobs/${encodeURIComponent(jobId)}/retry`,
+		baseUrl, apiSecret, `/api/v1/document-processing/jobs/${encodeURIComponent(jobId)}/retry`,
 		request,
 		'Document processing retry request failed'
 	);
@@ -1329,16 +1269,12 @@ export async function retryDocumentProcessingJob(
 
 export async function reviewTaskCandidate(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	taskCandidateId: string,
 	reviewState: TaskCandidateReviewState
 ) {
 	return putJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/task-candidates/${encodeURIComponent(taskCandidateId)}/review`,
+		baseUrl, apiSecret, `/api/v1/task-candidates/${encodeURIComponent(taskCandidateId)}/review`,
 		{
 			command_id: `task-candidate-review-${crypto.randomUUID()}`,
 			review_state: reviewState
@@ -1348,17 +1284,13 @@ export async function reviewTaskCandidate(
 
 export async function reviewIdentityCandidate(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	identityCandidateId: string,
 	reviewState: PersonIdentityReviewState,
 	commandId = `person-identity-review-${crypto.randomUUID()}`
 ) {
 	return putJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v2/identity-candidates/${encodeURIComponent(identityCandidateId)}/review`,
+		baseUrl, apiSecret, `/api/v1/identity-candidates/${encodeURIComponent(identityCandidateId)}/review`,
 		{
 			command_id: commandId,
 			review_state: reviewState
@@ -1368,86 +1300,67 @@ export async function reviewIdentityCandidate(
 
 export async function startGmailOAuthSetup(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: GmailOAuthStartRequest
 ): Promise<GmailOAuthStartResponse> {
-	return postJson(baseUrl, token, actorId, '/api/v1/email-accounts/gmail/oauth/start', request);
+	return postJson(baseUrl, apiSecret, '/api/v1/email-accounts/gmail/oauth/start', request);
 }
 
 export async function completeGmailOAuthSetup(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: GmailOAuthCompleteRequest
 ): Promise<EmailAccountSetupResponse> {
-	return postJson(baseUrl, token, actorId, '/api/v1/email-accounts/gmail/oauth/complete', request);
+	return postJson(baseUrl, apiSecret, '/api/v1/email-accounts/gmail/oauth/complete', request);
 }
 
 export async function setupImapAccount(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: ImapAccountSetupRequest
 ): Promise<EmailAccountSetupResponse> {
-	return postJson(baseUrl, token, actorId, '/api/v1/email-accounts/imap', request);
+	return postJson(baseUrl, apiSecret, '/api/v1/email-accounts/imap', request);
 }
 
 export async function setupTelegramFixtureAccount(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: TelegramAccountSetupRequest
 ): Promise<TelegramAccountSetupResponse> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v4/telegram/accounts/fixture',
+		baseUrl, apiSecret, '/api/v1/telegram/accounts/fixture',
 		request,
 		'Telegram account setup request failed'
 	);
 }
 
-export async function fetchV4Capabilities(
+export async function fetchTelegramCapabilities(
 	baseUrl: string,
-	token: string,
-	actorId: string
-): Promise<V4CapabilitiesResponse> {
+	apiSecret: string
+): Promise<TelegramCapabilitiesResponse> {
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v4/capabilities',
-		'V4 capabilities request failed'
+		baseUrl, apiSecret, '/api/v1/telegram/capabilities',
+		'Telegram capabilities request failed'
 	);
 }
 
-export async function fetchV5Capabilities(
+export async function fetchWhatsappCapabilities(
 	baseUrl: string,
-	token: string,
-	actorId: string
-): Promise<V5CapabilitiesResponse> {
+	apiSecret: string
+): Promise<WhatsappCapabilitiesResponse> {
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v5/capabilities',
-		'V5 capabilities request failed'
+		baseUrl, apiSecret, '/api/v1/whatsapp/capabilities',
+		'WhatsApp capabilities request failed'
 	);
 }
 
 export async function setupWhatsappWebFixtureAccount(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: WhatsappWebAccountSetupRequest
 ): Promise<WhatsappWebAccountSetupResponse> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v5/whatsapp/accounts/fixture',
+		baseUrl, apiSecret, '/api/v1/whatsapp/accounts/fixture',
 		request,
 		'WhatsApp Web account setup request failed'
 	);
@@ -1455,8 +1368,7 @@ export async function setupWhatsappWebFixtureAccount(
 
 export async function fetchWhatsappWebSessions(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	accountId?: string,
 	limit = 50
 ): Promise<WhatsappWebSessionListResponse> {
@@ -1465,18 +1377,14 @@ export async function fetchWhatsappWebSessions(
 		params.set('account_id', accountId.trim());
 	}
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v5/whatsapp/sessions?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/whatsapp/sessions?${params.toString()}`,
 		'WhatsApp Web sessions request failed'
 	);
 }
 
 export async function fetchWhatsappWebMessages(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	accountId?: string,
 	providerChatId?: string,
 	limit = 50
@@ -1489,25 +1397,18 @@ export async function fetchWhatsappWebMessages(
 		params.set('provider_chat_id', providerChatId.trim());
 	}
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v5/whatsapp/messages?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/whatsapp/messages?${params.toString()}`,
 		'WhatsApp Web messages request failed'
 	);
 }
 
 export async function ingestWhatsappWebFixtureMessage(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: WhatsappWebFixtureMessageRequest
 ): Promise<WhatsappWebMessageIngestResponse> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v5/whatsapp/messages',
+		baseUrl, apiSecret, '/api/v1/whatsapp/messages',
 		request,
 		'WhatsApp Web fixture message request failed'
 	);
@@ -1515,8 +1416,7 @@ export async function ingestWhatsappWebFixtureMessage(
 
 export async function fetchTelegramChats(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	accountId?: string,
 	limit = 50
 ): Promise<TelegramChatListResponse> {
@@ -1525,18 +1425,14 @@ export async function fetchTelegramChats(
 		params.set('account_id', accountId.trim());
 	}
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v4/telegram/chats?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/telegram/chats?${params.toString()}`,
 		'Telegram chats request failed'
 	);
 }
 
 export async function fetchTelegramMessages(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	accountId?: string,
 	providerChatId?: string,
 	limit = 50
@@ -1549,25 +1445,18 @@ export async function fetchTelegramMessages(
 		params.set('provider_chat_id', providerChatId.trim());
 	}
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v4/telegram/messages?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/telegram/messages?${params.toString()}`,
 		'Telegram messages request failed'
 	);
 }
 
 export async function ingestTelegramFixtureMessage(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: TelegramFixtureMessageRequest
 ): Promise<TelegramMessageIngestResponse> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v4/telegram/messages',
+		baseUrl, apiSecret, '/api/v1/telegram/messages',
 		request,
 		'Telegram fixture message request failed'
 	);
@@ -1575,29 +1464,21 @@ export async function ingestTelegramFixtureMessage(
 
 export async function fetchAutomationTemplates(
 	baseUrl: string,
-	token: string,
-	actorId: string
+	apiSecret: string
 ): Promise<AutomationTemplateListResponse> {
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v4/policies/templates',
+		baseUrl, apiSecret, '/api/v1/policies/templates',
 		'Automation template request failed'
 	);
 }
 
 export async function saveAutomationTemplate(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: AutomationTemplateRequest
 ): Promise<AutomationTemplate> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v4/policies/templates',
+		baseUrl, apiSecret, '/api/v1/policies/templates',
 		request,
 		'Automation template save failed'
 	);
@@ -1605,29 +1486,21 @@ export async function saveAutomationTemplate(
 
 export async function fetchAutomationPolicies(
 	baseUrl: string,
-	token: string,
-	actorId: string
+	apiSecret: string
 ): Promise<AutomationPolicyListResponse> {
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v4/policies',
+		baseUrl, apiSecret, '/api/v1/policies',
 		'Automation policy request failed'
 	);
 }
 
 export async function saveAutomationPolicy(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: AutomationPolicyRequest
 ): Promise<AutomationPolicy> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v4/policies',
+		baseUrl, apiSecret, '/api/v1/policies',
 		request,
 		'Automation policy save failed'
 	);
@@ -1635,15 +1508,11 @@ export async function saveAutomationPolicy(
 
 export async function dryRunTelegramSend(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: TelegramSendDryRunRequest
 ): Promise<TelegramSendDryRunResponse> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v4/policies/telegram-send/dry-run',
+		baseUrl, apiSecret, '/api/v1/policies/telegram-send/dry-run',
 		request,
 		'Telegram send dry-run failed'
 	);
@@ -1651,8 +1520,7 @@ export async function dryRunTelegramSend(
 
 export async function fetchTelegramCalls(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	accountId?: string,
 	limit = 50
 ): Promise<TelegramCallListResponse> {
@@ -1661,35 +1529,27 @@ export async function fetchTelegramCalls(
 		params.set('account_id', accountId.trim());
 	}
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v4/calls?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/calls?${params.toString()}`,
 		'Telegram call request failed'
 	);
 }
 
 export async function saveTelegramCall(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: TelegramCallRequest
 ): Promise<TelegramCall> {
-	return postJson(baseUrl, token, actorId, '/api/v4/calls', request, 'Telegram call save failed');
+	return postJson(baseUrl, apiSecret, '/api/v1/calls', request, 'Telegram call save failed');
 }
 
 export async function saveCallTranscriptFixture(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	callId: string,
 	request: CallTranscriptFixtureRequest
 ): Promise<CallTranscript> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v4/calls/${encodeURIComponent(callId)}/transcript`,
+		baseUrl, apiSecret, `/api/v1/calls/${encodeURIComponent(callId)}/transcript`,
 		request,
 		'Call transcript save failed'
 	);
@@ -1697,71 +1557,56 @@ export async function saveCallTranscriptFixture(
 
 export async function fetchCallTranscript(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	callId: string
 ): Promise<CallTranscriptResponse> {
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v4/calls/${encodeURIComponent(callId)}/transcript`,
+		baseUrl, apiSecret, `/api/v1/calls/${encodeURIComponent(callId)}/transcript`,
 		'Call transcript request failed'
 	);
 }
 
 export async function fetchAiStatus(
 	baseUrl: string,
-	token: string,
-	actorId: string
+	apiSecret: string
 ): Promise<AiStatus> {
-	return getJson(baseUrl, token, actorId, '/api/v3/ai/status', 'AI status request failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/ai/status', 'AI status request failed');
 }
 
 export async function fetchAiAgents(
 	baseUrl: string,
-	token: string,
-	actorId: string
+	apiSecret: string
 ): Promise<AiAgentListResponse> {
-	return getJson(baseUrl, token, actorId, '/api/v3/agents', 'AI agents request failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/ai/agents', 'AI agents request failed');
 }
 
 export async function fetchAiRuns(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	limit = 25
 ): Promise<AiRunListResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	return getJson(
-		baseUrl,
-		token,
-		actorId,
-		`/api/v3/ai/runs?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/ai/runs?${params.toString()}`,
 		'AI run history request failed'
 	);
 }
 
 export async function requestAiAnswer(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: AiAnswerRequest
 ): Promise<AiAnswerResponse> {
-	return postJson(baseUrl, token, actorId, '/api/v3/ai/answers', request, 'AI answer request failed');
+	return postJson(baseUrl, apiSecret, '/api/v1/ai/answers', request, 'AI answer request failed');
 }
 
 export async function refreshAiTaskCandidates(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: AiTaskCandidateRefreshRequest
 ): Promise<AiTaskCandidateRefreshResponse> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v3/ai/task-candidates/refresh',
+		baseUrl, apiSecret, '/api/v1/ai/task-candidates/refresh',
 		request,
 		'AI task candidate refresh request failed'
 	);
@@ -1769,15 +1614,11 @@ export async function refreshAiTaskCandidates(
 
 export async function requestAiMeetingPrep(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	request: AiMeetingPrepRequest
 ): Promise<AiMeetingPrepResponse> {
 	return postJson(
-		baseUrl,
-		token,
-		actorId,
-		'/api/v3/ai/meeting-prep',
+		baseUrl, apiSecret, '/api/v1/ai/meeting-prep',
 		request,
 		'AI meeting prep request failed'
 	);
@@ -1786,8 +1627,7 @@ export async function requestAiMeetingPrep(
 
 export async function fetchMailMessages(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	accountId?: string,
 	workflowState?: WorkflowState,
 	channelKind?: string,
@@ -1798,35 +1638,30 @@ export async function fetchMailMessages(
 	if (workflowState?.trim()) params.set('workflow_state', workflowState.trim());
 	if (channelKind?.trim()) params.set('channel_kind', channelKind.trim());
 	return getJson(
-		baseUrl, token, actorId,
-		`/api/v1/communications/messages?${params.toString()}`,
+		baseUrl, apiSecret, `/api/v1/communications/messages?${params.toString()}`,
 		'Mail messages request failed'
 	);
 }
 
 export async function fetchMailMessage(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	messageId: string
 ): Promise<MailMessageDetailResponse> {
 	return getJson(
-		baseUrl, token, actorId,
-		`/api/v1/communications/messages/${encodeURIComponent(messageId)}`,
+		baseUrl, apiSecret, `/api/v1/communications/messages/${encodeURIComponent(messageId)}`,
 		'Mail message detail request failed'
 	);
 }
 
 export async function transitionMessageWorkflowState(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	messageId: string,
 	workflowState: WorkflowState
 ): Promise<WorkflowStateTransitionResponse> {
 	return putJson(
-		baseUrl, token, actorId,
-		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/workflow-state`,
+		baseUrl, apiSecret, `/api/v1/communications/messages/${encodeURIComponent(messageId)}/workflow-state`,
 		{ workflow_state: workflowState },
 		'Workflow state transition failed'
 	);
@@ -1834,81 +1669,79 @@ export async function transitionMessageWorkflowState(
 
 export async function fetchMessageStateCounts(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	accountId?: string
 ): Promise<WorkflowStateCountsResponse> {
 	const params = new URLSearchParams();
 	if (accountId?.trim()) params.set('account_id', accountId.trim());
 	const qs = params.toString();
 	return getJson(
-		baseUrl, token, actorId,
-		`/api/v1/communications/messages/states${qs ? '?' + qs : ''}`,
+		baseUrl, apiSecret, `/api/v1/communications/messages/states${qs ? '?' + qs : ''}`,
 		'Message state counts request failed'
 	);
 }
 
 
 export async function fetchThreads(
-	baseUrl: string, token: string, actorId: string, accountId?: string, limit = 50
+	baseUrl: string, apiSecret: string, accountId?: string, limit = 50
 ): Promise<ThreadListResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	if (accountId?.trim()) params.set('account_id', accountId.trim());
-	return getJson(baseUrl, token, actorId, `/api/v1/communications/threads?${params.toString()}`, 'Threads request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/communications/threads?${params.toString()}`, 'Threads request failed');
 }
 
 export async function fetchThreadMessages(
-	baseUrl: string, token: string, actorId: string, accountId: string, subject: string, limit = 50
+	baseUrl: string, apiSecret: string, accountId: string, subject: string, limit = 50
 ): Promise<ThreadMessagesResponse> {
 	const params = new URLSearchParams({ account_id: accountId, subject, limit: String(Math.trunc(limit)) });
-	return getJson(baseUrl, token, actorId, `/api/v1/communications/threads/messages?${params.toString()}`, 'Thread messages failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/communications/threads/messages?${params.toString()}`, 'Thread messages failed');
 }
 
 export async function analyzeMessage(
-	baseUrl: string, token: string, actorId: string, messageId: string
+	baseUrl: string, apiSecret: string, messageId: string
 ): Promise<MessageAnalyzeResponse> {
-	return postJson(baseUrl, token, actorId, `/api/v1/communications/messages/${encodeURIComponent(messageId)}/analyze`, {}, 'Message analysis failed');
+	return postJson(baseUrl, apiSecret, `/api/v1/communications/messages/${encodeURIComponent(messageId)}/analyze`, {}, 'Message analysis failed');
 }
 
 export async function searchEmails(
-	baseUrl: string, token: string, actorId: string, query: string, limit = 20
+	baseUrl: string, apiSecret: string, query: string, limit = 20
 ): Promise<EmailSearchResponse> {
 	const params = new URLSearchParams({ q: query, limit: String(Math.trunc(limit)) });
-	return getJson(baseUrl, token, actorId, `/api/v1/communications/search?${params.toString()}`, 'Email search failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/communications/search?${params.toString()}`, 'Email search failed');
 }
 
 
 export async function fetchDrafts(
-	baseUrl: string, token: string, actorId: string, accountId?: string, status?: string
+	baseUrl: string, apiSecret: string, accountId?: string, status?: string
 ): Promise<DraftListResponse> {
 	const params = new URLSearchParams();
 	if (accountId?.trim()) params.set('account_id', accountId.trim());
 	if (status?.trim()) params.set('status', status.trim());
 	const qs = params.toString();
-	return getJson(baseUrl, token, actorId, `/api/v1/communications/drafts${qs ? '?' + qs : ''}`, 'Drafts request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/communications/drafts${qs ? '?' + qs : ''}`, 'Drafts request failed');
 }
 
 export async function createDraft(
-	baseUrl: string, token: string, actorId: string, draft: Record<string, unknown>
+	baseUrl: string, apiSecret: string, draft: Record<string, unknown>
 ): Promise<EmailDraft> {
-	return postJson(baseUrl, token, actorId, '/api/v1/communications/drafts', draft, 'Draft creation failed');
+	return postJson(baseUrl, apiSecret, '/api/v1/communications/drafts', draft, 'Draft creation failed');
 }
 
 export async function fetchMailboxHealth(
-	baseUrl: string, token: string, actorId: string, accountId?: string
+	baseUrl: string, apiSecret: string, accountId?: string
 ): Promise<MailboxHealth> {
 	const params = new URLSearchParams();
 	if (accountId?.trim()) params.set('account_id', accountId.trim());
 	const qs = params.toString();
-	return getJson(baseUrl, token, actorId, `/api/v1/communications/analytics/health${qs ? '?' + qs : ''}`, 'Health request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/communications/analytics/health${qs ? '?' + qs : ''}`, 'Health request failed');
 }
 
 export async function fetchTopSenders(
-	baseUrl: string, token: string, actorId: string, accountId?: string, limit = 20
+	baseUrl: string, apiSecret: string, accountId?: string, limit = 20
 ): Promise<SenderStats[]> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	if (accountId?.trim()) params.set('account_id', accountId.trim());
-	return getJson(baseUrl, token, actorId, `/api/v1/communications/analytics/senders?${params.toString()}`, 'Senders request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/communications/analytics/senders?${params.toString()}`, 'Senders request failed');
 }
 
 
@@ -1939,17 +1772,17 @@ export type PersonListResponse = {
 };
 
 export async function fetchPersons(
-	baseUrl: string, token: string, actorId: string, limit = 50, favoritesOnly = false
+	baseUrl: string, apiSecret: string, limit = 50, favoritesOnly = false
 ): Promise<PersonListResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	if (favoritesOnly) params.set('favorites_only', 'true');
-	return getJson(baseUrl, token, actorId, `/api/v2/persons?${params.toString()}`, 'Persons request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/persons?${params.toString()}`, 'Persons request failed');
 }
 
 export async function fetchPerson(
-	baseUrl: string, token: string, actorId: string, personId: string
+	baseUrl: string, apiSecret: string, personId: string
 ): Promise<EnrichedPerson> {
-	return getJson(baseUrl, token, actorId, `/api/v2/persons/${encodeURIComponent(personId)}`, 'Person request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/persons/${encodeURIComponent(personId)}`, 'Person request failed');
 }
 
 export type Organization = {
@@ -2000,31 +1833,29 @@ export type OrganizationListResponse = {
 };
 
 export async function fetchOrganizations(
-	baseUrl: string, token: string, actorId: string, limit = 50
+	baseUrl: string, apiSecret: string, limit = 50
 ): Promise<OrganizationListResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
-	return getJson(baseUrl, token, actorId, `/api/v2/organizations?${params.toString()}`, 'Organizations request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/organizations?${params.toString()}`, 'Organizations request failed');
 }
 
 export async function fetchOrganization(
-	baseUrl: string, token: string, actorId: string, orgId: string
+	baseUrl: string, apiSecret: string, orgId: string
 ): Promise<Organization> {
-	return getJson(baseUrl, token, actorId, `/api/v2/organizations/${encodeURIComponent(orgId)}`, 'Organization request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/organizations/${encodeURIComponent(orgId)}`, 'Organization request failed');
 }
 
 
 async function getJson<TResponse>(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	path: string,
 	fallbackMessage: string
 ): Promise<TResponse> {
 	const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
 	const response = await fetch(`${normalizedBaseUrl}${path}`, {
 		headers: {
-			Authorization: `Bearer ${token}`,
-			'X-Hermes-Actor-Id': actorId
+			'X-Hermes-Secret': apiSecret
 		}
 	});
 
@@ -2040,8 +1871,7 @@ async function getJson<TResponse>(
 
 async function postJson<TResponse>(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	path: string,
 	body: unknown,
 	fallbackMessage = 'Account setup request failed'
@@ -2050,9 +1880,8 @@ async function postJson<TResponse>(
 	const response = await fetch(`${normalizedBaseUrl}${path}`, {
 		method: 'POST',
 		headers: {
-			Authorization: `Bearer ${token}`,
 			'Content-Type': 'application/json',
-			'X-Hermes-Actor-Id': actorId
+			'X-Hermes-Secret': apiSecret
 		},
 		body: JSON.stringify(body)
 	});
@@ -2069,8 +1898,7 @@ async function postJson<TResponse>(
 
 async function putJson<TResponse>(
 	baseUrl: string,
-	token: string,
-	actorId: string,
+	apiSecret: string,
 	path: string,
 	body: unknown,
 	fallbackMessage = 'PUT request failed'
@@ -2079,9 +1907,8 @@ async function putJson<TResponse>(
 	const response = await fetch(`${normalizedBaseUrl}${path}`, {
 		method: 'PUT',
 		headers: {
-			Authorization: `Bearer ${token}`,
 			'Content-Type': 'application/json',
-			'X-Hermes-Actor-Id': actorId
+			'X-Hermes-Secret': apiSecret
 		},
 		body: JSON.stringify(body)
 	});
@@ -2296,28 +2123,28 @@ export type CalendarRulesResponse = { items: CalendarRule[] };
 // ── Calendar API Functions ─────────────────────────────────────────────────
 
 export async function fetchCalendarAccounts(
-	baseUrl: string, token: string, actorId: string, provider?: string
+	baseUrl: string, apiSecret: string, provider?: string
 ): Promise<CalendarAccountsResponse> {
 	const params = new URLSearchParams();
 	if (provider) params.set('provider', provider);
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/accounts?${params.toString()}`, 'Calendar accounts request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/accounts?${params.toString()}`, 'Calendar accounts request failed');
 }
 
 export async function createCalendarAccount(
-	baseUrl: string, token: string, actorId: string,
+	baseUrl: string, apiSecret: string,
 	body: { provider: string; account_name: string; email?: string }
 ): Promise<CalendarAccount> {
-	return postJson(baseUrl, token, actorId, '/api/v2/calendar/accounts', body, 'Create calendar account failed');
+	return postJson(baseUrl, apiSecret, '/api/v1/calendar/accounts', body, 'Create calendar account failed');
 }
 
 export async function fetchCalendarSources(
-	baseUrl: string, token: string, actorId: string, accountId: string
+	baseUrl: string, apiSecret: string, accountId: string
 ): Promise<CalendarSourcesResponse> {
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/accounts/${encodeURIComponent(accountId)}/sources`, 'Calendar sources request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/accounts/${encodeURIComponent(accountId)}/sources`, 'Calendar sources request failed');
 }
 
 export async function fetchCalendarEvents(
-	baseUrl: string, token: string, actorId: string,
+	baseUrl: string, apiSecret: string,
 	params: { account_id?: string; source_id?: string; from?: string; to?: string; status?: string; event_type?: string; limit?: number }
 ): Promise<CalendarEventsResponse> {
 	const sp = new URLSearchParams();
@@ -2328,23 +2155,23 @@ export async function fetchCalendarEvents(
 	if (params.status) sp.set('status', params.status);
 	if (params.event_type) sp.set('event_type', params.event_type);
 	if (params.limit) sp.set('limit', String(params.limit));
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events?${sp.toString()}`, 'Calendar events request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/events?${sp.toString()}`, 'Calendar events request failed');
 }
 
 export async function createCalendarEvent(
-	baseUrl: string, token: string, actorId: string,
+	baseUrl: string, apiSecret: string,
 	body: { title: string; start_at: string; end_at: string; description?: string; location?: string; event_type?: string; account_id?: string; source_id?: string; timezone?: string; all_day?: boolean }
 ): Promise<CalendarEvent> {
-	return postJson(baseUrl, token, actorId, '/api/v2/calendar/events', body, 'Create event failed');
+	return postJson(baseUrl, apiSecret, '/api/v1/calendar/events', body, 'Create event failed');
 }
 
 export async function deleteCalendarEvent(
-	baseUrl: string, token: string, actorId: string, eventId: string
+	baseUrl: string, apiSecret: string, eventId: string
 ): Promise<{ deleted: boolean }> {
 	const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
-	const response = await fetch(`${normalizedBaseUrl}/api/v2/calendar/events/${encodeURIComponent(eventId)}`, {
+	const response = await fetch(`${normalizedBaseUrl}/api/v1/calendar/events/${encodeURIComponent(eventId)}`, {
 		method: 'DELETE',
-		headers: { Authorization: `Bearer ${token}`, 'X-Hermes-Actor-Id': actorId }
+		headers: { 'X-Hermes-Secret': apiSecret }
 	});
 	if (!response.ok) {
 		const error = (await response.json().catch(() => null)) as { message?: string } | null;
@@ -2354,89 +2181,89 @@ export async function deleteCalendarEvent(
 }
 
 export async function fetchEventParticipants(
-	baseUrl: string, token: string, actorId: string, eventId: string
+	baseUrl: string, apiSecret: string, eventId: string
 ): Promise<EventParticipantsResponse> {
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/participants`, 'Participants request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/events/${encodeURIComponent(eventId)}/participants`, 'Participants request failed');
 }
 
 export async function fetchEventContextPack(
-	baseUrl: string, token: string, actorId: string, eventId: string
+	baseUrl: string, apiSecret: string, eventId: string
 ): Promise<EventContextPack | null> {
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/context-pack`, 'Context pack request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/events/${encodeURIComponent(eventId)}/context-pack`, 'Context pack request failed');
 }
 
 export async function fetchEventAgenda(
-	baseUrl: string, token: string, actorId: string, eventId: string
+	baseUrl: string, apiSecret: string, eventId: string
 ): Promise<EventAgenda | null> {
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/agenda`, 'Agenda request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/events/${encodeURIComponent(eventId)}/agenda`, 'Agenda request failed');
 }
 
 export async function fetchEventChecklist(
-	baseUrl: string, token: string, actorId: string, eventId: string
+	baseUrl: string, apiSecret: string, eventId: string
 ): Promise<EventChecklist | null> {
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/checklist`, 'Checklist request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/events/${encodeURIComponent(eventId)}/checklist`, 'Checklist request failed');
 }
 
 export async function fetchEventBrief(
-	baseUrl: string, token: string, actorId: string, eventId: string
+	baseUrl: string, apiSecret: string, eventId: string
 ): Promise<Record<string, unknown>> {
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/brief`, 'Brief request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/events/${encodeURIComponent(eventId)}/brief`, 'Brief request failed');
 }
 
 export async function fetchMeetingNotes(
-	baseUrl: string, token: string, actorId: string, eventId: string
+	baseUrl: string, apiSecret: string, eventId: string
 ): Promise<MeetingNotesResponse> {
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/notes`, 'Notes request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/events/${encodeURIComponent(eventId)}/notes`, 'Notes request failed');
 }
 
 export async function fetchMeetingOutcomes(
-	baseUrl: string, token: string, actorId: string, eventId: string
+	baseUrl: string, apiSecret: string, eventId: string
 ): Promise<MeetingOutcomesResponse> {
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/outcomes`, 'Outcomes request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/events/${encodeURIComponent(eventId)}/outcomes`, 'Outcomes request failed');
 }
 
 export async function fetchDeadlines(
-	baseUrl: string, token: string, actorId: string, status?: string
+	baseUrl: string, apiSecret: string, status?: string
 ): Promise<DeadlinesResponse> {
 	const params = new URLSearchParams();
 	if (status) params.set('status', status);
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/deadlines?${params.toString()}`, 'Deadlines request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/deadlines?${params.toString()}`, 'Deadlines request failed');
 }
 
 export async function fetchFocusBlocks(
-	baseUrl: string, token: string, actorId: string
+	baseUrl: string, apiSecret: string
 ): Promise<FocusBlocksResponse> {
-	return getJson(baseUrl, token, actorId, '/api/v2/calendar/focus-blocks', 'Focus blocks request failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/calendar/focus-blocks', 'Focus blocks request failed');
 }
 
 export async function fetchCalendarWatchtower(
-	baseUrl: string, token: string, actorId: string
+	baseUrl: string, apiSecret: string
 ): Promise<Record<string, unknown>> {
-	return getJson(baseUrl, token, actorId, '/api/v2/calendar/watchtower', 'Watchtower request failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/calendar/watchtower', 'Watchtower request failed');
 }
 
 export async function fetchWeeklyBrief(
-	baseUrl: string, token: string, actorId: string
+	baseUrl: string, apiSecret: string
 ): Promise<Record<string, unknown>> {
-	return getJson(baseUrl, token, actorId, '/api/v2/calendar/weekly-brief', 'Weekly brief request failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/calendar/weekly-brief', 'Weekly brief request failed');
 }
 
 export async function fetchCalendarRules(
-	baseUrl: string, token: string, actorId: string
+	baseUrl: string, apiSecret: string
 ): Promise<CalendarRulesResponse> {
-	return getJson(baseUrl, token, actorId, '/api/v2/calendar/rules', 'Rules request failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/calendar/rules', 'Rules request failed');
 }
 
 export async function postCalendarBrain(
-	baseUrl: string, token: string, actorId: string, question: string
+	baseUrl: string, apiSecret: string, question: string
 ): Promise<Record<string, unknown>> {
-	return postJson(baseUrl, token, actorId, '/api/v2/calendar/brain', { q: question }, 'Brain query failed');
+	return postJson(baseUrl, apiSecret, '/api/v1/calendar/brain', { q: question }, 'Brain query failed');
 }
 
 export async function searchCalendarEvents(
-	baseUrl: string, token: string, actorId: string, q: string
+	baseUrl: string, apiSecret: string, q: string
 ): Promise<Record<string, unknown>> {
-	return getJson(baseUrl, token, actorId, `/api/v2/calendar/search?q=${encodeURIComponent(q)}`, 'Calendar search failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/calendar/search?q=${encodeURIComponent(q)}`, 'Calendar search failed');
 }
 
 // ── Task Types ───────────────────────────────────────────────────────────
@@ -2544,7 +2371,7 @@ export type TaskTemplatesResponse = { items: TaskTemplate[] };
 // ── Task API Functions ────────────────────────────────────────────────────
 
 export async function fetchTaskRecords(
-	baseUrl: string, token: string, actorId: string,
+	baseUrl: string, apiSecret: string,
 	params: { status?: string; project_id?: string; source_type?: string; limit?: number }
 ): Promise<TaskRecordsResponse> {
 	const sp = new URLSearchParams();
@@ -2552,109 +2379,109 @@ export async function fetchTaskRecords(
 	if (params.project_id) sp.set('project_id', params.project_id);
 	if (params.source_type) sp.set('source_type', params.source_type);
 	if (params.limit) sp.set('limit', String(params.limit));
-	return getJson(baseUrl, token, actorId, `/api/v2/tasks?${sp.toString()}`, 'Tasks request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/tasks?${sp.toString()}`, 'Tasks request failed');
 }
 
 export async function fetchTask(
-	baseUrl: string, token: string, actorId: string, taskId: string
+	baseUrl: string, apiSecret: string, taskId: string
 ): Promise<Task> {
-	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}`, 'Task request failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}`, 'Task request failed');
 }
 
 export async function createTask(
-	baseUrl: string, token: string, actorId: string,
+	baseUrl: string, apiSecret: string,
 	body: { title: string; description?: string; source_type?: string; project_id?: string; hermes_status?: string; priority_score?: number; due_at?: string; area?: string; linked_person_id?: string }
 ): Promise<Task> {
-	return postJson(baseUrl, token, actorId, '/api/v2/tasks', body, 'Create task failed');
+	return postJson(baseUrl, apiSecret, '/api/v1/tasks', body, 'Create task failed');
 }
 
 export async function updateTask(
-	baseUrl: string, token: string, actorId: string, taskId: string,
+	baseUrl: string, apiSecret: string, taskId: string,
 	body: Record<string, unknown>
 ): Promise<Task> {
-	return putJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}`, body, 'Update task failed');
+	return putJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}`, body, 'Update task failed');
 }
 
 export async function setTaskStatus(
-	baseUrl: string, token: string, actorId: string, taskId: string, status: string
+	baseUrl: string, apiSecret: string, taskId: string, status: string
 ): Promise<{ status: string }> {
-	return postJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/status`, { status }, 'Set status failed');
+	return postJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}/status`, { status }, 'Set status failed');
 }
 
 export async function archiveTask(
-	baseUrl: string, token: string, actorId: string, taskId: string
+	baseUrl: string, apiSecret: string, taskId: string
 ): Promise<{ archived: boolean }> {
-	return postJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/archive`, {}, 'Archive failed');
+	return postJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}/archive`, {}, 'Archive failed');
 }
 
 export async function fetchTaskContextPack(
-	baseUrl: string, token: string, actorId: string, taskId: string
+	baseUrl: string, apiSecret: string, taskId: string
 ): Promise<TaskContextPack | null> {
-	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/context-pack`, 'Context pack failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}/context-pack`, 'Context pack failed');
 }
 
 export async function fetchTaskEvidence(
-	baseUrl: string, token: string, actorId: string, taskId: string
+	baseUrl: string, apiSecret: string, taskId: string
 ): Promise<TaskEvidenceResponse> {
-	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/evidence`, 'Evidence failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}/evidence`, 'Evidence failed');
 }
 
 export async function fetchTaskRelations(
-	baseUrl: string, token: string, actorId: string, taskId: string
+	baseUrl: string, apiSecret: string, taskId: string
 ): Promise<TaskRelationsResponse> {
-	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/relations`, 'Relations failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}/relations`, 'Relations failed');
 }
 
 export async function fetchTaskChecklist(
-	baseUrl: string, token: string, actorId: string, taskId: string
+	baseUrl: string, apiSecret: string, taskId: string
 ): Promise<TaskChecklist | null> {
-	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/checklist`, 'Checklist failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}/checklist`, 'Checklist failed');
 }
 
 export async function fetchTaskSubtasks(
-	baseUrl: string, token: string, actorId: string, taskId: string
+	baseUrl: string, apiSecret: string, taskId: string
 ): Promise<TaskSubtasksResponse> {
-	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/subtasks`, 'Subtasks failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}/subtasks`, 'Subtasks failed');
 }
 
 export async function analyzeTask(
-	baseUrl: string, token: string, actorId: string, taskId: string
+	baseUrl: string, apiSecret: string, taskId: string
 ): Promise<Record<string, unknown>> {
-	return postJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/analyze`, {}, 'Analyze failed');
+	return postJson(baseUrl, apiSecret, `/api/v1/tasks/${encodeURIComponent(taskId)}/analyze`, {}, 'Analyze failed');
 }
 
 export async function fetchTaskProviders(
-	baseUrl: string, token: string, actorId: string
+	baseUrl: string, apiSecret: string
 ): Promise<TaskProvidersResponse> {
-	return getJson(baseUrl, token, actorId, '/api/v2/tasks/providers', 'Providers failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/tasks/providers', 'Providers failed');
 }
 
 export async function fetchTaskRules(
-	baseUrl: string, token: string, actorId: string
+	baseUrl: string, apiSecret: string
 ): Promise<TaskRulesResponse> {
-	return getJson(baseUrl, token, actorId, '/api/v2/tasks/rules', 'Rules failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/tasks/rules', 'Rules failed');
 }
 
 export async function fetchTaskTemplates(
-	baseUrl: string, token: string, actorId: string
+	baseUrl: string, apiSecret: string
 ): Promise<TaskTemplatesResponse> {
-	return getJson(baseUrl, token, actorId, '/api/v2/tasks/templates', 'Templates failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/tasks/templates', 'Templates failed');
 }
 
 export async function fetchTaskWatchtower(
-	baseUrl: string, token: string, actorId: string
+	baseUrl: string, apiSecret: string
 ): Promise<Record<string, unknown>> {
-	return getJson(baseUrl, token, actorId, '/api/v2/tasks/watchtower', 'Watchtower failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/tasks/watchtower', 'Watchtower failed');
 }
 
 export async function fetchTaskDailyBrief(
-	baseUrl: string, token: string, actorId: string
+	baseUrl: string, apiSecret: string
 ): Promise<Record<string, unknown>> {
-	return getJson(baseUrl, token, actorId, '/api/v2/tasks/daily-brief', 'Daily brief failed');
+	return getJson(baseUrl, apiSecret, '/api/v1/tasks/daily-brief', 'Daily brief failed');
 }
 
 export async function searchTasks(
-	baseUrl: string, token: string, actorId: string, q: string
+	baseUrl: string, apiSecret: string, q: string
 ): Promise<Record<string, unknown>> {
-	return getJson(baseUrl, token, actorId, `/api/v2/tasks/search?q=${encodeURIComponent(q)}`, 'Task search failed');
+	return getJson(baseUrl, apiSecret, `/api/v1/tasks/search?q=${encodeURIComponent(q)}`, 'Task search failed');
 }
