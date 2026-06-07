@@ -12,6 +12,7 @@ pub mod extract;
 pub mod finance;
 pub mod fixtures;
 pub mod flags;
+pub mod handlers;
 pub mod imap_write;
 pub mod import;
 pub mod ingestion;
