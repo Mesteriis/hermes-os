@@ -23,7 +23,7 @@ Use a persistent local mail cache split by responsibility:
 - The initial MIME extractor is intentionally basic: it supports recursive multipart traversal, `text/plain` body projection, attachment-like parts with `attachment` disposition, inline parts with filenames, `filename`, single-section `filename*`, ordered RFC2231 continuation filename segments, and `base64` or `quoted-printable` transfer decoding.
 - The initial MIME extractor is not a complete RFC MIME engine. Encrypted/signed containers, malformed boundary recovery, charset transcoding beyond lossy UTF-8 handling, preview generation and deep attachment inspection remain future slices.
 - The system must not store mailbox credentials, OAuth tokens or app passwords in blob paths, blob metadata, database payloads, logs or fixture files.
-- Read-only provider sync must remain non-mutating: IMAP uses `EXAMINE` plus `BODY.PEEK[]`; Gmail uses read-only API scopes.
+- Read-only constraint applies to automated tests only per ADR-0055. Production provider sync uses read-write networking.
 - `make dev` should be allowed to reuse already downloaded local cache data and should not require provider connectivity for the UI to display previously downloaded messages.
 - `make reset-data` remains the explicit destructive command for local development cache removal.
 

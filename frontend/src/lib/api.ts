@@ -117,6 +117,214 @@ export type CommunicationMessagesResponse = {
 	items: CommunicationMessageSummary[];
 };
 
+export type WorkflowState = 'new' | 'reviewed' | 'needs_action' | 'waiting' | 'done' | 'archived' | 'muted' | 'spam';
+
+export type CommunicationMessageSummaryV2 = {
+	message_id: string;
+	raw_record_id: string;
+	account_id: string;
+	provider_record_id: string;
+	subject: string;
+	sender: string;
+	recipients: string[];
+	body_text_preview: string;
+	occurred_at: string | null;
+	projected_at: string;
+	channel_kind: string;
+	conversation_id: string | null;
+	sender_display_name: string | null;
+	delivery_state: string;
+	workflow_state: WorkflowState;
+	importance_score: number | null;
+	ai_category: string | null;
+	ai_summary: string | null;
+	ai_summary_generated_at: string | null;
+	message_metadata: Record<string, unknown>;
+	attachment_count: number;
+};
+
+export type MailMessagesResponse = {
+	items: CommunicationMessageSummaryV2[];
+};
+
+export type MailMessageDetailItemV2 = {
+	message_id: string;
+	raw_record_id: string;
+	account_id: string;
+	provider_record_id: string;
+	subject: string;
+	sender: string;
+	recipients: string[];
+	body_text: string;
+	occurred_at: string | null;
+	projected_at: string;
+	channel_kind: string;
+	conversation_id: string | null;
+	sender_display_name: string | null;
+	delivery_state: string;
+	workflow_state: WorkflowState;
+	importance_score: number | null;
+	ai_category: string | null;
+	ai_summary: string | null;
+	ai_summary_generated_at: string | null;
+	message_metadata: Record<string, unknown>;
+};
+
+export type MailMessageDetailResponse = {
+	message: MailMessageDetailItemV2;
+	attachments: CommunicationAttachment[];
+};
+
+export type WorkflowStateCountItem = {
+	state: string;
+	count: number;
+};
+
+export type WorkflowStateCountsResponse = {
+	counts: WorkflowStateCountItem[];
+};
+
+export type WorkflowStateTransitionRequest = {
+	workflow_state: WorkflowState;
+};
+
+
+export type EmailThread = {
+	thread_id: string;
+	account_id: string;
+	subject: string;
+	message_count: number;
+	participant_count: number;
+	first_message_at: string | null;
+	last_message_at: string | null;
+	has_open_action: boolean;
+	has_attachments: boolean;
+	dominant_workflow_state: string;
+};
+
+export type ThreadMessage = {
+	message_id: string;
+	account_id: string;
+	subject: string;
+	sender: string;
+	sender_display_name: string | null;
+	body_text: string;
+	occurred_at: string | null;
+	projected_at: string;
+	workflow_state: string;
+	importance_score: number | null;
+	ai_category: string | null;
+	ai_summary: string | null;
+	delivery_state: string;
+	attachment_count: number;
+};
+
+export type ThreadListResponse = { items: EmailThread[] };
+export type ThreadMessagesResponse = { items: ThreadMessage[] };
+
+export type EmailRule = {
+	rule_id: string;
+	name: string;
+	description_nl: string;
+	conditions_json: Record<string, unknown>[];
+	actions_json: Record<string, unknown>[];
+	mode: 'suggest' | 'ask_before_execute' | 'auto_execute' | 'dry_run';
+	enabled: boolean;
+	match_count: number;
+	last_matched_at: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type EmailTemplate = {
+	template_id: string;
+	name: string;
+	subject_template: string;
+	body_template: string;
+	variables: string[];
+	language: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type EmailPersona = {
+	persona_id: string;
+	name: string;
+	account_id: string;
+	display_name: string;
+	signature: string;
+	default_language: string | null;
+	default_tone: string | null;
+	is_default: boolean;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type MessageAnalyzeResponse = {
+	message_id: string;
+	analyzed: boolean;
+	category: string | null;
+	summary: string | null;
+	importance_score: number | null;
+	workflow_state: string;
+};
+
+
+export type EmailDraft = {
+	draft_id: string;
+	account_id: string;
+	persona_id: string | null;
+	to_recipients: string[];
+	cc_recipients: string[];
+	bcc_recipients: string[];
+	subject: string;
+	body_text: string;
+	body_html: string | null;
+	in_reply_to: string | null;
+	references: string[];
+	status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed';
+	scheduled_send_at: string | null;
+	send_attempts: number;
+	last_error: string | null;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type MailboxHealth = {
+	total_messages: number;
+	unread: number;
+	needs_action: number;
+	waiting: number;
+	done: number;
+	archived: number;
+	spam: number;
+	important: number;
+	with_attachments: number;
+	average_importance: number;
+	oldest_message_days: number | null;
+};
+
+export type SenderStats = {
+	sender: string;
+	message_count: number;
+	avg_importance: number;
+	last_message_days: number | null;
+};
+
+export type DraftListResponse = { items: EmailDraft[] };
+export type EmailSearchResponse = {
+	results: { object_id: string; object_kind: string; title: string }[];
+};
+export type WorkflowStateTransitionResponse = {
+	message_id: string;
+	workflow_state: string;
+	previous_state: string;
+};
+
+
+
 export type CommunicationMessageDetail = {
 	message: CommunicationMessageDetailItem;
 	attachments: CommunicationAttachment[];
@@ -1605,6 +1813,134 @@ export async function requestAiMeetingPrep(
 		request,
 		'AI meeting prep request failed'
 	);
+}
+
+
+export async function fetchMailMessages(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	accountId?: string,
+	workflowState?: WorkflowState,
+	channelKind?: string,
+	limit = 50
+): Promise<MailMessagesResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (accountId?.trim()) params.set('account_id', accountId.trim());
+	if (workflowState?.trim()) params.set('workflow_state', workflowState.trim());
+	if (channelKind?.trim()) params.set('channel_kind', channelKind.trim());
+	return getJson(
+		baseUrl, token, actorId,
+		`/api/v1/communications/messages?${params.toString()}`,
+		'Mail messages request failed'
+	);
+}
+
+export async function fetchMailMessage(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	messageId: string
+): Promise<MailMessageDetailResponse> {
+	return getJson(
+		baseUrl, token, actorId,
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}`,
+		'Mail message detail request failed'
+	);
+}
+
+export async function transitionMessageWorkflowState(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	messageId: string,
+	workflowState: WorkflowState
+): Promise<WorkflowStateTransitionResponse> {
+	return putJson(
+		baseUrl, token, actorId,
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/workflow-state`,
+		{ workflow_state: workflowState },
+		'Workflow state transition failed'
+	);
+}
+
+export async function fetchMessageStateCounts(
+	baseUrl: string,
+	token: string,
+	actorId: string,
+	accountId?: string
+): Promise<WorkflowStateCountsResponse> {
+	const params = new URLSearchParams();
+	if (accountId?.trim()) params.set('account_id', accountId.trim());
+	const qs = params.toString();
+	return getJson(
+		baseUrl, token, actorId,
+		`/api/v1/communications/messages/states${qs ? '?' + qs : ''}`,
+		'Message state counts request failed'
+	);
+}
+
+
+export async function fetchThreads(
+	baseUrl: string, token: string, actorId: string, accountId?: string, limit = 50
+): Promise<ThreadListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (accountId?.trim()) params.set('account_id', accountId.trim());
+	return getJson(baseUrl, token, actorId, `/api/v1/communications/threads?${params.toString()}`, 'Threads request failed');
+}
+
+export async function fetchThreadMessages(
+	baseUrl: string, token: string, actorId: string, accountId: string, subject: string, limit = 50
+): Promise<ThreadMessagesResponse> {
+	const params = new URLSearchParams({ account_id: accountId, subject, limit: String(Math.trunc(limit)) });
+	return getJson(baseUrl, token, actorId, `/api/v1/communications/threads/messages?${params.toString()}`, 'Thread messages failed');
+}
+
+export async function analyzeMessage(
+	baseUrl: string, token: string, actorId: string, messageId: string
+): Promise<MessageAnalyzeResponse> {
+	return postJson(baseUrl, token, actorId, `/api/v1/communications/messages/${encodeURIComponent(messageId)}/analyze`, {}, 'Message analysis failed');
+}
+
+export async function searchEmails(
+	baseUrl: string, token: string, actorId: string, query: string, limit = 20
+): Promise<EmailSearchResponse> {
+	const params = new URLSearchParams({ q: query, limit: String(Math.trunc(limit)) });
+	return getJson(baseUrl, token, actorId, `/api/v1/communications/search?${params.toString()}`, 'Email search failed');
+}
+
+
+export async function fetchDrafts(
+	baseUrl: string, token: string, actorId: string, accountId?: string, status?: string
+): Promise<DraftListResponse> {
+	const params = new URLSearchParams();
+	if (accountId?.trim()) params.set('account_id', accountId.trim());
+	if (status?.trim()) params.set('status', status.trim());
+	const qs = params.toString();
+	return getJson(baseUrl, token, actorId, `/api/v1/communications/drafts${qs ? '?' + qs : ''}`, 'Drafts request failed');
+}
+
+export async function createDraft(
+	baseUrl: string, token: string, actorId: string, draft: Record<string, unknown>
+): Promise<EmailDraft> {
+	return postJson(baseUrl, token, actorId, '/api/v1/communications/drafts', draft, 'Draft creation failed');
+}
+
+export async function fetchMailboxHealth(
+	baseUrl: string, token: string, actorId: string, accountId?: string
+): Promise<MailboxHealth> {
+	const params = new URLSearchParams();
+	if (accountId?.trim()) params.set('account_id', accountId.trim());
+	const qs = params.toString();
+	return getJson(baseUrl, token, actorId, `/api/v1/communications/analytics/health${qs ? '?' + qs : ''}`, 'Health request failed');
+}
+
+export async function fetchTopSenders(
+	baseUrl: string, token: string, actorId: string, accountId?: string, limit = 20
+): Promise<SenderStats[]> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (accountId?.trim()) params.set('account_id', accountId.trim());
+	return getJson(baseUrl, token, actorId, `/api/v1/communications/analytics/senders?${params.toString()}`, 'Senders request failed');
 }
 
 async function getJson<TResponse>(

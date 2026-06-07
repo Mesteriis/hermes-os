@@ -1,0 +1,213 @@
+use crate::ollama::{OllamaClient, OllamaError};
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CommunicationFingerprint {
+    pub avg_message_length: Option<usize>,
+    pub avg_response_hours: Option<f64>,
+    pub frequent_topics: Vec<String>,
+    pub typical_tone: Option<String>,
+    pub detected_language: Option<String>,
+    pub writing_style: Option<String>,
+    pub preferred_time_of_day: Option<String>,
+    pub trust_score: Option<i16>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ContactInsight {
+    pub contact_id: String,
+    pub fingerprint: CommunicationFingerprint,
+    pub suggested_actions: Vec<String>,
+}
+
+#[derive(Clone)]
+pub struct ContactIntelligenceService {
+    ollama: Option<OllamaClient>,
+}
+
+impl ContactIntelligenceService {
+    pub fn new(ollama: Option<OllamaClient>) -> Self {
+        Self { ollama }
+    }
+
+    pub fn heuristic_fingerprint(messages: &[ContactMessage]) -> CommunicationFingerprint {
+        if messages.is_empty() {
+            return CommunicationFingerprint {
+                avg_message_length: None,
+                avg_response_hours: None,
+                frequent_topics: vec![],
+                typical_tone: None,
+                detected_language: None,
+                writing_style: None,
+                preferred_time_of_day: None,
+                trust_score: None,
+            };
+        }
+
+        let total_len: usize = messages.iter().map(|m| m.body_text.len()).sum();
+        let avg_len = total_len / messages.len();
+
+        let mut topics = Vec::new();
+        let combined_text: String = messages
+            .iter()
+            .map(|m| &m.body_text as &str)
+            .collect::<Vec<_>>()
+            .join(" ")
+            .to_lowercase();
+        for (topic, keywords) in [
+            ("finance", &["invoice", "payment", "amount", "tax"][..]),
+            ("legal", &["contract", "nda", "agreement", "legal"][..]),
+            (
+                "project",
+                &["project", "deadline", "milestone", "deliverable"][..],
+            ),
+            ("support", &["help", "issue", "problem", "bug"][..]),
+        ] {
+            if keywords.iter().any(|k| combined_text.contains(k)) {
+                topics.push(topic.into());
+            }
+        }
+
+        let tone = if combined_text.contains("urgent") || combined_text.contains("asap") {
+            Some("urgent".into())
+        } else if combined_text.contains("thanks") || combined_text.contains("appreciate") {
+            Some("friendly".into())
+        } else if combined_text.contains("please") && combined_text.contains("would") {
+            Some("polite".into())
+        } else {
+            Some("neutral".into())
+        };
+
+        let lang = crate::email_multilingual::MultilingualService::detect_language(&combined_text);
+
+        // Trust score: starts at 50, adjusted by interaction history
+        let trust = 50i16
+            .saturating_add((messages.len() as i16 * 2).min(30))
+            .saturating_add(if !topics.is_empty() { 10 } else { 0 });
+
+        CommunicationFingerprint {
+            avg_message_length: Some(avg_len),
+            avg_response_hours: None,
+            frequent_topics: topics,
+            typical_tone: tone,
+            detected_language: Some(lang.language),
+            writing_style: if avg_len > 500 {
+                Some("verbose".into())
+            } else if avg_len < 100 {
+                Some("concise".into())
+            } else {
+                Some("balanced".into())
+            },
+            preferred_time_of_day: None,
+            trust_score: Some(trust.clamp(0, 100)),
+        }
+    }
+
+    pub async fn llm_fingerprint(
+        &self,
+        messages: &[ContactMessage],
+    ) -> Result<Option<CommunicationFingerprint>, ContactIntelligenceError> {
+        let Some(ref ollama) = self.ollama else {
+            return Ok(None);
+        };
+        let sample: String = messages
+            .iter()
+            .take(5)
+            .map(|m| format!("Subject: {}\nBody: {}\n", m.subject, m.body_text))
+            .collect::<Vec<_>>()
+            .join("\n---\n");
+        let prompt = format!(
+            "Analyze communication patterns from these email samples. Return JSON with: frequent_topics (array of strings), typical_tone (one word), detected_language (code), writing_style (verbose/concise/balanced), preferred_time_of_day (morning/afternoon/evening or null).\n\nSamples:\n{sample}"
+        );
+        let result = ollama.chat(&prompt).await?;
+        let content = result
+            .content
+            .trim()
+            .strip_prefix("```json")
+            .and_then(|s| s.strip_suffix("```"))
+            .map(str::trim)
+            .unwrap_or(result.content.trim());
+        Ok(serde_json::from_str(content).ok())
+    }
+
+    pub fn suggested_actions(fingerprint: &CommunicationFingerprint) -> Vec<String> {
+        let mut actions = Vec::new();
+        if let Some(ref tone) = fingerprint.typical_tone {
+            actions.push(format!(
+                "Contact tends to be {tone} — match tone in replies"
+            ));
+        }
+        if let Some(ref lang) = fingerprint.detected_language {
+            if lang != "en" {
+                actions.push(format!(
+                    "Contact writes in {lang} — consider translating replies"
+                ));
+            }
+        }
+        if let Some(ref style) = fingerprint.writing_style {
+            actions.push(format!("Contact style: {style}"));
+        }
+        if let Some(score) = fingerprint.trust_score {
+            if score < 30 {
+                actions.push("Low trust score — verify claims".into());
+            }
+        }
+        actions
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ContactMessage {
+    pub subject: String,
+    pub body_text: String,
+    pub occurred_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Error)]
+pub enum ContactIntelligenceError {
+    #[error(transparent)]
+    Ollama(#[from] OllamaError),
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn sample_messages() -> Vec<ContactMessage> {
+        vec![
+            ContactMessage {
+                subject: "Invoice".into(),
+                body_text: "Please pay invoice #123 for $500".into(),
+                occurred_at: None,
+            },
+            ContactMessage {
+                subject: "Thanks".into(),
+                body_text: "Thank you for your help with the project".into(),
+                occurred_at: None,
+            },
+        ]
+    }
+
+    #[test]
+    fn fingerprint_detects_topics() {
+        let fp = ContactIntelligenceService::heuristic_fingerprint(&sample_messages());
+        assert!(fp.frequent_topics.contains(&"finance".into()));
+    }
+    #[test]
+    fn fingerprint_sets_trust() {
+        let fp = ContactIntelligenceService::heuristic_fingerprint(&sample_messages());
+        assert!(fp.trust_score.unwrap() >= 50);
+    }
+    #[test]
+    fn fingerprint_detects_tone() {
+        let fp = ContactIntelligenceService::heuristic_fingerprint(&sample_messages());
+        assert!(fp.typical_tone.is_some());
+    }
+    #[test]
+    fn empty_messages_returns_none() {
+        let fp = ContactIntelligenceService::heuristic_fingerprint(&[]);
+        assert!(fp.trust_score.is_none());
+    }
+}

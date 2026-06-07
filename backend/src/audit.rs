@@ -206,6 +206,22 @@ impl NewApiAuditRecord {
         }
     }
 
+    pub fn message_workflow_state_set(
+        actor_id: impl Into<String>,
+        message_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            actor_kind: LOCAL_API_TOKEN_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "message.workflow_state.set".to_owned(),
+            method: "PUT".to_owned(),
+            path_template: "/api/v1/communications/messages/{message_id}/workflow-state".to_owned(),
+            target_kind: "communication_message".to_owned(),
+            target_id: Some(message_id.into()),
+            metadata: json!({}),
+        }
+    }
+
     pub fn contact_identity_review_set(
         actor_id: impl Into<String>,
         identity_candidate_id: impl Into<String>,

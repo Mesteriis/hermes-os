@@ -56,11 +56,12 @@
 - `ADR-0032` - Docker Compose development environment under `docker/`.
 - `ADR-0041` - email provider ingestion foundation for Gmail, iCloud and generic IMAP.
 - `ADR-0042` - provider credential secret references and resolver boundary.
-- `ADR-0043` - read-only Gmail API and IMAP provider networking.
+- `ADR-0043` - Superseded by ADR-0055. Original read-only Gmail API and IMAP provider networking (temporary).
 - `ADR-0044` - account setup and encrypted secret vault.
 - `ADR-0046` - persistent dev mail cache and blob storage; mail bytes/attachments live under `docker/data/mail/`, PostgreSQL stores metadata, references and attachment scan state.
 - `ADR-0053` - database-backed encrypted secret vault; encrypted credential payloads live in PostgreSQL ciphertext rows, while the vault key remains outside PostgreSQL.
 - `ADR-0054` - application settings store; user-editable runtime/UI settings live in `application_settings`, while provider accounts remain domain records.
+- `ADR-0055` - full email provider networking with read and write operations; supersedes ADR-0043. Read-only restriction retained only for automated integration tests.
 
 ## 4. Implementation Phase
 
@@ -211,7 +212,7 @@ Use the repository-configured tool first. If no tool exists, report that validat
 - Search indexes and embeddings are derived, rebuildable state.
 - AI output is never source of truth.
 - Private data must not be used for fine-tuning.
-- Provider adapters must preserve raw source provenance.
+- Provider adapters must preserve raw source provenance. Full read-write provider networking is enabled per ADR-0055; read-only restriction applies only to automated tests.
 - Agents and plugins must use capability-based permissions.
 - Mobile UI is out of scope until `ADR-0031` is superseded.
 - Docker development infrastructure must stay under `docker/` per `ADR-0032`.

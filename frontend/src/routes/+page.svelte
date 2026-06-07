@@ -8,7 +8,27 @@
 		fetchAutomationTemplates,
 		fetchCallTranscript,
 		fetchCommunicationMessage,
-		fetchCommunicationMessages,
+		fetchDrafts,
+	createDraft,
+	fetchMailboxHealth,
+	fetchTopSenders,
+	fetchThreads,
+	analyzeMessage,
+	searchEmails,
+	type EmailDraft,
+	type MailboxHealth,
+	type SenderStats,
+	type EmailThread,
+	type MessageAnalyzeResponse,
+	fetchMailMessages,
+	fetchMailMessage,
+	transitionMessageWorkflowState,
+	fetchMessageStateCounts,
+	type CommunicationMessageSummaryV2,
+	type MailMessageDetailResponse,
+	type WorkflowState,
+	type WorkflowStateCountItem,
+	fetchCommunicationMessages,
 		fetchDocumentProcessing,
 		fetchGraphNeighborhood,
 		fetchGraphNodes,
@@ -249,6 +269,27 @@
 	let graphSearchRequestSequence = 0;
 	let graphNeighborhoodRequestSequence = 0;
 	let communicationMessages = $state<CommunicationMessageSummary[]>([]);
+	let isComposeOpen = $state(false);
+	let composeForm = $state({
+		draft_id: '',
+		account_id: '',
+		to_text: '',
+		cc_text: '',
+		subject: '',
+		body: '',
+	});
+	let drafts = $state<EmailDraft[]>([]);
+	let mailboxHealth = $state<MailboxHealth | null>(null);
+	let topSenders = $state<SenderStats[]>([]);
+	let threads = $state<EmailThread[]>([]);
+	let isAnalyzing = $state(false);
+	let aiAnalysisResult = $state<MessageAnalyzeResponse | null>(null);
+
+	let mailStateFilter = $state<WorkflowState | ''>('');
+	let mailStateCounts = $state<WorkflowStateCountItem[]>([]);
+	let isMailStateTransitioning = $state(false);
+	let mailStateError = $state('');
+
 	let selectedCommunicationDetail = $state<CommunicationMessageDetail | null>(null);
 	let communicationsError = $state('');
 	let isCommunicationsLoading = $state(false);
@@ -1083,6 +1124,92 @@
 		}
 	}
 
+
+	async function loadCommunicationMessagesFiltered(filterState?: WorkflowState) {
+		try {
+			isCommunicationsLoading = true;
+			communicationsError = '';
+			const response = await fetchMailMessages(
+				apiBaseUrl, apiToken, actorId,
+				undefined, filterState || undefined, undefined, 50
+			);
+			communicationMessages = response.items as unknown as CommunicationMessageSummary[];
+			if (selectedConversationIndex >= communicationMessages.length) {
+				selectedConversationIndex = Math.max(0, communicationMessages.length - 1);
+			}
+			if (communicationMessages.length > 0) {
+				await loadCommunicationDetail(communicationMessages[selectedConversationIndex].message_id);
+			} else {
+				selectedCommunicationDetail = null;
+			}
+		} catch (error) {
+			communicationsError = error instanceof Error ? error.message : 'Unknown communications error';
+			selectedCommunicationDetail = null;
+		} finally {
+			isCommunicationsLoading = false;
+		}
+	}
+
+	async function loadMessageStateCounts() {
+		try {
+			const response = await fetchMessageStateCounts(apiBaseUrl, apiToken, actorId);
+			mailStateCounts = response.counts;
+		} catch {
+			mailStateCounts = [];
+		}
+	}
+
+	async function handleWorkflowStateTransition(messageId: string, newState: WorkflowState) {
+		try {
+			isMailStateTransitioning = true;
+			mailStateError = '';
+			await transitionMessageWorkflowState(apiBaseUrl, apiToken, actorId, messageId, newState);
+			await loadCommunicationMessagesFiltered(mailStateFilter || undefined);
+			await loadMessageStateCounts();
+		await loadMailboxHealth();
+		await loadTopSenders();
+		await loadDrafts();
+		await loadThreads();
+		} catch (error) {
+			mailStateError = error instanceof Error ? error.message : 'State transition failed';
+		} finally {
+			isMailStateTransitioning = false;
+		}
+	}
+
+
+	async function loadDrafts() {
+		try { const r = await fetchDrafts(apiBaseUrl, apiToken, actorId); drafts = r.items; } catch { drafts = []; }
+	}
+	async function loadMailboxHealth() {
+		try { mailboxHealth = await fetchMailboxHealth(apiBaseUrl, apiToken, actorId); } catch { mailboxHealth = null; }
+	}
+	async function loadTopSenders() {
+		try { topSenders = await fetchTopSenders(apiBaseUrl, apiToken, actorId); } catch { topSenders = []; }
+	}
+	async function loadThreads() {
+		try { const r = await fetchThreads(apiBaseUrl, apiToken, actorId); threads = r.items; } catch { threads = []; }
+	}
+	async function handleAnalyzeMessage(messageId: string) {
+		try { isAnalyzing = true; aiAnalysisResult = await analyzeMessage(apiBaseUrl, apiToken, actorId, messageId); } catch { aiAnalysisResult = null; } finally { isAnalyzing = false; }
+	}
+	async function handleSaveDraft() {
+		if (!composeForm.draft_id || !composeForm.subject) return;
+		try {
+			await createDraft(apiBaseUrl, apiToken, actorId, {
+				draft_id: composeForm.draft_id,
+				account_id: composeForm.account_id || 'gmail-primary',
+				to_recipients: composeForm.to_text.split(',').map(s => s.trim()).filter(Boolean),
+				cc_recipients: composeForm.cc_text.split(',').map(s => s.trim()).filter(Boolean),
+				subject: composeForm.subject,
+				body_text: composeForm.body,
+				status: 'draft',
+			});
+			composeForm = { draft_id: '', account_id: '', to_text: '', cc_text: '', subject: '', body: '' };
+			isComposeOpen = false;
+			await loadDrafts();
+		} catch (e) { /* ignore */ }
+	}
 	async function loadCommunications() {
 		isCommunicationsLoading = true;
 		try {
@@ -3150,16 +3277,16 @@
 					<div class="header-actions">
 						<button type="button" class="segmented active"><Icon icon="tabler:message" width="16" height="16" /></button>
 						<button type="button" class="segmented" disabled><Icon icon="tabler:layout-grid" width="16" height="16" /></button>
-						<button type="button" class="primary-button" disabled>New Message</button>
+						<button type="button" class="primary-button" onclick={() => { composeForm.draft_id = 'draft-' + Date.now(); isComposeOpen = true; }}>New Message</button>
 					</div>
 				</div>
 				<div class="filter-tabs">
-					<button type="button" class="active">All <em>{communicationMessages.length}</em></button>
-					<button type="button" disabled>People <em>0</em></button>
-					<button type="button" disabled>Unread <em>0</em></button>
-					<button type="button" disabled>Requires Reply <em>0</em></button>
-					<button type="button" disabled>Waiting <em>0</em></button>
-					<button type="button" disabled>More <Icon icon="tabler:chevron-down" width="14" height="14" /></button>
+					<button type="button" class:active={mailStateFilter === ''} onclick={() => { mailStateFilter = ''; void loadCommunicationMessagesFiltered(); }}>All <em>{communicationMessages.length}</em></button>
+					<button type="button" class:active={mailStateFilter === 'needs_action'} onclick={() => { mailStateFilter = 'needs_action'; void loadCommunicationMessagesFiltered('needs_action'); }}>Needs Action <em>{mailStateCounts.find(c => c.state === 'needs_action')?.count ?? 0}</em></button>
+					<button type="button" class:active={mailStateFilter === 'waiting'} onclick={() => { mailStateFilter = 'waiting'; void loadCommunicationMessagesFiltered('waiting'); }}>Waiting <em>{mailStateCounts.find(c => c.state === 'waiting')?.count ?? 0}</em></button>
+					<button type="button" class:active={mailStateFilter === 'new'} onclick={() => { mailStateFilter = 'new'; void loadCommunicationMessagesFiltered('new'); }}>New <em>{mailStateCounts.find(c => c.state === 'new')?.count ?? 0}</em></button>
+					<button type="button" class:active={mailStateFilter === 'done'} onclick={() => { mailStateFilter = 'done'; void loadCommunicationMessagesFiltered('done'); }}>Done <em>{mailStateCounts.find(c => c.state === 'done')?.count ?? 0}</em></button>
+					<button type="button" class:active={mailStateFilter === 'archived'} onclick={() => { mailStateFilter = 'archived'; void loadCommunicationMessagesFiltered('archived'); }}>Archived <em>{mailStateCounts.find(c => c.state === 'archived')?.count ?? 0}</em></button>
 				</div>
 				<div class="three-pane communications-grid">
 					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-conversation-list" data-widget-hidden={!isWidgetVisible('communications-conversation-list')}>
@@ -3184,6 +3311,9 @@
 											<small>{message.subject}</small>
 											<em>{message.body_text_preview}</em>
 										</span>
+										{#if (message as any).workflow_state}
+											<span class="state-badge {(message as any).workflow_state}">{(message as any).workflow_state.replace('_', ' ')}</span>
+										{/if}
 										<time>{messageTime(message)}</time>
 										{#if message.attachment_count > 0}<b>{message.attachment_count}</b>{/if}
 									</button>
@@ -3199,13 +3329,23 @@
 									<img src="/assets/hermes-reference-avatar.png" alt="" />
 									<div><h2>{senderLabel(selectedCommunication.sender)}</h2><p>{selectedCommunication.subject}</p></div>
 									<div class="chat-actions">
+										<button type="button" onclick={() => void handleWorkflowStateTransition(selectedCommunication.message_id, 'needs_action')} disabled={isMailStateTransitioning} title="Mark as Needs Action"><Icon icon="tabler:alert-triangle" width="17" height="17" /></button>
+										<button type="button" onclick={() => void handleWorkflowStateTransition(selectedCommunication.message_id, 'waiting')} disabled={isMailStateTransitioning} title="Mark as Waiting"><Icon icon="tabler:clock-hour-4" width="17" height="17" /></button>
+										<button type="button" onclick={() => void handleWorkflowStateTransition(selectedCommunication.message_id, 'done')} disabled={isMailStateTransitioning} title="Mark as Done"><Icon icon="tabler:circle-check" width="17" height="17" /></button>
+										<button type="button" onclick={() => void handleWorkflowStateTransition(selectedCommunication.message_id, 'archived')} disabled={isMailStateTransitioning} title="Archive"><Icon icon="tabler:archive" width="17" height="17" /></button>
 										<button type="button" onclick={() => void askAiAboutSelectedMessage()} disabled={isAiAnswerSubmitting}><Icon icon="tabler:sparkles" width="17" height="17" /></button>
-										<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
-										<button type="button" disabled><Icon icon="tabler:video" width="17" height="17" /></button>
-										<button type="button" disabled><Icon icon="tabler:info-circle" width="17" height="17" /></button>
 									</div>
 								</header>
 								<div class="chat-body">
+									{#if aiAnalysisResult && aiAnalysisResult.message_id === selectedCommunication.message_id}
+										<article class="ai-analysis-card">
+											<strong><Icon icon="tabler:sparkles" width="16" height="16" />AI Analysis</strong>
+											{#if aiAnalysisResult.category}<p><em>Category:</em> {aiAnalysisResult.category}</p>{/if}
+											{#if aiAnalysisResult.summary}<p><em>Summary:</em> {aiAnalysisResult.summary}</p>{/if}
+											{#if aiAnalysisResult.importance_score != null}<p><em>Importance:</em> {aiAnalysisResult.importance_score}/100</p>{/if}
+											<p><em>State:</em> <span class="state-badge {aiAnalysisResult.workflow_state}">{aiAnalysisResult.workflow_state.replace('_', ' ')}</span></p>
+										</article>
+									{/if}
 									<div class="date-divider">{messageTime(selectedCommunicationDetail?.message ?? selectedCommunication)}</div>
 									<article class="bubble inbound">
 										<strong>{selectedCommunication.subject}</strong><br />
@@ -3264,6 +3404,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'contacts'}
 			<section class="contacts-page">
@@ -3419,6 +3600,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'projects'}
 			<section class="projects-page">
@@ -3735,6 +3957,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'calendar'}
 			<section class="calendar-page">
@@ -3773,6 +4036,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'documents'}
 			<section class="documents-page">
@@ -3849,6 +4153,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'notes'}
 			<section class="notes-page">
@@ -3888,6 +4233,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'knowledge'}
 			<section class="knowledge-page">
@@ -4177,6 +4563,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'telegram'}
 			<section class="telegram-page communications-page">
@@ -4244,6 +4671,15 @@
 									</div>
 								</header>
 								<div class="chat-body">
+									{#if aiAnalysisResult && aiAnalysisResult.message_id === selectedCommunication.message_id}
+										<article class="ai-analysis-card">
+											<strong><Icon icon="tabler:sparkles" width="16" height="16" />AI Analysis</strong>
+											{#if aiAnalysisResult.category}<p><em>Category:</em> {aiAnalysisResult.category}</p>{/if}
+											{#if aiAnalysisResult.summary}<p><em>Summary:</em> {aiAnalysisResult.summary}</p>{/if}
+											{#if aiAnalysisResult.importance_score != null}<p><em>Importance:</em> {aiAnalysisResult.importance_score}/100</p>{/if}
+											<p><em>State:</em> <span class="state-badge {aiAnalysisResult.workflow_state}">{aiAnalysisResult.workflow_state.replace('_', ' ')}</span></p>
+										</article>
+									{/if}
 									{#if selectedTelegramMessages.length === 0}
 										<div class="empty-panel fill">No messages for this chat.</div>
 									{:else}
@@ -4414,6 +4850,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'whatsapp'}
 			<section class="whatsapp-page communications-page">
@@ -4479,6 +4956,15 @@
 									</div>
 								</header>
 								<div class="chat-body">
+									{#if aiAnalysisResult && aiAnalysisResult.message_id === selectedCommunication.message_id}
+										<article class="ai-analysis-card">
+											<strong><Icon icon="tabler:sparkles" width="16" height="16" />AI Analysis</strong>
+											{#if aiAnalysisResult.category}<p><em>Category:</em> {aiAnalysisResult.category}</p>{/if}
+											{#if aiAnalysisResult.summary}<p><em>Summary:</em> {aiAnalysisResult.summary}</p>{/if}
+											{#if aiAnalysisResult.importance_score != null}<p><em>Importance:</em> {aiAnalysisResult.importance_score}/100</p>{/if}
+											<p><em>State:</em> <span class="state-badge {aiAnalysisResult.workflow_state}">{aiAnalysisResult.workflow_state.replace('_', ' ')}</span></p>
+										</article>
+									{/if}
 									{#if selectedWhatsappMessages.length === 0}
 										<div class="empty-panel fill">No WhatsApp Web messages for this session.</div>
 									{:else}
@@ -4559,6 +5045,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else if currentView === 'settings'}
 			<section class="settings-page">
@@ -4891,6 +5418,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{:else}
 			<section class="timeline-page">
@@ -4910,6 +5478,47 @@
 						</div>
 					</aside>
 				</div>
+
+				{#if isComposeOpen}
+					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
+					<aside class="account-drawer"  aria-label="Compose email">
+						<header>
+							<div><p>Compose</p><h2>New Message</h2></div>
+							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+						</header>
+						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
+							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
+							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
+							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
+							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
+							<div class="form-actions wide">
+								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
+								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+							</div>
+						</form>
+					</aside>
+				{/if}
+
+				{#if drafts.length > 0}
+					<div class="draft-strip">
+						<strong>Drafts ({drafts.length})</strong>
+						{#each drafts.slice(0, 3) as draft}
+							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
+								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if mailboxHealth}
+					<div class="health-strip">
+						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
+						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
+						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
+						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
+						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
+					</div>
+				{/if}
 			</section>
 		{/if}
 	</section>

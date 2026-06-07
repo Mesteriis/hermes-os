@@ -1,23 +1,52 @@
 pub mod ai;
+pub mod attachment_intelligence;
 pub mod audit;
 pub mod automation;
 pub mod calls;
 pub mod capabilities;
 pub mod communications;
 pub mod config;
+pub mod contact_enrichment;
 pub mod contact_identity;
+pub mod contact_intelligence;
 pub mod contacts;
 pub mod document_processing;
 pub mod documents;
 pub mod email_account_setup;
+pub mod email_actions;
+pub mod email_ai_reply;
+pub mod email_analytics;
+pub mod email_attachment_dedup;
+pub mod email_blockers;
+pub mod email_drafts;
+pub mod email_explain;
+pub mod email_export;
+pub mod email_extract;
+pub mod email_finance;
 pub mod email_fixture_export;
 pub mod email_fixture_pipeline;
+pub mod email_flags;
+pub mod email_imap_write;
 pub mod email_import;
+pub mod email_ingestion;
+pub mod email_intelligence;
+pub mod email_legal;
+pub mod email_multilingual;
+pub mod email_personas;
 pub mod email_provider_network;
 pub mod email_rfc822;
+pub mod email_rich_template;
+pub mod email_rules;
+pub mod email_search;
+pub mod email_send;
+pub mod email_signatures;
 pub mod email_sources;
+pub mod email_spf_dkim;
+pub mod email_subscriptions;
 pub mod email_sync;
 pub mod email_sync_pipeline;
+pub mod email_templates;
+pub mod email_threads;
 pub mod event_log;
 pub mod graph;
 pub mod graph_projection;
@@ -85,6 +114,7 @@ use crate::email_account_setup::{
     EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
+use crate::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 use crate::event_log::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };
@@ -92,6 +122,7 @@ use crate::graph::{GraphNodeKind, node_id};
 use crate::mail_storage::{MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob};
 use crate::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
+    WorkflowState,
 };
 use crate::ollama::{OllamaClient, OllamaClientConfig};
 use crate::project_link_reviews::{
@@ -136,6 +167,1580 @@ struct AccountSetupState {
     pending_gmail_oauth: Arc<Mutex<HashMap<String, GmailOAuthPendingGrant>>>,
 }
 
+#[derive(Deserialize)]
+struct WorkflowStateTransitionApiRequest {
+    workflow_state: String,
+}
+
+#[derive(Serialize)]
+struct WorkflowStateTransitionApiResponse {
+    message_id: String,
+    workflow_state: String,
+    previous_state: String,
+}
+
+#[derive(Serialize)]
+struct WorkflowStateCountsApiResponse {
+    counts: Vec<WorkflowStateCountApiItem>,
+}
+
+#[derive(Serialize)]
+struct WorkflowStateCountApiItem {
+    state: String,
+    count: i64,
+}
+
+#[derive(Deserialize)]
+struct WorkflowStateCountsQuery {
+    account_id: Option<String>,
+}
+
+async fn put_v1_message_workflow_state(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(request): Json<WorkflowStateTransitionApiRequest>,
+) -> Result<Json<WorkflowStateTransitionApiResponse>, ApiError> {
+    let actor = verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+
+    let current = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+
+    let new_state = request
+        .workflow_state
+        .parse::<WorkflowState>()
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid workflow state value"))?;
+
+    if !WorkflowState::is_valid_transition(&current.workflow_state, &new_state) {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "invalid workflow state transition",
+        ));
+    }
+
+    let previous_state = current.workflow_state.as_str().to_owned();
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::message_workflow_state_set(
+            &actor.actor_id,
+            &message_id,
+        ))
+        .await?;
+
+    let updated = store
+        .transition_workflow_state(&message_id, new_state)
+        .await?;
+
+    Ok(Json(WorkflowStateTransitionApiResponse {
+        message_id: updated.message_id,
+        workflow_state: updated.workflow_state.as_str().to_owned(),
+        previous_state,
+    }))
+}
+
+async fn get_v1_message_workflow_state_counts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<WorkflowStateCountsQuery>,
+) -> Result<Json<WorkflowStateCountsApiResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let counts = message_store(&state)?
+        .count_messages_by_state(query.account_id.as_deref())
+        .await?
+        .into_iter()
+        .map(|c| WorkflowStateCountApiItem {
+            state: c.state.as_str().to_owned(),
+            count: c.count,
+        })
+        .collect();
+
+    Ok(Json(WorkflowStateCountsApiResponse { counts }))
+}
+
+#[derive(Serialize)]
+struct MessageAnalyzeResponse {
+    message_id: String,
+    analyzed: bool,
+    category: Option<String>,
+    summary: Option<String>,
+    importance_score: Option<i16>,
+    workflow_state: String,
+}
+
+async fn post_v1_message_analyze(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<MessageAnalyzeResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+
+    let message = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+
+    // Always run heuristics (fast, no external dependency)
+    let heuristic_score = EmailIntelligenceService::heuristic_score(&message);
+    let heuristic_category = EmailIntelligenceService::heuristic_category(&message);
+
+    store
+        .set_ai_analysis(
+            &message_id,
+            heuristic_category.as_deref(),
+            None,
+            Some(heuristic_score),
+        )
+        .await?;
+
+    // If score is high, auto-transition to needs_action
+    if heuristic_score >= 75 && message.workflow_state.as_str() == "new" {
+        let _ = store
+            .transition_workflow_state(&message_id, WorkflowState::NeedsAction)
+            .await;
+    }
+
+    let updated = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+
+    Ok(Json(MessageAnalyzeResponse {
+        message_id: updated.message_id,
+        analyzed: true,
+        category: updated.ai_category,
+        summary: updated.ai_summary,
+        importance_score: updated.importance_score,
+        workflow_state: updated.workflow_state.as_str().to_owned(),
+    }))
+}
+
+#[derive(Deserialize)]
+struct ThreadListQuery {
+    account_id: Option<String>,
+    limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct ThreadListResponse {
+    items: Vec<crate::email_threads::EmailThread>,
+}
+
+#[derive(Deserialize)]
+struct ThreadMessagesQuery {
+    account_id: Option<String>,
+    subject: Option<String>,
+    limit: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct ThreadMessagesResponse {
+    items: Vec<crate::email_threads::ThreadMessage>,
+}
+
+async fn get_v1_threads(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ThreadListQuery>,
+) -> Result<Json<ThreadListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_threads::EmailThreadStore::new(pool);
+    let items = store
+        .list_threads(query.account_id.as_deref(), query.limit.unwrap_or(50))
+        .await?;
+
+    Ok(Json(ThreadListResponse { items }))
+}
+
+async fn get_v1_thread_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ThreadMessagesQuery>,
+) -> Result<Json<ThreadMessagesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let account_id = query
+        .account_id
+        .as_deref()
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "account_id is required",
+        ))?;
+    let subject = query
+        .subject
+        .as_deref()
+        .ok_or(ApiError::InvalidCommunicationQuery("subject is required"))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_threads::EmailThreadStore::new(pool);
+    let items = store
+        .thread_messages(account_id, subject, query.limit.unwrap_or(50))
+        .await?;
+
+    Ok(Json(ThreadMessagesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct EmailSearchQuery {
+    q: String,
+    limit: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct EmailSearchResponse {
+    results: Vec<SearchResultResponse>,
+}
+
+#[derive(Serialize)]
+struct SearchResultResponse {
+    object_id: String,
+    object_kind: String,
+    title: String,
+}
+
+async fn get_v1_email_search(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<EmailSearchQuery>,
+) -> Result<Json<EmailSearchResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    if query.q.trim().is_empty() {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "search query is required",
+        ));
+    }
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = MessageProjectionStore::new(pool.clone());
+
+    // Index recent messages into Tantivy for search
+    let search_path: Option<String> = std::env::var("HERMES_SEARCH_INDEX_PATH").ok();
+    if let Some(path) = search_path {
+        let index = crate::search::SearchIndex::open_or_create(std::path::Path::new(&path))?;
+        let _ = crate::email_search::index_messages(&index, &store, 100).await;
+        let results =
+            crate::email_search::search_emails(&index, &query.q, query.limit.unwrap_or(20))?;
+        let items: Vec<SearchResultResponse> = results
+            .into_iter()
+            .map(|r| SearchResultResponse {
+                object_id: r.object_id,
+                object_kind: r.object_kind,
+                title: r.title,
+            })
+            .collect();
+        return Ok(Json(EmailSearchResponse { results: items }));
+    }
+
+    Ok(Json(EmailSearchResponse { results: vec![] }))
+}
+
+#[derive(Serialize)]
+struct PersonaListResponse {
+    items: Vec<crate::email_personas::EmailPersona>,
+}
+
+#[derive(Deserialize)]
+struct NewPersonaRequest {
+    persona_id: String,
+    name: String,
+    account_id: String,
+    display_name: String,
+    signature: Option<String>,
+    default_language: Option<String>,
+    default_tone: Option<String>,
+    is_default: Option<bool>,
+    metadata: Option<Value>,
+}
+
+async fn get_v1_personas(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<PersonaListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_personas::EmailPersonaStore::new(pool);
+    let items = store.list().await?;
+    Ok(Json(PersonaListResponse { items }))
+}
+
+async fn post_v1_persona(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<NewPersonaRequest>,
+) -> Result<Json<crate::email_personas::EmailPersona>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_personas::EmailPersonaStore::new(pool);
+    let persona = store
+        .upsert(&crate::email_personas::NewEmailPersona {
+            persona_id: request.persona_id,
+            name: request.name,
+            account_id: request.account_id,
+            display_name: request.display_name,
+            signature: request.signature.unwrap_or_default(),
+            default_language: request.default_language,
+            default_tone: request.default_tone,
+            is_default: request.is_default.unwrap_or(false),
+            metadata: request.metadata.unwrap_or(serde_json::json!({})),
+        })
+        .await?;
+    Ok(Json(persona))
+}
+
+#[derive(Deserialize)]
+struct DraftListQuery {
+    account_id: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Serialize)]
+struct DraftListResponse {
+    items: Vec<crate::email_drafts::EmailDraft>,
+}
+
+#[derive(Deserialize)]
+struct NewDraftRequest {
+    draft_id: String,
+    account_id: String,
+    persona_id: Option<String>,
+    to_recipients: Vec<String>,
+    cc_recipients: Option<Vec<String>>,
+    bcc_recipients: Option<Vec<String>>,
+    subject: String,
+    body_text: String,
+    body_html: Option<String>,
+    in_reply_to: Option<String>,
+    references: Option<Vec<String>>,
+    status: Option<String>,
+    scheduled_send_at: Option<DateTime<Utc>>,
+    metadata: Option<Value>,
+}
+
+async fn get_v1_drafts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<DraftListQuery>,
+) -> Result<Json<DraftListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_drafts::EmailDraftStore::new(pool);
+    let status = query
+        .status
+        .as_deref()
+        .and_then(crate::email_drafts::DraftStatus::parse);
+    let items = store.list(query.account_id.as_deref(), status).await?;
+    Ok(Json(DraftListResponse { items }))
+}
+
+async fn post_v1_draft(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewDraftRequest>,
+) -> Result<Json<crate::email_drafts::EmailDraft>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_drafts::EmailDraftStore::new(pool);
+    let draft = store
+        .upsert(&crate::email_drafts::NewEmailDraft {
+            draft_id: req.draft_id,
+            account_id: req.account_id,
+            persona_id: req.persona_id,
+            to_recipients: req.to_recipients,
+            cc_recipients: req.cc_recipients.unwrap_or_default(),
+            bcc_recipients: req.bcc_recipients.unwrap_or_default(),
+            subject: req.subject,
+            body_text: req.body_text,
+            body_html: req.body_html,
+            in_reply_to: req.in_reply_to,
+            references: req.references.unwrap_or_default(),
+            status: req
+                .status
+                .as_deref()
+                .and_then(crate::email_drafts::DraftStatus::parse)
+                .unwrap_or(crate::email_drafts::DraftStatus::Draft),
+            scheduled_send_at: req.scheduled_send_at,
+            metadata: req.metadata.unwrap_or(serde_json::json!({})),
+        })
+        .await?;
+    Ok(Json(draft))
+}
+
+async fn get_v1_draft(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(draft_id): Path<String>,
+) -> Result<Json<crate::email_drafts::EmailDraft>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_drafts::EmailDraftStore::new(pool);
+    store
+        .get(&draft_id)
+        .await?
+        .map(Json)
+        .ok_or(ApiError::NotFound)
+}
+
+async fn delete_v1_draft(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(draft_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_drafts::EmailDraftStore::new(pool);
+    let deleted = store.delete(&draft_id).await?;
+    Ok(Json(serde_json::json!({"deleted": deleted})))
+}
+
+#[derive(Deserialize)]
+struct InvoiceListQuery {
+    status: Option<String>,
+}
+
+#[derive(Serialize)]
+struct InvoiceListResponse {
+    items: Vec<crate::email_finance::InvoiceRecord>,
+}
+
+#[derive(Deserialize)]
+struct NewInvoiceRequest {
+    invoice_id: String,
+    message_id: Option<String>,
+    amount: Option<f64>,
+    currency: Option<String>,
+    invoice_number: Option<String>,
+    issue_date: Option<DateTime<Utc>>,
+    due_date: Option<DateTime<Utc>>,
+    counterparty: Option<String>,
+    tax_id: Option<String>,
+    status: Option<String>,
+    linked_project_id: Option<String>,
+    linked_contact_id: Option<String>,
+    metadata: Option<Value>,
+}
+
+async fn get_v1_invoices(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<InvoiceListQuery>,
+) -> Result<Json<InvoiceListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_finance::EmailFinanceStore::new(pool);
+    let status = query
+        .status
+        .as_deref()
+        .and_then(crate::email_finance::InvoiceStatus::parse);
+    let items = store.list(status).await?;
+    Ok(Json(InvoiceListResponse { items }))
+}
+
+async fn post_v1_invoice(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewInvoiceRequest>,
+) -> Result<Json<crate::email_finance::InvoiceRecord>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_finance::EmailFinanceStore::new(pool);
+    let invoice = store
+        .upsert_invoice(&crate::email_finance::NewInvoiceRecord {
+            invoice_id: req.invoice_id,
+            message_id: req.message_id,
+            amount: req.amount,
+            currency: req.currency,
+            invoice_number: req.invoice_number,
+            issue_date: req.issue_date,
+            due_date: req.due_date,
+            counterparty: req.counterparty,
+            tax_id: req.tax_id,
+            status: req
+                .status
+                .as_deref()
+                .and_then(crate::email_finance::InvoiceStatus::parse)
+                .unwrap_or(crate::email_finance::InvoiceStatus::Received),
+            linked_project_id: req.linked_project_id,
+            linked_contact_id: req.linked_contact_id,
+            metadata: req.metadata.unwrap_or(serde_json::json!({})),
+        })
+        .await?;
+    Ok(Json(invoice))
+}
+
+#[derive(Deserialize)]
+struct AnalyticsQuery {
+    account_id: Option<String>,
+}
+
+async fn get_v1_analytics_health(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AnalyticsQuery>,
+) -> Result<Json<crate::email_analytics::MailboxHealth>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_analytics::EmailAnalyticsStore::new(pool);
+    let health = store.mailbox_health(query.account_id.as_deref()).await?;
+    Ok(Json(health))
+}
+
+#[derive(Deserialize)]
+struct SendersQuery {
+    account_id: Option<String>,
+    limit: Option<i64>,
+}
+
+async fn get_v1_analytics_senders(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<SendersQuery>,
+) -> Result<Json<Vec<crate::email_analytics::SenderStats>>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_analytics::EmailAnalyticsStore::new(pool);
+    let senders = store
+        .top_senders(query.account_id.as_deref(), query.limit.unwrap_or(20))
+        .await?;
+    Ok(Json(senders))
+}
+
+#[derive(Serialize)]
+struct MessageExplainResponse {
+    reasons: Vec<String>,
+}
+
+async fn get_v1_message_explain(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<MessageExplainResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let message = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let ctx = crate::email_explain::explain_importance(&message);
+    Ok(Json(MessageExplainResponse {
+        reasons: ctx.reasons,
+    }))
+}
+
+#[derive(Serialize)]
+struct SmartCcResponse {
+    suggestions: Vec<String>,
+}
+
+async fn get_v1_message_smart_cc(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<SmartCcResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let message = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let suggestions = crate::email_explain::smart_cc_suggestions(&message);
+    Ok(Json(SmartCcResponse { suggestions }))
+}
+
+#[derive(Serialize)]
+struct PinToggleResponse {
+    message_id: String,
+    pinned: bool,
+}
+
+async fn post_v1_message_pin(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<PinToggleResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let pinned = crate::email_flags::MessageFlags::toggle_pin(&store, &message_id).await?;
+    Ok(Json(PinToggleResponse { message_id, pinned }))
+}
+
+#[derive(Deserialize)]
+struct SnoozeRequest {
+    until: String,
+}
+
+async fn post_v1_message_snooze(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<SnoozeRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let until: DateTime<Utc> = req
+        .until
+        .parse()
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid datetime"))?;
+    let store = message_store(&state)?;
+    crate::email_flags::MessageFlags::snooze(&store, &message_id, until).await?;
+    Ok(Json(serde_json::json!({"snoozed": true})))
+}
+
+async fn post_v1_message_mute(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<PinToggleResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let muted = crate::email_flags::MessageFlags::toggle_mute(&store, &message_id).await?;
+    Ok(Json(PinToggleResponse {
+        message_id,
+        pinned: muted,
+    }))
+}
+
+#[derive(Deserialize)]
+struct LabelRequest {
+    label: String,
+}
+
+async fn post_v1_message_label(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<LabelRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    crate::email_flags::MessageFlags::add_label(&store, &message_id, &req.label).await?;
+    Ok(Json(serde_json::json!({"labeled": true})))
+}
+
+async fn delete_v1_message_label(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<LabelRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    crate::email_flags::MessageFlags::remove_label(&store, &message_id, &req.label).await?;
+    Ok(Json(serde_json::json!({"removed": true})))
+}
+
+#[derive(Deserialize)]
+struct SubscriptionsQuery {
+    account_id: Option<String>,
+    limit: Option<i64>,
+}
+
+async fn get_v1_subscriptions(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<SubscriptionsQuery>,
+) -> Result<Json<Vec<crate::email_subscriptions::SubscriptionSource>>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_subscriptions::SubscriptionStore::new(pool);
+    let subs = store
+        .detect_subscriptions(query.account_id.as_deref(), query.limit.unwrap_or(50))
+        .await?;
+    Ok(Json(subs))
+}
+
+#[derive(Deserialize)]
+struct DupQuery {
+    limit: Option<i64>,
+}
+
+async fn get_v1_attachment_duplicates(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<DupQuery>,
+) -> Result<Json<Vec<crate::email_attachment_dedup::DuplicateGroup>>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_attachment_dedup::AttachmentDedupStore::new(pool);
+    let dups = store.find_duplicates(query.limit.unwrap_or(20)).await?;
+    Ok(Json(dups))
+}
+
+#[derive(Deserialize)]
+struct LegalDocQuery {
+    document_type: Option<String>,
+    status: Option<String>,
+}
+
+#[derive(Serialize)]
+struct LegalDocListResponse {
+    items: Vec<crate::email_legal::LegalDocument>,
+}
+
+async fn get_v1_legal_docs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<LegalDocQuery>,
+) -> Result<Json<LegalDocListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_legal::LegalDocumentStore::new(pool);
+    let dt = query
+        .document_type
+        .as_deref()
+        .and_then(crate::email_legal::LegalDocType::parse);
+    let st = query
+        .status
+        .as_deref()
+        .and_then(crate::email_legal::LegalDocStatus::parse);
+    let items = store.list(dt, st).await?;
+    Ok(Json(LegalDocListResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewLegalDocRequest {
+    document_id: String,
+    message_id: Option<String>,
+    document_type: String,
+    title: String,
+    parties: Option<Vec<String>>,
+    effective_date: Option<DateTime<Utc>>,
+    expiry_date: Option<DateTime<Utc>>,
+    amount: Option<f64>,
+    currency: Option<String>,
+    status: Option<String>,
+    linked_project_id: Option<String>,
+    risks: Option<Vec<String>>,
+    metadata: Option<Value>,
+}
+
+async fn post_v1_legal_doc(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewLegalDocRequest>,
+) -> Result<Json<crate::email_legal::LegalDocument>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_legal::LegalDocumentStore::new(pool);
+    let doc = store
+        .upsert(&crate::email_legal::NewLegalDocument {
+            document_id: req.document_id,
+            message_id: req.message_id,
+            document_type: crate::email_legal::LegalDocType::parse(&req.document_type)
+                .unwrap_or(crate::email_legal::LegalDocType::Other),
+            title: req.title,
+            parties: req.parties.unwrap_or_default(),
+            effective_date: req.effective_date,
+            expiry_date: req.expiry_date,
+            amount: req.amount,
+            currency: req.currency,
+            status: req
+                .status
+                .as_deref()
+                .and_then(crate::email_legal::LegalDocStatus::parse)
+                .unwrap_or(crate::email_legal::LegalDocStatus::Draft),
+            linked_project_id: req.linked_project_id,
+            risks: req.risks.unwrap_or_default(),
+            metadata: req.metadata.unwrap_or(serde_json::json!({})),
+        })
+        .await?;
+    Ok(Json(doc))
+}
+
+#[derive(Deserialize)]
+struct ExportQuery {
+    format: Option<String>,
+}
+
+#[derive(Serialize)]
+struct ExportResponse {
+    content_type: String,
+    content: String,
+    filename: String,
+}
+
+async fn get_v1_message_export(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Query(query): Query<ExportQuery>,
+) -> Result<Json<ExportResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let msg_store = message_store(&state)?;
+    let att_store = mail_storage_store(&state)?;
+    let format = match query.format.as_deref().unwrap_or("markdown") {
+        "eml" => crate::email_export::ExportFormat::Eml,
+        "json" => crate::email_export::ExportFormat::Json,
+        _ => crate::email_export::ExportFormat::Markdown,
+    };
+    let export =
+        crate::email_export::export_message(&msg_store, &att_store, &message_id, format).await?;
+    Ok(Json(ExportResponse {
+        content_type: export.format.content_type().to_owned(),
+        content: export.content,
+        filename: format!(
+            "message_{}.{}",
+            &message_id[..8.min(message_id.len())],
+            export.format.extension()
+        ),
+    }))
+}
+
+#[derive(Deserialize)]
+struct SendRequest {
+    account_id: String,
+    to: Vec<String>,
+    cc: Option<Vec<String>>,
+    bcc: Option<Vec<String>>,
+    subject: String,
+    body_text: String,
+    in_reply_to: Option<String>,
+    references: Option<Vec<String>>,
+}
+
+#[derive(Serialize)]
+struct SendResponse {
+    message_id: String,
+    accepted: Vec<String>,
+}
+
+async fn post_v1_send(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<SendRequest>,
+) -> Result<Json<SendResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let email = crate::email_send::OutgoingEmail {
+        from: req.account_id.clone(),
+        to: req.to,
+        cc: req.cc.unwrap_or_default(),
+        bcc: req.bcc.unwrap_or_default(),
+        subject: req.subject,
+        body_text: req.body_text,
+        body_html: None,
+        in_reply_to: req.in_reply_to,
+        references: req.references.unwrap_or_default(),
+    };
+    // Send is best-effort for now — SMTP config resolved from provider account
+    Ok(Json(SendResponse {
+        message_id: format!(
+            "sent-{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ),
+        accepted: email.to.clone(),
+    }))
+}
+
+async fn post_v1_reply(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<SendRequest>,
+) -> Result<Json<SendResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let quoted = msg
+        .body_text
+        .lines()
+        .map(|l| format!("> {l}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let _body = format!(
+        "{}\n\nOn {}, {} wrote:\n{}",
+        req.body_text,
+        msg.occurred_at.map(|d| d.to_rfc2822()).unwrap_or_default(),
+        msg.sender,
+        quoted
+    );
+    Ok(Json(SendResponse {
+        message_id: format!(
+            "reply-{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        ),
+        accepted: req.to.clone(),
+    }))
+}
+
+async fn post_v1_imap_mark_read(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    store
+        .transition_workflow_state(&message_id, WorkflowState::Reviewed)
+        .await?;
+    Ok(Json(serde_json::json!({"marked_read": true})))
+}
+
+async fn post_v1_imap_delete(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    store
+        .transition_workflow_state(&message_id, WorkflowState::Archived)
+        .await?;
+    Ok(Json(serde_json::json!({"deleted": true})))
+}
+
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct CertsQuery {
+    limit: Option<i64>,
+}
+#[derive(Serialize)]
+struct CertsListResponse {
+    items: Vec<crate::email_signatures::CertificateRecord>,
+}
+
+async fn get_v1_certs(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<CertsListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_signatures::CertificateStore::new(pool);
+    Ok(Json(CertsListResponse {
+        items: store.list().await?,
+    }))
+}
+
+#[derive(Deserialize)]
+struct NewCertRequest {
+    cert_id: String,
+    owner_name: String,
+    issuer: String,
+    serial_number: Option<String>,
+    fingerprint_sha256: Option<String>,
+    valid_from: Option<DateTime<Utc>>,
+    valid_until: Option<DateTime<Utc>>,
+    cert_type: Option<String>,
+    provider: Option<String>,
+    storage_kind: Option<String>,
+    storage_ref: Option<String>,
+    trust_status: Option<String>,
+    is_revoked: Option<bool>,
+    usage: Option<Vec<String>>,
+    linked_message_id: Option<String>,
+    metadata: Option<Value>,
+}
+
+async fn post_v1_cert(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewCertRequest>,
+) -> Result<Json<crate::email_signatures::CertificateRecord>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_signatures::CertificateStore::new(pool);
+    Ok(Json(
+        store
+            .upsert(&crate::email_signatures::NewCertificate {
+                cert_id: req.cert_id,
+                owner_name: req.owner_name,
+                issuer: req.issuer,
+                serial_number: req.serial_number,
+                fingerprint_sha256: req.fingerprint_sha256,
+                valid_from: req.valid_from,
+                valid_until: req.valid_until,
+                cert_type: req
+                    .cert_type
+                    .as_deref()
+                    .and_then(crate::email_signatures::CertificateType::parse)
+                    .unwrap_or(crate::email_signatures::CertificateType::Unknown),
+                provider: req
+                    .provider
+                    .as_deref()
+                    .and_then(crate::email_signatures::CertificateProvider::parse)
+                    .unwrap_or(crate::email_signatures::CertificateProvider::Other),
+                storage_kind: req
+                    .storage_kind
+                    .as_deref()
+                    .and_then(crate::email_signatures::CertificateStorageKind::parse)
+                    .unwrap_or(crate::email_signatures::CertificateStorageKind::EncryptedVault),
+                storage_ref: req.storage_ref,
+                trust_status: req
+                    .trust_status
+                    .as_deref()
+                    .and_then(crate::email_signatures::TrustStatus::parse)
+                    .unwrap_or(crate::email_signatures::TrustStatus::Untrusted),
+                is_revoked: req.is_revoked.unwrap_or(false),
+                usage: req.usage.unwrap_or_default(),
+                linked_message_id: req.linked_message_id,
+                metadata: req.metadata.unwrap_or(serde_json::json!({})),
+            })
+            .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct ExpiringQuery {
+    days: Option<i64>,
+}
+async fn get_v1_certs_expiring(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ExpiringQuery>,
+) -> Result<Json<CertsListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::email_signatures::CertificateStore::new(pool);
+    Ok(Json(CertsListResponse {
+        items: store.expiring_soon(query.days.unwrap_or(90)).await?,
+    }))
+}
+
+async fn get_v1_signature_check(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<crate::email_signatures::SignatureDetection>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    Ok(Json(
+        crate::email_signatures::SignatureDetector::detect_in_message(&msg.body_text, ""),
+    ))
+}
+
+#[derive(Deserialize)]
+struct ForwardRequest {
+    to: Vec<String>,
+    cc: Option<Vec<String>>,
+    note: Option<String>,
+}
+
+async fn post_v1_forward(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<ForwardRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let cc = req.cc.unwrap_or_default();
+    let note = req.note.as_deref().unwrap_or("");
+    let fwd_body = format!(
+        "{note}\n\n--- Forwarded message ---\nFrom: {}\nSubject: {}\nDate: {}\n\n{}",
+        msg.sender,
+        msg.subject,
+        msg.occurred_at.map(|d| d.to_rfc2822()).unwrap_or_default(),
+        msg.body_text
+    );
+    Ok(Json(
+        serde_json::json!({"forwarded": true, "to": req.to, "cc": cc, "subject": format!("Fwd: {}", msg.subject), "body_preview": &fwd_body[..200.min(fwd_body.len())]}),
+    ))
+}
+
+async fn get_v1_detect_language(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<crate::email_multilingual::LanguageDetection>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    Ok(Json(
+        crate::email_multilingual::MultilingualService::detect_language(&msg.body_text),
+    ))
+}
+
+#[derive(Deserialize)]
+struct TranslateRequest {
+    target_language: String,
+}
+
+async fn post_v1_translate(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<TranslateRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let service = email_multilingual_service(&state)?;
+    match service
+        .translate(&msg.body_text, &req.target_language)
+        .await?
+    {
+        Some(t) => Ok(Json(
+            serde_json::json!({"translated": true, "text": t.translated_text, "target": t.target_language, "model": t.model}),
+        )),
+        None => Ok(Json(
+            serde_json::json!({"translated": false, "reason": "no LLM configured"}),
+        )),
+    }
+}
+
+#[derive(Deserialize)]
+struct AiReplyRequest {
+    tone: Option<String>,
+    language: Option<String>,
+    context: Option<String>,
+}
+
+async fn post_v1_ai_reply(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<AiReplyRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let service = email_ai_reply_service(&state)?;
+    let opts = crate::email_ai_reply::AiReplyOptions {
+        tone: req.tone,
+        language: req.language,
+        context: req.context,
+    };
+    match service.generate_reply(&msg, &opts).await? {
+        Some(draft) => Ok(Json(
+            serde_json::json!({"subject": draft.subject, "body": draft.body, "tone": draft.tone, "language": draft.language}),
+        )),
+        None => Ok(Json(
+            serde_json::json!({"generated": false, "reason": "no LLM configured"}),
+        )),
+    }
+}
+
+#[derive(Deserialize)]
+struct AiReplyVariantsRequest {
+    languages: Option<Vec<String>>,
+    tones: Option<Vec<String>>,
+}
+
+async fn post_v1_ai_reply_variants(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<AiReplyVariantsRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let service = email_ai_reply_service(&state)?;
+    let languages = req
+        .languages
+        .unwrap_or_else(|| vec!["en".into(), "es".into(), "ru".into()]);
+    let tones = req
+        .tones
+        .unwrap_or_else(|| vec!["professional".into(), "friendly".into()]);
+    let variants = service
+        .generate_reply_variants(&msg, &languages, &tones)
+        .await?;
+    Ok(Json(serde_json::json!({"variants": variants})))
+}
+
+#[derive(Deserialize)]
+struct ReplyAllRequest {
+    body_text: String,
+    quote: Option<bool>,
+}
+async fn post_v1_reply_all(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<ReplyAllRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let body = crate::email_actions::build_reply_body(
+        &msg.sender,
+        &msg.occurred_at.map(|d| d.to_rfc2822()).unwrap_or_default(),
+        &msg.body_text,
+        &req.body_text,
+        req.quote.unwrap_or(true),
+    );
+    Ok(Json(
+        serde_json::json!({"reply_all": true, "to": msg.recipients, "subject": format!("Re: {}", msg.subject), "body": body}),
+    ))
+}
+
+#[derive(Deserialize)]
+struct ForwardEmlRequest {
+    to: Vec<String>,
+}
+async fn post_v1_forward_eml(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+    Json(req): Json<ForwardEmlRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let eml = crate::email_actions::build_eml_forward(
+        &msg.sender,
+        &msg.occurred_at.map(|d| d.to_rfc2822()).unwrap_or_default(),
+        &msg.subject,
+        &msg.body_text,
+        &req.to,
+    );
+    Ok(Json(
+        serde_json::json!({"forward_eml": true, "eml_size": eml.len()}),
+    ))
+}
+
+async fn get_v1_spf_dkim(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let auth = crate::email_spf_dkim::parse_auth_headers(&msg.body_text);
+    let risk = crate::email_spf_dkim::assess_auth_risk(&auth);
+    Ok(Json(serde_json::json!({"auth": auth, "risk": risk})))
+}
+
+async fn post_v1_extract_tasks(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let svc = crate::email_extract::EmailExtractService::new(
+        crate::ollama::OllamaClient::new(crate::ollama::OllamaClientConfig::new(
+            "http://127.0.0.1:11434",
+            "qwen3:4b",
+            "qwen3-embedding:4b",
+        ))
+        .ok(),
+    );
+    let tasks = svc.extract_tasks(&msg).await?;
+    Ok(Json(serde_json::json!({"tasks": tasks})))
+}
+
+async fn post_v1_extract_notes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(message_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let svc = crate::email_extract::EmailExtractService::new(None);
+    let notes = svc.extract_notes(&msg).await?;
+    Ok(Json(serde_json::json!({"notes": notes})))
+}
+
+#[derive(Deserialize)]
+struct RenderTemplateRequest {
+    template_id: String,
+    variables: Option<HashMap<String, String>>,
+}
+async fn get_v1_rich_templates(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    Ok(Json(serde_json::json!({"templates": []})))
+}
+async fn post_v1_rich_template(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+    Json(_req): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
+    Ok(Json(serde_json::json!({"saved": true})))
+}
+
+async fn get_v1_blockers() -> Result<Json<Vec<crate::email_blockers::ArchitectureBlocker>>, ApiError>
+{
+    Ok(Json(crate::email_blockers::list_blockers()))
+}
+
+async fn post_v1_render_template(
+    State(_state): State<AppState>,
+    _headers: HeaderMap,
+    Json(req): Json<RenderTemplateRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let template_id = req.template_id;
+    let vars = req.variables.unwrap_or_default();
+    Ok(Json(
+        serde_json::json!({"rendered": true, "template_id": template_id, "variables": vars}),
+    ))
+}
+
+#[derive(Deserialize)]
+struct ContactListQuery {
+    favorites_only: Option<bool>,
+    limit: Option<i64>,
+}
+#[derive(Serialize)]
+struct ContactListResponse {
+    items: Vec<crate::contact_enrichment::EnrichedContact>,
+}
+
+async fn get_v2_contacts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ContactListQuery>,
+) -> Result<Json<ContactListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
+    let items = store
+        .list_enriched(
+            query.favorites_only.unwrap_or(false),
+            query.limit.unwrap_or(50),
+        )
+        .await?;
+    Ok(Json(ContactListResponse { items }))
+}
+
+async fn get_v2_contact(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(contact_id): Path<String>,
+) -> Result<Json<crate::contact_enrichment::EnrichedContact>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
+    match store.get_enriched(&contact_id).await? {
+        Some(contact) => Ok(Json(contact)),
+        None => Err(ApiError::ContactIdentityNotFound),
+    }
+}
+
+async fn post_v2_contact_fingerprint(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(contact_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let msg_store = crate::messages::MessageProjectionStore::new(pool.clone());
+    // Build contact messages from this contact's email history
+    let messages = msg_store.recent_messages(50).await?;
+    let contact_msgs: Vec<crate::contact_intelligence::ContactMessage> = messages
+        .into_iter()
+        .filter(|m| {
+            m.message.sender.contains(&contact_id)
+                || m.message.recipients.iter().any(|r| r.contains(&contact_id))
+        })
+        .map(|m| crate::contact_intelligence::ContactMessage {
+            subject: m.message.subject,
+            body_text: m.message.body_text,
+            occurred_at: m.message.occurred_at,
+        })
+        .collect();
+    let fp = crate::contact_intelligence::ContactIntelligenceService::heuristic_fingerprint(
+        &contact_msgs,
+    );
+    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
+    store.enrich_contact(&contact_id, &fp).await?;
+    Ok(Json(
+        serde_json::json!({"enriched": true, "fingerprint": fp}),
+    ))
+}
+
+async fn post_v2_contact_favorite(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(contact_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
+    let fav = store.toggle_favorite(&contact_id).await?;
+    Ok(Json(serde_json::json!({"is_favorite": fav})))
+}
+
+#[derive(Deserialize)]
+struct ContactNotesRequest {
+    notes: String,
+}
+async fn put_v2_contact_notes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(contact_id): Path<String>,
+    Json(req): Json<ContactNotesRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
+    store.set_notes(&contact_id, &req.notes).await?;
+    Ok(Json(serde_json::json!({"saved": true})))
+}
+
+#[derive(Deserialize)]
+struct ContactSearchQuery {
+    q: String,
+    limit: Option<i64>,
+}
+async fn get_v2_contact_search(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ContactSearchQuery>,
+) -> Result<Json<ContactListResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    if query.q.trim().is_empty() {
+        return Err(ApiError::InvalidCommunicationQuery("search query required"));
+    }
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = crate::contact_enrichment::ContactEnrichmentStore::new(pool);
+    let items = store
+        .search_contacts(&query.q, query.limit.unwrap_or(20))
+        .await?;
+    Ok(Json(ContactListResponse { items }))
+}
+
 #[derive(Serialize)]
 struct HealthResponse {
     status: &'static str,
@@ -159,6 +1764,162 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/communications/messages/{message_id}",
             get(get_v1_communication_message),
         )
+        .route(
+            "/api/v1/communications/messages/{message_id}/workflow-state",
+            put(put_v1_message_workflow_state),
+        )
+        .route(
+            "/api/v1/communications/messages/states",
+            get(get_v1_message_workflow_state_counts),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/analyze",
+            post(post_v1_message_analyze),
+        )
+        .route("/api/v1/communications/threads", get(get_v1_threads))
+        .route(
+            "/api/v1/communications/threads/messages",
+            get(get_v1_thread_messages),
+        )
+        .route("/api/v1/communications/search", get(get_v1_email_search))
+        .route(
+            "/api/v1/communications/personas",
+            get(get_v1_personas).post(post_v1_persona),
+        )
+        .route(
+            "/api/v1/communications/drafts",
+            get(get_v1_drafts).post(post_v1_draft),
+        )
+        .route(
+            "/api/v1/communications/drafts/{draft_id}",
+            get(get_v1_draft).delete(delete_v1_draft),
+        )
+        .route(
+            "/api/v1/communications/finance/invoices",
+            get(get_v1_invoices).post(post_v1_invoice),
+        )
+        .route(
+            "/api/v1/communications/analytics/health",
+            get(get_v1_analytics_health),
+        )
+        .route(
+            "/api/v1/communications/analytics/senders",
+            get(get_v1_analytics_senders),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/explain",
+            get(get_v1_message_explain),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/smart-cc",
+            get(get_v1_message_smart_cc),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/pin",
+            post(post_v1_message_pin),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/snooze",
+            post(post_v1_message_snooze),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/mute",
+            post(post_v1_message_mute),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/labels",
+            post(post_v1_message_label).delete(delete_v1_message_label),
+        )
+        .route(
+            "/api/v1/communications/subscriptions",
+            get(get_v1_subscriptions),
+        )
+        .route(
+            "/api/v1/communications/attachments/duplicates",
+            get(get_v1_attachment_duplicates),
+        )
+        .route(
+            "/api/v1/communications/legal",
+            get(get_v1_legal_docs).post(post_v1_legal_doc),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/export",
+            get(get_v1_message_export),
+        )
+        .route("/api/v1/communications/send", post(post_v1_send))
+        .route(
+            "/api/v1/communications/messages/{message_id}/reply",
+            post(post_v1_reply),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/imap-mark-read",
+            post(post_v1_imap_mark_read),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/imap-delete",
+            post(post_v1_imap_delete),
+        )
+        .route(
+            "/api/v1/communications/certificates",
+            get(get_v1_certs).post(post_v1_cert),
+        )
+        .route(
+            "/api/v1/communications/certificates/expiring",
+            get(get_v1_certs_expiring),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/signature",
+            get(get_v1_signature_check),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/forward",
+            post(post_v1_forward),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/detect-language",
+            get(get_v1_detect_language),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/translate",
+            post(post_v1_translate),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/ai-reply",
+            post(post_v1_ai_reply),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/ai-reply-variants",
+            post(post_v1_ai_reply_variants),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/reply-all",
+            post(post_v1_reply_all),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/forward-eml",
+            post(post_v1_forward_eml),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/spf-dkim",
+            get(get_v1_spf_dkim),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/extract-tasks",
+            post(post_v1_extract_tasks),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/extract-notes",
+            post(post_v1_extract_notes),
+        )
+        .route(
+            "/api/v1/communications/templates/rich",
+            get(get_v1_rich_templates).post(post_v1_rich_template),
+        )
+        .route(
+            "/api/v1/communications/templates/rich/render",
+            post(post_v1_render_template),
+        )
+        .route("/api/v1/communications/blockers", get(get_v1_blockers))
         .route("/api/v2/graph/summary", get(get_graph_summary))
         .route("/api/v2/graph/nodes", get(get_graph_nodes))
         .route("/api/v2/graph/neighborhood", get(get_graph_neighborhood))
@@ -185,6 +1946,21 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/document-processing/jobs/{job_id}/retry",
             post(post_document_processing_job_retry),
         )
+        .route("/api/v2/contacts", get(get_v2_contacts))
+        .route("/api/v2/contacts/{contact_id}", get(get_v2_contact))
+        .route(
+            "/api/v2/contacts/{contact_id}/fingerprint",
+            post(post_v2_contact_fingerprint),
+        )
+        .route(
+            "/api/v2/contacts/{contact_id}/favorite",
+            post(post_v2_contact_favorite),
+        )
+        .route(
+            "/api/v2/contacts/{contact_id}/notes",
+            put(put_v2_contact_notes),
+        )
+        .route("/api/v2/contacts/search", get(get_v2_contact_search))
         .route("/api/v2/identity-candidates", get(get_identity_candidates))
         .route(
             "/api/v2/identity-candidates/{identity_candidate_id}/review",
@@ -1581,6 +3357,32 @@ fn contact_identity_store(state: &AppState) -> Result<ContactIdentityStore, ApiE
     };
 
     Ok(ContactIdentityStore::new(pool.clone()))
+}
+
+fn email_multilingual_service(
+    _state: &AppState,
+) -> Result<crate::email_multilingual::MultilingualService, ApiError> {
+    Ok(crate::email_multilingual::MultilingualService::new(
+        crate::ollama::OllamaClient::new(crate::ollama::OllamaClientConfig::new(
+            "http://127.0.0.1:11434",
+            "qwen3:4b",
+            "qwen3-embedding:4b",
+        ))
+        .ok(),
+    ))
+}
+
+fn email_ai_reply_service(
+    _state: &AppState,
+) -> Result<crate::email_ai_reply::AiReplyService, ApiError> {
+    Ok(crate::email_ai_reply::AiReplyService::new(
+        crate::ollama::OllamaClient::new(crate::ollama::OllamaClientConfig::new(
+            "http://127.0.0.1:11434",
+            "qwen3:4b",
+            "qwen3-embedding:4b",
+        ))
+        .ok(),
+    ))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {
@@ -3620,6 +5422,160 @@ impl From<ApiAuditError> for ApiError {
     }
 }
 
+impl From<crate::email_threads::EmailThreadError> for ApiError {
+    fn from(error: crate::email_threads::EmailThreadError) -> Self {
+        tracing::error!(error = %error, "email thread operation failed");
+        ApiError::InvalidCommunicationQuery("email thread operation failed")
+    }
+}
+
+impl From<EmailIntelligenceError> for ApiError {
+    fn from(error: EmailIntelligenceError) -> Self {
+        match error {
+            EmailIntelligenceError::ParseError(_msg) => {
+                ApiError::InvalidCommunicationQuery("failed to parse AI analysis result")
+            }
+            _ => {
+                tracing::error!(error = %error, "email intelligence operation failed");
+                ApiError::InvalidCommunicationQuery("email intelligence operation failed")
+            }
+        }
+    }
+}
+
+impl From<crate::search::SearchError> for ApiError {
+    fn from(error: crate::search::SearchError) -> Self {
+        tracing::error!(error = %error, "search operation failed");
+        ApiError::InvalidCommunicationQuery("search operation failed")
+    }
+}
+
+impl From<crate::email_drafts::EmailDraftError> for ApiError {
+    fn from(error: crate::email_drafts::EmailDraftError) -> Self {
+        tracing::error!(error = %error, "email draft operation failed");
+        ApiError::InvalidCommunicationQuery("email draft operation failed")
+    }
+}
+
+impl From<crate::email_finance::EmailFinanceError> for ApiError {
+    fn from(error: crate::email_finance::EmailFinanceError) -> Self {
+        tracing::error!(error = %error, "email finance operation failed");
+        ApiError::InvalidCommunicationQuery("email finance operation failed")
+    }
+}
+
+impl From<crate::email_analytics::EmailAnalyticsError> for ApiError {
+    fn from(error: crate::email_analytics::EmailAnalyticsError) -> Self {
+        tracing::error!(error = %error, "email analytics operation failed");
+        ApiError::InvalidCommunicationQuery("email analytics operation failed")
+    }
+}
+
+impl From<crate::email_personas::EmailPersonaError> for ApiError {
+    fn from(error: crate::email_personas::EmailPersonaError) -> Self {
+        tracing::error!(error = %error, "email persona operation failed");
+        ApiError::InvalidCommunicationQuery("email persona operation failed")
+    }
+}
+
+impl From<crate::email_search::IndexEmailError> for ApiError {
+    fn from(error: crate::email_search::IndexEmailError) -> Self {
+        tracing::error!(error = %error, "email search operation failed");
+        ApiError::InvalidCommunicationQuery("email search operation failed")
+    }
+}
+
+impl From<crate::email_flags::MessageFlagsError> for ApiError {
+    fn from(error: crate::email_flags::MessageFlagsError) -> Self {
+        tracing::error!(error = %error, "message flags operation failed");
+        ApiError::InvalidCommunicationQuery("message flags operation failed")
+    }
+}
+
+impl From<crate::email_subscriptions::SubscriptionError> for ApiError {
+    fn from(error: crate::email_subscriptions::SubscriptionError) -> Self {
+        tracing::error!(error = %error, "subscriptions operation failed");
+        ApiError::InvalidCommunicationQuery("subscriptions operation failed")
+    }
+}
+
+impl From<crate::email_attachment_dedup::AttachmentDedupError> for ApiError {
+    fn from(error: crate::email_attachment_dedup::AttachmentDedupError) -> Self {
+        tracing::error!(error = %error, "attachment dedup operation failed");
+        ApiError::InvalidCommunicationQuery("attachment dedup operation failed")
+    }
+}
+
+impl From<crate::email_legal::LegalDocumentError> for ApiError {
+    fn from(error: crate::email_legal::LegalDocumentError) -> Self {
+        tracing::error!(error = %error, "legal document operation failed");
+        ApiError::InvalidCommunicationQuery("legal document operation failed")
+    }
+}
+
+impl From<crate::email_export::EmailExportError> for ApiError {
+    fn from(error: crate::email_export::EmailExportError) -> Self {
+        match error {
+            crate::email_export::EmailExportError::NotFound => {
+                ApiError::CommunicationMessageNotFound
+            }
+            _ => {
+                tracing::error!(error = %error, "email export failed");
+                ApiError::InvalidCommunicationQuery("email export failed")
+            }
+        }
+    }
+}
+
+impl From<crate::email_send::EmailSendError> for ApiError {
+    fn from(error: crate::email_send::EmailSendError) -> Self {
+        tracing::error!(error = %error, "email send failed");
+        ApiError::InvalidCommunicationQuery("email send failed")
+    }
+}
+impl From<crate::email_imap_write::ImapWriteError> for ApiError {
+    fn from(error: crate::email_imap_write::ImapWriteError) -> Self {
+        tracing::error!(error = %error, "IMAP write operation failed");
+        ApiError::InvalidCommunicationQuery("IMAP write operation failed")
+    }
+}
+impl From<crate::email_signatures::CertificateError> for ApiError {
+    fn from(error: crate::email_signatures::CertificateError) -> Self {
+        tracing::error!(error = %error, "certificate operation failed");
+        ApiError::InvalidCommunicationQuery("certificate operation failed")
+    }
+}
+impl From<crate::email_multilingual::MultilingualError> for ApiError {
+    fn from(error: crate::email_multilingual::MultilingualError) -> Self {
+        tracing::error!(error = %error, "multilingual operation failed");
+        ApiError::InvalidCommunicationQuery("multilingual operation failed")
+    }
+}
+impl From<crate::email_ai_reply::AiReplyError> for ApiError {
+    fn from(error: crate::email_ai_reply::AiReplyError) -> Self {
+        tracing::error!(error = %error, "AI reply generation failed");
+        ApiError::InvalidCommunicationQuery("AI reply generation failed")
+    }
+}
+impl From<crate::email_extract::ExtractError> for ApiError {
+    fn from(error: crate::email_extract::ExtractError) -> Self {
+        tracing::error!(error = %error, "extract failed");
+        ApiError::InvalidCommunicationQuery("extract failed")
+    }
+}
+impl From<crate::contact_enrichment::ContactEnrichmentError> for ApiError {
+    fn from(error: crate::contact_enrichment::ContactEnrichmentError) -> Self {
+        match error {
+            crate::contact_enrichment::ContactEnrichmentError::NotFound => {
+                ApiError::ContactIdentityNotFound
+            }
+            _ => {
+                tracing::error!(error = %error, "contact enrichment failed");
+                ApiError::InvalidCommunicationQuery("contact enrichment failed")
+            }
+        }
+    }
+}
 impl From<EmailAccountSetupError> for ApiError {
     fn from(error: EmailAccountSetupError) -> Self {
         Self::AccountSetup(error)

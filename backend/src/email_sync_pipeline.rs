@@ -6,6 +6,7 @@ use crate::communications::{CommunicationIngestionStore, StoredRawCommunicationR
 use crate::contacts::{
     ContactProjectionError, ContactProjectionStore, upsert_contacts_from_message_participants,
 };
+use crate::email_ingestion::analyze_ingested_message;
 use crate::email_rfc822::{ParsedEmailAttachment, ParsedEmailAttachmentDisposition};
 use crate::email_sync::{
     EmailSyncBatch, EmailSyncRecordError, record_email_sync_batch_with_mail_blobs,
@@ -100,6 +101,7 @@ async fn project_raw_records(
     for raw_record in raw_records {
         let parsed = parse_raw_email_message_from_blob(blob_store, raw_record).await?;
         let message = project_parsed_raw_email_message(message_store, raw_record, &parsed).await?;
+        let _analysis = analyze_ingested_message(message_store, &message).await?;
         let attachment_report = project_attachments(
             mail_store,
             blob_store,

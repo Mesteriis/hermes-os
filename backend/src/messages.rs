@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
@@ -7,6 +8,106 @@ use thiserror::Error;
 use crate::communications::StoredRawCommunicationRecord;
 use crate::email_rfc822::{EmailRfc822ParseError, ParsedEmailMessage, parse_rfc822_message};
 use crate::mail_storage::{LocalMailBlobStore, MailStorageError};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WorkflowState {
+    New,
+    Reviewed,
+    NeedsAction,
+    Waiting,
+    Done,
+    Archived,
+    Muted,
+    Spam,
+}
+
+impl WorkflowState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            WorkflowState::New => "new",
+            WorkflowState::Reviewed => "reviewed",
+            WorkflowState::NeedsAction => "needs_action",
+            WorkflowState::Waiting => "waiting",
+            WorkflowState::Done => "done",
+            WorkflowState::Archived => "archived",
+            WorkflowState::Muted => "muted",
+            WorkflowState::Spam => "spam",
+        }
+    }
+
+    pub fn valid_transitions(&self) -> &[WorkflowState] {
+        match self {
+            WorkflowState::New => &[
+                WorkflowState::Reviewed,
+                WorkflowState::NeedsAction,
+                WorkflowState::Archived,
+                WorkflowState::Muted,
+                WorkflowState::Spam,
+            ],
+            WorkflowState::Reviewed => &[
+                WorkflowState::NeedsAction,
+                WorkflowState::Waiting,
+                WorkflowState::Done,
+                WorkflowState::Archived,
+                WorkflowState::Muted,
+                WorkflowState::Spam,
+            ],
+            WorkflowState::NeedsAction => &[
+                WorkflowState::Waiting,
+                WorkflowState::Done,
+                WorkflowState::Archived,
+                WorkflowState::Reviewed,
+            ],
+            WorkflowState::Waiting => &[
+                WorkflowState::NeedsAction,
+                WorkflowState::Done,
+                WorkflowState::Archived,
+                WorkflowState::Reviewed,
+            ],
+            WorkflowState::Done => &[
+                WorkflowState::Archived,
+                WorkflowState::Reviewed,
+                WorkflowState::NeedsAction,
+            ],
+            WorkflowState::Archived => &[
+                WorkflowState::Reviewed,
+                WorkflowState::NeedsAction,
+                WorkflowState::Done,
+            ],
+            WorkflowState::Muted => &[WorkflowState::Reviewed, WorkflowState::Archived],
+            WorkflowState::Spam => &[
+                WorkflowState::Reviewed,
+                WorkflowState::Archived,
+                WorkflowState::New,
+            ],
+        }
+    }
+
+    pub fn is_valid_transition(from: &Self, to: &Self) -> bool {
+        from.valid_transitions().contains(to)
+    }
+}
+
+impl std::str::FromStr for WorkflowState {
+    type Err = MessageProjectionError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim() {
+            "new" => Ok(WorkflowState::New),
+            "reviewed" => Ok(WorkflowState::Reviewed),
+            "needs_action" => Ok(WorkflowState::NeedsAction),
+            "waiting" => Ok(WorkflowState::Waiting),
+            "done" => Ok(WorkflowState::Done),
+            "archived" => Ok(WorkflowState::Archived),
+            "muted" => Ok(WorkflowState::Muted),
+            "spam" => Ok(WorkflowState::Spam),
+            _ => Err(MessageProjectionError::InvalidWorkflowState(
+                value.to_owned(),
+            )),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct MessageProjectionStore {
@@ -41,6 +142,11 @@ impl MessageProjectionStore {
                 m.sender_display_name,
                 m.delivery_state,
                 m.message_metadata,
+                m.workflow_state,
+                m.importance_score,
+                m.ai_category,
+                m.ai_summary,
+                m.ai_summary_generated_at,
                 count(a.attachment_id)::BIGINT AS attachment_count
             FROM communication_messages m
             LEFT JOIN communication_attachments a ON a.message_id = m.message_id
@@ -59,7 +165,12 @@ impl MessageProjectionStore {
                 m.conversation_id,
                 m.sender_display_name,
                 m.delivery_state,
-                m.message_metadata
+                m.message_metadata,
+                m.workflow_state,
+                m.importance_score,
+                m.ai_category,
+                m.ai_summary,
+                m.ai_summary_generated_at
             ORDER BY
                 COALESCE(m.occurred_at, m.projected_at) DESC,
                 m.projected_at DESC,
@@ -99,7 +210,12 @@ impl MessageProjectionStore {
                 conversation_id,
                 sender_display_name,
                 delivery_state,
-                message_metadata
+                message_metadata,
+                workflow_state,
+                importance_score,
+                ai_category,
+                ai_summary,
+                ai_summary_generated_at
             FROM communication_messages
             WHERE message_id = $1
             "#,
@@ -186,7 +302,12 @@ impl MessageProjectionStore {
                 conversation_id,
                 sender_display_name,
                 delivery_state,
-                message_metadata
+                message_metadata,
+                workflow_state,
+                importance_score,
+                ai_category,
+                ai_summary,
+                ai_summary_generated_at
             "#,
         )
         .bind(&canonical_message_id)
@@ -285,7 +406,12 @@ impl MessageProjectionStore {
                 conversation_id,
                 sender_display_name,
                 delivery_state,
-                message_metadata
+                message_metadata,
+                workflow_state,
+                importance_score,
+                ai_category,
+                ai_summary,
+                ai_summary_generated_at
             "#,
         )
         .bind(&message.message_id)
@@ -313,6 +439,173 @@ impl MessageProjectionStore {
             });
         };
 
+        row_to_projected_message(row)
+    }
+
+    pub async fn list_messages(
+        &self,
+        account_id: Option<&str>,
+        workflow_state: Option<WorkflowState>,
+        channel_kind: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<ProjectedMessageSummary>, MessageProjectionError> {
+        let limit = validate_limit(limit)?;
+        let workflow_state_str = workflow_state.map(|s| s.as_str().to_owned());
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                m.message_id, m.raw_record_id, m.account_id, m.provider_record_id,
+                m.subject, m.sender, m.recipients, m.body_text,
+                m.occurred_at, m.projected_at, m.channel_kind, m.conversation_id,
+                m.sender_display_name, m.delivery_state, m.message_metadata,
+                m.workflow_state, m.importance_score, m.ai_category,
+                m.ai_summary, m.ai_summary_generated_at,
+                count(a.attachment_id)::BIGINT AS attachment_count
+            FROM communication_messages m
+            LEFT JOIN communication_attachments a ON a.message_id = m.message_id
+            WHERE ($1::text IS NULL OR m.account_id = $1)
+              AND ($2::text IS NULL OR m.workflow_state = $2)
+              AND ($3::text IS NULL OR m.channel_kind = $3)
+            GROUP BY
+                m.message_id, m.raw_record_id, m.account_id, m.provider_record_id,
+                m.subject, m.sender, m.recipients, m.body_text,
+                m.occurred_at, m.projected_at, m.channel_kind, m.conversation_id,
+                m.sender_display_name, m.delivery_state, m.message_metadata,
+                m.workflow_state, m.importance_score, m.ai_category,
+                m.ai_summary, m.ai_summary_generated_at
+            ORDER BY COALESCE(m.occurred_at, m.projected_at) DESC, m.projected_at DESC, m.message_id ASC
+            LIMIT $4
+            "#,
+        )
+        .bind(account_id)
+        .bind(workflow_state_str.as_deref())
+        .bind(channel_kind)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+        rows.into_iter()
+            .map(row_to_projected_message_summary)
+            .collect()
+    }
+
+    pub async fn count_messages_by_state(
+        &self,
+        account_id: Option<&str>,
+    ) -> Result<Vec<WorkflowStateCount>, MessageProjectionError> {
+        let rows = sqlx::query(
+            r#"SELECT m.workflow_state, count(*)::BIGINT AS msg_count
+            FROM communication_messages m
+            WHERE ($1::text IS NULL OR m.account_id = $1)
+            GROUP BY m.workflow_state ORDER BY m.workflow_state"#,
+        )
+        .bind(account_id)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut counts = Vec::new();
+        for row in rows {
+            let state: String = row.try_get("workflow_state")?;
+            counts.push(WorkflowStateCount {
+                state: state.parse::<WorkflowState>().unwrap_or(WorkflowState::New),
+                count: row.try_get::<i64, _>("msg_count")?,
+            });
+        }
+        Ok(counts)
+    }
+
+    pub async fn transition_workflow_state(
+        &self,
+        message_id: &str,
+        new_state: WorkflowState,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        validate_non_empty("message_id", message_id)?;
+        let row = sqlx::query(
+            r#"UPDATE communication_messages SET workflow_state = $2, projected_at = now()
+            WHERE message_id = $1
+            RETURNING
+                message_id, raw_record_id, account_id, provider_record_id,
+                subject, sender, recipients, body_text,
+                occurred_at, projected_at, channel_kind, conversation_id,
+                sender_display_name, delivery_state, message_metadata,
+                workflow_state, importance_score, ai_category,
+                ai_summary, ai_summary_generated_at"#,
+        )
+        .bind(message_id.trim())
+        .bind(new_state.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Err(MessageProjectionError::MessageNotFound);
+        };
+        row_to_projected_message(row)
+    }
+
+    pub async fn set_ai_analysis(
+        &self,
+        message_id: &str,
+        category: Option<&str>,
+        summary: Option<&str>,
+        importance_score: Option<i16>,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        validate_non_empty("message_id", message_id)?;
+        if let Some(score) = importance_score {
+            if !(0..=100).contains(&score) {
+                return Err(MessageProjectionError::InvalidImportanceScore(score));
+            }
+        }
+        let row = sqlx::query(
+            r#"UPDATE communication_messages SET
+                ai_category = COALESCE($2, ai_category),
+                ai_summary = COALESCE($3, ai_summary),
+                ai_summary_generated_at = CASE WHEN $3 IS NOT NULL THEN now() ELSE ai_summary_generated_at END,
+                importance_score = COALESCE($4, importance_score),
+                projected_at = now()
+            WHERE message_id = $1
+            RETURNING
+                message_id, raw_record_id, account_id, provider_record_id,
+                subject, sender, recipients, body_text,
+                occurred_at, projected_at, channel_kind, conversation_id,
+                sender_display_name, delivery_state, message_metadata,
+                workflow_state, importance_score, ai_category,
+                ai_summary, ai_summary_generated_at"#,
+        )
+        .bind(message_id.trim())
+        .bind(category)
+        .bind(summary)
+        .bind(importance_score)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Err(MessageProjectionError::MessageNotFound);
+        };
+        row_to_projected_message(row)
+    }
+    pub async fn set_message_metadata(
+        &self,
+        message_id: &str,
+        metadata: &serde_json::Value,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        validate_non_empty("message_id", message_id)?;
+        if !metadata.is_object() {
+            return Err(MessageProjectionError::InvalidMessageMetadata);
+        }
+        let row = sqlx::query(
+            r#"UPDATE communication_messages SET message_metadata = $2, projected_at = now()
+            WHERE message_id = $1
+            RETURNING
+                message_id, raw_record_id, account_id, provider_record_id,
+                subject, sender, recipients, body_text,
+                occurred_at, projected_at, channel_kind, conversation_id,
+                sender_display_name, delivery_state, message_metadata,
+                workflow_state, importance_score, ai_category,
+                ai_summary, ai_summary_generated_at"#,
+        )
+        .bind(message_id.trim())
+        .bind(metadata)
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Err(MessageProjectionError::MessageNotFound);
+        };
         row_to_projected_message(row)
     }
 }
@@ -374,12 +667,23 @@ pub struct ProjectedMessage {
     pub sender_display_name: Option<String>,
     pub delivery_state: String,
     pub message_metadata: Value,
+    pub workflow_state: WorkflowState,
+    pub importance_score: Option<i16>,
+    pub ai_category: Option<String>,
+    pub ai_summary: Option<String>,
+    pub ai_summary_generated_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProjectedMessageSummary {
     pub message: ProjectedMessage,
     pub attachment_count: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct WorkflowStateCount {
+    pub state: WorkflowState,
+    pub count: i64,
 }
 
 pub async fn project_raw_email_message(
@@ -470,6 +774,7 @@ fn row_to_projected_message_summary(
 }
 
 fn row_to_projected_message(row: PgRow) -> Result<ProjectedMessage, MessageProjectionError> {
+    let workflow_state: String = row.try_get("workflow_state")?;
     Ok(ProjectedMessage {
         message_id: row.try_get("message_id")?,
         raw_record_id: row.try_get("raw_record_id")?,
@@ -486,6 +791,13 @@ fn row_to_projected_message(row: PgRow) -> Result<ProjectedMessage, MessageProje
         sender_display_name: row.try_get("sender_display_name")?,
         delivery_state: row.try_get("delivery_state")?,
         message_metadata: row.try_get("message_metadata")?,
+        workflow_state: workflow_state
+            .parse::<WorkflowState>()
+            .unwrap_or(WorkflowState::New),
+        importance_score: row.try_get("importance_score")?,
+        ai_category: row.try_get("ai_category")?,
+        ai_summary: row.try_get("ai_summary")?,
+        ai_summary_generated_at: row.try_get("ai_summary_generated_at")?,
     })
 }
 
@@ -603,4 +915,13 @@ pub enum MessageProjectionError {
 
     #[error("message query limit must be between 1 and 100: {0}")]
     InvalidLimit(i64),
+
+    #[error("communication message was not found")]
+    MessageNotFound,
+
+    #[error("invalid workflow state: {0}")]
+    InvalidWorkflowState(String),
+
+    #[error("invalid importance score: {0}, must be 0-100")]
+    InvalidImportanceScore(i16),
 }

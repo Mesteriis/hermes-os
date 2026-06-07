@@ -73,6 +73,9 @@ impl OllamaClient {
             embed_model: config.embed_model,
         })
     }
+    pub fn chat_model(&self) -> &str {
+        &self.chat_model
+    }
 
     pub async fn version(&self) -> Result<String, OllamaError> {
         let response: VersionResponse = self.get_json("/api/version").await?;
