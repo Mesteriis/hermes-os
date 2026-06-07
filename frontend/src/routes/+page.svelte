@@ -16,6 +16,8 @@
 	analyzeMessage,
 	searchEmails,
 	type EmailDraft,
+	type EnrichedPerson,
+	type Organization,
 	type MailboxHealth,
 	type SenderStats,
 	type EmailThread,
@@ -51,6 +53,24 @@
 		fetchWhatsappWebSessions,
 		fetchProjects,
 		fetchV1Status,
+		fetchPersons,
+		fetchOrganizations,
+		fetchCalendarAccounts,
+		fetchCalendarSources,
+		fetchCalendarEvents,
+		fetchCalendarWatchtower,
+		fetchWeeklyBrief,
+		searchCalendarEvents,
+		fetchEventBrief,
+		fetchEventContextPack,
+		fetchEventAgenda,
+		fetchEventChecklist,
+		fetchMeetingNotes,
+		createCalendarEvent,
+		postCalendarBrain,
+		type CalendarAccount,
+		type CalendarSource,
+		type CalendarEvent,
 		findFrontendLayoutSetting,
 		ingestTelegramFixtureMessage,
 		ingestWhatsappWebFixtureMessage,
@@ -144,6 +164,7 @@
 		| 'telegram'
 		| 'whatsapp'
 		| 'agents'
+		| 'organizations'
 		| 'settings';
 
 	type NavItem = {
@@ -311,6 +332,33 @@
 	let identityCandidates = $state<PersonIdentityCandidate[]>([]);
 	let identityCandidatesError = $state('');
 	let isIdentityCandidatesLoading = $state(false);
+	let persons = $state<EnrichedPerson[]>([]);
+	let organizations = $state<Organization[]>([]);
+	let organizationsError = $state('');
+	let isOrganizationsLoading = $state(false);
+
+	let calendarAccounts = $state<CalendarAccount[]>([]);
+	let calendarEvents = $state<CalendarEvent[]>([]);
+	let calendarSources = $state<CalendarSource[]>([]);
+	let calendarWatchtower = $state<Record<string, unknown>>({});
+	let isCalendarLoading = $state(false);
+	let calendarError = $state('');
+	let calendarViewMode = $state<'day' | 'week' | 'month' | 'agenda'>('week');
+	let selectedEvent = $state<CalendarEvent | null>(null);
+	let calendarSearchQuery = $state('');
+	let calendarSearchResults = $state<CalendarEvent[]>([]);
+	let weeklyBrief = $state<Record<string, unknown> | null>(null);
+	let eventBrief = $state<Record<string, unknown> | null>(null);
+	let eventContext = $state<Record<string, unknown> | null>(null);
+	let eventAgenda = $state<Record<string, unknown> | null>(null);
+	let showNewEventForm = $state(false);
+	let newEventTitle = $state('');
+	let newEventStart = $state('');
+	let newEventEnd = $state('');
+	let newEventType = $state('meeting');
+	let selectedOrganizationId = $state('');
+	let personsError = $state('');
+	let isPersonsLoading = $state(false);
 	let projectRequestSequence = 0;
 	let selectedConversationIndex = $state(0);
 	let selectedPersonIndex = $state(0);
@@ -523,22 +571,26 @@
 	let savingSettingKey = $state<string | null>(null);
 	let selectedSettingsSection = $state<'application' | 'accounts'>('application');
 
-	const primaryNav: NavItem[] = [
-		{ id: 'home', label: 'Home', icon: 'tabler:home', enabled: true },
-		{ id: 'communications', label: 'Communications', icon: 'tabler:messages', badge: '23', enabled: true },
-		{ id: 'timeline', label: 'Timeline', icon: 'tabler:timeline-event', enabled: true },
-		{ id: 'persons', label: 'Persons', icon: 'tabler:address-book', enabled: true },
-		{ id: 'projects', label: 'Projects', icon: 'tabler:briefcase', enabled: true },
-		{ id: 'tasks', label: 'Tasks', icon: 'tabler:checkbox', enabled: true },
-		{ id: 'calendar', label: 'Calendar', icon: 'tabler:calendar', enabled: true },
-		{ id: 'documents', label: 'Documents', icon: 'tabler:file-text', enabled: true },
-		{ id: 'notes', label: 'Notes', icon: 'tabler:notes', enabled: true },
-		{ id: 'knowledge', label: 'Knowledge Graph', icon: 'tabler:share', enabled: true },
-		{ id: 'telegram', label: 'Telegram', icon: 'tabler:brand-telegram', enabled: true },
-		{ id: 'whatsapp', label: 'WhatsApp', icon: 'tabler:brand-whatsapp', enabled: true },
-		{ id: 'agents', label: 'AI Agents', icon: 'tabler:sparkles', enabled: true },
-		{ id: 'settings', label: 'Settings', icon: 'tabler:settings', enabled: true }
-	];
+	const primaryNav = $derived.by((): NavItem[] => {
+		const totalMessages = mailboxHealth ? mailboxHealth.unread : 0;
+		const totalNodes = graphSummary ? graphSummary.node_counts.reduce((sum, c) => sum + c.count, 0) : 0;
+		return [
+			{ id: 'home', label: 'Home', icon: 'tabler:home', enabled: true },
+			{ id: 'communications', label: 'Communications', icon: 'tabler:messages', badge: totalMessages > 0 ? String(totalMessages) : undefined, enabled: true },
+			{ id: 'timeline', label: 'Timeline', icon: 'tabler:timeline-event', enabled: true },
+			{ id: 'persons', label: 'Persons', icon: 'tabler:address-book', badge: persons.length > 0 ? String(persons.length) : undefined, enabled: true },
+			{ id: 'projects', label: 'Projects', icon: 'tabler:briefcase', badge: projectSummaries.length > 0 ? String(projectSummaries.length) : undefined, enabled: true },
+			{ id: 'tasks', label: 'Tasks', icon: 'tabler:checkbox', badge: (taskCandidates.length + activeTasks.length) > 0 ? String(taskCandidates.length + activeTasks.length) : undefined, enabled: true },
+			{ id: 'calendar', label: 'Calendar', icon: 'tabler:calendar', enabled: true },
+			{ id: 'documents', label: 'Documents', icon: 'tabler:file-text', badge: documentProcessingJobs.length > 0 ? String(documentProcessingJobs.length) : undefined, enabled: true },
+			{ id: 'notes', label: 'Notes', icon: 'tabler:notes', enabled: true },
+			{ id: 'knowledge', label: 'Knowledge Graph', icon: 'tabler:share', badge: totalNodes > 0 ? String(totalNodes) : undefined, enabled: true },
+			{ id: 'telegram', label: 'Telegram', icon: 'tabler:brand-telegram', badge: telegramChats.length > 0 ? String(telegramChats.length) : undefined, enabled: true },
+			{ id: 'whatsapp', label: 'WhatsApp', icon: 'tabler:brand-whatsapp', badge: whatsappSessions.length > 0 ? String(whatsappSessions.length) : undefined, enabled: true },
+			{ id: 'agents', label: 'AI Agents', icon: 'tabler:sparkles', badge: aiAgents.length > 0 ? String(aiAgents.length) : undefined, enabled: true },
+			{ id: 'settings', label: 'Settings', icon: 'tabler:settings', badge: providerAccounts.length > 0 ? String(providerAccounts.length) : undefined, enabled: true }
+		];
+	});
 
 	const viewCopy: Record<ViewId, { title: string; subtitle: string; search: string; icon: string }> = {
 		home: {
@@ -619,6 +671,12 @@
 			search: 'Search agents, capabilities, tasks...',
 			icon: 'tabler:sparkles'
 		},
+		organizations: {
+			title: 'Companies',
+			subtitle: 'All companies and organizations from your communications',
+			search: 'Search companies, industries, locations...',
+			icon: 'tabler:building'
+		},
 		settings: {
 			title: 'Settings',
 			subtitle: 'Runtime settings and connected accounts.',
@@ -627,33 +685,33 @@
 		}
 	};
 
-	const shortcutsByView: Record<ViewId, ShortcutItem[]> = {
+	const shortcutsByView = $derived.by((): Record<ViewId, ShortcutItem[]> => ({
 		home: [
-			{ label: 'Inbox', icon: 'tabler:inbox', badge: '12' },
+			{ label: 'Inbox', icon: 'tabler:inbox', badge: mailboxHealth ? String(mailboxHealth.unread) : undefined },
 			{ label: 'Starred', icon: 'tabler:star' },
-			{ label: 'Waiting', icon: 'tabler:clock-hour-4', badge: '3' },
-			{ label: 'Requires Reply', icon: 'tabler:message-reply', badge: '5' },
+			{ label: 'Waiting', icon: 'tabler:clock-hour-4', badge: mailboxHealth ? String(mailboxHealth.waiting) : undefined },
+			{ label: 'Requires Reply', icon: 'tabler:message-reply', badge: mailboxHealth ? String(mailboxHealth.needs_action) : undefined },
 			{ label: 'Mentions', icon: 'tabler:at' },
 			{ label: 'Trash', icon: 'tabler:trash' }
 		],
 		communications: [
-			{ label: 'Inbox', icon: 'tabler:inbox', badge: '12' },
+			{ label: 'Inbox', icon: 'tabler:inbox', badge: mailboxHealth ? String(mailboxHealth.unread) : undefined },
 			{ label: 'Starred', icon: 'tabler:star' },
-			{ label: 'Waiting', icon: 'tabler:clock-hour-4' },
-			{ label: 'Requires Reply', icon: 'tabler:message-reply', badge: '3' },
+			{ label: 'Waiting', icon: 'tabler:clock-hour-4', badge: mailboxHealth ? String(mailboxHealth.waiting) : undefined },
+			{ label: 'Requires Reply', icon: 'tabler:message-reply', badge: mailboxHealth ? String(mailboxHealth.needs_action) : undefined },
 			{ label: 'Mentions', icon: 'tabler:at' },
-			{ label: 'Spam', icon: 'tabler:shield-x', badge: '4' },
-			{ label: 'Archive', icon: 'tabler:archive' }
+			{ label: 'Spam', icon: 'tabler:shield-x', badge: mailStateCounts.find(c => c.state === 'spam')?.count ? String(mailStateCounts.find(c => c.state === 'spam')!.count) : undefined },
+			{ label: 'Archive', icon: 'tabler:archive', badge: mailStateCounts.find(c => c.state === 'archived')?.count ? String(mailStateCounts.find(c => c.state === 'archived')!.count) : undefined }
 		],
 		timeline: [
-			{ label: 'Today', icon: 'tabler:calendar-time', badge: '18' },
+			{ label: 'Today', icon: 'tabler:calendar-time', badge: String(communicationMessages.length) },
 			{ label: 'Messages', icon: 'tabler:message' },
 			{ label: 'Documents', icon: 'tabler:file-text' },
 			{ label: 'Decisions', icon: 'tabler:git-pull-request' }
 		],
 		persons: [
-			{ label: 'All People', icon: 'tabler:users', badge: '642' },
-			{ label: 'Companies', icon: 'tabler:building', badge: '128' },
+			{ label: 'All People', icon: 'tabler:users', badge: String(persons.length) },
+			{ label: 'Companies', icon: 'tabler:building' },
 			{ label: 'Clients', icon: 'tabler:shield-check' },
 			{ label: 'Partners', icon: 'tabler:users-group' },
 			{ label: 'Team', icon: 'tabler:user-check' },
@@ -661,34 +719,34 @@
 			{ label: 'Archived', icon: 'tabler:archive' }
 		],
 		projects: [
-			{ label: 'My Projects', icon: 'tabler:briefcase', badge: '12' },
-			{ label: 'Active', icon: 'tabler:chart-bar', badge: '7' },
+			{ label: 'My Projects', icon: 'tabler:briefcase', badge: String(projectSummaries.length) },
+			{ label: 'Active', icon: 'tabler:chart-bar', badge: String(projectSummaries.filter(p => p.project.status === 'active').length) },
 			{ label: 'Planning', icon: 'tabler:calendar-plus' },
 			{ label: 'On Hold', icon: 'tabler:clock-pause' },
 			{ label: 'Completed', icon: 'tabler:rosette-discount-check' },
 			{ label: 'Archived', icon: 'tabler:archive' }
 		],
 		tasks: [
-			{ label: 'My Tasks', icon: 'tabler:checkbox', badge: '12' },
-			{ label: 'Assigned to Me', icon: 'tabler:user-check', badge: '7' },
-			{ label: 'Waiting', icon: 'tabler:clock', badge: '5' },
-			{ label: 'Due Today', icon: 'tabler:calendar-exclamation', badge: '3' },
-			{ label: 'This Week', icon: 'tabler:calendar-week', badge: '9' },
-			{ label: 'High Priority', icon: 'tabler:star', badge: '4' },
+			{ label: 'My Tasks', icon: 'tabler:checkbox', badge: String(taskCandidates.length + activeTasks.length) },
+			{ label: 'Assigned to Me', icon: 'tabler:user-check', badge: String(activeTasks.length) },
+			{ label: 'Waiting', icon: 'tabler:clock', badge: String(taskCandidates.filter(t => t.review_state === 'suggested').length) },
+			{ label: 'Due Today', icon: 'tabler:calendar-exclamation' },
+			{ label: 'This Week', icon: 'tabler:calendar-week' },
+			{ label: 'High Priority', icon: 'tabler:star' },
 			{ label: 'Completed', icon: 'tabler:heart-check' }
 		],
 		calendar: [
-			{ label: 'My Agenda', icon: 'tabler:calendar-stats', badge: '12' },
-			{ label: 'Team Meetings', icon: 'tabler:star', badge: '7' },
-			{ label: 'Focus Time', icon: 'tabler:shield-half', badge: '5' },
-			{ label: 'Important', icon: 'tabler:shield-star', badge: '3' },
-			{ label: 'Travel', icon: 'tabler:plane', badge: '2' },
+			{ label: 'My Agenda', icon: 'tabler:calendar-stats' },
+			{ label: 'Team Meetings', icon: 'tabler:star' },
+			{ label: 'Focus Time', icon: 'tabler:shield-half' },
+			{ label: 'Important', icon: 'tabler:shield-star' },
+			{ label: 'Travel', icon: 'tabler:plane' },
 			{ label: 'Birthdays', icon: 'tabler:calendar-heart' }
 		],
 		documents: [
-			{ label: 'Recent', icon: 'tabler:inbox', badge: '24' },
-			{ label: 'Starred', icon: 'tabler:star', badge: '8' },
-			{ label: 'Shared with me', icon: 'tabler:shield-check', badge: '12' },
+			{ label: 'Recent', icon: 'tabler:inbox', badge: String(documentProcessingJobs.length) },
+			{ label: 'Starred', icon: 'tabler:star' },
+			{ label: 'Shared with me', icon: 'tabler:shield-check' },
 			{ label: 'Contracts', icon: 'tabler:briefcase' },
 			{ label: 'Reports', icon: 'tabler:report' },
 			{ label: 'Presentations', icon: 'tabler:presentation' },
@@ -696,24 +754,24 @@
 			{ label: 'Trash', icon: 'tabler:trash' }
 		],
 		notes: [
-			{ label: 'Inbox', icon: 'tabler:inbox', badge: '12' },
-			{ label: 'Starred', icon: 'tabler:star', badge: '8' },
-			{ label: 'Today', icon: 'tabler:calendar-check', badge: '5' },
-			{ label: 'Personal', icon: 'tabler:folder', badge: '7' },
-			{ label: 'Work', icon: 'tabler:folder', badge: '9' },
-			{ label: 'Ideas', icon: 'tabler:bulb', badge: '4' },
+			{ label: 'Inbox', icon: 'tabler:inbox' },
+			{ label: 'Starred', icon: 'tabler:star' },
+			{ label: 'Today', icon: 'tabler:calendar-check' },
+			{ label: 'Personal', icon: 'tabler:folder' },
+			{ label: 'Work', icon: 'tabler:folder' },
+			{ label: 'Ideas', icon: 'tabler:bulb' },
 			{ label: 'Archive', icon: 'tabler:archive' }
 		],
 		knowledge: [
-			{ label: 'My Graphs', icon: 'tabler:heart-handshake', badge: '12' },
-			{ label: 'Recent', icon: 'tabler:star', badge: '24' },
-			{ label: 'Favorites', icon: 'tabler:star', badge: '8' },
-			{ label: 'Important', icon: 'tabler:shield-star', badge: '15' },
-			{ label: 'Shared with me', icon: 'tabler:star', badge: '7' },
+			{ label: 'My Graphs', icon: 'tabler:heart-handshake', badge: graphSummary ? String(graphSummary.node_counts.reduce((sum, c) => sum + c.count, 0)) : undefined },
+			{ label: 'Recent', icon: 'tabler:star' },
+			{ label: 'Favorites', icon: 'tabler:star' },
+			{ label: 'Important', icon: 'tabler:shield-star' },
+			{ label: 'Shared with me', icon: 'tabler:star' },
 			{ label: 'Trash', icon: 'tabler:trash' }
 		],
 		telegram: [
-			{ label: 'Chats', icon: 'tabler:messages', badge: 'V4' },
+			{ label: 'Chats', icon: 'tabler:messages', badge: String(telegramChats.length) },
 			{ label: 'Policies', icon: 'tabler:shield-check' },
 			{ label: 'Templates', icon: 'tabler:template' },
 			{ label: 'Calls', icon: 'tabler:phone-call' },
@@ -721,101 +779,167 @@
 			{ label: 'Audit', icon: 'tabler:clipboard-list' }
 		],
 		whatsapp: [
-			{ label: 'Sessions', icon: 'tabler:devices', badge: 'V5' },
+			{ label: 'Sessions', icon: 'tabler:devices', badge: String(whatsappSessions.length) },
 			{ label: 'Messages', icon: 'tabler:messages' },
 			{ label: 'Fixture', icon: 'tabler:flask' },
 			{ label: 'Guardrails', icon: 'tabler:shield-lock' },
 			{ label: 'Provenance', icon: 'tabler:git-branch' }
 		],
 		agents: [
-			{ label: 'My Agents', icon: 'tabler:robot', badge: '12' },
-			{ label: 'Active Tasks', icon: 'tabler:star', badge: '8' },
-			{ label: 'Automations', icon: 'tabler:settings-automation', badge: '6' },
-			{ label: 'Templates', icon: 'tabler:template', badge: '15' },
+			{ label: 'My Agents', icon: 'tabler:robot', badge: String(aiAgents.length) },
+			{ label: 'Active Tasks', icon: 'tabler:star' },
+			{ label: 'Automations', icon: 'tabler:settings-automation' },
+			{ label: 'Templates', icon: 'tabler:template' },
 			{ label: 'Logs', icon: 'tabler:clipboard-list' },
 			{ label: 'Settings', icon: 'tabler:settings' }
 		],
+		organizations: [
+			{ label: 'All Companies', icon: 'tabler:building', badge: String(organizations.length) },
+			{ label: 'Active', icon: 'tabler:chart-bar' },
+			{ label: 'Watchlist', icon: 'tabler:shield-star' },
+			{ label: 'By Industry', icon: 'tabler:category' },
+			{ label: 'Archived', icon: 'tabler:archive' }
+		],
 		settings: [
-			{ label: 'Application', icon: 'tabler:adjustments-horizontal', badge: 'DB' },
+			{ label: 'Application', icon: 'tabler:adjustments-horizontal', badge: String(providerAccounts.length) },
 			{ label: 'Accounts', icon: 'tabler:users' },
 			{ label: 'AI Runtime', icon: 'tabler:sparkles' },
 			{ label: 'Security', icon: 'tabler:shield-lock' }
 		]
-	};
+	}));
 
-	const homeStats: StatCard[] = [
-		{ label: 'New Events', value: '47', delta: '18%', icon: 'tabler:chart-bar' },
-		{ label: 'Needs Attention', value: '4', delta: '2', icon: 'tabler:alert-circle' },
-		{ label: 'Waiting For Reply', value: '3', delta: '1', icon: 'tabler:message-reply' },
-		{ label: 'New Documents', value: '2', delta: '1', icon: 'tabler:file-text' },
-		{ label: 'New Persons', value: '1', delta: '1', icon: 'tabler:user-plus' }
-	];
+	const homeStats = $derived.by(() => {
+		const stats: StatCard[] = [];
+		if (mailboxHealth) {
+			stats.push({ label: 'Messages', value: String(mailboxHealth.total_messages), delta: `+${mailboxHealth.unread}`, icon: 'tabler:mail' });
+			stats.push({ label: 'Needs attention', value: String(mailboxHealth.needs_action), delta: `+${mailboxHealth.important}`, icon: 'tabler:alert-circle' });
+			stats.push({ label: 'Waiting', value: String(mailboxHealth.waiting), delta: `${mailboxHealth.done} done`, icon: 'tabler:message-reply' });
+		}
+		stats.push({ label: 'Projects', value: String(projectSummaries.length), delta: 'active', icon: 'tabler:briefcase' });
+		stats.push({ label: 'Persons', value: String(persons.length), delta: 'enriched', icon: 'tabler:user-plus' });
+		return stats;
+	});
 
-	const whatsNew: FeedItem[] = [
-		{ icon: 'tabler:mail', title: 'New email from John Smith', meta: 'Re: Project Hermes - Next Steps', time: '14:32', tag: 'Project Hermes', tone: 'blue' },
-		{ icon: 'tabler:brand-telegram', title: 'Telegram message from Maria Petrova', meta: 'Can you review the new mockups?', time: '14:15', tag: 'Design', tone: 'blue' },
-		{ icon: 'tabler:brand-whatsapp', title: 'WhatsApp from Accountant', meta: 'Please send me the VAT report for Q2', time: '13:47', tag: 'Finance', tone: 'green' },
-		{ icon: 'tabler:file-text', title: 'Document uploaded', meta: 'Contract_Smith_Partners.pdf', time: '11:28', tag: 'Smith & Partners', tone: 'slate' },
-		{ icon: 'tabler:calendar-check', title: 'Meeting completed', meta: 'Project Hermes - Weekly Sync', time: '10:42', tag: '45m · 6 participants', tone: 'mint' }
-	];
+	const whatsNew = $derived.by(() => {
+		const items: FeedItem[] = [];
+		const channelIcons: Record<string, string> = {
+			email: 'tabler:mail',
+			gmail: 'tabler:brand-gmail',
+			icloud: 'tabler:cloud',
+			imap: 'tabler:server',
+			telegram_user: 'tabler:brand-telegram',
+			telegram_bot: 'tabler:brand-telegram',
+			whatsapp_web: 'tabler:brand-whatsapp'
+		};
+		for (const msg of communicationMessages.slice(0, 5)) {
+			const sender = msg.sender_display_name || msg.sender || 'Unknown';
+			items.push({
+				icon: channelIcons[msg.channel_kind] || 'tabler:message',
+				title: `New message from ${sender}`,
+				meta: msg.subject || msg.body_text_preview,
+				time: msg.occurred_at || msg.projected_at,
+				tag: msg.subject ? undefined : undefined,
+				tone: 'blue'
+			});
+		}
+		return items;
+	});
 
-	const peopleTalked = [
-		{ name: 'John Smith', meta: 'Re: Project Hermes - Next Steps', icon: 'tabler:mail' },
-		{ name: 'Maria Petrova', meta: 'Can you review the new mockups?', icon: 'tabler:brand-telegram' },
-		{ name: 'Accountant', meta: 'VAT report for Q2', icon: 'tabler:brand-whatsapp' },
-		{ name: 'IRIS Team', meta: 'Updated roadmap v2.0', icon: 'tabler:brand-telegram' },
-		{ name: 'Elena Rodriguez', meta: 'Document request', icon: 'tabler:brand-whatsapp' }
-	];
+	const peopleTalked = $derived.by(() => {
+		const seen = new Set<string>();
+		const result: { name: string; meta: string; icon: string }[] = [];
+		for (const msg of communicationMessages) {
+			const sender = msg.sender_display_name || msg.sender || 'Unknown';
+			if (seen.has(sender)) continue;
+			seen.add(sender);
+			result.push({
+				name: sender,
+				meta: msg.subject || msg.body_text_preview,
+				icon: 'tabler:message'
+			});
+			if (result.length >= 5) break;
+		}
+		return result;
+	});
 
-	const conversations: Conversation[] = [
-		{ name: 'John Smith', role: 'CEO at Smith & Partners', project: 'Hermes Project', channel: 'Email', time: '14:32', unread: '2', preview: "Sounds good! Let's schedule a call for tomorrow" },
-		{ name: 'Maria Petrova', role: 'Lead Designer', project: 'Design Discussion', channel: 'Telegram', time: '14:15', unread: '1', preview: 'Here are the mockups for the new dashboard' },
-		{ name: 'Acme Corp - Legal', role: 'Contract Review', project: 'Contract Review', channel: 'Email', time: '13:47', preview: 'Please review the attached contract' },
-		{ name: 'Accountant', role: 'Finance', project: 'VAT & Taxes', channel: 'WhatsApp', time: '12:21', unread: '3', preview: 'We need the VAT report for Q2' },
-		{ name: 'IRIS Team', role: 'Team Channel', project: 'Project Updates', channel: 'Telegram', time: '11:08', preview: 'Alex: Updated the roadmap for v2.0' },
-		{ name: 'GitHub', role: 'Hermes Hub', project: 'Hermes Hub', channel: 'Email', time: 'Yesterday', preview: 'Pull request #128 was merged' }
-	];
 
-	const personList: Person[] = [
-		{ name: 'John Smith', role: 'CEO', company: 'Smith & Partners', status: 'Online' },
-		{ name: 'Maria Petrova', role: 'Lead Designer', company: 'Acme Corp', channel: 'Telegram' },
-		{ name: 'Michael Brown', role: 'CTO', company: 'TechFlow Inc.', status: 'Online' },
-		{ name: 'Elena Rodriguez', role: 'Project Manager', company: 'IRIS Solutions', status: 'Online' },
-		{ name: 'David Wilson', role: 'Product Owner', company: 'Acme Corp', channel: 'Email' },
-		{ name: 'Anna Becker', role: 'Marketing Director', company: 'Vision Labs', status: 'Online' },
-		{ name: 'Accountant', role: 'Finance', company: 'Personal', channel: 'WhatsApp' },
-		{ name: 'IRIS Team', role: 'Team Channel', company: 'IRIS Solution', channel: 'Telegram' }
-	];
+	const conversations = $derived.by(() => {
+		const channelLabels: Record<string, string> = {
+			email: 'Email', gmail: 'Gmail', icloud: 'iCloud', imap: 'IMAP',
+			telegram_user: 'Telegram', telegram_bot: 'Telegram',
+			whatsapp_web: 'WhatsApp'
+		};
+		return communicationMessages.map((msg) => ({
+			name: msg.sender_display_name || msg.sender || 'Unknown',
+			role: msg.sender || '',
+			project: msg.subject || msg.body_text_preview,
+			channel: channelLabels[msg.channel_kind] || msg.channel_kind,
+			time: msg.occurred_at || msg.projected_at,
+			preview: msg.body_text_preview
+		}));
+	});
+	const personList = $derived.by(() =>
+		persons.map((p) => ({
+			name: p.display_name,
+			role: p.preferred_channel || 'Contact',
+			company: p.email_address,
+			status: p.last_interaction_at ? 'Online' : undefined,
+			channel: p.preferred_channel ?? undefined
+		}))
+	);
 
-	const projects: ProjectItem[] = [
-		{ name: 'Hermes Hub', kind: 'Product Development', progress: 75, tasks: 23, icon: 'tabler:cube', tone: 'cyan' },
-		{ name: 'Acme Integration', kind: 'Client Project', progress: 45, tasks: 12, icon: 'tabler:cube', tone: 'blue' },
-		{ name: 'Q3 Marketing Campaign', kind: 'Marketing', progress: 60, tasks: 17, icon: 'tabler:hexagon', tone: 'purple' },
-		{ name: 'Personal Finance', kind: 'Personal Project', progress: 30, tasks: 8, icon: 'tabler:home-dollar', tone: 'mint' }
-	];
+	const projects = $derived.by(() =>
+		projectSummaries.map((ps) => ({
+			name: ps.project.name,
+			kind: ps.project.kind,
+			progress: ps.project.progress_percent,
+			tasks: ps.stats.message_count + ps.stats.document_count,
+			icon: 'tabler:cube' as const,
+			tone: ps.project.status === 'active' ? 'cyan' as const : 'blue' as const
+		}))
+	);
 
-	const tasks: TaskItem[] = [
-		{ title: 'Review Q2 financial report', tracker: 'Jira Cloud', project: 'Hermes Hub', assignee: 'Maria Petrova', status: 'In Review', priority: 'High', due: 'Today 14:00', group: 'Due Today' },
-		{ title: 'Fix authentication flow bug', tracker: 'YouTrack', project: 'Platform Core', assignee: 'Alex Morgan', status: 'In Progress', priority: 'High', due: 'Today 16:00', group: 'Due Today' },
-		{ title: 'Prepare design system update', tracker: 'ClickUp', project: 'Design System', assignee: 'Elena Rodriguez', status: 'To Do', priority: 'Medium', due: 'Today 18:00', group: 'Due Today' },
-		{ title: 'Implement plugin architecture', tracker: 'Jira Cloud', project: 'Hermes Hub', assignee: 'John Smith', status: 'In Progress', priority: 'High', due: 'May 16', group: 'This Week' },
-		{ title: 'API rate limiting', tracker: 'YouTrack', project: 'Backend Services', assignee: 'Alex Morgan', status: 'To Do', priority: 'Medium', due: 'May 16', group: 'This Week' },
-		{ title: 'Update user documentation', tracker: 'ClickUp', project: 'Documentation', assignee: 'Maria Petrova', status: 'In Review', priority: 'Medium', due: 'May 17', group: 'This Week' },
-		{ title: 'Setup monitoring alerts', tracker: 'Jira Cloud', project: 'DevOps', assignee: 'John Smith', status: 'To Do', priority: 'Medium', due: 'May 17', group: 'This Week' },
-		{ title: 'Refactor notification module', tracker: 'YouTrack', project: 'Platform Core', assignee: 'Elena Rodriguez', status: 'In Progress', priority: 'Low', due: 'May 18', group: 'This Week' },
-		{ title: 'Mobile app dark mode', tracker: 'Jira Cloud', project: 'Mobile App', assignee: 'Maria Petrova', status: 'To Do', priority: 'Low', due: 'May 24', group: 'Later' }
-	];
+	const tasks = $derived.by(() => {
+		const all: TaskItem[] = [];
+		for (const tc of taskCandidates) {
+			all.push({
+				title: tc.title,
+				tracker: tc.source_kind,
+				project: tc.project_id || 'Unassigned',
+				assignee: tc.assignee_label || 'Unassigned',
+				status: tc.review_state === 'suggested' ? 'To Review' : tc.review_state === 'user_confirmed' ? 'Active' : 'Rejected',
+				priority: tc.confidence > 0.7 ? 'High' : 'Medium',
+				due: tc.due_text || 'No deadline',
+				group: tc.review_state === 'suggested' ? 'Review Queue' : 'Active'
+			});
+		}
+		for (const at of activeTasks) {
+			all.push({
+				title: at.title,
+				tracker: at.source_kind,
+				project: at.project_id || 'Unassigned',
+				assignee: 'Active',
+				status: 'Active',
+				priority: 'High',
+				due: 'Active',
+				group: 'Active'
+			});
+		}
+		return all;
+	});
 
-	const documents = [
-		{ name: 'Hermes_Hub_Architecture_v1.2.pdf', source: 'Google Drive', project: 'Hermes Hub', type: 'PDF', date: 'May 13, 2024', size: '2.4 MB', icon: 'tabler:file-type-pdf', tone: 'red' },
-		{ name: 'Product_Roadmap_2024.xlsx', source: 'OneDrive', project: 'Hermes Hub', type: 'Excel', date: 'May 12, 2024', size: '1.1 MB', icon: 'tabler:file-spreadsheet', tone: 'green' },
-		{ name: 'Meeting_Notes_Design_System.md', source: 'Dropbox', project: 'Design System', type: 'Markdown', date: 'May 9, 2024', size: '45 KB', icon: 'tabler:file-text', tone: 'blue' },
-		{ name: 'Contract_Acme_Corp_v2.pdf', source: 'Google Drive', project: 'Acme Integration', type: 'PDF', date: 'May 10, 2024', size: '1.8 MB', icon: 'tabler:file-type-pdf', tone: 'red' },
-		{ name: 'User_Research_Summary.pdf', source: 'Notion', project: 'Website Redesign', type: 'PDF', date: 'May 7, 2024', size: '3.2 MB', icon: 'tabler:file-description', tone: 'slate' },
-		{ name: 'API_Documentation_v1.0.pdf', source: 'Dropbox', project: 'Platform Core', type: 'PDF', date: 'May 6, 2024', size: '5.7 MB', icon: 'tabler:file-type-pdf', tone: 'red' },
-		{ name: 'Q2_Financial_Report.xlsx', source: 'OneDrive', project: 'Finance', type: 'Excel', date: 'May 5, 2024', size: '980 KB', icon: 'tabler:file-spreadsheet', tone: 'green' }
-	];
-
+	const documents = $derived.by(() =>
+		documentProcessingJobs.map((job) => ({
+			name: `${job.document_id} (${job.step})`,
+			source: 'Hermes Hub',
+			project: job.status,
+			type: job.step,
+			date: job.queued_at,
+			size: job.last_error_summary || 'No errors',
+			icon: 'tabler:file-text' as const,
+			tone: job.status === 'succeeded' ? 'green' as const : job.status === 'failed' ? 'red' as const : 'amber' as const
+		}))
+	);
 	const notes = [
 		{ title: 'Hermes Hub - Product Strategy', body: 'Основные принципы: единое пространство памяти, интеграция всех коммуникаций...', source: 'Apple Notes', tag: '#project', time: '10:42', icon: 'tabler:notes' },
 		{ title: 'User Research Summary', body: 'Ключевые инсайты из интервью с пользователями...', source: 'Obsidian', tag: '#research', time: '09:15', icon: 'tabler:file-text' },
@@ -825,20 +949,20 @@
 		{ title: 'Email: Partnership Opportunity', body: 'Интересное предложение о партнерстве. Нужно обсудить с командой...', source: 'Outlook', tag: '#partnership', time: 'May 12, 16:20', icon: 'tabler:mail' }
 	];
 
-	const weekColumns = ['MON 12', 'TUE 13', 'WED 14', 'THU 15', 'FRI 16', 'SAT 17', 'SUN 18'];
-	const calendarBlocks = [
-		{ layoutClass: 'slot-0', title: 'Team Standup', meta: 'Google Calendar', tone: 'blue' },
-		{ layoutClass: 'slot-1', title: 'Project Hermes Planning', meta: 'Microsoft 365', tone: 'green' },
-		{ layoutClass: 'slot-2', title: 'Focus Time', meta: 'Microsoft 365', tone: 'green' },
-		{ layoutClass: 'slot-3', title: 'Platform Core Sync', meta: 'YouTrack', tone: 'purple' },
-		{ layoutClass: 'slot-4', title: 'Product Review', meta: 'Google Calendar', tone: 'blue' },
-		{ layoutClass: 'slot-5', title: 'Engineering Sync', meta: 'Microsoft 365', tone: 'green' },
-		{ layoutClass: 'slot-6', title: 'YouTrack: Daily Standup', meta: 'YouTrack', tone: 'purple' },
-		{ layoutClass: 'slot-7', title: 'Architecture Discussion', meta: 'Microsoft 365', tone: 'green' },
-		{ layoutClass: 'slot-8', title: 'All Hands', meta: 'Google Calendar', tone: 'blue' },
-		{ layoutClass: 'slot-9', title: 'Sprint Planning', meta: 'YouTrack', tone: 'purple' },
-		{ layoutClass: 'slot-10', title: 'Hackathon', meta: 'Personal', tone: 'amber' }
-	];
+	const weekDays = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+	const nowDate = new Date();
+	const weekStart = new Date(nowDate);
+	weekStart.setDate(nowDate.getDate() - nowDate.getDay() + 1);
+	weekStart.setHours(0, 0, 0, 0);
+	const weekColumns = weekDays.map((d, i) => {
+		const d2 = new Date(weekStart); d2.setDate(weekStart.getDate() + i);
+		return `${d} ${d2.getDate()}`;
+	});
+	const filteredEvents = $derived(calendarEvents.filter(e => {
+		const start = new Date(e.start_at);
+		const end = new Date(weekStart); end.setDate(weekStart.getDate() + 7);
+		return start >= weekStart && start < end;
+	}));
 
 	const selectedCommunication = $derived(communicationMessages[selectedConversationIndex] ?? null);
 	const selectedTelegramChat = $derived(
@@ -880,6 +1004,8 @@
 	);
 	const selectedConversation = $derived(conversations[selectedConversationIndex] ?? conversations[0]);
 	const selectedPerson = $derived(personList[selectedPersonIndex] ?? personList[0]);
+	const selectedOrganization = $derived(organizations.find(o => o.organization_id === selectedOrganizationId) ?? organizations[0]);
+	const orgPeople = $derived.by(() => persons.filter(p => p.linked_projects?.some(pid => selectedOrganization?.display_name && pid.includes(selectedOrganization.display_name))).slice(0, 5));
 	const agentCards = $derived(aiAgents.map(agentCardView));
 	const selectedAgent = $derived(agentCards[selectedAgentIndex] ?? agentCards[0] ?? null);
 	const activeView = $derived(viewCopy[currentView]);
@@ -941,6 +1067,8 @@
 		void loadDocumentProcessingJobs();
 		void loadProjects();
 		void loadIdentityCandidates();
+		void loadPersons();
+		void loadOrganizations();
 		void loadTaskReviewState();
 		void loadAiWorkspace();
 		void loadTelegramWorkspace();
@@ -1279,6 +1407,125 @@
 		} finally {
 			isTasksLoading = false;
 		}
+	}
+
+
+	async function loadPersons() {
+		isPersonsLoading = true;
+		try {
+			const response = await fetchPersons(apiBaseUrl, apiToken, actorId);
+			persons = response.items;
+			personsError = '';
+		} catch (error) {
+			personsError = error instanceof Error ? error.message : 'Unknown persons error';
+			persons = [];
+		} finally {
+			isPersonsLoading = false;
+		}
+	}
+
+	async function loadOrganizations() {
+		isOrganizationsLoading = true;
+		try {
+			const response = await fetchOrganizations(apiBaseUrl, apiToken, actorId);
+			organizations = response.items;
+			organizationsError = '';
+		} catch (error) {
+			organizationsError = error instanceof Error ? error.message : 'Unknown organizations error';
+			organizations = [];
+		} finally {
+			isOrganizationsLoading = false;
+		}
+	}
+
+	async function loadCalendar() {
+		isCalendarLoading = true;
+		try {
+			const [accts, events] = await Promise.all([
+				fetchCalendarAccounts(apiBaseUrl, apiToken, actorId),
+				fetchCalendarEvents(apiBaseUrl, apiToken, actorId, { limit: 200 })
+			]);
+			calendarAccounts = accts.items;
+			calendarEvents = events.items;
+			calendarSources = [];
+			for (const acct of calendarAccounts) {
+				try {
+					const srcs = await fetchCalendarSources(apiBaseUrl, apiToken, actorId, acct.account_id);
+					calendarSources.push(...srcs.items);
+				} catch (_) { /* sources optional */ }
+			}
+			fetchCalendarWatchtower(apiBaseUrl, apiToken, actorId).then(r => calendarWatchtower = r).catch(() => {});
+			calendarError = '';
+		} catch (error) {
+			calendarError = error instanceof Error ? error.message : 'Calendar load failed';
+			calendarAccounts = [];
+			calendarEvents = [];
+		} finally {
+			isCalendarLoading = false;
+		}
+	}
+
+	function getEventTimeRange(): { from: string; to: string } {
+		const now = new Date();
+		const from = new Date(now);
+		if (calendarViewMode === 'day') { from.setHours(0, 0, 0, 0); }
+		else if (calendarViewMode === 'week') { from.setDate(now.getDate() - now.getDay() + 1); from.setHours(0, 0, 0, 0); }
+		else { from.setDate(1); from.setHours(0, 0, 0, 0); }
+		const to = new Date(from);
+		if (calendarViewMode === 'day') to.setDate(to.getDate() + 1);
+		else if (calendarViewMode === 'week') to.setDate(to.getDate() + 7);
+		else to.setMonth(to.getMonth() + 1);
+		return { from: from.toISOString(), to: to.toISOString() };
+	}
+
+	async function prepareEvent(evt: CalendarEvent) {
+		selectedEvent = evt;
+		try {
+			const [ctx, brief, agenda] = await Promise.all([
+				fetchEventContextPack(apiBaseUrl, apiToken, actorId, evt.event_id),
+				fetchEventBrief(apiBaseUrl, apiToken, actorId, evt.event_id),
+				fetchEventAgenda(apiBaseUrl, apiToken, actorId, evt.event_id),
+			]);
+			eventContext = ctx;
+			eventBrief = brief;
+			eventAgenda = agenda;
+		} catch (_) { eventBrief = null; }
+	}
+
+	async function completeEvent(evt: CalendarEvent) {
+		selectedEvent = evt;
+		try {
+			const notes = await fetchMeetingNotes(apiBaseUrl, apiToken, actorId, evt.event_id);
+			eventContext = { notes: notes.items };
+		} catch (_) {}
+	}
+
+	async function searchCalendar() {
+		if (!calendarSearchQuery.trim()) { calendarSearchResults = []; return; }
+		try {
+			const result = await searchCalendarEvents(apiBaseUrl, apiToken, actorId, calendarSearchQuery);
+			calendarSearchResults = (result.results as CalendarEvent[]) || [];
+		} catch (_) { calendarSearchResults = []; }
+	}
+
+	async function loadWeeklyBrief() {
+		try {
+			const brief = await fetchWeeklyBrief(apiBaseUrl, apiToken, actorId);
+			weeklyBrief = brief;
+		} catch (_) { weeklyBrief = null; }
+	}
+
+	async function handleCreateEvent() {
+		if (!newEventTitle || !newEventStart || !newEventEnd) return;
+		try {
+			await createCalendarEvent(apiBaseUrl, apiToken, actorId, {
+				title: newEventTitle, start_at: new Date(newEventStart).toISOString(),
+				end_at: new Date(newEventEnd).toISOString(), event_type: newEventType
+			});
+			showNewEventForm = false;
+			newEventTitle = '';
+			await loadCalendar();
+		} catch (e) { calendarError = e instanceof Error ? e.message : 'Create failed'; }
 	}
 
 	async function loadAiWorkspace() {
@@ -3453,7 +3700,7 @@
 						{@render widgetEditChrome('persons-list')}
 						<section class="panel persons-list-panel">
 							<header>
-								<div><h1>Persons</h1><p>642 persons</p></div>
+								<div><h1>Persons</h1><p>{persons.length} persons</p></div>
 								<button type="button" class="primary-button" disabled>New Person</button>
 							</header>
 							<div class="filter-tabs compact">
@@ -3476,7 +3723,7 @@
 							{@render widgetEditChrome('persons-hero')}
 							<header class="person-hero panel">
 								<img src="/assets/hermes-reference-avatar.png" alt="" />
-								<div><h1>{selectedPerson.name}</h1><p>{selectedPerson.role} at {selectedPerson.company}</p><small>Online</small></div>
+								<div><h1>{selectedPerson.name}</h1><p>{selectedPerson.role} at {selectedPerson.company}</p><small>{selectedPerson.status ?? selectedPerson.channel ?? 'Contact'}</small></div>
 								<div class="chat-actions">
 									<button type="button" disabled><Icon icon="tabler:mail" width="17" height="17" /></button>
 									<button type="button" disabled><Icon icon="tabler:phone" width="17" height="17" /></button>
@@ -3499,7 +3746,7 @@
 								<section class="panel info-card">
 									<h2>Person Information</h2>
 									<ul class="detail-list">
-										<li><Icon icon="tabler:mail" width="17" height="17" /> jsmith@smithpartners.com <em>Work</em></li>
+										<li><Icon icon="tabler:mail" width="17" height="17" /> {selectedPerson.company} <em>Primary</em></li>
 										<li><Icon icon="tabler:phone" width="17" height="17" /> +1 (555) 123-4567 <em>Mobile</em></li>
 										<li><Icon icon="tabler:brand-telegram" width="17" height="17" /> @john.smith <em>Telegram</em></li>
 										<li><Icon icon="tabler:map-pin" width="17" height="17" /> New York, USA <em>Local Time: 18:42</em></li>
@@ -4005,80 +4252,178 @@
 					{@render widgetEditChrome('calendar-toolbar')}
 					<div class="view-header">
 						<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:calendar" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
-						<div class="section-tabs pill-tabs"><button type="button" disabled>Day</button><button type="button" class="active">Week</button><button type="button" disabled>Month</button><button type="button" disabled>Agenda</button></div>
-						<button type="button" class="primary-button" disabled>New Event</button>
+						<div class="search-bar">
+							<input type="text" placeholder="Search events..." bind:value={calendarSearchQuery} oninput={() => searchCalendar()} />
+						</div>
+						<div class="section-tabs pill-tabs">
+							<button type="button" class:active={calendarViewMode === 'day'} onclick={() => { calendarViewMode = 'day'; loadCalendar(); }}>Day</button>
+							<button type="button" class:active={calendarViewMode === 'week'} onclick={() => { calendarViewMode = 'week'; loadCalendar(); }}>Week</button>
+							<button type="button" class:active={calendarViewMode === 'month'} onclick={() => { calendarViewMode = 'month'; loadCalendar(); }}>Month</button>
+							<button type="button" class:active={calendarViewMode === 'agenda'} onclick={() => { calendarViewMode = 'agenda'; loadCalendar(); }}>Agenda</button>
+						</div>
+						<button type="button" class="primary-button" onclick={() => showNewEventForm = !showNewEventForm}><Icon icon="tabler:plus" width="16" height="16" /> New Event</button>
+						<button type="button" class="ghost-button" onclick={() => { loadCalendar(); loadWeeklyBrief(); }} title="Refresh"><Icon icon="tabler:refresh" width="16" height="16" /></button>
 					</div>
 				</div>
-				<div class="filter-bar"><button type="button" disabled>All Accounts (8)</button><button type="button" disabled>All Calendars (24)</button><button type="button" disabled>All Event Types</button><button type="button" disabled>Filters</button></div>
+
+				{#if showNewEventForm}
+					<div class="panel new-event-form">
+						<h3>New Event</h3>
+						<div class="form-row">
+							<input type="text" placeholder="Event title" bind:value={newEventTitle} />
+							<select bind:value={newEventType}>
+								<option value="meeting">Meeting</option><option value="focus">Focus</option>
+								<option value="deadline">Deadline</option><option value="personal">Personal</option>
+								<option value="travel">Travel</option><option value="tax">Tax</option>
+								<option value="review">Review</option><option value="planning">Planning</option>
+							</select>
+						</div>
+						<div class="form-row">
+							<input type="datetime-local" bind:value={newEventStart} />
+							<span>→</span>
+							<input type="datetime-local" bind:value={newEventEnd} />
+						</div>
+						<div class="form-actions">
+							<button type="button" class="primary-button" onclick={handleCreateEvent}>Create</button>
+							<button type="button" class="ghost-button" onclick={() => showNewEventForm = false}>Cancel</button>
+						</div>
+					</div>
+				{/if}
+
+				<div class="filter-bar">
+					<span>{calendarAccounts.length} accounts &middot; {calendarEvents.length} events</span>
+					{#if calendarError}<span class="error-text">{calendarError}</span>{/if}
+					{#if calendarSearchResults.length > 0}
+						<span class="search-hint">Search: {calendarSearchResults.length} results for "{calendarSearchQuery}"</span>
+					{/if}
+				</div>
+
 				<div class="calendar-layout">
 					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="calendar-week-grid" data-widget-hidden={!isWidgetVisible('calendar-week-grid')}>
 						{@render widgetEditChrome('calendar-week-grid')}
 						<section class="panel week-board">
 							<div class="week-header">{#each weekColumns as day}<strong>{day}</strong>{/each}</div>
-							<div class="time-grid">
-								{#each calendarBlocks as block}
-									<article class="event-block {block.tone} {block.layoutClass}"><strong>{block.title}</strong><span>{block.meta}</span></article>
-								{/each}
-								<div class="now-line"><span>11:42</span></div>
+							<div class="event-list">
+								{#if isCalendarLoading}
+									<div class="loading-state">Loading events...</div>
+								{:else if (calendarSearchResults.length > 0 ? calendarSearchResults : filteredEvents).length === 0}
+									<div class="empty-state">No events</div>
+								{:else}
+									{#each (calendarSearchResults.length > 0 ? calendarSearchResults : filteredEvents) as evt (evt.event_id)}
+										{@const tone = evt.event_type === 'meeting' ? 'blue' : evt.event_type === 'deadline' ? 'red' : evt.event_type === 'focus' ? 'green' : 'neutral'}
+										{@const dayLabel = new Date(evt.start_at).toLocaleDateString('en-US', {weekday:'short', day:'numeric'})}
+										<div class="event-row {tone}" onclick={() => prepareEvent(evt)} role="button" tabindex="0" onkeydown={(e) => e.key === 'Enter' && prepareEvent(evt)}>
+											<span class="event-day">{dayLabel}</span>
+											<span class="event-time">{new Date(evt.start_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {new Date(evt.end_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+											<strong>{evt.title}</strong>
+											<span class="event-type-chip">{evt.event_type || 'event'}</span>
+											{#if evt.importance_score && evt.importance_score > 0.5}<em class="importance-dot high"></em>{/if}
+											{#if evt.readiness_score != null && evt.readiness_score < 0.5}<em class="importance-dot warn"></em>{/if}
+										</div>
+									{/each}
+								{/if}
 							</div>
-							<footer>Legend: <span>Google Calendar</span><span>Microsoft 365</span><span>YouTrack</span><span>Personal</span></footer>
+							<footer class="source-footer">
+								{#each calendarAccounts as acct}
+									<span class="source-badge">{acct.account_name}</span>
+								{/each}
+							</footer>
 						</section>
 					</div>
 					<aside class="stacked-rail">
+						<!-- Weekly Brief -->
+						<div class="panel info-card">
+							<h2>Weekly Brief <button type="button" class="link-row" onclick={loadWeeklyBrief}><Icon icon="tabler:refresh" width="12" height="12" /></button></h2>
+							{#if weeklyBrief}
+								<div class="metric-grid tiny">
+									<article class="metric-card"><span>Events</span><strong>{weeklyBrief.upcoming_events_this_week as number || 0}</strong></article>
+									<article class="metric-card"><span>Overdue</span><strong>{weeklyBrief.overdue_deadlines as number || 0}</strong></article>
+									<article class="metric-card"><span>No Notes</span><strong>{weeklyBrief.past_events_without_notes as number || 0}</strong></article>
+								</div>
+							{:else}
+								<p class="muted">Click refresh to load</p>
+							{/if}
+						</div>
+
+						<!-- Upcoming -->
 						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="calendar-upcoming" data-widget-hidden={!isWidgetVisible('calendar-upcoming')}>
 							{@render widgetEditChrome('calendar-upcoming')}
-							<section class="panel info-card"><h2>Upcoming Events</h2>{#each ['1:1 with Maria', 'Roadmap Review', 'Product Review', 'Engineering Sync', 'Architecture Discussion'] as event, index}<div class="deadline"><span>{index < 2 ? 'Today' : 'Tomorrow'} · {event}</span><time>{index + 9}:00</time></div>{/each}</section>
+							<section class="panel info-card">
+								<h2>Upcoming</h2>
+								{#if calendarEvents.length === 0}
+									<p class="muted">No upcoming events</p>
+								{:else}
+									{#each calendarEvents.filter(e => new Date(e.start_at) >= new Date()).slice(0, 8) as evt}
+										<div class="deadline" role="button" tabindex="0" onclick={() => prepareEvent(evt)} onkeydown={(e) => e.key === 'Enter' && prepareEvent(evt)}>
+											<span>{new Date(evt.start_at).toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'})} &middot; {evt.title}</span>
+											<time>{new Date(evt.start_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</time>
+										</div>
+									{/each}
+								{/if}
+							</section>
 						</div>
+
+						<!-- Event Detail (when selected) -->
+						{#if selectedEvent}
+							<div class="panel info-card event-detail">
+								<h2>{selectedEvent.title} <button type="button" class="ghost-button small" onclick={() => { selectedEvent = null; eventBrief = null; eventContext = null; }}><Icon icon="tabler:x" width="14" height="14" /></button></h2>
+								<div class="event-meta">
+									<span><Icon icon="tabler:clock" width="14" height="14" /> {new Date(selectedEvent.start_at).toLocaleString()}</span>
+									{#if selectedEvent.location}<span><Icon icon="tabler:map-pin" width="14" height="14" /> {selectedEvent.location}</span>{/if}
+									<span class="chip {selectedEvent.status}">{selectedEvent.status}</span>
+								</div>
+								{#if eventBrief}
+									<div class="brief-section">
+										<h4>Brief</h4>
+										{#if (eventBrief.participants as any[])}
+											<div class="brief-participants">
+												{#each (eventBrief.participants as any[]) as p}
+													<span class="participant-chip">{p.name || p.email}</span>
+												{/each}
+											</div>
+										{/if}
+										{#if (eventBrief.context as any)?.summary}<p class="muted">{(eventBrief.context as any).summary}</p>{/if}
+									</div>
+								{/if}
+								{#if eventAgenda}
+									<div class="brief-section">
+										<h4>Agenda</h4>
+										{#if eventAgenda.suggested_agenda}
+											<ul class="agenda-list">
+												{#each (eventAgenda.suggested_agenda as any[]) as item}
+													<li>{item}</li>
+												{/each}
+											</ul>
+										{/if}
+									</div>
+								{/if}
+								<div class="event-actions">
+									<button type="button" class="primary-button small" onclick={() => selectedEvent && prepareEvent(selectedEvent)}><Icon icon="tabler:brain" width="14" height="14" /> Prepare</button>
+									<button type="button" class="ghost-button small" onclick={() => selectedEvent && completeEvent(selectedEvent)}><Icon icon="tabler:check" width="14" height="14" /> Complete</button>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Calendars -->
 						<div class="widget-frame stacked-rail" class:editing={isLayoutEditing} data-widget-id="calendar-source-status" data-widget-hidden={!isWidgetVisible('calendar-source-status')}>
 							{@render widgetEditChrome('calendar-source-status')}
-							<section class="panel info-card"><h2>Calendars</h2>{#each ['Google Work', 'Google Personal', 'Microsoft Work', 'YouTrack Events'] as item}<label class="mini-check"><input type="checkbox" checked />{item}<em></em></label>{/each}<button type="button" class="link-row" disabled>Add Calendar</button></section>
-							<section class="panel info-card"><h2>Time Insights</h2>{#each ['Meetings 18h 30m', 'Focus Time 12h 15m', 'Personal 8h 45m', 'Other 3h 30m'] as item}<div class="bar-row"><span>{item}</span><div><i></i></div></div>{/each}</section>
+							<section class="panel info-card">
+								<h2>Calendars</h2>
+								{#if calendarSources.length === 0}
+									{#each calendarAccounts as acct}
+										<label class="mini-check"><input type="checkbox" checked disabled />{acct.account_name}<em>{acct.provider}</em></label>
+									{/each}
+								{:else}
+									{#each calendarSources as src}
+										<label class="mini-check"><input type="checkbox" checked disabled />{src.name}<em>{src.timezone || ''}</em></label>
+									{/each}
+								{/if}
+							</section>
 						</div>
 					</aside>
 				</div>
-
-				{#if isComposeOpen}
-					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
-					<aside class="account-drawer"  aria-label="Compose email">
-						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
-							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
-						</header>
-						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
-							<label><span>To</span><input bind:value={composeForm.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
-							<label><span>CC</span><input bind:value={composeForm.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
-							<label><span>Subject</span><input bind:value={composeForm.subject} placeholder="Email subject" autocomplete="off" /></label>
-							<label class="wide"><span>Body</span><textarea bind:value={composeForm.body} rows="8" placeholder="Write your message..."></textarea></label>
-							<div class="form-actions wide">
-								<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
-								<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
-							</div>
-						</form>
-					</aside>
-				{/if}
-
-				{#if drafts.length > 0}
-					<div class="draft-strip">
-						<strong>Drafts ({drafts.length})</strong>
-						{#each drafts.slice(0, 3) as draft}
-							<button type="button" class="draft-chip" onclick={() => { composeForm = { draft_id: draft.draft_id, account_id: draft.account_id, to_text: draft.to_recipients.join(', '), cc_text: draft.cc_recipients.join(', '), subject: draft.subject, body: draft.body_text }; isComposeOpen = true; }}>
-								<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}
-							</button>
-						{/each}
-					</div>
-				{/if}
-
-				{#if mailboxHealth}
-					<div class="health-strip">
-						<span class="health-chip needs_action"><Icon icon="tabler:alert-triangle" width="14" height="14" />{mailboxHealth.needs_action} need action</span>
-						<span class="health-chip waiting"><Icon icon="tabler:clock-hour-4" width="14" height="14" />{mailboxHealth.waiting} waiting</span>
-						<span class="health-chip done"><Icon icon="tabler:circle-check" width="14" height="14" />{mailboxHealth.done} done</span>
-						<span class="health-chip"><Icon icon="tabler:mail" width="14" height="14" />{mailboxHealth.total_messages} total</span>
-						{#if mailboxHealth.important > 0}<span class="health-chip important"><Icon icon="tabler:star" width="14" height="14" />{mailboxHealth.important} important</span>{/if}
-					</div>
-				{/if}
 			</section>
-		{:else if currentView === 'documents'}
+
 			<section class="documents-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:file-text" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
@@ -5460,6 +5805,72 @@
 					</div>
 				{/if}
 			</section>
+		{:else if currentView === 'organizations'}
+			<section class="organizations-page">
+				<div class="view-header"><div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:building" width="28" height="28" /></span><div><h1>Companies</h1><p>All companies and organizations from your communications</p></div></div></div>
+				{#if organizationsError}
+					<p class="inline-error">{organizationsError}</p>
+				{/if}
+				<div class="org-layout">
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="organizations-list" data-widget-hidden={!isWidgetVisible('organizations-list')}>
+						{@render widgetEditChrome('organizations-list')}
+						<section class="panel org-list-panel">
+							<header class="panel-title-row"><h2>All Companies ({organizations.length})</h2></header>
+							{#if isOrganizationsLoading && organizations.length === 0}
+								<div class="graph-strip-message"><span>Loading companies.</span></div>
+							{:else if organizations.length === 0}
+								<div class="graph-strip-message"><span>No companies yet.</span></div>
+							{:else}
+								{#each organizations as org}
+									<button type="button" class="org-row" class:active={selectedOrganizationId === org.organization_id} onclick={() => (selectedOrganizationId = org.organization_id)}>
+										<span class="round-icon blue"><Icon icon="tabler:building" width="20" height="20" /></span>
+										<div>
+											<strong>{org.display_name}</strong>
+											<p>{org.industry || 'Unknown industry'}{#if org.country} · {org.country}{/if}</p>
+										</div>
+										<small>{org.status}{#if org.watchlist} · ⚠ watchlist{/if}</small>
+									</button>
+								{/each}
+							{/if}
+						</section>
+					</div>
+					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="organizations-detail" data-widget-hidden={!isWidgetVisible('organizations-detail')}>
+						{@render widgetEditChrome('organizations-detail')}
+						<section class="panel org-detail-panel">
+							{#if selectedOrganization}
+								<header>
+									<span class="round-icon blue"><Icon icon="tabler:building" width="26" height="26" /></span>
+									<div><h2>{selectedOrganization.display_name}</h2><em>{selectedOrganization.industry || 'Unknown industry'}{#if selectedOrganization.country} · {selectedOrganization.country}{/if}</em></div>
+								</header>
+								<div class="org-detail-grid">
+									<div class="info-card"><h3>Status</h3><span class="status-chip {selectedOrganization.status}">{selectedOrganization.status}</span>{#if selectedOrganization.health_status}<span class="health-chip">{selectedOrganization.health_status}</span>{/if}{#if selectedOrganization.watchlist}<span class="health-chip important">Watchlist</span>{/if}</div>
+									{#if selectedOrganization.description}
+										<div class="info-card"><h3>About</h3><p>{selectedOrganization.description}</p></div>
+									{/if}
+									<div class="info-card"><h3>Details</h3>
+										{#if selectedOrganization.website}<div class="detail-row"><span>Website</span><strong>{selectedOrganization.website}</strong></div>{/if}
+										{#if selectedOrganization.legal_name}<div class="detail-row"><span>Legal name</span><strong>{selectedOrganization.legal_name}</strong></div>{/if}
+										{#if selectedOrganization.registration_number}<div class="detail-row"><span>Registration</span><strong>{selectedOrganization.registration_number}</strong></div>{/if}
+										{#if selectedOrganization.vat}<div class="detail-row"><span>VAT</span><strong>{selectedOrganization.vat}</strong></div>{/if}
+										<div class="detail-row"><span>Interactions</span><strong>{selectedOrganization.interaction_count}</strong></div>
+										<div class="detail-row"><span>Priority</span><strong>{selectedOrganization.priority || 'normal'}</strong></div>
+									</div>
+									{#if orgPeople.length > 0}
+										<div class="info-card"><h3>Key People</h3>
+											{#each orgPeople as person}
+												<div class="person-mini"><span class="round-icon"><Icon icon="tabler:user" width="16" height="16" /></span><strong>{person.display_name}</strong><small>{person.email_address}</small></div>
+											{/each}
+										</div>
+									{/if}
+								</div>
+							{:else}
+								<header><span class="round-icon"><Icon icon="tabler:building-off" width="26" height="26" /></span><div><h2>No company selected</h2><em>Select a company from the list</em></div></header>
+							{/if}
+						</section>
+					</div>
+				</div>
+			</section>
+
 		{:else}
 			<section class="timeline-page">
 				<div class="view-header"><div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:timeline-event" width="28" height="28" /></span><div><h1>Timeline</h1><p>Chronological activity across connected sources.</p></div></div></div>
@@ -5468,7 +5879,17 @@
 						{@render widgetEditChrome('timeline-stream')}
 						<section class="panel feed-panel large-timeline">
 							<header class="panel-title-row"><h2>Today</h2><button type="button" class="ghost-button" disabled>All Events</button></header>
-							{#each whatsNew.concat(whatsNew) as item, index}<article class="timeline-event-row"><time>{18 - index}:42</time><span class="rail-dot"></span><span class="round-icon {item.tone}"><Icon icon={item.icon} width="20" height="20" /></span><div><strong>{item.title}</strong><p>{item.meta}</p>{#if item.tag}<em>{item.tag}</em>{/if}</div></article>{/each}
+							{#each communicationMessages.slice(0, 20) as msg, index}
+						<article class="timeline-event-row">
+							<span class="rail-dot"></span>
+							<span class="round-icon blue"><Icon icon="tabler:message" width="20" height="20" /></span>
+							<div>
+								<strong>{msg.sender_display_name || msg.sender || 'Unknown'}</strong>
+								<p>{msg.subject || msg.body_text_preview}</p>
+								<time>{msg.occurred_at || msg.projected_at}</time>
+							</div>
+						</article>
+						{/each}
 						</section>
 					</div>
 					<aside class="stacked-rail">
@@ -5520,7 +5941,7 @@
 					</div>
 				{/if}
 			</section>
-		{/if}
+	{/if}
 	</section>
 
 	{#if isLayoutEditing && isWidgetDrawerOpen}

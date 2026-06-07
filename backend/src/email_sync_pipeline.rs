@@ -3,9 +3,6 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::communications::{CommunicationIngestionStore, StoredRawCommunicationRecord};
-use crate::persons::{
-    PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
-};
 use crate::email_ingestion::analyze_ingested_message;
 use crate::email_rfc822::{ParsedEmailAttachment, ParsedEmailAttachmentDisposition};
 use crate::email_sync::{
@@ -19,6 +16,9 @@ use crate::mail_storage::{
 use crate::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage,
     parse_raw_email_message_from_blob, project_parsed_raw_email_message,
+};
+use crate::persons::{
+    PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

@@ -2,31 +2,20 @@ pub mod ai;
 pub mod attachment_intelligence;
 pub mod audit;
 pub mod automation;
+pub mod calendar;
+pub mod calendar_brain;
+pub mod calendar_core;
+pub mod calendar_health;
+pub mod calendar_intelligence;
+pub mod calendar_meetings;
+pub mod calendar_reminders;
+pub mod calendar_rules;
+pub mod calendar_scheduling;
+pub mod calendar_sync;
 pub mod calls;
 pub mod capabilities;
 pub mod communications;
 pub mod config;
-pub mod person_core;
-pub mod person_enrichment;
-pub mod person_identity;
-pub mod person_intelligence;
-pub mod person_memory;
-pub mod person_enrichment_engine;
-pub mod person_expertise;
-pub mod person_trust;
-pub mod person_health;
-pub mod person_investigator;
-pub mod person_analytics;
-pub mod person_export;
-pub mod organizations;
-pub mod organization_core;
-pub mod organization_enrichment;
-pub mod organization_finance;
-pub mod organization_health;
-pub mod organization_investigator;
-pub mod organization_memory;
-pub mod organization_workflows;
-pub mod persons;
 pub mod document_processing;
 pub mod documents;
 pub mod email_account_setup;
@@ -70,6 +59,27 @@ pub mod graph_projection;
 pub mod mail_storage;
 pub mod messages;
 pub mod ollama;
+pub mod organization_core;
+pub mod organization_enrichment;
+pub mod organization_finance;
+pub mod organization_health;
+pub mod organization_investigator;
+pub mod organization_memory;
+pub mod organization_workflows;
+pub mod organizations;
+pub mod person_analytics;
+pub mod person_core;
+pub mod person_enrichment;
+pub mod person_enrichment_engine;
+pub mod person_expertise;
+pub mod person_export;
+pub mod person_health;
+pub mod person_identity;
+pub mod person_intelligence;
+pub mod person_investigator;
+pub mod person_memory;
+pub mod person_trust;
+pub mod persons;
 pub mod project_link_reviews;
 pub mod projections;
 pub mod projects;
@@ -78,7 +88,14 @@ pub mod secret_vault;
 pub mod secrets;
 pub mod settings;
 pub mod storage;
+pub mod task_brain;
 pub mod task_candidates;
+pub mod task_core;
+pub mod task_health;
+pub mod task_intelligence;
+pub mod task_rules;
+pub mod task_sync;
+pub mod tasks;
 pub mod telegram;
 pub mod whatsapp;
 
@@ -118,9 +135,9 @@ use crate::communications::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
 };
 use crate::config::AppConfig;
+use crate::person_analytics::{AnalyticsError, PersonAnalyticsService};
 use crate::person_enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
 use crate::person_expertise::{PersonExpertiseError, PersonExpertiseStore};
-use crate::person_analytics::{AnalyticsError, PersonAnalyticsService};
 use crate::person_export::{ExportError, ExportFormat, PersonExportService};
 use crate::person_investigator::{InvestigatorError, PersonInvestigator};
 
@@ -129,19 +146,39 @@ use crate::person_health::{PersonHealthError, PersonHealthStore};
 use crate::person_trust::{PersonPromiseStore, PersonRiskStore, PersonTrustError};
 
 use crate::person_memory::{
-    NewRelationshipEvent, PersonFactStore, PersonMemoryCardStore,
-    PersonMemoryError, PersonPreferenceStore, RelationshipEventStore,
+    NewRelationshipEvent, PersonFactStore, PersonMemoryCardStore, PersonMemoryError,
+    PersonPreferenceStore, RelationshipEventStore,
 };
 
+use crate::person_core::{
+    NewPersonPersona, PersonCoreError, PersonIdentity, PersonPersona, PersonPersonaStore,
+    PersonRole, PersonRoleStore, PersonsIdentityStore,
+};
 use crate::person_identity::{
     PersonIdentityCandidate, PersonIdentityDetail, PersonIdentityError,
     PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
 };
-use crate::person_core::{
-    NewPersonPersona, PersonCoreError, PersonIdentity, PersonsIdentityStore,
-    PersonPersona, PersonPersonaStore, PersonRole, PersonRoleStore,
-};
 
+use crate::calendar::{
+    CalendarAccountStore, CalendarAccountUpdate, CalendarError, CalendarEventListQuery,
+    CalendarEventStore, CalendarEventUpdate, CalendarSourceStore, NewCalendarEvent,
+};
+use crate::calendar_brain::{CalendarBrainError, CalendarBrainService};
+use crate::calendar_core::{
+    CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
+    EventContextPackStore, EventParticipantStore, EventRelationStore,
+};
+use crate::calendar_health::{CalendarHealthError, CalendarWatchtowerService};
+use crate::calendar_intelligence::CalendarIntelligenceService;
+use crate::calendar_meetings::{
+    EventRecordingStore, EventTranscriptStore, MeetingNoteStore, MeetingOutcomeStore, MeetingsError,
+};
+use crate::calendar_reminders::{CalendarReminderStore, ReminderError};
+use crate::calendar_rules::{CalendarRuleError, CalendarRuleStore, RuleUpdate};
+use crate::calendar_scheduling::{
+    DeadlineStore, FocusBlockStore, SchedulingError, SmartSchedulingService,
+};
+use crate::calendar_sync::{export_event_ics, export_event_md};
 use crate::document_processing::{
     DocumentProcessingError, DocumentProcessingJob, DocumentProcessingRecord,
     DocumentProcessingRetryCommand, DocumentProcessingRetryCommandResult, DocumentProcessingStatus,
@@ -176,10 +213,20 @@ use crate::settings::{
 use crate::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
+use crate::task_brain::{TaskBrainError, TaskBrainService};
 use crate::task_candidates::{
     ActiveTask, TaskCandidate, TaskCandidateError, TaskCandidateReviewCommand,
     TaskCandidateReviewState, TaskCandidateStore,
 };
+use crate::task_core::{
+    ExternalTaskIdentityStore, TaskChecklistStore, TaskContextPackStore, TaskCoreError,
+    TaskEvidenceStore, TaskProviderStore, TaskRelationStore, TaskSubtaskStore,
+};
+use crate::task_health::{TaskHealthError, TaskWatchtowerService};
+use crate::task_intelligence::TaskIntelligenceService;
+use crate::task_rules::{TaskRuleError, TaskRuleStore, TaskTemplateStore};
+use crate::task_sync::{export_task_json, export_task_md};
+use crate::tasks::{NewTask, TaskError, TaskListQuery, TaskStore, TaskUpdate};
 use crate::telegram::{
     NewTelegramMessage, TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat,
     TelegramError, TelegramMessage, TelegramMessageIngestResult, TelegramStore,
@@ -1050,11 +1097,6 @@ async fn post_v1_legal_doc(
     Ok(Json(doc))
 }
 
-#[derive(Deserialize)]
-struct PersonExportQuery {
-    format: Option<String>,
-}
-
 #[derive(Serialize)]
 struct ExportResponse {
     content_type: String,
@@ -1706,9 +1748,8 @@ async fn post_v2_person_fingerprint(
             occurred_at: m.message.occurred_at,
         })
         .collect();
-    let fp = crate::person_intelligence::PersonIntelligenceService::heuristic_fingerprint(
-        &person_msgs,
-    );
+    let fp =
+        crate::person_intelligence::PersonIntelligenceService::heuristic_fingerprint(&person_msgs);
     let store = crate::person_enrichment::PersonEnrichmentStore::new(pool);
     store.enrich_person(&person_id, &fp).await?;
     Ok(Json(
@@ -2020,14 +2061,8 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/persons/{person_id}/identities/{identity_id}",
             delete(delete_person_identity),
         )
-        .route(
-            "/api/v2/persons/{person_id}/roles",
-            get(get_person_roles),
-        )
-        .route(
-            "/api/v2/persons/{person_id}/roles",
-            post(post_person_role),
-        )
+        .route("/api/v2/persons/{person_id}/roles", get(get_person_roles))
+        .route("/api/v2/persons/{person_id}/roles", post(post_person_role))
         .route(
             "/api/v2/persons/{person_id}/roles/{role}",
             delete(delete_person_role),
@@ -2068,8 +2103,9 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/persons/{person_id}/history-diff",
             get(get_person_history_diff),
         )
-        .route("/api/v2/persons/{person_id}/timeline",
-        get(get_person_timeline).post(post_relationship_event),
+        .route(
+            "/api/v2/persons/{person_id}/timeline",
+            get(get_person_timeline).post(post_relationship_event),
         )
         .route(
             "/api/v2/persons/{person_id}/enrichment",
@@ -2095,10 +2131,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/persons/{person_id}/promises",
             get(get_person_promises),
         )
-        .route(
-            "/api/v2/persons/{person_id}/risks",
-            get(get_person_risks),
-        )
+        .route("/api/v2/persons/{person_id}/risks", get(get_person_risks))
         .route(
             "/api/v2/persons/{person_id}/investigate",
             post(post_person_investigate),
@@ -2119,29 +2152,308 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v2/persons/{person_id}/export",
             get(get_person_export_handler),
         )
-        .route("/api/v2/persons/{person_id}/risks",
-        get(get_person_risks),
-        )
+        .route("/api/v2/persons/{person_id}/risks", get(get_person_risks))
         .route(
             "/api/v2/persons/{person_id}/health",
             get(get_persons_health),
         )
-        .route(
-            "/api/v2/persons/health",
-            get(get_persons_health),
-        )
-        .route(
-            "/api/v2/persons/watchlist",
-            get(get_persons_watchlist),
-        )
+        .route("/api/v2/persons/health", get(get_persons_health))
+        .route("/api/v2/persons/watchlist", get(get_persons_watchlist))
         .route(
             "/api/v2/persons/{person_id}/watchlist",
             post(post_person_watchlist_toggle),
         )
-        .route("/api/v2/organizations", get(get_organizations).post(post_organization))
+        .route(
+            "/api/v2/calendar/accounts",
+            get(get_calendar_accounts).post(post_calendar_account),
+        )
+        .route(
+            "/api/v2/calendar/accounts/{account_id}",
+            get(get_calendar_account)
+                .put(put_calendar_account)
+                .delete(delete_calendar_account),
+        )
+        .route(
+            "/api/v2/calendar/accounts/{account_id}/sources",
+            get(get_calendar_sources).post(post_calendar_source),
+        )
+        .route(
+            "/api/v2/calendar/events",
+            get(get_calendar_events).post(post_calendar_event),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}",
+            get(get_calendar_event)
+                .put(put_calendar_event)
+                .delete(delete_calendar_event),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/reschedule",
+            post(post_calendar_event_reschedule),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/cancel",
+            post(post_calendar_event_cancel),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/participants",
+            get(get_event_participants).post(post_event_participant),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/relations",
+            get(get_event_relations).post(post_event_relation),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/context-pack",
+            get(get_event_context_pack).post(post_event_context_pack),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/agenda",
+            get(get_event_agenda).post(post_event_agenda),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/checklist",
+            get(get_event_checklist).post(post_event_checklist),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/classify",
+            post(post_event_classify),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/analyze",
+            post(post_event_analyze),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/risks",
+            get(get_event_risks),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/notes",
+            get(get_meeting_notes).post(post_meeting_note),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/outcomes",
+            get(get_meeting_outcomes).post(post_meeting_outcome),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/recording",
+            get(get_event_recordings).post(post_event_recording),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/transcript",
+            get(get_event_transcript),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/follow-up",
+            post(post_event_follow_up),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/follow-up-status",
+            get(get_event_follow_up_status),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/brief",
+            get(get_event_brief),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/generate-agenda",
+            post(post_generate_agenda),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/export",
+            get(get_event_export),
+        )
+        .route(
+            "/api/v2/calendar/deadlines",
+            get(get_deadlines).post(post_deadline),
+        )
+        .route(
+            "/api/v2/calendar/focus-blocks",
+            get(get_focus_blocks).post(post_focus_block),
+        )
+        .route("/api/v2/calendar/smart-schedule", post(post_smart_schedule))
+        .route("/api/v2/calendar/watchtower", get(get_calendar_watchtower))
+        .route("/api/v2/calendar/health", get(get_calendar_health))
+        .route("/api/v2/calendar/weekly-brief", get(get_weekly_brief))
+        .route("/api/v2/calendar/analytics", get(get_calendar_analytics))
+        .route("/api/v2/calendar/brain", post(post_calendar_brain))
+        .route("/api/v2/calendar/search", get(get_calendar_search))
+        .route(
+            "/api/v2/calendar/rules",
+            get(get_calendar_rules).post(post_calendar_rule),
+        )
+        .route(
+            "/api/v2/calendar/rules/{rule_id}",
+            put(put_calendar_rule).delete(delete_calendar_rule),
+        )
+        .route("/api/v2/calendar/import", post(post_calendar_import))
+        .route(
+            "/api/v2/calendar/accounts/{account_id}/sync",
+            post(post_calendar_sync),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/reminders",
+            get(get_event_reminders).post(post_event_reminder),
+        )
+        .route(
+            "/api/v2/calendar/events/{event_id}/reminders/{reminder_id}/toggle",
+            post(post_event_reminder_toggle),
+        )
+        .route(
+            "/api/v2/calendar/analytics/distribution",
+            get(get_time_distribution),
+        )
+        .route(
+            "/api/v2/calendar/analytics/focus-balance",
+            get(get_focus_balance),
+        )
+        .route(
+            "/api/v2/calendar/analytics/back-to-back",
+            get(get_back_to_back),
+        )
+        .route(
+            "/api/v2/organizations",
+            get(get_organizations).post(post_organization),
+        )
         .route("/api/v2/organizations/search", get(get_organization_search))
-        .route("/api/v2/organizations/{org_id}", get(get_organization).put(put_organization))
-        .route("/api/v2/organizations/{org_id}/archive", post(post_organization_archive))
+        .route(
+            "/api/v2/organizations/{org_id}",
+            get(get_organization).put(put_organization),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/archive",
+            post(post_organization_archive),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/identities",
+            get(get_org_identities).post(post_org_identity),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/aliases",
+            get(get_org_aliases).post(post_org_alias),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/domains",
+            get(get_org_domains),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/departments",
+            get(get_org_departments).post(post_org_department),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/contacts",
+            get(get_org_contacts).post(post_org_contact_link),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/related",
+            get(get_org_related),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/timeline",
+            get(get_org_timeline),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/portals",
+            get(get_org_portals),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/procedures",
+            get(get_org_procedures),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/playbooks",
+            get(get_org_playbooks),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/templates",
+            get(get_org_templates),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/financial",
+            get(get_org_financial),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/contracts",
+            get(get_org_contracts),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/compliance",
+            get(get_org_compliance),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/services",
+            get(get_org_services),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/products",
+            get(get_org_products),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/enrichment",
+            get(get_org_enrichment),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/enrichment/{rid}/apply",
+            post(post_org_enrich_apply),
+        )
+        .route("/api/v2/organizations/{org_id}/risks", get(get_org_risks))
+        .route("/api/v2/organizations/{org_id}/health", get(get_org_health))
+        .route(
+            "/api/v2/organizations/{org_id}/watchlist",
+            post(post_org_watchlist_toggle),
+        )
+        .route(
+            "/api/v2/organizations/{org_id}/dossier",
+            get(get_org_dossier),
+        )
+        .route("/api/v2/organizations/{org_id}/brief", get(get_org_brief))
+        .route(
+            "/api/v2/organizations/{org_id}/context-pack",
+            get(get_org_context_pack),
+        )
+        .route("/api/v2/tasks", get(get_tasks_v2).post(post_task))
+        .route("/api/v2/tasks/{task_id}", get(get_task).put(put_task))
+        .route("/api/v2/tasks/{task_id}/archive", post(post_task_archive))
+        .route("/api/v2/tasks/{task_id}/status", post(post_task_status))
+        .route(
+            "/api/v2/tasks/{task_id}/context-pack",
+            get(get_task_context_pack).post(post_task_context_pack),
+        )
+        .route(
+            "/api/v2/tasks/{task_id}/evidence",
+            get(get_task_evidence).post(post_task_evidence),
+        )
+        .route(
+            "/api/v2/tasks/{task_id}/relations",
+            get(get_task_relations).post(post_task_relation),
+        )
+        .route(
+            "/api/v2/tasks/{task_id}/checklist",
+            get(get_task_checklist).post(post_task_checklist),
+        )
+        .route(
+            "/api/v2/tasks/{task_id}/subtasks",
+            get(get_task_subtasks).post(post_task_subtask),
+        )
+        .route("/api/v2/tasks/{task_id}/analyze", post(post_task_analyze))
+        .route("/api/v2/tasks/{task_id}/export", get(get_task_export))
+        .route("/api/v2/tasks/{task_id}/external", get(get_task_external))
+        .route(
+            "/api/v2/tasks/providers",
+            get(get_task_providers).post(post_task_provider),
+        )
+        .route("/api/v2/tasks/brain", post(post_task_brain))
+        .route("/api/v2/tasks/search", get(get_task_search))
+        .route("/api/v2/tasks/daily-brief", get(get_task_daily_brief))
+        .route(
+            "/api/v2/tasks/rules",
+            get(get_task_rules).post(post_task_rule),
+        )
+        .route("/api/v2/tasks/rules/{rule_id}", delete(delete_task_rule))
+        .route("/api/v2/tasks/templates", get(get_task_templates))
+        .route("/api/v2/tasks/watchtower", get(get_task_watchtower))
+        .route("/api/v2/tasks/health", get(get_task_health))
+        .route("/api/v2/tasks/analytics", get(get_task_analytics))
         .route("/api/v2/task-candidates", get(get_task_candidates))
         .route(
             "/api/v2/task-candidates/{task_candidate_id}/review",
@@ -2228,7 +2540,6 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .layer(local_frontend_cors_layer())
 }
 
-
 // ── Person Identities ───────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -2242,9 +2553,16 @@ async fn get_person_identities(
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonIdentitiesResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = PersonsIdentityStore::new(pool);
-    let items = store.list_by_person(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let items = store
+        .list_by_person(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonIdentitiesResponse { items }))
 }
 
@@ -2262,12 +2580,21 @@ async fn post_person_identity(
     Json(req): Json<NewPersonIdentityRequest>,
 ) -> Result<Json<PersonIdentity>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = PersonsIdentityStore::new(pool);
     let identity = store
-        .upsert(&person_id, &req.identity_type, &req.identity_value, req.source.as_deref().unwrap_or("manual"))
+        .upsert(
+            &person_id,
+            &req.identity_type,
+            &req.identity_value,
+            req.source.as_deref().unwrap_or("manual"),
+        )
         .await
-        .map_err(|e| ApiError::from(e))?;
+        .map_err(ApiError::from)?;
     Ok(Json(identity))
 }
 
@@ -2277,9 +2604,13 @@ async fn delete_person_identity(
     Path((_person_id, identity_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = PersonsIdentityStore::new(pool);
-    let deleted = store.delete(&identity_id).await.map_err(|e| ApiError::from(e))?;
+    let deleted = store.delete(&identity_id).await.map_err(ApiError::from)?;
     Ok(Json(json!({"deleted": deleted})))
 }
 
@@ -2296,9 +2627,16 @@ async fn get_person_roles(
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonRolesResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = PersonRoleStore::new(pool);
-    let items = store.list_by_person(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let items = store
+        .list_by_person(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonRolesResponse { items }))
 }
 
@@ -2314,9 +2652,16 @@ async fn post_person_role(
     Json(req): Json<NewPersonRoleRequest>,
 ) -> Result<Json<PersonRole>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = PersonRoleStore::new(pool);
-    let role = store.assign(&person_id, &req.role, None).await.map_err(|e| ApiError::from(e))?;
+    let role = store
+        .assign(&person_id, &req.role, None)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(role))
 }
 
@@ -2326,9 +2671,16 @@ async fn delete_person_role(
     Path((person_id, role)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = PersonRoleStore::new(pool);
-    let deleted = store.remove(&person_id, &role).await.map_err(|e| ApiError::from(e))?;
+    let deleted = store
+        .remove(&person_id, &role)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(json!({"deleted": deleted})))
 }
 
@@ -2345,9 +2697,16 @@ async fn get_person_personas(
     Path(person_id): Path<String>,
 ) -> Result<Json<PersonPersonasResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = PersonPersonaStore::new(pool);
-    let items = store.list_by_person(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let items = store
+        .list_by_person(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonPersonasResponse { items }))
 }
 
@@ -2358,12 +2717,16 @@ async fn post_person_persona(
     Json(req): Json<NewPersonPersona>,
 ) -> Result<Json<PersonPersona>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = PersonPersonaStore::new(pool);
-    let persona = store.upsert(&NewPersonPersona {
-        person_id,
-        ..req
-    }).await.map_err(|e| ApiError::from(e))?;
+    let persona = store
+        .upsert(&NewPersonPersona { person_id, ..req })
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(persona))
 }
 
@@ -2373,119 +2736,235 @@ async fn delete_person_persona(
     Path((_person_id, persona_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = PersonPersonaStore::new(pool);
-    let deleted = store.delete(&persona_id).await.map_err(|e| ApiError::from(e))?;
+    let deleted = store.delete(&persona_id).await.map_err(ApiError::from)?;
     Ok(Json(json!({"deleted": deleted})))
 }
-
 
 // ── Person Facts ────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct PersonFactsResponse { items: Vec<crate::person_memory::PersonFact> }
+struct PersonFactsResponse {
+    items: Vec<crate::person_memory::PersonFact>,
+}
 
 async fn get_person_facts(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<PersonFactsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = PersonFactStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = PersonFactStore::new(pool)
+        .list(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonFactsResponse { items }))
 }
 
 #[derive(Deserialize)]
-struct NewPersonFactRequest { fact_type: String, value: String, source: Option<String>, confidence: Option<f64> }
+struct NewPersonFactRequest {
+    fact_type: String,
+    value: String,
+    source: Option<String>,
+    confidence: Option<f64>,
+}
 
 async fn post_person_fact(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
     Json(req): Json<NewPersonFactRequest>,
 ) -> Result<Json<crate::person_memory::PersonFact>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let fact = PersonFactStore::new(pool).upsert(&person_id, &req.fact_type, &req.value, req.source.as_deref().unwrap_or("manual"), req.confidence.unwrap_or(1.0)).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let fact = PersonFactStore::new(pool)
+        .upsert(
+            &person_id,
+            &req.fact_type,
+            &req.value,
+            req.source.as_deref().unwrap_or("manual"),
+            req.confidence.unwrap_or(1.0),
+        )
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(fact))
 }
 
 // ── Person Memory Cards ─────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct PersonMemoryCardsResponse { items: Vec<crate::person_memory::PersonMemoryCard> }
+struct PersonMemoryCardsResponse {
+    items: Vec<crate::person_memory::PersonMemoryCard>,
+}
 
 async fn get_person_memory_cards(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<PersonMemoryCardsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = PersonMemoryCardStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = PersonMemoryCardStore::new(pool)
+        .list(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonMemoryCardsResponse { items }))
 }
 
 #[derive(Deserialize)]
-struct NewPersonMemoryCardRequest { title: String, description: String, source: Option<String>, importance: Option<i16> }
+struct NewPersonMemoryCardRequest {
+    title: String,
+    description: String,
+    source: Option<String>,
+    importance: Option<i16>,
+}
 
 async fn post_person_memory_card(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
     Json(req): Json<NewPersonMemoryCardRequest>,
 ) -> Result<Json<crate::person_memory::PersonMemoryCard>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let card = PersonMemoryCardStore::new(pool).upsert(&person_id, &req.title, &req.description, req.source.as_deref().unwrap_or("manual"), req.importance.unwrap_or(5)).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let card = PersonMemoryCardStore::new(pool)
+        .upsert(
+            &person_id,
+            &req.title,
+            &req.description,
+            req.source.as_deref().unwrap_or("manual"),
+            req.importance.unwrap_or(5),
+        )
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(card))
 }
 
 // ── Person Preferences ──────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct PersonPreferencesResponse { items: Vec<crate::person_memory::PersonPreference> }
+struct PersonPreferencesResponse {
+    items: Vec<crate::person_memory::PersonPreference>,
+}
 
 async fn get_person_preferences(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<PersonPreferencesResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = PersonPreferenceStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = PersonPreferenceStore::new(pool)
+        .list(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonPreferencesResponse { items }))
 }
 
 #[derive(Deserialize)]
-struct NewPersonPreferenceRequest { preference_type: String, value: String, source: Option<String> }
+struct NewPersonPreferenceRequest {
+    preference_type: String,
+    value: String,
+    source: Option<String>,
+}
 
 async fn post_person_preference(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
     Json(req): Json<NewPersonPreferenceRequest>,
 ) -> Result<Json<crate::person_memory::PersonPreference>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let pref = PersonPreferenceStore::new(pool).upsert(&person_id, &req.preference_type, &req.value, req.source.as_deref().unwrap_or("manual")).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let pref = PersonPreferenceStore::new(pool)
+        .upsert(
+            &person_id,
+            &req.preference_type,
+            &req.value,
+            req.source.as_deref().unwrap_or("manual"),
+        )
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(pref))
 }
 
 // ── Relationship Timeline ───────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct RelationshipTimelineResponse { items: Vec<crate::person_memory::RelationshipEvent> }
+struct RelationshipTimelineResponse {
+    items: Vec<crate::person_memory::RelationshipEvent>,
+}
 
 async fn get_person_timeline(
-    State(state): State<AppState>, headers: HeaderMap,
-    Path(person_id): Path<String>, Query(query): Query<TimelineQuery>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
+    Query(query): Query<TimelineQuery>,
 ) -> Result<Json<RelationshipTimelineResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = RelationshipEventStore::new(pool).timeline(&person_id, query.limit.unwrap_or(50)).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = RelationshipEventStore::new(pool)
+        .timeline(&person_id, query.limit.unwrap_or(50))
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(RelationshipTimelineResponse { items }))
 }
 
 #[derive(Deserialize)]
-struct TimelineQuery { limit: Option<i64> }
+struct TimelineQuery {
+    limit: Option<i64>,
+}
 
 async fn post_relationship_event(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
     Json(req): Json<NewRelationshipEvent>,
 ) -> Result<Json<crate::person_memory::RelationshipEvent>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let event = RelationshipEventStore::new(pool).add(&NewRelationshipEvent { person_id, ..req }).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let event = RelationshipEventStore::new(pool)
+        .add(&NewRelationshipEvent { person_id, ..req })
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(event))
 }
 
@@ -2510,90 +2989,163 @@ impl From<PersonTrustError> for ApiError {
     }
 }
 
-
 // ── Person Enrichment ──────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct EnrichmentResultsResponse { items: Vec<crate::person_enrichment_engine::EnrichmentResult> }
+struct EnrichmentResultsResponse {
+    items: Vec<crate::person_enrichment_engine::EnrichmentResult>,
+}
 
 async fn get_person_enrichment(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<EnrichmentResultsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = EnrichmentResultStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = EnrichmentResultStore::new(pool)
+        .list(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(EnrichmentResultsResponse { items }))
 }
 
 async fn post_person_enrichment_apply(
-    State(state): State<AppState>, headers: HeaderMap, Path((_person_id, result_id)): Path<(String, String)>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((_person_id, result_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    EnrichmentResultStore::new(pool).apply(&result_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    EnrichmentResultStore::new(pool)
+        .apply(&result_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(json!({"applied": true})))
 }
 
 async fn post_person_enrichment_reject(
-    State(state): State<AppState>, headers: HeaderMap, Path((_person_id, result_id)): Path<(String, String)>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((_person_id, result_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    EnrichmentResultStore::new(pool).reject(&result_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    EnrichmentResultStore::new(pool)
+        .reject(&result_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(json!({"rejected": true})))
 }
 
 // ── Person Expertise ───────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct PersonExpertiseResponse { items: Vec<crate::person_expertise::PersonExpertise> }
+struct PersonExpertiseResponse {
+    items: Vec<crate::person_expertise::PersonExpertise>,
+}
 
 async fn get_person_expertise(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<PersonExpertiseResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = PersonExpertiseStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = PersonExpertiseStore::new(pool)
+        .list(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonExpertiseResponse { items }))
 }
 
 #[derive(Deserialize)]
-struct ExpertiseSearchQuery { skill: String, limit: Option<i64> }
+struct ExpertiseSearchQuery {
+    skill: String,
+    limit: Option<i64>,
+}
 
 async fn get_person_expertise_search(
-    State(state): State<AppState>, headers: HeaderMap, Query(query): Query<ExpertiseSearchQuery>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<ExpertiseSearchQuery>,
 ) -> Result<Json<PersonExpertiseResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = PersonExpertiseStore::new(pool).search_by_skill(&query.skill, query.limit.unwrap_or(20)).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = PersonExpertiseStore::new(pool)
+        .search_by_skill(&query.skill, query.limit.unwrap_or(20))
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonExpertiseResponse { items }))
 }
 
 // ── Person Promises ────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct PersonPromisesResponse { items: Vec<crate::person_trust::PersonPromise> }
+struct PersonPromisesResponse {
+    items: Vec<crate::person_trust::PersonPromise>,
+}
 
 async fn get_person_promises(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<PersonPromisesResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = PersonPromiseStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = PersonPromiseStore::new(pool)
+        .list(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonPromisesResponse { items }))
 }
 
 // ── Person Risks ────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct PersonRisksResponse { items: Vec<crate::person_trust::PersonRisk> }
+struct PersonRisksResponse {
+    items: Vec<crate::person_trust::PersonRisk>,
+}
 
 async fn get_person_risks(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<PersonRisksResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = PersonRiskStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = PersonRiskStore::new(pool)
+        .list(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonRisksResponse { items }))
 }
 
@@ -2604,36 +3156,62 @@ impl From<PersonHealthError> for ApiError {
     }
 }
 
-
 // ── Person Health ──────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct PersonHealthResponse { items: Vec<crate::person_health::PersonHealth> }
+struct PersonHealthResponse {
+    items: Vec<crate::person_health::PersonHealth>,
+}
 
 async fn get_persons_health(
-    State(state): State<AppState>, headers: HeaderMap,
+    State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<PersonHealthResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = PersonHealthStore::new(pool).list_health().await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = PersonHealthStore::new(pool)
+        .list_health()
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonHealthResponse { items }))
 }
 
 async fn get_persons_watchlist(
-    State(state): State<AppState>, headers: HeaderMap,
+    State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> Result<Json<PersonHealthResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = PersonHealthStore::new(pool).list_watchlist().await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = PersonHealthStore::new(pool)
+        .list_watchlist()
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonHealthResponse { items }))
 }
 
 async fn post_person_watchlist_toggle(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let on = PersonHealthStore::new(pool).toggle_watchlist(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let on = PersonHealthStore::new(pool)
+        .toggle_watchlist(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(json!({"watchlist": on})))
 }
 
@@ -2663,171 +3241,324 @@ impl From<ExportError> for ApiError {
     }
 }
 
-
 // ── Person Investigator ────────────────────────────────────────────────────
 
 async fn post_person_investigate(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let dossier = PersonInvestigator::new(pool).assemble_dossier(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let dossier = PersonInvestigator::new(pool)
+        .assemble_dossier(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&dossier).unwrap_or_default()))
 }
 
 async fn get_person_dossier(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let dossier = PersonInvestigator::new(pool).assemble_dossier(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let dossier = PersonInvestigator::new(pool)
+        .assemble_dossier(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&dossier).unwrap_or_default()))
 }
 
 async fn get_person_meeting_prep(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let prep = PersonInvestigator::new(pool).meeting_prep(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let prep = PersonInvestigator::new(pool)
+        .meeting_prep(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&prep).unwrap_or_default()))
 }
 
 // ── Person Analytics ────────────────────────────────────────────────────────
 
 async fn get_person_analytics(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let analytics = PersonAnalyticsService::new(pool).compute(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let analytics = PersonAnalyticsService::new(pool)
+        .compute(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&analytics).unwrap_or_default()))
 }
 
 // ── Person Export ───────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
-struct PersonDownloadQuery { format: Option<String> }
+struct PersonDownloadQuery {
+    format: Option<String>,
+}
 
 async fn get_person_export_handler(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
     Query(query): Query<PersonDownloadQuery>,
 ) -> Result<(HeaderMap, String), ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let format = query.format.as_deref().and_then(ExportFormat::from_str).unwrap_or(ExportFormat::Json);
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let content = PersonExportService::new(pool).export(&person_id, format.clone()).await.map_err(|e| ApiError::from(e))?;
+    let format = query
+        .format
+        .as_deref()
+        .and_then(ExportFormat::parse)
+        .unwrap_or(ExportFormat::Json);
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let content = PersonExportService::new(pool)
+        .export(&person_id, format.clone())
+        .await
+        .map_err(ApiError::from)?;
     let mut headers_map = HeaderMap::new();
-    headers_map.insert(header::CONTENT_TYPE, HeaderValue::from_str(format.content_type()).unwrap_or(HeaderValue::from_static("application/json")));
+    headers_map.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_str(format.content_type())
+            .unwrap_or(HeaderValue::from_static("application/json")),
+    );
     headers_map.insert(
         HeaderName::from_static("content-disposition"),
-        HeaderValue::from_str(&format!("attachment; filename=person_{}.{}", person_id, format.extension())).unwrap(),
+        HeaderValue::from_str(&format!(
+            "attachment; filename=person_{}.{}",
+            person_id,
+            format.extension()
+        ))
+        .unwrap(),
     );
     Ok((headers_map, content))
 }
 
-
 // ── Person Snapshots & History Diff ─────────────────────────────────────────
 
 #[derive(Serialize)]
-struct PersonSnapshotsResponse { items: Vec<crate::person_memory::PersonSnapshot> }
+struct PersonSnapshotsResponse {
+    items: Vec<crate::person_memory::PersonSnapshot>,
+}
 
 async fn get_person_snapshots(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
 ) -> Result<Json<PersonSnapshotsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::person_memory::PersonSnapshotStore::new(pool).list(&person_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::person_memory::PersonSnapshotStore::new(pool)
+        .list(&person_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(PersonSnapshotsResponse { items }))
 }
 
 #[derive(Deserialize)]
-struct HistoryDiffQuery { from: String, to: String }
+struct HistoryDiffQuery {
+    from: String,
+    to: String,
+}
 
 async fn get_person_history_diff(
-    State(state): State<AppState>, headers: HeaderMap, Path(person_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(person_id): Path<String>,
     Query(query): Query<HistoryDiffQuery>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let from_date = DateTime::parse_from_rfc3339(&query.from).map_err(|_| ApiError::InvalidCommunicationQuery("invalid from date"))?.with_timezone(&Utc);
-    let to_date = DateTime::parse_from_rfc3339(&query.to).map_err(|_| ApiError::InvalidCommunicationQuery("invalid to date"))?.with_timezone(&Utc);
-    let diff = crate::person_memory::PersonSnapshotStore::new(pool).history_diff(&person_id, from_date, to_date).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let from_date = DateTime::parse_from_rfc3339(&query.from)
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid from date"))?
+        .with_timezone(&Utc);
+    let to_date = DateTime::parse_from_rfc3339(&query.to)
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid to date"))?
+        .with_timezone(&Utc);
+    let diff = crate::person_memory::PersonSnapshotStore::new(pool)
+        .history_diff(&person_id, from_date, to_date)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&diff).unwrap_or_default()))
 }
 
 // ── Organizations ───────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct OrganizationListResponse { items: Vec<crate::organizations::Organization> }
+struct OrganizationListResponse {
+    items: Vec<crate::organizations::Organization>,
+}
 
 #[derive(Deserialize)]
-struct OrganizationListQuery { org_type: Option<String>, limit: Option<i64> }
+struct OrganizationListQuery {
+    org_type: Option<String>,
+    limit: Option<i64>,
+}
 
 async fn get_organizations(
-    State(state): State<AppState>, headers: HeaderMap, Query(query): Query<OrganizationListQuery>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<OrganizationListQuery>,
 ) -> Result<Json<OrganizationListResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = OrganizationStore::new(pool).list(query.org_type.as_deref(), query.limit.unwrap_or(50)).await?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = OrganizationStore::new(pool)
+        .list(query.org_type.as_deref(), query.limit.unwrap_or(50))
+        .await?;
     Ok(Json(OrganizationListResponse { items }))
 }
 
 #[derive(Deserialize)]
-struct NewOrganizationRequest { display_name: String, org_type: Option<String> }
+struct NewOrganizationRequest {
+    display_name: String,
+    org_type: Option<String>,
+}
 
 async fn post_organization(
-    State(state): State<AppState>, headers: HeaderMap, Json(req): Json<NewOrganizationRequest>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewOrganizationRequest>,
 ) -> Result<Json<crate::organizations::Organization>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let org = OrganizationStore::new(pool).create(&req.display_name, req.org_type.as_deref()).await?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let org = OrganizationStore::new(pool)
+        .create(&req.display_name, req.org_type.as_deref())
+        .await?;
     Ok(Json(org))
 }
 
 async fn get_organization(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<crate::organizations::Organization>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    OrganizationStore::new(pool).get(&org_id).await?.map(Json).ok_or(ApiError::NotFound)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    OrganizationStore::new(pool)
+        .get(&org_id)
+        .await?
+        .map(Json)
+        .ok_or(ApiError::NotFound)
 }
 
 async fn put_organization(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
     Json(update): Json<OrganizationUpdate>,
 ) -> Result<Json<crate::organizations::Organization>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let org = OrganizationStore::new(pool).update(&org_id, &update).await?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let org = OrganizationStore::new(pool)
+        .update(&org_id, &update)
+        .await?;
     Ok(Json(org))
 }
 
 #[derive(Deserialize)]
-struct OrganizationSearchQuery { q: String, limit: Option<i64> }
+struct OrganizationSearchQuery {
+    q: String,
+    limit: Option<i64>,
+}
 
 async fn get_organization_search(
-    State(state): State<AppState>, headers: HeaderMap, Query(query): Query<OrganizationSearchQuery>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<OrganizationSearchQuery>,
 ) -> Result<Json<OrganizationListResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     let store = OrganizationStore::new(pool);
     let all = store.list(None, 200).await?;
     let q = query.q.trim().to_lowercase();
-    let items: Vec<_> = all.into_iter()
-        .filter(|o| o.display_name.to_lowercase().contains(&q)
-                  || o.legal_name.as_deref().unwrap_or("").to_lowercase().contains(&q)
-                  || o.website.as_deref().unwrap_or("").to_lowercase().contains(&q))
+    let items: Vec<_> = all
+        .into_iter()
+        .filter(|o| {
+            o.display_name.to_lowercase().contains(&q)
+                || o.legal_name
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .contains(&q)
+                || o.website
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .contains(&q)
+        })
         .take(query.limit.unwrap_or(20).clamp(1, 100) as usize)
         .collect();
     Ok(Json(OrganizationListResponse { items }))
 }
 
 async fn post_organization_archive(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
     OrganizationStore::new(pool).archive(&org_id).await?;
     Ok(Json(json!({"archived": true})))
 }
@@ -2835,342 +3566,3118 @@ async fn post_organization_archive(
 // ── Organization Identities ────────────────────────────────────────────────
 
 #[derive(Serialize)]
-struct OrgIdentitiesResponse { items: Vec<crate::organization_core::OrganizationIdentity> }
+struct OrgIdentitiesResponse {
+    items: Vec<crate::organization_core::OrganizationIdentity>,
+}
 
 async fn get_org_identities(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgIdentitiesResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_core::OrgIdentityStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_core::OrgIdentityStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgIdentitiesResponse { items }))
 }
 
 #[derive(Deserialize)]
-struct NewOrgIdentityRequest { identity_type: String, identity_value: String, source: Option<String> }
+struct NewOrgIdentityRequest {
+    identity_type: String,
+    identity_value: String,
+    source: Option<String>,
+}
 
 async fn post_org_identity(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
     Json(req): Json<NewOrgIdentityRequest>,
 ) -> Result<Json<crate::organization_core::OrganizationIdentity>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let identity = crate::organization_core::OrgIdentityStore::new(pool).upsert(&org_id, &req.identity_type, &req.identity_value, req.source.as_deref().unwrap_or("manual")).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let identity = crate::organization_core::OrgIdentityStore::new(pool)
+        .upsert(
+            &org_id,
+            &req.identity_type,
+            &req.identity_value,
+            req.source.as_deref().unwrap_or("manual"),
+        )
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(identity))
 }
 
 // ── Organization Aliases ───────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgAliasesResponse { items: Vec<crate::organization_core::OrganizationAlias> }
+#[derive(Serialize)]
+struct OrgAliasesResponse {
+    items: Vec<crate::organization_core::OrganizationAlias>,
+}
 
 async fn get_org_aliases(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgAliasesResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_core::OrgAliasStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_core::OrgAliasStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgAliasesResponse { items }))
 }
 
-#[derive(Deserialize)] struct NewOrgAliasRequest { name: String, alias_type: String, source: Option<String> }
+#[derive(Deserialize)]
+struct NewOrgAliasRequest {
+    name: String,
+    alias_type: String,
+    source: Option<String>,
+}
 
 async fn post_org_alias(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
     Json(req): Json<NewOrgAliasRequest>,
 ) -> Result<Json<crate::organization_core::OrganizationAlias>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let alias = crate::organization_core::OrgAliasStore::new(pool).add(&org_id, &req.name, &req.alias_type, req.source.as_deref().unwrap_or("manual")).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let alias = crate::organization_core::OrgAliasStore::new(pool)
+        .add(
+            &org_id,
+            &req.name,
+            &req.alias_type,
+            req.source.as_deref().unwrap_or("manual"),
+        )
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(alias))
 }
 
 // ── Organization Domains ───────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgDomainsResponse { items: Vec<crate::organization_core::OrganizationDomain> }
+#[derive(Serialize)]
+struct OrgDomainsResponse {
+    items: Vec<crate::organization_core::OrganizationDomain>,
+}
 
 async fn get_org_domains(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgDomainsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_core::OrgDomainStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_core::OrgDomainStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgDomainsResponse { items }))
 }
 
 // ── Organization Departments ───────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgDepartmentsResponse { items: Vec<crate::organization_core::OrgDepartment> }
+#[derive(Serialize)]
+struct OrgDepartmentsResponse {
+    items: Vec<crate::organization_core::OrgDepartment>,
+}
 
 async fn get_org_departments(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgDepartmentsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_core::OrgDepartmentStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_core::OrgDepartmentStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgDepartmentsResponse { items }))
 }
 
-#[derive(Deserialize)] struct NewOrgDepartmentRequest { name: String, description: Option<String>, parent_id: Option<String> }
+#[derive(Deserialize)]
+struct NewOrgDepartmentRequest {
+    name: String,
+    description: Option<String>,
+    parent_id: Option<String>,
+}
 
 async fn post_org_department(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
     Json(req): Json<NewOrgDepartmentRequest>,
 ) -> Result<Json<crate::organization_core::OrgDepartment>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let dept = crate::organization_core::OrgDepartmentStore::new(pool).add(&org_id, &req.name, req.description.as_deref(), req.parent_id.as_deref()).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let dept = crate::organization_core::OrgDepartmentStore::new(pool)
+        .add(
+            &org_id,
+            &req.name,
+            req.description.as_deref(),
+            req.parent_id.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(dept))
 }
 
 // ── Organization Contacts ──────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgContactsResponse { items: Vec<crate::organization_core::OrgContactLink> }
+#[derive(Serialize)]
+struct OrgContactsResponse {
+    items: Vec<crate::organization_core::OrgContactLink>,
+}
 
 async fn get_org_contacts(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgContactsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_core::OrgContactLinkStore::new(pool).list_by_org(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_core::OrgContactLinkStore::new(pool)
+        .list_by_org(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgContactsResponse { items }))
 }
 
-#[derive(Deserialize)] struct LinkOrgContactRequest { person_id: String, role: Option<String>, department: Option<String> }
+#[derive(Deserialize)]
+struct LinkOrgContactRequest {
+    person_id: String,
+    role: Option<String>,
+    department: Option<String>,
+}
 
 async fn post_org_contact_link(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
     Json(req): Json<LinkOrgContactRequest>,
 ) -> Result<Json<crate::organization_core::OrgContactLink>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let link = crate::organization_core::OrgContactLinkStore::new(pool).link(&org_id, &req.person_id, req.role.as_deref(), req.department.as_deref()).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let link = crate::organization_core::OrgContactLinkStore::new(pool)
+        .link(
+            &org_id,
+            &req.person_id,
+            req.role.as_deref(),
+            req.department.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(link))
 }
 
 // ── Organization Related ───────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgRelatedResponse { items: Vec<crate::organization_core::RelatedOrganization> }
+#[derive(Serialize)]
+struct OrgRelatedResponse {
+    items: Vec<crate::organization_core::RelatedOrganization>,
+}
 
 async fn get_org_related(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgRelatedResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_core::RelatedOrgStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_core::RelatedOrgStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgRelatedResponse { items }))
 }
 
 // ── Organization Timeline ──────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgTimelineResponse { items: Vec<crate::organization_workflows::OrgTimelineEvent> }
-#[derive(Deserialize)] struct OrgTimelineQuery { limit: Option<i64> }
+#[derive(Serialize)]
+struct OrgTimelineResponse {
+    items: Vec<crate::organization_workflows::OrgTimelineEvent>,
+}
+#[derive(Deserialize)]
+struct OrgTimelineQuery {
+    limit: Option<i64>,
+}
 
 async fn get_org_timeline(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>, Query(query): Query<OrgTimelineQuery>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
+    Query(query): Query<OrgTimelineQuery>,
 ) -> Result<Json<OrgTimelineResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_workflows::OrgTimelineStore::new(pool).list(&org_id, query.limit.unwrap_or(50)).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_workflows::OrgTimelineStore::new(pool)
+        .list(&org_id, query.limit.unwrap_or(50))
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgTimelineResponse { items }))
 }
 
 // ── Organization Portals ───────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgPortalsResponse { items: Vec<crate::organization_workflows::OrgPortal> }
+#[derive(Serialize)]
+struct OrgPortalsResponse {
+    items: Vec<crate::organization_workflows::OrgPortal>,
+}
 
 async fn get_org_portals(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgPortalsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_workflows::OrgPortalStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_workflows::OrgPortalStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgPortalsResponse { items }))
 }
 
 // ── Organization Procedures ────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgProceduresResponse { items: Vec<crate::organization_workflows::OrgProcedure> }
+#[derive(Serialize)]
+struct OrgProceduresResponse {
+    items: Vec<crate::organization_workflows::OrgProcedure>,
+}
 
 async fn get_org_procedures(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgProceduresResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_workflows::OrgProcedureStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_workflows::OrgProcedureStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgProceduresResponse { items }))
 }
 
 // ── Organization Playbooks ─────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgPlaybooksResponse { items: Vec<crate::organization_workflows::OrgPlaybook> }
+#[derive(Serialize)]
+struct OrgPlaybooksResponse {
+    items: Vec<crate::organization_workflows::OrgPlaybook>,
+}
 
 async fn get_org_playbooks(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgPlaybooksResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_workflows::OrgPlaybookStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_workflows::OrgPlaybookStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgPlaybooksResponse { items }))
 }
 
 // ── Organization Templates ─────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgTemplatesResponse { items: Vec<crate::organization_workflows::OrgTemplate> }
+#[derive(Serialize)]
+struct OrgTemplatesResponse {
+    items: Vec<crate::organization_workflows::OrgTemplate>,
+}
 
 async fn get_org_templates(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgTemplatesResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_workflows::OrgTemplateStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_workflows::OrgTemplateStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgTemplatesResponse { items }))
 }
 
 // ── Organization Financial ─────────────────────────────────────────────────
 
 async fn get_org_financial(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let info = crate::organization_finance::OrgFinancialStore::new(pool).get(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let info = crate::organization_finance::OrgFinancialStore::new(pool)
+        .get(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&info).unwrap_or_default()))
 }
 
 // ── Organization Contracts ─────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgContractsResponse { items: Vec<crate::organization_finance::OrgContract> }
+#[derive(Serialize)]
+struct OrgContractsResponse {
+    items: Vec<crate::organization_finance::OrgContract>,
+}
 
 async fn get_org_contracts(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgContractsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_finance::OrgContractStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_finance::OrgContractStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgContractsResponse { items }))
 }
 
 // ── Organization Compliance ────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgComplianceResponse { items: Vec<crate::organization_finance::OrgCompliance> }
+#[derive(Serialize)]
+struct OrgComplianceResponse {
+    items: Vec<crate::organization_finance::OrgCompliance>,
+}
 
 async fn get_org_compliance(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgComplianceResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_finance::OrgComplianceStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_finance::OrgComplianceStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgComplianceResponse { items }))
 }
 
 // ── Organization Services ──────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgServicesResponse { items: Vec<crate::organization_finance::OrgService> }
+#[derive(Serialize)]
+struct OrgServicesResponse {
+    items: Vec<crate::organization_finance::OrgService>,
+}
 
 async fn get_org_services(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgServicesResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_finance::OrgServiceStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_finance::OrgServiceStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgServicesResponse { items }))
 }
 
 // ── Organization Products ──────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgProductsResponse { items: Vec<crate::organization_finance::OrgProduct> }
+#[derive(Serialize)]
+struct OrgProductsResponse {
+    items: Vec<crate::organization_finance::OrgProduct>,
+}
 
 async fn get_org_products(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgProductsResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_finance::OrgProductStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_finance::OrgProductStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgProductsResponse { items }))
 }
 
 // ── Organization Enrichment ────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgEnrichmentResponse { items: Vec<crate::organization_enrichment::OrgEnrichmentResult> }
+#[derive(Serialize)]
+struct OrgEnrichmentResponse {
+    items: Vec<crate::organization_enrichment::OrgEnrichmentResult>,
+}
 
 async fn get_org_enrichment(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgEnrichmentResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_enrichment::OrgEnrichmentStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_enrichment::OrgEnrichmentStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgEnrichmentResponse { items }))
 }
 
 async fn post_org_enrich_apply(
-    State(state): State<AppState>, headers: HeaderMap, Path((_org_id, rid)): Path<(String, String)>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((_org_id, rid)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    crate::organization_enrichment::OrgEnrichmentStore::new(pool).apply(&rid).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    crate::organization_enrichment::OrgEnrichmentStore::new(pool)
+        .apply(&rid)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(json!({"applied": true})))
 }
 
 // ── Organization Risks ─────────────────────────────────────────────────────
 
-#[derive(Serialize)] struct OrgRisksResponse { items: Vec<crate::organization_health::OrgRisk> }
+#[derive(Serialize)]
+struct OrgRisksResponse {
+    items: Vec<crate::organization_health::OrgRisk>,
+}
 
 async fn get_org_risks(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<OrgRisksResponse>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let items = crate::organization_health::OrgRiskStore::new(pool).list(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = crate::organization_health::OrgRiskStore::new(pool)
+        .list(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(OrgRisksResponse { items }))
 }
 
 // ── Organization Health ────────────────────────────────────────────────────
 
 async fn get_org_health(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let health = crate::organization_health::OrgHealthStore::new(pool).get(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let health = crate::organization_health::OrgHealthStore::new(pool)
+        .get(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&health).unwrap_or_default()))
 }
 
 async fn post_org_watchlist_toggle(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let on = crate::organization_health::OrgHealthStore::new(pool).toggle_watchlist(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let on = crate::organization_health::OrgHealthStore::new(pool)
+        .toggle_watchlist(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(json!({"watchlist": on})))
 }
 
 // ── Organization Investigator ───────────────────────────────────────────────
 
 async fn get_org_dossier(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let dossier = crate::organization_investigator::OrganizationInvestigator::new(pool).dossier(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let dossier = crate::organization_investigator::OrganizationInvestigator::new(pool)
+        .dossier(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&dossier).unwrap_or_default()))
 }
 
 async fn get_org_brief(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let brief = crate::organization_investigator::OrganizationInvestigator::new(pool).brief(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let brief = crate::organization_investigator::OrganizationInvestigator::new(pool)
+        .brief(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&brief).unwrap_or_default()))
 }
 
 async fn get_org_context_pack(
-    State(state): State<AppState>, headers: HeaderMap, Path(org_id): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     verify_local_api_capability(&state.config, &headers)?;
-    let pool = state.database.pool().ok_or(ApiError::DatabaseNotConfigured)?.clone();
-    let pack = crate::organization_investigator::OrganizationInvestigator::new(pool).context_pack(&org_id).await.map_err(|e| ApiError::from(e))?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let pack = crate::organization_investigator::OrganizationInvestigator::new(pool)
+        .context_pack(&org_id)
+        .await
+        .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&pack).unwrap_or_default()))
+}
+
+// ── Calendar Accounts ──────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct CalendarAccountsResponse {
+    items: Vec<crate::calendar::CalendarAccount>,
+}
+
+#[derive(Deserialize)]
+struct CalendarAccountQuery {
+    provider: Option<String>,
+}
+
+async fn get_calendar_accounts(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<CalendarAccountQuery>,
+) -> Result<Json<CalendarAccountsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = CalendarAccountStore::new(pool)
+        .list(query.provider.as_deref())
+        .await?;
+    Ok(Json(CalendarAccountsResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewCalendarAccountRequest {
+    provider: String,
+    account_name: String,
+    email: Option<String>,
+}
+
+async fn post_calendar_account(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewCalendarAccountRequest>,
+) -> Result<Json<crate::calendar::CalendarAccount>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let acct = CalendarAccountStore::new(pool)
+        .create(&req.provider, &req.account_name, req.email.as_deref())
+        .await?;
+    Ok(Json(acct))
+}
+
+async fn get_calendar_account(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(account_id): Path<String>,
+) -> Result<Json<crate::calendar::CalendarAccount>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    CalendarAccountStore::new(pool)
+        .get(&account_id)
+        .await?
+        .map(Json)
+        .ok_or(ApiError::NotFound)
+}
+
+async fn put_calendar_account(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(account_id): Path<String>,
+    Json(update): Json<CalendarAccountUpdate>,
+) -> Result<Json<crate::calendar::CalendarAccount>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let acct = CalendarAccountStore::new(pool)
+        .update(&account_id, &update)
+        .await?;
+    Ok(Json(acct))
+}
+
+async fn delete_calendar_account(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(account_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    CalendarAccountStore::new(pool).delete(&account_id).await?;
+    Ok(Json(json!({"deleted": true})))
+}
+
+// ── Calendar Sources ───────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct CalendarSourcesResponse {
+    items: Vec<crate::calendar::CalendarSource>,
+}
+
+async fn get_calendar_sources(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(account_id): Path<String>,
+) -> Result<Json<CalendarSourcesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = CalendarSourceStore::new(pool)
+        .list_by_account(&account_id)
+        .await?;
+    Ok(Json(CalendarSourcesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewCalendarSourceRequest {
+    name: String,
+    provider_calendar_id: Option<String>,
+    color: Option<String>,
+    timezone: Option<String>,
+}
+
+async fn post_calendar_source(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(account_id): Path<String>,
+    Json(req): Json<NewCalendarSourceRequest>,
+) -> Result<Json<crate::calendar::CalendarSource>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let src = CalendarSourceStore::new(pool)
+        .create(
+            &account_id,
+            &req.name,
+            req.provider_calendar_id.as_deref(),
+            req.color.as_deref(),
+            req.timezone.as_deref(),
+        )
+        .await?;
+    Ok(Json(src))
+}
+
+// ── Calendar Events ────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct CalendarEventsResponse {
+    items: Vec<crate::calendar::CalendarEvent>,
+}
+
+#[derive(Deserialize)]
+struct CalendarEventQuery {
+    account_id: Option<String>,
+    source_id: Option<String>,
+    from: Option<DateTime<Utc>>,
+    to: Option<DateTime<Utc>>,
+    status: Option<String>,
+    event_type: Option<String>,
+    limit: Option<i64>,
+}
+
+async fn get_calendar_events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<CalendarEventQuery>,
+) -> Result<Json<CalendarEventsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let list_query = CalendarEventListQuery {
+        account_id: query.account_id,
+        source_id: query.source_id,
+        from: query.from,
+        to: query.to,
+        status: query.status,
+        event_type: query.event_type,
+        limit: query.limit,
+    };
+    let items = CalendarEventStore::new(pool).list(&list_query).await?;
+    Ok(Json(CalendarEventsResponse { items }))
+}
+
+async fn post_calendar_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewCalendarEvent>,
+) -> Result<Json<crate::calendar::CalendarEvent>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let event = CalendarEventStore::new(pool).create(&req).await?;
+    Ok(Json(event))
+}
+
+async fn get_calendar_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<crate::calendar::CalendarEvent>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    CalendarEventStore::new(pool)
+        .get(&event_id)
+        .await?
+        .map(Json)
+        .ok_or(ApiError::NotFound)
+}
+
+async fn put_calendar_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(update): Json<CalendarEventUpdate>,
+) -> Result<Json<crate::calendar::CalendarEvent>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let event = CalendarEventStore::new(pool)
+        .update(&event_id, &update)
+        .await?;
+    Ok(Json(event))
+}
+
+async fn delete_calendar_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    CalendarEventStore::new(pool).delete(&event_id).await?;
+    Ok(Json(json!({"deleted": true})))
+}
+
+// ── Calendar Event Reschedule / Cancel ─────────────────────────────────────
+
+#[derive(Deserialize)]
+struct RescheduleRequest {
+    start_at: DateTime<Utc>,
+    end_at: DateTime<Utc>,
+}
+
+async fn post_calendar_event_reschedule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<RescheduleRequest>,
+) -> Result<Json<crate::calendar::CalendarEvent>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let event = CalendarEventStore::new(pool)
+        .reschedule(&event_id, req.start_at, req.end_at)
+        .await?;
+    Ok(Json(event))
+}
+
+async fn post_calendar_event_cancel(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    CalendarEventStore::new(pool)
+        .set_status(&event_id, "cancelled")
+        .await?;
+    Ok(Json(json!({"cancelled": true})))
+}
+
+// ── Event Participants ─────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct EventParticipantsResponse {
+    items: Vec<crate::calendar_core::EventParticipant>,
+}
+
+async fn get_event_participants(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<EventParticipantsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = EventParticipantStore::new(pool)
+        .list(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(EventParticipantsResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewParticipantRequest {
+    email: String,
+    display_name: Option<String>,
+    role: Option<String>,
+    person_id: Option<String>,
+    organization_id: Option<String>,
+}
+
+async fn post_event_participant(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<NewParticipantRequest>,
+) -> Result<Json<crate::calendar_core::EventParticipant>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let p = EventParticipantStore::new(pool)
+        .add(
+            &event_id,
+            &req.email,
+            req.display_name.as_deref(),
+            req.role.as_deref(),
+            req.person_id.as_deref(),
+            req.organization_id.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(p))
+}
+
+// ── Event Relations ────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct EventRelationsResponse {
+    items: Vec<crate::calendar_core::EventRelation>,
+}
+
+async fn get_event_relations(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<EventRelationsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = EventRelationStore::new(pool)
+        .list(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(EventRelationsResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewRelationRequest {
+    entity_type: String,
+    entity_id: String,
+    relation_type: String,
+}
+
+async fn post_event_relation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<NewRelationRequest>,
+) -> Result<Json<crate::calendar_core::EventRelation>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let rel = EventRelationStore::new(pool)
+        .link(
+            &event_id,
+            &req.entity_type,
+            &req.entity_id,
+            &req.relation_type,
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(rel))
+}
+
+// ── Event Context Pack ─────────────────────────────────────────────────────
+
+async fn get_event_context_pack(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let pack = EventContextPackStore::new(pool)
+        .get(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(serde_json::to_value(&pack).unwrap_or_default()))
+}
+
+async fn post_event_context_pack(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<ContextPackInput>,
+) -> Result<Json<crate::calendar_core::EventContextPack>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let pack = EventContextPackStore::new(pool)
+        .upsert(&event_id, &req)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(pack))
+}
+
+// ── Event Agenda ───────────────────────────────────────────────────────────
+
+async fn get_event_agenda(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let agenda = EventAgendaStore::new(pool)
+        .get(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(serde_json::to_value(&agenda).unwrap_or_default()))
+}
+
+#[derive(Deserialize)]
+struct SetAgendaRequest {
+    items: Value,
+    source: Option<String>,
+}
+
+async fn post_event_agenda(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<SetAgendaRequest>,
+) -> Result<Json<crate::calendar_core::EventAgenda>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let agenda = EventAgendaStore::new(pool)
+        .set(
+            &event_id,
+            req.items,
+            req.source.as_deref().unwrap_or("manual"),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(agenda))
+}
+
+// ── Event Checklist ────────────────────────────────────────────────────────
+
+async fn get_event_checklist(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let cl = EventChecklistStore::new(pool)
+        .get(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(serde_json::to_value(&cl).unwrap_or_default()))
+}
+
+#[derive(Deserialize)]
+struct SetChecklistRequest {
+    items: Value,
+    source: Option<String>,
+}
+
+async fn post_event_checklist(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<SetChecklistRequest>,
+) -> Result<Json<crate::calendar_core::EventChecklist>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let cl = EventChecklistStore::new(pool)
+        .set(
+            &event_id,
+            req.items,
+            req.source.as_deref().unwrap_or("manual"),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(cl))
+}
+
+// ── Event Intelligence ─────────────────────────────────────────────────────
+
+async fn post_event_classify(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let event = CalendarEventStore::new(pool.clone())
+        .get(&event_id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let participants = EventParticipantStore::new(pool.clone())
+        .list(&event_id)
+        .await
+        .unwrap_or_default();
+    let event_type = CalendarIntelligenceService::classify_event(
+        &event.title,
+        participants.len(),
+        (event.end_at - event.start_at).num_minutes(),
+    );
+    let update = CalendarEventUpdate {
+        event_type: Some(event_type.clone()),
+        ..Default::default()
+    };
+    CalendarEventStore::new(pool)
+        .update(&event_id, &update)
+        .await?;
+    Ok(Json(json!({"event_type": event_type})))
+}
+
+async fn post_event_analyze(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let event = CalendarEventStore::new(pool.clone())
+        .get(&event_id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let parts = EventParticipantStore::new(pool.clone())
+        .list(&event_id)
+        .await
+        .unwrap_or_default();
+    let has_agenda = EventAgendaStore::new(pool.clone())
+        .get(&event_id)
+        .await
+        .map(|a| a.is_some())
+        .unwrap_or(false);
+    let has_checklist = EventChecklistStore::new(pool.clone())
+        .get(&event_id)
+        .await
+        .map(|c| c.is_some())
+        .unwrap_or(false);
+    let has_relations = EventRelationStore::new(pool.clone())
+        .list(&event_id)
+        .await
+        .map(|r| !r.is_empty())
+        .unwrap_or(false);
+
+    let importance = CalendarIntelligenceService::calculate_importance(
+        &event.title,
+        parts.len(),
+        has_relations,
+        false,
+    );
+    let readiness = CalendarIntelligenceService::calculate_readiness(
+        has_agenda,
+        false,
+        has_relations,
+        has_checklist,
+        !parts.is_empty(),
+    );
+    let risks = CalendarIntelligenceService::detect_risks(
+        has_agenda,
+        false,
+        !parts.is_empty(),
+        has_relations,
+        event.start_at < Utc::now() + chrono::Duration::hours(24),
+    );
+
+    let update = CalendarEventUpdate {
+        importance_score: Some(importance),
+        readiness_score: Some(readiness),
+        ..Default::default()
+    };
+    CalendarEventStore::new(pool.clone())
+        .update(&event_id, &update)
+        .await?;
+
+    Ok(Json(
+        json!({"importance": importance, "readiness": readiness, "risks": risks}),
+    ))
+}
+
+async fn get_event_risks(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let event = CalendarEventStore::new(pool.clone())
+        .get(&event_id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let parts = EventParticipantStore::new(pool.clone())
+        .list(&event_id)
+        .await
+        .unwrap_or_default();
+    let has_agenda = EventAgendaStore::new(pool.clone())
+        .get(&event_id)
+        .await
+        .map(|a| a.is_some())
+        .unwrap_or(false);
+    let has_relations = EventRelationStore::new(pool.clone())
+        .list(&event_id)
+        .await
+        .map(|r| !r.is_empty())
+        .unwrap_or(false);
+    let is_soon = event.start_at < Utc::now() + chrono::Duration::hours(24);
+    let risks = CalendarIntelligenceService::detect_risks(
+        has_agenda,
+        false,
+        !parts.is_empty(),
+        has_relations,
+        is_soon,
+    );
+    Ok(Json(json!({"risks": risks})))
+}
+
+// ── Meeting Notes ──────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct MeetingNotesResponse {
+    items: Vec<crate::calendar_meetings::MeetingNote>,
+}
+
+async fn get_meeting_notes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<MeetingNotesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = MeetingNoteStore::new(pool)
+        .list(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(MeetingNotesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewNoteRequest {
+    content: String,
+    format: Option<String>,
+    source: Option<String>,
+}
+
+async fn post_meeting_note(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<NewNoteRequest>,
+) -> Result<Json<crate::calendar_meetings::MeetingNote>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let note = MeetingNoteStore::new(pool)
+        .create(
+            &event_id,
+            &req.content,
+            req.format.as_deref(),
+            req.source.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(note))
+}
+
+// ── Meeting Outcomes ───────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct MeetingOutcomesResponse {
+    items: Vec<crate::calendar_meetings::MeetingOutcome>,
+}
+
+async fn get_meeting_outcomes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<MeetingOutcomesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = MeetingOutcomeStore::new(pool)
+        .list(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(MeetingOutcomesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewOutcomeRequest {
+    outcome_type: String,
+    title: String,
+    description: Option<String>,
+    owner_person_id: Option<String>,
+    due_date: Option<DateTime<Utc>>,
+}
+
+async fn post_meeting_outcome(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<NewOutcomeRequest>,
+) -> Result<Json<crate::calendar_meetings::MeetingOutcome>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let outcome = MeetingOutcomeStore::new(pool)
+        .add(
+            &event_id,
+            &req.outcome_type,
+            &req.title,
+            req.description.as_deref(),
+            req.owner_person_id.as_deref(),
+            req.due_date,
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(outcome))
+}
+
+async fn post_event_follow_up(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    CalendarEventStore::new(pool.clone())
+        .set_status(&event_id, "needs_follow_up")
+        .await?;
+    Ok(Json(json!({"follow_up_created": true})))
+}
+
+async fn get_event_follow_up_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let status = MeetingOutcomeStore::new(pool)
+        .follow_up_status(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(status))
+}
+
+// ── Event Recordings ───────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct EventRecordingsResponse {
+    items: Vec<crate::calendar_meetings::EventRecording>,
+}
+
+async fn get_event_recordings(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<EventRecordingsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = EventRecordingStore::new(pool)
+        .list(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(EventRecordingsResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewRecordingRequest {
+    file_path: Option<String>,
+    source: Option<String>,
+    duration_seconds: Option<i32>,
+}
+
+async fn post_event_recording(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<NewRecordingRequest>,
+) -> Result<Json<crate::calendar_meetings::EventRecording>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let rec = EventRecordingStore::new(pool)
+        .add(
+            &event_id,
+            req.file_path.as_deref(),
+            req.source.as_deref(),
+            req.duration_seconds,
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(rec))
+}
+
+async fn get_event_transcript(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let t = EventTranscriptStore::new(pool)
+        .get(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(serde_json::to_value(&t).unwrap_or_default()))
+}
+
+// ── Calendar Brain ─────────────────────────────────────────────────────────
+
+async fn get_event_brief(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let brief = CalendarBrainService::meeting_brief(&pool, &event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(brief))
+}
+
+async fn post_generate_agenda(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let agenda = CalendarBrainService::generate_agenda(&pool, &event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(agenda))
+}
+
+// ── Deadlines ──────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct DeadlinesResponse {
+    items: Vec<crate::calendar_scheduling::DeadlineEvent>,
+}
+
+#[derive(Deserialize)]
+struct DeadlineQuery {
+    status: Option<String>,
+    limit: Option<i64>,
+}
+
+async fn get_deadlines(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<DeadlineQuery>,
+) -> Result<Json<DeadlinesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = DeadlineStore::new(pool)
+        .list(query.status.as_deref(), query.limit.unwrap_or(50))
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(DeadlinesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewDeadlineRequest {
+    title: String,
+    due_at: DateTime<Utc>,
+    severity: Option<String>,
+    source_entity_type: Option<String>,
+    source_entity_id: Option<String>,
+}
+
+async fn post_deadline(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewDeadlineRequest>,
+) -> Result<Json<crate::calendar_scheduling::DeadlineEvent>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let d = DeadlineStore::new(pool)
+        .create(
+            &req.title,
+            req.due_at,
+            req.severity.as_deref(),
+            req.source_entity_type.as_deref(),
+            req.source_entity_id.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(d))
+}
+
+// ── Focus Blocks ───────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct FocusBlocksResponse {
+    items: Vec<crate::calendar_scheduling::FocusBlock>,
+}
+
+#[derive(Deserialize)]
+struct FocusBlockQuery {
+    from: Option<DateTime<Utc>>,
+    to: Option<DateTime<Utc>>,
+    limit: Option<i64>,
+}
+
+async fn get_focus_blocks(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<FocusBlockQuery>,
+) -> Result<Json<FocusBlocksResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = FocusBlockStore::new(pool)
+        .list(query.from, query.to, query.limit.unwrap_or(50))
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(FocusBlocksResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewFocusBlockRequest {
+    title: String,
+    start_at: DateTime<Utc>,
+    end_at: DateTime<Utc>,
+    purpose: Option<String>,
+    linked_project_id: Option<String>,
+    protection_level: Option<String>,
+}
+
+async fn post_focus_block(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewFocusBlockRequest>,
+) -> Result<Json<crate::calendar_scheduling::FocusBlock>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let fb = FocusBlockStore::new(pool)
+        .create(
+            &req.title,
+            req.start_at,
+            req.end_at,
+            req.purpose.as_deref(),
+            req.linked_project_id.as_deref(),
+            req.protection_level.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(fb))
+}
+
+// ── Smart Schedule ─────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct SmartScheduleRequest {
+    duration_minutes: Option<i64>,
+    lookahead_hours: Option<i64>,
+}
+
+async fn post_smart_schedule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<SmartScheduleRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let events = CalendarEventStore::new(pool)
+        .list(&CalendarEventListQuery {
+            limit: Some(200),
+            ..Default::default()
+        })
+        .await?;
+    let pairs: Vec<(DateTime<Utc>, DateTime<Utc>)> =
+        events.iter().map(|e| (e.start_at, e.end_at)).collect();
+    let slots = SmartSchedulingService::find_slots(
+        &pairs,
+        req.duration_minutes.unwrap_or(30),
+        req.lookahead_hours.unwrap_or(48),
+    );
+    Ok(Json(json!({"slots": slots})))
+}
+
+// ── Calendar Watchtower ────────────────────────────────────────────────────
+
+async fn get_calendar_watchtower(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let preparation = CalendarWatchtowerService::events_needing_preparation(&pool)
+        .await
+        .map_err(ApiError::from)?;
+    let no_outcomes = CalendarWatchtowerService::events_without_outcomes(&pool)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(
+        json!({"preparation": preparation, "without_outcomes": no_outcomes}),
+    ))
+}
+
+async fn get_calendar_health(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let load = CalendarWatchtowerService::meeting_load_analysis(&pool)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(load))
+}
+
+// ── Weekly Brief ───────────────────────────────────────────────────────────
+
+async fn get_weekly_brief(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let brief = CalendarWatchtowerService::weekly_brief(&pool)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(brief))
+}
+
+// ── Calendar Analytics ─────────────────────────────────────────────────────
+
+async fn get_calendar_analytics(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let load = CalendarWatchtowerService::meeting_load_analysis(&pool)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(load))
+}
+
+// ── Calendar Brain ─────────────────────────────────────────────────────────
+
+async fn post_calendar_brain(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<TaskBrainQueryParams>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let answer = CalendarBrainService::answer(&pool, &req.q)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(answer))
+}
+
+// ── Calendar Search ────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct CalendarSearchQuery {
+    q: String,
+}
+
+async fn get_calendar_search(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<CalendarSearchQuery>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let results = CalendarBrainService::search_events(&pool, &query.q)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(results))
+}
+
+// ── Calendar Rules ─────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct CalendarRulesResponse {
+    items: Vec<crate::calendar_rules::CalendarRule>,
+}
+
+async fn get_calendar_rules(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<CalendarRulesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = CalendarRuleStore::new(pool)
+        .list()
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(CalendarRulesResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewRuleRequest {
+    name: String,
+    description: Option<String>,
+    dsl: Value,
+    approval_mode: Option<String>,
+}
+
+async fn post_calendar_rule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewRuleRequest>,
+) -> Result<Json<crate::calendar_rules::CalendarRule>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let rule = CalendarRuleStore::new(pool)
+        .create(
+            &req.name,
+            req.description.as_deref(),
+            req.dsl,
+            req.approval_mode.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(rule))
+}
+
+async fn put_calendar_rule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(rule_id): Path<String>,
+    Json(update): Json<RuleUpdate>,
+) -> Result<Json<crate::calendar_rules::CalendarRule>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let rule = CalendarRuleStore::new(pool)
+        .update(&rule_id, &update)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(rule))
+}
+
+async fn delete_calendar_rule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(rule_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    CalendarRuleStore::new(pool)
+        .delete(&rule_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(json!({"deleted": true})))
+}
+
+// ── Calendar Import/Export ─────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct CalendarImportRequest {
+    ics_data: Option<String>,
+    events: Option<Value>,
+}
+
+async fn post_calendar_import(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CalendarImportRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let ics_data_received = req
+        .ics_data
+        .as_deref()
+        .is_some_and(|value| !value.trim().is_empty());
+    let mut imported = 0;
+    if let Some(events) = req.events {
+        if let Some(arr) = events.as_array() {
+            for evt in arr {
+                let title = evt
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Imported Event");
+                let start = evt
+                    .get("start_at")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse::<DateTime<Utc>>().ok())
+                    .unwrap_or(Utc::now());
+                let end = evt
+                    .get("end_at")
+                    .and_then(|v| v.as_str())
+                    .and_then(|s| s.parse::<DateTime<Utc>>().ok())
+                    .unwrap_or(start);
+                let _ = CalendarEventStore::new(pool.clone())
+                    .create(&NewCalendarEvent {
+                        title: title.to_string(),
+                        start_at: start,
+                        end_at: end,
+                        ..Default::default()
+                    })
+                    .await;
+                imported += 1;
+            }
+        }
+    }
+    Ok(Json(
+        json!({"imported": imported, "ics_data_received": ics_data_received}),
+    ))
+}
+
+async fn post_calendar_sync(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(account_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    CalendarAccountStore::new(pool.clone())
+        .update(
+            &account_id,
+            &CalendarAccountUpdate {
+                sync_status: Some("syncing".into()),
+                ..Default::default()
+            },
+        )
+        .await?;
+    Ok(Json(
+        json!({"sync_triggered": true, "note": "Provider sync is deferred to future implementation"}),
+    ))
+}
+
+#[derive(Deserialize)]
+struct EventExportQuery {
+    format: Option<String>,
+}
+
+async fn get_event_export(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Query(query): Query<EventExportQuery>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let event = CalendarEventStore::new(pool)
+        .get(&event_id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let fmt = query.format.as_deref().unwrap_or("json");
+    match fmt {
+        "ics" => {
+            let ics = export_event_ics(
+                &event.title,
+                event.description.as_deref(),
+                event.location.as_deref(),
+                &event.start_at.format("%Y%m%dT%H%M%S").to_string(),
+                &event.end_at.format("%Y%m%dT%H%M%S").to_string(),
+                event.timezone.as_deref(),
+            );
+            Ok(Json(json!({"format": "ics", "content": ics})))
+        }
+        "md" => {
+            let md = export_event_md(
+                &event.title,
+                event.description.as_deref(),
+                event.location.as_deref(),
+                &event.start_at.to_rfc3339(),
+                &event.end_at.to_rfc3339(),
+                &[],
+            );
+            Ok(Json(json!({"format": "markdown", "content": md})))
+        }
+        _ => Ok(Json(serde_json::to_value(&event).unwrap_or_default())),
+    }
+}
+
+// ── Event Reminders ────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct EventRemindersResponse {
+    items: Vec<crate::calendar_reminders::CalendarReminder>,
+}
+
+async fn get_event_reminders(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+) -> Result<Json<EventRemindersResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = CalendarReminderStore::new(pool)
+        .list(&event_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(EventRemindersResponse { items }))
+}
+
+#[derive(Deserialize)]
+struct NewReminderRequest {
+    reminder_type: String,
+    minutes_before: Option<i32>,
+    message: Option<String>,
+}
+
+async fn post_event_reminder(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(event_id): Path<String>,
+    Json(req): Json<NewReminderRequest>,
+) -> Result<Json<crate::calendar_reminders::CalendarReminder>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let r = CalendarReminderStore::new(pool)
+        .create(
+            &event_id,
+            &req.reminder_type,
+            req.minutes_before,
+            req.message.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(r))
+}
+
+#[derive(Deserialize)]
+struct ToggleReminderRequest {
+    active: bool,
+}
+
+async fn post_event_reminder_toggle(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((_event_id, reminder_id)): Path<(String, String)>,
+    Json(req): Json<ToggleReminderRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    CalendarReminderStore::new(pool)
+        .set_active(&reminder_id, req.active)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(json!({"toggled": true, "active": req.active})))
+}
+
+// ── Analytics: Time Distribution ───────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct AnalyticsRangeQuery {
+    from: Option<String>,
+    to: Option<String>,
+}
+
+async fn get_time_distribution(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AnalyticsRangeQuery>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let now = Utc::now();
+    let from: DateTime<Utc> = query
+        .from
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(now - chrono::Duration::days(7));
+    let to: DateTime<Utc> = query
+        .to
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(now);
+    let dist = CalendarWatchtowerService::time_distribution(&pool, from, to)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(dist))
+}
+
+async fn get_focus_balance(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AnalyticsRangeQuery>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let now = Utc::now();
+    let from: DateTime<Utc> = query
+        .from
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(now - chrono::Duration::days(7));
+    let to: DateTime<Utc> = query
+        .to
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(now);
+    let balance = CalendarWatchtowerService::focus_balance(&pool, from, to)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(balance))
+}
+
+async fn get_back_to_back(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<AnalyticsRangeQuery>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let now = Utc::now();
+    let from: DateTime<Utc> = query
+        .from
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(now - chrono::Duration::days(7));
+    let to: DateTime<Utc> = query
+        .to
+        .as_deref()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(now);
+    let b2b = CalendarWatchtowerService::back_to_back_meetings(&pool, from, to)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(b2b))
+}
+
+// ── Tasks v2 ──────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct TaskListResponseV2 {
+    items: Vec<crate::tasks::Task>,
+}
+#[derive(Deserialize)]
+struct TaskListQueryParams {
+    status: Option<String>,
+    project_id: Option<String>,
+    source_type: Option<String>,
+    limit: Option<i64>,
+}
+
+async fn get_tasks_v2(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<TaskListQueryParams>,
+) -> Result<Json<TaskListResponseV2>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = TaskStore::new(pool)
+        .list(&TaskListQuery {
+            status: q.status,
+            project_id: q.project_id,
+            source_type: q.source_type,
+            limit: q.limit,
+        })
+        .await?;
+    Ok(Json(TaskListResponseV2 { items }))
+}
+
+async fn post_task(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewTask>,
+) -> Result<Json<crate::tasks::Task>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let task = TaskStore::new(pool).create(&req).await?;
+    Ok(Json(task))
+}
+
+async fn get_task(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<crate::tasks::Task>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    TaskStore::new(pool)
+        .get(&task_id)
+        .await?
+        .map(Json)
+        .ok_or(ApiError::NotFound)
+}
+
+async fn put_task(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(update): Json<TaskUpdate>,
+) -> Result<Json<crate::tasks::Task>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let task = TaskStore::new(pool).update(&task_id, &update).await?;
+    Ok(Json(task))
+}
+
+#[derive(Deserialize)]
+struct TaskStatusRequest {
+    status: String,
+}
+async fn post_task_status(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(req): Json<TaskStatusRequest>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    TaskStore::new(pool)
+        .set_status(&task_id, &req.status)
+        .await?;
+    Ok(Json(json!({"status": req.status})))
+}
+
+async fn post_task_archive(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    TaskStore::new(pool).archive(&task_id).await?;
+    Ok(Json(json!({"archived": true})))
+}
+
+// ── Task Context Pack ─────────────────────────────────────────────────────
+
+async fn get_task_context_pack(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let pack = TaskContextPackStore::new(pool)
+        .get(&task_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(serde_json::to_value(&pack).unwrap_or_default()))
+}
+
+#[derive(Deserialize)]
+struct UpsertContextPackRequest {
+    summary: Option<String>,
+    open_questions: Option<Value>,
+    blockers: Option<Value>,
+    risks: Option<Value>,
+    suggested_next_action: Option<String>,
+}
+async fn post_task_context_pack(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(req): Json<UpsertContextPackRequest>,
+) -> Result<Json<crate::task_core::TaskContextPack>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let pack = TaskContextPackStore::new(pool)
+        .upsert(
+            &task_id,
+            req.summary.as_deref(),
+            req.open_questions.unwrap_or(json!([])),
+            req.blockers.unwrap_or(json!([])),
+            req.risks.unwrap_or(json!([])),
+            req.suggested_next_action.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(pack))
+}
+
+// ── Task Evidence ─────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct TaskEvidenceResponse {
+    items: Vec<crate::task_core::TaskEvidence>,
+}
+async fn get_task_evidence(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<TaskEvidenceResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = TaskEvidenceStore::new(pool)
+        .list(&task_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(TaskEvidenceResponse { items }))
+}
+#[derive(Deserialize)]
+struct NewEvidenceRequest {
+    source_type: String,
+    source_id: String,
+    quote: Option<String>,
+    confidence: Option<f64>,
+}
+async fn post_task_evidence(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(req): Json<NewEvidenceRequest>,
+) -> Result<Json<crate::task_core::TaskEvidence>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let ev = TaskEvidenceStore::new(pool)
+        .add(
+            &task_id,
+            &req.source_type,
+            &req.source_id,
+            req.quote.as_deref(),
+            req.confidence,
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(ev))
+}
+
+// ── Task Relations ────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct TaskRelationsResponse {
+    items: Vec<crate::task_core::TaskRelation>,
+}
+async fn get_task_relations(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<TaskRelationsResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = TaskRelationStore::new(pool)
+        .list(&task_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(TaskRelationsResponse { items }))
+}
+#[derive(Deserialize)]
+struct NewRelationReq {
+    entity_type: String,
+    entity_id: String,
+    relation_type: String,
+}
+async fn post_task_relation(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(req): Json<NewRelationReq>,
+) -> Result<Json<crate::task_core::TaskRelation>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let rel = TaskRelationStore::new(pool)
+        .link(
+            &task_id,
+            &req.entity_type,
+            &req.entity_id,
+            &req.relation_type,
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(rel))
+}
+
+// ── Task Checklist ────────────────────────────────────────────────────────
+
+async fn get_task_checklist(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let cl = TaskChecklistStore::new(pool)
+        .get(&task_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(serde_json::to_value(&cl).unwrap_or_default()))
+}
+#[derive(Deserialize)]
+struct SetChecklistReq {
+    items: Value,
+    source: Option<String>,
+}
+async fn post_task_checklist(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(req): Json<SetChecklistReq>,
+) -> Result<Json<crate::task_core::TaskChecklist>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let cl = TaskChecklistStore::new(pool)
+        .set(
+            &task_id,
+            req.items,
+            req.source.as_deref().unwrap_or("manual"),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(cl))
+}
+
+// ── Task Subtasks ─────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct TaskSubtasksResponse {
+    items: Vec<crate::task_core::TaskSubtask>,
+}
+async fn get_task_subtasks(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<TaskSubtasksResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = TaskSubtaskStore::new(pool)
+        .list(&task_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(TaskSubtasksResponse { items }))
+}
+#[derive(Deserialize)]
+struct NewSubtaskReq {
+    child_task_id: String,
+    sort_order: Option<i32>,
+}
+async fn post_task_subtask(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Json(req): Json<NewSubtaskReq>,
+) -> Result<Json<crate::task_core::TaskSubtask>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let sub = TaskSubtaskStore::new(pool)
+        .add(&task_id, &req.child_task_id, req.sort_order.unwrap_or(0))
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(sub))
+}
+
+// ── Task Intelligence ─────────────────────────────────────────────────────
+
+async fn post_task_analyze(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let task = TaskStore::new(pool.clone())
+        .get(&task_id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let has_ctx = TaskContextPackStore::new(pool.clone())
+        .get(&task_id)
+        .await
+        .map(|c| c.is_some())
+        .unwrap_or(false);
+    let _has_relations = TaskRelationStore::new(pool.clone())
+        .list(&task_id)
+        .await
+        .map(|r| !r.is_empty())
+        .unwrap_or(false);
+    let is_legal = task.area.as_deref() == Some("legal") || task.area.as_deref() == Some("tax");
+    let is_tax = task.area.as_deref() == Some("tax");
+    let has_contact = task.linked_person_id.is_some();
+    let has_org = task.linked_organization_id.is_some();
+    let priority = TaskIntelligenceService::calculate_priority(
+        task.due_at,
+        has_contact,
+        has_org,
+        task.project_id.is_some(),
+        is_legal,
+        is_tax,
+        false,
+    );
+    let risk = TaskIntelligenceService::calculate_risk(
+        task.due_at
+            .map(|d| (d - Utc::now()).num_hours() < 24)
+            .unwrap_or(false),
+        false,
+        false,
+        false,
+        is_legal,
+        &task.title,
+    );
+    let readiness = TaskIntelligenceService::calculate_readiness(
+        task.description.is_some(),
+        has_ctx,
+        false,
+        task.due_at.is_some(),
+        true,
+        has_contact,
+    );
+    let missing = TaskIntelligenceService::detect_missing_context(
+        task.description.is_some(),
+        has_ctx,
+        task.due_at.is_some(),
+        has_contact,
+        task.project_id.is_some(),
+    );
+    let next_action = TaskIntelligenceService::suggest_next_action(
+        &task.hermes_status,
+        false,
+        false,
+        task.waiting_reason.as_deref(),
+    );
+    let update = TaskUpdate {
+        priority_score: Some(priority),
+        risk_score: Some(risk),
+        readiness_score: Some(readiness),
+        ..Default::default()
+    };
+    TaskStore::new(pool).update(&task_id, &update).await?;
+    Ok(Json(
+        json!({"priority": priority, "risk": risk, "readiness": readiness, "missing_context": missing, "next_action": next_action}),
+    ))
+}
+
+// ── Task Export ───────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct TaskExportQuery {
+    format: Option<String>,
+}
+async fn get_task_export(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+    Query(q): Query<TaskExportQuery>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let task = TaskStore::new(pool)
+        .get(&task_id)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    match q.format.as_deref().unwrap_or("json") {
+        "md" => Ok(Json(
+            json!({"format":"markdown","content": export_task_md(&task.title, task.description.as_deref(), &task.hermes_status, task.why.as_deref(), task.outcome.as_deref())}),
+        )),
+        _ => Ok(Json(export_task_json(
+            &task.title,
+            task.description.as_deref(),
+            &task.hermes_status,
+            task.priority_score,
+            task.due_at.map(|d| d.to_rfc3339()).as_deref(),
+        ))),
+    }
+}
+
+// ── Task External ─────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct ExtIdentitiesResponse {
+    items: Vec<crate::task_core::ExternalTaskIdentity>,
+}
+async fn get_task_external(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(task_id): Path<String>,
+) -> Result<Json<ExtIdentitiesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = ExternalTaskIdentityStore::new(pool)
+        .list(&task_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(ExtIdentitiesResponse { items }))
+}
+
+// ── Task Providers ────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct TaskProvidersResponse {
+    items: Vec<crate::task_core::TaskProviderAccount>,
+}
+async fn get_task_providers(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<TaskProvidersResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = TaskProviderStore::new(pool)
+        .list()
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(TaskProvidersResponse { items }))
+}
+#[derive(Deserialize)]
+struct NewTaskProviderReq {
+    provider: String,
+    account_name: String,
+}
+async fn post_task_provider(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewTaskProviderReq>,
+) -> Result<Json<crate::task_core::TaskProviderAccount>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let prov = TaskProviderStore::new(pool)
+        .create(&req.provider, &req.account_name)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(prov))
+}
+
+// ── Task Brain ────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct TaskBrainQueryParams {
+    q: String,
+}
+async fn post_task_brain(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<TaskBrainQueryParams>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let answer = TaskBrainService::explain_task(&pool, &req.q)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(answer))
+}
+
+#[derive(Deserialize)]
+struct TaskSearchQueryParams {
+    q: String,
+}
+async fn get_task_search(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<TaskSearchQueryParams>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let results = TaskBrainService::search_tasks(&pool, &q.q).await?;
+    Ok(Json(results))
+}
+
+async fn get_task_daily_brief(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let brief = TaskBrainService::daily_brief(&pool).await?;
+    Ok(Json(brief))
+}
+
+// ── Task Rules ────────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct TaskRulesResponse {
+    items: Vec<crate::task_rules::TaskRule>,
+}
+async fn get_task_rules(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<TaskRulesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = TaskRuleStore::new(pool)
+        .list()
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(TaskRulesResponse { items }))
+}
+#[derive(Deserialize)]
+struct NewTaskRuleReq {
+    name: String,
+    description: Option<String>,
+    dsl: Value,
+    approval_mode: Option<String>,
+}
+async fn post_task_rule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<NewTaskRuleReq>,
+) -> Result<Json<crate::task_rules::TaskRule>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let rule = TaskRuleStore::new(pool)
+        .create(
+            &req.name,
+            req.description.as_deref(),
+            req.dsl,
+            req.approval_mode.as_deref(),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(rule))
+}
+async fn delete_task_rule(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(rule_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    TaskRuleStore::new(pool)
+        .delete(&rule_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(json!({"deleted": true})))
+}
+
+// ── Task Templates ────────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+struct TaskTemplatesResponse {
+    items: Vec<crate::task_rules::TaskTemplate>,
+}
+async fn get_task_templates(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<TaskTemplatesResponse>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = TaskTemplateStore::new(pool)
+        .list()
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(TaskTemplatesResponse { items }))
+}
+
+// ── Task Watchtower ───────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct WatchtowerQuery {
+    days: Option<i64>,
+}
+async fn get_task_watchtower(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<WatchtowerQuery>,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let days = q.days.unwrap_or(14);
+    let overdue = TaskWatchtowerService::overdue(&pool)
+        .await
+        .map_err(ApiError::from)?;
+    let stale = TaskWatchtowerService::stale_tasks(&pool, days)
+        .await
+        .map_err(ApiError::from)?;
+    let no_ctx = TaskWatchtowerService::without_context(&pool)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(
+        json!({"overdue": overdue, "stale": stale, "without_context": no_ctx}),
+    ))
+}
+
+async fn get_task_health(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let wl = TaskWatchtowerService::workload(&pool)
+        .await
+        .map_err(ApiError::from)?;
+    let ct = TaskWatchtowerService::cycle_time(&pool)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(json!({"workload": wl, "cycle_time": ct})))
+}
+
+async fn get_task_analytics(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Value>, ApiError> {
+    verify_local_api_capability(&state.config, &headers)?;
+    let _pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    Ok(Json(
+        json!({"analytics": "available via /tasks/health and /tasks/watchtower"}),
+    ))
 }
 
 pub async fn run(config: AppConfig) -> Result<(), AppError> {
@@ -5663,9 +9170,7 @@ fn parse_person_identity_candidates_query(
     Ok(query)
 }
 
-fn parse_person_identity_review_state(
-    value: &str,
-) -> Result<PersonIdentityReviewState, ApiError> {
+fn parse_person_identity_review_state(value: &str) -> Result<PersonIdentityReviewState, ApiError> {
     match value.trim() {
         "suggested" => Ok(PersonIdentityReviewState::Suggested),
         "user_confirmed" => Ok(PersonIdentityReviewState::UserConfirmed),
@@ -6762,6 +10267,138 @@ impl From<crate::organization_investigator::InvestigatorError> for ApiError {
             _ => {
                 tracing::error!(error = %error, "investigator operation failed");
                 ApiError::InvalidCommunicationQuery("investigator operation failed")
+            }
+        }
+    }
+}
+
+impl From<CalendarCoreError> for ApiError {
+    fn from(error: CalendarCoreError) -> Self {
+        match error {
+            CalendarCoreError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "calendar core operation failed");
+                ApiError::InvalidCommunicationQuery("calendar core operation failed")
+            }
+        }
+    }
+}
+impl From<MeetingsError> for ApiError {
+    fn from(error: MeetingsError) -> Self {
+        match error {
+            MeetingsError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "meetings operation failed");
+                ApiError::InvalidCommunicationQuery("meetings operation failed")
+            }
+        }
+    }
+}
+impl From<SchedulingError> for ApiError {
+    fn from(error: SchedulingError) -> Self {
+        match error {
+            SchedulingError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "scheduling operation failed");
+                ApiError::InvalidCommunicationQuery("scheduling operation failed")
+            }
+        }
+    }
+}
+impl From<CalendarHealthError> for ApiError {
+    fn from(error: CalendarHealthError) -> Self {
+        tracing::error!(error = %error, "calendar health operation failed");
+        ApiError::InvalidCommunicationQuery("calendar health operation failed")
+    }
+}
+impl From<CalendarBrainError> for ApiError {
+    fn from(error: CalendarBrainError) -> Self {
+        match error {
+            CalendarBrainError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "calendar brain operation failed");
+                ApiError::InvalidCommunicationQuery("calendar brain operation failed")
+            }
+        }
+    }
+}
+impl From<ReminderError> for ApiError {
+    fn from(error: ReminderError) -> Self {
+        tracing::error!(error = %error, "reminder operation failed");
+        ApiError::InvalidCommunicationQuery("reminder operation failed")
+    }
+}
+
+impl From<CalendarRuleError> for ApiError {
+    fn from(error: CalendarRuleError) -> Self {
+        match error {
+            CalendarRuleError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "calendar rule operation failed");
+                ApiError::InvalidCommunicationQuery("calendar rule operation failed")
+            }
+        }
+    }
+}
+
+impl From<TaskError> for ApiError {
+    fn from(error: TaskError) -> Self {
+        match error {
+            TaskError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "task operation failed");
+                ApiError::InvalidCommunicationQuery("task operation failed")
+            }
+        }
+    }
+}
+impl From<TaskCoreError> for ApiError {
+    fn from(error: TaskCoreError) -> Self {
+        match error {
+            TaskCoreError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "task core operation failed");
+                ApiError::InvalidCommunicationQuery("task core operation failed")
+            }
+        }
+    }
+}
+impl From<TaskHealthError> for ApiError {
+    fn from(error: TaskHealthError) -> Self {
+        tracing::error!(error = %error, "task health failed");
+        ApiError::InvalidCommunicationQuery("task health failed")
+    }
+}
+impl From<TaskRuleError> for ApiError {
+    fn from(error: TaskRuleError) -> Self {
+        match error {
+            TaskRuleError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "task rule failed");
+                ApiError::InvalidCommunicationQuery("task rule failed")
+            }
+        }
+    }
+}
+
+impl From<TaskBrainError> for ApiError {
+    fn from(error: TaskBrainError) -> Self {
+        match error {
+            TaskBrainError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "task brain failed");
+                ApiError::InvalidCommunicationQuery("task brain failed")
+            }
+        }
+    }
+}
+impl From<CalendarError> for ApiError {
+    fn from(error: CalendarError) -> Self {
+        match error {
+            CalendarError::NotFound => ApiError::NotFound,
+            _ => {
+                tracing::error!(error = %error, "calendar operation failed");
+                ApiError::InvalidCommunicationQuery("calendar operation failed")
             }
         }
     }

@@ -1943,6 +1943,108 @@ export async function fetchTopSenders(
 	return getJson(baseUrl, token, actorId, `/api/v1/communications/analytics/senders?${params.toString()}`, 'Senders request failed');
 }
 
+
+export type EnrichedPerson = {
+	person_id: string;
+	display_name: string;
+	email_address: string;
+	language: string | null;
+	tone: string | null;
+	trust_score: number | null;
+	avg_response_hours: number | null;
+	preferred_channel: string | null;
+	last_interaction_at: string | null;
+	interaction_count: number;
+	frequent_topics: string[];
+	writing_style: string | null;
+	person_metadata: Record<string, unknown>;
+	is_favorite: boolean;
+	notes: string | null;
+	linked_projects: string[];
+	linked_documents: string[];
+	created_at: string;
+	updated_at: string;
+};
+
+export type PersonListResponse = {
+	items: EnrichedPerson[];
+};
+
+export async function fetchPersons(
+	baseUrl: string, token: string, actorId: string, limit = 50, favoritesOnly = false
+): Promise<PersonListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (favoritesOnly) params.set('favorites_only', 'true');
+	return getJson(baseUrl, token, actorId, `/api/v2/persons?${params.toString()}`, 'Persons request failed');
+}
+
+export async function fetchPerson(
+	baseUrl: string, token: string, actorId: string, personId: string
+): Promise<EnrichedPerson> {
+	return getJson(baseUrl, token, actorId, `/api/v2/persons/${encodeURIComponent(personId)}`, 'Person request failed');
+}
+
+export type Organization = {
+	organization_id: string;
+	display_name: string;
+	legal_name: string | null;
+	org_type: string | null;
+	status: string;
+	country: string | null;
+	city: string | null;
+	address: string | null;
+	website: string | null;
+	industry: string | null;
+	description: string | null;
+	primary_language: string | null;
+	timezone: string | null;
+	trust_score: number | null;
+	health_status: string | null;
+	priority: string | null;
+	notes: string | null;
+	tags: string[];
+	org_metadata: Record<string, unknown>;
+	last_interaction_at: string | null;
+	interaction_count: number;
+	registration_number: string | null;
+	country_of_registration: string | null;
+	vat: string | null;
+	cif: string | null;
+	nif: string | null;
+	tax_id: string | null;
+	legal_address: string | null;
+	registry_source: string | null;
+	registry_last_verified: string | null;
+	communication_style: string | null;
+	verbosity: string | null;
+	formality: string | null;
+	secondary_languages: string[] | null;
+	preferred_tone: string | null;
+	official_style_required: boolean | null;
+	last_health_check: string | null;
+	watchlist: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type OrganizationListResponse = {
+	items: Organization[];
+};
+
+export async function fetchOrganizations(
+	baseUrl: string, token: string, actorId: string, limit = 50
+): Promise<OrganizationListResponse> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return getJson(baseUrl, token, actorId, `/api/v2/organizations?${params.toString()}`, 'Organizations request failed');
+}
+
+export async function fetchOrganization(
+	baseUrl: string, token: string, actorId: string, orgId: string
+): Promise<Organization> {
+	return getJson(baseUrl, token, actorId, `/api/v2/organizations/${encodeURIComponent(orgId)}`, 'Organization request failed');
+}
+
+
 async function getJson<TResponse>(
 	baseUrl: string,
 	token: string,
@@ -2024,4 +2126,567 @@ async function putJson<TResponse>(
 	}
 
 	return (await response.json()) as TResponse;
+}
+
+// ── Calendar Types ────────────────────────────────────────────────────────
+
+export type CalendarAccount = {
+	account_id: string;
+	provider: string;
+	account_name: string;
+	email: string | null;
+	credentials_reference: string | null;
+	sync_status: string;
+	capabilities: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type CalendarAccountsResponse = { items: CalendarAccount[] };
+
+export type CalendarSource = {
+	source_id: string;
+	account_id: string;
+	provider_calendar_id: string | null;
+	name: string;
+	color: string | null;
+	timezone: string | null;
+	visibility: string;
+	read_only: boolean;
+	sync_enabled: boolean;
+	capabilities: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type CalendarSourcesResponse = { items: CalendarSource[] };
+
+export type CalendarEvent = {
+	event_id: string;
+	source_event_id: string | null;
+	account_id: string | null;
+	source_id: string | null;
+	title: string;
+	description: string | null;
+	location: string | null;
+	start_at: string;
+	end_at: string;
+	timezone: string | null;
+	all_day: boolean;
+	recurrence_rule: string | null;
+	status: string;
+	visibility: string;
+	event_type: string | null;
+	importance_score: number | null;
+	readiness_score: number | null;
+	sync_status: string;
+	created_at: string;
+	updated_at: string;
+};
+
+export type CalendarEventsResponse = { items: CalendarEvent[] };
+
+export type EventParticipant = {
+	id: string;
+	event_id: string;
+	person_id: string | null;
+	email: string;
+	display_name: string | null;
+	role: string;
+	response_status: string;
+	organization_id: string | null;
+	timezone: string | null;
+	confidence: number;
+	created_at: string;
+};
+
+export type EventParticipantsResponse = { items: EventParticipant[] };
+
+export type EventRelation = {
+	id: string;
+	event_id: string;
+	entity_type: string;
+	entity_id: string;
+	relation_type: string;
+	source: string;
+	confidence: number;
+	created_at: string;
+};
+
+export type EventRelationsResponse = { items: EventRelation[] };
+
+export type EventContextPack = {
+	id: string;
+	event_id: string;
+	summary: string | null;
+	participants_summary: string | null;
+	documents: unknown[];
+	tasks: unknown[];
+	open_questions: unknown[];
+	risks: unknown[];
+	suggested_agenda: unknown[];
+	suggested_actions: unknown[];
+	generated_at: string;
+	model: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type EventAgenda = {
+	id: string;
+	event_id: string;
+	items: unknown[];
+	source: string;
+	created_by: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type EventChecklist = {
+	id: string;
+	event_id: string;
+	items: unknown[];
+	source: string;
+	created_at: string;
+	updated_at: string;
+};
+
+export type MeetingNote = {
+	id: string;
+	event_id: string;
+	content: string;
+	format: string;
+	source: string;
+	linked_note_id: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type MeetingNotesResponse = { items: MeetingNote[] };
+
+export type MeetingOutcome = {
+	id: string;
+	event_id: string;
+	outcome_type: string;
+	title: string;
+	description: string | null;
+	owner_person_id: string | null;
+	due_date: string | null;
+	source: string;
+	confidence: number;
+	linked_entity_id: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type MeetingOutcomesResponse = { items: MeetingOutcome[] };
+
+export type DeadlineEvent = {
+	id: string;
+	source_entity_type: string | null;
+	source_entity_id: string | null;
+	title: string;
+	due_at: string;
+	severity: string;
+	status: string;
+	linked_calendar_event_id: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type DeadlinesResponse = { items: DeadlineEvent[] };
+
+export type FocusBlock = {
+	id: string;
+	title: string;
+	start_at: string;
+	end_at: string;
+	purpose: string | null;
+	linked_project_id: string | null;
+	protection_level: string;
+	status: string;
+	created_at: string;
+	updated_at: string;
+};
+
+export type FocusBlocksResponse = { items: FocusBlock[] };
+
+export type CalendarRule = {
+	rule_id: string;
+	name: string;
+	natural_language_description: string | null;
+	compiled_dsl: Record<string, unknown>;
+	enabled: boolean;
+	approval_mode: string;
+	last_run_at: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type CalendarRulesResponse = { items: CalendarRule[] };
+
+// ── Calendar API Functions ─────────────────────────────────────────────────
+
+export async function fetchCalendarAccounts(
+	baseUrl: string, token: string, actorId: string, provider?: string
+): Promise<CalendarAccountsResponse> {
+	const params = new URLSearchParams();
+	if (provider) params.set('provider', provider);
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/accounts?${params.toString()}`, 'Calendar accounts request failed');
+}
+
+export async function createCalendarAccount(
+	baseUrl: string, token: string, actorId: string,
+	body: { provider: string; account_name: string; email?: string }
+): Promise<CalendarAccount> {
+	return postJson(baseUrl, token, actorId, '/api/v2/calendar/accounts', body, 'Create calendar account failed');
+}
+
+export async function fetchCalendarSources(
+	baseUrl: string, token: string, actorId: string, accountId: string
+): Promise<CalendarSourcesResponse> {
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/accounts/${encodeURIComponent(accountId)}/sources`, 'Calendar sources request failed');
+}
+
+export async function fetchCalendarEvents(
+	baseUrl: string, token: string, actorId: string,
+	params: { account_id?: string; source_id?: string; from?: string; to?: string; status?: string; event_type?: string; limit?: number }
+): Promise<CalendarEventsResponse> {
+	const sp = new URLSearchParams();
+	if (params.account_id) sp.set('account_id', params.account_id);
+	if (params.source_id) sp.set('source_id', params.source_id);
+	if (params.from) sp.set('from', params.from);
+	if (params.to) sp.set('to', params.to);
+	if (params.status) sp.set('status', params.status);
+	if (params.event_type) sp.set('event_type', params.event_type);
+	if (params.limit) sp.set('limit', String(params.limit));
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events?${sp.toString()}`, 'Calendar events request failed');
+}
+
+export async function createCalendarEvent(
+	baseUrl: string, token: string, actorId: string,
+	body: { title: string; start_at: string; end_at: string; description?: string; location?: string; event_type?: string; account_id?: string; source_id?: string; timezone?: string; all_day?: boolean }
+): Promise<CalendarEvent> {
+	return postJson(baseUrl, token, actorId, '/api/v2/calendar/events', body, 'Create event failed');
+}
+
+export async function deleteCalendarEvent(
+	baseUrl: string, token: string, actorId: string, eventId: string
+): Promise<{ deleted: boolean }> {
+	const normalizedBaseUrl = baseUrl.replace(/\/+$/, '');
+	const response = await fetch(`${normalizedBaseUrl}/api/v2/calendar/events/${encodeURIComponent(eventId)}`, {
+		method: 'DELETE',
+		headers: { Authorization: `Bearer ${token}`, 'X-Hermes-Actor-Id': actorId }
+	});
+	if (!response.ok) {
+		const error = (await response.json().catch(() => null)) as { message?: string } | null;
+		throw new Error(error?.message ?? `Delete event failed: ${response.status}`);
+	}
+	return (await response.json()) as { deleted: boolean };
+}
+
+export async function fetchEventParticipants(
+	baseUrl: string, token: string, actorId: string, eventId: string
+): Promise<EventParticipantsResponse> {
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/participants`, 'Participants request failed');
+}
+
+export async function fetchEventContextPack(
+	baseUrl: string, token: string, actorId: string, eventId: string
+): Promise<EventContextPack | null> {
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/context-pack`, 'Context pack request failed');
+}
+
+export async function fetchEventAgenda(
+	baseUrl: string, token: string, actorId: string, eventId: string
+): Promise<EventAgenda | null> {
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/agenda`, 'Agenda request failed');
+}
+
+export async function fetchEventChecklist(
+	baseUrl: string, token: string, actorId: string, eventId: string
+): Promise<EventChecklist | null> {
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/checklist`, 'Checklist request failed');
+}
+
+export async function fetchEventBrief(
+	baseUrl: string, token: string, actorId: string, eventId: string
+): Promise<Record<string, unknown>> {
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/brief`, 'Brief request failed');
+}
+
+export async function fetchMeetingNotes(
+	baseUrl: string, token: string, actorId: string, eventId: string
+): Promise<MeetingNotesResponse> {
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/notes`, 'Notes request failed');
+}
+
+export async function fetchMeetingOutcomes(
+	baseUrl: string, token: string, actorId: string, eventId: string
+): Promise<MeetingOutcomesResponse> {
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/events/${encodeURIComponent(eventId)}/outcomes`, 'Outcomes request failed');
+}
+
+export async function fetchDeadlines(
+	baseUrl: string, token: string, actorId: string, status?: string
+): Promise<DeadlinesResponse> {
+	const params = new URLSearchParams();
+	if (status) params.set('status', status);
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/deadlines?${params.toString()}`, 'Deadlines request failed');
+}
+
+export async function fetchFocusBlocks(
+	baseUrl: string, token: string, actorId: string
+): Promise<FocusBlocksResponse> {
+	return getJson(baseUrl, token, actorId, '/api/v2/calendar/focus-blocks', 'Focus blocks request failed');
+}
+
+export async function fetchCalendarWatchtower(
+	baseUrl: string, token: string, actorId: string
+): Promise<Record<string, unknown>> {
+	return getJson(baseUrl, token, actorId, '/api/v2/calendar/watchtower', 'Watchtower request failed');
+}
+
+export async function fetchWeeklyBrief(
+	baseUrl: string, token: string, actorId: string
+): Promise<Record<string, unknown>> {
+	return getJson(baseUrl, token, actorId, '/api/v2/calendar/weekly-brief', 'Weekly brief request failed');
+}
+
+export async function fetchCalendarRules(
+	baseUrl: string, token: string, actorId: string
+): Promise<CalendarRulesResponse> {
+	return getJson(baseUrl, token, actorId, '/api/v2/calendar/rules', 'Rules request failed');
+}
+
+export async function postCalendarBrain(
+	baseUrl: string, token: string, actorId: string, question: string
+): Promise<Record<string, unknown>> {
+	return postJson(baseUrl, token, actorId, '/api/v2/calendar/brain', { q: question }, 'Brain query failed');
+}
+
+export async function searchCalendarEvents(
+	baseUrl: string, token: string, actorId: string, q: string
+): Promise<Record<string, unknown>> {
+	return getJson(baseUrl, token, actorId, `/api/v2/calendar/search?q=${encodeURIComponent(q)}`, 'Calendar search failed');
+}
+
+// ── Task Types ───────────────────────────────────────────────────────────
+
+export type Task = {
+	task_id: string;
+	task_candidate_id: string | null;
+	title: string;
+	description: string | null;
+	source_kind: string;
+	source_id: string;
+	source_type: string;
+	project_id: string | null;
+	status: string;
+	hermes_status: string;
+	priority_score: number | null;
+	risk_score: number | null;
+	readiness_score: number | null;
+	area: string | null;
+	why: string | null;
+	outcome: string | null;
+	due_at: string | null;
+	completed_at: string | null;
+	archived_at: string | null;
+	waiting_reason: string | null;
+	energy_type: string | null;
+	confidentiality: string;
+	tags: unknown[];
+	task_metadata: Record<string, unknown>;
+	linked_person_id: string | null;
+	linked_organization_id: string | null;
+	created_from_event_id: string | null;
+	created_by_actor_id: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type TaskRecordsResponse = { items: Task[] };
+
+export type TaskContextPack = {
+	id: string;
+	task_id: string;
+	summary: string | null;
+	source_summary: string | null;
+	open_questions: unknown[];
+	blockers: unknown[];
+	risks: unknown[];
+	suggested_next_action: string | null;
+	generated_at: string;
+	model: string | null;
+};
+
+export type TaskEvidence = {
+	id: string; task_id: string; source_type: string;
+	source_id: string; quote: string | null; confidence: number;
+	created_at: string;
+};
+
+export type TaskEvidenceResponse = { items: TaskEvidence[] };
+
+export type TaskRelation = {
+	id: string; task_id: string; entity_type: string;
+	entity_id: string; relation_type: string;
+	source: string; confidence: number; created_at: string;
+};
+
+export type TaskRelationsResponse = { items: TaskRelation[] };
+
+export type TaskChecklist = {
+	id: string; task_id: string; items: unknown[];
+	source: string; created_at: string; updated_at: string;
+};
+
+export type TaskSubtask = {
+	id: string; parent_task_id: string; child_task_id: string;
+	sort_order: number; created_at: string;
+};
+
+export type TaskSubtasksResponse = { items: TaskSubtask[] };
+
+export type TaskProviderAccount = {
+	account_id: string; provider: string; account_name: string;
+	credentials_reference: string | null; sync_mode: string;
+	capabilities: Record<string, unknown>;
+};
+
+export type TaskProvidersResponse = { items: TaskProviderAccount[] };
+
+export type TaskRule = {
+	rule_id: string; name: string; natural_language_description: string | null;
+	compiled_dsl: Record<string, unknown>; enabled: boolean;
+	approval_mode: string; last_run_at: string | null;
+};
+
+export type TaskRulesResponse = { items: TaskRule[] };
+
+export type TaskTemplate = {
+	template_id: string; name: string; description: string | null;
+	default_fields: Record<string, unknown>; default_checklist: unknown[];
+	default_priority: string; default_energy_type: string | null;
+};
+
+export type TaskTemplatesResponse = { items: TaskTemplate[] };
+
+// ── Task API Functions ────────────────────────────────────────────────────
+
+export async function fetchTaskRecords(
+	baseUrl: string, token: string, actorId: string,
+	params: { status?: string; project_id?: string; source_type?: string; limit?: number }
+): Promise<TaskRecordsResponse> {
+	const sp = new URLSearchParams();
+	if (params.status) sp.set('status', params.status);
+	if (params.project_id) sp.set('project_id', params.project_id);
+	if (params.source_type) sp.set('source_type', params.source_type);
+	if (params.limit) sp.set('limit', String(params.limit));
+	return getJson(baseUrl, token, actorId, `/api/v2/tasks?${sp.toString()}`, 'Tasks request failed');
+}
+
+export async function fetchTask(
+	baseUrl: string, token: string, actorId: string, taskId: string
+): Promise<Task> {
+	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}`, 'Task request failed');
+}
+
+export async function createTask(
+	baseUrl: string, token: string, actorId: string,
+	body: { title: string; description?: string; source_type?: string; project_id?: string; hermes_status?: string; priority_score?: number; due_at?: string; area?: string; linked_person_id?: string }
+): Promise<Task> {
+	return postJson(baseUrl, token, actorId, '/api/v2/tasks', body, 'Create task failed');
+}
+
+export async function updateTask(
+	baseUrl: string, token: string, actorId: string, taskId: string,
+	body: Record<string, unknown>
+): Promise<Task> {
+	return putJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}`, body, 'Update task failed');
+}
+
+export async function setTaskStatus(
+	baseUrl: string, token: string, actorId: string, taskId: string, status: string
+): Promise<{ status: string }> {
+	return postJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/status`, { status }, 'Set status failed');
+}
+
+export async function archiveTask(
+	baseUrl: string, token: string, actorId: string, taskId: string
+): Promise<{ archived: boolean }> {
+	return postJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/archive`, {}, 'Archive failed');
+}
+
+export async function fetchTaskContextPack(
+	baseUrl: string, token: string, actorId: string, taskId: string
+): Promise<TaskContextPack | null> {
+	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/context-pack`, 'Context pack failed');
+}
+
+export async function fetchTaskEvidence(
+	baseUrl: string, token: string, actorId: string, taskId: string
+): Promise<TaskEvidenceResponse> {
+	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/evidence`, 'Evidence failed');
+}
+
+export async function fetchTaskRelations(
+	baseUrl: string, token: string, actorId: string, taskId: string
+): Promise<TaskRelationsResponse> {
+	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/relations`, 'Relations failed');
+}
+
+export async function fetchTaskChecklist(
+	baseUrl: string, token: string, actorId: string, taskId: string
+): Promise<TaskChecklist | null> {
+	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/checklist`, 'Checklist failed');
+}
+
+export async function fetchTaskSubtasks(
+	baseUrl: string, token: string, actorId: string, taskId: string
+): Promise<TaskSubtasksResponse> {
+	return getJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/subtasks`, 'Subtasks failed');
+}
+
+export async function analyzeTask(
+	baseUrl: string, token: string, actorId: string, taskId: string
+): Promise<Record<string, unknown>> {
+	return postJson(baseUrl, token, actorId, `/api/v2/tasks/${encodeURIComponent(taskId)}/analyze`, {}, 'Analyze failed');
+}
+
+export async function fetchTaskProviders(
+	baseUrl: string, token: string, actorId: string
+): Promise<TaskProvidersResponse> {
+	return getJson(baseUrl, token, actorId, '/api/v2/tasks/providers', 'Providers failed');
+}
+
+export async function fetchTaskRules(
+	baseUrl: string, token: string, actorId: string
+): Promise<TaskRulesResponse> {
+	return getJson(baseUrl, token, actorId, '/api/v2/tasks/rules', 'Rules failed');
+}
+
+export async function fetchTaskTemplates(
+	baseUrl: string, token: string, actorId: string
+): Promise<TaskTemplatesResponse> {
+	return getJson(baseUrl, token, actorId, '/api/v2/tasks/templates', 'Templates failed');
+}
+
+export async function fetchTaskWatchtower(
+	baseUrl: string, token: string, actorId: string
+): Promise<Record<string, unknown>> {
+	return getJson(baseUrl, token, actorId, '/api/v2/tasks/watchtower', 'Watchtower failed');
+}
+
+export async function fetchTaskDailyBrief(
+	baseUrl: string, token: string, actorId: string
+): Promise<Record<string, unknown>> {
+	return getJson(baseUrl, token, actorId, '/api/v2/tasks/daily-brief', 'Daily brief failed');
+}
+
+export async function searchTasks(
+	baseUrl: string, token: string, actorId: string, q: string
+): Promise<Record<string, unknown>> {
+	return getJson(baseUrl, token, actorId, `/api/v2/tasks/search?q=${encodeURIComponent(q)}`, 'Task search failed');
 }

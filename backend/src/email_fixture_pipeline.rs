@@ -6,9 +6,6 @@ use thiserror::Error;
 use crate::communications::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use crate::persons::{
-    PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
-};
 use crate::email_import::{
     FixtureEmailImportError, FixtureEmailImportRequest, import_fixture_email_messages_with_records,
 };
@@ -17,6 +14,9 @@ use crate::graph_projection::{
     GraphProjectionError, GraphProjectionReport, GraphProjectionService,
 };
 use crate::messages::{MessageProjectionError, MessageProjectionStore, project_raw_email_message};
+use crate::persons::{
+    PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EmailFixturePipelineRequest {

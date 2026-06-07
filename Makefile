@@ -1,13 +1,19 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config validate dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-check frontend-build frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-v2-workflow-smoke-dev backend-ai-smoke-dev backend-v4-smoke-dev backend-v5-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
+.PHONY: help docker-env compose-config validate lint lint-rust lint-frontend lint-architecture pre-commit-install pre-commit-run dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-lint frontend-lint-ts frontend-check frontend-build frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-v2-workflow-smoke-dev backend-ai-smoke-dev backend-v4-smoke-dev backend-v5-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
 	@printf '%s\n' '  make docker-env      Create docker/.env from docker/.env.example if missing'
 	@printf '%s\n' '  make compose-config  Validate and render Docker Compose config'
 	@printf '%s\n' '  make validate        Run the full local/CI validation gate'
+	@printf '%s\n' '  make lint            Run strict lint-only gates without tests'
+	@printf '%s\n' '  make lint-rust       Run Rust fmt-check and clippy without tests'
+	@printf '%s\n' '  make lint-frontend   Run frontend style and TS/Svelte lint without tests'
+	@printf '%s\n' '  make lint-architecture Run repository architecture/code boundary guards'
+	@printf '%s\n' '  make pre-commit-install Install configured pre-commit hooks'
+	@printf '%s\n' '  make pre-commit-run Run configured pre-commit hooks against all files'
 	@printf '%s\n' '  make dev             Start PostgreSQL, backend auto-restart, and frontend HMR'
 	@printf '%s\n' '  make compose-dev     Start Docker Compose development services in foreground'
 	@printf '%s\n' '  make up              Start development services in background'
@@ -23,6 +29,7 @@ help:
 	@printf '%s\n' '  make reset-data      Delete docker/data contents; requires CONFIRM=yes'
 	@printf '%s\n' '  make frontend-install Install frontend dependencies with pnpm'
 	@printf '%s\n' '  make frontend-dev    Run the SvelteKit frontend with Vite HMR'
+	@printf '%s\n' '  make frontend-lint   Run frontend style and TS/Svelte lint without tests'
 	@printf '%s\n' '  make frontend-check  Run frontend style and SvelteKit type checks'
 	@printf '%s\n' '  make frontend-build  Build the SvelteKit frontend'
 	@printf '%s\n' '  make frontend-tauri-dev Run the Tauri desktop shell in development'
@@ -113,6 +120,22 @@ compose-config: docker-env
 	$(COMPOSE) config
 
 validate: compose-config backend-validate backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-v2-workflow-smoke-dev backend-ai-smoke-dev backend-v4-smoke-dev backend-v5-smoke-dev backend-search-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-projection-runner-smoke-dev backend-smoke-dev frontend-check frontend-build
+
+lint: lint-rust lint-frontend lint-architecture
+
+lint-rust: backend-fmt-check backend-clippy
+
+lint-frontend: frontend-lint
+
+lint-architecture:
+	node scripts/check-architecture.mjs
+	node scripts/check-code-boundaries.mjs
+
+pre-commit-install:
+	pre-commit install
+
+pre-commit-run:
+	pre-commit run --all-files
 
 dev: docker-env
 	@set -eu; \
@@ -239,6 +262,12 @@ frontend-dev: docker-env
 		VITE_HERMES_LOCAL_API_TOKEN="$${HERMES_LOCAL_API_TOKEN}" \
 		VITE_HERMES_ACTOR_ID="$${HERMES_FRONTEND_ACTOR_ID:-desktop-shell}" \
 		pnpm dev --host "$${HERMES_FRONTEND_BIND:-127.0.0.1}" --port "$$frontend_port" --strictPort
+
+frontend-lint: frontend-lint-ts
+	cd frontend && pnpm check
+
+frontend-lint-ts:
+	cd frontend && pnpm lint:ts
 
 frontend-check:
 	cd frontend && pnpm check
