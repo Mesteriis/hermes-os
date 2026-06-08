@@ -522,7 +522,7 @@ pub enum GraphEvidenceSourceKind {
 impl GraphEvidenceSourceKind {
     pub fn as_str(self) -> &'static str {
         match self {
-            Self::Person => "person",
+            Self::Person => "contact",
             Self::Message => "message",
             Self::Document => "document",
             Self::RawRecord => "raw_record",
@@ -858,7 +858,7 @@ fn parse_review_state(value: String) -> Result<GraphReviewState, GraphStoreError
 
 fn parse_evidence_source_kind(value: String) -> Result<GraphEvidenceSourceKind, GraphStoreError> {
     match value.as_str() {
-        "person" => Ok(GraphEvidenceSourceKind::Person),
+        "contact" | "person" => Ok(GraphEvidenceSourceKind::Person),
         "message" => Ok(GraphEvidenceSourceKind::Message),
         "document" => Ok(GraphEvidenceSourceKind::Document),
         "raw_record" => Ok(GraphEvidenceSourceKind::RawRecord),

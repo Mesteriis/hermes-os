@@ -410,7 +410,7 @@ impl SemanticSourceKind {
             Self::Document => "document",
             Self::Project => "project",
             Self::Task => "task",
-            Self::Person => "person",
+            Self::Person => "contact",
         }
     }
 
@@ -420,7 +420,7 @@ impl SemanticSourceKind {
             "document" => Ok(Self::Document),
             "project" => Ok(Self::Project),
             "task" => Ok(Self::Task),
-            "person" => Ok(Self::Person),
+            "contact" | "person" => Ok(Self::Person),
             _ => Err(AiError::InvalidSourceKind(value.to_owned())),
         }
     }

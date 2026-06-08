@@ -154,8 +154,9 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
     let body = json_body(response).await;
+    assert_eq!(status, StatusCode::OK, "body={body}");
     assert_eq!(body["agent_id"], json!("MNEMOSYNE"));
     assert_eq!(body["status"], json!("completed"));
     assert_eq!(body["model"], json!("qwen3:4b"));
@@ -228,8 +229,9 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
     let body = json_body(response).await;
+    assert_eq!(status, StatusCode::OK, "body={body}");
     assert_eq!(body["status"], json!("completed"));
     assert_eq!(body["created_count"], json!(1));
 
@@ -311,8 +313,9 @@ async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
         .await
         .expect("response");
 
-    assert_eq!(response.status(), StatusCode::OK);
+    let status = response.status();
     let body = json_body(response).await;
+    assert_eq!(status, StatusCode::OK, "body={body}");
     assert_eq!(body["agent_id"], json!("HESTIA"));
     assert_eq!(body["status"], json!("completed"));
     assert_eq!(

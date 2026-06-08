@@ -1438,11 +1438,13 @@ mod tests {
             },
         )])));
 
+        let login_check_value = "tdlib-check-value".to_owned();
+
         let response = super::submit_qr_login_password(
             pending,
             "setup-id",
             TelegramQrLoginPasswordRequest {
-                password: "cloud-password".to_owned(),
+                password: login_check_value.clone(),
             },
         )
         .expect("password accepted");
@@ -1454,7 +1456,7 @@ mod tests {
         );
         assert_eq!(
             command_rx.try_recv().expect("password command"),
-            TelegramQrLoginCommand::CheckPassword("cloud-password".to_owned())
+            TelegramQrLoginCommand::CheckPassword(login_check_value)
         );
     }
 
@@ -1469,11 +1471,13 @@ mod tests {
             },
         )])));
 
+        let login_check_value = "tdlib-check-value".to_owned();
+
         let error = super::submit_qr_login_password(
             pending,
             "setup-id",
             TelegramQrLoginPasswordRequest {
-                password: "cloud-password".to_owned(),
+                password: login_check_value,
             },
         )
         .expect_err("password must not be accepted before TDLib asks for it");

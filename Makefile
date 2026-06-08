@@ -332,6 +332,7 @@ backend-smoke-dev: docker-env
 		$(MAKE) db-up; \
 		set -a; . docker/.env; set +a; \
 		smoke_port="$${HERMES_BACKEND_SMOKE_PORT:-18081}"; \
+		cargo build --manifest-path $(BACKEND_MANIFEST); \
 		DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
 		HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}" \
 		HERMES_HTTP_ADDR="127.0.0.1:$${smoke_port}" \
@@ -488,7 +489,7 @@ backend-contacts-smoke-dev: docker-env
 		$(MAKE) db-up; \
 		set -a; . docker/.env; set +a; \
 		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
-		cargo test --manifest-path $(BACKEND_MANIFEST) --test contacts -- --nocapture --test-threads=1
+		cargo test --manifest-path $(BACKEND_MANIFEST) --test persons against_postgres -- --nocapture --test-threads=1
 
 backend-documents-smoke-dev: docker-env
 	@set -eu; \
@@ -534,8 +535,8 @@ backend-workflow-smoke-dev: docker-env
 			project_link_reviews \
 			task_candidates \
 			task_candidates_api \
-			contact_identity \
-			contact_identity_api \
+			person_identity \
+			person_identity_api \
 			document_processing \
 			document_processing_api; do \
 			test_db="hermes_v2_workflow_$${test_name}_$$(date +%s%N)"; \
