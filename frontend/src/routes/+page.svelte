@@ -77,6 +77,7 @@
 		type CalendarSource,
 		type CalendarEvent,
 		findFrontendLayoutSetting,
+		findFrontendSidebarSetting,
 		ingestTelegramFixtureMessage,
 		ingestWhatsappWebFixtureMessage,
 		refreshAiTaskCandidates,
@@ -86,6 +87,7 @@
 		requestAiMeetingPrep,
 		retryDocumentProcessingJob,
 		saveApplicationSetting,
+		saveFrontendSidebarSetting,
 		searchGraphNodes,
 		saveAutomationPolicy,
 		saveAutomationTemplate,
@@ -151,12 +153,30 @@
 	} from '$lib/api';
 	import {
 		defaultLayoutSettings,
+		defaultSidebarSettings,
 		findPresetForView,
 		parseLayoutSettings,
+		parseCommunicationSidebarItemId,
+		parseSidebarSettings,
+		communicationSectionViewId,
+		communicationSections,
+		primaryWorkspaceNav,
+		resolveSidebarRootEntries,
 		resolveLayout,
+		sidebarGroupIdFromRootId,
+		sidebarGroupRootId,
 		widgetRegistry,
+		type CommunicationSection,
+		type CommunicationSectionId,
 		type LayoutSettings,
+		type PrimaryNavId,
+		type ResolvedSidebarItem,
 		type ResolvedLayout,
+		type SidebarItemId,
+		type SidebarNavGroup,
+		type SidebarRootItemId,
+		type SidebarSettings,
+		type SidebarViewId,
 		type ViewLayoutOverride
 	} from '$lib/layout';
 	import { onMount } from 'svelte';
@@ -171,34 +191,18 @@
 	type TelegramSetupMode = 'fixture' | 'live';
 	type TelegramAuthMethod = 'fixture' | 'phone' | 'qr' | 'bot_token';
 	type TelegramWizardStep = 'account' | 'auth' | 'details';
-	type ViewId =
-		| 'home'
-		| 'communications'
-		| 'timeline'
-		| 'persons'
-		| 'projects'
-		| 'tasks'
-		| 'calendar'
-		| 'documents'
-		| 'notes'
-		| 'knowledge'
-		| 'telegram'
-		| 'whatsapp'
-		| 'agents'
-		| 'organizations'
-		| 'settings';
+	type AppViewId = PrimaryNavId | 'organizations' | 'settings';
+	type ViewId = SidebarViewId;
 
 	type NavItem = {
-		id: ViewId;
+		id: PrimaryNavId;
 		label: string;
 		icon: string;
 		badge?: string;
 		enabled: boolean;
 	};
 
-	type ShortcutItem = {
-		label: string;
-		icon: string;
+	type CommunicationNavItem = CommunicationSection & {
 		badge?: string;
 	};
 
@@ -208,6 +212,21 @@
 		delta: string;
 		icon: string;
 		tone?: string;
+	};
+
+	type NotificationItem = {
+		id: string;
+		source: 'telegram' | 'communications';
+		icon: string;
+		title: string;
+		body: string;
+		meta: string;
+		time: string | null;
+		messageId?: string;
+		accountId?: string;
+		providerChatId?: string | null;
+		targetSection?: CommunicationSectionId;
+		isDemo?: boolean;
 	};
 
 	type FeedItem = {
@@ -287,8 +306,50 @@
 	const apiBaseUrl = import.meta.env.VITE_HERMES_API_BASE_URL ?? 'http://127.0.0.1:8080';
 	const apiSecret = import.meta.env.VITE_HERMES_LOCAL_API_SECRET ?? 'change-me-local-api-secret';
 
-	let currentView = $state<ViewId>('home');
-	let searchQuery = $state('');
+	let currentView = $state<AppViewId>('home');
+	let activeCommunicationSection = $state<CommunicationSectionId>('unified');
+	let expandedSidebarGroupIds = $state<string[]>(['communications']);
+	let activeSidebarRailGroupId = $state<string | null>(null);
+	let isSidebarRail = $state(false);
+	let isNotificationsDrawerOpen = $state(false);
+	let dismissedNotificationIds = $state<string[]>([]);
+	let expandedNotificationIds = $state<string[]>([]);
+	let demoNotificationItems = $state<NotificationItem[]>([
+		{
+			id: 'demo:telegram:new-message',
+			source: 'telegram',
+			icon: 'tabler:brand-telegram',
+			title: 'New Telegram message',
+			body: 'Maria sent a note about the sidebar navigation flow. She wants the Communications submenu to feel like a workspace context, not a flat list of pages, and asked for one more pass on the rail interaction.',
+			meta: 'Demo · Telegram',
+			time: new Date(Date.now() - 1000 * 60 * 7).toISOString(),
+			providerChatId: 'demo-telegram-chat',
+			targetSection: 'telegram',
+			isDemo: true
+		},
+		{
+			id: 'demo:communications:needs-reply',
+			source: 'communications',
+			icon: 'tabler:mail',
+			title: 'Needs reply',
+			body: 'Acme Corp is waiting for a short confirmation. They need an answer before tomorrow morning so the planning thread can move into execution without another status meeting.',
+			meta: 'Demo · Mail',
+			time: new Date(Date.now() - 1000 * 60 * 22).toISOString(),
+			targetSection: 'needs_reply',
+			isDemo: true
+		},
+		{
+			id: 'demo:communications:mention',
+			source: 'communications',
+			icon: 'tabler:at',
+			title: 'Mentioned in thread',
+			body: 'Alex mentioned you in the product planning discussion. The thread includes design feedback, notification drawer behavior, and sidebar customization rules for grouped sections.',
+			meta: 'Demo · Mentions',
+			time: new Date(Date.now() - 1000 * 60 * 48).toISOString(),
+			targetSection: 'mentions',
+			isDemo: true
+		}
+	]);
 	let status = $state<V1Status | null>(null);
 	let statusError = $state('');
 	let vaultWizardStep = $state<'intro' | 'entropy' | 'biometric' | 'recovery' | 'done'>('intro');
@@ -560,12 +621,34 @@
 	});
 	let applicationSettings = $state<ApplicationSetting[]>([]);
 	let layoutSettings = $state<LayoutSettings>(defaultLayoutSettings());
+	let sidebarSettings = $state<SidebarSettings>(defaultSidebarSettings());
 	let isLayoutEditing = $state(false);
 	let isWidgetDrawerOpen = $state(false);
+	let isUserMenuOpen = $state(false);
 	let layoutDraft = $state<LayoutSettings | null>(null);
+	let sidebarDraft = $state<SidebarSettings | null>(null);
 	let layoutError = $state('');
+	let sidebarError = $state('');
+	let newSidebarGroupLabel = $state('');
+	let isSidebarSettingsSaving = $state(false);
 	const effectiveLayoutSettings = $derived(layoutDraft ?? layoutSettings);
-	const activeLayout = $derived(resolveActiveLayout(currentView, effectiveLayoutSettings));
+	const effectiveSidebarSettings = $derived(sidebarDraft ?? sidebarSettings);
+	const activeWorkspaceView = $derived(
+		currentView === 'communications'
+			? communicationSectionViewId(activeCommunicationSection)
+			: currentView
+	);
+	const isCommunicationMessagesSection = $derived(
+		currentView === 'communications' &&
+			['unified', 'inbox', 'waiting', 'needs_reply', 'mail'].includes(activeCommunicationSection)
+	);
+	const activeCommunicationEmptySection = $derived(
+		currentView === 'communications' &&
+			['mentions', 'calls', 'meetings'].includes(activeCommunicationSection)
+			? communicationSections.find((item) => item.id === activeCommunicationSection) ?? null
+			: null
+	);
+	const activeLayout = $derived(resolveActiveLayout(activeWorkspaceView, effectiveLayoutSettings));
 	const renderedWidgetIdsForCurrentView = $derived.by(() => {
 		if (!isWidgetDrawerOpen || typeof document === 'undefined') {
 			return null;
@@ -579,7 +662,7 @@
 	});
 	const addableWidgetsForCurrentView = $derived.by(() => {
 		const layout = activeLayout;
-		const preset = layout?.preset ?? findPresetForView(currentView);
+		const preset = layout?.preset ?? findPresetForView(activeWorkspaceView);
 		if (!preset) {
 			return [];
 		}
@@ -616,28 +699,21 @@
 	let settingsActionMessage = $state('');
 	let isSettingsLoading = $state(false);
 	let savingSettingKey = $state<string | null>(null);
-	let selectedSettingsSection = $state<'application' | 'accounts'>('application');
+	let selectedSettingsSection = $state<'application' | 'sidebar' | 'accounts'>('application');
 
-	const primaryNav = $derived.by((): NavItem[] => {
-		const totalMessages = mailboxHealth ? mailboxHealth.unread : 0;
-		const totalNodes = graphSummary ? graphSummary.node_counts.reduce((sum, c) => sum + c.count, 0) : 0;
-		return [
-			{ id: 'home', label: 'Home', icon: 'tabler:home', enabled: true },
-			{ id: 'communications', label: 'Communications', icon: 'tabler:messages', badge: totalMessages > 0 ? String(totalMessages) : undefined, enabled: true },
-			{ id: 'timeline', label: 'Timeline', icon: 'tabler:timeline-event', enabled: true },
-			{ id: 'persons', label: 'Persons', icon: 'tabler:address-book', badge: persons.length > 0 ? String(persons.length) : undefined, enabled: true },
-			{ id: 'projects', label: 'Projects', icon: 'tabler:briefcase', badge: projectSummaries.length > 0 ? String(projectSummaries.length) : undefined, enabled: true },
-			{ id: 'tasks', label: 'Tasks', icon: 'tabler:checkbox', badge: (taskCandidates.length + activeTasks.length) > 0 ? String(taskCandidates.length + activeTasks.length) : undefined, enabled: true },
-			{ id: 'calendar', label: 'Calendar', icon: 'tabler:calendar', enabled: true },
-			{ id: 'documents', label: 'Documents', icon: 'tabler:file-text', badge: documentProcessingJobs.length > 0 ? String(documentProcessingJobs.length) : undefined, enabled: true },
-			{ id: 'notes', label: 'Notes', icon: 'tabler:notes', enabled: true },
-			{ id: 'knowledge', label: 'Knowledge Graph', icon: 'tabler:share', badge: totalNodes > 0 ? String(totalNodes) : undefined, enabled: true },
-			{ id: 'telegram', label: 'Telegram', icon: 'tabler:brand-telegram', badge: telegramChats.length > 0 ? String(telegramChats.length) : undefined, enabled: true },
-			{ id: 'whatsapp', label: 'WhatsApp', icon: 'tabler:brand-whatsapp', badge: whatsappSessions.length > 0 ? String(whatsappSessions.length) : undefined, enabled: true },
-			{ id: 'agents', label: 'AI Agents', icon: 'tabler:sparkles', badge: aiAgents.length > 0 ? String(aiAgents.length) : undefined, enabled: true },
-			{ id: 'settings', label: 'Settings', icon: 'tabler:settings', badge: providerAccounts.length > 0 ? String(providerAccounts.length) : undefined, enabled: true }
-		];
-	});
+	const primaryNav = $derived.by((): NavItem[] =>
+		primaryWorkspaceNav.map((item) => ({ ...item, enabled: true }))
+	);
+	const sidebarRootEntries = $derived(resolveSidebarRootEntries(primaryNav, effectiveSidebarSettings));
+	const sidebarHiddenNavItems = $derived.by(() =>
+		effectiveSidebarSettings.hiddenItemIds
+			.map((itemId) => sidebarConfigItem(itemId))
+			.filter((item): item is { id: SidebarItemId; label: string; icon: string } => item !== null)
+	);
+
+	const communicationsNav = $derived.by((): CommunicationNavItem[] =>
+		communicationSections.map((item) => ({ ...item, badge: communicationSectionBadge(item.id) }))
+	);
 
 	const viewCopy: Record<ViewId, { title: string; subtitle: string; search: string; icon: string }> = {
 		home: {
@@ -731,129 +807,6 @@
 			icon: 'tabler:settings'
 		}
 	};
-
-	const shortcutsByView = $derived.by((): Record<ViewId, ShortcutItem[]> => ({
-		home: [
-			{ label: 'Inbox', icon: 'tabler:inbox', badge: mailboxHealth ? String(mailboxHealth.unread) : undefined },
-			{ label: 'Starred', icon: 'tabler:star' },
-			{ label: 'Waiting', icon: 'tabler:clock-hour-4', badge: mailboxHealth ? String(mailboxHealth.waiting) : undefined },
-			{ label: 'Requires Reply', icon: 'tabler:message-reply', badge: mailboxHealth ? String(mailboxHealth.needs_action) : undefined },
-			{ label: 'Mentions', icon: 'tabler:at' },
-			{ label: 'Trash', icon: 'tabler:trash' }
-		],
-		communications: [
-			{ label: 'Inbox', icon: 'tabler:inbox', badge: mailboxHealth ? String(mailboxHealth.unread) : undefined },
-			{ label: 'Starred', icon: 'tabler:star' },
-			{ label: 'Waiting', icon: 'tabler:clock-hour-4', badge: mailboxHealth ? String(mailboxHealth.waiting) : undefined },
-			{ label: 'Requires Reply', icon: 'tabler:message-reply', badge: mailboxHealth ? String(mailboxHealth.needs_action) : undefined },
-			{ label: 'Mentions', icon: 'tabler:at' },
-			{ label: 'Spam', icon: 'tabler:shield-x', badge: mailStateCounts.find(c => c.state === 'spam')?.count ? String(mailStateCounts.find(c => c.state === 'spam')!.count) : undefined },
-			{ label: 'Archive', icon: 'tabler:archive', badge: mailStateCounts.find(c => c.state === 'archived')?.count ? String(mailStateCounts.find(c => c.state === 'archived')!.count) : undefined }
-		],
-		timeline: [
-			{ label: 'Today', icon: 'tabler:calendar-time', badge: String(communicationMessages.length) },
-			{ label: 'Messages', icon: 'tabler:message' },
-			{ label: 'Documents', icon: 'tabler:file-text' },
-			{ label: 'Decisions', icon: 'tabler:git-pull-request' }
-		],
-		persons: [
-			{ label: 'All People', icon: 'tabler:users', badge: String(persons.length) },
-			{ label: 'Companies', icon: 'tabler:building' },
-			{ label: 'Clients', icon: 'tabler:shield-check' },
-			{ label: 'Partners', icon: 'tabler:users-group' },
-			{ label: 'Team', icon: 'tabler:user-check' },
-			{ label: 'Vendors', icon: 'tabler:briefcase' },
-			{ label: 'Archived', icon: 'tabler:archive' }
-		],
-		projects: [
-			{ label: 'My Projects', icon: 'tabler:briefcase', badge: String(projectSummaries.length) },
-			{ label: 'Active', icon: 'tabler:chart-bar', badge: String(projectSummaries.filter(p => p.project.status === 'active').length) },
-			{ label: 'Planning', icon: 'tabler:calendar-plus' },
-			{ label: 'On Hold', icon: 'tabler:clock-pause' },
-			{ label: 'Completed', icon: 'tabler:rosette-discount-check' },
-			{ label: 'Archived', icon: 'tabler:archive' }
-		],
-		tasks: [
-			{ label: 'My Tasks', icon: 'tabler:checkbox', badge: String(taskCandidates.length + activeTasks.length) },
-			{ label: 'Assigned to Me', icon: 'tabler:user-check', badge: String(activeTasks.length) },
-			{ label: 'Waiting', icon: 'tabler:clock', badge: String(taskCandidates.filter(t => t.review_state === 'suggested').length) },
-			{ label: 'Due Today', icon: 'tabler:calendar-exclamation' },
-			{ label: 'This Week', icon: 'tabler:calendar-week' },
-			{ label: 'High Priority', icon: 'tabler:star' },
-			{ label: 'Completed', icon: 'tabler:heart-check' }
-		],
-		calendar: [
-			{ label: 'My Agenda', icon: 'tabler:calendar-stats' },
-			{ label: 'Team Meetings', icon: 'tabler:star' },
-			{ label: 'Focus Time', icon: 'tabler:shield-half' },
-			{ label: 'Important', icon: 'tabler:shield-star' },
-			{ label: 'Travel', icon: 'tabler:plane' },
-			{ label: 'Birthdays', icon: 'tabler:calendar-heart' }
-		],
-		documents: [
-			{ label: 'Recent', icon: 'tabler:inbox', badge: String(documentProcessingJobs.length) },
-			{ label: 'Starred', icon: 'tabler:star' },
-			{ label: 'Shared with me', icon: 'tabler:shield-check' },
-			{ label: 'Contracts', icon: 'tabler:briefcase' },
-			{ label: 'Reports', icon: 'tabler:report' },
-			{ label: 'Presentations', icon: 'tabler:presentation' },
-			{ label: 'Archive', icon: 'tabler:archive' },
-			{ label: 'Trash', icon: 'tabler:trash' }
-		],
-		notes: [
-			{ label: 'Inbox', icon: 'tabler:inbox' },
-			{ label: 'Starred', icon: 'tabler:star' },
-			{ label: 'Today', icon: 'tabler:calendar-check' },
-			{ label: 'Personal', icon: 'tabler:folder' },
-			{ label: 'Work', icon: 'tabler:folder' },
-			{ label: 'Ideas', icon: 'tabler:bulb' },
-			{ label: 'Archive', icon: 'tabler:archive' }
-		],
-		knowledge: [
-			{ label: 'My Graphs', icon: 'tabler:heart-handshake', badge: graphSummary ? String(graphSummary.node_counts.reduce((sum, c) => sum + c.count, 0)) : undefined },
-			{ label: 'Recent', icon: 'tabler:star' },
-			{ label: 'Favorites', icon: 'tabler:star' },
-			{ label: 'Important', icon: 'tabler:shield-star' },
-			{ label: 'Shared with me', icon: 'tabler:star' },
-			{ label: 'Trash', icon: 'tabler:trash' }
-		],
-		telegram: [
-			{ label: 'Chats', icon: 'tabler:messages', badge: String(telegramChats.length) },
-			{ label: 'Policies', icon: 'tabler:shield-check' },
-			{ label: 'Templates', icon: 'tabler:template' },
-			{ label: 'Calls', icon: 'tabler:phone-call' },
-			{ label: 'Transcripts', icon: 'tabler:file-text' },
-			{ label: 'Audit', icon: 'tabler:clipboard-list' }
-		],
-		whatsapp: [
-			{ label: 'Sessions', icon: 'tabler:devices', badge: String(whatsappSessions.length) },
-			{ label: 'Messages', icon: 'tabler:messages' },
-			{ label: 'Fixture', icon: 'tabler:flask' },
-			{ label: 'Guardrails', icon: 'tabler:shield-lock' },
-			{ label: 'Provenance', icon: 'tabler:git-branch' }
-		],
-		agents: [
-			{ label: 'My Agents', icon: 'tabler:robot', badge: String(aiAgents.length) },
-			{ label: 'Active Tasks', icon: 'tabler:star' },
-			{ label: 'Automations', icon: 'tabler:settings-automation' },
-			{ label: 'Templates', icon: 'tabler:template' },
-			{ label: 'Logs', icon: 'tabler:clipboard-list' },
-			{ label: 'Settings', icon: 'tabler:settings' }
-		],
-		organizations: [
-			{ label: 'All Companies', icon: 'tabler:building', badge: String(organizations.length) },
-			{ label: 'Active', icon: 'tabler:chart-bar' },
-			{ label: 'Watchlist', icon: 'tabler:shield-star' },
-			{ label: 'By Industry', icon: 'tabler:category' },
-			{ label: 'Archived', icon: 'tabler:archive' }
-		],
-		settings: [
-			{ label: 'Application', icon: 'tabler:adjustments-horizontal', badge: String(providerAccounts.length) },
-			{ label: 'Accounts', icon: 'tabler:users' },
-			{ label: 'AI Runtime', icon: 'tabler:sparkles' },
-			{ label: 'Security', icon: 'tabler:shield-lock' }
-		]
-	}));
 
 	const homeStats = $derived.by(() => {
 		const stats: StatCard[] = [];
@@ -1027,6 +980,59 @@
 	const selectedTelegramCall = $derived(
 		telegramCalls.find((call) => call.call_id === selectedTelegramCallId) ?? telegramCalls[0] ?? null
 	);
+	const notificationItems = $derived.by(() => {
+		const dismissed = new Set(dismissedNotificationIds);
+		const items: NotificationItem[] = demoNotificationItems.filter(
+			(notification) => !dismissed.has(notification.id)
+		);
+		for (const message of telegramMessages.slice(0, 5)) {
+			if (message.delivery_state !== 'received') {
+				continue;
+			}
+			const id = `telegram:${message.message_id}`;
+			if (dismissed.has(id)) {
+				continue;
+			}
+			items.push({
+				id,
+				source: 'telegram',
+				icon: 'tabler:brand-telegram',
+				title: message.chat_title || 'Telegram',
+				body: message.text || 'New Telegram message',
+				meta: senderLabel(message.sender_display_name || message.sender),
+				time: message.occurred_at || message.projected_at,
+				messageId: message.message_id,
+				accountId: message.account_id,
+				providerChatId: message.provider_chat_id,
+				targetSection: 'telegram'
+			});
+		}
+		for (const message of communicationMessages.slice(0, 5)) {
+			const workflowState = (message as CommunicationMessageSummaryV2).workflow_state;
+			if (workflowState !== 'new' && workflowState !== 'needs_action') {
+				continue;
+			}
+			const id = `communication:${message.message_id}`;
+			if (dismissed.has(id)) {
+				continue;
+			}
+			items.push({
+				id,
+				source: 'communications',
+				icon: communicationChannelIcon(message.channel_kind),
+				title: message.subject || 'New communication',
+				body: message.body_text_preview || senderLabel(message.sender),
+				meta: senderLabel(message.sender_display_name || message.sender),
+				time: message.occurred_at || message.projected_at,
+				messageId: message.message_id,
+				accountId: message.account_id,
+				targetSection: 'unified'
+			});
+		}
+		return items
+			.sort((left, right) => new Date(right.time ?? 0).getTime() - new Date(left.time ?? 0).getTime())
+			.slice(0, 12);
+	});
 	const telegramClosureCapabilities = $derived(
 		telegramCapabilities?.capabilities.filter((capability) => capability.closure_gate) ?? []
 	);
@@ -1067,8 +1073,7 @@
 	const orgPeople = $derived.by(() => persons.filter(p => p.linked_projects?.some(pid => selectedOrganization?.display_name && pid.includes(selectedOrganization.display_name))).slice(0, 5));
 	const agentCards = $derived(aiAgents.map(agentCardView));
 	const selectedAgent = $derived(agentCards[selectedAgentIndex] ?? agentCards[0] ?? null);
-	const activeView = $derived(viewCopy[currentView]);
-	const activeShortcuts = $derived(shortcutsByView[currentView]);
+	const activeView = $derived(viewCopy[activeWorkspaceView]);
 	const selectedGraphNode = $derived(graphNeighborhood?.selected_node ?? null);
 	const graphCanvasNodes = $derived(buildGraphCanvasNodes(graphNeighborhood));
 	const graphCanvasEdges = $derived(buildGraphCanvasEdges(graphNeighborhood, graphCanvasNodes));
@@ -1105,7 +1110,11 @@
 				!confirmedSplitCandidateForMerge(item)
 		)
 	);
-	const settingsByCategory = $derived(groupSettingsByCategory(applicationSettings));
+	const settingsByCategory = $derived(
+		groupSettingsByCategory(
+			applicationSettings.filter((setting) => setting.setting_key !== 'frontend.sidebar')
+		)
+	);
 	const emailProviderAccounts = $derived(
 		providerAccounts.filter((account) => ['gmail', 'icloud', 'imap'].includes(account.provider_kind))
 	);
@@ -1262,8 +1271,12 @@
 			]);
 			applicationSettings = settingsResponse.items;
 			const frontendLayoutSetting = findFrontendLayoutSetting(settingsResponse.items);
+			const frontendSidebarSetting = findFrontendSidebarSetting(settingsResponse.items);
 			layoutSettings = parseLayoutSettings(frontendLayoutSetting?.value ?? null);
+			sidebarSettings = parseSidebarSettings(frontendSidebarSetting?.value ?? null);
+			sidebarDraft = null;
 			layoutError = '';
+			sidebarError = '';
 			providerAccounts = accountsResponse.items;
 			settingDrafts = Object.fromEntries(
 				settingsResponse.items.map((setting) => [setting.setting_key, settingDraftValue(setting)])
@@ -1271,7 +1284,9 @@
 			settingsError = '';
 		} catch (error) {
 			layoutSettings = defaultLayoutSettings();
+			sidebarSettings = defaultSidebarSettings();
 			layoutError = error instanceof Error ? error.message : 'Unknown layout settings error';
+			sidebarError = error instanceof Error ? error.message : 'Unknown sidebar settings error';
 			settingsError = error instanceof Error ? error.message : 'Unknown settings error';
 		} finally {
 			isSettingsLoading = false;
@@ -1302,6 +1317,16 @@
 				...settingDrafts,
 				[updated.setting_key]: settingDraftValue(updated)
 			};
+			if (updated.setting_key === 'frontend.layout') {
+				layoutSettings = parseLayoutSettings(updated.value);
+				layoutDraft = null;
+				layoutError = '';
+			}
+			if (updated.setting_key === 'frontend.sidebar') {
+				sidebarSettings = parseSidebarSettings(updated.value);
+				sidebarDraft = null;
+				sidebarError = '';
+			}
 			settingsActionMessage = `${updated.label} saved`;
 			settingsError = '';
 			if (updated.setting_key.startsWith('ai.')) {
@@ -2058,9 +2083,388 @@
 		return structuredClone($state.snapshot(settings));
 	}
 
+	function cloneSidebarSettings(settings: SidebarSettings): SidebarSettings {
+		return structuredClone($state.snapshot(settings));
+	}
+
+	function sidebarGroupLabel(group: SidebarNavGroup, index: number) {
+		return group.label || (group.id === 'communications' ? 'Communications' : `Group ${index + 1}`);
+	}
+
+	function sidebarRootIndexForGroup(groupId: string) {
+		return effectiveSidebarSettings.rootItemIds.indexOf(sidebarGroupRootId(groupId));
+	}
+
+	function sidebarConfigItem(itemId: SidebarItemId) {
+		const communicationSectionId = parseCommunicationSidebarItemId(itemId);
+		if (communicationSectionId) {
+			const section = communicationSections.find((item) => item.id === communicationSectionId);
+			return section ? { id: itemId, label: section.label, icon: section.icon } : null;
+		}
+
+		const item = primaryNav.find((navItem) => navItem.id === itemId);
+		return item ? { id: itemId, label: item.label, icon: item.icon } : null;
+	}
+
+	function sidebarItemLabel(item: ResolvedSidebarItem<NavItem>) {
+		return item.kind === 'primary' ? item.primary.label : item.section.label;
+	}
+
+	function sidebarItemIcon(item: ResolvedSidebarItem<NavItem>) {
+		return item.kind === 'primary' ? item.primary.icon : item.section.icon;
+	}
+
+	function sidebarItemBadge(item: ResolvedSidebarItem<NavItem>) {
+		return item.kind === 'primary' ? item.primary.badge : communicationSectionBadge(item.section.id);
+	}
+
+	function sidebarItemTitle(item: ResolvedSidebarItem<NavItem>) {
+		return item.kind === 'primary' && !item.primary.enabled
+			? `${item.primary.label} is not available in the current desktop scope`
+			: sidebarItemLabel(item);
+	}
+
+	function isSidebarItemDisabled(item: ResolvedSidebarItem<NavItem>) {
+		return item.kind === 'primary' && !item.primary.enabled;
+	}
+
+	function isSidebarItemActive(item: ResolvedSidebarItem<NavItem>) {
+		return item.kind === 'primary'
+			? currentView === item.primary.id
+			: currentView === 'communications' && activeCommunicationSection === item.section.id;
+	}
+
+	function isSidebarItemIdActive(itemId: SidebarItemId) {
+		const communicationSectionId = parseCommunicationSidebarItemId(itemId);
+		if (communicationSectionId) {
+			return currentView === 'communications' && activeCommunicationSection === communicationSectionId;
+		}
+		return currentView === itemId;
+	}
+
+	function sidebarGroupHasActiveItem(group: SidebarNavGroup) {
+		return group.itemIds.some((itemId) => isSidebarItemIdActive(itemId));
+	}
+
+	function sidebarGroupHasSeparatorBefore(group: SidebarNavGroup, itemId: SidebarItemId) {
+		return group.itemIds.indexOf(itemId) > 0 && group.separatorBeforeItemIds.includes(itemId);
+	}
+
+	function isSidebarGroupExpanded(groupId: string) {
+		return expandedSidebarGroupIds.includes(groupId);
+	}
+
+	function setSidebarGroupExpanded(groupId: string, expanded: boolean) {
+		expandedSidebarGroupIds = expanded
+			? Array.from(new Set([...expandedSidebarGroupIds, groupId]))
+			: expandedSidebarGroupIds.filter((id) => id !== groupId);
+	}
+
+	function toggleSidebarGroup(group: SidebarNavGroup) {
+		if (isSidebarRail) {
+			activeSidebarRailGroupId = activeSidebarRailGroupId === group.id ? null : group.id;
+			return;
+		}
+
+		setSidebarGroupExpanded(group.id, !isSidebarGroupExpanded(group.id));
+	}
+
+	function closeSidebarRailDropdown() {
+		activeSidebarRailGroupId = null;
+	}
+
+	function selectSidebarItem(item: ResolvedSidebarItem<NavItem>) {
+		if (item.kind === 'primary') {
+			setCurrentView(item.primary.id);
+			return;
+		}
+
+		selectCommunicationSection(item.section.id);
+	}
+
+	function sidebarSettingsHasChanges() {
+		return sidebarDraft !== null && JSON.stringify(sidebarDraft) !== JSON.stringify(sidebarSettings);
+	}
+
+	function sidebarGroupIdFromLabel(label: string) {
+		const base =
+			label
+				.trim()
+				.toLowerCase()
+				.replace(/[^a-z0-9_-]+/g, '-')
+				.replace(/^-+|-+$/g, '') || `group-${effectiveSidebarSettings.groups.length + 1}`;
+		const existingIds = new Set(effectiveSidebarSettings.groups.map((group) => group.id));
+		if (!existingIds.has(base)) {
+			return base;
+		}
+
+		let suffix = 2;
+		while (existingIds.has(`${base}-${suffix}`)) {
+			suffix += 1;
+		}
+		return `${base}-${suffix}`;
+	}
+
+	function updateSidebarDraft(update: (draft: SidebarSettings) => SidebarSettings) {
+		const draft = sidebarDraft ?? cloneSidebarSettings(sidebarSettings);
+		sidebarDraft = parseSidebarSettings(update(draft));
+		sidebarError = '';
+		settingsActionMessage = '';
+	}
+
+	function updateSidebarGroupLabel(groupId: string, label: string) {
+		updateSidebarDraft((draft) => ({
+			...draft,
+			groups: draft.groups.map((group) =>
+				group.id === groupId ? { ...group, label: label.slice(0, 32) } : group
+			)
+		}));
+	}
+
+	function addSidebarGroup() {
+		const label = newSidebarGroupLabel.trim().slice(0, 32);
+		const groupLabel = label || `Group ${effectiveSidebarSettings.groups.length + 1}`;
+		const groupId = sidebarGroupIdFromLabel(groupLabel);
+		updateSidebarDraft((draft) => ({
+			...draft,
+			rootItemIds: [...draft.rootItemIds, sidebarGroupRootId(groupId)],
+			groups: [
+				...draft.groups,
+				{
+					id: groupId,
+					label: groupLabel,
+					icon: 'tabler:folder',
+					itemIds: [],
+					separatorBeforeItemIds: []
+				}
+			]
+		}));
+		setSidebarGroupExpanded(groupId, true);
+		newSidebarGroupLabel = '';
+	}
+
+	function removeSidebarGroup(groupId: string) {
+		if (groupId === 'communications') {
+			sidebarError = 'The Communications group can be renamed or reordered, but not removed.';
+			return;
+		}
+		updateSidebarDraft((draft) => {
+			if (draft.groups.length <= 1) {
+				return draft;
+			}
+
+			const groupIndex = draft.groups.findIndex((group) => group.id === groupId);
+			if (groupIndex < 0) {
+				return draft;
+			}
+
+			const groups = draft.groups.map((group) => ({
+				...group,
+				itemIds: [...group.itemIds],
+				separatorBeforeItemIds: [...group.separatorBeforeItemIds]
+			}));
+			const [removedGroup] = groups.splice(groupIndex, 1);
+			if (!removedGroup) {
+				return draft;
+			}
+
+			let rootItemIds = draft.rootItemIds.filter((rootId) => sidebarGroupIdFromRootId(rootId) !== groupId);
+			const communicationsGroupIndex = groups.findIndex((group) => group.id === 'communications');
+			for (const itemId of removedGroup.itemIds) {
+				const communicationSectionId = parseCommunicationSidebarItemId(itemId);
+				if (communicationSectionId && communicationsGroupIndex >= 0) {
+					groups[communicationsGroupIndex] = {
+						...groups[communicationsGroupIndex],
+						itemIds: [...groups[communicationsGroupIndex].itemIds, itemId]
+					};
+				} else if (!communicationSectionId) {
+					rootItemIds = [...rootItemIds, itemId as SidebarRootItemId];
+				}
+			}
+
+			return { ...draft, rootItemIds, groups };
+		});
+		expandedSidebarGroupIds = expandedSidebarGroupIds.filter((id) => id !== groupId);
+	}
+
+	function moveSidebarGroup(groupId: string, direction: -1 | 1) {
+		updateSidebarDraft((draft) => {
+			const rootId = sidebarGroupRootId(groupId);
+			const rootIndex = draft.rootItemIds.indexOf(rootId);
+			const nextIndex = rootIndex + direction;
+			if (rootIndex < 0 || nextIndex < 0 || nextIndex >= draft.rootItemIds.length) {
+				return draft;
+			}
+
+			const rootItemIds = [...draft.rootItemIds];
+			[rootItemIds[rootIndex], rootItemIds[nextIndex]] = [rootItemIds[nextIndex], rootItemIds[rootIndex]];
+			return { ...draft, rootItemIds };
+		});
+	}
+
+	function moveSidebarRootItem(rootId: SidebarRootItemId, direction: -1 | 1) {
+		updateSidebarDraft((draft) => {
+			const rootIndex = draft.rootItemIds.indexOf(rootId);
+			const nextIndex = rootIndex + direction;
+			if (rootIndex < 0 || nextIndex < 0 || nextIndex >= draft.rootItemIds.length) {
+				return draft;
+			}
+			const rootItemIds = [...draft.rootItemIds];
+			[rootItemIds[rootIndex], rootItemIds[nextIndex]] = [rootItemIds[nextIndex], rootItemIds[rootIndex]];
+			return { ...draft, rootItemIds };
+		});
+	}
+
+	function moveSidebarItem(itemId: SidebarItemId, direction: -1 | 1) {
+		updateSidebarDraft((draft) => {
+			const groups = draft.groups.map((group) => ({
+				...group,
+				itemIds: [...group.itemIds],
+				separatorBeforeItemIds: [...group.separatorBeforeItemIds]
+			}));
+			const groupIndex = groups.findIndex((group) => group.itemIds.includes(itemId));
+			if (groupIndex < 0) {
+				return draft;
+			}
+
+			const itemIndex = groups[groupIndex].itemIds.indexOf(itemId);
+			const nextItemIndex = itemIndex + direction;
+			if (nextItemIndex >= 0 && nextItemIndex < groups[groupIndex].itemIds.length) {
+				[groups[groupIndex].itemIds[itemIndex], groups[groupIndex].itemIds[nextItemIndex]] = [
+					groups[groupIndex].itemIds[nextItemIndex],
+					groups[groupIndex].itemIds[itemIndex]
+				];
+				return { ...draft, groups };
+			}
+
+			const nextGroupIndex = groupIndex + direction;
+			if (nextGroupIndex < 0 || nextGroupIndex >= groups.length) {
+				return draft;
+			}
+
+			groups[groupIndex].itemIds = groups[groupIndex].itemIds.filter((id) => id !== itemId);
+			groups[groupIndex].separatorBeforeItemIds = groups[groupIndex].separatorBeforeItemIds.filter(
+				(id) => id !== itemId
+			);
+			if (direction < 0) {
+				groups[nextGroupIndex].itemIds = [...groups[nextGroupIndex].itemIds, itemId];
+			} else {
+				groups[nextGroupIndex].itemIds = [itemId, ...groups[nextGroupIndex].itemIds];
+			}
+			return { ...draft, groups };
+		});
+	}
+
+	function moveSidebarItemToGroup(itemId: SidebarItemId, targetGroupId: string) {
+		updateSidebarDraft((draft) => {
+			if (targetGroupId !== 'root' && !draft.groups.some((group) => group.id === targetGroupId)) {
+				return draft;
+			}
+
+			const groups = draft.groups.map((group) => ({
+				...group,
+				itemIds: group.itemIds.filter((id) => id !== itemId),
+				separatorBeforeItemIds: group.separatorBeforeItemIds.filter((id) => id !== itemId)
+			}));
+			const rootItemIds = draft.rootItemIds.filter((id) => id !== itemId);
+
+			if (targetGroupId === 'root') {
+				if (parseCommunicationSidebarItemId(itemId)) {
+					return draft;
+				}
+				return {
+					...draft,
+					rootItemIds: [...rootItemIds, itemId as SidebarRootItemId],
+					groups
+				};
+			}
+
+			return {
+				...draft,
+				rootItemIds,
+				groups: groups.map((group) =>
+					group.id === targetGroupId ? { ...group, itemIds: [...group.itemIds, itemId] } : group
+				)
+			};
+		});
+		if (targetGroupId !== 'root') {
+			setSidebarGroupExpanded(targetGroupId, true);
+		}
+	}
+
+	function toggleSidebarGroupSeparator(groupId: string, itemId: SidebarItemId) {
+		updateSidebarDraft((draft) => ({
+			...draft,
+			groups: draft.groups.map((group) => {
+				if (group.id !== groupId || group.itemIds.indexOf(itemId) <= 0) {
+					return group;
+				}
+
+				const hasSeparator = group.separatorBeforeItemIds.includes(itemId);
+				return {
+					...group,
+					separatorBeforeItemIds: hasSeparator
+						? group.separatorBeforeItemIds.filter((id) => id !== itemId)
+						: [...group.separatorBeforeItemIds, itemId]
+				};
+			})
+		}));
+	}
+
+	function toggleSidebarItemHidden(itemId: SidebarItemId) {
+		updateSidebarDraft((draft) => ({
+			...draft,
+			hiddenItemIds: draft.hiddenItemIds.includes(itemId)
+				? draft.hiddenItemIds.filter((id) => id !== itemId)
+				: [...draft.hiddenItemIds, itemId]
+		}));
+	}
+
+	function resetSidebarSettingsToDefault() {
+		sidebarDraft = defaultSidebarSettings();
+		sidebarError = '';
+		settingsActionMessage = '';
+	}
+
+	function cancelSidebarSettingsEditing() {
+		sidebarDraft = null;
+		sidebarError = '';
+		newSidebarGroupLabel = '';
+	}
+
+	async function saveSidebarSettings() {
+		const nextSettings = parseSidebarSettings(sidebarDraft ?? sidebarSettings);
+		isSidebarSettingsSaving = true;
+		savingSettingKey = 'frontend.sidebar';
+		try {
+			const updated = await saveFrontendSidebarSetting(apiBaseUrl, apiSecret, nextSettings);
+			applicationSettings = applicationSettings.some((item) => item.setting_key === updated.setting_key)
+				? applicationSettings.map((item) =>
+						item.setting_key === updated.setting_key ? updated : item
+					)
+				: [...applicationSettings, updated];
+			sidebarSettings = parseSidebarSettings(updated.value);
+			sidebarDraft = null;
+			settingDrafts = {
+				...settingDrafts,
+				[updated.setting_key]: settingDraftValue(updated)
+			};
+			sidebarError = '';
+			settingsError = '';
+			settingsActionMessage = 'Sidebar navigation saved';
+		} catch (error) {
+			sidebarError = error instanceof Error ? error.message : 'Unknown sidebar settings update error';
+			settingsError = sidebarError;
+		} finally {
+			isSidebarSettingsSaving = false;
+			savingSettingKey = null;
+		}
+	}
+
 	function startLayoutEditing() {
 		layoutDraft = cloneLayoutSettings(layoutSettings);
 		isLayoutEditing = true;
+		isUserMenuOpen = false;
 		layoutError = '';
 	}
 
@@ -2069,6 +2473,91 @@
 		isLayoutEditing = false;
 		isWidgetDrawerOpen = false;
 		layoutError = '';
+	}
+
+	function toggleUserMenu() {
+		isUserMenuOpen = !isUserMenuOpen;
+	}
+
+	function closeUserMenu() {
+		isUserMenuOpen = false;
+	}
+
+	function toggleNotificationsDrawer() {
+		isNotificationsDrawerOpen = !isNotificationsDrawerOpen;
+		if (isNotificationsDrawerOpen) {
+			isUserMenuOpen = false;
+		}
+	}
+
+	function closeNotificationsDrawer() {
+		isNotificationsDrawerOpen = false;
+	}
+
+	function dismissNotification(notificationId: string) {
+		if (!dismissedNotificationIds.includes(notificationId)) {
+			dismissedNotificationIds = [...dismissedNotificationIds, notificationId];
+		}
+	}
+
+	function toggleNotificationExpanded(notificationId: string) {
+		expandedNotificationIds = expandedNotificationIds.includes(notificationId)
+			? expandedNotificationIds.filter((id) => id !== notificationId)
+			: [...expandedNotificationIds, notificationId];
+	}
+
+	function isNotificationExpanded(notificationId: string) {
+		return expandedNotificationIds.includes(notificationId);
+	}
+
+	function notificationNeedsExpansion(notification: NotificationItem) {
+		return notification.body.length > 120;
+	}
+
+	async function openNotificationTarget(notification: NotificationItem) {
+		isNotificationsDrawerOpen = false;
+		const targetSection = notification.targetSection ?? (notification.source === 'telegram' ? 'telegram' : 'unified');
+		if (notification.isDemo) {
+			selectCommunicationSection(targetSection);
+			return;
+		}
+		if (notification.source === 'telegram') {
+			selectCommunicationSection(targetSection);
+			if (telegramChats.length === 0) {
+				await loadTelegramWorkspace();
+			}
+			const targetChat = telegramChats.find(
+				(chat) =>
+					chat.account_id === notification.accountId &&
+					chat.provider_chat_id === notification.providerChatId
+			);
+			if (targetChat) {
+				selectTelegramChat(targetChat);
+			} else if (notification.providerChatId) {
+				selectedTelegramChatId = notification.providerChatId;
+			}
+			return;
+		}
+
+		selectCommunicationSection(targetSection);
+		if (!notification.messageId) {
+			return;
+		}
+		const messageIndex = communicationMessages.findIndex(
+			(message) => message.message_id === notification.messageId
+		);
+		if (messageIndex >= 0) {
+			selectCommunication(messageIndex);
+		} else {
+			await loadCommunicationDetail(notification.messageId);
+		}
+	}
+
+	function exitApplication() {
+		isUserMenuOpen = false;
+		if (typeof window !== 'undefined') {
+			window.close();
+		}
 	}
 
 	function resetCurrentViewLayout() {
@@ -2085,7 +2574,7 @@
 	}
 
 	function ensureCurrentViewOverride() {
-		const preset = activeLayout?.preset ?? findPresetForView(currentView);
+		const preset = activeLayout?.preset ?? findPresetForView(activeWorkspaceView);
 		if (!preset) {
 			return null;
 		}
@@ -2115,7 +2604,7 @@
 
 	function updateCurrentViewOverride(update: (override: ViewLayoutOverride) => ViewLayoutOverride) {
 		const override = ensureCurrentViewOverride();
-		const layoutViewId = activeLayout?.preset.viewId ?? findPresetForView(currentView)?.viewId;
+		const layoutViewId = activeLayout?.preset.viewId ?? findPresetForView(activeWorkspaceView)?.viewId;
 		if (!override || !layoutDraft || !layoutViewId) {
 			return;
 		}
@@ -2441,10 +2930,74 @@
 		return 'tabler:file';
 	}
 
-	function setCurrentView(viewId: ViewId) {
+	function communicationSectionBadge(sectionId: CommunicationSectionId) {
+		if (sectionId === 'inbox') {
+			return mailboxHealth?.unread ? String(mailboxHealth.unread) : undefined;
+		}
+		if (sectionId === 'waiting') {
+			return mailboxHealth?.waiting ? String(mailboxHealth.waiting) : undefined;
+		}
+		if (sectionId === 'needs_reply') {
+			return mailboxHealth?.needs_action ? String(mailboxHealth.needs_action) : undefined;
+		}
+		return undefined;
+	}
+
+	function communicationSectionWorkflowState(sectionId: CommunicationSectionId): WorkflowState | '' | null {
+		switch (sectionId) {
+			case 'inbox':
+				return 'new';
+			case 'waiting':
+				return 'waiting';
+			case 'needs_reply':
+				return 'needs_action';
+			case 'unified':
+			case 'mail':
+				return '';
+			default:
+				return null;
+		}
+	}
+
+	function selectCommunicationSection(sectionId: CommunicationSectionId) {
+		currentView = 'communications';
+		activeCommunicationSection = sectionId;
+		if (!isSidebarRail) {
+			setSidebarGroupExpanded('communications', true);
+		}
+		activeSidebarRailGroupId = null;
+		isWidgetDrawerOpen = false;
+
+		const workflowState = communicationSectionWorkflowState(sectionId);
+		if (workflowState !== null) {
+			mailStateFilter = workflowState;
+			void loadCommunicationMessagesFiltered(workflowState || undefined);
+		}
+	}
+
+	function toggleSidebarRail() {
+		isSidebarRail = !isSidebarRail;
+		activeSidebarRailGroupId = null;
+		if (!isSidebarRail && currentView === 'communications') {
+			setSidebarGroupExpanded('communications', true);
+		}
+	}
+
+	function setCurrentView(viewId: AppViewId) {
 		currentView = viewId;
 		isWidgetDrawerOpen = false;
-		searchQuery = '';
+		activeSidebarRailGroupId = null;
+		if (viewId === 'communications') {
+			if (!isSidebarRail) {
+				setSidebarGroupExpanded('communications', true);
+			}
+			const workflowState = communicationSectionWorkflowState(activeCommunicationSection);
+			if (workflowState !== null) {
+				mailStateFilter = workflowState;
+				void loadCommunicationMessagesFiltered(workflowState || undefined);
+			}
+			return;
+		}
 	}
 
 	function setView(item: NavItem) {
@@ -3968,7 +4521,7 @@
 	<meta name="description" content="Hermes Hub desktop personal OS dashboard." />
 </svelte:head>
 
-<main class="desktop-shell view-{currentView}">
+<main class="desktop-shell view-{activeWorkspaceView}" class:sidebar-rail={isSidebarRail}>
 	{#if !isVaultReady}
 		<section class="vault-onboarding" aria-label="Secure vault onboarding" onmousemove={handleVaultEntropyMove}>
 			<div class="vault-panel">
@@ -4037,103 +4590,265 @@
 			</div>
 		</section>
 	{/if}
-	<aside class="sidebar" aria-label="Hermes Hub navigation">
+	<aside class="sidebar" class:rail={isSidebarRail} aria-label="Hermes Hub navigation">
 		<div class="brand">
-			<img src="/assets/hermes-logo-mark.png" alt="" class="brand-mark" />
-			<div>
+			<button
+				type="button"
+				class="brand-mark-button"
+				aria-label={isSidebarRail ? 'Expand sidebar' : 'Collapse sidebar'}
+				aria-pressed={isSidebarRail}
+				title={isSidebarRail ? 'Expand sidebar' : 'Collapse sidebar'}
+				onclick={toggleSidebarRail}
+			>
+				<img src="/assets/hermes-logo-mark.png" alt="" class="brand-mark" />
+			</button>
+			<div class="brand-copy">
 				<p class="brand-name">Hermes Hub</p>
 				<p class="brand-subtitle">Personal OS</p>
 			</div>
 		</div>
 
-		<nav class="nav-group" aria-label="Primary">
-			{#each primaryNav as item}
-				<button
-					type="button"
-					class:active={currentView === item.id}
-					class:disabled={!item.enabled}
-					disabled={!item.enabled}
-					title={item.enabled ? item.label : `${item.label} is not available in the current desktop scope`}
-					onclick={() => setView(item)}
-				>
-					<Icon icon={item.icon} width="18" height="18" />
-					<span>{item.label}</span>
-					{#if item.badge}
-						<em>{item.badge}</em>
-					{/if}
-				</button>
+		<nav class="nav-group primary-nav" aria-label="Primary workspaces">
+			{#each sidebarRootEntries as entry, entryIndex}
+				{#if entry.kind === 'item'}
+					{@const item = entry.item}
+					<div class="nav-entry">
+						<button
+							type="button"
+							class:active={isSidebarItemActive(item)}
+							class:disabled={isSidebarItemDisabled(item)}
+							disabled={isSidebarItemDisabled(item)}
+							aria-current={isSidebarItemActive(item) ? 'page' : undefined}
+							title={sidebarItemTitle(item)}
+							onclick={() => selectSidebarItem(item)}
+						>
+							<Icon icon={sidebarItemIcon(item)} width="18" height="18" />
+							<span>{sidebarItemLabel(item)}</span>
+							{#if sidebarItemBadge(item)}
+								<em>{sidebarItemBadge(item)}</em>
+							{/if}
+						</button>
+					</div>
+				{:else}
+					{@const group = entry.group}
+					<div class="nav-entry">
+						<button
+							type="button"
+							class:active={sidebarGroupHasActiveItem(group)}
+							class:has-subnav={true}
+							aria-current={sidebarGroupHasActiveItem(group) ? 'page' : undefined}
+							aria-expanded={isSidebarRail ? activeSidebarRailGroupId === group.id : isSidebarGroupExpanded(group.id)}
+							aria-controls={`sidebar-group-${group.id}-sections`}
+							aria-haspopup={isSidebarRail ? 'menu' : undefined}
+							title={sidebarGroupLabel(group, entryIndex)}
+							onclick={() => toggleSidebarGroup(group)}
+						>
+							<Icon icon={group.icon} width="18" height="18" />
+							<span>{sidebarGroupLabel(group, entryIndex)}</span>
+							{#if !isSidebarRail}
+								<Icon class="nav-disclosure" icon={isSidebarGroupExpanded(group.id) ? 'tabler:chevron-up' : 'tabler:chevron-down'} width="15" height="15" />
+							{/if}
+						</button>
+						{#if activeSidebarRailGroupId === group.id && isSidebarRail}
+							<div
+								id={`sidebar-group-${group.id}-sections`}
+								class="communications-rail-dropdown"
+								aria-label={`${sidebarGroupLabel(group, entryIndex)} sections`}
+							>
+								{#each group.items as item}
+									{#if sidebarGroupHasSeparatorBefore(group, item.itemId)}
+										<div class="subnav-separator" aria-hidden="true"></div>
+									{/if}
+									<button
+										type="button"
+										class="subnav-item"
+										class:active={isSidebarItemActive(item)}
+										aria-current={isSidebarItemActive(item) ? 'page' : undefined}
+										title={sidebarItemTitle(item)}
+										disabled={isSidebarItemDisabled(item)}
+										onclick={() => selectSidebarItem(item)}
+									>
+										<Icon icon={sidebarItemIcon(item)} width="16" height="16" />
+										<span>{sidebarItemLabel(item)}</span>
+										{#if sidebarItemBadge(item)}
+											<em>{sidebarItemBadge(item)}</em>
+										{/if}
+									</button>
+								{/each}
+							</div>
+						{/if}
+						{#if isSidebarGroupExpanded(group.id) && !isSidebarRail}
+							<div
+								id={`sidebar-group-${group.id}-sections`}
+								class="communications-subnav"
+								aria-label={`${sidebarGroupLabel(group, entryIndex)} sections`}
+							>
+								{#each group.items as item}
+									{#if sidebarGroupHasSeparatorBefore(group, item.itemId)}
+										<div class="subnav-separator" aria-hidden="true"></div>
+									{/if}
+									<button
+										type="button"
+										class="subnav-item"
+										class:active={isSidebarItemActive(item)}
+										aria-current={isSidebarItemActive(item) ? 'page' : undefined}
+										title={sidebarItemTitle(item)}
+										disabled={isSidebarItemDisabled(item)}
+										onclick={() => selectSidebarItem(item)}
+									>
+										<Icon icon={sidebarItemIcon(item)} width="16" height="16" />
+										<span>{sidebarItemLabel(item)}</span>
+										{#if sidebarItemBadge(item)}
+											<em>{sidebarItemBadge(item)}</em>
+										{/if}
+									</button>
+								{/each}
+							</div>
+						{/if}
+					</div>
+				{/if}
 			{/each}
 		</nav>
 
-		<div class="nav-separator"></div>
-
-		<section class="shortcuts" aria-label="Shortcuts">
-			<p>Shortcuts</p>
-			<nav class="nav-group">
-				{#each activeShortcuts as item}
-					<button type="button" class="shortcut" disabled title={`${item.label} shortcut is not implemented yet`}>
-						<Icon icon={item.icon} width="18" height="18" />
-						<span>{item.label}</span>
-						{#if item.badge}
-							<em>{item.badge}</em>
-						{/if}
-					</button>
-				{/each}
-			</nav>
-		</section>
-
-		<div class="profile-card">
-			<img src="/assets/hermes-reference-avatar.png" alt="Alex Morgan" />
-			<div>
-				<strong>Alex Morgan</strong>
-				<span>Focus Mode</span>
-			</div>
-			<Icon icon="tabler:chevron-down" width="16" height="16" />
-		</div>
-
-		<div class="sidebar-tools" aria-label="Settings shortcuts">
-			<button type="button" class:active={currentView === 'settings'} title="Open settings" onclick={() => setCurrentView('settings')}>
+		<div class="sidebar-tools" aria-label="System navigation">
+			<button type="button" class="settings-link" class:active={currentView === 'settings'} title="Open settings" onclick={() => setCurrentView('settings')}>
 				<Icon icon="tabler:settings" width="18" height="18" />
-			</button>
-			<button type="button" disabled title="Help is not available yet">
-				<Icon icon="tabler:help-circle" width="18" height="18" />
-			</button>
-			<button type="button" disabled title="Apps are not available yet">
-				<Icon icon="tabler:layout-grid" width="18" height="18" />
+				<span>Settings</span>
 			</button>
 		</div>
 	</aside>
 
-	<section class="workspace" aria-label={`${activeView.title} workspace`}>
+	{#if isSidebarRail && activeSidebarRailGroupId !== null}
+		<button
+			type="button"
+			class="sidebar-rail-dropdown-backdrop"
+			aria-label="Close sidebar menu"
+			onclick={closeSidebarRailDropdown}
+		></button>
+	{/if}
+
+	<section class="workspace" class:layout-editing={isLayoutEditing} aria-label={`${activeView.title} workspace`}>
 		<header class="topbar">
-			<label class="search-box">
-				<Icon icon="tabler:search" width="18" height="18" />
-				<input bind:value={searchQuery} placeholder={activeView.search} aria-label={activeView.search} />
-				<span class="kbd">⌘ K</span>
-			</label>
+			<div class="topbar-title">
+				<h1>{activeView.title}</h1>
+				<p>{activeView.subtitle}</p>
+			</div>
 			<div class="top-actions">
-				<button type="button" disabled>
-					<Icon icon="tabler:terminal-2" width="16" height="16" />
-					Command Palette
-					<span class="kbd">⌘ P</span>
-				</button>
-				<button type="button" class="icon-button" disabled title="Notifications are not implemented yet">
+				<button
+					type="button"
+					class="icon-button"
+					class:active={isNotificationsDrawerOpen}
+					aria-label="Open notifications"
+					aria-expanded={isNotificationsDrawerOpen}
+					aria-controls="notifications-drawer"
+					title="Open notifications"
+					onclick={toggleNotificationsDrawer}
+				>
 					<Icon icon="tabler:bell" width="18" height="18" />
-					<i>2</i>
+					{#if notificationItems.length > 0}
+						<i>{notificationItems.length}</i>
+					{/if}
 				</button>
-				<button type="button" class="avatar-button" onclick={() => openAccountDrawer('mail')} title="Open account setup">
-					<img src="/assets/hermes-logo-mark.png" alt="" />
-				</button>
+				<div class="user-menu-shell">
+					<button
+						type="button"
+						class="menu-button"
+						aria-haspopup="menu"
+						aria-expanded={isUserMenuOpen}
+						aria-controls="user-menu"
+						onclick={toggleUserMenu}
+						title="Open user menu"
+					>
+						<Icon icon="tabler:menu-2" width="20" height="20" />
+					</button>
+					{#if isUserMenuOpen}
+						<button type="button" class="user-menu-backdrop" aria-label="Close user menu" onclick={closeUserMenu}></button>
+						<div id="user-menu" class="user-menu" role="menu" aria-label="User menu">
+							<button type="button" role="menuitem" onclick={startLayoutEditing} disabled={isLayoutEditing}>
+								<Icon icon="tabler:layout-dashboard" width="16" height="16" />
+								<span>Constructor Mode</span>
+							</button>
+							<div class="user-menu-separator" role="separator"></div>
+							<button type="button" role="menuitem" onclick={exitApplication}>
+								<Icon icon="tabler:logout" width="16" height="16" />
+								<span>Exit</span>
+							</button>
+						</div>
+					{/if}
+				</div>
 			</div>
 		</header>
 
-		<div class="layout-edit-controls" role="group" aria-label="Widget layout controls">
-			{#if !isLayoutEditing}
-				<button type="button" class="ghost-button" onclick={startLayoutEditing}>
-					<Icon icon="tabler:layout-dashboard" width="16" height="16" />
-					Edit Layout
-				</button>
-			{:else}
+		{#if isNotificationsDrawerOpen}
+			<button
+				type="button"
+				class="notifications-backdrop"
+				aria-label="Close notifications"
+				onclick={closeNotificationsDrawer}
+			></button>
+			<aside id="notifications-drawer" class="notifications-drawer" aria-label="Notifications">
+				<header>
+					<div>
+						<h2>Notifications</h2>
+						<p>{notificationItems.length} active</p>
+					</div>
+					<button type="button" class="icon-button" aria-label="Close notifications" onclick={closeNotificationsDrawer}>
+						<Icon icon="tabler:x" width="18" height="18" />
+					</button>
+				</header>
+				{#if notificationItems.length === 0}
+					<div class="notifications-empty">
+						<Icon icon="tabler:bell-check" width="28" height="28" />
+						<p>No active notifications.</p>
+					</div>
+				{:else}
+					<div class="notifications-list">
+						{#each notificationItems as notification}
+							<article>
+								<button
+									type="button"
+									class="notification-target"
+									onclick={() => void openNotificationTarget(notification)}
+								>
+									<span class="round-icon cyan">
+										<Icon icon={notification.icon} width="18" height="18" />
+									</span>
+									<span>
+										<strong>{notification.title}</strong>
+										<small>{notification.meta} · {formatDateTime(notification.time)}</small>
+										<em class:expanded={isNotificationExpanded(notification.id)}>{notification.body}</em>
+									</span>
+								</button>
+								{#if notificationNeedsExpansion(notification)}
+									<button
+										type="button"
+										class="notification-expand"
+										aria-expanded={isNotificationExpanded(notification.id)}
+										onclick={() => toggleNotificationExpanded(notification.id)}
+									>
+										{isNotificationExpanded(notification.id) ? 'Show less' : 'Show full text'}
+									</button>
+								{/if}
+								<button
+									type="button"
+									class="notification-dismiss"
+									aria-label={`Dismiss ${notification.title}`}
+									onclick={(event) => {
+										event.stopPropagation();
+										dismissNotification(notification.id);
+									}}
+								>
+									<Icon icon="tabler:trash" width="16" height="16" />
+								</button>
+							</article>
+						{/each}
+					</div>
+				{/if}
+			</aside>
+		{/if}
+
+		{#if isLayoutEditing}
+			<div class="layout-edit-controls" role="group" aria-label="Widget layout controls">
 				<button type="button" class="ghost-button" onclick={() => (isWidgetDrawerOpen = true)}>
 					<Icon icon="tabler:plus" width="16" height="16" />
 					Add widget
@@ -4141,19 +4856,12 @@
 				<button type="button" class="ghost-button" onclick={cancelLayoutEditing}>Cancel</button>
 				<button type="button" class="ghost-button" onclick={resetCurrentViewLayout}>Reset</button>
 				<button type="button" class="primary-button" disabled>Save</button>
-			{/if}
-		</div>
+			</div>
+		{/if}
 
 		{#if currentView === 'home'}
 			<section class="home-page">
 				<div class="hero-row">
-					<div class="greeting">
-						<div class="hero-mark"><img src="/assets/hermes-logo-mark.png" alt="" /></div>
-						<div>
-							<h1>{activeView.title}</h1>
-							<p>{activeView.subtitle}</p>
-						</div>
-					</div>
 					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-metrics" data-widget-hidden={!isWidgetVisible('home-metrics')}>
 						{@render widgetEditChrome('home-metrics')}
 						<div class="metric-grid home-metrics">
@@ -4302,7 +5010,7 @@
 					</section>
 				</div>
 			</section>
-		{:else if currentView === 'communications'}
+		{:else if isCommunicationMessagesSection}
 			<section class="communications-page">
 				<div class="view-header">
 					<div>
@@ -4316,10 +5024,10 @@
 					</div>
 				</div>
 				<div class="filter-tabs">
-					<button type="button" class:active={mailStateFilter === ''} onclick={() => { mailStateFilter = ''; void loadCommunicationMessagesFiltered(); }}>All <em>{communicationMessages.length}</em></button>
-					<button type="button" class:active={mailStateFilter === 'needs_action'} onclick={() => { mailStateFilter = 'needs_action'; void loadCommunicationMessagesFiltered('needs_action'); }}>Needs Action <em>{mailStateCounts.find(c => c.state === 'needs_action')?.count ?? 0}</em></button>
-					<button type="button" class:active={mailStateFilter === 'waiting'} onclick={() => { mailStateFilter = 'waiting'; void loadCommunicationMessagesFiltered('waiting'); }}>Waiting <em>{mailStateCounts.find(c => c.state === 'waiting')?.count ?? 0}</em></button>
-					<button type="button" class:active={mailStateFilter === 'new'} onclick={() => { mailStateFilter = 'new'; void loadCommunicationMessagesFiltered('new'); }}>New <em>{mailStateCounts.find(c => c.state === 'new')?.count ?? 0}</em></button>
+					<button type="button" class:active={mailStateFilter === ''} onclick={() => selectCommunicationSection('unified')}>Unified <em>{communicationMessages.length}</em></button>
+					<button type="button" class:active={mailStateFilter === 'needs_action'} onclick={() => selectCommunicationSection('needs_reply')}>Needs Reply <em>{mailStateCounts.find(c => c.state === 'needs_action')?.count ?? 0}</em></button>
+					<button type="button" class:active={mailStateFilter === 'waiting'} onclick={() => selectCommunicationSection('waiting')}>Waiting <em>{mailStateCounts.find(c => c.state === 'waiting')?.count ?? 0}</em></button>
+					<button type="button" class:active={mailStateFilter === 'new'} onclick={() => selectCommunicationSection('inbox')}>Inbox <em>{mailStateCounts.find(c => c.state === 'new')?.count ?? 0}</em></button>
 					<button type="button" class:active={mailStateFilter === 'done'} onclick={() => { mailStateFilter = 'done'; void loadCommunicationMessagesFiltered('done'); }}>Done <em>{mailStateCounts.find(c => c.state === 'done')?.count ?? 0}</em></button>
 					<button type="button" class:active={mailStateFilter === 'archived'} onclick={() => { mailStateFilter = 'archived'; void loadCommunicationMessagesFiltered('archived'); }}>Archived <em>{mailStateCounts.find(c => c.state === 'archived')?.count ?? 0}</em></button>
 				</div>
@@ -4481,6 +5189,25 @@
 					</div>
 				{/if}
 			</section>
+		{:else if activeCommunicationEmptySection}
+			<section class="communications-page communication-empty-page">
+				<div class="view-header">
+					<div class="view-title-with-icon">
+						<span class="hero-mark small"><Icon icon={activeCommunicationEmptySection.icon} width="28" height="28" /></span>
+						<div>
+							<h1>{activeCommunicationEmptySection.label}</h1>
+							<p>This Communications workspace is ready in navigation, but no data contract is implemented yet.</p>
+						</div>
+					</div>
+				</div>
+				<section class="panel communication-empty-panel">
+					<Icon icon={activeCommunicationEmptySection.icon} width="42" height="42" />
+					<div>
+						<h2>{activeCommunicationEmptySection.label}</h2>
+						<p>Hermes Hub will keep this as a second-level Communications context. It is intentionally empty until a scoped backend and UI slice defines real records for this workspace.</p>
+					</div>
+				</section>
+			</section>
 		{:else if currentView === 'persons'}
 			<section class="persons-page">
 				<div class="persons-layout">
@@ -4507,6 +5234,7 @@
 						</section>
 					</div>
 					<section class="person-detail">
+						{#if selectedPerson}
 						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-hero" data-widget-hidden={!isWidgetVisible('persons-hero')}>
 							{@render widgetEditChrome('persons-hero')}
 							<header class="person-hero panel">
@@ -4558,6 +5286,15 @@
 								<section class="panel info-card"><h2>Active Projects</h2>{#each projects.slice(0, 3) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
 							</div>
 						</div>
+						{:else}
+							<section class="panel empty-domain-state">
+								<Icon icon="tabler:user" width="42" height="42" />
+								<div>
+									<h2>No person selected</h2>
+									<p>Hermes Hub will show relationship memory here after persons are imported from local sources.</p>
+								</div>
+							</section>
+						{/if}
 					</section>
 					<aside class="stacked-rail">
 						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-ai-summary" data-widget-hidden={!isWidgetVisible('persons-ai-summary')}>
@@ -5212,7 +5949,7 @@
 					</aside>
 				</div>
 			</section>
-
+		{:else if currentView === 'documents'}
 			<section class="documents-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:file-text" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
@@ -5739,7 +6476,7 @@
 					</div>
 				{/if}
 			</section>
-		{:else if currentView === 'telegram'}
+		{:else if currentView === 'communications' && activeCommunicationSection === 'telegram'}
 			<section class="telegram-page communications-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-telegram" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
@@ -6028,7 +6765,7 @@
 					</div>
 				{/if}
 			</section>
-		{:else if currentView === 'whatsapp'}
+		{:else if currentView === 'communications' && activeCommunicationSection === 'whatsapp'}
 			<section class="whatsapp-page communications-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-whatsapp" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
@@ -6261,6 +6998,9 @@
 					<button type="button" class:active={selectedSettingsSection === 'application'} onclick={() => (selectedSettingsSection = 'application')}>
 						<Icon icon="tabler:adjustments-horizontal" width="16" height="16" />Application
 					</button>
+					<button type="button" class:active={selectedSettingsSection === 'sidebar'} onclick={() => (selectedSettingsSection = 'sidebar')}>
+						<Icon icon="tabler:layout-sidebar" width="16" height="16" />Sidebar
+					</button>
 					<button type="button" class:active={selectedSettingsSection === 'accounts'} onclick={() => (selectedSettingsSection = 'accounts')}>
 						<Icon icon="tabler:users" width="16" height="16" />Accounts <em>{providerAccounts.length}</em>
 					</button>
@@ -6361,6 +7101,238 @@
 									</ul>
 								</section>
 							</div>
+						</aside>
+					</div>
+				{:else if selectedSettingsSection === 'sidebar'}
+					<div class="settings-layout sidebar-settings-layout">
+						<section class="panel settings-list-panel sidebar-settings-panel">
+							<header class="panel-title-row">
+								<div>
+									<h2>Sidebar Navigation</h2>
+									<p>Configure workspace groups, order and hidden domains. Communications sources stay inside Communications.</p>
+								</div>
+								<div class="sidebar-settings-actions">
+									<button type="button" onclick={cancelSidebarSettingsEditing} disabled={!sidebarSettingsHasChanges() || isSidebarSettingsSaving}>
+										<Icon icon="tabler:arrow-back-up" width="16" height="16" />Cancel
+									</button>
+									<button type="button" onclick={resetSidebarSettingsToDefault} disabled={isSidebarSettingsSaving}>
+										<Icon icon="tabler:restore" width="16" height="16" />Default
+									</button>
+									<button type="button" class="primary-button" onclick={() => void saveSidebarSettings()} disabled={!sidebarSettingsHasChanges() || isSidebarSettingsSaving}>
+										<Icon icon="tabler:device-floppy" width="16" height="16" />{isSidebarSettingsSaving ? 'Saving' : 'Save'}
+									</button>
+								</div>
+							</header>
+
+							{#if sidebarError}
+								<p class="inline-error">{sidebarError}</p>
+							{/if}
+
+							<form class="sidebar-group-create" onsubmit={(event) => { event.preventDefault(); addSidebarGroup(); }}>
+								<label>
+									<span>New group</span>
+									<input bind:value={newSidebarGroupLabel} placeholder="Focus, Library, Planning" autocomplete="off" />
+								</label>
+								<button type="submit">
+									<Icon icon="tabler:plus" width="16" height="16" />Create Group
+								</button>
+							</form>
+
+							<div class="sidebar-config-list">
+								<section class="sidebar-config-group">
+									<header>
+										<label>
+											<span>Root level</span>
+											<input value="Sidebar root" disabled autocomplete="off" />
+										</label>
+									</header>
+
+									<div class="sidebar-config-items">
+										{#each effectiveSidebarSettings.rootItemIds as rootId, rootIndex}
+											{@const groupId = sidebarGroupIdFromRootId(rootId)}
+											{#if groupId}
+												{@const group = effectiveSidebarSettings.groups.find((item) => item.id === groupId)}
+												{#if group}
+													<div class="sidebar-config-item group-node">
+														<div class="sidebar-config-item-main">
+															<span class="round-icon green"><Icon icon={group.icon} width="18" height="18" /></span>
+															<div>
+																<strong>{sidebarGroupLabel(group, rootIndex)}</strong>
+																<small>Expandable group · {group.itemIds.length} items</small>
+															</div>
+														</div>
+														<div class="sidebar-config-item-controls">
+															<button type="button" aria-label={`Move ${sidebarGroupLabel(group, rootIndex)} up`} title="Move group up" onclick={() => moveSidebarGroup(group.id, -1)} disabled={rootIndex === 0}>
+																<Icon icon="tabler:arrow-up" width="16" height="16" />
+															</button>
+															<button type="button" aria-label={`Move ${sidebarGroupLabel(group, rootIndex)} down`} title="Move group down" onclick={() => moveSidebarGroup(group.id, 1)} disabled={rootIndex === effectiveSidebarSettings.rootItemIds.length - 1}>
+																<Icon icon="tabler:arrow-down" width="16" height="16" />
+															</button>
+															<button type="button" aria-label={`Remove ${sidebarGroupLabel(group, rootIndex)} group`} title="Remove group" onclick={() => removeSidebarGroup(group.id)} disabled={group.id === 'communications'}>
+																<Icon icon="tabler:trash" width="16" height="16" />
+															</button>
+														</div>
+													</div>
+												{/if}
+											{:else}
+												{@const item = sidebarConfigItem(rootId as SidebarItemId)}
+												{#if item}
+													{@const isHidden = effectiveSidebarSettings.hiddenItemIds.includes(item.id)}
+													<div class="sidebar-config-item" class:hidden={isHidden}>
+														<div class="sidebar-config-item-main">
+															<span class="round-icon cyan"><Icon icon={item.icon} width="18" height="18" /></span>
+															<div>
+																<strong>{item.label}</strong>
+																<small>{isHidden ? 'Hidden from sidebar' : 'Root domain'}</small>
+															</div>
+														</div>
+														<div class="sidebar-config-item-controls">
+															<select aria-label={`Move ${item.label}`} value="root" onchange={(event) => moveSidebarItemToGroup(item.id, inputEventValue(event))}>
+																<option value="root">Root level</option>
+																{#each effectiveSidebarSettings.groups as targetGroup, targetIndex}
+																	<option value={targetGroup.id}>{sidebarGroupLabel(targetGroup, targetIndex)}</option>
+																{/each}
+															</select>
+															<button type="button" aria-label={`Move ${item.label} up`} title="Move item up" onclick={() => moveSidebarRootItem(rootId, -1)} disabled={rootIndex === 0}>
+																<Icon icon="tabler:arrow-up" width="16" height="16" />
+															</button>
+															<button type="button" aria-label={`Move ${item.label} down`} title="Move item down" onclick={() => moveSidebarRootItem(rootId, 1)} disabled={rootIndex === effectiveSidebarSettings.rootItemIds.length - 1}>
+																<Icon icon="tabler:arrow-down" width="16" height="16" />
+															</button>
+															<button type="button" class:active={!isHidden} aria-pressed={!isHidden} onclick={() => toggleSidebarItemHidden(item.id)}>
+																<Icon icon={isHidden ? 'tabler:eye' : 'tabler:eye-off'} width="16" height="16" />{isHidden ? 'Show' : 'Hide'}
+															</button>
+														</div>
+													</div>
+												{/if}
+											{/if}
+										{/each}
+									</div>
+								</section>
+
+								{#each effectiveSidebarSettings.groups as group, groupIndex}
+									<section class="sidebar-config-group">
+										<header>
+											<label>
+												<span>Group label</span>
+												<input
+													value={group.label}
+													placeholder={groupIndex === 0 ? 'Primary' : `Group ${groupIndex + 1}`}
+													autocomplete="off"
+													oninput={(event) => updateSidebarGroupLabel(group.id, inputEventValue(event))}
+												/>
+											</label>
+											<div class="sidebar-config-group-actions">
+												<button type="button" aria-label={`Move ${sidebarGroupLabel(group, groupIndex)} group up`} title="Move group up" onclick={() => moveSidebarGroup(group.id, -1)} disabled={sidebarRootIndexForGroup(group.id) <= 0}>
+													<Icon icon="tabler:arrow-up" width="16" height="16" />
+												</button>
+												<button type="button" aria-label={`Move ${sidebarGroupLabel(group, groupIndex)} group down`} title="Move group down" onclick={() => moveSidebarGroup(group.id, 1)} disabled={sidebarRootIndexForGroup(group.id) === effectiveSidebarSettings.rootItemIds.length - 1}>
+													<Icon icon="tabler:arrow-down" width="16" height="16" />
+												</button>
+												<button type="button" aria-label={`Remove ${sidebarGroupLabel(group, groupIndex)} group`} title="Remove group" onclick={() => removeSidebarGroup(group.id)} disabled={group.id === 'communications'}>
+													<Icon icon="tabler:trash" width="16" height="16" />
+												</button>
+											</div>
+										</header>
+
+										<div class="sidebar-config-items">
+											{#if group.itemIds.length === 0}
+												<div class="empty-panel">No items in this group.</div>
+											{:else}
+												{#each group.itemIds as itemId, itemIndex}
+													{@const item = sidebarConfigItem(itemId)}
+													{#if item}
+														{@const isHidden = effectiveSidebarSettings.hiddenItemIds.includes(item.id)}
+														{@const hasSeparator = sidebarGroupHasSeparatorBefore(group, item.id)}
+														<div class="sidebar-config-item" class:hidden={isHidden}>
+															<div class="sidebar-config-item-main">
+																<span class="round-icon cyan"><Icon icon={item.icon} width="18" height="18" /></span>
+																<div>
+																	<strong>{item.label}</strong>
+																	<small>{isHidden ? 'Hidden from sidebar' : 'Visible domain'}</small>
+																</div>
+															</div>
+															<div class="sidebar-config-item-controls">
+																<select aria-label={`Move ${item.label} to group`} value={group.id} onchange={(event) => moveSidebarItemToGroup(item.id, inputEventValue(event))}>
+																	{#if !parseCommunicationSidebarItemId(item.id)}
+																		<option value="root">Root level</option>
+																	{/if}
+																	{#each effectiveSidebarSettings.groups as targetGroup, targetIndex}
+																		<option value={targetGroup.id}>{sidebarGroupLabel(targetGroup, targetIndex)}</option>
+																	{/each}
+																</select>
+																<button type="button" aria-label={`Move ${item.label} up`} title="Move item up" onclick={() => moveSidebarItem(item.id, -1)}>
+																	<Icon icon="tabler:arrow-up" width="16" height="16" />
+																</button>
+																<button type="button" aria-label={`Move ${item.label} down`} title="Move item down" onclick={() => moveSidebarItem(item.id, 1)}>
+																	<Icon icon="tabler:arrow-down" width="16" height="16" />
+																</button>
+																<button
+																	type="button"
+																	class="separator-toggle"
+																	class:active={hasSeparator}
+																	aria-pressed={hasSeparator}
+																	aria-label={hasSeparator ? `Remove divider before ${item.label}` : `Add divider before ${item.label}`}
+																	title={hasSeparator ? `Remove divider before ${item.label}` : `Add divider before ${item.label}`}
+																	onclick={() => toggleSidebarGroupSeparator(group.id, item.id)}
+																	disabled={itemIndex === 0}
+																>
+																	<Icon icon="tabler:separator-horizontal" width="16" height="16" />Divider
+																</button>
+																<button type="button" class:active={!isHidden} aria-pressed={!isHidden} onclick={() => toggleSidebarItemHidden(item.id)}>
+																	<Icon icon={isHidden ? 'tabler:eye' : 'tabler:eye-off'} width="16" height="16" />{isHidden ? 'Show' : 'Hide'}
+																</button>
+															</div>
+														</div>
+													{/if}
+												{/each}
+											{/if}
+										</div>
+									</section>
+								{/each}
+							</div>
+						</section>
+
+						<aside class="stacked-rail settings-rail sidebar-settings-summary">
+							<section class="panel info-card">
+								<h2>Preview</h2>
+								<ul class="sidebar-preview-list">
+									{#each sidebarRootEntries as entry, entryIndex}
+										<li>
+											{#if entry.kind === 'group'}
+												<strong>{sidebarGroupLabel(entry.group, entryIndex)}</strong>
+												<span>{entry.group.items.map((item) => sidebarItemLabel(item)).join(', ') || 'Empty group'}</span>
+											{:else}
+												<strong>{sidebarItemLabel(entry.item)}</strong>
+												<span>Root domain</span>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							</section>
+
+							<section class="panel info-card">
+								<h2>Hidden</h2>
+								{#if sidebarHiddenNavItems.length === 0}
+									<p>No domains are hidden.</p>
+								{:else}
+									<ul class="detail-list">
+										{#each sidebarHiddenNavItems as item}
+											<li>{item.label}<button type="button" onclick={() => toggleSidebarItemHidden(item.id)}>Show</button></li>
+										{/each}
+									</ul>
+								{/if}
+							</section>
+
+							<section class="panel info-card">
+								<h2>Rules</h2>
+								<ul class="detail-list">
+									<li>Default keeps the current sidebar order<em>Preset</em></li>
+									<li>Communications sources stay nested<em>Context</em></li>
+									<li>Hidden domains stay recoverable here<em>Safe</em></li>
+									<li>Settings store no message content<em>Privacy</em></li>
+								</ul>
+							</section>
 						</aside>
 					</div>
 				{:else}
@@ -6688,7 +7660,7 @@
 				</div>
 			</section>
 
-		{:else}
+		{:else if currentView === 'timeline'}
 			<section class="timeline-page">
 				<div class="view-header"><div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:timeline-event" width="28" height="28" /></span><div><h1>Timeline</h1><p>Chronological activity across connected sources.</p></div></div></div>
 				<div class="timeline-layout">

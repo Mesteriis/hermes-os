@@ -1,4 +1,4 @@
-import type { LayoutSettings } from '$lib/layout';
+import type { LayoutSettings, SidebarSettings } from '$lib/layout';
 
 export type V1Status = {
 	version: string;
@@ -61,6 +61,7 @@ export type ApplicationSettingsResponse = {
 };
 
 export const FRONTEND_LAYOUT_SETTING_KEY = 'frontend.layout';
+export const FRONTEND_SIDEBAR_SETTING_KEY = 'frontend.sidebar';
 
 export type ProviderAccount = {
 	account_id: string;
@@ -1233,12 +1234,24 @@ export function findFrontendLayoutSetting(settings: ApplicationSetting[]): Appli
 	return settings.find((setting) => setting.setting_key === FRONTEND_LAYOUT_SETTING_KEY) ?? null;
 }
 
+export function findFrontendSidebarSetting(settings: ApplicationSetting[]): ApplicationSetting | null {
+	return settings.find((setting) => setting.setting_key === FRONTEND_SIDEBAR_SETTING_KEY) ?? null;
+}
+
 export async function saveFrontendLayoutSetting(
 	baseUrl: string,
 	apiSecret: string,
 	value: LayoutSettings
 ): Promise<ApplicationSetting> {
 	return saveApplicationSetting(baseUrl, apiSecret, FRONTEND_LAYOUT_SETTING_KEY, value);
+}
+
+export async function saveFrontendSidebarSetting(
+	baseUrl: string,
+	apiSecret: string,
+	value: SidebarSettings
+): Promise<ApplicationSetting> {
+	return saveApplicationSetting(baseUrl, apiSecret, FRONTEND_SIDEBAR_SETTING_KEY, value);
 }
 
 export async function fetchProviderAccounts(

@@ -8,9 +8,10 @@
 	--hh-supported-min-height: 600px;
 	--hh-shell-min-width: var(--hh-supported-min-width);
 	--hh-shell-min-height: var(--hh-supported-min-height);
-	--hh-shell-sidebar-width: clamp(176px, 17vw, 224px);
+	--hh-shell-sidebar-width: 224px;
 	--hh-shell-content-min-width: 0px;
-	--hh-shell-sidebar-width-compact: 176px;
+	--hh-shell-sidebar-width-compact: 208px;
+	--hh-shell-sidebar-width-rail: 64px;
 	--hh-shell-content-min-width-compact: 0px;
 
 	--hh-color-bg: #02090b;

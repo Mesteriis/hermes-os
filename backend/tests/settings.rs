@@ -52,6 +52,11 @@ async fn application_settings_store_lists_seeded_settings_against_postgres() {
     assert!(
         settings
             .iter()
+            .any(|setting| setting.setting_key == "frontend.sidebar")
+    );
+    assert!(
+        settings
+            .iter()
             .any(|setting| setting.setting_key == "ui.theme")
     );
     assert!(
@@ -92,6 +97,55 @@ async fn application_settings_include_frontend_layout_against_postgres() {
     assert_eq!(layout_setting.value["schemaVersion"], json!(1));
     assert!(layout_setting.value["views"].is_object());
     assert!(layout_setting.is_editable);
+}
+
+#[tokio::test]
+async fn application_settings_include_frontend_sidebar_against_postgres() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live frontend sidebar settings test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let store = ApplicationSettingsStore::new(database.pool().expect("configured pool").clone());
+    store
+        .repair_declared_settings()
+        .await
+        .expect("repair settings");
+
+    let settings = store.list_settings().await.expect("list settings");
+
+    let sidebar_setting = settings
+        .iter()
+        .find(|setting| setting.setting_key == "frontend.sidebar")
+        .expect("frontend sidebar setting");
+
+    assert_eq!(sidebar_setting.category, "frontend");
+    assert_eq!(sidebar_setting.value_kind, SettingValueKind::Json);
+    assert_eq!(sidebar_setting.metadata["schema_version"], json!(2));
+    assert!(sidebar_setting.value["groups"].is_array());
+    assert!(sidebar_setting.value["hiddenItemIds"].is_array());
+    if sidebar_setting.value["schemaVersion"] == json!(2) {
+        assert!(sidebar_setting.value["rootItemIds"].is_array());
+        assert_eq!(
+            sidebar_setting.value["rootItemIds"][1],
+            json!("group:communications")
+        );
+        assert_eq!(
+            sidebar_setting.value["groups"][0]["itemIds"][0],
+            json!("communications.unified")
+        );
+        assert_eq!(
+            sidebar_setting.value["groups"][0]["separatorBeforeItemIds"][0],
+            json!("communications.mail")
+        );
+    }
+    assert!(sidebar_setting.is_editable);
 }
 
 #[tokio::test]

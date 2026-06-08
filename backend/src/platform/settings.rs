@@ -316,6 +316,59 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             is_editable: true,
         },
         DeclaredApplicationSetting {
+            setting_key: "frontend.sidebar",
+            category: "frontend",
+            value_kind: SettingValueKind::Json,
+            default_value: json!({
+                "schemaVersion": 2,
+                "rootItemIds": [
+                    "home",
+                    "group:communications",
+                    "timeline",
+                    "persons",
+                    "projects",
+                    "tasks",
+                    "calendar",
+                    "documents",
+                    "notes",
+                    "knowledge",
+                    "agents"
+                ],
+                "groups": [
+                    {
+                        "id": "communications",
+                        "label": "Communications",
+                        "icon": "tabler:messages",
+                        "itemIds": [
+                            "communications.unified",
+                            "communications.inbox",
+                            "communications.waiting",
+                            "communications.needs_reply",
+                            "communications.mentions",
+                            "communications.mail",
+                            "communications.telegram",
+                            "communications.whatsapp",
+                            "communications.calls",
+                            "communications.meetings"
+                        ],
+                        "separatorBeforeItemIds": [
+                            "communications.mail"
+                        ]
+                    }
+                ],
+                "hiddenItemIds": []
+            }),
+            label: "Frontend sidebar",
+            description: "Desktop sidebar grouping, item order and hidden workspace metadata. Stores navigation preferences only, never message bodies, document text or secrets.",
+            metadata: json!({
+                "ui_control": "json",
+                "schema_version": 2,
+                "stores_private_content": false,
+                "restart_required": false
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
             setting_key: "ai.ollama_base_url",
             category: "ai",
             value_kind: SettingValueKind::String,

@@ -4,20 +4,22 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 const views = [
-	['home', 'Home'],
-	['communications', 'Communications'],
-	['timeline', 'Timeline'],
-	['contacts', 'Contacts'],
-	['projects', 'Projects'],
-	['tasks', 'Tasks'],
-	['calendar', 'Calendar'],
-	['documents', 'Documents'],
-	['notes', 'Notes'],
-	['knowledge-graph', 'Knowledge Graph'],
-	['telegram', 'Telegram'],
-	['whatsapp', 'WhatsApp'],
-	['ai-agents', 'AI Agents'],
-	['settings', 'Settings']
+	{ id: 'home', label: 'Home', kind: 'primary' },
+	{ id: 'communications', label: 'Communications', kind: 'primary' },
+	{ id: 'communications-mail', label: 'Mail', kind: 'communication-section' },
+	{ id: 'communications-telegram', label: 'Telegram', kind: 'communication-section' },
+	{ id: 'communications-whatsapp', label: 'WhatsApp', kind: 'communication-section' },
+	{ id: 'communications-calls', label: 'Calls', kind: 'communication-section' },
+	{ id: 'timeline', label: 'Timeline', kind: 'primary' },
+	{ id: 'persons', label: 'Persons', kind: 'primary' },
+	{ id: 'projects', label: 'Projects', kind: 'primary' },
+	{ id: 'tasks', label: 'Tasks', kind: 'primary' },
+	{ id: 'calendar', label: 'Calendar', kind: 'primary' },
+	{ id: 'documents', label: 'Documents', kind: 'primary' },
+	{ id: 'notes', label: 'Notes', kind: 'primary' },
+	{ id: 'knowledge-graph', label: 'Knowledge Graph', kind: 'primary' },
+	{ id: 'ai-agents', label: 'AI Agents', kind: 'primary' },
+	{ id: 'settings', label: 'Settings', kind: 'settings' }
 ];
 
 const viewports = [
@@ -46,8 +48,28 @@ const browser = await chromium.launch();
 const results = [];
 const failures = [];
 
+const layoutStatusFixture = {
+	version: 'layout-capture',
+	surfaces: {
+		messages: true,
+		persons: true,
+		search: true,
+		documents: true,
+		account_setup: true
+	},
+	vault_status: {
+		state: 'locked',
+		needs_entropy: false,
+		needs_biometric: false,
+		needs_recovery: false,
+		version: 1,
+		recoverable: true,
+		entropy_progress: 100
+	}
+};
+
 async function getPrimaryNavButton(page, label) {
-	const primaryNav = page.locator('nav[aria-label="Primary"]');
+	const primaryNav = page.locator('nav[aria-label="Primary workspaces"]');
 	const button = primaryNav.getByRole('button').filter({ hasText: label });
 	const count = await button.count();
 	if (count !== 1) {
@@ -60,6 +82,54 @@ async function getPrimaryNavButton(page, label) {
 		);
 	}
 	return button;
+}
+
+async function openPrimaryView(page, label) {
+	const button = await getPrimaryNavButton(page, label);
+	await button.click();
+}
+
+async function openCommunicationSection(page, label) {
+	const subnav = page.locator('#communications-sidebar-sections');
+	if (!(await subnav.isVisible().catch(() => false))) {
+		await openPrimaryView(page, 'Communications');
+	}
+	await subnav.waitFor({ state: 'visible' });
+	const button = subnav.getByRole('button').filter({ hasText: label });
+	const count = await button.count();
+	if (count !== 1) {
+		const subnavLabels = await subnav.getByRole('button').evaluateAll((buttons) =>
+			buttons.map((navButton) => (navButton.textContent ?? '').trim().replace(/\s+/g, ' '))
+		);
+		throw new Error(
+			`Expected exactly one Communications section button containing visible text "${label}", found ${count}. ` +
+				`Communications buttons: ${subnavLabels.length > 0 ? subnavLabels.join(', ') : '(none)'}`
+		);
+	}
+	await button.click();
+}
+
+async function openSettings(page) {
+	const button = page.locator('.sidebar-tools').getByRole('button').filter({ hasText: 'Settings' });
+	const count = await button.count();
+	if (count !== 1) {
+		throw new Error(`Expected one Settings button in sidebar tools, found ${count}.`);
+	}
+	await button.click();
+}
+
+async function openView(page, view) {
+	if (view.kind === 'communication-section') {
+		await openCommunicationSection(page, view.label);
+		return;
+	}
+
+	if (view.kind === 'settings') {
+		await openSettings(page);
+		return;
+	}
+
+	await openPrimaryView(page, view.label);
 }
 
 async function getViewportGuardDisplay(page, context) {
@@ -80,6 +150,16 @@ function trackConsoleIssues(page, consoleIssues) {
 	});
 }
 
+async function installLayoutCaptureRoutes(page) {
+	await page.route('**/api/v1/status', async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify(layoutStatusFixture)
+		});
+	});
+}
+
 async function captureViewport(viewport) {
 	const viewportDir = path.join(outputDir, viewport.id);
 	await mkdir(viewportDir, { recursive: true });
@@ -87,14 +167,15 @@ async function captureViewport(viewport) {
 	const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height } });
 	const consoleIssues = [];
 	trackConsoleIssues(page, consoleIssues);
+	await installLayoutCaptureRoutes(page);
 
 	try {
-		await page.goto(url, { waitUntil: 'networkidle' });
+		await page.goto(url, { waitUntil: 'domcontentloaded' });
+		await page.locator('nav[aria-label="Primary workspaces"]').waitFor({ state: 'visible' });
 
-		for (const [id, label] of views) {
-			const button = await getPrimaryNavButton(page, label);
-			await button.click();
-			await page.waitForTimeout(100);
+		for (const view of views) {
+			await openView(page, view);
+			await page.waitForTimeout(650);
 			const layoutState = await page.evaluate(() => {
 				const tokenNumber = (name, fallback) => {
 					const probe = document.createElement('div');
@@ -233,14 +314,14 @@ async function captureViewport(viewport) {
 				h1: layoutState.h1,
 				bodyScrollWidth: layoutState.bodyScrollWidth,
 				documentScrollWidth: layoutState.documentScrollWidth,
-				guardDisplay: await getViewportGuardDisplay(page, `capturing ${label} view state at ${viewport.id}`),
+				guardDisplay: await getViewportGuardDisplay(page, `capturing ${view.label} view state at ${viewport.id}`),
 				outliers: layoutState.outliers,
 				widgetFrameMetrics: layoutState.widgetFrameMetrics,
 				layoutColumnMetrics: layoutState.layoutColumnMetrics
 			};
-			const screenshotPath = path.join(viewportDir, `${id}.png`);
+			const screenshotPath = path.join(viewportDir, `${view.id}.png`);
 			await page.screenshot({ path: screenshotPath, fullPage: false });
-			results.push({ type: 'view', viewport, id, label, screenshotPath, state });
+			results.push({ type: 'view', viewport, id: view.id, label: view.label, screenshotPath, state });
 
 			if (
 				state.bodyScrollWidth > viewport.width + 1 ||
@@ -250,7 +331,7 @@ async function captureViewport(viewport) {
 				failures.push({
 					type: 'horizontal-overflow',
 					viewport: viewport.id,
-					view: id,
+					view: view.id,
 					bodyScrollWidth: state.bodyScrollWidth,
 					documentScrollWidth: state.documentScrollWidth,
 					outliers: state.outliers
@@ -260,7 +341,7 @@ async function captureViewport(viewport) {
 				failures.push({
 					type: 'non-modular-widget-heights',
 					viewport: viewport.id,
-					view: id,
+					view: view.id,
 					widgets: state.widgetFrameMetrics.nonModularHeights
 				});
 			}
@@ -272,12 +353,34 @@ async function captureViewport(viewport) {
 					failures.push({
 						type: 'desktop-column-spread',
 						viewport: viewport.id,
-						view: id,
+						view: view.id,
 						tolerance: desktopColumnSpreadTolerance,
 						layouts: spreadOutliers
 					});
 				}
 			}
+		}
+
+		await openPrimaryView(page, 'Home');
+		await page.getByRole('button', { name: 'Collapse sidebar' }).click();
+		await page.waitForTimeout(100);
+		const railState = await page.evaluate(() => {
+			const sidebar = document.querySelector('.sidebar');
+			const subnav = document.querySelector('#communications-sidebar-sections');
+			return {
+				isRail: sidebar?.classList.contains('rail') ?? false,
+				sidebarWidth: sidebar ? Math.round(sidebar.getBoundingClientRect().width) : null,
+				hasVisibleSubnav:
+					subnav !== null &&
+					getComputedStyle(subnav).display !== 'none' &&
+					subnav.getBoundingClientRect().height > 0
+			};
+		});
+		const railScreenshotPath = path.join(viewportDir, 'rail-home.png');
+		await page.screenshot({ path: railScreenshotPath, fullPage: false });
+		results.push({ type: 'rail', viewport, screenshotPath: railScreenshotPath, state: railState });
+		if (!railState.isRail || railState.sidebarWidth !== 64 || railState.hasVisibleSubnav) {
+			failures.push({ type: 'rail-mode', viewport: viewport.id, state: railState });
 		}
 
 		results.push({ type: 'console', viewport, issues: consoleIssues });
@@ -288,8 +391,10 @@ async function captureViewport(viewport) {
 
 async function captureViewportGuard() {
 	const page = await browser.newPage({ viewport: { width: 800, height: 600 } });
+	await installLayoutCaptureRoutes(page);
 	try {
-		await page.goto(url, { waitUntil: 'networkidle' });
+		await page.goto(url, { waitUntil: 'domcontentloaded' });
+		await page.locator('nav[aria-label="Primary workspaces"]').waitFor({ state: 'visible' });
 
 		await page.setViewportSize({ width: 799, height: 600 });
 		await page.waitForTimeout(50);
