@@ -12,8 +12,12 @@ use hermes_hub_backend::domains::mail::core::{
     CommunicationProviderKind, ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::secrets::SecretKind;
+use hermes_hub_backend::platform::secrets::{
+    DatabaseEncryptedSecretVault, ResolvedSecret, SecretKind, SecretReferenceStore, SecretResolver,
+    SecretStoreKind,
+};
 use hermes_hub_backend::platform::storage::Database;
+use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "telegram-api-test-secret";
 
@@ -78,6 +82,11 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     assert_eq!(capabilities_response.status(), StatusCode::OK);
     let capabilities_body = json_body(capabilities_response).await;
     assert_eq!(capabilities_body["runtime_mode"], json!("fixture"));
+    assert_eq!(
+        capabilities_body["telegram_app_credentials_configured"],
+        json!(false)
+    );
+    assert_eq!(capabilities_body["qr_login_ready"], json!(false));
     assert_capability_status(
         &capabilities_body,
         "telegram_fixture_runtime",
@@ -369,6 +378,280 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
             .expect("transcript text")
             .contains("follow up")
     );
+}
+
+#[tokio::test]
+async fn telegram_live_account_setup_stores_bot_token_in_database_vault() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-bot-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_SECRET_VAULT_KEY", "telegram-live-account-test-key"),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/accounts",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "telegram_bot",
+                "display_name": "Telegram Bot",
+                "external_account_id": format!("@hermes_bot_{suffix}"),
+                "bot_token": "123456:telegram-bot-token",
+                "transcription_enabled": false
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("account response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["account_id"], json!(account_id));
+    assert_eq!(body["provider_kind"], json!("telegram_bot"));
+    assert_eq!(body["runtime"], json!("live_blocked"));
+    assert_eq!(
+        body["credential_bindings"][0]["secret_purpose"],
+        json!("telegram_bot_token")
+    );
+    assert_eq!(
+        body["credential_bindings"][0]["secret_kind"],
+        json!("api_token")
+    );
+    assert_eq!(
+        body["credential_bindings"][0]["store_kind"],
+        json!("database_encrypted_vault")
+    );
+
+    let account = sqlx::query(
+        "SELECT provider_kind, config FROM communication_provider_accounts WHERE account_id = $1",
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider account");
+    let provider_kind: String = account.try_get("provider_kind").expect("provider kind");
+    let config: Value = account.try_get("config").expect("config");
+    assert_eq!(provider_kind, "telegram_bot");
+    assert_eq!(config["runtime"], json!("live_blocked"));
+    assert_eq!(config["transcription_enabled"], json!(false));
+    assert!(config.get("bot_token").is_none());
+    assert!(config.get("api_hash").is_none());
+
+    let secret_ref = body["credential_bindings"][0]["secret_ref"]
+        .as_str()
+        .expect("secret ref");
+    let secret_store = SecretReferenceStore::new(pool.clone());
+    let reference = secret_store
+        .secret_reference(secret_ref)
+        .await
+        .expect("secret reference query")
+        .expect("secret reference exists");
+    assert_eq!(reference.secret_kind, SecretKind::ApiToken);
+    assert_eq!(
+        reference.store_kind,
+        SecretStoreKind::DatabaseEncryptedVault
+    );
+    assert_eq!(reference.metadata["provider"], json!("telegram_bot"));
+    assert_eq!(reference.metadata["account_id"], json!(account_id));
+
+    let vault = DatabaseEncryptedSecretVault::new(
+        pool.clone(),
+        ResolvedSecret::new("telegram-live-account-test-key").expect("vault key"),
+    );
+    assert_eq!(
+        vault
+            .resolve(&reference)
+            .await
+            .expect("resolve bot token")
+            .expose_for_runtime(),
+        "123456:telegram-bot-token"
+    );
+}
+
+#[tokio::test]
+async fn telegram_live_account_setup_api_requires_configured_database() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
+        Database::disabled(),
+    );
+
+    let response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/accounts",
+            json!({
+                "account_id": "telegram-no-db",
+                "provider_kind": "telegram_bot",
+                "display_name": "Telegram No DB",
+                "external_account_id": "@telegram_no_db",
+                "bot_token": "123456:telegram-bot-token"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("account response");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], json!("database_not_configured"));
+}
+
+#[tokio::test]
+async fn telegram_capabilities_report_qr_login_readiness_inputs() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            (
+                "HERMES_TDJSON_PATH",
+                "/tmp/hermes-hub-test-missing-libtdjson.dylib",
+            ),
+            ("HERMES_TELEGRAM_API_ID", "12345"),
+            ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
+        ])
+        .expect("config"),
+        Database::disabled(),
+    );
+
+    let response = app
+        .oneshot(get_request_with_token(
+            "/api/v1/telegram/capabilities",
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("capabilities response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["telegram_app_credentials_configured"], json!(true));
+    assert_eq!(body["tdjson_runtime_available"], json!(false));
+    assert_eq!(body["qr_login_ready"], json!(false));
+    assert_capability_status(&body, "tdlib_live_runtime", "blocked", false);
+}
+
+#[tokio::test]
+async fn telegram_qr_login_start_reports_tdlib_runtime_unavailable() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            (
+                "HERMES_TDJSON_PATH",
+                "/tmp/hermes-hub-test-missing-libtdjson.dylib",
+            ),
+        ])
+        .expect("config"),
+        Database::disabled(),
+    );
+
+    let response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/login/qr/start",
+            json!({
+                "account_id": "telegram-qr",
+                "display_name": "Telegram QR",
+                "external_account_id": "qr-login:telegram-qr",
+                "api_id": 12345,
+                "api_hash": "telegram-api-hash",
+                "session_encryption_key": "telegram-session-key",
+                "tdlib_data_path": "docker/data/telegram/telegram-qr",
+                "transcription_enabled": true
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("QR login response");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], json!("telegram_tdlib_runtime_unavailable"));
+}
+
+#[tokio::test]
+async fn telegram_qr_login_start_uses_configured_app_credentials_when_payload_omits_them() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            (
+                "HERMES_TDJSON_PATH",
+                "/tmp/hermes-hub-test-missing-libtdjson.dylib",
+            ),
+            ("HERMES_TELEGRAM_API_ID", "12345"),
+            ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
+        ])
+        .expect("config"),
+        Database::disabled(),
+    );
+
+    let response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/login/qr/start",
+            json!({
+                "account_id": "telegram-qr-configured",
+                "display_name": "Telegram QR Configured",
+                "external_account_id": "qr-login:telegram-qr-configured",
+                "session_encryption_key": "telegram-session-key",
+                "tdlib_data_path": "docker/data/telegram/telegram-qr-configured",
+                "transcription_enabled": true
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("QR login response");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], json!("telegram_tdlib_runtime_unavailable"));
+}
+
+#[tokio::test]
+async fn telegram_qr_login_status_unknown_setup_returns_json_not_found() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
+        Database::disabled(),
+    );
+
+    let response = app
+        .oneshot(get_request_with_token(
+            "/api/v1/telegram/login/qr/missing-setup",
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("QR status response");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], json!("telegram_qr_login_not_found"));
+}
+
+#[tokio::test]
+async fn telegram_qr_login_password_unknown_setup_returns_json_not_found() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
+        Database::disabled(),
+    );
+
+    let response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/login/qr/missing-setup/password",
+            json!({ "password": "test-password" }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("QR password response");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], json!("telegram_qr_login_not_found"));
 }
 
 fn assert_capability_status(body: &Value, capability: &str, status: &str, closure_gate: bool) {

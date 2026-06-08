@@ -57,11 +57,64 @@ make frontend-install
 make frontend-dev
 make frontend-check
 make frontend-build
+make tdlib-macos-resource
+make backend-sidecar-macos
 make frontend-tauri-dev
 make frontend-tauri-build
 ```
 
 For the normal full-stack development loop, use `make dev` from the repository root. It starts PostgreSQL, the backend auto-restart watcher, and this frontend with Vite HMR. The default frontend URL is `http://127.0.0.1:5174`; override it with `HERMES_FRONTEND_PORT` in `docker/.env` when needed.
+
+## Bundled TDLib Runtime
+
+macOS release builds package the Telegram TDLib JSON runtime from
+`frontend/src-tauri/resources/tdlib/`. Generated `libtdjson.dylib` files are not
+committed; prepare the resource before `tauri build`:
+
+```sh
+make tdlib-macos-resource
+make frontend-tauri-build
+```
+
+`make tdlib-macos-resource` copies `libtdjson.dylib` from, in order:
+
+1. `HERMES_TDJSON_SOURCE`
+2. `HERMES_TDJSON_PATH`
+3. Homebrew `tdlib`
+4. `/opt/homebrew/lib/libtdjson.dylib`
+5. `/usr/local/lib/libtdjson.dylib`
+
+Release CI can build TDLib from source instead of relying on a system install:
+
+```sh
+HERMES_TDLIB_BUILD_FROM_SOURCE=1 make tdlib-macos-resource
+```
+
+The backend still accepts `HERMES_TDJSON_PATH` as a development override, but a
+packaged macOS app should resolve TDLib from the bundled Tauri resource path.
+Linux is supported only as a development/container target and is not packaged as
+a desktop TDLib bundle.
+
+Telegram QR login also needs Telegram app credentials. Development runs can set
+`HERMES_TELEGRAM_API_ID` and `HERMES_TELEGRAM_API_HASH` in the backend
+environment. Packaged macOS builds can inject them into the Tauri launcher with
+`HERMES_BUNDLED_TELEGRAM_API_ID` and `HERMES_BUNDLED_TELEGRAM_API_HASH`; the
+launcher forwards those values to the backend sidecar as runtime
+`HERMES_TELEGRAM_API_ID` and `HERMES_TELEGRAM_API_HASH`.
+
+## Bundled Backend Sidecar
+
+macOS release builds package the Rust backend as a Tauri sidecar from
+`frontend/src-tauri/binaries/`. Generated sidecar binaries are not committed;
+prepare the current host binary before `tauri build`:
+
+```sh
+make backend-sidecar-macos
+make frontend-tauri-build
+```
+
+`make frontend-tauri-build` runs both `backend-sidecar-macos` and
+`tdlib-macos-resource` before invoking Tauri.
 
 ## Backend Dependency
 

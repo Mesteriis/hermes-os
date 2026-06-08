@@ -1,3 +1,4 @@
 [workspace]
 resolver = "2"
 members = ["backend", "crates/testkit"]
+exclude = ["frontend/src-tauri"]

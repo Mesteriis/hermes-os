@@ -16,6 +16,7 @@ fn default_config_binds_to_localhost_without_database_url() {
     assert_eq!(config.local_api_secret(), None);
     assert_eq!(config.secret_vault_path(), None);
     assert_eq!(config.secret_vault_key(), None);
+    assert_eq!(config.tdjson_path(), None);
 }
 
 #[test]
@@ -86,6 +87,43 @@ fn config_from_pairs_accepts_ollama_runtime_overrides() {
 }
 
 #[test]
+fn config_from_pairs_accepts_tdjson_runtime_path() {
+    let config =
+        AppConfig::from_pairs([("HERMES_TDJSON_PATH", "/opt/homebrew/lib/libtdjson.dylib")])
+            .expect("valid TDLib JSON runtime config");
+
+    assert_eq!(
+        config.tdjson_path(),
+        Some(Path::new("/opt/homebrew/lib/libtdjson.dylib"))
+    );
+}
+
+#[test]
+fn config_from_pairs_accepts_telegram_app_credentials() {
+    let config = AppConfig::from_pairs([
+        ("HERMES_TELEGRAM_API_ID", "12345"),
+        ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
+    ])
+    .expect("valid Telegram app credential config");
+
+    assert_eq!(config.telegram_api_id(), Some(12345));
+    assert_eq!(
+        config
+            .telegram_api_hash()
+            .expect("Telegram API hash")
+            .expose_for_runtime(),
+        "telegram-api-hash"
+    );
+    assert_eq!(
+        format!(
+            "{:?}",
+            config.telegram_api_hash().expect("Telegram API hash")
+        ),
+        "ResolvedSecret { value: \"<redacted>\" }"
+    );
+}
+
+#[test]
 fn default_config_uses_local_ollama_and_qwen_models() {
     let config = AppConfig::default();
 
@@ -133,6 +171,29 @@ fn config_from_pairs_rejects_empty_secret_vault_key() {
         .expect_err("empty secret vault key must fail");
 
     assert!(matches!(error, ConfigError::EmptySecretVaultKey));
+}
+
+#[test]
+fn config_from_pairs_rejects_empty_tdjson_path() {
+    let error = AppConfig::from_pairs([("HERMES_TDJSON_PATH", "   ")])
+        .expect_err("empty TDLib JSON runtime path must fail");
+
+    assert!(matches!(error, ConfigError::EmptyTdjsonPath));
+}
+
+#[test]
+fn config_from_pairs_rejects_invalid_telegram_app_credentials() {
+    let error = AppConfig::from_pairs([("HERMES_TELEGRAM_API_ID", "0")])
+        .expect_err("zero Telegram API ID must fail");
+    assert!(matches!(error, ConfigError::InvalidTelegramApiId { .. }));
+
+    let error = AppConfig::from_pairs([("HERMES_TELEGRAM_API_ID", "not-a-number")])
+        .expect_err("non-numeric Telegram API ID must fail");
+    assert!(matches!(error, ConfigError::InvalidTelegramApiId { .. }));
+
+    let error = AppConfig::from_pairs([("HERMES_TELEGRAM_API_HASH", "   ")])
+        .expect_err("empty Telegram API hash must fail");
+    assert!(matches!(error, ConfigError::EmptyTelegramApiHash));
 }
 
 #[test]

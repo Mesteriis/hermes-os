@@ -8,13 +8,27 @@ use thiserror::Error;
 
 use crate::domains::mail::core::{
     CommunicationIngestionError, CommunicationIngestionStore, CommunicationProviderKind,
-    NewProviderAccount, NewRawCommunicationRecord,
+    NewProviderAccount, NewProviderAccountSecretBinding, NewRawCommunicationRecord,
+    ProviderAccountSecretPurpose,
 };
 use crate::domains::mail::messages::{
     MessageProjectionError, MessageProjectionStore, NewProjectedMessage,
 };
+use crate::platform::secrets::{
+    DatabaseEncryptedSecretVault, DatabaseEncryptedVaultError, NewSecretReference, SecretKind,
+    SecretReferenceError, SecretReferenceStore, SecretStoreKind,
+};
 
 const TELEGRAM_MESSAGE_RECORD_KIND: &str = "telegram_message";
+
+struct TelegramCredentialWrite<'a> {
+    account_id: &'a str,
+    provider_kind: CommunicationProviderKind,
+    secret_purpose: ProviderAccountSecretPurpose,
+    secret_kind: SecretKind,
+    label: &'a str,
+    value: String,
+}
 
 #[derive(Clone)]
 pub struct TelegramStore {
@@ -58,6 +72,166 @@ impl TelegramStore {
             provider_kind: stored_account.provider_kind.as_str().to_owned(),
             runtime: "fixture".to_owned(),
             transcription_enabled: request.transcription_enabled,
+            credential_bindings: vec![],
+        })
+    }
+
+    pub async fn setup_live_blocked_account(
+        &self,
+        secret_store: &SecretReferenceStore,
+        vault: &DatabaseEncryptedSecretVault,
+        request: &TelegramLiveAccountSetupRequest,
+    ) -> Result<TelegramAccountSetupResponse, TelegramError> {
+        request.validate()?;
+        let provider_kind = request.provider_kind;
+        if !provider_kind.is_telegram() {
+            return Err(TelegramError::InvalidRequest(
+                "provider_kind must be telegram_user or telegram_bot".to_owned(),
+            ));
+        }
+
+        let mut config = json!({
+            "runtime": "live_blocked",
+            "transcription_enabled": request.transcription_enabled,
+        });
+        if let Some(object) = config.as_object_mut() {
+            if let Some(tdlib_data_path) = request
+                .tdlib_data_path
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                object.insert("tdlib_data_path".to_owned(), json!(tdlib_data_path));
+            }
+            if let Some(api_id) = request.api_id {
+                object.insert("api_id".to_owned(), json!(api_id));
+            }
+        }
+
+        let stored_account = CommunicationIngestionStore::new(self.pool.clone())
+            .upsert_provider_account(
+                &NewProviderAccount::new(
+                    &request.account_id,
+                    provider_kind,
+                    &request.display_name,
+                    &request.external_account_id,
+                )
+                .config(config),
+            )
+            .await?;
+
+        let mut credential_bindings = Vec::new();
+        match provider_kind {
+            CommunicationProviderKind::TelegramUser => {
+                credential_bindings.push(
+                    self.store_account_credential(
+                        secret_store,
+                        vault,
+                        TelegramCredentialWrite {
+                            account_id: &request.account_id,
+                            provider_kind,
+                            secret_purpose: ProviderAccountSecretPurpose::TelegramApiHash,
+                            secret_kind: SecretKind::ApiToken,
+                            label: "Telegram API hash",
+                            value: required_optional_value(
+                                "api_hash",
+                                request.api_hash.as_deref(),
+                            )?,
+                        },
+                    )
+                    .await?,
+                );
+                if let Some(session_encryption_key) = request
+                    .session_encryption_key
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
+                    credential_bindings.push(
+                        self.store_account_credential(
+                            secret_store,
+                            vault,
+                            TelegramCredentialWrite {
+                                account_id: &request.account_id,
+                                provider_kind,
+                                secret_purpose: ProviderAccountSecretPurpose::TelegramSessionKey,
+                                secret_kind: SecretKind::Other,
+                                label: "Telegram session encryption key",
+                                value: session_encryption_key.to_owned(),
+                            },
+                        )
+                        .await?,
+                    );
+                }
+            }
+            CommunicationProviderKind::TelegramBot => {
+                credential_bindings.push(
+                    self.store_account_credential(
+                        secret_store,
+                        vault,
+                        TelegramCredentialWrite {
+                            account_id: &request.account_id,
+                            provider_kind,
+                            secret_purpose: ProviderAccountSecretPurpose::TelegramBotToken,
+                            secret_kind: SecretKind::ApiToken,
+                            label: "Telegram bot token",
+                            value: required_optional_value(
+                                "bot_token",
+                                request.bot_token.as_deref(),
+                            )?,
+                        },
+                    )
+                    .await?,
+                );
+            }
+            _ => unreachable!("validated provider kind must be Telegram"),
+        }
+
+        Ok(TelegramAccountSetupResponse {
+            account_id: stored_account.account_id,
+            provider_kind: stored_account.provider_kind.as_str().to_owned(),
+            runtime: "live_blocked".to_owned(),
+            transcription_enabled: request.transcription_enabled,
+            credential_bindings,
+        })
+    }
+
+    async fn store_account_credential(
+        &self,
+        secret_store: &SecretReferenceStore,
+        vault: &DatabaseEncryptedSecretVault,
+        credential: TelegramCredentialWrite<'_>,
+    ) -> Result<TelegramCredentialBinding, TelegramError> {
+        let secret_ref = telegram_secret_ref(credential.account_id, credential.secret_purpose);
+        secret_store
+            .upsert_secret_reference(
+                &NewSecretReference::new(
+                    &secret_ref,
+                    credential.secret_kind,
+                    SecretStoreKind::DatabaseEncryptedVault,
+                    format!("{} for {}", credential.label, credential.account_id),
+                )
+                .metadata(json!({
+                    "provider": credential.provider_kind.as_str(),
+                    "account_id": credential.account_id,
+                    "secret_purpose": credential.secret_purpose.as_str()
+                })),
+            )
+            .await?;
+        vault.store_secret(&secret_ref, &credential.value).await?;
+        CommunicationIngestionStore::new(self.pool.clone())
+            .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+                credential.account_id,
+                credential.secret_purpose,
+                &secret_ref,
+            ))
+            .await?;
+
+        Ok(TelegramCredentialBinding {
+            secret_purpose: credential.secret_purpose.as_str().to_owned(),
+            secret_ref,
+            secret_kind: credential.secret_kind,
+            store_kind: SecretStoreKind::DatabaseEncryptedVault,
         })
     }
 
@@ -340,12 +514,184 @@ impl TelegramAccountSetupRequest {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct TelegramLiveAccountSetupRequest {
+    pub account_id: String,
+    pub provider_kind: CommunicationProviderKind,
+    pub display_name: String,
+    pub external_account_id: String,
+    pub api_id: Option<i64>,
+    pub api_hash: Option<String>,
+    pub bot_token: Option<String>,
+    pub session_encryption_key: Option<String>,
+    pub tdlib_data_path: Option<String>,
+    #[serde(default)]
+    pub transcription_enabled: bool,
+}
+
+impl TelegramLiveAccountSetupRequest {
+    pub(crate) fn with_app_credentials(
+        mut self,
+        api_id: Option<i64>,
+        api_hash: Option<String>,
+    ) -> Self {
+        if self.api_id.is_none() {
+            self.api_id = api_id;
+        }
+        if self
+            .api_hash
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            self.api_hash = api_hash;
+        }
+        self
+    }
+
+    fn validate(&self) -> Result<(), TelegramError> {
+        validate_non_empty("account_id", &self.account_id)?;
+        validate_non_empty("display_name", &self.display_name)?;
+        validate_non_empty("external_account_id", &self.external_account_id)?;
+        match self.provider_kind {
+            CommunicationProviderKind::TelegramUser => {
+                let api_id = self.api_id.ok_or_else(|| {
+                    TelegramError::InvalidRequest("api_id must not be empty".to_owned())
+                })?;
+                if api_id <= 0 {
+                    return Err(TelegramError::InvalidRequest(
+                        "api_id must be greater than zero".to_owned(),
+                    ));
+                }
+                required_optional_value("api_hash", self.api_hash.as_deref())?;
+            }
+            CommunicationProviderKind::TelegramBot => {
+                required_optional_value("bot_token", self.bot_token.as_deref())?;
+            }
+            _ => {
+                return Err(TelegramError::InvalidRequest(
+                    "provider_kind must be telegram_user or telegram_bot".to_owned(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct TelegramQrLoginStartRequest {
+    pub account_id: String,
+    pub display_name: String,
+    pub external_account_id: String,
+    pub api_id: Option<i64>,
+    pub api_hash: Option<String>,
+    pub session_encryption_key: Option<String>,
+    pub tdlib_data_path: Option<String>,
+    #[serde(default)]
+    pub transcription_enabled: bool,
+}
+
+impl TelegramQrLoginStartRequest {
+    pub(crate) fn with_app_credentials(
+        mut self,
+        api_id: Option<i64>,
+        api_hash: Option<String>,
+    ) -> Self {
+        if self.api_id.is_none() {
+            self.api_id = api_id;
+        }
+        if self
+            .api_hash
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .is_none()
+        {
+            self.api_hash = api_hash;
+        }
+        self
+    }
+
+    pub(crate) fn required_api_id(&self) -> Result<i64, TelegramError> {
+        let api_id = self
+            .api_id
+            .ok_or_else(|| TelegramError::InvalidRequest("api_id must not be empty".to_owned()))?;
+        if api_id <= 0 {
+            return Err(TelegramError::InvalidRequest(
+                "api_id must be greater than zero".to_owned(),
+            ));
+        }
+        Ok(api_id)
+    }
+
+    pub(crate) fn required_api_hash(&self) -> Result<&str, TelegramError> {
+        self.api_hash
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| TelegramError::InvalidRequest("api_hash must not be empty".to_owned()))
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), TelegramError> {
+        validate_non_empty("account_id", &self.account_id)?;
+        validate_non_empty("display_name", &self.display_name)?;
+        validate_non_empty("external_account_id", &self.external_account_id)?;
+        self.required_api_id()?;
+        self.required_api_hash()?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct TelegramQrLoginPasswordRequest {
+    pub password: String,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TelegramQrLoginStatus {
+    WaitingQrScan,
+    WaitingPassword,
+    Ready,
+    Expired,
+    Failed,
+    RuntimeUnavailable,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TelegramQrLoginStatusResponse {
+    pub setup_id: String,
+    pub account_id: String,
+    pub status: TelegramQrLoginStatus,
+    pub qr_link: Option<String>,
+    pub qr_svg: Option<String>,
+    pub telegram_user_id: Option<String>,
+    pub telegram_username: Option<String>,
+    pub suggested_account_id: Option<String>,
+    pub suggested_display_name: Option<String>,
+    pub suggested_external_account_id: Option<String>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub poll_after_ms: u64,
+    pub message: Option<String>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TelegramAccountSetupResponse {
     pub account_id: String,
     pub provider_kind: String,
     pub runtime: String,
     pub transcription_enabled: bool,
+    pub credential_bindings: Vec<TelegramCredentialBinding>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TelegramCredentialBinding {
+    pub secret_purpose: String,
+    pub secret_ref: String,
+    pub secret_kind: SecretKind,
+    pub store_kind: SecretStoreKind,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -534,8 +880,26 @@ pub enum TelegramError {
     #[error("invalid Telegram request: {0}")]
     InvalidRequest(String),
 
+    #[error("Telegram TDLib runtime is not available: {0}")]
+    TdlibRuntimeUnavailable(String),
+
+    #[error("Telegram TDLib runtime failed: {0}")]
+    TdlibRuntime(String),
+
+    #[error("Telegram QR generation failed: {0}")]
+    QrGeneration(String),
+
+    #[error("Telegram QR login setup was not found")]
+    QrLoginNotFound,
+
     #[error(transparent)]
     Communication(#[from] CommunicationIngestionError),
+
+    #[error(transparent)]
+    SecretReference(#[from] SecretReferenceError),
+
+    #[error(transparent)]
+    DatabaseVault(#[from] DatabaseEncryptedVaultError),
 
     #[error(transparent)]
     MessageProjection(#[from] MessageProjectionError),
@@ -641,6 +1005,19 @@ fn validate_non_empty(field: &'static str, value: &str) -> Result<String, Telegr
     Ok(trimmed.to_owned())
 }
 
+fn required_optional_value(
+    field: &'static str,
+    value: Option<&str>,
+) -> Result<String, TelegramError> {
+    let Some(value) = value else {
+        return Err(TelegramError::InvalidRequest(format!(
+            "{field} must not be empty"
+        )));
+    };
+
+    validate_non_empty(field, value)
+}
+
 fn validate_object(field: &'static str, value: &Value) -> Result<(), TelegramError> {
     if !value.is_object() {
         return Err(TelegramError::InvalidRequest(format!(
@@ -648,4 +1025,12 @@ fn validate_object(field: &'static str, value: &Value) -> Result<(), TelegramErr
         )));
     }
     Ok(())
+}
+
+fn telegram_secret_ref(account_id: &str, secret_purpose: ProviderAccountSecretPurpose) -> String {
+    format!(
+        "secret:provider-account:{}:{}",
+        account_id.trim(),
+        secret_purpose.as_str()
+    )
 }

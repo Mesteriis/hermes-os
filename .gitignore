@@ -29,6 +29,8 @@ coverage/
 
 # Tauri
 src-tauri/target/
+frontend/src-tauri/binaries/hermes-hub-backend-*
+frontend/src-tauri/resources/tdlib/**/libtdjson.*
 
 # Python tooling that may be used for scripts later
 .venv/

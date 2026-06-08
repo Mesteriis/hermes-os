@@ -66,6 +66,7 @@
 		fetchEventAgenda,
 		fetchEventChecklist,
 		fetchMeetingNotes,
+		createCalendarAccount,
 		createCalendarEvent,
 		postCalendarBrain,
 		type CalendarAccount,
@@ -84,12 +85,16 @@
 		searchGraphNodes,
 		saveAutomationPolicy,
 		saveAutomationTemplate,
-		saveCallTranscriptFixture,
-		saveTelegramCall,
-		setupImapAccount,
-		setupTelegramFixtureAccount,
-		setupWhatsappWebFixtureAccount,
-		startGmailOAuthSetup,
+			saveCallTranscriptFixture,
+			saveTelegramCall,
+			setupImapAccount,
+			fetchTelegramQrLoginStatus,
+			setupTelegramAccount,
+			setupTelegramFixtureAccount,
+			setupWhatsappWebFixtureAccount,
+			startTelegramQrLogin,
+			submitTelegramQrLoginPassword,
+			startGmailOAuthSetup,
 		type ApplicationSetting,
 		type AiAgent,
 		type AiAnswerResponse,
@@ -129,8 +134,9 @@
 		type TelegramCall,
 		type TelegramChat,
 		type TelegramMessage,
-		type TelegramProviderKind,
-		type TelegramSendDryRunResponse,
+			type TelegramProviderKind,
+			type TelegramQrLoginStatusResponse,
+			type TelegramSendDryRunResponse,
 		type TelegramCapabilitiesResponse,
 		type WhatsappCapabilitiesResponse,
 		type WhatsappWebMessage,
@@ -150,6 +156,15 @@
 	import { onMount } from 'svelte';
 
 	type Provider = 'gmail' | 'icloud' | 'imap';
+	type AccountWizardKind = 'mail' | 'calendar' | 'telegram' | 'whatsapp';
+	type AccountWizardTarget = AccountWizardKind | Provider;
+	type MailService = Provider | 'microsoft' | 'yahoo' | 'aol';
+	type MailWizardStep = 'provider' | 'details';
+	type CalendarProvider = 'local' | 'google' | 'microsoft' | 'apple' | 'caldav' | 'ics';
+	type CalendarWizardStep = 'provider' | 'details';
+	type TelegramSetupMode = 'fixture' | 'live';
+	type TelegramAuthMethod = 'fixture' | 'phone' | 'qr' | 'bot_token';
+	type TelegramWizardStep = 'account' | 'auth' | 'details';
 	type ViewId =
 		| 'home'
 		| 'communications'
@@ -377,6 +392,11 @@
 	let aiMeetingPrepResult = $state<AiMeetingPrepResponse | null>(null);
 	let aiTaskRefreshResult = $state<AiTaskCandidateRefreshResponse | null>(null);
 	let selectedProvider = $state<Provider>('gmail');
+	let accountWizardKind = $state<AccountWizardKind>('mail');
+	let mailWizardStep = $state<MailWizardStep>('provider');
+	let selectedMailService = $state<MailService>('icloud');
+	let mailAddress = $state('');
+	let calendarWizardStep = $state<CalendarWizardStep>('provider');
 	let isAccountDrawerOpen = $state(false);
 	let isSetupSubmitting = $state(false);
 	let setupMessage = $state('');
@@ -403,6 +423,11 @@
 		password: '',
 		secret_kind: 'app_password' as 'app_password' | 'password'
 	});
+	let calendarAccountForm = $state({
+		provider: 'local' as CalendarProvider,
+		account_name: 'Local Calendar',
+		email: ''
+	});
 	let telegramChats = $state<TelegramChat[]>([]);
 	let telegramMessages = $state<TelegramMessage[]>([]);
 	let automationTemplates = $state<AutomationTemplate[]>([]);
@@ -417,13 +442,22 @@
 	let isTelegramLoading = $state(false);
 	let isTelegramActionSubmitting = $state(false);
 	let telegramSendDryRunResult = $state<TelegramSendDryRunResponse | null>(null);
+	let telegramSetupMode = $state<TelegramSetupMode>('fixture');
+	let telegramAuthMethod = $state<TelegramAuthMethod>('fixture');
+	let telegramWizardStep = $state<TelegramWizardStep>('account');
+	let telegramQrLogin = $state<TelegramQrLoginStatusResponse | null>(null);
+	let telegramQrPassword = $state('');
 	let telegramAccountForm = $state({
 		account_id: 'telegram-primary',
 		provider_kind: 'telegram_user' as TelegramProviderKind,
 		display_name: 'Primary Telegram',
 		external_account_id: '@telegram_fixture',
+		api_id: '',
+		api_hash: '',
+		bot_token: '',
+		session_encryption_key: '',
 		tdlib_data_path: 'docker/data/telegram/telegram-primary',
-		transcription_enabled: true
+		transcription_enabled: false
 	});
 	let telegramMessageForm = $state({
 		account_id: 'telegram-primary',
@@ -984,6 +1018,18 @@
 	);
 	const telegramBlockedCapabilities = $derived(
 		telegramCapabilities?.capabilities.filter((capability) => capability.status === 'blocked') ?? []
+	);
+	const telegramQrRuntimeBlocked = $derived(
+		telegramAuthMethod === 'qr' &&
+			telegramCapabilities !== null &&
+			!telegramCapabilities.tdjson_runtime_available
+	);
+	const telegramQrNeedsFormAppCredentials = $derived(
+		telegramAuthMethod === 'qr' &&
+			!(telegramCapabilities?.telegram_app_credentials_configured ?? false)
+	);
+	const telegramNeedsFormAppCredentials = $derived(
+		telegramAuthMethod === 'phone' || telegramQrNeedsFormAppCredentials
 	);
 	const selectedWhatsappSession = $derived(
 		whatsappSessions.find((session) => session.session_id === selectedWhatsappSessionId) ??
@@ -2285,18 +2331,187 @@
 		setCurrentView(item.id);
 	}
 
-	function openAccountDrawer() {
+	function openAccountDrawer(target: AccountWizardTarget = 'mail') {
+		accountWizardKind = target === 'gmail' || target === 'icloud' || target === 'imap' ? 'mail' : target;
+		if (target === 'gmail' || target === 'icloud' || target === 'imap') {
+			selectMailService(target);
+		}
+		if (accountWizardKind === 'mail') {
+			mailWizardStep = 'provider';
+		}
+		if (accountWizardKind === 'calendar') {
+			calendarWizardStep = 'provider';
+		}
+		if (accountWizardKind === 'telegram') {
+			telegramWizardStep = 'account';
+		}
+		telegramQrLogin = null;
+		telegramQrPassword = '';
 		isAccountDrawerOpen = true;
 		setupMessage = '';
 		setupError = '';
+		telegramActionMessage = '';
+		telegramError = '';
+		whatsappActionMessage = '';
+		whatsappError = '';
 	}
 
 	function closeAccountDrawer() {
 		isAccountDrawerOpen = false;
 	}
 
+	function selectMailService(service: MailService) {
+		selectedMailService = service;
+		setupMessage = '';
+		setupError = '';
+
+		if (service === 'gmail') {
+			selectedProvider = 'gmail';
+			gmailForm = {
+				...gmailForm,
+				account_id: gmailForm.account_id || 'gmail-primary',
+				display_name: gmailForm.display_name || 'Primary Gmail'
+			};
+			return;
+		}
+
+		const preset = mailServicePreset(service);
+		selectedProvider = preset.provider;
+		imapForm = {
+			...imapForm,
+			account_id: preset.accountId,
+			display_name: preset.displayName,
+			host: preset.host,
+			port: preset.port,
+			tls: true,
+			mailbox: imapForm.mailbox || 'INBOX',
+			secret_kind: preset.secretKind
+		};
+	}
+
+	function continueMailWizard() {
+		const email = mailAddress.trim();
+		if (email) {
+			const inferred = inferMailService(email);
+			if (inferred) {
+				selectMailService(inferred);
+			}
+			gmailForm = {
+				...gmailForm,
+				external_account_id: email,
+				account_id: gmailForm.account_id || accountIdFromEmail(email, 'gmail'),
+				display_name: gmailForm.display_name || email
+			};
+			imapForm = {
+				...imapForm,
+				external_account_id: email,
+				username: imapForm.username || email,
+				account_id: imapForm.account_id || accountIdFromEmail(email, 'mail'),
+				display_name: imapForm.display_name || email
+			};
+		}
+		mailWizardStep = 'details';
+	}
+
+	function continueCalendarWizard(provider?: CalendarProvider) {
+		if (provider) {
+			calendarAccountForm = {
+				...calendarAccountForm,
+				provider,
+				account_name: calendarProviderDefaultName(provider)
+			};
+		}
+		calendarWizardStep = 'details';
+	}
+
+	function continueTelegramWizard(nextStep: TelegramWizardStep) {
+		telegramWizardStep = nextStep;
+	}
+
+	function selectTelegramAuthMethod(method: TelegramAuthMethod) {
+		telegramAuthMethod = method;
+		telegramSetupMode = method === 'fixture' ? 'fixture' : 'live';
+		telegramQrLogin = null;
+		telegramQrPassword = '';
+		if (method === 'qr' && telegramAccountForm.external_account_id === '@telegram_fixture') {
+			telegramAccountForm = {
+				...telegramAccountForm,
+				external_account_id: ''
+			};
+		} else if (method === 'bot_token') {
+			telegramAccountForm = {
+				...telegramAccountForm,
+				provider_kind: 'telegram_bot'
+			};
+		}
+	}
+
+	function telegramWizardExternalAccountId() {
+		return (
+			telegramAccountForm.external_account_id.trim() ||
+			(telegramAuthMethod === 'qr'
+				? `qr-login:${telegramAccountForm.account_id}`
+				: telegramAccountForm.account_id)
+		);
+	}
+
+	function telegramQrStatusLabel(status: string) {
+		switch (status) {
+			case 'waiting_qr_scan':
+				return 'Waiting for QR scan';
+			case 'waiting_password':
+				return 'Telegram password required';
+			case 'ready':
+				return 'Telegram authorized';
+			case 'expired':
+				return 'QR code expired';
+			case 'failed':
+				return 'QR login failed';
+			case 'runtime_unavailable':
+				return 'TDLib runtime unavailable';
+			default:
+				return 'QR login status';
+		}
+	}
+
+	function applyTelegramQrLoginResult(result: TelegramQrLoginStatusResponse) {
+		telegramQrLogin = result;
+		if (result.status !== 'ready') {
+			return;
+		}
+		telegramQrPassword = '';
+
+		telegramAccountForm = {
+			...telegramAccountForm,
+			account_id: result.suggested_account_id ?? telegramAccountForm.account_id,
+			display_name: result.suggested_display_name ?? telegramAccountForm.display_name,
+			external_account_id:
+				result.suggested_external_account_id ?? telegramAccountForm.external_account_id
+		};
+	}
+
+	function telegramWizardNote() {
+		if (telegramAuthMethod === 'fixture') {
+			return 'Fixture mode creates local Telegram records for UI and policy testing.';
+		}
+		if (telegramAuthMethod === 'qr') {
+			if (telegramCapabilities !== null && !telegramCapabilities.tdjson_runtime_available) {
+				return 'TDLib JSON runtime is not available in the running backend.';
+			}
+			if (telegramQrNeedsFormAppCredentials) {
+				return 'Enter Telegram API ID and API hash to start QR login in this dev session.';
+			}
+			if (telegramQrLogin?.status === 'waiting_password') {
+				return 'Enter the Telegram 2-step verification password to finish local TDLib authorization.';
+			}
+			return 'Telegram app credentials are configured in the backend environment. QR login is ready.';
+		}
+		return 'Live credentials are stored in the encrypted database vault. Telegram live runtime remains blocked until the adapter is implemented.';
+	}
+
 	function selectProvider(provider: Provider) {
 		selectedProvider = provider;
+		selectedMailService = provider;
 		setupMessage = '';
 		setupError = '';
 
@@ -2321,6 +2536,154 @@
 				host: imapForm.host === 'imap.mail.me.com' ? '' : imapForm.host,
 				secret_kind: 'password'
 			};
+		}
+	}
+
+	function mailServicePreset(service: MailService): {
+		provider: Provider;
+		accountId: string;
+		displayName: string;
+		host: string;
+		port: number;
+		secretKind: 'app_password' | 'password';
+	} {
+		switch (service) {
+			case 'icloud':
+				return {
+					provider: 'icloud',
+					accountId: 'icloud-primary',
+					displayName: 'Primary iCloud',
+					host: 'imap.mail.me.com',
+					port: 993,
+					secretKind: 'app_password'
+				};
+			case 'microsoft':
+				return {
+					provider: 'imap',
+					accountId: 'microsoft-primary',
+					displayName: 'Microsoft Mail',
+					host: 'outlook.office365.com',
+					port: 993,
+					secretKind: 'password'
+				};
+			case 'yahoo':
+				return {
+					provider: 'imap',
+					accountId: 'yahoo-primary',
+					displayName: 'Yahoo Mail',
+					host: 'imap.mail.yahoo.com',
+					port: 993,
+					secretKind: 'app_password'
+				};
+			case 'aol':
+				return {
+					provider: 'imap',
+					accountId: 'aol-primary',
+					displayName: 'AOL Mail',
+					host: 'imap.aol.com',
+					port: 993,
+					secretKind: 'app_password'
+				};
+			default:
+				return {
+					provider: 'imap',
+					accountId: 'imap-primary',
+					displayName: 'IMAP Mail',
+					host: imapForm.host === 'imap.mail.me.com' ? '' : imapForm.host,
+					port: Number(imapForm.port) || 993,
+					secretKind: 'password'
+				};
+		}
+	}
+
+	function hasFixedMailServerPreset(service: MailService) {
+		return service !== 'imap';
+	}
+
+	function mailServiceDisplayName(service: MailService) {
+		switch (service) {
+			case 'gmail':
+				return 'Google';
+			case 'icloud':
+				return 'iCloud';
+			case 'microsoft':
+				return 'Microsoft Exchange';
+			case 'yahoo':
+				return 'Yahoo';
+			case 'aol':
+				return 'AOL';
+			default:
+				return 'Other Mail Account';
+		}
+	}
+
+	function mailServiceIcon(service: MailService) {
+		switch (service) {
+			case 'gmail':
+				return 'tabler:brand-gmail';
+			case 'icloud':
+				return 'tabler:cloud';
+			case 'microsoft':
+				return 'tabler:brand-office';
+			case 'yahoo':
+				return 'tabler:mail';
+			case 'aol':
+				return 'tabler:mail-bolt';
+			default:
+				return 'tabler:server';
+		}
+	}
+
+	function mailServiceAccountPrefix(service: MailService) {
+		switch (service) {
+			case 'icloud':
+				return 'icloud';
+			case 'microsoft':
+				return 'microsoft';
+			case 'yahoo':
+				return 'yahoo';
+			case 'aol':
+				return 'aol';
+			case 'gmail':
+				return 'gmail';
+			default:
+				return 'imap';
+		}
+	}
+
+	function inferMailService(email: string): MailService | null {
+		const domain = email.split('@')[1]?.trim().toLowerCase() ?? '';
+		if (['gmail.com', 'googlemail.com'].includes(domain)) return 'gmail';
+		if (['icloud.com', 'me.com', 'mac.com'].includes(domain)) return 'icloud';
+		if (['outlook.com', 'hotmail.com', 'live.com', 'office365.com'].includes(domain)) return 'microsoft';
+		if (domain.endsWith('yahoo.com')) return 'yahoo';
+		if (domain === 'aol.com') return 'aol';
+		return null;
+	}
+
+	function accountIdFromEmail(email: string, fallback: string) {
+		const normalized = email
+			.trim()
+			.toLowerCase()
+			.replace(/[^a-z0-9]+/g, '-')
+			.replace(/^-+|-+$/g, '');
+		return normalized ? `${fallback}-${normalized}` : `${fallback}-primary`;
+	}
+
+	function calendarProviderDefaultName(provider: CalendarProvider) {
+		switch (provider) {
+			case 'google':
+				return 'Google Calendar';
+			case 'microsoft':
+				return 'Microsoft Calendar';
+			case 'apple':
+				return 'Apple Calendar';
+			case 'caldav':
+				return 'CalDAV Calendar';
+			case 'ics':
+				return 'ICS Feed';
+			default:
+				return 'Local Calendar';
 		}
 	}
 
@@ -2379,16 +2742,30 @@
 		setupError = '';
 
 		try {
+			const username = imapForm.username.trim();
+			const fixedServerPreset = hasFixedMailServerPreset(selectedMailService);
+			const externalAccountId = fixedServerPreset
+				? username
+				: imapForm.external_account_id.trim() || username;
+			const accountId = fixedServerPreset
+				? accountIdFromEmail(externalAccountId, mailServiceAccountPrefix(selectedMailService))
+				: imapForm.account_id.trim() || accountIdFromEmail(externalAccountId, 'imap');
+			const displayName = fixedServerPreset
+				? externalAccountId || mailServiceDisplayName(selectedMailService)
+				: imapForm.display_name.trim() || externalAccountId || mailServiceDisplayName(selectedMailService);
+			const host = imapForm.host.trim();
+			const mailbox = imapForm.mailbox.trim() || 'INBOX';
+
 			const result = await setupImapAccount(apiBaseUrl, apiSecret, {
-				account_id: imapForm.account_id,
+				account_id: accountId,
 				provider_kind: selectedProvider === 'icloud' ? 'icloud' : 'imap',
-				display_name: imapForm.display_name,
-				external_account_id: imapForm.external_account_id,
-				host: imapForm.host,
+				display_name: displayName,
+				external_account_id: externalAccountId,
+				host,
 				port: Number(imapForm.port),
 				tls: imapForm.tls,
-				mailbox: imapForm.mailbox,
-				username: imapForm.username,
+				mailbox,
+				username,
 				password: imapForm.password,
 				secret_kind: imapForm.secret_kind
 			});
@@ -2397,6 +2774,26 @@
 			await loadSettingsWorkspace();
 		} catch (error) {
 			setupError = error instanceof Error ? error.message : 'Mail account setup failed';
+		} finally {
+			isSetupSubmitting = false;
+		}
+	}
+
+	async function saveCalendarAccount() {
+		isSetupSubmitting = true;
+		setupMessage = '';
+		setupError = '';
+
+		try {
+			const result = await createCalendarAccount(apiBaseUrl, apiSecret, {
+				provider: calendarAccountForm.provider,
+				account_name: calendarAccountForm.account_name,
+				email: calendarAccountForm.email.trim() || undefined
+			});
+			setupMessage = `Calendar account ${result.account_name} saved`;
+			await Promise.all([loadCalendar(), loadSettingsWorkspace()]);
+		} catch (error) {
+			setupError = error instanceof Error ? error.message : 'Calendar account setup failed';
 		} finally {
 			isSetupSubmitting = false;
 		}
@@ -2483,6 +2880,8 @@
 		isWhatsappActionSubmitting = true;
 		whatsappActionMessage = '';
 		whatsappError = '';
+		setupMessage = '';
+		setupError = '';
 		try {
 			const result = await setupWhatsappWebFixtureAccount(apiBaseUrl, apiSecret, {
 				account_id: whatsappAccountForm.account_id,
@@ -2498,9 +2897,12 @@
 				account_id: result.account_id
 			};
 			whatsappActionMessage = `${providerKindLabel(result.provider_kind)} account ${result.account_id} saved`;
+			setupMessage = whatsappActionMessage;
 			await Promise.all([loadWhatsappWebWorkspace(), loadSettingsWorkspace()]);
 		} catch (error) {
-			whatsappError = error instanceof Error ? error.message : 'WhatsApp Web fixture setup failed';
+			const message = error instanceof Error ? error.message : 'WhatsApp Web fixture setup failed';
+			whatsappError = message;
+			setupError = message;
 		} finally {
 			isWhatsappActionSubmitting = false;
 		}
@@ -2543,24 +2945,83 @@
 		}
 	}
 
-	async function setupTelegramFixture() {
-		if (isTelegramActionSubmitting) {
+	async function saveTelegramAccountFromWizard(options: { allowWhileSubmitting?: boolean } = {}) {
+		if (isTelegramActionSubmitting && !options.allowWhileSubmitting) {
 			return;
 		}
+		const shouldResetSubmitting = !isTelegramActionSubmitting;
+
+		const isFixtureSetup = telegramAuthMethod === 'fixture';
+		const providerKind =
+			telegramAuthMethod === 'bot_token'
+				? 'telegram_bot'
+				: telegramAuthMethod === 'phone' || telegramAuthMethod === 'qr'
+					? 'telegram_user'
+					: telegramAccountForm.provider_kind;
+		const externalAccountId = telegramWizardExternalAccountId();
 
 		isTelegramActionSubmitting = true;
 		telegramActionMessage = '';
 		telegramError = '';
+		setupMessage = '';
+		setupError = '';
 		try {
-			const result = await setupTelegramFixtureAccount(apiBaseUrl, apiSecret, {
-				account_id: telegramAccountForm.account_id,
-				provider_kind: telegramAccountForm.provider_kind,
-				display_name: telegramAccountForm.display_name,
-				external_account_id: telegramAccountForm.external_account_id,
-				tdlib_data_path: telegramAccountForm.tdlib_data_path || undefined,
-				transcription_enabled: telegramAccountForm.transcription_enabled
-			});
-			telegramActionMessage = `${providerKindLabel(result.provider_kind)} account ${result.account_id} saved`;
+			const result =
+				isFixtureSetup
+					? await setupTelegramFixtureAccount(apiBaseUrl, apiSecret, {
+							account_id: telegramAccountForm.account_id,
+							provider_kind: providerKind,
+							display_name: telegramAccountForm.display_name,
+							external_account_id: externalAccountId,
+							tdlib_data_path:
+								telegramAuthMethod === 'qr'
+									? undefined
+									: telegramAccountForm.tdlib_data_path || undefined,
+							transcription_enabled:
+								telegramAuthMethod === 'qr' ? false : telegramAccountForm.transcription_enabled
+						})
+					: await setupTelegramAccount(apiBaseUrl, apiSecret, {
+							account_id: telegramAccountForm.account_id,
+							provider_kind: providerKind,
+							display_name: telegramAccountForm.display_name,
+							external_account_id: externalAccountId,
+							api_id:
+								providerKind === 'telegram_user' && telegramAccountForm.api_id.trim()
+									? Number(telegramAccountForm.api_id.trim())
+									: undefined,
+							api_hash:
+								providerKind === 'telegram_user'
+									? telegramAccountForm.api_hash.trim() || undefined
+									: undefined,
+							bot_token:
+								providerKind === 'telegram_bot'
+									? telegramAccountForm.bot_token || undefined
+									: undefined,
+							session_encryption_key:
+								providerKind === 'telegram_user'
+									? telegramAccountForm.session_encryption_key || undefined
+									: undefined,
+							tdlib_data_path:
+								telegramAuthMethod === 'qr'
+									? undefined
+									: telegramAccountForm.tdlib_data_path || undefined,
+							transcription_enabled:
+								telegramAuthMethod === 'qr' ? false : telegramAccountForm.transcription_enabled
+						});
+			const runtimeLabel =
+				telegramAuthMethod === 'qr' && telegramQrLogin?.status === 'ready'
+					? 'saved after QR authorization'
+					: result.runtime === 'live_blocked'
+						? 'saved as live-blocked'
+						: 'saved';
+			telegramActionMessage = `${providerKindLabel(result.provider_kind)} account ${result.account_id} ${runtimeLabel}`;
+			setupMessage = telegramActionMessage;
+			telegramAccountForm = {
+				...telegramAccountForm,
+				api_hash: '',
+				bot_token: '',
+				session_encryption_key: ''
+			};
 			telegramMessageForm = {
 				...telegramMessageForm,
 				account_id: result.account_id
@@ -2579,7 +3040,174 @@
 			};
 			await Promise.all([loadTelegramWorkspace(), loadSettingsWorkspace()]);
 		} catch (error) {
-			telegramError = error instanceof Error ? error.message : 'Telegram fixture setup failed';
+			const message = error instanceof Error ? error.message : 'Telegram account setup failed';
+			telegramError = message;
+			setupError = message;
+		} finally {
+			if (shouldResetSubmitting) {
+				isTelegramActionSubmitting = false;
+			}
+		}
+	}
+
+	async function saveReadyTelegramQrAccountFromWizard() {
+		if (telegramAuthMethod !== 'qr' || telegramQrLogin?.status !== 'ready') {
+			return;
+		}
+		await saveTelegramAccountFromWizard({ allowWhileSubmitting: true });
+	}
+
+	async function startTelegramQrLoginFromWizard() {
+		if (isTelegramActionSubmitting) {
+			return;
+		}
+
+		let capabilities = telegramCapabilities;
+		if (!capabilities) {
+			try {
+				capabilities = await fetchTelegramCapabilities(apiBaseUrl, apiSecret);
+				telegramCapabilities = capabilities;
+			} catch {
+				capabilities = null;
+			}
+		}
+
+		if (capabilities && !capabilities.tdjson_runtime_available) {
+			setupError = 'TDLib JSON runtime is not available in the running backend';
+			telegramError = setupError;
+			return;
+		}
+
+		const apiIdValue = telegramAccountForm.api_id.trim();
+		const apiHashValue = telegramAccountForm.api_hash.trim();
+		const appCredentialsConfigured = capabilities?.telegram_app_credentials_configured ?? false;
+		if (!appCredentialsConfigured && (!apiIdValue || !apiHashValue)) {
+			setupError = 'Telegram API ID and API hash are required for QR login in this dev session';
+			telegramError = setupError;
+			return;
+		}
+		const parsedApiId = Number(apiIdValue);
+		if (apiIdValue && (!Number.isInteger(parsedApiId) || parsedApiId <= 0)) {
+			setupError = 'Telegram API ID must be greater than zero';
+			telegramError = setupError;
+			return;
+		}
+		const apiId = apiIdValue ? parsedApiId : undefined;
+
+		isTelegramActionSubmitting = true;
+		telegramActionMessage = '';
+		telegramError = '';
+		setupMessage = '';
+		setupError = '';
+		telegramQrLogin = null;
+		telegramQrPassword = '';
+
+		try {
+			const result = await startTelegramQrLogin(apiBaseUrl, apiSecret, {
+				account_id: telegramAccountForm.account_id,
+				display_name: telegramAccountForm.display_name,
+				external_account_id: telegramWizardExternalAccountId(),
+				api_id: apiId,
+				api_hash: apiHashValue || undefined,
+				session_encryption_key: telegramAccountForm.session_encryption_key || undefined,
+				tdlib_data_path: undefined,
+				transcription_enabled: false
+			});
+			applyTelegramQrLoginResult(result);
+			if (result.status === 'ready') {
+				await saveReadyTelegramQrAccountFromWizard();
+			} else {
+				setupMessage =
+					result.status === 'waiting_qr_scan'
+						? 'Scan the Telegram QR code to continue'
+						: result.message ?? `Telegram QR login status: ${result.status}`;
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Telegram QR login start failed';
+			setupError = message;
+			telegramError = message;
+		} finally {
+			isTelegramActionSubmitting = false;
+		}
+	}
+
+	async function submitTelegramQrPasswordFromWizard() {
+		if (isTelegramActionSubmitting || !telegramQrLogin) {
+			return;
+		}
+
+		if (telegramQrLogin.status !== 'waiting_password') {
+			setupError = 'Telegram QR login is not waiting for a password';
+			telegramError = setupError;
+			return;
+		}
+
+		if (!telegramQrPassword) {
+			setupError = 'Telegram 2-step verification password is required';
+			telegramError = setupError;
+			return;
+		}
+
+		isTelegramActionSubmitting = true;
+		setupError = '';
+		telegramError = '';
+		try {
+			const result = await submitTelegramQrLoginPassword(
+				apiBaseUrl,
+				apiSecret,
+				telegramQrLogin.setup_id,
+				{ password: telegramQrPassword }
+			);
+			telegramQrPassword = '';
+			applyTelegramQrLoginResult(result);
+			if (result.status === 'ready') {
+				await saveReadyTelegramQrAccountFromWizard();
+			} else {
+				setupMessage = result.message ?? `Telegram QR login status: ${result.status}`;
+			}
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : 'Telegram QR login password submit failed';
+			setupError = message;
+			telegramError = message;
+		} finally {
+			isTelegramActionSubmitting = false;
+		}
+	}
+
+	function submitTelegramQrStepFromWizard() {
+		if (telegramQrLogin?.status === 'waiting_password') {
+			void submitTelegramQrPasswordFromWizard();
+			return;
+		}
+		void startTelegramQrLoginFromWizard();
+	}
+
+	async function refreshTelegramQrLoginStatus() {
+		if (!telegramQrLogin || isTelegramActionSubmitting) {
+			return;
+		}
+
+		isTelegramActionSubmitting = true;
+		setupError = '';
+		telegramError = '';
+		try {
+			const result = await fetchTelegramQrLoginStatus(
+				apiBaseUrl,
+				apiSecret,
+				telegramQrLogin.setup_id
+			);
+			applyTelegramQrLoginResult(result);
+			if (result.status === 'ready') {
+				await saveReadyTelegramQrAccountFromWizard();
+			} else {
+				setupMessage = result.message ?? `Telegram QR login status: ${result.status}`;
+			}
+		} catch (error) {
+			const message =
+				error instanceof Error ? error.message : 'Telegram QR login status request failed';
+			setupError = message;
+			telegramError = message;
 		} finally {
 			isTelegramActionSubmitting = false;
 		}
@@ -3302,7 +3930,7 @@
 					<Icon icon="tabler:bell" width="18" height="18" />
 					<i>2</i>
 				</button>
-				<button type="button" class="avatar-button" onclick={openAccountDrawer} title="Open account setup">
+				<button type="button" class="avatar-button" onclick={() => openAccountDrawer('mail')} title="Open account setup">
 					<img src="/assets/hermes-logo-mark.png" alt="" />
 				</button>
 			</div>
@@ -4231,6 +4859,7 @@
 							<button type="button" class:active={calendarViewMode === 'agenda'} onclick={() => { calendarViewMode = 'agenda'; loadCalendar(); }}>Agenda</button>
 						</div>
 						<button type="button" class="primary-button" onclick={() => showNewEventForm = !showNewEventForm}><Icon icon="tabler:plus" width="16" height="16" /> New Event</button>
+						<button type="button" class="ghost-button" onclick={() => openAccountDrawer('calendar')}><Icon icon="tabler:calendar-plus" width="16" height="16" />Add Calendar</button>
 						<button type="button" class="ghost-button" onclick={() => { loadCalendar(); loadWeeklyBrief(); }} title="Refresh"><Icon icon="tabler:refresh" width="16" height="16" /></button>
 					</div>
 				</div>
@@ -4923,6 +5552,7 @@
 			<section class="telegram-page communications-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-telegram" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<button type="button" class="primary-button" onclick={() => openAccountDrawer('telegram')}><Icon icon="tabler:plus" width="16" height="16" />Add Account</button>
 					<button type="button" class="primary-button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
 
@@ -5023,15 +5653,16 @@
 							{@render widgetEditChrome('telegram-sync-controls')}
 							<section class="panel info-card">
 							<h2>Account Setup</h2>
-							<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void setupTelegramFixture(); }}>
-								<label><span>Account ID</span><input bind:value={telegramAccountForm.account_id} autocomplete="off" /></label>
-								<label><span>Provider</span><select bind:value={telegramAccountForm.provider_kind}><option value="telegram_user">User</option><option value="telegram_bot">Bot</option></select></label>
-								<label><span>Display name</span><input bind:value={telegramAccountForm.display_name} autocomplete="off" /></label>
-								<label><span>External ID</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="off" /></label>
-								<label class="wide"><span>TDLib data path</span><input bind:value={telegramAccountForm.tdlib_data_path} autocomplete="off" /></label>
-								<label class="checkbox-row"><input bind:checked={telegramAccountForm.transcription_enabled} type="checkbox" /><span>Transcription enabled</span></label>
-								<div class="form-actions"><button type="submit" disabled={isTelegramActionSubmitting}>Save Fixture</button></div>
-							</form>
+							<div class="setup-summary-card">
+								<span class="round-icon purple"><Icon icon="tabler:brand-telegram" width="22" height="22" /></span>
+								<div>
+									<strong>{telegramProviderAccounts.length} Telegram accounts</strong>
+									<p>{telegramProviderAccounts.length ? 'User and bot records are available for ingestion and policies.' : 'No Telegram account record is configured yet.'}</p>
+								</div>
+							</div>
+							<div class="form-actions wide">
+								<button type="button" onclick={() => openAccountDrawer('telegram')} disabled={isTelegramActionSubmitting}>Open Wizard</button>
+							</div>
 							</section>
 
 							<section class="panel info-card">
@@ -5210,6 +5841,7 @@
 			<section class="whatsapp-page communications-page">
 				<div class="view-header">
 					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-whatsapp" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<button type="button" class="primary-button" onclick={() => openAccountDrawer('whatsapp')}><Icon icon="tabler:plus" width="16" height="16" />Add Account</button>
 					<button type="button" class="primary-button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
 
@@ -5308,14 +5940,16 @@
 							{@render widgetEditChrome('whatsapp-sync-controls')}
 							<section class="panel info-card">
 								<h2>Account Setup</h2>
-								<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void setupWhatsappWebFixture(); }}>
-									<label><span>Account ID</span><input bind:value={whatsappAccountForm.account_id} autocomplete="off" /></label>
-									<label><span>Display name</span><input bind:value={whatsappAccountForm.display_name} autocomplete="off" /></label>
-									<label><span>External ID</span><input bind:value={whatsappAccountForm.external_account_id} autocomplete="off" /></label>
-									<label><span>Device name</span><input bind:value={whatsappAccountForm.device_name} autocomplete="off" /></label>
-									<label class="wide"><span>Local state path</span><input bind:value={whatsappAccountForm.local_state_path} autocomplete="off" /></label>
-									<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting}>Save Fixture</button></div>
-								</form>
+								<div class="setup-summary-card">
+									<span class="round-icon green"><Icon icon="tabler:brand-whatsapp" width="22" height="22" /></span>
+									<div>
+										<strong>{whatsappProviderAccounts.length} WhatsApp accounts</strong>
+										<p>{whatsappProviderAccounts.length ? 'Companion session records are available for fixture ingestion.' : 'No WhatsApp Web account record is configured yet.'}</p>
+									</div>
+								</div>
+								<div class="form-actions wide">
+									<button type="button" onclick={() => openAccountDrawer('whatsapp')} disabled={isWhatsappActionSubmitting}>Open Wizard</button>
+								</div>
 							</section>
 
 							<section class="panel info-card">
@@ -5545,7 +6179,7 @@
 							<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Mail Accounts</h2><p>Gmail OAuth, iCloud app-password and generic IMAP records.</p></div>
-									<button type="button" class="primary-button" onclick={openAccountDrawer}><Icon icon="tabler:plus" width="16" height="16" />Add Mail</button>
+									<button type="button" class="primary-button" onclick={() => openAccountDrawer('mail')}><Icon icon="tabler:plus" width="16" height="16" />Add Mail</button>
 								</header>
 								<div class="account-card-grid">
 									{#if emailProviderAccounts.length === 0}
@@ -5571,8 +6205,32 @@
 							{@render widgetEditChrome('settings-account-setup-cards')}
 							<section class="panel account-section">
 								<header class="panel-title-row">
+									<div><h2>Calendar Accounts</h2><p>Local and external calendar metadata accounts.</p></div>
+									<button type="button" class="primary-button" onclick={() => openAccountDrawer('calendar')}><Icon icon="tabler:calendar-plus" width="16" height="16" />Add Calendar</button>
+								</header>
+								<div class="account-card-grid">
+									{#if calendarAccounts.length === 0}
+										<div class="empty-panel fill">No calendar accounts configured.</div>
+									{:else}
+										{#each calendarAccounts as account}
+											<article class="account-card">
+												<span class="round-icon green"><Icon icon="tabler:calendar" width="22" height="22" /></span>
+												<div>
+													<strong>{account.account_name}</strong>
+													<p>{account.email || account.account_id}</p>
+													<small>{account.provider} · updated {formatDateTime(account.updated_at)}</small>
+												</div>
+												<code>{account.account_id}</code>
+											</article>
+										{/each}
+									{/if}
+								</div>
+							</section>
+
+							<section class="panel account-section">
+								<header class="panel-title-row">
 									<div><h2>Telegram Accounts</h2><p>User and bot accounts used by Telegram ingestion and automation policies.</p></div>
-									<button type="button" class="primary-button" onclick={() => setCurrentView('telegram')}><Icon icon="tabler:brand-telegram" width="16" height="16" />Setup</button>
+									<button type="button" class="primary-button" onclick={() => openAccountDrawer('telegram')}><Icon icon="tabler:brand-telegram" width="16" height="16" />Add Telegram</button>
 								</header>
 								<div class="account-card-grid">
 									{#if telegramProviderAccounts.length === 0}
@@ -5596,7 +6254,7 @@
 							<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Other Provider Accounts</h2><p>WhatsApp Web and future communication providers.</p></div>
-									<button type="button" class="primary-button" onclick={() => setCurrentView('whatsapp')}><Icon icon="tabler:brand-whatsapp" width="16" height="16" />Setup</button>
+									<button type="button" class="primary-button" onclick={() => openAccountDrawer('whatsapp')}><Icon icon="tabler:brand-whatsapp" width="16" height="16" />Add WhatsApp</button>
 								</header>
 								<div class="account-card-grid">
 									{#if whatsappProviderAccounts.length === 0}
@@ -5943,61 +6601,213 @@
 {#if isAccountDrawerOpen}
 	<button
 		type="button"
-		class="drawer-backdrop"
+		class="drawer-backdrop modal-backdrop"
 		aria-label="Close account setup"
 		onclick={closeAccountDrawer}
 	></button>
-	<aside class="account-drawer" aria-labelledby="account-setup-heading">
+	<div class="account-modal" role="dialog" aria-modal="true" aria-labelledby="account-setup-heading">
 		<header>
 			<div>
-				<p>Provider Accounts</p>
-				<h2 id="account-setup-heading">Add Account</h2>
+				<p>{accountWizardKind === 'mail' ? 'Mail Account' : accountWizardKind === 'calendar' ? 'Calendar Account' : accountWizardKind === 'telegram' ? 'Telegram Account' : 'WhatsApp Account'}</p>
+				<h2 id="account-setup-heading">{accountWizardKind === 'mail' ? 'New Mail Account' : accountWizardKind === 'calendar' ? 'New Calendar Account' : accountWizardKind === 'telegram' ? 'New Telegram Account' : 'New WhatsApp Account'}</h2>
 			</div>
 			<button type="button" class="icon-button" onclick={closeAccountDrawer} aria-label="Close">
 				<Icon icon="tabler:x" width="18" height="18" />
 			</button>
 		</header>
 
-		<div class="provider-tabs" aria-label="Account provider">
-			<button type="button" class:active={selectedProvider === 'gmail'} onclick={() => selectProvider('gmail')}>Gmail</button>
-			<button type="button" class:active={selectedProvider === 'icloud'} onclick={() => selectProvider('icloud')}>iCloud</button>
-			<button type="button" class:active={selectedProvider === 'imap'} onclick={() => selectProvider('imap')}>Raw IMAP</button>
-		</div>
-
-		{#if selectedProvider === 'gmail'}
-			<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
-				<label><span>Account ID</span><input bind:value={gmailForm.account_id} autocomplete="off" /></label>
-				<label><span>Display name</span><input bind:value={gmailForm.display_name} autocomplete="off" /></label>
-				<label><span>Gmail address</span><input bind:value={gmailForm.external_account_id} autocomplete="email" /></label>
-				<label><span>OAuth client ID</span><input bind:value={gmailForm.client_id} autocomplete="off" /></label>
-				<label><span>OAuth client secret</span><input bind:value={gmailForm.client_secret} type="password" autocomplete="off" /></label>
-				<label class="wide"><span>Redirect URI</span><input bind:value={gmailForm.redirect_uri} autocomplete="off" /></label>
-				<div class="form-actions wide"><button type="button" onclick={startGmailSetup} disabled={isSetupSubmitting}>Start OAuth</button></div>
-			</form>
-
-			{#if gmailPending}
-				<div class="oauth-box">
-					<a href={gmailPending.authorization_url} target="_blank" rel="noreferrer">Open Google consent</a>
-					<label><span>Authorization code</span><input bind:value={gmailAuthorizationCode} autocomplete="off" /></label>
-					<button type="button" onclick={completeGmailSetup} disabled={isSetupSubmitting}>Complete Gmail</button>
+		{#if accountWizardKind === 'mail'}
+			<div class="wizard-progress" aria-label="Mail setup steps">
+				<span class:active={mailWizardStep === 'provider'}>1. Service</span>
+				<span class:active={mailWizardStep === 'details'}>2. Details</span>
+			</div>
+			{#if mailWizardStep === 'provider'}
+				<form class="wizard-step" onsubmit={(event) => { event.preventDefault(); continueMailWizard(); }}>
+					<label class="wide wizard-email-field"><span>Email address</span><input bind:value={mailAddress} type="email" placeholder="name@example.com" autocomplete="email" /></label>
+					<div class="wizard-divider"><span>or choose mail service</span></div>
+					<div class="wizard-choice-list">
+						<button type="button" class:active={selectedMailService === 'icloud'} onclick={() => selectMailService('icloud')}><Icon icon="tabler:cloud" width="34" height="34" /><strong>iCloud</strong></button>
+						<button type="button" class:active={selectedMailService === 'microsoft'} onclick={() => selectMailService('microsoft')}><Icon icon="tabler:brand-office" width="34" height="34" /><strong>Microsoft Exchange</strong></button>
+						<button type="button" class:active={selectedMailService === 'gmail'} onclick={() => selectMailService('gmail')}><Icon icon="tabler:brand-gmail" width="34" height="34" /><strong>Google</strong></button>
+						<button type="button" class:active={selectedMailService === 'yahoo'} onclick={() => selectMailService('yahoo')}><Icon icon="tabler:mail" width="34" height="34" /><strong>Yahoo</strong></button>
+						<button type="button" class:active={selectedMailService === 'aol'} onclick={() => selectMailService('aol')}><Icon icon="tabler:mail-bolt" width="34" height="34" /><strong>AOL</strong></button>
+						<button type="button" class:active={selectedMailService === 'imap'} onclick={() => selectMailService('imap')}><Icon icon="tabler:server" width="34" height="34" /><strong>Other Mail Account</strong></button>
+					</div>
+					<div class="wizard-actions">
+						<button type="submit" class="primary-button">Continue</button>
+					</div>
+				</form>
+			{:else}
+				<div class="wizard-step">
+					<button type="button" class="wizard-back" onclick={() => (mailWizardStep = 'provider')}><Icon icon="tabler:arrow-left" width="15" height="15" />Service</button>
+					{#if selectedMailService === 'gmail'}
+						<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
+							<label><span>Account ID</span><input bind:value={gmailForm.account_id} autocomplete="off" /></label>
+							<label><span>Display name</span><input bind:value={gmailForm.display_name} autocomplete="off" /></label>
+							<label><span>Gmail address</span><input bind:value={gmailForm.external_account_id} autocomplete="email" /></label>
+							<label><span>OAuth client ID</span><input bind:value={gmailForm.client_id} autocomplete="off" /></label>
+							<label><span>OAuth client secret</span><input bind:value={gmailForm.client_secret} type="password" autocomplete="off" /></label>
+							<label class="wide"><span>Redirect URI</span><input bind:value={gmailForm.redirect_uri} autocomplete="off" /></label>
+							<div class="form-actions wide"><button type="button" onclick={startGmailSetup} disabled={isSetupSubmitting}>Start OAuth</button></div>
+						</form>
+						{#if gmailPending}
+							<div class="oauth-box">
+								<a href={gmailPending.authorization_url} target="_blank" rel="noreferrer">Open Google consent</a>
+								<label><span>Authorization code</span><input bind:value={gmailAuthorizationCode} autocomplete="off" /></label>
+								<button type="button" onclick={completeGmailSetup} disabled={isSetupSubmitting}>Complete Gmail</button>
+							</div>
+						{/if}
+					{:else if hasFixedMailServerPreset(selectedMailService)}
+						<div class="setup-summary-card" aria-label="Selected mail service">
+							<span class="round-icon cyan"><Icon icon={mailServiceIcon(selectedMailService)} width="18" height="18" /></span>
+							<div>
+								<strong>{mailServiceDisplayName(selectedMailService)}</strong>
+							</div>
+						</div>
+						<form class="setup-form compact-form" onsubmit={(event) => event.preventDefault()}>
+							<label><span>Login</span><input bind:value={imapForm.username} autocomplete="username" /></label>
+							<label><span>Password</span><input bind:value={imapForm.password} type="password" autocomplete="current-password" /></label>
+							<div class="form-actions wide"><button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>Save Account</button></div>
+						</form>
+					{:else}
+						<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
+							<label><span>Account ID</span><input bind:value={imapForm.account_id} autocomplete="off" /></label>
+							<label><span>Display name</span><input bind:value={imapForm.display_name} autocomplete="off" /></label>
+							<label><span>Email address</span><input bind:value={imapForm.external_account_id} autocomplete="email" /></label>
+							<label><span>Username</span><input bind:value={imapForm.username} autocomplete="username" /></label>
+							<label><span>Host</span><input bind:value={imapForm.host} autocomplete="off" /></label>
+							<label><span>Port</span><input bind:value={imapForm.port} type="number" min="1" max="65535" /></label>
+							<label><span>Mailbox</span><input bind:value={imapForm.mailbox} autocomplete="off" /></label>
+							<label><span>Password</span><input bind:value={imapForm.password} type="password" autocomplete="current-password" /></label>
+							<label class="checkbox-row"><input bind:checked={imapForm.tls} type="checkbox" /><span>TLS</span></label>
+							<div class="form-actions"><button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>Save Account</button></div>
+						</form>
+					{/if}
 				</div>
 			{/if}
-		{:else}
-			<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
-				<label><span>Account ID</span><input bind:value={imapForm.account_id} autocomplete="off" /></label>
-				<label><span>Display name</span><input bind:value={imapForm.display_name} autocomplete="off" /></label>
-				<label><span>Email address</span><input bind:value={imapForm.external_account_id} autocomplete="email" /></label>
-				<label><span>Username</span><input bind:value={imapForm.username} autocomplete="username" /></label>
-				<label><span>Host</span><input bind:value={imapForm.host} autocomplete="off" /></label>
-				<label><span>Port</span><input bind:value={imapForm.port} type="number" min="1" max="65535" /></label>
-				<label><span>Mailbox</span><input bind:value={imapForm.mailbox} autocomplete="off" /></label>
-				<label><span>Password</span><input bind:value={imapForm.password} type="password" autocomplete="current-password" /></label>
-				<label class="checkbox-row"><input bind:checked={imapForm.tls} type="checkbox" /><span>TLS</span></label>
-				<div class="form-actions"><button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>Save Account</button></div>
+		{:else if accountWizardKind === 'calendar'}
+			<div class="wizard-progress" aria-label="Calendar setup steps">
+				<span class:active={calendarWizardStep === 'provider'}>1. Provider</span>
+				<span class:active={calendarWizardStep === 'details'}>2. Details</span>
+			</div>
+			{#if calendarWizardStep === 'provider'}
+				<div class="wizard-step">
+					<div class="wizard-choice-grid">
+						<button type="button" onclick={() => continueCalendarWizard('local')}><Icon icon="tabler:calendar" width="28" height="28" /><strong>Local</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('google')}><Icon icon="tabler:brand-google" width="28" height="28" /><strong>Google Calendar</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('microsoft')}><Icon icon="tabler:brand-office" width="28" height="28" /><strong>Microsoft 365</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('apple')}><Icon icon="tabler:apple" width="28" height="28" /><strong>Apple Calendar</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('caldav')}><Icon icon="tabler:server" width="28" height="28" /><strong>CalDAV</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('ics')}><Icon icon="tabler:rss" width="28" height="28" /><strong>ICS Feed</strong></button>
+					</div>
+				</div>
+			{:else}
+				<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void saveCalendarAccount(); }}>
+					<button type="button" class="wizard-back wide" onclick={() => (calendarWizardStep = 'provider')}><Icon icon="tabler:arrow-left" width="15" height="15" />Provider</button>
+					<label><span>Provider</span><select bind:value={calendarAccountForm.provider}><option value="local">Local</option><option value="google">Google Calendar</option><option value="microsoft">Microsoft 365</option><option value="apple">Apple Calendar</option><option value="caldav">CalDAV</option><option value="ics">ICS Feed</option></select></label>
+					<label><span>Account name</span><input bind:value={calendarAccountForm.account_name} autocomplete="off" /></label>
+					<label class="wide"><span>Email or owner</span><input bind:value={calendarAccountForm.email} autocomplete="email" /></label>
+					<div class="form-actions wide"><button type="submit" disabled={isSetupSubmitting || !calendarAccountForm.account_name.trim()}>Save Calendar</button></div>
+				</form>
+			{/if}
+		{:else if accountWizardKind === 'telegram'}
+			<div class="wizard-progress" aria-label="Telegram setup steps">
+				<span class:active={telegramWizardStep === 'account'}>1. Account</span>
+				<span class:active={telegramWizardStep === 'auth'}>2. Login</span>
+				<span class:active={telegramWizardStep === 'details'}>3. Details</span>
+			</div>
+			{#if telegramWizardStep === 'account'}
+				<div class="wizard-step">
+					<div class="wizard-choice-grid two">
+						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_user'} onclick={() => { telegramAccountForm = { ...telegramAccountForm, provider_kind: 'telegram_user' }; selectTelegramAuthMethod('phone'); continueTelegramWizard('auth'); }}><Icon icon="tabler:user" width="30" height="30" /><strong>User Account</strong><span>Phone or QR login</span></button>
+						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_bot'} onclick={() => { telegramAccountForm = { ...telegramAccountForm, provider_kind: 'telegram_bot' }; selectTelegramAuthMethod('bot_token'); continueTelegramWizard('auth'); }}><Icon icon="tabler:robot" width="30" height="30" /><strong>Bot Account</strong><span>Bot token</span></button>
+					</div>
+				</div>
+			{:else if telegramWizardStep === 'auth'}
+				<div class="wizard-step">
+					<button type="button" class="wizard-back" onclick={() => (telegramWizardStep = 'account')}><Icon icon="tabler:arrow-left" width="15" height="15" />Account</button>
+					<div class="wizard-choice-grid">
+						{#if telegramAccountForm.provider_kind === 'telegram_user'}
+							<button type="button" class:active={telegramAuthMethod === 'phone'} onclick={() => { selectTelegramAuthMethod('phone'); continueTelegramWizard('details'); }}><Icon icon="tabler:phone" width="28" height="28" /><strong>Phone Number</strong></button>
+							<button type="button" class:active={telegramAuthMethod === 'qr'} onclick={() => { selectTelegramAuthMethod('qr'); continueTelegramWizard('details'); }}><Icon icon="tabler:qrcode" width="28" height="28" /><strong>QR Code</strong></button>
+						{/if}
+						{#if telegramAccountForm.provider_kind === 'telegram_bot'}
+							<button type="button" class:active={telegramAuthMethod === 'bot_token'} onclick={() => { selectTelegramAuthMethod('bot_token'); continueTelegramWizard('details'); }}><Icon icon="tabler:key" width="28" height="28" /><strong>Bot Token</strong></button>
+						{/if}
+						<button type="button" class:active={telegramAuthMethod === 'fixture'} onclick={() => { selectTelegramAuthMethod('fixture'); continueTelegramWizard('details'); }}><Icon icon="tabler:flask" width="28" height="28" /><strong>Fixture</strong></button>
+					</div>
+				</div>
+			{:else}
+					<form class="setup-form" onsubmit={(event) => { event.preventDefault(); telegramAuthMethod === 'qr' ? submitTelegramQrStepFromWizard() : void saveTelegramAccountFromWizard(); }}>
+					<button type="button" class="wizard-back wide" onclick={() => (telegramWizardStep = 'auth')}><Icon icon="tabler:arrow-left" width="15" height="15" />Login</button>
+					{#if telegramAuthMethod !== 'qr'}
+						<label><span>Account ID</span><input bind:value={telegramAccountForm.account_id} autocomplete="off" /></label>
+						<label><span>Display name</span><input bind:value={telegramAccountForm.display_name} autocomplete="off" /></label>
+					{/if}
+					{#if telegramAuthMethod === 'phone'}
+						<label class="wide"><span>Phone number</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="tel" placeholder="+15551234567" /></label>
+						{:else if telegramAuthMethod === 'qr'}
+							<div class="qr-login-panel wide" class:large={Boolean(telegramQrLogin?.qr_svg)}>
+								{#if telegramQrLogin?.qr_svg}
+									<div class="qr-svg" aria-label="Telegram QR code">{@html telegramQrLogin.qr_svg}</div>
+								{:else}
+									<Icon icon="tabler:qrcode" width="58" height="58" />
+								{/if}
+								<div>
+									<strong>{telegramQrLogin ? telegramQrStatusLabel(telegramQrLogin.status) : 'QR login'}</strong>
+									<p>{telegramQrLogin?.message ?? 'Telegram QR code is ready to be generated for this account.'}</p>
+									{#if telegramQrLogin?.qr_link}
+										<a href={telegramQrLogin.qr_link}>Open Telegram login link</a>
+									{/if}
+								</div>
+							</div>
+							{#if telegramQrLogin?.status === 'waiting_password'}
+								<label class="wide"><span>Telegram Cloud Password</span><input bind:value={telegramQrPassword} type="password" autocomplete="current-password" /></label>
+							{/if}
+					{:else}
+						<label class="wide"><span>External ID</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="off" /></label>
+					{/if}
+					{#if telegramNeedsFormAppCredentials}
+						<label><span>API ID</span><input bind:value={telegramAccountForm.api_id} inputmode="numeric" autocomplete="off" /></label>
+						<label><span>API hash</span><input bind:value={telegramAccountForm.api_hash} type="password" autocomplete="off" /></label>
+						<label class="wide"><span>Session encryption key</span><input bind:value={telegramAccountForm.session_encryption_key} type="password" autocomplete="off" /></label>
+					{/if}
+					{#if telegramAuthMethod === 'bot_token'}
+						<label class="wide"><span>Bot token</span><input bind:value={telegramAccountForm.bot_token} type="password" autocomplete="off" /></label>
+					{/if}
+						<div class="wizard-note wide">
+							{telegramWizardNote()}
+						</div>
+						<div class="form-actions wide">
+							{#if telegramAuthMethod === 'qr'}
+								{#if telegramQrLogin?.status === 'waiting_password'}
+									<button type="submit" disabled={isTelegramActionSubmitting || !telegramQrPassword}>Continue</button>
+								{:else}
+									<button type="submit" disabled={isTelegramActionSubmitting || telegramQrLogin?.status === 'ready' || telegramQrRuntimeBlocked}>Start QR Login</button>
+								{/if}
+								<button type="button" onclick={refreshTelegramQrLoginStatus} disabled={isTelegramActionSubmitting || !telegramQrLogin || telegramQrLogin.status === 'ready'}>Refresh Status</button>
+								{#if telegramQrLogin?.status === 'ready'}
+									<button type="button" onclick={() => void saveTelegramAccountFromWizard()} disabled={isTelegramActionSubmitting}>Save Account</button>
+								{/if}
+							{:else}
+								<button type="submit" disabled={isTelegramActionSubmitting}>{telegramAuthMethod === 'fixture' ? 'Save Fixture' : 'Save Live Record'}</button>
+							{/if}
+						</div>
+					</form>
+			{/if}
+		{:else if accountWizardKind === 'whatsapp'}
+			<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void setupWhatsappWebFixture(); }}>
+				<label><span>Account ID</span><input bind:value={whatsappAccountForm.account_id} autocomplete="off" /></label>
+				<label><span>Display name</span><input bind:value={whatsappAccountForm.display_name} autocomplete="off" /></label>
+				<label><span>External ID</span><input bind:value={whatsappAccountForm.external_account_id} autocomplete="off" /></label>
+				<label><span>Device name</span><input bind:value={whatsappAccountForm.device_name} autocomplete="off" /></label>
+				<label class="wide"><span>Local state path</span><input bind:value={whatsappAccountForm.local_state_path} autocomplete="off" /></label>
+				<div class="wizard-note wide">WhatsApp Web live runtime remains blocked; this creates a fixture companion-session record.</div>
+				<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting}>Save Fixture</button></div>
 			</form>
 		{/if}
 
 		{#if setupMessage}<p class="setup-state success">{setupMessage}</p>{/if}
 		{#if setupError}<p class="setup-state error">{setupError}</p>{/if}
-	</aside>
+	</div>
 {/if}

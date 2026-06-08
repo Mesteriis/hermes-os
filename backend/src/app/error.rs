@@ -464,12 +464,63 @@ impl axum::response::IntoResponse for ApiError {
                     message,
                     false,
                 ),
+                TelegramError::TdlibRuntimeUnavailable(error) => {
+                    tracing::warn!(error = %error, "Telegram TDLib runtime is unavailable");
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "telegram_tdlib_runtime_unavailable",
+                        "Telegram TDLib runtime is not configured on this host".to_owned(),
+                        false,
+                    )
+                }
+                TelegramError::TdlibRuntime(error) => {
+                    tracing::warn!(error = %error, "Telegram TDLib runtime operation failed");
+                    (
+                        StatusCode::BAD_GATEWAY,
+                        "telegram_tdlib_runtime_error",
+                        "Telegram TDLib runtime operation failed".to_owned(),
+                        false,
+                    )
+                }
+                TelegramError::QrGeneration(error) => {
+                    tracing::warn!(error = %error, "Telegram QR generation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "telegram_qr_generation_error",
+                        "Telegram QR generation failed".to_owned(),
+                        false,
+                    )
+                }
+                TelegramError::QrLoginNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "telegram_qr_login_not_found",
+                    "Telegram QR login setup was not found".to_owned(),
+                    false,
+                ),
                 TelegramError::Communication(error) => {
                     tracing::error!(error = %error, "Telegram communication store operation failed");
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "telegram_store_error",
                         "Telegram store operation failed".to_owned(),
+                        false,
+                    )
+                }
+                TelegramError::SecretReference(error) => {
+                    tracing::error!(error = %error, "Telegram secret reference operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "telegram_secret_reference_error",
+                        "Telegram secret reference operation failed".to_owned(),
+                        false,
+                    )
+                }
+                TelegramError::DatabaseVault(error) => {
+                    tracing::error!(error = %error, "Telegram database vault operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "telegram_secret_vault_error",
+                        "Telegram secret vault operation failed".to_owned(),
                         false,
                     )
                 }

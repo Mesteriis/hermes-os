@@ -118,8 +118,11 @@ use crate::domains::tasks::sync::{export_task_json, export_task_md};
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat,
-    TelegramError, TelegramMessage, TelegramMessageIngestResult, TelegramStore,
+    TelegramError, TelegramLiveAccountSetupRequest, TelegramMessage, TelegramMessageIngestResult,
+    TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatusResponse,
+    TelegramStore,
 };
+use crate::integrations::telegram::tdjson;
 use crate::integrations::whatsapp::client::{
     NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
     WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
@@ -142,9 +145,9 @@ use crate::app::{ApiError, AppState};
 use crate::domains::api_support::*;
 
 pub(crate) async fn get_telegram_capabilities(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
 ) -> Result<Json<TelegramCapabilitiesResponse>, ApiError> {
-    Ok(Json(TelegramCapabilitiesResponse::current()))
+    Ok(Json(TelegramCapabilitiesResponse::current(&state.config)))
 }
 
 pub(crate) async fn post_telegram_fixture_account(
@@ -156,6 +159,82 @@ pub(crate) async fn post_telegram_fixture_account(
             .setup_fixture_account(&request)
             .await?,
     ))
+}
+
+pub(crate) async fn post_telegram_account(
+    State(state): State<AppState>,
+    Json(request): Json<TelegramLiveAccountSetupRequest>,
+) -> Result<Json<TelegramAccountSetupResponse>, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let vault = database_encrypted_vault(&state.config, pool.clone())
+        .ok_or(ApiError::SecretVaultNotConfigured)?;
+    let secret_store = SecretReferenceStore::new(pool.clone());
+    let request = request.with_app_credentials(
+        state.config.telegram_api_id(),
+        telegram_api_hash_from_config(&state.config),
+    );
+
+    Ok(Json(
+        telegram_store(&state)?
+            .setup_live_blocked_account(&secret_store, &vault, &request)
+            .await?,
+    ))
+}
+
+pub(crate) async fn post_telegram_qr_login_start(
+    State(state): State<AppState>,
+    Json(request): Json<TelegramQrLoginStartRequest>,
+) -> Result<Json<TelegramQrLoginStatusResponse>, ApiError> {
+    let request = request.with_app_credentials(
+        state.config.telegram_api_id(),
+        telegram_api_hash_from_config(&state.config),
+    );
+
+    Ok(Json(
+        tdjson::start_qr_login(
+            state.config.clone(),
+            state.account_setup.pending_telegram_qr_login.clone(),
+            request,
+        )
+        .await?,
+    ))
+}
+
+pub(crate) async fn get_telegram_qr_login_status(
+    State(state): State<AppState>,
+    Path(setup_id): Path<String>,
+) -> Result<Json<TelegramQrLoginStatusResponse>, ApiError> {
+    let pending = state
+        .account_setup
+        .pending_telegram_qr_login
+        .lock()
+        .map_err(|_| ApiError::AccountSetupState)?;
+    let session = pending
+        .get(setup_id.trim())
+        .map(|session| session.response.clone())
+        .ok_or(ApiError::Telegram(TelegramError::QrLoginNotFound))?;
+
+    Ok(Json(session))
+}
+
+pub(crate) async fn post_telegram_qr_login_password(
+    State(state): State<AppState>,
+    Path(setup_id): Path<String>,
+    Json(request): Json<TelegramQrLoginPasswordRequest>,
+) -> Result<Json<TelegramQrLoginStatusResponse>, ApiError> {
+    Ok(Json(tdjson::submit_qr_login_password(
+        state.account_setup.pending_telegram_qr_login.clone(),
+        &setup_id,
+        request,
+    )?))
+}
+
+fn telegram_api_hash_from_config(config: &AppConfig) -> Option<String> {
+    config
+        .telegram_api_hash()
+        .map(|secret| secret.expose_for_runtime().to_owned())
 }
 
 pub(crate) async fn get_telegram_chats(

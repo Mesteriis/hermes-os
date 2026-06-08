@@ -1,5 +1,28 @@
+use std::path::PathBuf;
+use std::sync::Mutex;
+
+use tauri::{AppHandle, Manager, Runtime};
+use tauri_plugin_shell::process::{CommandChild, CommandEvent};
+use tauri_plugin_shell::ShellExt;
+
+#[derive(Default)]
+struct BackendSidecar {
+    child: Mutex<Option<CommandChild>>,
+}
+
+impl Drop for BackendSidecar {
+    fn drop(&mut self) {
+        if let Ok(mut child) = self.child.lock() {
+            if let Some(child) = child.take() {
+                let _ = child.kill();
+            }
+        }
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -8,8 +31,135 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            app.manage(BackendSidecar::default());
+            if !cfg!(debug_assertions) {
+                start_backend_sidecar(app.handle())?;
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn start_backend_sidecar<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error>> {
+    if std::env::var_os("HERMES_DISABLE_BACKEND_SIDECAR").is_some() {
+        log::info!("Hermes backend sidecar disabled by HERMES_DISABLE_BACKEND_SIDECAR");
+        return Ok(());
+    }
+
+    let mut command = app
+        .shell()
+        .sidecar("hermes-hub-backend")?
+        .env("HERMES_HTTP_ADDR", "127.0.0.1:8080")
+        .env(
+            "HERMES_LOCAL_API_SECRET",
+            std::env::var_os("HERMES_LOCAL_API_SECRET")
+                .unwrap_or_else(|| "change-me-local-api-secret".into()),
+        );
+
+    for key in [
+        "DATABASE_URL",
+        "HERMES_SECRET_VAULT_KEY",
+        "HERMES_OLLAMA_BASE_URL",
+        "HERMES_OLLAMA_CHAT_MODEL",
+        "HERMES_OLLAMA_EMBED_MODEL",
+        "HERMES_OLLAMA_TIMEOUT_SECONDS",
+    ] {
+        if let Some(value) = std::env::var_os(key) {
+            command = command.env(key, value);
+        }
+    }
+    if let Some(value) = std::env::var_os("HERMES_TELEGRAM_API_ID")
+        .or_else(|| option_env!("HERMES_BUNDLED_TELEGRAM_API_ID").map(std::ffi::OsString::from))
+    {
+        command = command.env("HERMES_TELEGRAM_API_ID", value);
+    }
+    if let Some(value) = std::env::var_os("HERMES_TELEGRAM_API_HASH")
+        .or_else(|| option_env!("HERMES_BUNDLED_TELEGRAM_API_HASH").map(std::ffi::OsString::from))
+    {
+        command = command.env("HERMES_TELEGRAM_API_HASH", value);
+    }
+
+    if std::env::var_os("HERMES_TDJSON_PATH").is_none() {
+        if let Some(tdjson_path) = bundled_tdjson_path(app) {
+            command = command.env("HERMES_TDJSON_PATH", tdjson_path);
+        }
+    }
+
+    let (mut events, child) = command.spawn()?;
+    let pid = child.pid();
+    app.state::<BackendSidecar>()
+        .child
+        .lock()
+        .map_err(|_| std::io::Error::other("backend sidecar state lock poisoned"))?
+        .replace(child);
+
+    tauri::async_runtime::spawn(async move {
+        log::info!("Hermes backend sidecar started with pid {pid}");
+        while let Some(event) = events.recv().await {
+            match event {
+                CommandEvent::Stdout(line) => log_sidecar_line(log::Level::Info, &line),
+                CommandEvent::Stderr(line) => log_sidecar_line(log::Level::Warn, &line),
+                CommandEvent::Error(error) => {
+                    log::error!("Hermes backend sidecar event error: {error}");
+                }
+                CommandEvent::Terminated(payload) => {
+                    log::warn!(
+                        "Hermes backend sidecar terminated: code={:?} signal={:?}",
+                        payload.code,
+                        payload.signal
+                    );
+                }
+                _ => {}
+            }
+        }
+    });
+
+    Ok(())
+}
+
+fn log_sidecar_line(level: log::Level, bytes: &[u8]) {
+    let line = String::from_utf8_lossy(bytes).trim().to_owned();
+    if line.is_empty() {
+        return;
+    }
+    log::log!(level, "Hermes backend sidecar: {line}");
+}
+
+fn bundled_tdjson_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
+    let resource_dir = app.path().resource_dir().ok()?;
+    let tdlib_dir = resource_dir.join("tdlib");
+    let platform_path = tdlib_dir
+        .join(tdlib_platform_dir())
+        .join(tdlib_library_file_name());
+    if platform_path.is_file() {
+        return Some(platform_path);
+    }
+
+    let universal_path = tdlib_dir
+        .join("macos-universal")
+        .join(tdlib_library_file_name());
+    universal_path.is_file().then_some(universal_path)
+}
+
+fn tdlib_platform_dir() -> &'static str {
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    {
+        return "macos-arm64";
+    }
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    {
+        return "macos-x64";
+    }
+    #[allow(unreachable_code)]
+    "unknown"
+}
+
+fn tdlib_library_file_name() -> &'static str {
+    #[cfg(target_os = "macos")]
+    {
+        return "libtdjson.dylib";
+    }
+    #[allow(unreachable_code)]
+    "libtdjson"
 }

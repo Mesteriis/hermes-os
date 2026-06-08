@@ -817,6 +817,19 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/telegram/accounts/fixture",
             post(post_telegram_fixture_account),
         )
+        .route("/api/v1/telegram/accounts", post(post_telegram_account))
+        .route(
+            "/api/v1/telegram/login/qr/start",
+            post(post_telegram_qr_login_start),
+        )
+        .route(
+            "/api/v1/telegram/login/qr/{setup_id}",
+            get(get_telegram_qr_login_status),
+        )
+        .route(
+            "/api/v1/telegram/login/qr/{setup_id}/password",
+            post(post_telegram_qr_login_password),
+        )
         .route("/api/v1/telegram/chats", get(get_telegram_chats))
         .route(
             "/api/v1/telegram/messages",

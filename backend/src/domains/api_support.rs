@@ -122,6 +122,7 @@ use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat,
     TelegramError, TelegramMessage, TelegramMessageIngestResult, TelegramStore,
 };
+use crate::integrations::telegram::tdjson;
 use crate::integrations::whatsapp::client::{
     NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
     WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
@@ -659,26 +660,49 @@ pub(crate) struct AiRunListResponse {
 pub(crate) struct TelegramCapabilitiesResponse {
     pub(crate) version: &'static str,
     pub(crate) runtime_mode: &'static str,
+    pub(crate) telegram_app_credentials_configured: bool,
+    pub(crate) tdjson_runtime_available: bool,
+    pub(crate) qr_login_ready: bool,
     pub(crate) capabilities: Vec<TelegramCapabilityStatus>,
     pub(crate) unsupported_features: Vec<&'static str>,
 }
 
 impl TelegramCapabilitiesResponse {
-    pub(crate) fn current() -> Self {
+    pub(crate) fn current(config: &AppConfig) -> Self {
+        let telegram_app_credentials_configured =
+            config.telegram_api_id().is_some() && config.telegram_api_hash().is_some();
+        let tdjson_runtime_available = tdjson::runtime_available(config.tdjson_path());
+        let qr_login_ready = telegram_app_credentials_configured && tdjson_runtime_available;
+
         Self {
             version: "1.0",
-            runtime_mode: "fixture",
+            runtime_mode: if qr_login_ready {
+                "tdlib_qr"
+            } else {
+                "fixture"
+            },
+            telegram_app_credentials_configured,
+            tdjson_runtime_available,
+            qr_login_ready,
             capabilities: vec![
                 TelegramCapabilityStatus::available(
                     "telegram_fixture_runtime",
                     "Fixture Telegram accounts, chats and message projection are available for CI and local smoke validation.",
                     true,
                 ),
-                TelegramCapabilityStatus::blocked(
-                    "tdlib_live_runtime",
-                    "Live TDLib sessions require the native runtime adapter, account-scoped secret resolver and opt-in Telegram credentials.",
-                    false,
-                ),
+                if qr_login_ready {
+                    TelegramCapabilityStatus::available(
+                        "tdlib_live_runtime",
+                        "TDLib QR login runtime is configured for local development.",
+                        true,
+                    )
+                } else {
+                    TelegramCapabilityStatus::blocked(
+                        "tdlib_live_runtime",
+                        "Live TDLib sessions require a loadable native TDLib JSON runtime and Telegram app credentials.",
+                        false,
+                    )
+                },
                 TelegramCapabilityStatus::blocked(
                     "telegram_bot_live_runtime",
                     "Live bot sends require the Bot API runtime adapter and account-scoped bot token resolution.",

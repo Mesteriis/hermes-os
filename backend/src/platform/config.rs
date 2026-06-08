@@ -22,6 +22,9 @@ pub struct AppConfig {
     local_api_secret: Option<String>,
     secret_vault_path: Option<PathBuf>,
     secret_vault_key: Option<ResolvedSecret>,
+    tdjson_path: Option<PathBuf>,
+    telegram_api_id: Option<i64>,
+    telegram_api_hash: Option<ResolvedSecret>,
     ollama_base_url: String,
     ollama_chat_model: String,
     ollama_embed_model: String,
@@ -80,6 +83,38 @@ impl AppConfig {
                         return Err(ConfigError::EmptySecretVaultKey);
                     }
                     config.secret_vault_key = Some(ResolvedSecret::new(raw_key)?);
+                }
+                "HERMES_TDJSON_PATH" => {
+                    let raw_path = value.as_ref().trim();
+                    if raw_path.is_empty() {
+                        return Err(ConfigError::EmptyTdjsonPath);
+                    }
+                    config.tdjson_path = Some(PathBuf::from(raw_path));
+                }
+                "HERMES_TELEGRAM_API_ID" => {
+                    let raw_id = value.as_ref().trim();
+                    let api_id = raw_id.parse::<i64>().map_err(|source| {
+                        ConfigError::InvalidTelegramApiId {
+                            value: raw_id.to_owned(),
+                            reason: "must be a positive integer",
+                            source: Some(source),
+                        }
+                    })?;
+                    if api_id <= 0 {
+                        return Err(ConfigError::InvalidTelegramApiId {
+                            value: raw_id.to_owned(),
+                            reason: "must be greater than zero",
+                            source: None,
+                        });
+                    }
+                    config.telegram_api_id = Some(api_id);
+                }
+                "HERMES_TELEGRAM_API_HASH" => {
+                    let raw_hash = value.as_ref().trim();
+                    if raw_hash.is_empty() {
+                        return Err(ConfigError::EmptyTelegramApiHash);
+                    }
+                    config.telegram_api_hash = Some(ResolvedSecret::new(raw_hash)?);
                 }
                 "HERMES_OLLAMA_BASE_URL" => {
                     let raw_url = value.as_ref().trim();
@@ -151,6 +186,18 @@ impl AppConfig {
         self.secret_vault_key.as_ref()
     }
 
+    pub fn tdjson_path(&self) -> Option<&Path> {
+        self.tdjson_path.as_deref()
+    }
+
+    pub fn telegram_api_id(&self) -> Option<i64> {
+        self.telegram_api_id
+    }
+
+    pub fn telegram_api_hash(&self) -> Option<&ResolvedSecret> {
+        self.telegram_api_hash.as_ref()
+    }
+
     pub fn ollama_base_url(&self) -> &str {
         &self.ollama_base_url
     }
@@ -179,6 +226,9 @@ impl Default for AppConfig {
             local_api_secret: None,
             secret_vault_path: None,
             secret_vault_key: None,
+            tdjson_path: None,
+            telegram_api_id: None,
+            telegram_api_hash: None,
             ollama_base_url: DEFAULT_OLLAMA_BASE_URL.to_owned(),
             ollama_chat_model: DEFAULT_OLLAMA_CHAT_MODEL.to_owned(),
             ollama_embed_model: DEFAULT_OLLAMA_EMBED_MODEL.to_owned(),
@@ -207,6 +257,20 @@ pub enum ConfigError {
 
     #[error("HERMES_SECRET_VAULT_KEY is set but empty")]
     EmptySecretVaultKey,
+
+    #[error("HERMES_TDJSON_PATH is set but empty")]
+    EmptyTdjsonPath,
+
+    #[error("invalid HERMES_TELEGRAM_API_ID `{value}`: {reason}")]
+    InvalidTelegramApiId {
+        value: String,
+        reason: &'static str,
+        #[source]
+        source: Option<ParseIntError>,
+    },
+
+    #[error("HERMES_TELEGRAM_API_HASH is set but empty")]
+    EmptyTelegramApiHash,
 
     #[error("HERMES_OLLAMA_BASE_URL is set but empty")]
     EmptyOllamaBaseUrl,

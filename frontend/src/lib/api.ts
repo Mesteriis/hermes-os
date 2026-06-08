@@ -695,11 +695,71 @@ export type TelegramAccountSetupRequest = {
 	transcription_enabled: boolean;
 };
 
+export type TelegramLiveAccountSetupRequest = {
+	account_id: string;
+	provider_kind: TelegramProviderKind;
+	display_name: string;
+	external_account_id: string;
+	api_id?: number;
+	api_hash?: string;
+	bot_token?: string;
+	session_encryption_key?: string;
+	tdlib_data_path?: string;
+	transcription_enabled: boolean;
+};
+
+export type TelegramQrLoginStartRequest = {
+	account_id: string;
+	display_name: string;
+	external_account_id: string;
+	api_id?: number;
+	api_hash?: string;
+	session_encryption_key?: string;
+	tdlib_data_path?: string;
+	transcription_enabled: boolean;
+};
+
+export type TelegramQrLoginPasswordRequest = {
+	password: string;
+};
+
+export type TelegramQrLoginStatus =
+	| 'waiting_qr_scan'
+	| 'waiting_password'
+	| 'ready'
+	| 'expired'
+	| 'failed'
+	| 'runtime_unavailable';
+
+export type TelegramQrLoginStatusResponse = {
+	setup_id: string;
+	account_id: string;
+	status: TelegramQrLoginStatus;
+	qr_link: string | null;
+	qr_svg: string | null;
+	telegram_user_id: string | null;
+	telegram_username: string | null;
+	suggested_account_id: string | null;
+	suggested_display_name: string | null;
+	suggested_external_account_id: string | null;
+	expires_at: string | null;
+	poll_after_ms: number;
+	message: string | null;
+};
+
+export type TelegramCredentialBinding = {
+	secret_purpose: string;
+	secret_ref: string;
+	secret_kind: string;
+	store_kind: string;
+};
+
 export type TelegramAccountSetupResponse = {
 	account_id: string;
 	provider_kind: TelegramProviderKind;
 	runtime: string;
 	transcription_enabled: boolean;
+	credential_bindings: TelegramCredentialBinding[];
 };
 
 export type TelegramCapabilityStatus = {
@@ -712,6 +772,9 @@ export type TelegramCapabilityStatus = {
 export type TelegramCapabilitiesResponse = {
 	version: string;
 	runtime_mode: string;
+	telegram_app_credentials_configured: boolean;
+	tdjson_runtime_available: boolean;
+	qr_login_ready: boolean;
 	capabilities: TelegramCapabilityStatus[];
 	unsupported_features: string[];
 };
@@ -1331,6 +1394,62 @@ export async function setupTelegramFixtureAccount(
 		baseUrl, apiSecret, '/api/v1/telegram/accounts/fixture',
 		request,
 		'Telegram account setup request failed'
+	);
+}
+
+export async function setupTelegramAccount(
+	baseUrl: string,
+	apiSecret: string,
+	request: TelegramLiveAccountSetupRequest
+): Promise<TelegramAccountSetupResponse> {
+	return postJson(
+		baseUrl,
+		apiSecret,
+		'/api/v1/telegram/accounts',
+		request,
+		'Telegram account setup request failed'
+	);
+}
+
+export async function startTelegramQrLogin(
+	baseUrl: string,
+	apiSecret: string,
+	request: TelegramQrLoginStartRequest
+): Promise<TelegramQrLoginStatusResponse> {
+	return postJson(
+		baseUrl,
+		apiSecret,
+		'/api/v1/telegram/login/qr/start',
+		request,
+		'Telegram QR login start failed'
+	);
+}
+
+export async function fetchTelegramQrLoginStatus(
+	baseUrl: string,
+	apiSecret: string,
+	setupId: string
+): Promise<TelegramQrLoginStatusResponse> {
+	return getJson(
+		baseUrl,
+		apiSecret,
+		`/api/v1/telegram/login/qr/${encodeURIComponent(setupId)}`,
+		'Telegram QR login status request failed'
+	);
+}
+
+export async function submitTelegramQrLoginPassword(
+	baseUrl: string,
+	apiSecret: string,
+	setupId: string,
+	request: TelegramQrLoginPasswordRequest
+): Promise<TelegramQrLoginStatusResponse> {
+	return postJson(
+		baseUrl,
+		apiSecret,
+		`/api/v1/telegram/login/qr/${encodeURIComponent(setupId)}/password`,
+		request,
+		'Telegram QR login password submit failed'
 	);
 }
 
