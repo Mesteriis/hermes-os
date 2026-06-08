@@ -63,6 +63,7 @@
 - `ADR-0054` - application settings store; user-editable runtime/UI settings live in `application_settings`, while provider accounts remain domain records.
 - `ADR-0055` - full email provider networking with read and write operations; supersedes ADR-0043. Read-only restriction retained only for automated integration tests.
 
+- `ADR-0077` - i18n with Russian and English interface via JSON dictionaries and Svelte stores; English strings serve as translation keys, ru.json provides Russian translations.
 ## 4. Implementation Phase
 
 The project has entered implementation with the Rust backend foundation. Agents may add scoped implementation code when it follows the current request, relevant ADR and existing architecture.

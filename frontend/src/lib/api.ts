@@ -62,6 +62,7 @@ export type ApplicationSettingsResponse = {
 
 export const FRONTEND_LAYOUT_SETTING_KEY = 'frontend.layout';
 export const FRONTEND_SIDEBAR_SETTING_KEY = 'frontend.sidebar';
+export const FRONTEND_LOCALE_SETTING_KEY = 'frontend.locale';
 
 export type ProviderAccount = {
 	account_id: string;
@@ -1238,6 +1239,10 @@ export function findFrontendSidebarSetting(settings: ApplicationSetting[]): Appl
 	return settings.find((setting) => setting.setting_key === FRONTEND_SIDEBAR_SETTING_KEY) ?? null;
 }
 
+export function findFrontendLocaleSetting(settings: ApplicationSetting[]): ApplicationSetting | null {
+	return settings.find((setting) => setting.setting_key === FRONTEND_LOCALE_SETTING_KEY) ?? null;
+}
+
 export async function saveFrontendLayoutSetting(
 	baseUrl: string,
 	apiSecret: string,
@@ -1252,6 +1257,14 @@ export async function saveFrontendSidebarSetting(
 	value: SidebarSettings
 ): Promise<ApplicationSetting> {
 	return saveApplicationSetting(baseUrl, apiSecret, FRONTEND_SIDEBAR_SETTING_KEY, value);
+}
+
+export async function saveFrontendLocaleSetting(
+	baseUrl: string,
+	apiSecret: string,
+	value: string
+): Promise<ApplicationSetting> {
+	return saveApplicationSetting(baseUrl, apiSecret, FRONTEND_LOCALE_SETTING_KEY, value);
 }
 
 export async function fetchProviderAccounts(

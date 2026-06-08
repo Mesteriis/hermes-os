@@ -78,6 +78,8 @@
 		type CalendarEvent,
 		findFrontendLayoutSetting,
 		findFrontendSidebarSetting,
+		findFrontendLocaleSetting,
+		FRONTEND_LOCALE_SETTING_KEY,
 		ingestTelegramFixtureMessage,
 		ingestWhatsappWebFixtureMessage,
 		refreshAiTaskCandidates,
@@ -88,6 +90,7 @@
 		retryDocumentProcessingJob,
 		saveApplicationSetting,
 		saveFrontendSidebarSetting,
+		saveFrontendLocaleSetting,
 		searchGraphNodes,
 		saveAutomationPolicy,
 		saveAutomationTemplate,
@@ -180,6 +183,8 @@
 		type ViewLayoutOverride
 	} from '$lib/layout';
 	import { onMount } from 'svelte';
+	import { currentLocale, setLocale, t } from '$lib/i18n';
+	const _ = (key: string) => t($currentLocale, key);
 
 	type Provider = 'gmail' | 'icloud' | 'imap';
 	type AccountWizardKind = 'mail' | 'calendar' | 'telegram' | 'whatsapp';
@@ -699,7 +704,7 @@
 	let settingsActionMessage = $state('');
 	let isSettingsLoading = $state(false);
 	let savingSettingKey = $state<string | null>(null);
-	let selectedSettingsSection = $state<'application' | 'sidebar' | 'accounts'>('application');
+	let selectedSettingsSection = $state<'application' | 'sidebar' | 'accounts' | 'language'>('application');
 
 	const primaryNav = $derived.by((): NavItem[] =>
 		primaryWorkspaceNav.map((item) => ({ ...item, enabled: true }))
@@ -1275,6 +1280,10 @@
 			layoutSettings = parseLayoutSettings(frontendLayoutSetting?.value ?? null);
 			sidebarSettings = parseSidebarSettings(frontendSidebarSetting?.value ?? null);
 			sidebarDraft = null;
+			const frontendLocaleSetting = findFrontendLocaleSetting(settingsResponse.items);
+			if (frontendLocaleSetting?.value === 'ru' || frontendLocaleSetting?.value === 'en') {
+				setLocale(frontendLocaleSetting.value);
+			}
 			layoutError = '';
 			sidebarError = '';
 			providerAccounts = accountsResponse.items;
@@ -4603,8 +4612,8 @@
 				<img src="/assets/hermes-logo-mark.png" alt="" class="brand-mark" />
 			</button>
 			<div class="brand-copy">
-				<p class="brand-name">Hermes Hub</p>
-				<p class="brand-subtitle">Personal OS</p>
+				<p class="brand-name">{_('Hermes Hub')}</p>
+				<p class="brand-subtitle">{_('Personal OS')}</p>
 			</div>
 		</div>
 
@@ -4623,7 +4632,7 @@
 							onclick={() => selectSidebarItem(item)}
 						>
 							<Icon icon={sidebarItemIcon(item)} width="18" height="18" />
-							<span>{sidebarItemLabel(item)}</span>
+							<span>{_(sidebarItemLabel(item))}</span>
 							{#if sidebarItemBadge(item)}
 								<em>{sidebarItemBadge(item)}</em>
 							{/if}
@@ -4640,11 +4649,11 @@
 							aria-expanded={isSidebarRail ? activeSidebarRailGroupId === group.id : isSidebarGroupExpanded(group.id)}
 							aria-controls={`sidebar-group-${group.id}-sections`}
 							aria-haspopup={isSidebarRail ? 'menu' : undefined}
-							title={sidebarGroupLabel(group, entryIndex)}
+							title={_(sidebarGroupLabel(group, entryIndex))}
 							onclick={() => toggleSidebarGroup(group)}
 						>
 							<Icon icon={group.icon} width="18" height="18" />
-							<span>{sidebarGroupLabel(group, entryIndex)}</span>
+							<span>{_(sidebarGroupLabel(group, entryIndex))}</span>
 							{#if !isSidebarRail}
 								<Icon class="nav-disclosure" icon={isSidebarGroupExpanded(group.id) ? 'tabler:chevron-up' : 'tabler:chevron-down'} width="15" height="15" />
 							{/if}
@@ -4653,7 +4662,7 @@
 							<div
 								id={`sidebar-group-${group.id}-sections`}
 								class="communications-rail-dropdown"
-								aria-label={`${sidebarGroupLabel(group, entryIndex)} sections`}
+								aria-label={`${_(sidebarGroupLabel(group, entryIndex))} sections`}
 							>
 								{#each group.items as item}
 									{#if sidebarGroupHasSeparatorBefore(group, item.itemId)}
@@ -4669,7 +4678,7 @@
 										onclick={() => selectSidebarItem(item)}
 									>
 										<Icon icon={sidebarItemIcon(item)} width="16" height="16" />
-										<span>{sidebarItemLabel(item)}</span>
+										<span>{_(sidebarItemLabel(item))}</span>
 										{#if sidebarItemBadge(item)}
 											<em>{sidebarItemBadge(item)}</em>
 										{/if}
@@ -4681,7 +4690,7 @@
 							<div
 								id={`sidebar-group-${group.id}-sections`}
 								class="communications-subnav"
-								aria-label={`${sidebarGroupLabel(group, entryIndex)} sections`}
+								aria-label={`${_(sidebarGroupLabel(group, entryIndex))} sections`}
 							>
 								{#each group.items as item}
 									{#if sidebarGroupHasSeparatorBefore(group, item.itemId)}
@@ -4697,7 +4706,7 @@
 										onclick={() => selectSidebarItem(item)}
 									>
 										<Icon icon={sidebarItemIcon(item)} width="16" height="16" />
-										<span>{sidebarItemLabel(item)}</span>
+										<span>{_(sidebarItemLabel(item))}</span>
 										{#if sidebarItemBadge(item)}
 											<em>{sidebarItemBadge(item)}</em>
 										{/if}
@@ -4713,7 +4722,7 @@
 		<div class="sidebar-tools" aria-label="System navigation">
 			<button type="button" class="settings-link" class:active={currentView === 'settings'} title="Open settings" onclick={() => setCurrentView('settings')}>
 				<Icon icon="tabler:settings" width="18" height="18" />
-				<span>Settings</span>
+				<span>{_('Settings')}</span>
 			</button>
 		</div>
 	</aside>
@@ -4727,11 +4736,11 @@
 		></button>
 	{/if}
 
-	<section class="workspace" class:layout-editing={isLayoutEditing} aria-label={`${activeView.title} workspace`}>
+	<section class="workspace" class:layout-editing={isLayoutEditing} aria-label={`${_(activeView.title)} workspace`}>
 		<header class="topbar">
 			<div class="topbar-title">
-				<h1>{activeView.title}</h1>
-				<p>{activeView.subtitle}</p>
+				<h1>{_(activeView.title)}</h1>
+				<p>{_(activeView.subtitle)}</p>
 			</div>
 			<div class="top-actions">
 				<button
@@ -4766,12 +4775,16 @@
 						<div id="user-menu" class="user-menu" role="menu" aria-label="User menu">
 							<button type="button" role="menuitem" onclick={startLayoutEditing} disabled={isLayoutEditing}>
 								<Icon icon="tabler:layout-dashboard" width="16" height="16" />
-								<span>Constructor Mode</span>
+								<span>{_('Constructor Mode')}</span>
+							</button>
+							<button type="button" role="menuitem" onclick={async () => { const loc = $currentLocale === 'en' ? 'ru' : 'en'; setLocale(loc); try { await saveFrontendLocaleSetting(apiBaseUrl, apiSecret, loc); } catch (_) {} }}>
+								<Icon icon="tabler:language" width="16" height="16" />
+								<span>{$currentLocale === 'en' ? 'Русский' : 'English'}</span>
 							</button>
 							<div class="user-menu-separator" role="separator"></div>
 							<button type="button" role="menuitem" onclick={exitApplication}>
 								<Icon icon="tabler:logout" width="16" height="16" />
-								<span>Exit</span>
+								<span>{_('Exit')}</span>
 							</button>
 						</div>
 					{/if}
@@ -4789,7 +4802,7 @@
 			<aside id="notifications-drawer" class="notifications-drawer" aria-label="Notifications">
 				<header>
 					<div>
-						<h2>Notifications</h2>
+						<h2>{_('Notifications')}</h2>
 						<p>{notificationItems.length} active</p>
 					</div>
 					<button type="button" class="icon-button" aria-label="Close notifications" onclick={closeNotificationsDrawer}>
@@ -4799,7 +4812,7 @@
 				{#if notificationItems.length === 0}
 					<div class="notifications-empty">
 						<Icon icon="tabler:bell-check" width="28" height="28" />
-						<p>No active notifications.</p>
+						<p>{_('No active notifications.')}</p>
 					</div>
 				{:else}
 					<div class="notifications-list">
@@ -4876,7 +4889,7 @@
 								</article>
 							{/each}
 							<article class="metric-card focus-card">
-								<span>Focus Score</span>
+								<span>{_('Focus Score')}</span>
 								<div class="score-ring"><strong>78</strong></div>
 								<small>Good ↑ 5</small>
 							</article>
@@ -4890,8 +4903,8 @@
 						<section class="panel feed-panel">
 							<header class="panel-title-row">
 								<div>
-									<h2>What's New</h2>
-									<p>Key changes and important updates</p>
+									<h2>{_('What\'s New')}</h2>
+									<p>{_('Key changes and important updates')}</p>
 								</div>
 								<button type="button" class="ghost-button" disabled>All Types</button>
 							</header>
@@ -4917,8 +4930,8 @@
 						<section class="panel priorities-panel">
 							<header class="panel-title-row">
 								<div>
-									<h2>Today's Priorities</h2>
-									<p>Focus on what matters most</p>
+									<h2>{_('Today\'s Priorities')}</h2>
+									<p>{_('Focus on what matters most')}</p>
 								</div>
 							</header>
 							<div class="task-stack">
@@ -4942,8 +4955,8 @@
 						<section class="panel schedule-panel">
 							<header class="panel-title-row">
 								<div>
-									<h2>Upcoming</h2>
-									<p>Your schedule</p>
+									<h2>{_('Upcoming')}</h2>
+									<p>{_('Your schedule')}</p>
 								</div>
 							</header>
 							<div class="schedule-list">
@@ -4958,7 +4971,7 @@
 						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-people-talked-to" data-widget-hidden={!isWidgetVisible('home-people-talked-to')}>
 							{@render widgetEditChrome('home-people-talked-to')}
 							<section class="panel mini-panel">
-								<header class="panel-title-row"><h2>People You Talked To</h2><button type="button" class="link-button" disabled>View all</button></header>
+								<header class="panel-title-row"><h2>{_('People You Talked To')}</h2><button type="button" class="link-button" disabled>View all</button></header>
 								<div class="person-list">
 									{#each peopleTalked as person}
 										<article>
@@ -4973,7 +4986,7 @@
 						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-system-status" data-widget-hidden={!isWidgetVisible('home-system-status')}>
 							{@render widgetEditChrome('home-system-status')}
 							<section class="panel mini-panel">
-								<header class="panel-title-row"><h2>System Status</h2></header>
+								<header class="panel-title-row"><h2>{_('System Status')}</h2></header>
 								<ul class="status-list">
 									<li class:online={status}>All systems operational</li>
 									<li>AI Agents online <span>5/5</span></li>
@@ -4990,7 +5003,7 @@
 					{@render widgetEditChrome('home-active-projects')}
 					<section class="panel full-band">
 						<header class="panel-title-row">
-							<h2>Active Projects</h2>
+							<h2>{_('Active Projects')}</h2>
 							<button type="button" class="link-button" onclick={() => setCurrentView('projects')}>View all projects</button>
 						</header>
 						<div class="project-card-row">
@@ -5014,8 +5027,8 @@
 			<section class="communications-page">
 				<div class="view-header">
 					<div>
-						<h1>{activeView.title}</h1>
-						<p>{activeView.subtitle}</p>
+						<h1>{_(activeView.title)}</h1>
+						<p>{_(activeView.subtitle)}</p>
 					</div>
 					<div class="header-actions">
 						<button type="button" class="segmented active"><Icon icon="tabler:message" width="16" height="16" /></button>
@@ -5152,7 +5165,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
@@ -5283,7 +5296,7 @@
 							</div>
 							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-active-projects" data-widget-hidden={!isWidgetVisible('persons-active-projects')}>
 								{@render widgetEditChrome('persons-active-projects')}
-								<section class="panel info-card"><h2>Active Projects</h2>{#each projects.slice(0, 3) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
+								<section class="panel info-card"><h2>{_('Active Projects')}</h2>{#each projects.slice(0, 3) as project}<div class="related-row"><span class="round-icon {project.tone}"><Icon icon={project.icon} width="16" height="16" /></span><strong>{project.name}</strong><em>{project.progress}%</em></div>{/each}</section>
 							</div>
 						</div>
 						{:else}
@@ -5377,7 +5390,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
@@ -5638,7 +5651,7 @@
 		{:else if currentView === 'tasks'}
 			<section class="tasks-page">
 				<div class="view-header">
-					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:hexagon" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:hexagon" width="28" height="28" /></span><div><h1>{_(activeView.title)}</h1><p>{_(activeView.subtitle)}</p></div></div>
 					<div class="widget-frame inline-metrics" class:editing={isLayoutEditing} data-widget-id="tasks-metrics" data-widget-hidden={!isWidgetVisible('tasks-metrics')}>
 						{@render widgetEditChrome('tasks-metrics')}
 						<div class="metric-grid inline-metrics">
@@ -5734,7 +5747,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
@@ -5776,7 +5789,7 @@
 				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="calendar-toolbar" data-widget-hidden={!isWidgetVisible('calendar-toolbar')}>
 					{@render widgetEditChrome('calendar-toolbar')}
 					<div class="view-header">
-						<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:calendar" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+						<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:calendar" width="28" height="28" /></span><div><h1>{_(activeView.title)}</h1><p>{_(activeView.subtitle)}</p></div></div>
 						<div class="search-bar">
 							<input type="text" placeholder="Search events..." bind:value={calendarSearchQuery} oninput={() => searchCalendar()} />
 						</div>
@@ -5875,7 +5888,7 @@
 						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="calendar-upcoming" data-widget-hidden={!isWidgetVisible('calendar-upcoming')}>
 							{@render widgetEditChrome('calendar-upcoming')}
 							<section class="panel info-card">
-								<h2>Upcoming</h2>
+								<h2>{_('Upcoming')}</h2>
 								{#if calendarEvents.length === 0}
 									<p class="muted">No upcoming events</p>
 								{:else}
@@ -5952,7 +5965,7 @@
 		{:else if currentView === 'documents'}
 			<section class="documents-page">
 				<div class="view-header">
-					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:file-text" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:file-text" width="28" height="28" /></span><div><h1>{_(activeView.title)}</h1><p>{_(activeView.subtitle)}</p></div></div>
 					<button type="button" class="primary-button" disabled>Upload</button>
 				</div>
 				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="documents-source-cards" data-widget-hidden={!isWidgetVisible('documents-source-cards')}>
@@ -6029,7 +6042,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
@@ -6109,7 +6122,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
@@ -6439,7 +6452,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
@@ -6479,7 +6492,7 @@
 		{:else if currentView === 'communications' && activeCommunicationSection === 'telegram'}
 			<section class="telegram-page communications-page">
 				<div class="view-header">
-					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-telegram" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-telegram" width="28" height="28" /></span><div><h1>{_(activeView.title)}</h1><p>{_(activeView.subtitle)}</p></div></div>
 					<button type="button" class="primary-button" onclick={() => openAccountDrawer('telegram')}><Icon icon="tabler:plus" width="16" height="16" />Add Account</button>
 					<button type="button" class="primary-button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
@@ -6728,7 +6741,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
@@ -6768,7 +6781,7 @@
 		{:else if currentView === 'communications' && activeCommunicationSection === 'whatsapp'}
 			<section class="whatsapp-page communications-page">
 				<div class="view-header">
-					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-whatsapp" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-whatsapp" width="28" height="28" /></span><div><h1>{_(activeView.title)}</h1><p>{_(activeView.subtitle)}</p></div></div>
 					<button type="button" class="primary-button" onclick={() => openAccountDrawer('whatsapp')}><Icon icon="tabler:plus" width="16" height="16" />Add Account</button>
 					<button type="button" class="primary-button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
@@ -6926,7 +6939,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
@@ -6968,7 +6981,7 @@
 				<div class="view-header">
 					<div class="view-title-with-icon">
 						<span class="hero-mark small"><Icon icon="tabler:settings" width="28" height="28" /></span>
-						<div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div>
+						<div><h1>{_(activeView.title)}</h1><p>{_(activeView.subtitle)}</p></div>
 					</div>
 					<button type="button" class="primary-button" onclick={() => void loadSettingsWorkspace()} disabled={isSettingsLoading}>
 						<Icon icon="tabler:refresh" width="16" height="16" />Refresh
@@ -6978,7 +6991,7 @@
 				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-metrics" data-widget-hidden={!isWidgetVisible('settings-metrics')}>
 					{@render widgetEditChrome('settings-metrics')}
 					<div class="metric-grid settings-metrics">
-						<article class="metric-card"><span>Settings</span><strong>{applicationSettings.length}</strong><small>Editable runtime values</small></article>
+						<article class="metric-card"><span>{_('Settings')}</span><strong>{applicationSettings.length}</strong><small>Editable runtime values</small></article>
 						<article class="metric-card"><span>Accounts</span><strong>{providerAccounts.length}</strong><small>Email, Telegram, WhatsApp</small></article>
 						<article class="metric-card"><span>Mail</span><strong>{emailProviderAccounts.length}</strong><small>Gmail, iCloud, IMAP</small></article>
 						<article class="metric-card"><span>Telegram</span><strong>{telegramProviderAccounts.length}</strong><small>User and bot records</small></article>
@@ -7004,9 +7017,37 @@
 					<button type="button" class:active={selectedSettingsSection === 'accounts'} onclick={() => (selectedSettingsSection = 'accounts')}>
 						<Icon icon="tabler:users" width="16" height="16" />Accounts <em>{providerAccounts.length}</em>
 					</button>
+					<button type="button" class:active={selectedSettingsSection === 'language'} onclick={() => (selectedSettingsSection = 'language')}>
+						<Icon icon="tabler:language" width="16" height="16" />Language
+					</button>
 				</div>
 
-				{#if selectedSettingsSection === 'application'}
+				{#if selectedSettingsSection === 'language'}
+					<div class="settings-layout">
+						<section class="panel settings-list-panel">
+							<header class="panel-title-row">
+								<div><h2>Interface Language</h2><p>Choose the display language for the Hermes Hub interface.</p></div>
+							</header>
+							<div class="settings-category-list">
+								<div class="setting-row">
+									<span>Language</span>
+									<div class="setting-control">
+										<select value={$currentLocale} onchange={async (event) => { const el = event.target; if (el instanceof HTMLSelectElement) { const loc = el.value as "en" | "ru"; setLocale(loc); try { await saveFrontendLocaleSetting(apiBaseUrl, apiSecret, loc); } catch (e) { settingsError = e instanceof Error ? e.message : 'Failed to save locale'; } } }}>
+											<option value="en">English</option>
+											<option value="ru">Русский</option>
+										</select>
+									</div>
+								</div>
+							</div>
+						</section>
+						<aside class="settings-rail">
+							<section class="panel info-card">
+								<h2>About</h2>
+								<p>Language preference is stored in memory for the current session. A persistent locale setting can be added later.</p>
+							</section>
+						</aside>
+					</div>
+				{:else if selectedSettingsSection === 'application'}
 					<div class="settings-layout">
 						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-application-list-editor" data-widget-hidden={!isWidgetVisible('settings-application-list-editor')}>
 							{@render widgetEditChrome('settings-application-list-editor')}
@@ -7157,18 +7198,18 @@
 														<div class="sidebar-config-item-main">
 															<span class="round-icon green"><Icon icon={group.icon} width="18" height="18" /></span>
 															<div>
-																<strong>{sidebarGroupLabel(group, rootIndex)}</strong>
+																<strong>{_(sidebarGroupLabel(group, rootIndex))}</strong>
 																<small>Expandable group · {group.itemIds.length} items</small>
 															</div>
 														</div>
 														<div class="sidebar-config-item-controls">
-															<button type="button" aria-label={`Move ${sidebarGroupLabel(group, rootIndex)} up`} title="Move group up" onclick={() => moveSidebarGroup(group.id, -1)} disabled={rootIndex === 0}>
+															<button type="button" aria-label={`Move ${_(sidebarGroupLabel(group, rootIndex))} up`} title="Move group up" onclick={() => moveSidebarGroup(group.id, -1)} disabled={rootIndex === 0}>
 																<Icon icon="tabler:arrow-up" width="16" height="16" />
 															</button>
-															<button type="button" aria-label={`Move ${sidebarGroupLabel(group, rootIndex)} down`} title="Move group down" onclick={() => moveSidebarGroup(group.id, 1)} disabled={rootIndex === effectiveSidebarSettings.rootItemIds.length - 1}>
+															<button type="button" aria-label={`Move ${_(sidebarGroupLabel(group, rootIndex))} down`} title="Move group down" onclick={() => moveSidebarGroup(group.id, 1)} disabled={rootIndex === effectiveSidebarSettings.rootItemIds.length - 1}>
 																<Icon icon="tabler:arrow-down" width="16" height="16" />
 															</button>
-															<button type="button" aria-label={`Remove ${sidebarGroupLabel(group, rootIndex)} group`} title="Remove group" onclick={() => removeSidebarGroup(group.id)} disabled={group.id === 'communications'}>
+															<button type="button" aria-label={`Remove ${_(sidebarGroupLabel(group, rootIndex))} group`} title="Remove group" onclick={() => removeSidebarGroup(group.id)} disabled={group.id === 'communications'}>
 																<Icon icon="tabler:trash" width="16" height="16" />
 															</button>
 														</div>
@@ -7190,7 +7231,7 @@
 															<select aria-label={`Move ${item.label}`} value="root" onchange={(event) => moveSidebarItemToGroup(item.id, inputEventValue(event))}>
 																<option value="root">Root level</option>
 																{#each effectiveSidebarSettings.groups as targetGroup, targetIndex}
-																	<option value={targetGroup.id}>{sidebarGroupLabel(targetGroup, targetIndex)}</option>
+																	<option value={targetGroup.id}>{_(sidebarGroupLabel(targetGroup, targetIndex))}</option>
 																{/each}
 															</select>
 															<button type="button" aria-label={`Move ${item.label} up`} title="Move item up" onclick={() => moveSidebarRootItem(rootId, -1)} disabled={rootIndex === 0}>
@@ -7223,13 +7264,13 @@
 												/>
 											</label>
 											<div class="sidebar-config-group-actions">
-												<button type="button" aria-label={`Move ${sidebarGroupLabel(group, groupIndex)} group up`} title="Move group up" onclick={() => moveSidebarGroup(group.id, -1)} disabled={sidebarRootIndexForGroup(group.id) <= 0}>
+												<button type="button" aria-label={`Move ${_(sidebarGroupLabel(group, groupIndex))} group up`} title="Move group up" onclick={() => moveSidebarGroup(group.id, -1)} disabled={sidebarRootIndexForGroup(group.id) <= 0}>
 													<Icon icon="tabler:arrow-up" width="16" height="16" />
 												</button>
-												<button type="button" aria-label={`Move ${sidebarGroupLabel(group, groupIndex)} group down`} title="Move group down" onclick={() => moveSidebarGroup(group.id, 1)} disabled={sidebarRootIndexForGroup(group.id) === effectiveSidebarSettings.rootItemIds.length - 1}>
+												<button type="button" aria-label={`Move ${_(sidebarGroupLabel(group, groupIndex))} group down`} title="Move group down" onclick={() => moveSidebarGroup(group.id, 1)} disabled={sidebarRootIndexForGroup(group.id) === effectiveSidebarSettings.rootItemIds.length - 1}>
 													<Icon icon="tabler:arrow-down" width="16" height="16" />
 												</button>
-												<button type="button" aria-label={`Remove ${sidebarGroupLabel(group, groupIndex)} group`} title="Remove group" onclick={() => removeSidebarGroup(group.id)} disabled={group.id === 'communications'}>
+												<button type="button" aria-label={`Remove ${_(sidebarGroupLabel(group, groupIndex))} group`} title="Remove group" onclick={() => removeSidebarGroup(group.id)} disabled={group.id === 'communications'}>
 													<Icon icon="tabler:trash" width="16" height="16" />
 												</button>
 											</div>
@@ -7258,7 +7299,7 @@
 																		<option value="root">Root level</option>
 																	{/if}
 																	{#each effectiveSidebarSettings.groups as targetGroup, targetIndex}
-																		<option value={targetGroup.id}>{sidebarGroupLabel(targetGroup, targetIndex)}</option>
+																		<option value={targetGroup.id}>{_(sidebarGroupLabel(targetGroup, targetIndex))}</option>
 																	{/each}
 																</select>
 																<button type="button" aria-label={`Move ${item.label} up`} title="Move item up" onclick={() => moveSidebarItem(item.id, -1)}>
@@ -7300,10 +7341,10 @@
 									{#each sidebarRootEntries as entry, entryIndex}
 										<li>
 											{#if entry.kind === 'group'}
-												<strong>{sidebarGroupLabel(entry.group, entryIndex)}</strong>
+												<strong>{_(sidebarGroupLabel(entry.group, entryIndex))}</strong>
 												<span>{entry.group.items.map((item) => sidebarItemLabel(item)).join(', ') || 'Empty group'}</span>
 											{:else}
-												<strong>{sidebarItemLabel(entry.item)}</strong>
+												<strong>{_(sidebarItemLabel(entry.item))}</strong>
 												<span>Root domain</span>
 											{/if}
 										</li>
@@ -7444,7 +7485,7 @@
 		{:else if currentView === 'agents'}
 			<section class="agents-page">
 				<div class="view-header">
-					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:robot" width="28" height="28" /></span><div><h1>{activeView.title}</h1><p>{activeView.subtitle}</p></div></div>
+					<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:robot" width="28" height="28" /></span><div><h1>{_(activeView.title)}</h1><p>{_(activeView.subtitle)}</p></div></div>
 					<button type="button" class="primary-button" onclick={() => void loadAiWorkspace()} disabled={isAiLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 				</div>
 				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="ai-runtime-metrics" data-widget-hidden={!isWidgetVisible('ai-runtime-metrics')}>
@@ -7557,7 +7598,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
@@ -7693,7 +7734,7 @@
 					<button type="button" class="drawer-backdrop" onclick={() => (isComposeOpen = false)} aria-label="Close compose"></button>
 					<aside class="account-drawer"  aria-label="Compose email">
 						<header>
-							<div><p>Compose</p><h2>New Message</h2></div>
+							<div><p>{_('Compose')}</p><h2>New Message</h2></div>
 							<button type="button" class="icon-button" onclick={() => (isComposeOpen = false)} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
 						</header>
 						<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void handleSaveDraft(); }}>
