@@ -138,6 +138,7 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
+use crate::vault::{HostVault, HostVaultConfig};
 use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 
 use crate::ai::api::*;
@@ -165,14 +166,36 @@ pub fn build_router(config: AppConfig) -> Router {
 
 pub fn build_router_with_database(config: AppConfig, database: Database) -> Router {
     let api_secret = config.local_api_secret().unwrap_or_default().to_owned();
+    let vault = HostVault::new(HostVaultConfig {
+        home: config.vault_home().to_path_buf(),
+        dev_mode: config.dev_mode(),
+        dev_key_path: config.dev_key_path().to_path_buf(),
+    })
+    .expect("host vault runtime must initialize");
     let state = AppState {
         config,
         database,
+        vault,
         account_setup: AccountSetupState::default(),
     };
 
     let api_routes = Router::new()
         .route("/api/v1/status", get(get_v1_status))
+        .route("/api/v1/vault/status", get(get_v1_vault_status))
+        .route(
+            "/api/v1/vault/collect-entropy",
+            post(post_v1_vault_collect_entropy),
+        )
+        .route("/api/v1/vault/create", post(post_v1_vault_create))
+        .route("/api/v1/vault/unlock", post(post_v1_vault_unlock))
+        .route(
+            "/api/v1/vault/recovery/export",
+            post(post_v1_vault_recovery_export),
+        )
+        .route(
+            "/api/v1/vault/recovery/import",
+            post(post_v1_vault_recovery_import),
+        )
         .route(
             "/api/v1/communications/messages",
             get(get_v1_communication_messages),

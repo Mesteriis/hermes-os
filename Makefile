@@ -82,6 +82,22 @@ docker-env:
 			printf '\nHERMES_LOCAL_API_SECRET=change-me-local-api-secret\n' >> docker/.env; \
 			printf '%s\n' 'Added HERMES_LOCAL_API_SECRET to docker/.env. Review it before running services.'; \
 		fi; \
+		if ! grep -q '^HERMES_DEV_MODE=' docker/.env; then \
+			printf '\nHERMES_DEV_MODE=true\n' >> docker/.env; \
+			printf '%s\n' 'Added HERMES_DEV_MODE to docker/.env. Review it before running services.'; \
+		fi; \
+		if ! grep -q '^HERMES_HOST_VAULT_HOME=' docker/.env; then \
+			printf '\nHERMES_HOST_VAULT_HOME=$${HOME}/.hermes/vault\n' >> docker/.env; \
+			printf '%s\n' 'Added HERMES_HOST_VAULT_HOME to docker/.env. Review it before running services.'; \
+		fi; \
+		if ! grep -q '^HERMES_VAULT_HOME=' docker/.env; then \
+			printf '\nHERMES_VAULT_HOME=/hermes-vault\n' >> docker/.env; \
+			printf '%s\n' 'Added HERMES_VAULT_HOME to docker/.env. Review it before running services.'; \
+		fi; \
+		if ! grep -q '^HERMES_DEV_KEY_PATH=' docker/.env; then \
+			printf '\nHERMES_DEV_KEY_PATH=/hermes-vault/dev/master.key\n' >> docker/.env; \
+			printf '%s\n' 'Added HERMES_DEV_KEY_PATH to docker/.env. Review it before running services.'; \
+		fi; \
 		if ! grep -q '^HERMES_SECRET_VAULT_KEY=' docker/.env; then \
 			printf '\nHERMES_SECRET_VAULT_KEY=change-me-local-secret-vault-key\n' >> docker/.env; \
 			printf '%s\n' 'Added HERMES_SECRET_VAULT_KEY to docker/.env. Review it before running services.'; \
@@ -289,6 +305,9 @@ backend-run-dev: docker-env
 	@set -a; . docker/.env; set +a; \
 		DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
 		HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}" \
+		HERMES_DEV_MODE="$${HERMES_DEV_MODE:-true}" \
+		HERMES_VAULT_HOME="$${HERMES_HOST_VAULT_HOME:-$${HOME}/.hermes/vault}" \
+		HERMES_DEV_KEY_PATH="$${HERMES_HOST_VAULT_HOME:-$${HOME}/.hermes/vault}/dev/master.key" \
 		HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}" \
 		cargo run --manifest-path $(BACKEND_MANIFEST)
 
@@ -310,6 +329,9 @@ backend-watch-dev: docker-env
 		fi; \
 		export DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}"; \
 		export HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}"; \
+		export HERMES_DEV_MODE="$${HERMES_DEV_MODE:-true}"; \
+		export HERMES_VAULT_HOME="$${HERMES_HOST_VAULT_HOME:-$${HOME}/.hermes/vault}"; \
+		export HERMES_DEV_KEY_PATH="$${HERMES_HOST_VAULT_HOME:-$${HOME}/.hermes/vault}/dev/master.key"; \
 		export HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}"; \
 		export HERMES_HTTP_ADDR="$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080}"; \
 		printf '%s\n' "Backend: http://$${HERMES_BACKEND_BIND:-127.0.0.1}:$${HERMES_BACKEND_PORT:-8080} (auto-restart)"; \
@@ -335,6 +357,9 @@ backend-smoke-dev: docker-env
 		cargo build --manifest-path $(BACKEND_MANIFEST); \
 		DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
 		HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}" \
+		HERMES_DEV_MODE="$${HERMES_DEV_MODE:-true}" \
+		HERMES_VAULT_HOME="$${HERMES_HOST_VAULT_HOME:-$${HOME}/.hermes/vault}" \
+		HERMES_DEV_KEY_PATH="$${HERMES_HOST_VAULT_HOME:-$${HOME}/.hermes/vault}/dev/master.key" \
 		HERMES_HTTP_ADDR="127.0.0.1:$${smoke_port}" \
 		cargo run --manifest-path $(BACKEND_MANIFEST) >/tmp/hermes-hub-backend-smoke.log 2>&1 & \
 		backend_pid="$$!"; \

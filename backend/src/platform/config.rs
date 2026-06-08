@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 use crate::platform::secrets::{ResolvedSecret, SecretResolutionError};
+use crate::vault::{default_dev_key_path, default_vault_home};
 
 const DEFAULT_HTTP_ADDR: &str = "127.0.0.1:8080";
 const DEFAULT_SERVICE_NAME: &str = "hermes-hub-backend";
@@ -22,6 +23,9 @@ pub struct AppConfig {
     local_api_secret: Option<String>,
     secret_vault_path: Option<PathBuf>,
     secret_vault_key: Option<ResolvedSecret>,
+    vault_home: PathBuf,
+    dev_mode: bool,
+    dev_key_path: PathBuf,
     tdjson_path: Option<PathBuf>,
     telegram_api_id: Option<i64>,
     telegram_api_hash: Option<ResolvedSecret>,
@@ -83,6 +87,24 @@ impl AppConfig {
                         return Err(ConfigError::EmptySecretVaultKey);
                     }
                     config.secret_vault_key = Some(ResolvedSecret::new(raw_key)?);
+                }
+                "HERMES_VAULT_HOME" => {
+                    let raw_path = value.as_ref().trim();
+                    if raw_path.is_empty() {
+                        return Err(ConfigError::EmptyVaultHome);
+                    }
+                    config.vault_home = PathBuf::from(raw_path);
+                }
+                "HERMES_DEV_MODE" => {
+                    let raw_value = value.as_ref().trim();
+                    config.dev_mode = parse_bool_env("HERMES_DEV_MODE", raw_value)?;
+                }
+                "HERMES_DEV_KEY_PATH" => {
+                    let raw_path = value.as_ref().trim();
+                    if raw_path.is_empty() {
+                        return Err(ConfigError::EmptyDevKeyPath);
+                    }
+                    config.dev_key_path = PathBuf::from(raw_path);
                 }
                 "HERMES_TDJSON_PATH" => {
                     let raw_path = value.as_ref().trim();
@@ -186,6 +208,18 @@ impl AppConfig {
         self.secret_vault_key.as_ref()
     }
 
+    pub fn vault_home(&self) -> &Path {
+        &self.vault_home
+    }
+
+    pub fn dev_mode(&self) -> bool {
+        self.dev_mode
+    }
+
+    pub fn dev_key_path(&self) -> &Path {
+        &self.dev_key_path
+    }
+
     pub fn tdjson_path(&self) -> Option<&Path> {
         self.tdjson_path.as_deref()
     }
@@ -217,6 +251,9 @@ impl AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
+        let home_dir = env::var_os("HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("."));
         Self {
             service_name: DEFAULT_SERVICE_NAME.to_owned(),
             http_addr: DEFAULT_HTTP_ADDR
@@ -226,6 +263,9 @@ impl Default for AppConfig {
             local_api_secret: None,
             secret_vault_path: None,
             secret_vault_key: None,
+            vault_home: default_vault_home(&home_dir),
+            dev_mode: false,
+            dev_key_path: default_dev_key_path(&home_dir),
             tdjson_path: None,
             telegram_api_id: None,
             telegram_api_hash: None,
@@ -234,6 +274,17 @@ impl Default for AppConfig {
             ollama_embed_model: DEFAULT_OLLAMA_EMBED_MODEL.to_owned(),
             ollama_timeout_seconds: DEFAULT_OLLAMA_TIMEOUT_SECONDS,
         }
+    }
+}
+
+fn parse_bool_env(name: &'static str, value: &str) -> Result<bool, ConfigError> {
+    match value {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        other => Err(ConfigError::InvalidBoolEnv {
+            name,
+            value: other.to_owned(),
+        }),
     }
 }
 
@@ -257,6 +308,15 @@ pub enum ConfigError {
 
     #[error("HERMES_SECRET_VAULT_KEY is set but empty")]
     EmptySecretVaultKey,
+
+    #[error("HERMES_VAULT_HOME is set but empty")]
+    EmptyVaultHome,
+
+    #[error("HERMES_DEV_KEY_PATH is set but empty")]
+    EmptyDevKeyPath,
+
+    #[error("invalid {name} `{value}`: expected true or false")]
+    InvalidBoolEnv { name: &'static str, value: String },
 
     #[error("HERMES_TDJSON_PATH is set but empty")]
     EmptyTdjsonPath,

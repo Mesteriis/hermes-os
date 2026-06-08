@@ -11,6 +11,9 @@ use hermes_hub_backend::platform::secrets::{
     SecretResolutionError, SecretResolver, SecretStoreKind,
 };
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::vault::{
+    EntropyEvent, HostVault, HostVaultConfig, SecretEntryContext, VaultMode,
+};
 
 #[tokio::test]
 async fn encrypted_vault_persists_secrets_without_plaintext_leakage() {
@@ -163,6 +166,163 @@ async fn database_encrypted_vault_rejects_wrong_master_key_against_postgres() {
     assert!(matches!(error, SecretResolutionError::StoreFailure { .. }));
 }
 
+#[test]
+fn host_vault_requires_entropy_threshold_before_create() {
+    let directory = tempdir().expect("tempdir");
+    let vault = test_host_vault(directory.path());
+
+    vault
+        .collect_entropy(entropy_events(1_999))
+        .expect("collect entropy");
+    let error = vault.create().expect_err("insufficient entropy must fail");
+
+    assert!(error.to_string().contains("insufficient vault entropy"));
+}
+
+#[tokio::test]
+async fn host_vault_create_unlock_store_and_resolve_secret() {
+    let directory = tempdir().expect("tempdir");
+    let vault = test_host_vault(directory.path());
+    vault
+        .collect_entropy(entropy_events(2_000))
+        .expect("collect entropy");
+    let status = vault.create().expect("create vault");
+    assert_eq!(status.state, VaultMode::Unlocked);
+
+    let metadata = serde_json::json!({
+        "provider": "imap",
+        "account_id": "acct-host-vault"
+    });
+    vault
+        .store_secret(
+            "secret:provider-account:acct-host-vault:imap_password",
+            "host-vault-password",
+            SecretEntryContext {
+                entry_kind: "provider_credential",
+                account_id: "acct-host-vault",
+                purpose: "imap_password",
+                secret_kind: "password",
+                label: "IMAP password",
+                metadata: &metadata,
+            },
+        )
+        .expect("store host vault secret");
+
+    let database =
+        fs::read_to_string(directory.path().join("vault").join("vault.db")).unwrap_or_default();
+    assert!(!database.contains("host-vault-password"));
+
+    let resolved = vault
+        .resolve(&host_vault_secret_reference(
+            "secret:provider-account:acct-host-vault:imap_password",
+            SecretKind::Password,
+        ))
+        .await
+        .expect("resolve host vault secret");
+    assert_eq!(resolved.expose_for_runtime(), "host-vault-password");
+
+    vault.lock().expect("lock vault");
+    assert_eq!(vault.status().expect("status").state, VaultMode::Locked);
+    vault.unlock().expect("unlock vault");
+    assert_eq!(
+        vault
+            .read_secret("secret:provider-account:acct-host-vault:imap_password")
+            .expect("read after unlock"),
+        "host-vault-password"
+    );
+}
+
+#[tokio::test]
+async fn host_vault_rejects_tampered_ciphertext() {
+    let directory = tempdir().expect("tempdir");
+    let vault = test_host_vault(directory.path());
+    vault
+        .collect_entropy(entropy_events(2_000))
+        .expect("collect entropy");
+    vault.create().expect("create vault");
+    let metadata = serde_json::json!({});
+    let secret_ref = "secret:provider-account:tampered:imap_password";
+    vault
+        .store_secret(
+            secret_ref,
+            "tamper-secret",
+            SecretEntryContext {
+                entry_kind: "provider_credential",
+                account_id: "tampered",
+                purpose: "imap_password",
+                secret_kind: "password",
+                label: "IMAP password",
+                metadata: &metadata,
+            },
+        )
+        .expect("store host vault secret");
+
+    {
+        let connection =
+            rusqlite::Connection::open(directory.path().join("vault").join("vault.db"))
+                .expect("open vault db");
+        connection
+            .execute(
+                "UPDATE vault_entries SET aad = 'tampered aad' WHERE secret_ref = ?1",
+                rusqlite::params![secret_ref],
+            )
+            .expect("tamper aad");
+    }
+
+    let error = vault
+        .resolve(&host_vault_secret_reference(
+            secret_ref,
+            SecretKind::Password,
+        ))
+        .await
+        .expect_err("tampered AAD must fail");
+    assert!(matches!(error, SecretResolutionError::StoreFailure { .. }));
+}
+
+#[test]
+fn host_vault_recovery_phrase_restores_existing_secret_access() {
+    let directory = tempdir().expect("tempdir");
+    let vault = test_host_vault(directory.path());
+    vault
+        .collect_entropy(entropy_events(2_000))
+        .expect("collect entropy");
+    vault.create().expect("create vault");
+    let metadata = serde_json::json!({});
+    let secret_ref = "secret:provider-account:recoverable:imap_password";
+    vault
+        .store_secret(
+            secret_ref,
+            "recoverable-secret",
+            SecretEntryContext {
+                entry_kind: "provider_credential",
+                account_id: "recoverable",
+                purpose: "imap_password",
+                secret_kind: "password",
+                label: "IMAP password",
+                metadata: &metadata,
+            },
+        )
+        .expect("store host vault secret");
+    let recovery = vault.export_recovery().expect("export recovery");
+
+    let restored = HostVault::new(HostVaultConfig {
+        home: directory.path().join("vault"),
+        dev_mode: true,
+        dev_key_path: directory.path().join("restored-dev").join("master.key"),
+    })
+    .expect("restored host vault");
+    restored
+        .import_recovery(&recovery.recovery_phrase)
+        .expect("import recovery");
+
+    assert_eq!(
+        restored
+            .read_secret(secret_ref)
+            .expect("read restored secret"),
+        "recoverable-secret"
+    );
+}
+
 fn secret_reference(secret_ref: &str) -> SecretReference {
     let now = Utc::now();
 
@@ -175,6 +335,44 @@ fn secret_reference(secret_ref: &str) -> SecretReference {
         created_at: now,
         updated_at: now,
     }
+}
+
+fn host_vault_secret_reference(secret_ref: &str, secret_kind: SecretKind) -> SecretReference {
+    let now = Utc::now();
+
+    SecretReference {
+        secret_ref: secret_ref.to_owned(),
+        secret_kind,
+        store_kind: SecretStoreKind::HostVault,
+        label: "host vault secret".to_owned(),
+        metadata: serde_json::json!({}),
+        created_at: now,
+        updated_at: now,
+    }
+}
+
+fn test_host_vault(root: &std::path::Path) -> HostVault {
+    HostVault::new(HostVaultConfig {
+        home: root.join("vault"),
+        dev_mode: true,
+        dev_key_path: root.join("dev").join("master.key"),
+    })
+    .expect("host vault")
+}
+
+fn entropy_events(count: usize) -> Vec<EntropyEvent> {
+    (0..count)
+        .map(|index| EntropyEvent {
+            x: (index % 977) as f64,
+            y: (index % 541) as f64,
+            dx: ((index % 13) as f64) - 6.0,
+            dy: ((index % 17) as f64) - 8.0,
+            timestamp_ms: index as f64 * 7.0,
+            velocity: (index % 29) as f64 / 10.0,
+            acceleration: (index % 31) as f64 / 100.0,
+            interval_ms: 7.0,
+        })
+        .collect()
 }
 
 fn unique_suffix() -> u128 {

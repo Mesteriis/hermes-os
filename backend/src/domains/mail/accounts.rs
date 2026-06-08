@@ -18,18 +18,81 @@ use crate::domains::mail::core::{
 use crate::platform::secrets::{DatabaseEncryptedSecretVault, DatabaseEncryptedVaultError};
 use crate::platform::secrets::{
     NewSecretReference, ResolvedSecret, SecretKind, SecretReference, SecretReferenceError,
-    SecretReferenceStore, SecretResolutionError, SecretResolver, SecretStoreKind,
+    SecretReferenceStore, SecretResolutionError, SecretResolutionFuture, SecretResolver,
+    SecretStoreKind,
 };
+use crate::vault::{HostVault, HostVaultError, SecretEntryContext};
 
 const DEFAULT_GOOGLE_AUTHORIZATION_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const DEFAULT_GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
 const GMAIL_READONLY_SCOPE: &str = "https://www.googleapis.com/auth/gmail.readonly";
 
 #[derive(Clone)]
+enum AccountSecretVault {
+    Database(DatabaseEncryptedSecretVault),
+    Host(HostVault),
+}
+
+impl AccountSecretVault {
+    fn store_kind(&self) -> SecretStoreKind {
+        match self {
+            Self::Database(_) => SecretStoreKind::DatabaseEncryptedVault,
+            Self::Host(_) => SecretStoreKind::HostVault,
+        }
+    }
+
+    async fn store_secret(
+        &self,
+        secret_ref: &str,
+        value: &str,
+        context: SecretWriteContext<'_>,
+    ) -> Result<(), EmailAccountSetupError> {
+        match self {
+            Self::Database(vault) => vault.store_secret(secret_ref, value).await?,
+            Self::Host(vault) => vault.store_secret(
+                secret_ref,
+                value,
+                SecretEntryContext {
+                    entry_kind: context.entry_kind,
+                    account_id: context.account_id,
+                    purpose: context.purpose,
+                    secret_kind: context.secret_kind.as_str(),
+                    label: context.label,
+                    metadata: context.metadata,
+                },
+            )?,
+        }
+        Ok(())
+    }
+
+    fn secret_reference(&self, secret_ref: &str, secret_kind: SecretKind) -> SecretReference {
+        vault_secret_reference(secret_ref, secret_kind, self.store_kind())
+    }
+}
+
+struct SecretWriteContext<'a> {
+    entry_kind: &'a str,
+    account_id: &'a str,
+    purpose: &'a str,
+    secret_kind: SecretKind,
+    label: &'a str,
+    metadata: &'a serde_json::Value,
+}
+
+impl SecretResolver for AccountSecretVault {
+    fn resolve<'a>(&'a self, reference: &'a SecretReference) -> SecretResolutionFuture<'a> {
+        match self {
+            Self::Database(vault) => vault.resolve(reference),
+            Self::Host(vault) => vault.resolve(reference),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct EmailAccountSetupService {
     communication_store: Option<CommunicationIngestionStore>,
     secret_store: Option<SecretReferenceStore>,
-    vault: DatabaseEncryptedSecretVault,
+    vault: AccountSecretVault,
     http: Client,
 }
 
@@ -42,7 +105,7 @@ impl EmailAccountSetupService {
         Self {
             communication_store: Some(communication_store),
             secret_store: Some(secret_store),
-            vault,
+            vault: AccountSecretVault::Database(vault),
             http: http_client(),
         }
     }
@@ -51,7 +114,20 @@ impl EmailAccountSetupService {
         Self {
             communication_store: None,
             secret_store: None,
-            vault,
+            vault: AccountSecretVault::Database(vault),
+            http: http_client(),
+        }
+    }
+
+    pub fn new_with_host_vault(
+        communication_store: CommunicationIngestionStore,
+        secret_store: SecretReferenceStore,
+        vault: HostVault,
+    ) -> Self {
+        Self {
+            communication_store: Some(communication_store),
+            secret_store: Some(secret_store),
+            vault: AccountSecretVault::Host(vault),
             http: http_client(),
         }
     }
@@ -124,7 +200,7 @@ impl EmailAccountSetupService {
                 &NewSecretReference::new(
                     &secret_ref,
                     SecretKind::OauthToken,
-                    SecretStoreKind::DatabaseEncryptedVault,
+                    self.vault.store_kind(),
                     format!(
                         "Gmail OAuth credential for {}",
                         pending.request.display_name
@@ -137,9 +213,22 @@ impl EmailAccountSetupService {
             )
             .await?;
         self.vault
-            .store_secret(&secret_ref, &serde_json::to_string(&token_bundle)?)
-            .await
-            .map_err(EmailAccountSetupError::DatabaseVault)?;
+            .store_secret(
+                &secret_ref,
+                &serde_json::to_string(&token_bundle)?,
+                SecretWriteContext {
+                    entry_kind: "provider_credential",
+                    account_id: &pending.account_id,
+                    purpose: ProviderAccountSecretPurpose::OauthToken.as_str(),
+                    secret_kind: SecretKind::OauthToken,
+                    label: "Gmail OAuth credential",
+                    metadata: &json!({
+                        "provider": "gmail",
+                        "account_id": pending.account_id
+                    }),
+                },
+            )
+            .await?;
         communication_store
             .upsert_provider_account(
                 &NewProviderAccount::new(
@@ -168,7 +257,7 @@ impl EmailAccountSetupService {
             account_id: pending.account_id,
             secret_ref,
             secret_kind: SecretKind::OauthToken,
-            store_kind: SecretStoreKind::DatabaseEncryptedVault,
+            store_kind: self.vault.store_kind(),
         })
     }
 
@@ -177,7 +266,9 @@ impl EmailAccountSetupService {
         secret_ref: &str,
     ) -> Result<ResolvedSecret, EmailAccountSetupError> {
         validate_non_empty("secret_ref", secret_ref)?;
-        let reference = vault_secret_reference(secret_ref, SecretKind::OauthToken);
+        let reference = self
+            .vault
+            .secret_reference(secret_ref, SecretKind::OauthToken);
         let resolved = self.vault.resolve(&reference).await?;
         let mut bundle: GmailOAuthTokenBundle =
             serde_json::from_str(resolved.expose_for_runtime())?;
@@ -199,9 +290,19 @@ impl EmailAccountSetupService {
         }
 
         self.vault
-            .store_secret(secret_ref, &serde_json::to_string(&bundle)?)
-            .await
-            .map_err(EmailAccountSetupError::DatabaseVault)?;
+            .store_secret(
+                secret_ref,
+                &serde_json::to_string(&bundle)?,
+                SecretWriteContext {
+                    entry_kind: "provider_credential",
+                    account_id: secret_ref,
+                    purpose: ProviderAccountSecretPurpose::OauthToken.as_str(),
+                    secret_kind: SecretKind::OauthToken,
+                    label: "OAuth credential",
+                    metadata: &json!({}),
+                },
+            )
+            .await?;
         ResolvedSecret::new(bundle.access_token).map_err(EmailAccountSetupError::Secret)
     }
 
@@ -219,7 +320,7 @@ impl EmailAccountSetupService {
                 &NewSecretReference::new(
                     &secret_ref,
                     request.secret_kind,
-                    SecretStoreKind::DatabaseEncryptedVault,
+                    self.vault.store_kind(),
                     format!("IMAP credential for {}", request.display_name),
                 )
                 .metadata(json!({
@@ -229,9 +330,22 @@ impl EmailAccountSetupService {
             )
             .await?;
         self.vault
-            .store_secret(&secret_ref, &request.password)
-            .await
-            .map_err(EmailAccountSetupError::DatabaseVault)?;
+            .store_secret(
+                &secret_ref,
+                &request.password,
+                SecretWriteContext {
+                    entry_kind: "provider_credential",
+                    account_id: &request.account_id,
+                    purpose: ProviderAccountSecretPurpose::ImapPassword.as_str(),
+                    secret_kind: request.secret_kind,
+                    label: "IMAP password",
+                    metadata: &json!({
+                        "provider": request.provider_kind.as_str(),
+                        "account_id": request.account_id
+                    }),
+                },
+            )
+            .await?;
         communication_store
             .upsert_provider_account(
                 &NewProviderAccount::new(
@@ -261,7 +375,7 @@ impl EmailAccountSetupService {
             account_id: request.account_id,
             secret_ref,
             secret_kind: request.secret_kind,
-            store_kind: SecretStoreKind::DatabaseEncryptedVault,
+            store_kind: self.vault.store_kind(),
         })
     }
 
@@ -543,13 +657,17 @@ fn imap_secret_ref(account_id: &str) -> String {
     format!("secret:provider-account:{account_id}:imap_password")
 }
 
-fn vault_secret_reference(secret_ref: &str, secret_kind: SecretKind) -> SecretReference {
+fn vault_secret_reference(
+    secret_ref: &str,
+    secret_kind: SecretKind,
+    store_kind: SecretStoreKind,
+) -> SecretReference {
     let now = Utc::now();
 
     SecretReference {
         secret_ref: secret_ref.to_owned(),
         secret_kind,
-        store_kind: SecretStoreKind::DatabaseEncryptedVault,
+        store_kind,
         label: "encrypted vault secret".to_owned(),
         metadata: json!({}),
         created_at: now,
@@ -601,6 +719,9 @@ pub enum EmailAccountSetupError {
 
     #[error(transparent)]
     DatabaseVault(#[from] DatabaseEncryptedVaultError),
+
+    #[error(transparent)]
+    HostVault(#[from] HostVaultError),
 
     #[error(transparent)]
     SecretReference(#[from] SecretReferenceError),

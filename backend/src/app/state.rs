@@ -5,11 +5,13 @@ use crate::domains::mail::accounts::GmailOAuthPendingGrant;
 use crate::integrations::telegram::tdjson::PendingQrLoginMap;
 use crate::platform::config::AppConfig;
 use crate::platform::storage::Database;
+use crate::vault::HostVault;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
     pub(crate) config: AppConfig,
     pub(crate) database: Database,
+    pub(crate) vault: HostVault,
     pub(crate) account_setup: AccountSetupState,
 }
 

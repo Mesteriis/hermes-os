@@ -18,6 +18,7 @@ use crate::platform::secrets::{
     DatabaseEncryptedSecretVault, DatabaseEncryptedVaultError, NewSecretReference, SecretKind,
     SecretReferenceError, SecretReferenceStore, SecretStoreKind,
 };
+use crate::vault::{HostVault, HostVaultError, SecretEntryContext};
 
 const TELEGRAM_MESSAGE_RECORD_KIND: &str = "telegram_message";
 
@@ -28,6 +29,55 @@ struct TelegramCredentialWrite<'a> {
     secret_kind: SecretKind,
     label: &'a str,
     value: String,
+}
+
+pub enum TelegramSecretVault {
+    Database(DatabaseEncryptedSecretVault),
+    Host(HostVault),
+}
+
+impl TelegramSecretVault {
+    pub fn database(vault: DatabaseEncryptedSecretVault) -> Self {
+        Self::Database(vault)
+    }
+
+    pub fn host(vault: HostVault) -> Self {
+        Self::Host(vault)
+    }
+
+    fn store_kind(&self) -> SecretStoreKind {
+        match self {
+            Self::Database(_) => SecretStoreKind::DatabaseEncryptedVault,
+            Self::Host(_) => SecretStoreKind::HostVault,
+        }
+    }
+
+    async fn store_secret(
+        &self,
+        secret_ref: &str,
+        credential: &TelegramCredentialWrite<'_>,
+    ) -> Result<(), TelegramError> {
+        match self {
+            Self::Database(vault) => vault.store_secret(secret_ref, &credential.value).await?,
+            Self::Host(vault) => vault.store_secret(
+                secret_ref,
+                &credential.value,
+                SecretEntryContext {
+                    entry_kind: "provider_credential",
+                    account_id: credential.account_id,
+                    purpose: credential.secret_purpose.as_str(),
+                    secret_kind: credential.secret_kind.as_str(),
+                    label: credential.label,
+                    metadata: &json!({
+                        "provider": credential.provider_kind.as_str(),
+                        "account_id": credential.account_id,
+                        "secret_purpose": credential.secret_purpose.as_str()
+                    }),
+                },
+            )?,
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -79,7 +129,7 @@ impl TelegramStore {
     pub async fn setup_live_blocked_account(
         &self,
         secret_store: &SecretReferenceStore,
-        vault: &DatabaseEncryptedSecretVault,
+        vault: &TelegramSecretVault,
         request: &TelegramLiveAccountSetupRequest,
     ) -> Result<TelegramAccountSetupResponse, TelegramError> {
         request.validate()?;
@@ -199,7 +249,7 @@ impl TelegramStore {
     async fn store_account_credential(
         &self,
         secret_store: &SecretReferenceStore,
-        vault: &DatabaseEncryptedSecretVault,
+        vault: &TelegramSecretVault,
         credential: TelegramCredentialWrite<'_>,
     ) -> Result<TelegramCredentialBinding, TelegramError> {
         let secret_ref = telegram_secret_ref(credential.account_id, credential.secret_purpose);
@@ -208,7 +258,7 @@ impl TelegramStore {
                 &NewSecretReference::new(
                     &secret_ref,
                     credential.secret_kind,
-                    SecretStoreKind::DatabaseEncryptedVault,
+                    vault.store_kind(),
                     format!("{} for {}", credential.label, credential.account_id),
                 )
                 .metadata(json!({
@@ -218,7 +268,7 @@ impl TelegramStore {
                 })),
             )
             .await?;
-        vault.store_secret(&secret_ref, &credential.value).await?;
+        vault.store_secret(&secret_ref, &credential).await?;
         CommunicationIngestionStore::new(self.pool.clone())
             .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
                 credential.account_id,
@@ -231,7 +281,7 @@ impl TelegramStore {
             secret_purpose: credential.secret_purpose.as_str().to_owned(),
             secret_ref,
             secret_kind: credential.secret_kind,
-            store_kind: SecretStoreKind::DatabaseEncryptedVault,
+            store_kind: vault.store_kind(),
         })
     }
 
@@ -900,6 +950,9 @@ pub enum TelegramError {
 
     #[error(transparent)]
     DatabaseVault(#[from] DatabaseEncryptedVaultError),
+
+    #[error(transparent)]
+    HostVault(#[from] HostVaultError),
 
     #[error(transparent)]
     MessageProjection(#[from] MessageProjectionError),

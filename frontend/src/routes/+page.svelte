@@ -53,6 +53,10 @@
 		fetchWhatsappWebSessions,
 		fetchProjects,
 		fetchV1Status,
+		collectVaultEntropy,
+		createVault,
+		exportVaultRecovery,
+		unlockVault,
 		fetchPersons,
 		fetchOrganizations,
 		fetchCalendarAccounts,
@@ -141,7 +145,9 @@
 		type WhatsappCapabilitiesResponse,
 		type WhatsappWebMessage,
 		type WhatsappWebSession,
-		type V1Status
+		type V1Status,
+		type VaultEntropyEvent,
+		type VaultRecoveryExportResponse
 	} from '$lib/api';
 	import {
 		defaultLayoutSettings,
@@ -285,6 +291,14 @@
 	let searchQuery = $state('');
 	let status = $state<V1Status | null>(null);
 	let statusError = $state('');
+	let vaultWizardStep = $state<'intro' | 'entropy' | 'biometric' | 'recovery' | 'done'>('intro');
+	let vaultEntropyEvents = $state<VaultEntropyEvent[]>([]);
+	let vaultEntropyBuffer: VaultEntropyEvent[] = [];
+	let vaultLastEntropyEvent = $state<VaultEntropyEvent | null>(null);
+	let vaultWizardError = $state('');
+	let vaultWizardMessage = $state('');
+	let vaultRecovery = $state<VaultRecoveryExportResponse | null>(null);
+	let isVaultActionSubmitting = $state(false);
 	let graphSummary = $state<GraphSummary | null>(null);
 	let graphError = $state('');
 	let isGraphSummaryLoading = $state(false);
@@ -1103,6 +1117,8 @@
 	const whatsappProviderAccounts = $derived(
 		providerAccounts.filter((account) => account.provider_kind === 'whatsapp_web')
 	);
+	const vaultStatus = $derived(status?.vault_status ?? null);
+	const isVaultReady = $derived(vaultStatus?.state === 'locked' || vaultStatus?.state === 'unlocked');
 
 	onMount(() => {
 		void loadV1Status();
@@ -1125,8 +1141,115 @@
 		try {
 			status = await fetchV1Status(apiBaseUrl, apiSecret);
 			statusError = '';
+			if (status.vault_status.state === 'uninitialized') {
+				vaultWizardStep = status.vault_status.entropy_progress >= 100 ? 'biometric' : 'intro';
+			}
 		} catch (error) {
 			statusError = error instanceof Error ? error.message : 'Unknown status error';
+		}
+	}
+
+	function startVaultWizard() {
+		vaultWizardStep = 'entropy';
+		vaultWizardError = '';
+		vaultWizardMessage = '';
+	}
+
+	async function handleVaultEntropyMove(event: MouseEvent) {
+		if (vaultWizardStep !== 'entropy' || isVaultActionSubmitting) {
+			return;
+		}
+		const previous = vaultLastEntropyEvent;
+		const interval = previous ? Math.max(1, event.timeStamp - previous.timestamp_ms) : 1;
+		const dx = previous ? event.clientX - previous.x : 0;
+		const dy = previous ? event.clientY - previous.y : 0;
+		const velocity = Math.hypot(dx, dy) / interval;
+		const acceleration = previous ? Math.abs(velocity - previous.velocity) / interval : 0;
+		const entropyEvent: VaultEntropyEvent = {
+			x: event.clientX,
+			y: event.clientY,
+			dx,
+			dy,
+			timestamp_ms: event.timeStamp,
+			velocity,
+			acceleration,
+			interval_ms: interval
+		};
+		vaultLastEntropyEvent = entropyEvent;
+		vaultEntropyEvents = [...vaultEntropyEvents, entropyEvent].slice(-2000);
+		vaultEntropyBuffer.push(entropyEvent);
+		if (vaultEntropyBuffer.length >= 100) {
+			await flushVaultEntropy();
+		}
+	}
+
+	async function flushVaultEntropy() {
+		if (vaultEntropyBuffer.length === 0) {
+			return;
+		}
+		const events = vaultEntropyBuffer;
+		vaultEntropyBuffer = [];
+		try {
+			const vault_status = await collectVaultEntropy(apiBaseUrl, apiSecret, events);
+			status = status ? { ...status, vault_status } : status;
+			if (vault_status.entropy_progress >= 100) {
+				vaultWizardStep = 'biometric';
+			}
+		} catch (error) {
+			vaultWizardError = error instanceof Error ? error.message : 'Vault entropy failed';
+		}
+	}
+
+	async function createSecureVault() {
+		if (isVaultActionSubmitting) {
+			return;
+		}
+		isVaultActionSubmitting = true;
+		vaultWizardError = '';
+		try {
+			await flushVaultEntropy();
+			const vault_status = await createVault(apiBaseUrl, apiSecret);
+			status = status ? { ...status, vault_status } : status;
+			vaultWizardStep = 'recovery';
+			vaultWizardMessage = 'Vault created. Export recovery material before continuing.';
+		} catch (error) {
+			vaultWizardError = error instanceof Error ? error.message : 'Vault create failed';
+		} finally {
+			isVaultActionSubmitting = false;
+		}
+	}
+
+	async function unlockSecureVault() {
+		if (isVaultActionSubmitting) {
+			return;
+		}
+		isVaultActionSubmitting = true;
+		vaultWizardError = '';
+		try {
+			const vault_status = await unlockVault(apiBaseUrl, apiSecret);
+			status = status ? { ...status, vault_status } : status;
+			vaultWizardMessage = 'Vault unlocked for this Hermes session.';
+		} catch (error) {
+			vaultWizardError = error instanceof Error ? error.message : 'Vault unlock failed';
+		} finally {
+			isVaultActionSubmitting = false;
+		}
+	}
+
+	async function exportRecoveryMaterial() {
+		if (isVaultActionSubmitting) {
+			return;
+		}
+		isVaultActionSubmitting = true;
+		vaultWizardError = '';
+		try {
+			vaultRecovery = await exportVaultRecovery(apiBaseUrl, apiSecret);
+			vaultWizardStep = 'done';
+			vaultWizardMessage = 'Recovery material exported. Store it outside the app.';
+		} catch (error) {
+			vaultWizardError = error instanceof Error ? error.message : 'Vault recovery export failed';
+		} finally {
+			isVaultActionSubmitting = false;
 		}
 	}
 
@@ -3846,6 +3969,74 @@
 </svelte:head>
 
 <main class="desktop-shell view-{currentView}">
+	{#if !isVaultReady}
+		<section class="vault-onboarding" aria-label="Secure vault onboarding" onmousemove={handleVaultEntropyMove}>
+			<div class="vault-panel">
+				<div class="vault-panel__header">
+					<div class="vault-emblem"><Icon icon="tabler:shield-lock" width="30" height="30" /></div>
+					<div>
+						<p class="vault-kicker">Hermes Secure Vault</p>
+						<h1>Create Your Personal Secure Vault</h1>
+					</div>
+				</div>
+
+				{#if vaultWizardStep === 'intro'}
+					<div class="vault-step">
+						<p>Hermes Hub encrypts credentials stored on this Mac. Secrets live in a dedicated host vault under <strong>~/.hermes/vault</strong>; PostgreSQL keeps only non-secret bindings.</p>
+						<p class="vault-warning">Если потерять recovery phrase/file, доступ к зашифрованным секретам может стать невозможным.</p>
+						<div class="vault-actions">
+							<button type="button" onclick={startVaultWizard}>Start Entropy Collection</button>
+						</div>
+					</div>
+				{:else if vaultWizardStep === 'entropy'}
+					<div class="vault-step">
+						<p>Move your mouse around the screen. Hermes combines OS randomness, timing entropy and mouse movement before creating the master key.</p>
+						<div class="vault-entropy-canvas">
+							<div class="vault-entropy-meter">
+								<span>Entropy</span>
+								<strong>{vaultStatus?.entropy_progress ?? 0}%</strong>
+							</div>
+							<progress class="vault-progress" value={vaultStatus?.entropy_progress ?? 0} max="100"></progress>
+							<p>{Math.min(vaultEntropyEvents.length, 2000)} / 2000 events</p>
+						</div>
+						<div class="vault-actions">
+							<button type="button" onclick={createSecureVault} disabled={(vaultStatus?.entropy_progress ?? 0) < 100 || isVaultActionSubmitting}>Create Vault</button>
+						</div>
+					</div>
+				{:else if vaultWizardStep === 'biometric'}
+					<div class="vault-step">
+						<p>Vault material is ready. In release runtime Hermes will use macOS Keychain as source-of-truth for the master key. Docker dev uses the configured dev key path.</p>
+						<div class="vault-actions">
+							<button type="button" onclick={createSecureVault} disabled={isVaultActionSubmitting}>Create Vault</button>
+							<button type="button" onclick={unlockSecureVault} disabled={isVaultActionSubmitting}>Unlock Existing Vault</button>
+						</div>
+					</div>
+				{:else if vaultWizardStep === 'recovery'}
+					<div class="vault-step">
+						<p>Export recovery material before continuing. Store the phrase and file safely outside Hermes.</p>
+						<p class="vault-warning">Без recovery phrase/file восстановление после переустановки или потери Keychain-доступа невозможно.</p>
+						<div class="vault-actions">
+							<button type="button" onclick={exportRecoveryMaterial} disabled={isVaultActionSubmitting}>Export Recovery</button>
+						</div>
+					</div>
+				{:else}
+					<div class="vault-step">
+						<p>Vault is ready. Recovery file: <strong>{vaultRecovery?.path ?? '~/.hermes/vault/hermes-recovery.key'}</strong></p>
+						{#if vaultRecovery?.recovery_phrase}
+							<div class="vault-recovery-phrase">{vaultRecovery.recovery_phrase}</div>
+						{/if}
+						<div class="vault-actions">
+							<button type="button" onclick={() => void loadV1Status()}>Continue</button>
+						</div>
+					</div>
+				{/if}
+
+				{#if vaultWizardMessage}<p class="vault-state success">{vaultWizardMessage}</p>{/if}
+				{#if vaultWizardError}<p class="vault-state error">{vaultWizardError}</p>{/if}
+				{#if statusError}<p class="vault-state error">{statusError}</p>{/if}
+			</div>
+		</section>
+	{/if}
 	<aside class="sidebar" aria-label="Hermes Hub navigation">
 		<div class="brand">
 			<img src="/assets/hermes-logo-mark.png" alt="" class="brand-mark" />

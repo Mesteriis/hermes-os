@@ -1,6 +1,8 @@
 # ADR-0053 Database-Backed Encrypted Secret Vault
 
-Status: Proposed
+Status: Superseded by ADR-0076
+
+This decision was superseded by ADR-0076, which moves new encrypted secret payloads out of PostgreSQL into a dedicated host vault under `~/.hermes/vault` while leaving PostgreSQL with non-secret metadata and account bindings.
 
 Supersedes: ADR-0016, ADR-0042, ADR-0044
 

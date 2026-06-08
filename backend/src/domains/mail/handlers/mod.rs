@@ -139,6 +139,7 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
+use crate::vault::EntropyEvent;
 use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 
 use crate::app::{ApiError, AppState};
@@ -1508,7 +1509,56 @@ pub(crate) async fn get_v1_status(
             documents: true,
             account_setup: true,
         },
+        vault_status: state.vault.status()?,
     }))
+}
+
+pub(crate) async fn get_v1_vault_status(
+    State(state): State<AppState>,
+) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+    Ok(Json(state.vault.status()?))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct VaultEntropyBatchRequest {
+    events: Vec<EntropyEvent>,
+}
+
+pub(crate) async fn post_v1_vault_collect_entropy(
+    State(state): State<AppState>,
+    Json(request): Json<VaultEntropyBatchRequest>,
+) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+    Ok(Json(state.vault.collect_entropy(request.events)?))
+}
+
+pub(crate) async fn post_v1_vault_create(
+    State(state): State<AppState>,
+) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+    Ok(Json(state.vault.create()?))
+}
+
+pub(crate) async fn post_v1_vault_unlock(
+    State(state): State<AppState>,
+) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+    Ok(Json(state.vault.unlock()?))
+}
+
+pub(crate) async fn post_v1_vault_recovery_export(
+    State(state): State<AppState>,
+) -> Result<Json<crate::vault::RecoveryExportResponse>, ApiError> {
+    Ok(Json(state.vault.export_recovery()?))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct VaultRecoveryImportRequest {
+    recovery_phrase: String,
+}
+
+pub(crate) async fn post_v1_vault_recovery_import(
+    State(state): State<AppState>,
+    Json(request): Json<VaultRecoveryImportRequest>,
+) -> Result<Json<crate::vault::VaultStatus>, ApiError> {
+    Ok(Json(state.vault.import_recovery(&request.recovery_phrase)?))
 }
 
 pub(crate) async fn get_v1_communication_messages(

@@ -136,6 +136,7 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
+use crate::vault::HostVaultError;
 use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 
 use axum::response::IntoResponse;
@@ -181,6 +182,7 @@ pub enum ApiError {
     InvalidCommunicationQuery(&'static str),
     CommunicationMessageNotFound,
     SecretVaultNotConfigured,
+    HostVault(HostVaultError),
     AccountSetup(EmailAccountSetupError),
     AccountSetupState,
     AccountSetupPendingGrantNotFound,
@@ -202,7 +204,13 @@ impl axum::response::IntoResponse for ApiError {
             Self::SecretVaultNotConfigured => (
                 StatusCode::SERVICE_UNAVAILABLE,
                 "secret_vault_not_configured",
-                "HERMES_SECRET_VAULT_KEY is required for account setup".to_owned(),
+                "host vault must be initialized and unlocked for account setup".to_owned(),
+                false,
+            ),
+            Self::HostVault(error) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "host_vault_error",
+                error.to_string(),
                 false,
             ),
             Self::InvalidEnvelope(error) => (
@@ -521,6 +529,15 @@ impl axum::response::IntoResponse for ApiError {
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "telegram_secret_vault_error",
                         "Telegram secret vault operation failed".to_owned(),
+                        false,
+                    )
+                }
+                TelegramError::HostVault(error) => {
+                    tracing::warn!(error = %error, "Telegram host vault operation failed");
+                    (
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "telegram_host_vault_error",
+                        "Telegram host vault operation failed".to_owned(),
                         false,
                     )
                 }
@@ -1302,6 +1319,12 @@ impl From<OrganizationError> for ApiError {
 impl From<EmailAccountSetupError> for ApiError {
     fn from(error: EmailAccountSetupError) -> Self {
         Self::AccountSetup(error)
+    }
+}
+
+impl From<HostVaultError> for ApiError {
+    fn from(error: HostVaultError) -> Self {
+        Self::HostVault(error)
     }
 }
 

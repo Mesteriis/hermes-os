@@ -5,6 +5,7 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
 use sqlx::Row;
+use tempfile::tempdir;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -12,10 +13,7 @@ use hermes_hub_backend::domains::mail::core::{
     CommunicationProviderKind, ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::secrets::{
-    DatabaseEncryptedSecretVault, ResolvedSecret, SecretKind, SecretReferenceStore, SecretResolver,
-    SecretStoreKind,
-};
+use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -381,8 +379,9 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
 }
 
 #[tokio::test]
-async fn telegram_live_account_setup_stores_bot_token_in_database_vault() {
+async fn telegram_live_account_setup_stores_bot_token_in_host_vault() {
     let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
     let database_url = ctx.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
@@ -393,14 +392,49 @@ async fn telegram_live_account_setup_stores_bot_token_in_database_vault() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_SECRET_VAULT_KEY", "telegram-live-account-test-key"),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_dir.path().join("vault").to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                vault_dir
+                    .path()
+                    .join("dev")
+                    .join("master.key")
+                    .to_str()
+                    .expect("dev key path"),
+            ),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
         database,
     );
 
+    let entropy_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/vault/collect-entropy",
+            json!({ "events": vault_entropy_events(2_000) }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("entropy response");
+    assert_eq!(entropy_response.status(), StatusCode::OK);
+    let create_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/vault/create",
+            json!({}),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("vault create response");
+    assert_eq!(create_response.status(), StatusCode::OK);
+
     let response = app
+        .clone()
         .oneshot(json_post_request_with_actor(
             "/api/v1/telegram/accounts",
             json!({
@@ -431,7 +465,7 @@ async fn telegram_live_account_setup_stores_bot_token_in_database_vault() {
     );
     assert_eq!(
         body["credential_bindings"][0]["store_kind"],
-        json!("database_encrypted_vault")
+        json!("host_vault")
     );
 
     let account = sqlx::query(
@@ -459,25 +493,18 @@ async fn telegram_live_account_setup_stores_bot_token_in_database_vault() {
         .expect("secret reference query")
         .expect("secret reference exists");
     assert_eq!(reference.secret_kind, SecretKind::ApiToken);
-    assert_eq!(
-        reference.store_kind,
-        SecretStoreKind::DatabaseEncryptedVault
-    );
+    assert_eq!(reference.store_kind, SecretStoreKind::HostVault);
     assert_eq!(reference.metadata["provider"], json!("telegram_bot"));
     assert_eq!(reference.metadata["account_id"], json!(account_id));
 
-    let vault = DatabaseEncryptedSecretVault::new(
-        pool.clone(),
-        ResolvedSecret::new("telegram-live-account-test-key").expect("vault key"),
-    );
-    assert_eq!(
-        vault
-            .resolve(&reference)
-            .await
-            .expect("resolve bot token")
-            .expose_for_runtime(),
-        "123456:telegram-bot-token"
-    );
+    let database_payload_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM encrypted_secret_vault_entries WHERE secret_ref = $1",
+    )
+    .bind(secret_ref)
+    .fetch_one(&pool)
+    .await
+    .expect("database payload count");
+    assert_eq!(database_payload_count, 0);
 }
 
 #[tokio::test]
@@ -696,6 +723,23 @@ fn get_request_with_token(path: &str, token: &str) -> Request<Body> {
         .header("x-hermes-secret", token)
         .body(Body::empty())
         .expect("request")
+}
+
+fn vault_entropy_events(count: usize) -> Vec<Value> {
+    (0..count)
+        .map(|index| {
+            json!({
+                "x": index % 997,
+                "y": index % 577,
+                "dx": (index % 11) as i64 - 5,
+                "dy": (index % 13) as i64 - 6,
+                "timestamp_ms": index * 5,
+                "velocity": (index % 19) as f64 / 10.0,
+                "acceleration": (index % 23) as f64 / 100.0,
+                "interval_ms": 5
+            })
+        })
+        .collect()
 }
 
 async fn json_body(response: axum::response::Response) -> Value {

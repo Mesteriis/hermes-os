@@ -139,6 +139,7 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
+use crate::vault::VaultStatus;
 use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 
 use crate::app::{ApiError, AppState};
@@ -361,13 +362,11 @@ pub(crate) fn account_setup_service(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let vault = database_encrypted_vault(&state.config, pool.clone())
-        .ok_or(ApiError::SecretVaultNotConfigured)?;
 
-    Ok(EmailAccountSetupService::new(
+    Ok(EmailAccountSetupService::new_with_host_vault(
         CommunicationIngestionStore::new(pool.clone()),
         SecretReferenceStore::new(pool.clone()),
-        vault,
+        state.vault.clone(),
     ))
 }
 
@@ -466,6 +465,7 @@ pub(crate) struct AuditEventsResponse {
 pub(crate) struct V1StatusResponse {
     pub(crate) version: &'static str,
     pub(crate) surfaces: V1Surfaces,
+    pub(crate) vault_status: VaultStatus,
 }
 
 #[derive(Serialize)]

@@ -31,7 +31,10 @@ services:
       DATABASE_URL: postgres://${HERMES_POSTGRES_USER}:${HERMES_POSTGRES_PASSWORD}@postgres:5432/${HERMES_POSTGRES_DB}
       HERMES_HTTP_ADDR: 0.0.0.0:${HERMES_BACKEND_PORT:-8080}
       HERMES_LOCAL_API_SECRET: ${HERMES_LOCAL_API_SECRET:?Set HERMES_LOCAL_API_SECRET in docker/.env}
-      HERMES_SECRET_VAULT_KEY: ${HERMES_SECRET_VAULT_KEY:?Set HERMES_SECRET_VAULT_KEY in docker/.env}
+      HERMES_DEV_MODE: ${HERMES_DEV_MODE:-true}
+      HERMES_VAULT_HOME: ${HERMES_VAULT_HOME:-/hermes-vault}
+      HERMES_DEV_KEY_PATH: ${HERMES_DEV_KEY_PATH:-/hermes-vault/dev/master.key}
+      HERMES_SECRET_VAULT_KEY: ${HERMES_SECRET_VAULT_KEY:-change-me-local-secret-vault-key}
       HERMES_OLLAMA_BASE_URL: ${HERMES_OLLAMA_BASE_URL:-http://127.0.0.1:11434}
       HERMES_OLLAMA_CHAT_MODEL: ${HERMES_OLLAMA_CHAT_MODEL:-qwen3:4b}
       HERMES_OLLAMA_EMBED_MODEL: ${HERMES_OLLAMA_EMBED_MODEL:-qwen3-embedding:4b}
@@ -49,6 +52,9 @@ services:
       - type: bind
         source: ./data/cargo-git
         target: /usr/local/cargo/git
+      - type: bind
+        source: ${HERMES_HOST_VAULT_HOME:-${HOME}/.hermes/vault}
+        target: /hermes-vault
     depends_on:
       postgres:
         condition: service_healthy

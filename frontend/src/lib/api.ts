@@ -9,6 +9,35 @@ export type V1Status = {
 		documents: boolean;
 		account_setup: boolean;
 	};
+	vault_status: VaultStatus;
+};
+
+export type VaultMode = 'uninitialized' | 'locked' | 'unlocked';
+
+export type VaultStatus = {
+	state: VaultMode;
+	needs_entropy: boolean;
+	needs_biometric: boolean;
+	needs_recovery: boolean;
+	version: number;
+	recoverable: boolean;
+	entropy_progress: number;
+};
+
+export type VaultEntropyEvent = {
+	x: number;
+	y: number;
+	dx: number;
+	dy: number;
+	timestamp_ms: number;
+	velocity: number;
+	acceleration: number;
+	interval_ms: number;
+};
+
+export type VaultRecoveryExportResponse = {
+	path: string;
+	recovery_phrase: string;
 };
 
 export type SettingValueKind = 'boolean' | 'integer' | 'string' | 'json';
@@ -1112,7 +1141,7 @@ export type EmailAccountSetupResponse = {
 	account_id: string;
 	secret_ref: string;
 	secret_kind: 'oauth_token' | 'app_password' | 'password';
-	store_kind: 'encrypted_vault' | 'database_encrypted_vault';
+	store_kind: 'encrypted_vault' | 'database_encrypted_vault' | 'host_vault';
 };
 
 export type ImapAccountSetupRequest = {
@@ -1134,6 +1163,50 @@ export async function fetchV1Status(
 	apiSecret: string
 ): Promise<V1Status> {
 	return getJson(baseUrl, apiSecret, '/api/v1/status', 'V1 status request failed');
+}
+
+export async function fetchVaultStatus(
+	baseUrl: string,
+	apiSecret: string
+): Promise<VaultStatus> {
+	return getJson(baseUrl, apiSecret, '/api/v1/vault/status', 'Vault status request failed');
+}
+
+export async function collectVaultEntropy(
+	baseUrl: string,
+	apiSecret: string,
+	events: VaultEntropyEvent[]
+): Promise<VaultStatus> {
+	return postJson(baseUrl, apiSecret, '/api/v1/vault/collect-entropy', { events }, 'Vault entropy request failed');
+}
+
+export async function createVault(
+	baseUrl: string,
+	apiSecret: string
+): Promise<VaultStatus> {
+	return postJson(baseUrl, apiSecret, '/api/v1/vault/create', {}, 'Vault create request failed');
+}
+
+export async function unlockVault(
+	baseUrl: string,
+	apiSecret: string
+): Promise<VaultStatus> {
+	return postJson(baseUrl, apiSecret, '/api/v1/vault/unlock', {}, 'Vault unlock request failed');
+}
+
+export async function exportVaultRecovery(
+	baseUrl: string,
+	apiSecret: string
+): Promise<VaultRecoveryExportResponse> {
+	return postJson(baseUrl, apiSecret, '/api/v1/vault/recovery/export', {}, 'Vault recovery export failed');
+}
+
+export async function importVaultRecovery(
+	baseUrl: string,
+	apiSecret: string,
+	recovery_phrase: string
+): Promise<VaultStatus> {
+	return postJson(baseUrl, apiSecret, '/api/v1/vault/recovery/import', { recovery_phrase }, 'Vault recovery import failed');
 }
 
 export async function fetchApplicationSettings(

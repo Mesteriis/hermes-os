@@ -1,8 +1,8 @@
 # ADR-0044 Account Setup and Encrypted Secret Vault
 
-Status: Superseded by ADR-0053
+Status: Superseded by ADR-0076
 
-This decision was superseded by ADR-0053, which keeps encrypted local account setup but replaces the file-backed vault path with a PostgreSQL-backed encrypted secret vault.
+This decision was superseded by ADR-0053 and then ADR-0076. ADR-0076 keeps encrypted local account setup but moves new secret payloads to a dedicated macOS host vault under `~/.hermes/vault`.
 
 ## Context
 

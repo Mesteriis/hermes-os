@@ -158,6 +158,7 @@ pub enum SecretStoreKind {
     OsKeychain,
     EncryptedVault,
     DatabaseEncryptedVault,
+    HostVault,
     ExternalVault,
     TestDouble,
 }
@@ -168,6 +169,7 @@ impl SecretStoreKind {
             Self::OsKeychain => "os_keychain",
             Self::EncryptedVault => "encrypted_vault",
             Self::DatabaseEncryptedVault => "database_encrypted_vault",
+            Self::HostVault => "host_vault",
             Self::ExternalVault => "external_vault",
             Self::TestDouble => "test_double",
         }
@@ -182,6 +184,7 @@ impl TryFrom<&str> for SecretStoreKind {
             "os_keychain" => Ok(Self::OsKeychain),
             "encrypted_vault" => Ok(Self::EncryptedVault),
             "database_encrypted_vault" => Ok(Self::DatabaseEncryptedVault),
+            "host_vault" => Ok(Self::HostVault),
             "external_vault" => Ok(Self::ExternalVault),
             "test_double" => Ok(Self::TestDouble),
             other => Err(SecretReferenceError::UnsupportedStoreKind(other.to_owned())),

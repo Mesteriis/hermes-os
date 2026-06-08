@@ -168,8 +168,6 @@ pub(crate) async fn post_telegram_account(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let vault = database_encrypted_vault(&state.config, pool.clone())
-        .ok_or(ApiError::SecretVaultNotConfigured)?;
     let secret_store = SecretReferenceStore::new(pool.clone());
     let request = request.with_app_credentials(
         state.config.telegram_api_id(),
@@ -178,7 +176,13 @@ pub(crate) async fn post_telegram_account(
 
     Ok(Json(
         telegram_store(&state)?
-            .setup_live_blocked_account(&secret_store, &vault, &request)
+            .setup_live_blocked_account(
+                &secret_store,
+                &crate::integrations::telegram::client::TelegramSecretVault::host(
+                    state.vault.clone(),
+                ),
+                &request,
+            )
             .await?,
     ))
 }
