@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-	communicationSidebarItemId,
 	communicationSections,
 	communicationSectionViewId,
 	defaultSidebarSettings,
@@ -33,7 +32,7 @@ describe('sidebar navigation architecture', () => {
 		expect(primaryWorkspaceNav.map((item) => item.label)).not.toContain('Settings');
 	});
 
-	it('defines the Communications second-level navigation in the intended order', () => {
+	it('defines the internal Communications filters and sources in the intended order', () => {
 		expect(communicationSections.map((item) => item.id)).toEqual([
 			'unified',
 			'inbox',
@@ -68,7 +67,6 @@ describe('sidebar navigation architecture', () => {
 		expect(settings.rootItemIds).toEqual([
 			'home',
 			'group:communications',
-			'timeline',
 			'persons',
 			'projects',
 			'tasks',
@@ -83,14 +81,20 @@ describe('sidebar navigation architecture', () => {
 				id: 'communications',
 				label: 'Communications',
 				icon: 'tabler:messages',
-				itemIds: communicationSections.map((section) => communicationSidebarItemId(section.id)),
-				separatorBeforeItemIds: ['communications.mail']
+				itemIds: [
+					'communications.mail',
+					'communications.telegram',
+					'communications.whatsapp',
+					'communications.calls',
+					'communications.meetings',
+					'timeline'
+				],
+				separatorBeforeItemIds: []
 			}
 		]);
 		expect(settings.hiddenItemIds).toEqual([]);
 		expect(visibleSidebarItemIds(settings)).toEqual([
 			'home',
-			'timeline',
 			'persons',
 			'projects',
 			'tasks',
@@ -99,33 +103,45 @@ describe('sidebar navigation architecture', () => {
 			'notes',
 			'knowledge',
 			'agents',
-			...communicationSections.map((section) => communicationSidebarItemId(section.id))
+			'communications.mail',
+			'communications.telegram',
+			'communications.whatsapp',
+			'communications.calls',
+			'communications.meetings',
+			'timeline'
 		]);
 	});
 
-	it('parses custom parent groups, hidden items, and appends missing entries safely', () => {
+	it('migrates v2 custom parent groups and removes mail filters from sidebar items', () => {
 		const settings = parseSidebarSettings({
 			schemaVersion: 2,
-			rootItemIds: ['home', 'group:communications', 'group:focus', 'projects', 'unknown'],
+			rootItemIds: ['home', 'group:communications', 'timeline', 'group:focus', 'projects', 'unknown'],
 			groups: [
 				{
 					id: 'communications',
 					label: 'Comms',
 					icon: 'tabler:messages',
-					itemIds: ['communications.inbox', 'communications.telegram', 'communications.inbox', 'unknown'],
+					itemIds: [
+						'communications.inbox',
+						'communications.telegram',
+						'communications.inbox',
+						'communications.needs_reply',
+						'unknown'
+					],
 					separatorBeforeItemIds: ['communications.telegram', 'communications.unified']
 				},
 				{
 					id: 'focus',
 					label: 'Focus',
 					icon: 'tabler:folder',
-					itemIds: ['tasks', 'calendar'],
+					itemIds: ['tasks', 'calendar', 'timeline'],
 					separatorBeforeItemIds: ['calendar']
 				}
 			],
-			hiddenItemIds: ['tasks', 'communications.telegram', 'unknown', 'tasks']
+			hiddenItemIds: ['tasks', 'communications.telegram', 'communications.inbox', 'unknown', 'tasks']
 		});
 
+		expect(settings.schemaVersion).toBe(3);
 		expect(settings.rootItemIds.slice(0, 4)).toEqual([
 			'home',
 			'group:communications',
@@ -137,18 +153,14 @@ describe('sidebar navigation architecture', () => {
 			label: 'Comms',
 			icon: 'tabler:messages',
 			itemIds: [
-				'communications.inbox',
 				'communications.telegram',
-				'communications.unified',
-				'communications.waiting',
-				'communications.needs_reply',
-				'communications.mentions',
 				'communications.mail',
 				'communications.whatsapp',
 				'communications.calls',
-				'communications.meetings'
+				'communications.meetings',
+				'timeline'
 			],
-			separatorBeforeItemIds: ['communications.telegram']
+			separatorBeforeItemIds: []
 		});
 		expect(settings.groups[1]).toEqual({
 			id: 'focus',
@@ -169,7 +181,7 @@ describe('sidebar navigation architecture', () => {
 					id: 'communications',
 					label: 'Communications',
 					icon: 'tabler:messages',
-					itemIds: ['communications.unified', 'communications.inbox'],
+					itemIds: ['communications.mail', 'communications.telegram'],
 					separatorBeforeItemIds: []
 				},
 				{
@@ -180,7 +192,7 @@ describe('sidebar navigation architecture', () => {
 					separatorBeforeItemIds: ['calendar']
 				}
 			],
-			hiddenItemIds: ['tasks', 'communications.inbox']
+			hiddenItemIds: ['tasks', 'communications.telegram']
 		});
 
 		const entries = resolveSidebarRootEntries(primaryWorkspaceNav, settings);
@@ -203,20 +215,15 @@ describe('sidebar navigation architecture', () => {
 				kind: 'group',
 				label: 'Communications',
 				ids: [
-					'communications.unified',
-					'communications.waiting',
-					'communications.needs_reply',
-					'communications.mentions',
 					'communications.mail',
-					'communications.telegram',
 					'communications.whatsapp',
 					'communications.calls',
-					'communications.meetings'
+					'communications.meetings',
+					'timeline'
 				]
 			},
 			{ kind: 'group', label: 'Focus', ids: ['calendar'] },
 			{ kind: 'item', id: 'projects' },
-			{ kind: 'item', id: 'timeline' },
 			{ kind: 'item', id: 'persons' },
 			{ kind: 'item', id: 'documents' },
 			{ kind: 'item', id: 'notes' },

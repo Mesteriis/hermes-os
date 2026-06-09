@@ -25,7 +25,11 @@ export type CommunicationSectionId =
 
 export type SidebarViewId = PrimaryNavId | 'telegram' | 'whatsapp' | 'settings' | 'organizations';
 export type SidebarPrimaryItemId = Exclude<PrimaryNavId, 'communications'>;
-export type CommunicationSidebarItemId = `communications.${CommunicationSectionId}`;
+export type CommunicationSidebarSectionId = Extract<
+	CommunicationSectionId,
+	'mail' | 'telegram' | 'whatsapp' | 'calls' | 'meetings'
+>;
+export type CommunicationSidebarItemId = `communications.${CommunicationSidebarSectionId}`;
 export type SidebarItemId = SidebarPrimaryItemId | CommunicationSidebarItemId;
 export type SidebarRootItemId = SidebarPrimaryItemId | `group:${string}`;
 
@@ -35,7 +39,8 @@ export type PrimaryWorkspaceNavItem = {
 	icon: string;
 };
 
-export const SIDEBAR_SETTINGS_SCHEMA_VERSION = 2;
+export const SIDEBAR_SETTINGS_SCHEMA_VERSION = 3;
+const LEGACY_SIDEBAR_SETTINGS_SCHEMA_VERSIONS = new Set([2, SIDEBAR_SETTINGS_SCHEMA_VERSION]);
 
 export type SidebarNavGroup = {
 	id: string;
@@ -112,28 +117,50 @@ export const communicationSections: CommunicationSection[] = [
 	{ id: 'meetings', label: 'Meetings', icon: 'tabler:calendar-event', group: 'sources' }
 ];
 
+const communicationSidebarSectionIds: CommunicationSidebarSectionId[] = [
+	'mail',
+	'telegram',
+	'whatsapp',
+	'calls',
+	'meetings'
+];
+const communicationSidebarSections = communicationSections.filter((section): section is CommunicationSection & {
+	id: CommunicationSidebarSectionId;
+} => communicationSidebarSectionIds.includes(section.id as CommunicationSidebarSectionId));
 const sidebarPrimaryItemIds = primaryWorkspaceNav
 	.map((item) => item.id)
 	.filter((itemId): itemId is SidebarPrimaryItemId => itemId !== 'communications');
+const communicationGroupPrimaryItemIds: SidebarPrimaryItemId[] = ['timeline'];
+const communicationGroupPrimaryItemIdSet = new Set<SidebarPrimaryItemId>(communicationGroupPrimaryItemIds);
+const rootSidebarPrimaryItemIds = sidebarPrimaryItemIds.filter(
+	(itemId) => !communicationGroupPrimaryItemIdSet.has(itemId)
+);
 const sidebarPrimaryItemIdSet = new Set<SidebarPrimaryItemId>(sidebarPrimaryItemIds);
-const communicationSectionIdSet = new Set<CommunicationSectionId>(
-	communicationSections.map((section) => section.id)
+const communicationSidebarSectionIdSet = new Set<CommunicationSidebarSectionId>(
+	communicationSidebarSections.map((section) => section.id)
 );
 const sidebarItemIdSet = new Set<SidebarItemId>([
 	...sidebarPrimaryItemIds,
-	...communicationSections.map((section) => communicationSidebarItemId(section.id))
+	...communicationSidebarSections.map((section) => communicationSidebarItemId(section.id))
 ]);
 
 const defaultCommunicationsGroup: SidebarNavGroup = {
 	id: 'communications',
 	label: 'Communications',
 	icon: 'tabler:messages',
-	itemIds: communicationSections.map((section) => communicationSidebarItemId(section.id)),
-	separatorBeforeItemIds: [communicationSidebarItemId('mail')]
+	itemIds: [
+		...communicationSidebarSections.map((section) => communicationSidebarItemId(section.id)),
+		...communicationGroupPrimaryItemIds
+	],
+	separatorBeforeItemIds: []
 };
 
 const defaultRootItemIds: SidebarRootItemId[] = primaryWorkspaceNav.flatMap((item) =>
-	item.id === 'communications' ? [sidebarGroupRootId(defaultCommunicationsGroup.id)] : [item.id as SidebarPrimaryItemId]
+	item.id === 'communications'
+		? [sidebarGroupRootId(defaultCommunicationsGroup.id)]
+		: item.id !== 'timeline'
+			? [item.id as SidebarPrimaryItemId]
+			: []
 );
 
 export function communicationSectionViewId(sectionId: CommunicationSectionId): SidebarViewId {
@@ -144,18 +171,18 @@ export function communicationSectionViewId(sectionId: CommunicationSectionId): S
 	return 'communications';
 }
 
-export function communicationSidebarItemId(sectionId: CommunicationSectionId): CommunicationSidebarItemId {
+export function communicationSidebarItemId(sectionId: CommunicationSidebarSectionId): CommunicationSidebarItemId {
 	return `communications.${sectionId}`;
 }
 
-export function parseCommunicationSidebarItemId(itemId: SidebarItemId): CommunicationSectionId | null {
+export function parseCommunicationSidebarItemId(itemId: SidebarItemId): CommunicationSidebarSectionId | null {
 	if (!itemId.startsWith('communications.')) {
 		return null;
 	}
 
 	const sectionId = itemId.slice('communications.'.length);
-	return communicationSectionIdSet.has(sectionId as CommunicationSectionId)
-		? (sectionId as CommunicationSectionId)
+	return communicationSidebarSectionIdSet.has(sectionId as CommunicationSidebarSectionId)
+		? (sectionId as CommunicationSidebarSectionId)
 		: null;
 }
 
@@ -177,7 +204,11 @@ export function defaultSidebarSettings(): SidebarSettings {
 }
 
 export function parseSidebarSettings(value: unknown): SidebarSettings {
-	if (!isRecord(value) || value.schemaVersion !== SIDEBAR_SETTINGS_SCHEMA_VERSION) {
+	if (
+		!isRecord(value) ||
+		typeof value.schemaVersion !== 'number' ||
+		!LEGACY_SIDEBAR_SETTINGS_SCHEMA_VERSIONS.has(value.schemaVersion)
+	) {
 		return defaultSidebarSettings();
 	}
 
@@ -295,7 +326,7 @@ function parseSidebarGroup(value: unknown, index: number): SidebarNavGroup | nul
 	const separatorBeforeItemIds = Object.hasOwn(value, 'separatorBeforeItemIds')
 		? parseSidebarItemIdArray(value.separatorBeforeItemIds)
 		: groupId === 'communications'
-			? [communicationSidebarItemId('mail')]
+			? [...defaultCommunicationsGroup.separatorBeforeItemIds]
 			: [];
 
 	if (rawId.length === 0 && label.length === 0 && itemIds.length === 0) {
@@ -344,7 +375,11 @@ function normalizeSidebarSettings(settings: SidebarSettings): SidebarSettings {
 	const seenItemIds = new Set<SidebarItemId>();
 	let groups = settings.groups.map((group, index) => {
 		const id = uniqueGroupId(group.id, index, seenGroupIds);
+		const isCommunicationsGroup = id === defaultCommunicationsGroup.id;
 		const itemIds = group.itemIds.filter((itemId) => {
+			if (!isCommunicationsGroup && communicationGroupPrimaryItemIdSet.has(itemId as SidebarPrimaryItemId)) {
+				return false;
+			}
 			if (seenItemIds.has(itemId)) {
 				return false;
 			}
@@ -370,6 +405,9 @@ function normalizeSidebarSettings(settings: SidebarSettings): SidebarSettings {
 			return groupIds.has(groupId);
 		}
 		const primaryRootId = rootId as SidebarPrimaryItemId;
+		if (communicationGroupPrimaryItemIdSet.has(primaryRootId)) {
+			return false;
+		}
 		if (seenItemIds.has(primaryRootId)) {
 			return false;
 		}
@@ -384,38 +422,42 @@ function normalizeSidebarSettings(settings: SidebarSettings): SidebarSettings {
 		}
 	}
 
-	for (const itemId of sidebarPrimaryItemIds) {
+	for (const itemId of rootSidebarPrimaryItemIds) {
 		if (!seenItemIds.has(itemId)) {
 			rootItemIds.push(itemId);
 			seenItemIds.add(itemId);
 		}
 	}
 
-	const communicationsGroup =
-		groups.find((group) => group.id === defaultCommunicationsGroup.id) ??
-		cloneSidebarGroup(defaultCommunicationsGroup);
-	const existingCommunicationIds = new Set(
+	const existingCommunicationsGroup = groups.find((group) => group.id === defaultCommunicationsGroup.id);
+	const communicationsGroup = existingCommunicationsGroup ?? {
+		...cloneSidebarGroup(defaultCommunicationsGroup),
+		itemIds: []
+	};
+	const existingDefaultCommunicationsItemIds = new Set(
 		groups.flatMap((group) =>
-			group.itemIds.filter((itemId) => itemId.startsWith('communications.'))
+			group.itemIds.filter((itemId) => defaultCommunicationsGroup.itemIds.includes(itemId))
 		)
 	);
 	const missingCommunicationIds = defaultCommunicationsGroup.itemIds.filter(
-		(itemId) => !existingCommunicationIds.has(itemId)
+		(itemId) => !existingDefaultCommunicationsItemIds.has(itemId)
 	);
 
 	if (missingCommunicationIds.length > 0) {
 		communicationsGroup.itemIds = [...communicationsGroup.itemIds, ...missingCommunicationIds];
-		if (!groups.some((group) => group.id === communicationsGroup.id)) {
-			groups = [communicationsGroup, ...groups];
-		}
-		const rootId = sidebarGroupRootId(communicationsGroup.id);
-		if (!rootItemIds.includes(rootId)) {
-			rootItemIds = [
-				...rootItemIds.slice(0, 1),
-				rootId,
-				...rootItemIds.slice(1)
-			];
-		}
+	}
+
+	if (!groups.some((group) => group.id === communicationsGroup.id)) {
+		groups = [communicationsGroup, ...groups];
+	}
+
+	const communicationsRootId = sidebarGroupRootId(communicationsGroup.id);
+	if (!rootItemIds.includes(communicationsRootId)) {
+		rootItemIds = [
+			...rootItemIds.slice(0, 1),
+			communicationsRootId,
+			...rootItemIds.slice(1)
+		];
 	}
 
 	return {
