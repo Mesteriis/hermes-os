@@ -89,6 +89,7 @@
 		requestAiMeetingPrep,
 		retryDocumentProcessingJob,
 		saveApplicationSetting,
+		saveFrontendLayoutSetting,
 		saveFrontendSidebarSetting,
 		saveFrontendLocaleSetting,
 		searchGraphNodes,
@@ -163,6 +164,8 @@
 		parseSidebarSettings,
 		communicationSectionViewId,
 		communicationSections,
+		LAYOUT_GRID_COLUMNS,
+		LAYOUT_GRID_MAX_ROWS,
 		primaryWorkspaceNav,
 		resolveSidebarRootEntries,
 		resolveLayout,
@@ -175,6 +178,7 @@
 		type PrimaryNavId,
 		type ResolvedSidebarItem,
 		type ResolvedLayout,
+		type ResolvedWidget,
 		type SidebarItemId,
 		type SidebarNavGroup,
 		type SidebarRootItemId,
@@ -198,6 +202,7 @@
 	type TelegramWizardStep = 'account' | 'auth' | 'details';
 	type AppViewId = PrimaryNavId | 'organizations' | 'settings';
 	type ViewId = SidebarViewId;
+	type WidgetGridDimension = 'columns' | 'rows';
 
 	type NavItem = {
 		id: PrimaryNavId;
@@ -629,12 +634,14 @@
 	let sidebarSettings = $state<SidebarSettings>(defaultSidebarSettings());
 	let isLayoutEditing = $state(false);
 	let isWidgetDrawerOpen = $state(false);
+	let selectedLayoutWidgetId = $state<string | null>(null);
 	let isUserMenuOpen = $state(false);
 	let layoutDraft = $state<LayoutSettings | null>(null);
 	let sidebarDraft = $state<SidebarSettings | null>(null);
 	let layoutError = $state('');
 	let sidebarError = $state('');
 	let newSidebarGroupLabel = $state('');
+	let isLayoutSettingsSaving = $state(false);
 	let isSidebarSettingsSaving = $state(false);
 	const effectiveLayoutSettings = $derived(layoutDraft ?? layoutSettings);
 	const effectiveSidebarSettings = $derived(sidebarDraft ?? sidebarSettings);
@@ -654,6 +661,32 @@
 			: null
 	);
 	const activeLayout = $derived(resolveActiveLayout(activeWorkspaceView, effectiveLayoutSettings));
+	const activeWidgetById = $derived.by(() => {
+		const widgets = Object.values(activeLayout?.widgetsByZone ?? {}).flat();
+		return new Map(widgets.map((widget) => [widget.widgetId, widget]));
+	});
+	const selectedLayoutWidget = $derived(
+		selectedLayoutWidgetId ? activeWidgetById.get(selectedLayoutWidgetId) ?? null : null
+	);
+	const hiddenWidgetTitles = $derived.by(() =>
+		(activeLayout?.hiddenByUser ?? []).map((widget) => widget.definition.title)
+	);
+	let viewportHiddenWidgetTitles = $state<string[]>([]);
+	const gridClassNames = [
+		...Array.from({ length: 12 }, (_, index) => `widget-cols-${index + 1}`),
+		...Array.from({ length: 24 }, (_, index) => `widget-rows-${index + 1}`),
+		'widget-scroll-none',
+		'widget-scroll-y',
+		'widget-scroll-x',
+		'widget-scroll-both',
+		'widget-fit-hidden'
+	];
+	const scrollClassByMode = {
+		none: 'widget-scroll-none',
+		vertical: 'widget-scroll-y',
+		horizontal: 'widget-scroll-x',
+		both: 'widget-scroll-both'
+	};
 	const renderedWidgetIdsForCurrentView = $derived.by(() => {
 		if (!isWidgetDrawerOpen || typeof document === 'undefined') {
 			return null;
@@ -697,6 +730,21 @@
 
 				return left.title.localeCompare(right.title);
 			});
+	});
+
+	$effect(() => {
+		const sync = () => syncWidgetGridClasses(activeWidgetById);
+		sync();
+		window.addEventListener('resize', sync);
+
+		return () => {
+			window.removeEventListener('resize', sync);
+		};
+	});
+	$effect(() => {
+		if (!isLayoutEditing || (selectedLayoutWidgetId && !activeWidgetById.has(selectedLayoutWidgetId))) {
+			selectedLayoutWidgetId = null;
+		}
 	});
 	let providerAccounts = $state<ProviderAccount[]>([]);
 	let settingDrafts = $state<Record<string, string>>({});
@@ -2475,13 +2523,47 @@
 		isLayoutEditing = true;
 		isUserMenuOpen = false;
 		layoutError = '';
+		selectedLayoutWidgetId = null;
 	}
 
 	function cancelLayoutEditing() {
 		layoutDraft = null;
 		isLayoutEditing = false;
 		isWidgetDrawerOpen = false;
+		selectedLayoutWidgetId = null;
 		layoutError = '';
+	}
+
+	async function saveLayoutSettings() {
+		const nextSettings = parseLayoutSettings(layoutDraft ?? layoutSettings);
+		isLayoutSettingsSaving = true;
+		savingSettingKey = 'frontend.layout';
+		try {
+			const updated = await saveFrontendLayoutSetting(apiBaseUrl, apiSecret, nextSettings);
+			applicationSettings = applicationSettings.some((item) => item.setting_key === updated.setting_key)
+				? applicationSettings.map((item) =>
+						item.setting_key === updated.setting_key ? updated : item
+					)
+				: [...applicationSettings, updated];
+			layoutSettings = parseLayoutSettings(updated.value);
+			layoutDraft = null;
+			isLayoutEditing = false;
+			isWidgetDrawerOpen = false;
+			selectedLayoutWidgetId = null;
+			settingDrafts = {
+				...settingDrafts,
+				[updated.setting_key]: settingDraftValue(updated)
+			};
+			layoutError = '';
+			settingsError = '';
+			settingsActionMessage = _('Widget layout saved');
+		} catch (error) {
+			layoutError = error instanceof Error ? error.message : 'Unknown layout settings update error';
+			settingsError = layoutError;
+		} finally {
+			isLayoutSettingsSaving = false;
+			savingSettingKey = null;
+		}
 	}
 
 	function toggleUserMenu() {
@@ -2579,6 +2661,7 @@
 		const views = { ...draft.views };
 		delete views[layoutViewId];
 		layoutDraft = { ...draft, views };
+		selectedLayoutWidgetId = null;
 		layoutError = '';
 	}
 
@@ -2596,6 +2679,7 @@
 			hiddenWidgetIds: [],
 			zoneOverrides: {},
 			orderOverrides: {},
+			gridOverrides: {},
 			sizeIntentOverrides: {}
 		};
 
@@ -2638,6 +2722,9 @@
 				hiddenWidgetIds: [...override.hiddenWidgetIds, widgetId]
 			};
 		});
+		if (selectedLayoutWidgetId === widgetId) {
+			selectedLayoutWidgetId = null;
+		}
 	}
 
 	function showWidget(widgetId: string) {
@@ -2646,6 +2733,106 @@
 			hiddenWidgetIds: override.hiddenWidgetIds.filter((id) => id !== widgetId)
 		}));
 		isWidgetDrawerOpen = false;
+	}
+
+	function openWidgetSettingsDrawer(widgetId: string) {
+		selectedLayoutWidgetId = widgetId;
+		isWidgetDrawerOpen = false;
+	}
+
+	function closeWidgetSettingsDrawer() {
+		selectedLayoutWidgetId = null;
+	}
+
+	function widgetZoneTitle(zoneId: string) {
+		return activeLayout?.zones.find((zone) => zone.id === zoneId)?.title ?? zoneId;
+	}
+
+	function widgetGridValue(widgetId: string, dimension: WidgetGridDimension) {
+		return activeWidgetById.get(widgetId)?.[dimension] ?? 1;
+	}
+
+	function widgetGridMin(widgetId: string, dimension: WidgetGridDimension) {
+		const widget = activeWidgetById.get(widgetId);
+		if (!widget) {
+			return 1;
+		}
+
+		return dimension === 'columns' ? widget.minColumns : widget.minRows;
+	}
+
+	function widgetGridMax(dimension: WidgetGridDimension) {
+		return dimension === 'columns' ? LAYOUT_GRID_COLUMNS : LAYOUT_GRID_MAX_ROWS;
+	}
+
+	function normalizeWidgetGridValue(
+		widgetId: string,
+		dimension: WidgetGridDimension,
+		value: number
+	) {
+		if (!Number.isFinite(value)) {
+			return widgetGridValue(widgetId, dimension);
+		}
+
+		return Math.max(
+			widgetGridMin(widgetId, dimension),
+			Math.min(widgetGridMax(dimension), Math.trunc(value))
+		);
+	}
+
+	function setWidgetGridValue(widgetId: string, dimension: WidgetGridDimension, value: number) {
+		const nextValue = normalizeWidgetGridValue(widgetId, dimension, value);
+		updateCurrentViewOverride((override) => {
+			const currentGridOverride = override.gridOverrides[widgetId] ?? {};
+
+			return {
+				...override,
+				gridOverrides: {
+					...override.gridOverrides,
+					[widgetId]: {
+						...currentGridOverride,
+						[dimension]: nextValue
+					}
+				}
+			};
+		});
+	}
+
+	function adjustWidgetGridValue(widgetId: string, dimension: WidgetGridDimension, delta: -1 | 1) {
+		setWidgetGridValue(widgetId, dimension, widgetGridValue(widgetId, dimension) + delta);
+	}
+
+	function handleWidgetGridInput(widgetId: string, dimension: WidgetGridDimension, event: Event) {
+		const input = event.currentTarget;
+		if (!(input instanceof HTMLInputElement)) {
+			return;
+		}
+
+		setWidgetGridValue(widgetId, dimension, input.valueAsNumber);
+	}
+
+	function resetWidgetGrid(widgetId: string) {
+		updateCurrentViewOverride((override) => {
+			const currentGridOverride = override.gridOverrides[widgetId];
+			if (!currentGridOverride) {
+				return override;
+			}
+
+			const restGridOverride = { ...currentGridOverride };
+			delete restGridOverride.columns;
+			delete restGridOverride.rows;
+			const nextGridOverrides = { ...override.gridOverrides };
+			if (Object.keys(restGridOverride).length === 0) {
+				delete nextGridOverrides[widgetId];
+			} else {
+				nextGridOverrides[widgetId] = restGridOverride;
+			}
+
+			return {
+				...override,
+				gridOverrides: nextGridOverrides
+			};
+		});
 	}
 
 	function moveWidgetInZone(widgetId: string, direction: -1 | 1) {
@@ -2681,6 +2868,113 @@
 		return Object.values(activeLayout.widgetsByZone).some((widgets) =>
 			widgets.some((widget) => widget.widgetId === widgetId)
 		);
+	}
+
+	function syncWidgetGridClasses(widgetsById: Map<string, ResolvedWidget>) {
+		if (typeof document === 'undefined') {
+			return;
+		}
+
+		if (window.scrollX !== 0 || window.scrollY !== 0) {
+			window.scrollTo(0, 0);
+		}
+
+		const workspace = document.querySelector<HTMLElement>('.workspace');
+		const workspaceWidth = workspace?.clientWidth ?? window.innerWidth;
+		const workspaceRect = workspace?.getBoundingClientRect();
+		const statusStrip = document.querySelector<HTMLElement>('.workspace-status-strip');
+		const statusRect = statusStrip?.getBoundingClientRect();
+		const minimumColumnWidth = 44;
+		const availableColumns = Math.max(
+			1,
+			Math.min(12, Math.floor(workspaceWidth / minimumColumnWidth))
+		);
+
+		for (const element of document.querySelectorAll<HTMLElement>('.widget-frame[data-widget-id]')) {
+			element.classList.remove(...gridClassNames);
+
+			const widgetId = element.dataset.widgetId;
+			if (!widgetId) continue;
+
+			const widget = widgetsById.get(widgetId);
+			if (!widget) continue;
+
+			const scrollClass = scrollClassByMode[widget.scrollMode];
+			element.classList.add(
+				`widget-cols-${widget.columns}`,
+				`widget-rows-${widget.rows}`,
+				scrollClass
+			);
+			element.dataset.widgetColumns = String(widget.columns);
+			element.dataset.widgetRows = String(widget.rows);
+			element.dataset.widgetMinColumns = String(widget.minColumns);
+			element.dataset.widgetMinRows = String(widget.minRows);
+			element.dataset.widgetScroll = widget.scrollMode;
+		}
+
+		requestAnimationFrame(() => {
+			if (window.scrollX !== 0 || window.scrollY !== 0) {
+				window.scrollTo(0, 0);
+			}
+
+			const hiddenByViewport: string[] = [];
+			const rightLimit = workspaceRect?.right ?? window.innerWidth;
+			const bottomLimit = statusRect?.top ?? workspaceRect?.bottom ?? window.innerHeight;
+
+			for (const element of document.querySelectorAll<HTMLElement>('.widget-frame[data-widget-id]')) {
+				const widgetId = element.dataset.widgetId;
+				const widget = widgetId ? widgetsById.get(widgetId) : null;
+				if (!widget) continue;
+
+				const rect = element.getBoundingClientRect();
+				const isFitHidden =
+					widget.minColumns > availableColumns ||
+					rect.left < (workspaceRect?.left ?? 0) - 1 ||
+					rect.right > rightLimit + 1 ||
+					rect.bottom > bottomLimit - 1;
+
+				if (isFitHidden) {
+					element.classList.add('widget-fit-hidden');
+					hiddenByViewport.push(widget.definition.title);
+				} else {
+					element.classList.remove('widget-fit-hidden');
+				}
+			}
+
+			for (const element of document.querySelectorAll<HTMLElement>('.widget-frame[data-widget-hide-if-clipped-content][data-widget-id]')) {
+				const widgetId = element.dataset.widgetId;
+				const widget = widgetId ? widgetsById.get(widgetId) : null;
+				const contentElements = Array.from(
+					element.querySelectorAll<HTMLElement>('[data-widget-fit-content]')
+				);
+				if (!widget || contentElements.length === 0 || element.classList.contains('widget-fit-hidden')) {
+					continue;
+				}
+
+				const rect = element.getBoundingClientRect();
+				const isContentClipped = contentElements.some((content) => {
+					const contentRect = content.getBoundingClientRect();
+					const hasInternalOverflow =
+						content.scrollHeight > content.clientHeight + 1 ||
+						content.scrollWidth > content.clientWidth + 1;
+
+					return (
+						hasInternalOverflow ||
+						contentRect.left < rect.left - 1 ||
+						contentRect.right > rect.right + 1 ||
+						contentRect.top < rect.top - 1 ||
+						contentRect.bottom > rect.bottom + 1
+					);
+				});
+
+				if (isContentClipped) {
+					element.classList.add('widget-fit-hidden');
+					hiddenByViewport.push(widget.definition.title);
+				}
+			}
+
+			viewportHiddenWidgetTitles = hiddenByViewport;
+		});
 	}
 
 	function resolveActiveLayout(viewId: ViewId, settings: LayoutSettings): ResolvedLayout | null {
@@ -4499,27 +4793,13 @@
 		<div class="widget-edit-chrome">
 			<button
 				type="button"
-				title="Move widget up"
-				aria-label="Move widget up"
-				onclick={() => moveWidgetInZone(widgetId, -1)}
+				class="widget-config-button"
+				title={_('Configure widget')}
+				aria-label={_('Configure widget')}
+				aria-expanded={selectedLayoutWidgetId === widgetId}
+				onclick={() => openWidgetSettingsDrawer(widgetId)}
 			>
-				<Icon icon="tabler:arrow-up" width="14" height="14" />
-			</button>
-			<button
-				type="button"
-				title="Move widget down"
-				aria-label="Move widget down"
-				onclick={() => moveWidgetInZone(widgetId, 1)}
-			>
-				<Icon icon="tabler:arrow-down" width="14" height="14" />
-			</button>
-			<button
-				type="button"
-				title="Hide widget"
-				aria-label="Hide widget"
-				onclick={() => hideWidget(widgetId)}
-			>
-				<Icon icon="tabler:eye-off" width="14" height="14" />
+				<Icon icon="tabler:adjustments-horizontal" width="15" height="15" />
 			</button>
 		</div>
 	{/if}
@@ -4861,23 +5141,36 @@
 		{/if}
 
 		{#if isLayoutEditing}
-			<div class="layout-edit-controls" role="group" aria-label="Widget layout controls">
-				<button type="button" class="ghost-button" onclick={() => (isWidgetDrawerOpen = true)}>
+			<div class="layout-edit-controls" role="group" aria-label={_('Widget layout controls')}>
+				<button type="button" class="ghost-button" onclick={() => { selectedLayoutWidgetId = null; isWidgetDrawerOpen = true; }}>
 					<Icon icon="tabler:plus" width="16" height="16" />
-					Add widget
+					{_('Add widget')}
 				</button>
-				<button type="button" class="ghost-button" onclick={cancelLayoutEditing}>Cancel</button>
-				<button type="button" class="ghost-button" onclick={resetCurrentViewLayout}>Reset</button>
-				<button type="button" class="primary-button" disabled>Save</button>
+				<button type="button" class="ghost-button" onclick={cancelLayoutEditing}>{_('Cancel')}</button>
+				<button type="button" class="ghost-button" onclick={resetCurrentViewLayout}>{_('Reset')}</button>
+				<button
+					type="button"
+					class="primary-button"
+					disabled={isLayoutSettingsSaving || layoutDraft === null}
+					onclick={saveLayoutSettings}
+				>
+					{isLayoutSettingsSaving ? _('Saving') : _('Save')}
+				</button>
 			</div>
 		{/if}
 
 		{#if currentView === 'home'}
 			<section class="home-page">
 				<div class="hero-row">
-					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-metrics" data-widget-hidden={!isWidgetVisible('home-metrics')}>
+					<div
+						class="widget-frame"
+						class:editing={isLayoutEditing}
+						data-widget-id="home-metrics"
+						data-widget-hide-if-clipped-content
+						data-widget-hidden={!isWidgetVisible('home-metrics')}
+					>
 						{@render widgetEditChrome('home-metrics')}
-						<div class="metric-grid home-metrics">
+						<div class="metric-grid home-metrics" data-widget-fit-content>
 							{#each homeStats as metric}
 								<article class="metric-card">
 									<span>{metric.label}</span>
@@ -4898,9 +5191,15 @@
 				</div>
 
 				<div class="dashboard-grid">
-					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-whats-new" data-widget-hidden={!isWidgetVisible('home-whats-new')}>
+					<div
+						class="widget-frame"
+						class:editing={isLayoutEditing}
+						data-widget-id="home-whats-new"
+						data-widget-hide-if-clipped-content
+						data-widget-hidden={!isWidgetVisible('home-whats-new')}
+					>
 						{@render widgetEditChrome('home-whats-new')}
-						<section class="panel feed-panel">
+						<section class="panel feed-panel" data-widget-fit-content>
 							<header class="panel-title-row">
 								<div>
 									<h2>{_('What\'s New')}</h2>
@@ -4925,9 +5224,15 @@
 						</section>
 					</div>
 
-					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-priorities" data-widget-hidden={!isWidgetVisible('home-priorities')}>
+					<div
+						class="widget-frame"
+						class:editing={isLayoutEditing}
+						data-widget-id="home-priorities"
+						data-widget-hide-if-clipped-content
+						data-widget-hidden={!isWidgetVisible('home-priorities')}
+					>
 						{@render widgetEditChrome('home-priorities')}
-						<section class="panel priorities-panel">
+						<section class="panel priorities-panel" data-widget-fit-content>
 							<header class="panel-title-row">
 								<div>
 									<h2>{_('Today\'s Priorities')}</h2>
@@ -4950,9 +5255,15 @@
 						</section>
 					</div>
 
-					<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-upcoming" data-widget-hidden={!isWidgetVisible('home-upcoming')}>
+					<div
+						class="widget-frame"
+						class:editing={isLayoutEditing}
+						data-widget-id="home-upcoming"
+						data-widget-hide-if-clipped-content
+						data-widget-hidden={!isWidgetVisible('home-upcoming')}
+					>
 						{@render widgetEditChrome('home-upcoming')}
-						<section class="panel schedule-panel">
+						<section class="panel schedule-panel" data-widget-fit-content>
 							<header class="panel-title-row">
 								<div>
 									<h2>{_('Upcoming')}</h2>
@@ -4968,9 +5279,15 @@
 					</div>
 
 					<aside class="stacked-rail">
-						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-people-talked-to" data-widget-hidden={!isWidgetVisible('home-people-talked-to')}>
+						<div
+							class="widget-frame"
+							class:editing={isLayoutEditing}
+							data-widget-id="home-people-talked-to"
+							data-widget-hide-if-clipped-content
+							data-widget-hidden={!isWidgetVisible('home-people-talked-to')}
+						>
 							{@render widgetEditChrome('home-people-talked-to')}
-							<section class="panel mini-panel">
+							<section class="panel mini-panel" data-widget-fit-content>
 								<header class="panel-title-row"><h2>{_('People You Talked To')}</h2><button type="button" class="link-button" disabled>View all</button></header>
 								<div class="person-list">
 									{#each peopleTalked as person}
@@ -4983,9 +5300,15 @@
 								</div>
 							</section>
 						</div>
-						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-system-status" data-widget-hidden={!isWidgetVisible('home-system-status')}>
+						<div
+							class="widget-frame"
+							class:editing={isLayoutEditing}
+							data-widget-id="home-system-status"
+							data-widget-hide-if-clipped-content
+							data-widget-hidden={!isWidgetVisible('home-system-status')}
+						>
 							{@render widgetEditChrome('home-system-status')}
-							<section class="panel mini-panel">
+							<section class="panel mini-panel" data-widget-fit-content>
 								<header class="panel-title-row"><h2>{_('System Status')}</h2></header>
 								<ul class="status-list">
 									<li class:online={status}>All systems operational</li>
@@ -4999,14 +5322,20 @@
 					</aside>
 				</div>
 
-				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="home-active-projects" data-widget-hidden={!isWidgetVisible('home-active-projects')}>
+				<div
+					class="widget-frame"
+					class:editing={isLayoutEditing}
+					data-widget-id="home-active-projects"
+					data-widget-hide-if-clipped-content
+					data-widget-hidden={!isWidgetVisible('home-active-projects')}
+				>
 					{@render widgetEditChrome('home-active-projects')}
 					<section class="panel full-band">
 						<header class="panel-title-row">
 							<h2>{_('Active Projects')}</h2>
 							<button type="button" class="link-button" onclick={() => setCurrentView('projects')}>View all projects</button>
 						</header>
-						<div class="project-card-row">
+						<div class="project-card-row" data-widget-fit-content>
 							{#each projects as project}
 								<article class="compact-project">
 									<span class="round-icon {project.tone}"><Icon icon={project.icon} width="20" height="20" /></span>
@@ -7772,7 +8101,127 @@
 				{/if}
 			</section>
 	{/if}
+		<div class="workspace-status-strip" aria-live="polite">
+			<strong>{_(activeView.title)}</strong>
+			<span>
+				{#if hiddenWidgetTitles.length === 0 && viewportHiddenWidgetTitles.length === 0}
+					No hidden widgets
+				{:else}
+					Hidden: {[...hiddenWidgetTitles, ...viewportHiddenWidgetTitles].join(', ')}
+				{/if}
+			</span>
+		</div>
 	</section>
+
+	{#if isLayoutEditing && selectedLayoutWidget}
+		<div class="layout-widget-drawer" role="dialog" aria-label={_('Widget settings')}>
+			<header>
+				<div>
+					<p>{_('Widget settings')}</p>
+					<h2>{_(selectedLayoutWidget.definition.title)}</h2>
+				</div>
+				<button
+					type="button"
+					class="icon-button"
+					onclick={closeWidgetSettingsDrawer}
+					title={_('Close widget settings')}
+					aria-label={_('Close widget settings')}
+				>
+					<Icon icon="tabler:x" width="16" height="16" />
+				</button>
+			</header>
+
+			<div class="layout-widget-meta">
+				<span>{_('Widget ID')}<strong>{selectedLayoutWidget.widgetId}</strong></span>
+				<span>{_('Zone')}<strong>{_(widgetZoneTitle(selectedLayoutWidget.zoneId))}</strong></span>
+			</div>
+
+			<section class="layout-widget-size-panel" aria-label={_('Widget grid size')}>
+				<div class="layout-widget-grid-row">
+					<div class="widget-grid-field">
+						<span>{_('Cols')}</span>
+						<div class="widget-grid-stepper">
+							<button
+								type="button"
+								title={_('Decrease columns')}
+								aria-label={_('Decrease columns')}
+								disabled={widgetGridValue(selectedLayoutWidget.widgetId, 'columns') <= widgetGridMin(selectedLayoutWidget.widgetId, 'columns')}
+								onclick={() => adjustWidgetGridValue(selectedLayoutWidget.widgetId, 'columns', -1)}
+							>
+								<Icon icon="tabler:minus" width="12" height="12" />
+							</button>
+							<input
+								type="number"
+								min={widgetGridMin(selectedLayoutWidget.widgetId, 'columns')}
+								max={widgetGridMax('columns')}
+								value={widgetGridValue(selectedLayoutWidget.widgetId, 'columns')}
+								aria-label={_('Widget columns')}
+								onchange={(event) => handleWidgetGridInput(selectedLayoutWidget.widgetId, 'columns', event)}
+							/>
+							<button
+								type="button"
+								title={_('Increase columns')}
+								aria-label={_('Increase columns')}
+								disabled={widgetGridValue(selectedLayoutWidget.widgetId, 'columns') >= widgetGridMax('columns')}
+								onclick={() => adjustWidgetGridValue(selectedLayoutWidget.widgetId, 'columns', 1)}
+							>
+								<Icon icon="tabler:plus" width="12" height="12" />
+							</button>
+						</div>
+						<small>{widgetGridMin(selectedLayoutWidget.widgetId, 'columns')} - {widgetGridMax('columns')}</small>
+					</div>
+
+					<div class="widget-grid-field">
+						<span>{_('Rows')}</span>
+						<div class="widget-grid-stepper">
+							<button
+								type="button"
+								title={_('Decrease rows')}
+								aria-label={_('Decrease rows')}
+								disabled={widgetGridValue(selectedLayoutWidget.widgetId, 'rows') <= widgetGridMin(selectedLayoutWidget.widgetId, 'rows')}
+								onclick={() => adjustWidgetGridValue(selectedLayoutWidget.widgetId, 'rows', -1)}
+							>
+								<Icon icon="tabler:minus" width="12" height="12" />
+							</button>
+							<input
+								type="number"
+								min={widgetGridMin(selectedLayoutWidget.widgetId, 'rows')}
+								max={widgetGridMax('rows')}
+								value={widgetGridValue(selectedLayoutWidget.widgetId, 'rows')}
+								aria-label={_('Widget rows')}
+								onchange={(event) => handleWidgetGridInput(selectedLayoutWidget.widgetId, 'rows', event)}
+							/>
+							<button
+								type="button"
+								title={_('Increase rows')}
+								aria-label={_('Increase rows')}
+								disabled={widgetGridValue(selectedLayoutWidget.widgetId, 'rows') >= widgetGridMax('rows')}
+								onclick={() => adjustWidgetGridValue(selectedLayoutWidget.widgetId, 'rows', 1)}
+							>
+								<Icon icon="tabler:plus" width="12" height="12" />
+							</button>
+						</div>
+						<small>{widgetGridMin(selectedLayoutWidget.widgetId, 'rows')} - {widgetGridMax('rows')}</small>
+					</div>
+				</div>
+			</section>
+
+			<div class="layout-widget-actions">
+				<button type="button" onclick={() => moveWidgetInZone(selectedLayoutWidget.widgetId, -1)}>
+					<Icon icon="tabler:arrow-up" width="14" height="14" />{_('Move widget up')}
+				</button>
+				<button type="button" onclick={() => moveWidgetInZone(selectedLayoutWidget.widgetId, 1)}>
+					<Icon icon="tabler:arrow-down" width="14" height="14" />{_('Move widget down')}
+				</button>
+				<button type="button" onclick={() => resetWidgetGrid(selectedLayoutWidget.widgetId)}>
+					<Icon icon="tabler:restore" width="14" height="14" />{_('Reset widget size')}
+				</button>
+				<button type="button" class="danger" onclick={() => hideWidget(selectedLayoutWidget.widgetId)}>
+					<Icon icon="tabler:eye-off" width="14" height="14" />{_('Hide widget')}
+				</button>
+			</div>
+		</div>
+	{/if}
 
 	{#if isLayoutEditing && isWidgetDrawerOpen}
 		<div class="widget-drawer" role="dialog" aria-label="Add widget">

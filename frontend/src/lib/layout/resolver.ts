@@ -1,10 +1,5 @@
-import type {
-	LayoutPreset,
-	ResolvedLayout,
-	ResolvedWidget,
-	ViewLayoutOverride,
-	WidgetDefinition
-} from './types';
+import type { LayoutPreset, ResolvedLayout, ResolvedWidget, ViewLayoutOverride, WidgetDefinition } from './types';
+import { LAYOUT_GRID_COLUMNS, LAYOUT_GRID_MAX_ROWS, LAYOUT_GRID_MIN_COLUMNS, LAYOUT_GRID_MIN_ROWS } from './types';
 
 export function resolveLayout(
 	preset: LayoutPreset,
@@ -34,11 +29,33 @@ export function resolveLayout(
 			definition.allowedZones.includes(requestedZoneId)
 				? requestedZoneId
 				: instance.zoneId;
-		const sizeIntent = override?.sizeIntentOverrides[instance.widgetId] ?? instance.sizeIntent;
+		const gridOverride = override?.gridOverrides[instance.widgetId];
+		const minColumns = clampGridNumber(
+			definition.minColumns,
+			LAYOUT_GRID_MIN_COLUMNS,
+			LAYOUT_GRID_COLUMNS
+		);
+		const minRows = clampGridNumber(definition.minRows, LAYOUT_GRID_MIN_ROWS, LAYOUT_GRID_MAX_ROWS);
+		const columns = clampGridNumber(
+			gridOverride?.columns ?? instance.columns ?? definition.defaultColumns,
+			minColumns,
+			LAYOUT_GRID_COLUMNS
+		);
+		const rows = clampGridNumber(
+			gridOverride?.rows ?? instance.rows ?? definition.defaultRows,
+			minRows,
+			LAYOUT_GRID_MAX_ROWS
+		);
+		const scrollMode = gridOverride?.scrollMode ?? definition.defaultScrollMode;
 		const resolvedWidget: ResolvedWidget = {
 			...instance,
 			zoneId,
-			sizeIntent,
+			columns,
+			rows,
+			minColumns,
+			minRows,
+			scrollMode,
+			sizeIntent: instance.sizeIntent,
 			definition,
 			isHiddenByUser: hiddenWidgetIds.has(instance.widgetId)
 		};
@@ -101,4 +118,12 @@ function sortZoneWidgets(
 
 function sortByPresetOrder(widgets: ResolvedWidget[]): ResolvedWidget[] {
 	return [...widgets].sort((left, right) => left.order - right.order);
+}
+
+function clampGridNumber(value: number, min: number, max: number): number {
+	if (!Number.isInteger(value)) {
+		return min;
+	}
+
+	return Math.min(max, Math.max(min, value));
 }

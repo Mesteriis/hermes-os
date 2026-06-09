@@ -1,10 +1,12 @@
 import {
+	LEGACY_LAYOUT_SCHEMA_VERSION,
 	LAYOUT_SCHEMA_VERSION,
+	type WidgetGridOverride,
+	type WidgetScrollMode,
 	type LayoutSettings,
 	type LayoutViewId,
 	type ViewLayoutOverride,
-	type WidgetSizeIntent,
-	widgetSizeIntents
+	widgetScrollModes,
 } from './types';
 
 const layoutViewIds = [
@@ -25,7 +27,7 @@ const layoutViewIds = [
 ] as const satisfies readonly LayoutViewId[];
 
 const layoutViewIdSet = new Set<string>(layoutViewIds);
-const widgetSizeIntentSet = new Set<string>(widgetSizeIntents);
+const widgetScrollModeSet = new Set<string>(widgetScrollModes);
 
 export function defaultLayoutSettings(): LayoutSettings {
 	return {
@@ -35,17 +37,23 @@ export function defaultLayoutSettings(): LayoutSettings {
 }
 
 export function parseLayoutSettings(value: unknown): LayoutSettings {
-	if (!isRecord(value) || value.schemaVersion !== LAYOUT_SCHEMA_VERSION || !isRecord(value.views)) {
+	if (
+		!isRecord(value) ||
+		(value.schemaVersion !== LAYOUT_SCHEMA_VERSION &&
+			value.schemaVersion !== LEGACY_LAYOUT_SCHEMA_VERSION) ||
+		!isRecord(value.views)
+	) {
 		return defaultLayoutSettings();
 	}
 
+	const isLegacySchema = value.schemaVersion === LEGACY_LAYOUT_SCHEMA_VERSION;
 	const views: LayoutSettings['views'] = {};
 	for (const [viewId, viewOverride] of Object.entries(value.views)) {
 		if (!isLayoutViewId(viewId)) {
 			continue;
 		}
 
-		const parsedOverride = parseViewOverride(viewOverride);
+		const parsedOverride = parseViewOverride(viewOverride, isLegacySchema);
 		if (parsedOverride !== null) {
 			views[viewId] = parsedOverride;
 		}
@@ -57,7 +65,7 @@ export function parseLayoutSettings(value: unknown): LayoutSettings {
 	};
 }
 
-function parseViewOverride(value: unknown): ViewLayoutOverride | null {
+function parseViewOverride(value: unknown, isLegacySchema: boolean): ViewLayoutOverride | null {
 	if (
 		!isRecord(value) ||
 		typeof value.presetId !== 'string' ||
@@ -73,7 +81,8 @@ function parseViewOverride(value: unknown): ViewLayoutOverride | null {
 		hiddenWidgetIds: parseStringArray(value.hiddenWidgetIds),
 		zoneOverrides: parseStringRecord(value.zoneOverrides),
 		orderOverrides: parseStringArrayRecord(value.orderOverrides),
-		sizeIntentOverrides: parseWidgetSizeIntentRecord(value.sizeIntentOverrides)
+		gridOverrides: isLegacySchema ? {} : parseWidgetGridOverrideRecord(value.gridOverrides),
+		sizeIntentOverrides: {}
 	};
 }
 
@@ -85,8 +94,8 @@ function isLayoutViewId(value: string): value is LayoutViewId {
 	return layoutViewIdSet.has(value);
 }
 
-function isWidgetSizeIntent(value: string): value is WidgetSizeIntent {
-	return widgetSizeIntentSet.has(value);
+function isWidgetScrollMode(value: string): value is WidgetScrollMode {
+	return widgetScrollModeSet.has(value);
 }
 
 function parseStringArray(value: unknown): string[] {
@@ -117,15 +126,35 @@ function parseStringArrayRecord(value: unknown): Record<string, string[]> {
 	);
 }
 
-function parseWidgetSizeIntentRecord(value: unknown): Partial<Record<string, WidgetSizeIntent>> {
+function parseWidgetGridOverrideRecord(value: unknown): Record<string, WidgetGridOverride> {
 	if (!isRecord(value)) {
 		return {};
 	}
 
 	return Object.fromEntries(
-		Object.entries(value).filter(
-			(entry): entry is [string, WidgetSizeIntent] =>
-				typeof entry[1] === 'string' && isWidgetSizeIntent(entry[1])
-		)
+		Object.entries(value)
+			.map(([widgetId, item]) => [widgetId, parseWidgetGridOverride(item)] as const)
+			.filter((entry): entry is [string, WidgetGridOverride] => Object.keys(entry[1]).length > 0)
 	);
+}
+
+function parseWidgetGridOverride(value: unknown): WidgetGridOverride {
+	if (!isRecord(value)) {
+		return {};
+	}
+
+	const override: WidgetGridOverride = {};
+	const columns = value.columns;
+	const rows = value.rows;
+	if (typeof columns === 'number' && Number.isInteger(columns)) {
+		override.columns = columns;
+	}
+	if (typeof rows === 'number' && Number.isInteger(rows)) {
+		override.rows = rows;
+	}
+	if (typeof value.scrollMode === 'string' && isWidgetScrollMode(value.scrollMode)) {
+		override.scrollMode = value.scrollMode;
+	}
+
+	return override;
 }

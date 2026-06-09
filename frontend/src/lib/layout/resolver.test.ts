@@ -3,9 +3,9 @@ import { findPresetForView, layoutPresets, layoutViewIdForAppView } from './pres
 import { widgetRegistry } from './registry';
 import { resolveLayout } from './resolver';
 import { defaultLayoutSettings, parseLayoutSettings } from './settings';
-import { LAYOUT_SCHEMA_VERSION } from './types';
+import { LAYOUT_GRID_COLUMNS, LAYOUT_GRID_MAX_ROWS, LAYOUT_SCHEMA_VERSION } from './types';
 import type { LayoutViewId } from './types';
-import type { LayoutPreset, ViewLayoutOverride, WidgetDefinition } from './types';
+import type { LayoutPreset, LayoutWidgetInstance, ViewLayoutOverride, WidgetDefinition } from './types';
 
 const expectedViews: LayoutViewId[] = [
 	'home',
@@ -25,59 +25,52 @@ const expectedViews: LayoutViewId[] = [
 	'settings'
 ];
 
+function testDefinition(
+	id: string,
+	title: string,
+	allowedZones: string[],
+	priority: number,
+	defaultColumns = 4,
+	defaultRows = 4,
+	defaultScrollMode: WidgetDefinition['defaultScrollMode'] = 'none'
+): WidgetDefinition {
+	return {
+		id,
+		title,
+		viewScope: ['home'],
+		defaultZone: 'main',
+		allowedZones,
+		defaultColumns,
+		defaultRows,
+		minColumns: 2,
+		minRows: 2,
+		defaultScrollMode,
+		defaultSizeIntent: 'auto',
+		priority,
+		canHide: true,
+		canAdd: true,
+		dataMode: 'static'
+	};
+}
+
+function testInstance(widgetId: string, zoneId: string, order: number): LayoutWidgetInstance {
+	return {
+		widgetId,
+		zoneId,
+		order,
+		columns: 4,
+		rows: 4,
+		sizeIntent: 'auto',
+		highlight: 'none',
+		visible: true
+	};
+}
+
 const testWidgets: WidgetDefinition[] = [
-	{
-		id: 'home-whats-new',
-		title: "What's New",
-		viewScope: ['home'],
-		defaultZone: 'main',
-		allowedZones: ['main', 'rail'],
-		minSize: { width: 260, height: 160 },
-		defaultSizeIntent: 'auto',
-		priority: 10,
-		canHide: true,
-		canAdd: true,
-		dataMode: 'static'
-	},
-	{
-		id: 'home-priorities',
-		title: "Today's Priorities",
-		viewScope: ['home'],
-		defaultZone: 'main',
-		allowedZones: ['main'],
-		minSize: { width: 260, height: 160 },
-		defaultSizeIntent: 'auto',
-		priority: 20,
-		canHide: true,
-		canAdd: true,
-		dataMode: 'static'
-	},
-	{
-		id: 'home-later',
-		title: 'Later',
-		viewScope: ['home'],
-		defaultZone: 'main',
-		allowedZones: ['main'],
-		minSize: { width: 260, height: 160 },
-		defaultSizeIntent: 'auto',
-		priority: 30,
-		canHide: true,
-		canAdd: true,
-		dataMode: 'static'
-	},
-	{
-		id: 'home-extra',
-		title: 'Extra',
-		viewScope: ['home'],
-		defaultZone: 'main',
-		allowedZones: ['main'],
-		minSize: { width: 260, height: 160 },
-		defaultSizeIntent: 'auto',
-		priority: 40,
-		canHide: true,
-		canAdd: true,
-		dataMode: 'static'
-	}
+	testDefinition('home-whats-new', "What's New", ['main', 'rail'], 10, 4, 4, 'vertical'),
+	testDefinition('home-priorities', "Today's Priorities", ['main'], 20),
+	testDefinition('home-later', 'Later', ['main'], 30),
+	testDefinition('home-extra', 'Extra', ['main'], 40)
 ];
 
 const testPreset: LayoutPreset = {
@@ -89,67 +82,24 @@ const testPreset: LayoutPreset = {
 		{ id: 'main', title: 'Main', minWidth: 320, minHeight: 240 },
 		{ id: 'rail', title: 'Rail', minWidth: 220, minHeight: 240 }
 	],
-	widgets: [
-		{
-			widgetId: 'home-whats-new',
-			zoneId: 'main',
-			order: 2,
-			sizeIntent: 'auto',
-			highlight: 'none',
-			visible: true
-		},
-		{
-			widgetId: 'home-priorities',
-			zoneId: 'main',
-			order: 1,
-			sizeIntent: 'auto',
-			highlight: 'none',
-			visible: true
-		}
-	]
+	widgets: [testInstance('home-whats-new', 'main', 2), testInstance('home-priorities', 'main', 1)]
 };
 
 const orderedPreset: LayoutPreset = {
 	...testPreset,
 	widgets: [
-		{
-			widgetId: 'home-whats-new',
-			zoneId: 'main',
-			order: 3,
-			sizeIntent: 'auto',
-			highlight: 'none',
-			visible: true
-		},
-		{
-			widgetId: 'home-priorities',
-			zoneId: 'main',
-			order: 1,
-			sizeIntent: 'auto',
-			highlight: 'none',
-			visible: true
-		},
-		{
-			widgetId: 'home-later',
-			zoneId: 'main',
-			order: 2,
-			sizeIntent: 'auto',
-			highlight: 'none',
-			visible: true
-		},
-		{
-			widgetId: 'home-extra',
-			zoneId: 'main',
-			order: 4,
-			sizeIntent: 'auto',
-			highlight: 'none',
-			visible: true
-		}
+		testInstance('home-whats-new', 'main', 3),
+		testInstance('home-priorities', 'main', 1),
+		testInstance('home-later', 'main', 2),
+		testInstance('home-extra', 'main', 4)
 	]
 };
 
 describe('layout domain exports', () => {
-	it('uses schema version 1 for the first persisted layout setting', () => {
-		expect(LAYOUT_SCHEMA_VERSION).toBe(1);
+	it('uses schema version 2 for row and column widget layout settings', () => {
+		expect(LAYOUT_SCHEMA_VERSION).toBe(2);
+		expect(LAYOUT_GRID_COLUMNS).toBe(12);
+		expect(LAYOUT_GRID_MAX_ROWS).toBe(24);
 	});
 });
 
@@ -271,6 +221,37 @@ describe('layout settings parser', () => {
 
 	it('keeps valid home view overrides', () => {
 		const parsed = parseLayoutSettings({
+			schemaVersion: 2,
+			views: {
+				home: {
+					presetId: 'home-default',
+					presetVersion: 1,
+					hiddenWidgetIds: ['home-system-status'],
+					zoneOverrides: { 'home-whats-new': 'rail' },
+					orderOverrides: { main: ['home-priorities', 'home-whats-new'] },
+					gridOverrides: {
+						'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' }
+					},
+					sizeIntentOverrides: { 'home-whats-new': 'wide' }
+				}
+			}
+		});
+
+		expect(parsed.views.home?.presetId).toBe('home-default');
+		expect(parsed.views.home?.presetVersion).toBe(1);
+		expect(parsed.views.home?.hiddenWidgetIds).toEqual(['home-system-status']);
+		expect(parsed.views.home?.zoneOverrides).toEqual({ 'home-whats-new': 'rail' });
+		expect(parsed.views.home?.orderOverrides).toEqual({
+			main: ['home-priorities', 'home-whats-new']
+		});
+		expect(parsed.views.home?.gridOverrides).toEqual({
+			'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' }
+		});
+		expect(parsed.views.home?.sizeIntentOverrides).toEqual({});
+	});
+
+	it('migrates legacy schema v1 overrides while dropping size intent state', () => {
+		const parsed = parseLayoutSettings({
 			schemaVersion: 1,
 			views: {
 				home: {
@@ -284,14 +265,11 @@ describe('layout settings parser', () => {
 			}
 		});
 
-		expect(parsed.views.home?.presetId).toBe('home-default');
-		expect(parsed.views.home?.presetVersion).toBe(1);
+		expect(parsed.schemaVersion).toBe(2);
 		expect(parsed.views.home?.hiddenWidgetIds).toEqual(['home-system-status']);
 		expect(parsed.views.home?.zoneOverrides).toEqual({ 'home-whats-new': 'rail' });
-		expect(parsed.views.home?.orderOverrides).toEqual({
-			main: ['home-priorities', 'home-whats-new']
-		});
-		expect(parsed.views.home?.sizeIntentOverrides).toEqual({ 'home-whats-new': 'wide' });
+		expect(parsed.views.home?.gridOverrides).toEqual({});
+		expect(parsed.views.home?.sizeIntentOverrides).toEqual({});
 	});
 });
 
@@ -312,14 +290,60 @@ describe('resolveLayout', () => {
 			hiddenWidgetIds: ['home-priorities'],
 			zoneOverrides: { 'home-whats-new': 'rail' },
 			orderOverrides: {},
+			gridOverrides: {
+				'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' }
+			},
 			sizeIntentOverrides: { 'home-whats-new': 'wide' }
 		});
 
 		expect(resolved.widgetsByZone.main).toEqual([]);
-		expect(resolved.widgetsByZone.rail.map((widget) => [widget.widgetId, widget.sizeIntent])).toEqual([
-			['home-whats-new', 'wide']
-		]);
+		expect(
+			resolved.widgetsByZone.rail.map((widget) => [
+				widget.widgetId,
+				widget.columns,
+				widget.rows,
+				widget.minColumns,
+				widget.minRows,
+				widget.scrollMode,
+				widget.sizeIntent
+			])
+		).toEqual([['home-whats-new', 6, 8, 2, 2, 'vertical', 'auto']]);
 		expect(resolved.hiddenByUser.map((widget) => widget.widgetId)).toEqual(['home-priorities']);
+	});
+
+	it('clamps illegal grid overrides to widget minimums and the 12-column / 24-row layout bounds', () => {
+		const resolved = resolveLayout(testPreset, testWidgets, {
+			presetId: 'home-default',
+			presetVersion: 1,
+			hiddenWidgetIds: [],
+			zoneOverrides: {},
+			orderOverrides: {},
+			gridOverrides: {
+				'home-whats-new': { columns: 99, rows: 99, scrollMode: 'vertical' },
+				'home-priorities': { columns: 1, rows: 1, scrollMode: 'both' }
+			},
+			sizeIntentOverrides: {}
+		});
+
+		const widgets = new Map(resolved.widgetsByZone.main.map((widget) => [widget.widgetId, widget]));
+		expect(widgets.get('home-whats-new')).toMatchObject({
+			columns: 12,
+			rows: 24,
+			scrollMode: 'vertical'
+		});
+		expect(widgets.get('home-priorities')).toMatchObject({
+			columns: 2,
+			rows: 2,
+			scrollMode: 'both'
+		});
+	});
+
+	it('falls back to definition scroll defaults when the instance stays automatic', () => {
+		const resolved = resolveLayout(testPreset, testWidgets, undefined);
+
+		const widgets = new Map(resolved.widgetsByZone.main.map((widget) => [widget.widgetId, widget]));
+		expect(widgets.get('home-whats-new')?.scrollMode).toBe('vertical');
+		expect(widgets.get('home-priorities')?.scrollMode).toBe('none');
 	});
 
 	it('applies order overrides before remaining widgets sorted by preset order', () => {
@@ -329,6 +353,7 @@ describe('resolveLayout', () => {
 			hiddenWidgetIds: [],
 			zoneOverrides: {},
 			orderOverrides: { main: ['home-whats-new', 'home-later'] },
+			gridOverrides: {},
 			sizeIntentOverrides: {}
 		});
 
@@ -347,6 +372,7 @@ describe('resolveLayout', () => {
 			hiddenWidgetIds: [],
 			zoneOverrides: { 'home-priorities': 'rail' },
 			orderOverrides: {},
+			gridOverrides: {},
 			sizeIntentOverrides: {}
 		});
 
@@ -362,14 +388,7 @@ describe('resolveLayout', () => {
 				...testPreset,
 				widgets: [
 					...testPreset.widgets,
-					{
-						widgetId: 'home-missing',
-						zoneId: 'main',
-						order: 3,
-						sizeIntent: 'auto',
-						highlight: 'none',
-						visible: true
-					}
+					testInstance('home-missing', 'main', 3)
 				]
 			},
 			testWidgets,
@@ -389,6 +408,7 @@ describe('resolveLayout', () => {
 			hiddenWidgetIds: ['home-priorities'],
 			zoneOverrides: { 'home-whats-new': 'rail' },
 			orderOverrides: { rail: ['home-whats-new'] },
+			gridOverrides: { 'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' } },
 			sizeIntentOverrides: { 'home-whats-new': 'wide' }
 		};
 		const originalPreset = JSON.stringify(testPreset);

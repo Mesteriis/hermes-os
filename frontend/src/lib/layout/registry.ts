@@ -1,5 +1,81 @@
 import type { LayoutViewId, WidgetDefinition } from './types';
 
+const scrollableWidgetIds = new Set<string>([
+	'communications-conversation-list',
+	'communications-message-detail',
+	'communications-ask-ai',
+	'timeline-stream',
+	'timeline-filters',
+	'persons-list',
+	'persons-hero',
+	'persons-information',
+	'persons-about',
+	'persons-recent-interactions',
+	'persons-active-projects',
+	'projects-summary',
+	'projects-graph-preview',
+	'projects-timeline',
+	'projects-recent-communications',
+	'projects-top-documents',
+	'projects-source-evidence',
+	'projects-open-promises',
+	'tasks-active-list',
+	'tasks-candidate-review',
+	'calendar-week-grid',
+	'calendar-upcoming',
+	'documents-navigation',
+	'documents-list',
+	'documents-detail-preview',
+	'notes-list',
+	'notes-detail',
+	'knowledge-graph-canvas',
+	'knowledge-search-results',
+	'telegram-chat-list',
+	'telegram-message-thread',
+	'telegram-sync-controls',
+	'telegram-selected-chat-metadata',
+	'whatsapp-account-session-metadata',
+	'whatsapp-chat-message-surface',
+	'whatsapp-sync-controls',
+	'ai-agent-list',
+	'ai-selected-agent-detail',
+	'ai-run-history',
+	'ai-answer-form',
+	'organizations-list',
+	'organizations-detail',
+	'settings-application-list-editor',
+	'settings-accounts-list',
+	'settings-account-setup-cards',
+	'settings-account-detail-status',
+	'settings-security-runtime-status'
+]);
+
+const defaultGridByZone: Record<string, { columns: number; rows: number }> = {
+	header: { columns: 12, rows: 3 },
+	hero: { columns: 12, rows: 3 },
+	metrics: { columns: 12, rows: 3 },
+	filters: { columns: 12, rows: 1 },
+	toolbar: { columns: 12, rows: 1 },
+	metadata: { columns: 12, rows: 2 },
+	tabs: { columns: 12, rows: 1 },
+	list: { columns: 3, rows: 12 },
+	detail: { columns: 6, rows: 12 },
+	main: { columns: 4, rows: 12 },
+	canvas: { columns: 9, rows: 12 },
+	rail: { columns: 3, rows: 6 },
+	inspector: { columns: 3, rows: 6 },
+	bottom: { columns: 12, rows: 4 }
+};
+
+const defaultGridByWidget: Record<string, { columns: number; rows: number }> = {
+	'documents-list': { columns: 6, rows: 12 },
+	'documents-related-context': { columns: 3, rows: 12 },
+	'telegram-account-status': { columns: 12, rows: 3 },
+	'telegram-sync-controls': { columns: 3, rows: 12 },
+	'telegram-selected-chat-metadata': { columns: 3, rows: 12 },
+	'whatsapp-sync-controls': { columns: 3, rows: 12 }
+};
+
 function widget(
 	id: string,
 	title: string,
@@ -8,13 +84,19 @@ function widget(
 	allowedZones: string[],
 	dataMode: WidgetDefinition['dataMode'] = 'static'
 ): WidgetDefinition {
+	const grid = defaultGridByWidget[id] ?? defaultGridByZone[defaultZone] ?? { columns: 4, rows: 4 };
+
 	return {
 		id,
 		title,
 		viewScope,
 		defaultZone,
 		allowedZones,
-		minSize: { width: 220, height: 120 },
+		defaultColumns: grid.columns,
+		defaultRows: grid.rows,
+		minColumns: Math.min(grid.columns, defaultZone === 'rail' || defaultZone === 'inspector' ? 2 : 1),
+		minRows: Math.min(grid.rows, defaultZone === 'toolbar' || defaultZone === 'tabs' ? 1 : 2),
+		defaultScrollMode: scrollableWidgetIds.has(id) ? 'vertical' : 'none',
 		defaultSizeIntent: 'auto',
 		priority: 100,
 		canHide: true,

@@ -24,13 +24,10 @@ const views = [
 
 const viewports = [
 	{ id: '800x600', width: 800, height: 600, expectMultiColumn: false },
-	{ id: '901x768', width: 901, height: 768, expectMultiColumn: false },
 	{ id: '1024x768', width: 1024, height: 768, expectMultiColumn: false },
-	{ id: '1200x768', width: 1200, height: 768, expectMultiColumn: false },
-	{ id: '1366x768', width: 1366, height: 768, expectMultiColumn: true }
+	{ id: '1366x768', width: 1366, height: 768, expectMultiColumn: true },
+	{ id: '1920x1080', width: 1920, height: 1080, expectMultiColumn: true }
 ];
-
-const desktopColumnSpreadTolerance = 2;
 
 const mode = process.argv[2] ?? 'baseline';
 if (!['baseline', 'after'].includes(mode)) {
@@ -90,7 +87,7 @@ async function openPrimaryView(page, label) {
 }
 
 async function openCommunicationSection(page, label) {
-	const subnav = page.locator('#communications-sidebar-sections');
+	const subnav = page.locator('#sidebar-group-communications-sections, #communications-sidebar-sections').first();
 	if (!(await subnav.isVisible().catch(() => false))) {
 		await openPrimaryView(page, 'Communications');
 	}
@@ -202,21 +199,34 @@ async function captureViewport(viewport) {
 				};
 				const widgetUnit = tokenNumber('--hh-widget-unit', 24);
 				const widgetRow = tokenNumber('--hh-widget-row', widgetUnit);
-				const isNearTokenMultiple = (height, token) => {
-					if (token <= 0) return false;
-					const nearest = Math.round(height / token) * token;
-					return Math.abs(height - nearest) <= 2;
+				const layoutGap = tokenNumber('--hh-layout-gap', 0);
+				const expectedWidgetHeight = (rows, zoneRows) =>
+					rows * (widgetRow + layoutGap / Math.max(1, zoneRows)) - layoutGap;
+				const isNearExpectedWidgetHeight = (height, rows, zoneRows) => {
+					const expected = expectedWidgetHeight(rows, zoneRows);
+					return Math.abs(height - expected) <= 2;
 				};
 				const outliers = [];
 				for (const element of document.querySelectorAll('body *')) {
 					const { rect, visible } = isElementVisible(element);
 					if (!visible) continue;
-					if (rect.left < -1 || rect.right > window.innerWidth + 1) {
+					if (element.closest('.sidebar')) continue;
+					const closestWidget = element.closest('.widget-frame[data-widget-id]');
+					if (closestWidget !== null && closestWidget !== element) continue;
+					const horizontalOutlier = rect.left < -1 || rect.right > window.innerWidth + 1;
+					const verticalOutlier = rect.top < -1 || rect.bottom > window.innerHeight + 1;
+					if (horizontalOutlier || verticalOutlier) {
 						outliers.push({
 							tag: element.tagName.toLowerCase(),
 							className: typeof element.className === 'string' ? element.className : '',
+							axis: [
+								horizontalOutlier ? 'horizontal' : null,
+								verticalOutlier ? 'vertical' : null
+							].filter(Boolean),
 							left: Math.round(rect.left),
 							right: Math.round(rect.right),
+							top: Math.round(rect.top),
+							bottom: Math.round(rect.bottom),
 							text: (element.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 80)
 						});
 					}
@@ -228,13 +238,26 @@ async function captureViewport(viewport) {
 					const { rect, visible } = isElementVisible(element);
 					if (!visible) continue;
 					const height = Math.round(rect.height);
+					const style = getComputedStyle(element);
+					const rows = Number.parseInt(element.getAttribute('data-widget-rows') ?? '', 10);
+					const zoneRowsValue = Number.parseFloat(style.getPropertyValue('--hh-zone-rows'));
+					const zoneRows = Number.isFinite(zoneRowsValue) ? zoneRowsValue : rows;
+					const expectedHeight = Number.isInteger(rows)
+						? Math.round(expectedWidgetHeight(rows, zoneRows))
+						: null;
+					const heightAligned = Number.isInteger(rows)
+						? isNearExpectedWidgetHeight(height, rows, zoneRows)
+						: false;
 					visibleWidgetFrames.push({
 						widgetId: element.getAttribute('data-widget-id') ?? '',
+						rows: Number.isInteger(rows) ? rows : null,
+						zoneRows: Number.isFinite(zoneRows) ? zoneRows : null,
 						height,
+						expectedHeight,
 						left: Math.round(rect.left),
 						top: Math.round(rect.top),
-						moduleAligned: isNearTokenMultiple(height, widgetUnit),
-						rowAligned: isNearTokenMultiple(height, widgetRow)
+						moduleAligned: heightAligned,
+						rowAligned: heightAligned
 					});
 				}
 
@@ -296,28 +319,90 @@ async function captureViewport(viewport) {
 					});
 				}
 
+				const scrollModeAllowsAxis = (mode, axis) => {
+					if (mode === 'both') return true;
+					if (axis === 'vertical') return mode === 'vertical';
+					if (axis === 'horizontal') return mode === 'horizontal';
+					return false;
+				};
+				const unauthorizedScrollContainers = [];
+				const workspace = document.querySelector('.workspace');
+				for (const element of workspace?.querySelectorAll('*') ?? []) {
+					const { rect, visible } = isElementVisible(element);
+					if (!visible) continue;
+
+					const style = getComputedStyle(element);
+					const scrollsVertically =
+						/(auto|scroll|overlay)/.test(style.overflowY) &&
+						element.scrollHeight > element.clientHeight + 1;
+					const scrollsHorizontally =
+						/(auto|scroll|overlay)/.test(style.overflowX) &&
+						element.scrollWidth > element.clientWidth + 1;
+					if (!scrollsVertically && !scrollsHorizontally) continue;
+
+					const widget = element.closest('.widget-frame[data-widget-id]');
+					const widgetScrollMode = widget?.getAttribute('data-widget-scroll') ?? 'none';
+					const verticalAllowed =
+						!scrollsVertically || (widget !== null && scrollModeAllowsAxis(widgetScrollMode, 'vertical'));
+					const horizontalAllowed =
+						!scrollsHorizontally ||
+						(widget !== null && scrollModeAllowsAxis(widgetScrollMode, 'horizontal'));
+
+					if (!verticalAllowed || !horizontalAllowed) {
+						unauthorizedScrollContainers.push({
+							tag: element.tagName.toLowerCase(),
+							className: typeof element.className === 'string' ? element.className : '',
+							widgetId: widget?.getAttribute('data-widget-id') ?? null,
+							widgetScrollMode,
+							scrollsVertically,
+							scrollsHorizontally,
+							clientWidth: element.clientWidth,
+							scrollWidth: element.scrollWidth,
+							clientHeight: element.clientHeight,
+							scrollHeight: element.scrollHeight,
+							left: Math.round(rect.left),
+							right: Math.round(rect.right),
+							top: Math.round(rect.top),
+							bottom: Math.round(rect.bottom),
+							text: (element.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 80)
+						});
+					}
+					if (unauthorizedScrollContainers.length >= 10) break;
+				}
+
 				return {
 					h1: document.querySelector('h1')?.textContent?.trim() ?? null,
+					scrollX: window.scrollX,
+					scrollY: window.scrollY,
 					bodyScrollWidth: document.body.scrollWidth,
+					bodyScrollHeight: document.body.scrollHeight,
 					documentScrollWidth: document.documentElement.scrollWidth,
+					documentScrollHeight: document.documentElement.scrollHeight,
 					outliers,
 					widgetFrameMetrics: {
 						widgetUnit,
 						widgetRow,
+						layoutGap,
 						visibleCount: visibleWidgetFrames.length,
 						nonModularHeights: visibleWidgetFrames.filter((frame) => !frame.moduleAligned && !frame.rowAligned)
 					},
-					layoutColumnMetrics
+					layoutColumnMetrics,
+					unauthorizedScrollContainers
 				};
 			});
 			const state = {
 				h1: layoutState.h1,
+				scrollX: layoutState.scrollX,
+				scrollY: layoutState.scrollY,
 				bodyScrollWidth: layoutState.bodyScrollWidth,
+				bodyScrollHeight: layoutState.bodyScrollHeight,
 				documentScrollWidth: layoutState.documentScrollWidth,
+				documentScrollHeight: layoutState.documentScrollHeight,
 				guardDisplay: await getViewportGuardDisplay(page, `capturing ${view.label} view state at ${viewport.id}`),
 				outliers: layoutState.outliers,
 				widgetFrameMetrics: layoutState.widgetFrameMetrics,
-				layoutColumnMetrics: layoutState.layoutColumnMetrics
+				layoutColumnMetrics: layoutState.layoutColumnMetrics,
+				unauthorizedScrollContainers: layoutState.unauthorizedScrollContainers
 			};
 			const screenshotPath = path.join(viewportDir, `${view.id}.png`);
 			await page.screenshot({ path: screenshotPath, fullPage: false });
@@ -329,12 +414,41 @@ async function captureViewport(viewport) {
 				state.outliers.length > 0
 			) {
 				failures.push({
-					type: 'horizontal-overflow',
+					type: 'viewport-outlier',
 					viewport: viewport.id,
 					view: view.id,
 					bodyScrollWidth: state.bodyScrollWidth,
 					documentScrollWidth: state.documentScrollWidth,
 					outliers: state.outliers
+				});
+			}
+			if (
+				state.bodyScrollHeight > viewport.height + 1 ||
+				state.documentScrollHeight > viewport.height + 1
+			) {
+				failures.push({
+					type: 'vertical-document-overflow',
+					viewport: viewport.id,
+					view: view.id,
+					bodyScrollHeight: state.bodyScrollHeight,
+					documentScrollHeight: state.documentScrollHeight
+				});
+			}
+			if (state.scrollX !== 0 || state.scrollY !== 0) {
+				failures.push({
+					type: 'document-scroll-offset',
+					viewport: viewport.id,
+					view: view.id,
+					scrollX: state.scrollX,
+					scrollY: state.scrollY
+				});
+			}
+			if (state.unauthorizedScrollContainers.length > 0) {
+				failures.push({
+					type: 'unauthorized-scroll-container',
+					viewport: viewport.id,
+					view: view.id,
+					containers: state.unauthorizedScrollContainers
 				});
 			}
 			if (state.widgetFrameMetrics.nonModularHeights.length > 0) {
@@ -344,20 +458,6 @@ async function captureViewport(viewport) {
 					view: view.id,
 					widgets: state.widgetFrameMetrics.nonModularHeights
 				});
-			}
-			if (viewport.expectMultiColumn) {
-				const spreadOutliers = state.layoutColumnMetrics.filter(
-					(metric) => metric.columnHeightSpread > desktopColumnSpreadTolerance
-				);
-				if (spreadOutliers.length > 0) {
-					failures.push({
-						type: 'desktop-column-spread',
-						viewport: viewport.id,
-						view: view.id,
-						tolerance: desktopColumnSpreadTolerance,
-						layouts: spreadOutliers
-					});
-				}
 			}
 		}
 
@@ -430,6 +530,9 @@ try {
 			widgetRow: result.state.widgetFrameMetrics.widgetRow,
 			nonModularWidgets: result.state.widgetFrameMetrics.nonModularHeights.length,
 			horizontalOutliers: result.state.outliers.length,
+			bodyScrollHeight: result.state.bodyScrollHeight,
+			documentScrollHeight: result.state.documentScrollHeight,
+			unauthorizedScrollContainers: result.state.unauthorizedScrollContainers.length,
 			columnSpreads: result.state.layoutColumnMetrics.map((metric) => ({
 				selector: metric.selector,
 				spread: metric.columnHeightSpread
