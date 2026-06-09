@@ -6,12 +6,18 @@ import {
 	type WidgetScrollMode,
 	type LayoutSettings,
 	type LayoutViewId,
+	type PanelBlur,
+	type PanelOpacity,
 	type ViewLayoutOverride,
+	panelBlurValues,
+	panelOpacityValues,
 	widgetScrollModes,
 } from './types';
 
 const layoutViewIdSet = new Set<string>(layoutViewIds);
 const widgetScrollModeSet = new Set<string>(widgetScrollModes);
+const panelOpacitySet = new Set<number>(panelOpacityValues);
+const panelBlurSet = new Set<number>(panelBlurValues);
 
 export function defaultLayoutSettings(): LayoutSettings {
 	return {
@@ -81,6 +87,14 @@ function isWidgetScrollMode(value: string): value is WidgetScrollMode {
 	return widgetScrollModeSet.has(value);
 }
 
+function isPanelOpacity(value: number): value is PanelOpacity {
+	return panelOpacitySet.has(value);
+}
+
+function isPanelBlur(value: number): value is PanelBlur {
+	return panelBlurSet.has(value);
+}
+
 function parseStringArray(value: unknown): string[] {
 	if (!Array.isArray(value)) {
 		return [];
@@ -137,6 +151,20 @@ function parseWidgetGridOverride(value: unknown): WidgetGridOverride {
 	}
 	if (typeof value.scrollMode === 'string' && isWidgetScrollMode(value.scrollMode)) {
 		override.scrollMode = value.scrollMode;
+	}
+	if (
+		typeof value.panelOpacity === 'number' &&
+		Number.isInteger(value.panelOpacity) &&
+		isPanelOpacity(value.panelOpacity)
+	) {
+		override.panelOpacity = value.panelOpacity;
+	}
+	if (
+		typeof value.panelBlur === 'number' &&
+		Number.isInteger(value.panelBlur) &&
+		isPanelBlur(value.panelBlur)
+	) {
+		override.panelBlur = value.panelBlur;
 	}
 
 	return override;

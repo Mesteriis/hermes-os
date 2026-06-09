@@ -43,12 +43,7 @@ const scrollableWidgetIds = new Set<string>([
 	'ai-run-history',
 	'ai-answer-form',
 	'organizations-list',
-	'organizations-detail',
-	'settings-application-list-editor',
-	'settings-accounts-list',
-	'settings-account-setup-cards',
-	'settings-account-detail-status',
-	'settings-security-runtime-status'
+	'organizations-detail'
 ]);
 
 function widget(
@@ -323,39 +318,5 @@ export const widgetRegistry: WidgetDefinition[] = [
 	widget('organizations-detail', 'Company Detail', ['organizations'], 'detail', ['detail'], 'api_backed'),
 	widget('organizations-health', 'Company Health', ['organizations'], 'rail', ['rail'], 'api_backed'),
 	widget('organizations-key-people', 'Key People', ['organizations'], 'rail', ['rail'], 'api_backed'),
-	widget('organizations-related-projects', 'Related Projects', ['organizations'], 'rail', ['rail'], 'api_backed'),
-	widget('settings-metrics', 'Settings Metrics', ['settings'], 'metrics', ['metrics'], 'api_backed'),
-	widget(
-		'settings-application-list-editor',
-		'Application Settings',
-		['settings'],
-		'main',
-		['main'],
-		'api_backed'
-	),
-	widget('settings-accounts-list', 'Accounts List', ['settings'], 'main', ['main'], 'api_backed'),
-	widget(
-		'settings-account-setup-cards',
-		'Account Setup',
-		['settings'],
-		'rail',
-		['rail'],
-		'api_backed'
-	),
-	widget(
-		'settings-account-detail-status',
-		'Account Detail Status',
-		['settings'],
-		'rail',
-		['rail'],
-		'api_backed'
-	),
-	widget(
-		'settings-security-runtime-status',
-		'Security And Runtime Status',
-		['settings'],
-		'rail',
-		['rail'],
-		'api_backed'
-	)
+	widget('organizations-related-projects', 'Related Projects', ['organizations'], 'rail', ['rail'], 'api_backed')
 ];

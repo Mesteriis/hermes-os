@@ -191,14 +191,6 @@ export const layoutPresets: LayoutPreset[] = [
 		instance('organizations-health', 'rail', 10),
 		instance('organizations-key-people', 'rail', 20),
 		instance('organizations-related-projects', 'rail', 30)
-	]),
-	preset('settings', 'operational_board', boardZones, [
-		instance('settings-metrics', 'metrics', 10),
-		instance('settings-application-list-editor', 'main', 10),
-		instance('settings-accounts-list', 'main', 20),
-		instance('settings-account-setup-cards', 'rail', 10),
-		instance('settings-account-detail-status', 'rail', 20),
-		instance('settings-security-runtime-status', 'rail', 30)
 	])
 ];
 

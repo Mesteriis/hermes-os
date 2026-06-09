@@ -95,12 +95,26 @@ impl ApplicationSettingsStore {
     ) -> Result<ApplicationSetting, SettingsError> {
         validate_setting_key(setting_key)?;
         validate_non_empty("actor_id", actor_id)?;
+        let setting_key = setting_key.trim();
 
-        let Some(existing) = self.setting(setting_key).await? else {
+        if declared_setting(setting_key).is_none() {
             return Err(SettingsError::SettingNotFound {
-                setting_key: setting_key.trim().to_owned(),
+                setting_key: setting_key.to_owned(),
             });
         };
+
+        let existing = match self.setting(setting_key).await? {
+            Some(setting) => setting,
+            None => {
+                self.repair_declared_settings().await?;
+                self.setting(setting_key)
+                    .await?
+                    .ok_or_else(|| SettingsError::SettingNotFound {
+                        setting_key: setting_key.to_owned(),
+                    })?
+            }
+        };
+
         if !existing.is_editable {
             return Err(SettingsError::ReadOnlySetting {
                 setting_key: existing.setting_key,
@@ -132,7 +146,7 @@ impl ApplicationSettingsStore {
                 updated_at
             "#,
         )
-        .bind(setting_key.trim())
+        .bind(setting_key)
         .bind(value)
         .bind(actor_id.trim())
         .fetch_one(&self.pool)
@@ -302,14 +316,14 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             category: "frontend",
             value_kind: SettingValueKind::Json,
             default_value: json!({
-                "schemaVersion": 1,
+                "schemaVersion": 2,
                 "views": {}
             }),
             label: "Frontend layout",
             description: "Desktop widget layout preset selections and user overrides. Stores layout metadata only, never message bodies, document text or secrets.",
             metadata: json!({
                 "ui_control": "json",
-                "schema_version": 1,
+                "schema_version": 2,
                 "stores_private_content": false,
                 "restart_required": false
             }),
@@ -320,11 +334,10 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             category: "frontend",
             value_kind: SettingValueKind::Json,
             default_value: json!({
-                "schemaVersion": 2,
+                "schemaVersion": 3,
                 "rootItemIds": [
                     "home",
                     "group:communications",
-                    "timeline",
                     "persons",
                     "projects",
                     "tasks",
@@ -340,20 +353,14 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
                         "label": "Communications",
                         "icon": "tabler:messages",
                         "itemIds": [
-                            "communications.unified",
-                            "communications.inbox",
-                            "communications.waiting",
-                            "communications.needs_reply",
-                            "communications.mentions",
                             "communications.mail",
                             "communications.telegram",
                             "communications.whatsapp",
                             "communications.calls",
-                            "communications.meetings"
+                            "communications.meetings",
+                            "timeline"
                         ],
-                        "separatorBeforeItemIds": [
-                            "communications.mail"
-                        ]
+                        "separatorBeforeItemIds": []
                     }
                 ],
                 "hiddenItemIds": []
@@ -362,7 +369,46 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             description: "Desktop sidebar grouping, item order and hidden workspace metadata. Stores navigation preferences only, never message bodies, document text or secrets.",
             metadata: json!({
                 "ui_control": "json",
-                "schema_version": 2,
+                "schema_version": 3,
+                "stores_private_content": false,
+                "restart_required": false
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
+            setting_key: "frontend.theme",
+            category: "frontend",
+            value_kind: SettingValueKind::Json,
+            default_value: json!({
+                "schemaVersion": 1,
+                "shellBackground": "network-mesh",
+                "backgroundBrightness": 70,
+                "accentColor": "teal",
+                "panelOpacity": 70,
+                "panelBlur": 12
+            }),
+            label: "Frontend appearance",
+            description: "Desktop shell background, image brightness, panel transparency, panel blur and accent color. Stores visual preferences only, never message bodies, document text or secrets.",
+            metadata: json!({
+                "ui_control": "appearance",
+                "schema_version": 1,
+                "allowed_backgrounds": [
+                    "none",
+                    "network-mesh",
+                    "data-stream",
+                    "node-frame",
+                    "eclipse-grid",
+                    "dna-blueprint",
+                    "forest-network",
+                    "forest-stream",
+                    "knowledge-map",
+                    "rune-gold",
+                    "rune-teal"
+                ],
+                "allowed_brightness": [30, 40, 50, 60, 70, 80, 90, 100],
+                "allowed_accent_colors": ["teal", "cyan", "blue", "violet", "amber", "rose"],
+                "allowed_panel_opacity": [40, 50, 60, 70, 80, 90, 100],
+                "allowed_panel_blur": [0, 4, 8, 12, 16, 20, 24],
                 "stores_private_content": false,
                 "restart_required": false
             }),

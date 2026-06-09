@@ -22,6 +22,12 @@ export const widgetScrollModes = ['none', 'vertical', 'horizontal', 'both'] as c
 
 export type WidgetScrollMode = (typeof widgetScrollModes)[number];
 
+export const panelOpacityValues = [40, 50, 60, 70, 80, 90, 100] as const;
+export const panelBlurValues = [0, 4, 8, 12, 16, 20, 24] as const;
+
+export type PanelOpacity = (typeof panelOpacityValues)[number];
+export type PanelBlur = (typeof panelBlurValues)[number];
+
 export type WidgetDataMode = 'static' | 'existing_state' | 'api_backed';
 
 // Single source of truth for layout view ids. The `LayoutViewId` type is derived
@@ -41,8 +47,7 @@ export const layoutViewIds = [
 	'telegram',
 	'whatsapp',
 	'ai-agents',
-	'organizations',
-	'settings'
+	'organizations'
 ] as const;
 
 export type LayoutViewId = (typeof layoutViewIds)[number];
@@ -51,6 +56,8 @@ export type WidgetGridOverride = {
 	columns?: number;
 	rows?: number;
 	scrollMode?: WidgetScrollMode;
+	panelOpacity?: PanelOpacity;
+	panelBlur?: PanelBlur;
 };
 
 export type WidgetDefinition = {
@@ -115,6 +122,8 @@ export type ResolvedWidget = LayoutWidgetInstance & {
 	minColumns: number;
 	minRows: number;
 	scrollMode: WidgetScrollMode;
+	panelOpacity?: PanelOpacity;
+	panelBlur?: PanelBlur;
 	isHiddenByUser: boolean;
 };
 

@@ -21,8 +21,7 @@ const expectedViews: LayoutViewId[] = [
 	'telegram',
 	'whatsapp',
 	'ai-agents',
-	'organizations',
-	'settings'
+	'organizations'
 ];
 
 function testDefinition(
@@ -196,13 +195,14 @@ describe('app shell layout view aliases', () => {
 	it('maps current app shell view ids to layout domain view ids', () => {
 		expect(layoutViewIdForAppView('knowledge')).toBe('knowledge-graph');
 		expect(layoutViewIdForAppView('agents')).toBe('ai-agents');
-		expect(layoutViewIdForAppView('settings')).toBe('settings');
+		expect(layoutViewIdForAppView('settings')).toBeNull();
 		expect(layoutViewIdForAppView('unknown')).toBeNull();
 	});
 
 	it('finds layout presets from app shell aliases', () => {
 		expect(findPresetForView('knowledge')?.viewId).toBe('knowledge-graph');
 		expect(findPresetForView('agents')?.viewId).toBe('ai-agents');
+		expect(findPresetForView('settings')).toBeNull();
 	});
 });
 
@@ -211,6 +211,23 @@ describe('layout settings parser', () => {
 		expect(parseLayoutSettings(null)).toEqual(defaultLayoutSettings());
 		expect(parseLayoutSettings({ schemaVersion: 99, views: {} })).toEqual(defaultLayoutSettings());
 		expect(parseLayoutSettings('bad')).toEqual(defaultLayoutSettings());
+	});
+
+	it('ignores settings overrides because settings is a system screen, not a layout view', () => {
+		const parsed = parseLayoutSettings({
+			schemaVersion: 2,
+			views: {
+				settings: {
+					presetId: 'settings-default',
+					presetVersion: 1,
+					gridOverrides: {
+						'settings-application-list-editor': { columns: 12, rows: 24 }
+					}
+				}
+			}
+		});
+
+		expect((parsed.views as Record<string, unknown>).settings).toBeUndefined();
 	});
 
 	it('keeps valid home view overrides', () => {
@@ -224,7 +241,13 @@ describe('layout settings parser', () => {
 					zoneOverrides: { 'home-whats-new': 'rail' },
 					orderOverrides: { main: ['home-priorities', 'home-whats-new'] },
 					gridOverrides: {
-						'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' }
+						'home-whats-new': {
+							columns: 6,
+							rows: 8,
+							scrollMode: 'vertical',
+							panelOpacity: 60,
+							panelBlur: 16
+						}
 					}
 				}
 			}
@@ -238,8 +261,37 @@ describe('layout settings parser', () => {
 			main: ['home-priorities', 'home-whats-new']
 		});
 		expect(parsed.views.home?.gridOverrides).toEqual({
-			'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' }
+			'home-whats-new': {
+				columns: 6,
+				rows: 8,
+				scrollMode: 'vertical',
+				panelOpacity: 60,
+				panelBlur: 16
+			}
 		});
+	});
+
+	it('drops illegal panel surface overrides', () => {
+		const parsed = parseLayoutSettings({
+			schemaVersion: 2,
+			views: {
+				home: {
+					presetId: 'home-default',
+					presetVersion: 1,
+					hiddenWidgetIds: [],
+					zoneOverrides: {},
+					orderOverrides: {},
+					gridOverrides: {
+						'home-whats-new': {
+							panelOpacity: 61,
+							panelBlur: 99
+						}
+					}
+				}
+			}
+		});
+
+		expect(parsed.views.home?.gridOverrides).toEqual({});
 	});
 
 	it('migrates legacy schema v1 overrides while dropping grid override state', () => {
@@ -300,7 +352,13 @@ describe('resolveLayout', () => {
 			zoneOverrides: { 'home-whats-new': 'rail' },
 			orderOverrides: {},
 			gridOverrides: {
-				'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' }
+				'home-whats-new': {
+					columns: 6,
+					rows: 8,
+					scrollMode: 'vertical',
+					panelOpacity: 60,
+					panelBlur: 16
+				}
 			}
 		});
 
@@ -312,9 +370,11 @@ describe('resolveLayout', () => {
 				widget.rows,
 				widget.minColumns,
 				widget.minRows,
-				widget.scrollMode
+				widget.scrollMode,
+				widget.panelOpacity,
+				widget.panelBlur
 			])
-		).toEqual([['home-whats-new', 6, 8, 2, 2, 'vertical']]);
+		).toEqual([['home-whats-new', 6, 8, 2, 2, 'vertical', 60, 16]]);
 		expect(resolved.hiddenByUser.map((widget) => widget.widgetId)).toEqual(['home-priorities']);
 	});
 

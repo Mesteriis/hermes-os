@@ -79,7 +79,8 @@
 		findFrontendLayoutSetting,
 		findFrontendSidebarSetting,
 		findFrontendLocaleSetting,
-		FRONTEND_LOCALE_SETTING_KEY,
+		findFrontendThemeSetting,
+		FRONTEND_THEME_SETTING_KEY,
 		ingestTelegramFixtureMessage,
 		ingestWhatsappWebFixtureMessage,
 		refreshAiTaskCandidates,
@@ -92,6 +93,7 @@
 		saveFrontendLayoutSetting,
 		saveFrontendSidebarSetting,
 		saveFrontendLocaleSetting,
+		saveFrontendThemeSetting,
 		searchGraphNodes,
 		saveAutomationPolicy,
 		saveAutomationTemplate,
@@ -158,23 +160,38 @@
 	import {
 		defaultLayoutSettings,
 		defaultSidebarSettings,
+		defaultFrontendThemeSettings,
 		findPresetForView,
 		parseLayoutSettings,
 		parseCommunicationSidebarItemId,
 		parseSidebarSettings,
+		parseFrontendThemeSettings,
 		communicationSectionViewId,
 		communicationSections,
 		LAYOUT_GRID_COLUMNS,
 		LAYOUT_GRID_MAX_ROWS,
+		panelBlurValues,
+		panelOpacityValues,
 		primaryWorkspaceNav,
 		resolveSidebarRootEntries,
 		resolveLayout,
 		sidebarGroupIdFromRootId,
 		sidebarGroupRootId,
+		shellAccentClass,
+		shellAccentColorOptions,
+		shellBackgroundClass,
+		shellBackgroundBrightnessValues,
+		shellBackgroundOptions,
+		shellBrightnessClass,
+		shellPanelBlurClass,
+		shellPanelOpacityClass,
 		widgetRegistry,
 		type CommunicationSection,
 		type CommunicationSectionId,
+		type FrontendThemeSettings,
 		type LayoutSettings,
+		type PanelBlur,
+		type PanelOpacity,
 		type PrimaryNavId,
 		type ResolvedSidebarItem,
 		type ResolvedLayout,
@@ -184,6 +201,9 @@
 		type SidebarRootItemId,
 		type SidebarSettings,
 		type SidebarViewId,
+		type ShellAccentColorId,
+		type ShellBackgroundBrightness,
+		type ShellBackgroundId,
 		type ViewLayoutOverride
 	} from '$lib/layout';
 	import { onMount } from 'svelte';
@@ -203,6 +223,7 @@
 	type AppViewId = PrimaryNavId | 'organizations' | 'settings';
 	type ViewId = SidebarViewId;
 	type WidgetGridDimension = 'columns' | 'rows';
+	type WidgetPanelSurfaceSetting = 'panelOpacity' | 'panelBlur';
 
 	type NavItem = {
 		id: PrimaryNavId;
@@ -675,6 +696,8 @@
 	const gridClassNames = [
 		...Array.from({ length: 12 }, (_, index) => `widget-cols-${index + 1}`),
 		...Array.from({ length: 24 }, (_, index) => `widget-rows-${index + 1}`),
+		...panelOpacityValues.map((value) => `widget-panel-opacity-${value}`),
+		...panelBlurValues.map((value) => `widget-panel-blur-${value}`),
 		'widget-scroll-none',
 		'widget-scroll-y',
 		'widget-scroll-x',
@@ -734,11 +757,37 @@
 
 	$effect(() => {
 		const sync = () => syncWidgetGridClasses(activeWidgetById);
+		let pendingFrame: number | null = null;
+		const scheduleSync = () => {
+			if (pendingFrame !== null) {
+				return;
+			}
+
+			pendingFrame = requestAnimationFrame(() => {
+				pendingFrame = null;
+				sync();
+			});
+		};
+
 		sync();
-		window.addEventListener('resize', sync);
+		const workspaceRoot =
+			document.querySelector<HTMLElement>('.workspace') ??
+			document.querySelector<HTMLElement>('.desktop-shell') ??
+			document.body;
+		const widgetObserver = new MutationObserver(scheduleSync);
+		widgetObserver.observe(workspaceRoot, {
+			childList: true,
+			subtree: true
+		});
+
+		window.addEventListener('resize', scheduleSync);
 
 		return () => {
-			window.removeEventListener('resize', sync);
+			window.removeEventListener('resize', scheduleSync);
+			widgetObserver.disconnect();
+			if (pendingFrame !== null) {
+				cancelAnimationFrame(pendingFrame);
+			}
 		};
 	});
 	$effect(() => {
@@ -752,7 +801,15 @@
 	let settingsActionMessage = $state('');
 	let isSettingsLoading = $state(false);
 	let savingSettingKey = $state<string | null>(null);
-	let selectedSettingsSection = $state<'application' | 'sidebar' | 'accounts' | 'language'>('application');
+	let selectedSettingsSection = $state<'appearance' | 'application' | 'sidebar' | 'accounts' | 'language'>('appearance');
+	let themeSettings = $state<FrontendThemeSettings>(defaultFrontendThemeSettings());
+	let themeDraft = $state<FrontendThemeSettings | null>(null);
+	let isThemeSettingsSaving = $state(false);
+	let themeError = $state('');
+	const effectiveThemeSettings = $derived(themeDraft ?? themeSettings);
+	const shellThemeClass = $derived(
+		`${shellBackgroundClass(effectiveThemeSettings)} ${shellBrightnessClass(effectiveThemeSettings)} ${shellAccentClass(effectiveThemeSettings)} ${shellPanelOpacityClass(effectiveThemeSettings)} ${shellPanelBlurClass(effectiveThemeSettings)}`
+	);
 
 	const primaryNav = $derived.by((): NavItem[] =>
 		primaryWorkspaceNav.map((item) => ({ ...item, enabled: true }))
@@ -1165,7 +1222,11 @@
 	);
 	const settingsByCategory = $derived(
 		groupSettingsByCategory(
-			applicationSettings.filter((setting) => setting.setting_key !== 'frontend.sidebar')
+			applicationSettings.filter(
+				(setting) =>
+					setting.setting_key !== 'frontend.sidebar' &&
+					setting.setting_key !== FRONTEND_THEME_SETTING_KEY
+			)
 		)
 	);
 	const emailProviderAccounts = $derived(
@@ -1325,15 +1386,19 @@
 			applicationSettings = settingsResponse.items;
 			const frontendLayoutSetting = findFrontendLayoutSetting(settingsResponse.items);
 			const frontendSidebarSetting = findFrontendSidebarSetting(settingsResponse.items);
+			const frontendThemeSetting = findFrontendThemeSetting(settingsResponse.items);
 			layoutSettings = parseLayoutSettings(frontendLayoutSetting?.value ?? null);
 			sidebarSettings = parseSidebarSettings(frontendSidebarSetting?.value ?? null);
+			themeSettings = parseFrontendThemeSettings(frontendThemeSetting?.value ?? null);
 			sidebarDraft = null;
+			themeDraft = null;
 			const frontendLocaleSetting = findFrontendLocaleSetting(settingsResponse.items);
 			if (frontendLocaleSetting?.value === 'ru' || frontendLocaleSetting?.value === 'en') {
 				setLocale(frontendLocaleSetting.value);
 			}
 			layoutError = '';
 			sidebarError = '';
+			themeError = '';
 			providerAccounts = accountsResponse.items;
 			settingDrafts = Object.fromEntries(
 				settingsResponse.items.map((setting) => [setting.setting_key, settingDraftValue(setting)])
@@ -1342,8 +1407,10 @@
 		} catch (error) {
 			layoutSettings = defaultLayoutSettings();
 			sidebarSettings = defaultSidebarSettings();
+			themeSettings = defaultFrontendThemeSettings();
 			layoutError = error instanceof Error ? error.message : 'Unknown layout settings error';
 			sidebarError = error instanceof Error ? error.message : 'Unknown sidebar settings error';
+			themeError = error instanceof Error ? error.message : 'Unknown appearance settings error';
 			settingsError = error instanceof Error ? error.message : 'Unknown settings error';
 		} finally {
 			isSettingsLoading = false;
@@ -1383,6 +1450,11 @@
 				sidebarSettings = parseSidebarSettings(updated.value);
 				sidebarDraft = null;
 				sidebarError = '';
+			}
+			if (updated.setting_key === FRONTEND_THEME_SETTING_KEY) {
+				themeSettings = parseFrontendThemeSettings(updated.value);
+				themeDraft = null;
+				themeError = '';
 			}
 			settingsActionMessage = `${updated.label} saved`;
 			settingsError = '';
@@ -2144,6 +2216,111 @@
 		return structuredClone($state.snapshot(settings));
 	}
 
+	function cloneThemeSettings(settings: FrontendThemeSettings): FrontendThemeSettings {
+		return structuredClone($state.snapshot(settings));
+	}
+
+	function updateThemeDraft(patch: Partial<FrontendThemeSettings>) {
+		themeDraft = parseFrontendThemeSettings({
+			...cloneThemeSettings(themeDraft ?? themeSettings),
+			...patch
+		});
+		themeError = '';
+		settingsActionMessage = '';
+	}
+
+	function selectShellBackground(shellBackground: ShellBackgroundId) {
+		updateThemeDraft({ shellBackground });
+	}
+
+	function updateShellBrightness(event: Event) {
+		const backgroundBrightness = Number(inputEventValue(event));
+		updateThemeDraft({ backgroundBrightness: backgroundBrightness as ShellBackgroundBrightness });
+	}
+
+	function updateGlobalPanelOpacity(event: Event) {
+		const panelOpacity = Number(inputEventValue(event));
+		updateThemeDraft({ panelOpacity: panelOpacity as PanelOpacity });
+	}
+
+	function updateGlobalPanelBlur(event: Event) {
+		const panelBlur = Number(inputEventValue(event));
+		updateThemeDraft({ panelBlur: panelBlur as PanelBlur });
+	}
+
+	function selectShellAccent(accentColor: ShellAccentColorId) {
+		updateThemeDraft({ accentColor });
+	}
+
+	function shellBackgroundPreviewClass(shellBackground: ShellBackgroundId) {
+		return `background-preview ${shellBackgroundClass({
+			...effectiveThemeSettings,
+			shellBackground
+		})}`;
+	}
+
+	function shellAccentSwatchClass(accentColor: ShellAccentColorId) {
+		return `accent-swatch ${shellAccentClass({
+			...effectiveThemeSettings,
+			accentColor
+		})}`;
+	}
+
+	function shellBackgroundLabel(shellBackground: ShellBackgroundId) {
+		return shellBackgroundOptions.find((option) => option.id === shellBackground)?.label ?? 'Default';
+	}
+
+	function shellAccentLabel(accentColor: ShellAccentColorId) {
+		return shellAccentColorOptions.find((option) => option.id === accentColor)?.label ?? 'Teal';
+	}
+
+	function themeSettingsHasChanges() {
+		return (
+			JSON.stringify(parseFrontendThemeSettings(themeDraft ?? themeSettings)) !==
+			JSON.stringify(themeSettings)
+		);
+	}
+
+	function resetThemeSettingsToDefault() {
+		themeDraft = defaultFrontendThemeSettings();
+		themeError = '';
+		settingsActionMessage = '';
+	}
+
+	function cancelThemeSettingsEditing() {
+		themeDraft = null;
+		themeError = '';
+	}
+
+	async function saveThemeSettings() {
+		const nextSettings = parseFrontendThemeSettings(themeDraft ?? themeSettings);
+		isThemeSettingsSaving = true;
+		savingSettingKey = FRONTEND_THEME_SETTING_KEY;
+		try {
+			const updated = await saveFrontendThemeSetting(apiBaseUrl, apiSecret, nextSettings);
+			applicationSettings = applicationSettings.some((item) => item.setting_key === updated.setting_key)
+				? applicationSettings.map((item) =>
+						item.setting_key === updated.setting_key ? updated : item
+					)
+				: [...applicationSettings, updated];
+			themeSettings = parseFrontendThemeSettings(updated.value);
+			themeDraft = null;
+			settingDrafts = {
+				...settingDrafts,
+				[updated.setting_key]: settingDraftValue(updated)
+			};
+			themeError = '';
+			settingsError = '';
+			settingsActionMessage = _('Appearance saved');
+		} catch (error) {
+			themeError = error instanceof Error ? error.message : 'Unknown appearance settings update error';
+			settingsError = themeError;
+		} finally {
+			isThemeSettingsSaving = false;
+			savingSettingKey = null;
+		}
+	}
+
 	function sidebarGroupLabel(group: SidebarNavGroup, index: number) {
 		return group.label || (group.id === 'communications' ? 'Communications' : `Group ${index + 1}`);
 	}
@@ -2810,6 +2987,78 @@
 		setWidgetGridValue(widgetId, dimension, input.valueAsNumber);
 	}
 
+	function widgetPanelSurfaceValue(widgetId: string, setting: WidgetPanelSurfaceSetting) {
+		const widget = activeWidgetById.get(widgetId);
+		return widget?.[setting] ?? effectiveThemeSettings[setting];
+	}
+
+	function widgetPanelSurfaceOverrideValue(widgetId: string, setting: WidgetPanelSurfaceSetting) {
+		return activeWidgetById.get(widgetId)?.[setting] ?? null;
+	}
+
+	function setWidgetPanelSurfaceValue(
+		widgetId: string,
+		setting: WidgetPanelSurfaceSetting,
+		value: number
+	) {
+		const allowedValues: readonly number[] =
+			setting === 'panelOpacity' ? panelOpacityValues : panelBlurValues;
+		if (!allowedValues.includes(value)) {
+			return;
+		}
+
+		updateCurrentViewOverride((override) => {
+			const currentGridOverride = override.gridOverrides[widgetId] ?? {};
+			return {
+				...override,
+				gridOverrides: {
+					...override.gridOverrides,
+					[widgetId]: {
+						...currentGridOverride,
+						[setting]: value
+					}
+				}
+			};
+		});
+	}
+
+	function handleWidgetPanelSurfaceInput(
+		widgetId: string,
+		setting: WidgetPanelSurfaceSetting,
+		event: Event
+	) {
+		const input = event.currentTarget;
+		if (!(input instanceof HTMLInputElement)) {
+			return;
+		}
+
+		setWidgetPanelSurfaceValue(widgetId, setting, input.valueAsNumber);
+	}
+
+	function resetWidgetPanelSurface(widgetId: string) {
+		updateCurrentViewOverride((override) => {
+			const currentGridOverride = override.gridOverrides[widgetId];
+			if (!currentGridOverride) {
+				return override;
+			}
+
+			const restGridOverride = { ...currentGridOverride };
+			delete restGridOverride.panelOpacity;
+			delete restGridOverride.panelBlur;
+			const nextGridOverrides = { ...override.gridOverrides };
+			if (Object.keys(restGridOverride).length === 0) {
+				delete nextGridOverrides[widgetId];
+			} else {
+				nextGridOverrides[widgetId] = restGridOverride;
+			}
+
+			return {
+				...override,
+				gridOverrides: nextGridOverrides
+			};
+		});
+	}
+
 	function resetWidgetGrid(widgetId: string) {
 		updateCurrentViewOverride((override) => {
 			const currentGridOverride = override.gridOverrides[widgetId];
@@ -2904,11 +3153,20 @@
 				`widget-rows-${widget.rows}`,
 				scrollClass
 			);
+			if (widget.panelOpacity !== undefined) {
+				element.classList.add(`widget-panel-opacity-${widget.panelOpacity}`);
+			}
+			if (widget.panelBlur !== undefined) {
+				element.classList.add(`widget-panel-blur-${widget.panelBlur}`);
+			}
 			element.dataset.widgetColumns = String(widget.columns);
 			element.dataset.widgetRows = String(widget.rows);
 			element.dataset.widgetMinColumns = String(widget.minColumns);
 			element.dataset.widgetMinRows = String(widget.minRows);
 			element.dataset.widgetScroll = widget.scrollMode;
+			element.dataset.widgetPanelOpacity =
+				widget.panelOpacity === undefined ? 'global' : String(widget.panelOpacity);
+			element.dataset.widgetPanelBlur = widget.panelBlur === undefined ? 'global' : String(widget.panelBlur);
 		}
 
 		requestAnimationFrame(() => {
@@ -4809,7 +5067,7 @@
 	<meta name="description" content="Hermes Hub desktop personal OS dashboard." />
 </svelte:head>
 
-<main class="desktop-shell view-{activeWorkspaceView}" class:sidebar-rail={isSidebarRail}>
+<main class={`desktop-shell view-${activeWorkspaceView} ${shellThemeClass}`} class:sidebar-rail={isSidebarRail}>
 	{#if !isVaultReady}
 		<section class="vault-onboarding" aria-label="Secure vault onboarding" onmousemove={handleVaultEntropyMove}>
 			<div class="vault-panel">
@@ -7316,16 +7574,13 @@
 					</button>
 				</div>
 
-				<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-metrics" data-widget-hidden={!isWidgetVisible('settings-metrics')}>
-					{@render widgetEditChrome('settings-metrics')}
-					<div class="metric-grid settings-metrics">
-						<article class="metric-card"><span>{_('Settings')}</span><strong>{applicationSettings.length}</strong><small>Editable runtime values</small></article>
-						<article class="metric-card"><span>Accounts</span><strong>{providerAccounts.length}</strong><small>Email, Telegram, WhatsApp</small></article>
-						<article class="metric-card"><span>Mail</span><strong>{emailProviderAccounts.length}</strong><small>Gmail, iCloud, IMAP</small></article>
-						<article class="metric-card"><span>Telegram</span><strong>{telegramProviderAccounts.length}</strong><small>User and bot records</small></article>
-						<article class="metric-card"><span>WhatsApp</span><strong>{whatsappProviderAccounts.length}</strong><small>Web sessions</small></article>
-						<article class="metric-card"><span>Secrets</span><strong>Vault</strong><small>Values stay out of settings</small></article>
-					</div>
+				<div class="metric-grid settings-metrics">
+					<article class="metric-card"><span>{_('Settings')}</span><strong>{applicationSettings.length}</strong><small>Editable runtime values</small></article>
+					<article class="metric-card"><span>Accounts</span><strong>{providerAccounts.length}</strong><small>Email, Telegram, WhatsApp</small></article>
+					<article class="metric-card"><span>Mail</span><strong>{emailProviderAccounts.length}</strong><small>Gmail, iCloud, IMAP</small></article>
+					<article class="metric-card"><span>Telegram</span><strong>{telegramProviderAccounts.length}</strong><small>User and bot records</small></article>
+					<article class="metric-card"><span>WhatsApp</span><strong>{whatsappProviderAccounts.length}</strong><small>Web sessions</small></article>
+					<article class="metric-card"><span>Secrets</span><strong>Vault</strong><small>Values stay out of settings</small></article>
 				</div>
 
 				{#if settingsActionMessage}
@@ -7336,6 +7591,9 @@
 				{/if}
 
 				<div class="section-tabs settings-tabs" aria-label="Settings sections">
+					<button type="button" class:active={selectedSettingsSection === 'appearance'} onclick={() => (selectedSettingsSection = 'appearance')}>
+						<Icon icon="tabler:palette" width="16" height="16" />{_('Appearance')}
+					</button>
 					<button type="button" class:active={selectedSettingsSection === 'application'} onclick={() => (selectedSettingsSection = 'application')}>
 						<Icon icon="tabler:adjustments-horizontal" width="16" height="16" />Application
 					</button>
@@ -7350,9 +7608,196 @@
 					</button>
 				</div>
 
-				{#if selectedSettingsSection === 'language'}
+				{#if selectedSettingsSection === 'appearance'}
+					<div class="settings-layout appearance-settings-layout">
+						<section class="panel settings-list-panel settings-primary-pane appearance-settings-panel">
+							<header class="panel-title-row">
+								<div>
+									<h2>{_('Interface Appearance')}</h2>
+									<p>{_('Choose shell background, brightness and application accent color.')}</p>
+								</div>
+								<div class="appearance-settings-actions">
+									<button type="button" onclick={cancelThemeSettingsEditing} disabled={!themeSettingsHasChanges() || isThemeSettingsSaving}>
+										<Icon icon="tabler:arrow-back-up" width="16" height="16" />{_('Cancel')}
+									</button>
+									<button type="button" onclick={resetThemeSettingsToDefault} disabled={isThemeSettingsSaving}>
+										<Icon icon="tabler:restore" width="16" height="16" />{_('Default')}
+									</button>
+									<button type="button" class="primary-button" onclick={() => void saveThemeSettings()} disabled={!themeSettingsHasChanges() || isThemeSettingsSaving}>
+										<Icon icon="tabler:device-floppy" width="16" height="16" />{isThemeSettingsSaving ? _('Saving') : _('Save')}
+									</button>
+								</div>
+							</header>
+
+							{#if themeError}
+								<p class="inline-error">{themeError}</p>
+							{/if}
+
+							<div class="appearance-config">
+								<section class="appearance-section">
+									<header>
+										<div>
+											<h3>{_('Shell Background')}</h3>
+											<p>{_('Background image for the desktop shell.')}</p>
+										</div>
+										<strong>{_(shellBackgroundLabel(effectiveThemeSettings.shellBackground))}</strong>
+									</header>
+									<div class="background-option-grid">
+										{#each shellBackgroundOptions as option}
+											<button
+												type="button"
+												class:active={effectiveThemeSettings.shellBackground === option.id}
+												aria-pressed={effectiveThemeSettings.shellBackground === option.id}
+												onclick={() => selectShellBackground(option.id)}
+											>
+												<span class={shellBackgroundPreviewClass(option.id)}></span>
+												<span>{_(option.label)}</span>
+											</button>
+										{/each}
+									</div>
+								</section>
+
+								<section class="appearance-section">
+									<header>
+										<div>
+											<h3>{_('Background Brightness')}</h3>
+											<p>{_('Controls image brightness without changing layout geometry.')}</p>
+										</div>
+										<strong>{effectiveThemeSettings.backgroundBrightness}%</strong>
+									</header>
+									<div class="brightness-control">
+										<input
+											type="range"
+											min="30"
+											max="100"
+											step="10"
+											value={effectiveThemeSettings.backgroundBrightness}
+											list="shell-background-brightness-values"
+											aria-label={_('Background Brightness')}
+											oninput={updateShellBrightness}
+										/>
+										<datalist id="shell-background-brightness-values">
+											{#each shellBackgroundBrightnessValues as value}
+												<option value={value}></option>
+											{/each}
+										</datalist>
+										<div class="brightness-scale">
+											<span>30%</span>
+											<span>100%</span>
+										</div>
+									</div>
+								</section>
+
+								<section class="appearance-section">
+									<header>
+										<div>
+											<h3>{_('Panel Transparency')}</h3>
+											<p>{_('Global opacity for widget panels and cards.')}</p>
+										</div>
+										<strong>{effectiveThemeSettings.panelOpacity}%</strong>
+									</header>
+									<div class="brightness-control">
+										<input
+											type="range"
+											min="40"
+											max="100"
+											step="10"
+											value={effectiveThemeSettings.panelOpacity}
+											list="panel-opacity-values"
+											aria-label={_('Panel Transparency')}
+											oninput={updateGlobalPanelOpacity}
+										/>
+										<datalist id="panel-opacity-values">
+											{#each panelOpacityValues as value}
+												<option value={value}></option>
+											{/each}
+										</datalist>
+										<div class="brightness-scale">
+											<span>40%</span>
+											<span>100%</span>
+										</div>
+									</div>
+								</section>
+
+								<section class="appearance-section">
+									<header>
+										<div>
+											<h3>{_('Panel Blur')}</h3>
+											<p>{_('Global backdrop blur for widget panels and cards.')}</p>
+										</div>
+										<strong>{effectiveThemeSettings.panelBlur}px</strong>
+									</header>
+									<div class="brightness-control">
+										<input
+											type="range"
+											min="0"
+											max="24"
+											step="4"
+											value={effectiveThemeSettings.panelBlur}
+											list="panel-blur-values"
+											aria-label={_('Panel Blur')}
+											oninput={updateGlobalPanelBlur}
+										/>
+										<datalist id="panel-blur-values">
+											{#each panelBlurValues as value}
+												<option value={value}></option>
+											{/each}
+										</datalist>
+										<div class="brightness-scale">
+											<span>0px</span>
+											<span>24px</span>
+										</div>
+									</div>
+								</section>
+
+								<section class="appearance-section">
+									<header>
+										<div>
+											<h3>{_('Application Color')}</h3>
+											<p>{_('Accent color for controls, borders and active states.')}</p>
+										</div>
+										<strong>{_(shellAccentLabel(effectiveThemeSettings.accentColor))}</strong>
+									</header>
+									<div class="accent-swatch-grid">
+										{#each shellAccentColorOptions as option}
+											<button
+												type="button"
+												class={shellAccentSwatchClass(option.id)}
+												class:active={effectiveThemeSettings.accentColor === option.id}
+												aria-pressed={effectiveThemeSettings.accentColor === option.id}
+												onclick={() => selectShellAccent(option.id)}
+											>
+												<span class="accent-swatch-dot"></span>
+												<span>{_(option.label)}</span>
+											</button>
+										{/each}
+									</div>
+								</section>
+							</div>
+						</section>
+
+						<aside class="settings-rail appearance-preview-rail">
+							<section class="panel info-card">
+								<h2>{_('Current Appearance')}</h2>
+								<div class="health-row"><span>{_('Background')}</span><strong>{_(shellBackgroundLabel(effectiveThemeSettings.shellBackground))}</strong></div>
+								<div class="health-row"><span>{_('Brightness')}</span><strong>{effectiveThemeSettings.backgroundBrightness}%</strong></div>
+								<div class="health-row"><span>{_('Color')}</span><strong>{_(shellAccentLabel(effectiveThemeSettings.accentColor))}</strong></div>
+								<div class="health-row"><span>{_('Panel Transparency')}</span><strong>{effectiveThemeSettings.panelOpacity}%</strong></div>
+								<div class="health-row"><span>{_('Panel Blur')}</span><strong>{effectiveThemeSettings.panelBlur}px</strong></div>
+							</section>
+							<section class="panel info-card">
+								<h2>{_('Storage')}</h2>
+								<ul class="detail-list">
+									<li>{_('Stored as declared frontend.theme setting')}<em>JSON</em></li>
+									<li>{_('No private content or secrets')}<em>ADR-0054</em></li>
+									<li>{_('No inline styles')}<em>CSS</em></li>
+								</ul>
+							</section>
+						</aside>
+					</div>
+				{:else if selectedSettingsSection === 'language'}
 					<div class="settings-layout">
-						<section class="panel settings-list-panel">
+						<section class="panel settings-list-panel settings-primary-pane">
 							<header class="panel-title-row">
 								<div><h2>Interface Language</h2><p>Choose the display language for the Hermes Hub interface.</p></div>
 							</header>
@@ -7377,9 +7822,7 @@
 					</div>
 				{:else if selectedSettingsSection === 'application'}
 					<div class="settings-layout">
-						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-application-list-editor" data-widget-hidden={!isWidgetVisible('settings-application-list-editor')}>
-							{@render widgetEditChrome('settings-application-list-editor')}
-							<section class="panel settings-list-panel">
+						<section class="panel settings-list-panel settings-primary-pane">
 								<header class="panel-title-row">
 									<div><h2>Application Settings</h2><p>All non-secret settings except database connectivity; secret-like keys are rejected.</p></div>
 								</header>
@@ -7442,39 +7885,32 @@
 										{/each}
 									</div>
 								{/if}
-							</section>
-						</div>
+						</section>
 
-						<aside class="stacked-rail settings-rail">
-							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-account-detail-status" data-widget-hidden={!isWidgetVisible('settings-account-detail-status')}>
-								{@render widgetEditChrome('settings-account-detail-status')}
-								<section class="panel info-card">
-									<h2>Runtime Source</h2>
-									<div class="health-row"><span>Backend bind</span><strong>{settingValueText('server.http_addr')}</strong></div>
-									<div class="health-row"><span>Frontend API</span><strong>{settingValueText('frontend.api_base_url')}</strong></div>
-									<div class="health-row"><span>AI URL</span><strong>{settingValueText('ai.ollama_base_url')}</strong></div>
-									<div class="health-row"><span>Chat</span><strong>{settingValueText('ai.chat_model')}</strong></div>
-									<div class="health-row"><span>Embedding</span><strong>{settingValueText('ai.embedding_model')}</strong></div>
-								</section>
-							</div>
-							<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-security-runtime-status" data-widget-hidden={!isWidgetVisible('settings-security-runtime-status')}>
-								{@render widgetEditChrome('settings-security-runtime-status')}
-								<section class="panel info-card">
-									<h2>Boundaries</h2>
-									<ul class="detail-list">
-										<li>PostgreSQL stores declared setting values<em>JSONB</em></li>
-										<li>Database URL stays outside the panel<em>Bootstrap</em></li>
-										<li>API token and vault key stay outside DB<em>Secret boundary</em></li>
-										<li>Credentials stay in encrypted vault<em>No secret values</em></li>
-										<li>Settings updates are audited<em>No values in audit</em></li>
-									</ul>
-								</section>
-							</div>
+						<aside class="settings-rail">
+							<section class="panel info-card">
+								<h2>Runtime Source</h2>
+								<div class="health-row"><span>Backend bind</span><strong>{settingValueText('server.http_addr')}</strong></div>
+								<div class="health-row"><span>Frontend API</span><strong>{settingValueText('frontend.api_base_url')}</strong></div>
+								<div class="health-row"><span>AI URL</span><strong>{settingValueText('ai.ollama_base_url')}</strong></div>
+								<div class="health-row"><span>Chat</span><strong>{settingValueText('ai.chat_model')}</strong></div>
+								<div class="health-row"><span>Embedding</span><strong>{settingValueText('ai.embedding_model')}</strong></div>
+							</section>
+							<section class="panel info-card">
+								<h2>Boundaries</h2>
+								<ul class="detail-list">
+									<li>PostgreSQL stores declared setting values<em>JSONB</em></li>
+									<li>Database URL stays outside the panel<em>Bootstrap</em></li>
+									<li>API token and vault key stay outside DB<em>Secret boundary</em></li>
+									<li>Credentials stay in encrypted vault<em>No secret values</em></li>
+									<li>Settings updates are audited<em>No values in audit</em></li>
+								</ul>
+							</section>
 						</aside>
 					</div>
 				{:else if selectedSettingsSection === 'sidebar'}
 					<div class="settings-layout sidebar-settings-layout">
-						<section class="panel settings-list-panel sidebar-settings-panel">
+						<section class="panel settings-list-panel settings-primary-pane sidebar-settings-panel">
 							<header class="panel-title-row">
 								<div>
 									<h2>Sidebar Navigation</h2>
@@ -7662,7 +8098,7 @@
 							</div>
 						</section>
 
-						<aside class="stacked-rail settings-rail sidebar-settings-summary">
+						<aside class="settings-rail sidebar-settings-summary">
 							<section class="panel info-card">
 								<h2>Preview</h2>
 								<ul class="sidebar-preview-list">
@@ -7706,9 +8142,7 @@
 					</div>
 				{:else}
 					<div class="settings-account-layout">
-						<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="settings-accounts-list" data-widget-hidden={!isWidgetVisible('settings-accounts-list')}>
-							{@render widgetEditChrome('settings-accounts-list')}
-							<section class="panel account-section">
+						<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Mail Accounts</h2><p>Gmail OAuth, iCloud app-password and generic IMAP records.</p></div>
 									<button type="button" class="primary-button" onclick={() => openAccountDrawer('mail')}><Icon icon="tabler:plus" width="16" height="16" />Add Mail</button>
@@ -7730,12 +8164,9 @@
 										{/each}
 									{/if}
 								</div>
-							</section>
-						</div>
+						</section>
 
-						<div class="widget-frame settings-account-layout" class:editing={isLayoutEditing} data-widget-id="settings-account-setup-cards" data-widget-hidden={!isWidgetVisible('settings-account-setup-cards')}>
-							{@render widgetEditChrome('settings-account-setup-cards')}
-							<section class="panel account-section">
+						<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Calendar Accounts</h2><p>Local and external calendar metadata accounts.</p></div>
 									<button type="button" class="primary-button" onclick={() => openAccountDrawer('calendar')}><Icon icon="tabler:calendar-plus" width="16" height="16" />Add Calendar</button>
@@ -7757,9 +8188,9 @@
 										{/each}
 									{/if}
 								</div>
-							</section>
+						</section>
 
-							<section class="panel account-section">
+						<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Telegram Accounts</h2><p>User and bot accounts used by Telegram ingestion and automation policies.</p></div>
 									<button type="button" class="primary-button" onclick={() => openAccountDrawer('telegram')}><Icon icon="tabler:brand-telegram" width="16" height="16" />Add Telegram</button>
@@ -7781,9 +8212,9 @@
 										{/each}
 									{/if}
 								</div>
-							</section>
+						</section>
 
-							<section class="panel account-section">
+						<section class="panel account-section">
 								<header class="panel-title-row">
 									<div><h2>Other Provider Accounts</h2><p>WhatsApp Web and future communication providers.</p></div>
 									<button type="button" class="primary-button" onclick={() => openAccountDrawer('whatsapp')}><Icon icon="tabler:brand-whatsapp" width="16" height="16" />Add WhatsApp</button>
@@ -7805,8 +8236,7 @@
 										{/each}
 									{/if}
 								</div>
-							</section>
-						</div>
+						</section>
 					</div>
 				{/if}
 			</section>
@@ -8201,6 +8631,65 @@
 							</button>
 						</div>
 						<small>{widgetGridMin(selectedLayoutWidget.widgetId, 'rows')} - {widgetGridMax('rows')}</small>
+					</div>
+				</div>
+			</section>
+
+			<section class="layout-widget-surface-panel" aria-label={_('Widget panel surface')}>
+				<header>
+					<div>
+						<h3>{_('Panel Surface')}</h3>
+						<p>{_('Override transparency and blur for this widget only.')}</p>
+					</div>
+					<button
+						type="button"
+						onclick={() => resetWidgetPanelSurface(selectedLayoutWidget.widgetId)}
+						disabled={
+							widgetPanelSurfaceOverrideValue(selectedLayoutWidget.widgetId, 'panelOpacity') === null &&
+							widgetPanelSurfaceOverrideValue(selectedLayoutWidget.widgetId, 'panelBlur') === null
+						}
+					>
+						<Icon icon="tabler:restore" width="14" height="14" />{_('Reset')}
+					</button>
+				</header>
+
+				<div class="layout-widget-grid-row">
+					<div class="widget-grid-field">
+						<span>{_('Opacity')}</span>
+						<div class="widget-surface-slider">
+							<input
+								type="range"
+								min="40"
+								max="100"
+								step="10"
+								value={widgetPanelSurfaceValue(selectedLayoutWidget.widgetId, 'panelOpacity')}
+								aria-label={_('Widget panel opacity')}
+								oninput={(event) => handleWidgetPanelSurfaceInput(selectedLayoutWidget.widgetId, 'panelOpacity', event)}
+							/>
+						</div>
+						<small>
+							{widgetPanelSurfaceValue(selectedLayoutWidget.widgetId, 'panelOpacity')}%
+							{widgetPanelSurfaceOverrideValue(selectedLayoutWidget.widgetId, 'panelOpacity') === null ? ` ${_('Global')}` : ` ${_('Override')}`}
+						</small>
+					</div>
+
+					<div class="widget-grid-field">
+						<span>{_('Blur')}</span>
+						<div class="widget-surface-slider">
+							<input
+								type="range"
+								min="0"
+								max="24"
+								step="4"
+								value={widgetPanelSurfaceValue(selectedLayoutWidget.widgetId, 'panelBlur')}
+								aria-label={_('Widget panel blur')}
+								oninput={(event) => handleWidgetPanelSurfaceInput(selectedLayoutWidget.widgetId, 'panelBlur', event)}
+							/>
+						</div>
+						<small>
+							{widgetPanelSurfaceValue(selectedLayoutWidget.widgetId, 'panelBlur')}px
+							{widgetPanelSurfaceOverrideValue(selectedLayoutWidget.widgetId, 'panelBlur') === null ? ` ${_('Global')}` : ` ${_('Override')}`}
+						</small>
 					</div>
 				</div>
 			</section>

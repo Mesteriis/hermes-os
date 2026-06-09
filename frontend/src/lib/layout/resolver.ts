@@ -47,6 +47,8 @@ export function resolveLayout(
 			LAYOUT_GRID_MAX_ROWS
 		);
 		const scrollMode = gridOverride?.scrollMode ?? definition.defaultScrollMode;
+		const panelOpacity = gridOverride?.panelOpacity;
+		const panelBlur = gridOverride?.panelBlur;
 		const resolvedWidget: ResolvedWidget = {
 			...instance,
 			zoneId,
@@ -55,6 +57,8 @@ export function resolveLayout(
 			minColumns,
 			minRows,
 			scrollMode,
+			panelOpacity,
+			panelBlur,
 			definition,
 			isHiddenByUser: hiddenWidgetIds.has(instance.widgetId)
 		};

@@ -57,6 +57,11 @@ async fn application_settings_store_lists_seeded_settings_against_postgres() {
     assert!(
         settings
             .iter()
+            .any(|setting| setting.setting_key == "frontend.theme")
+    );
+    assert!(
+        settings
+            .iter()
             .any(|setting| setting.setting_key == "ui.theme")
     );
     assert!(
@@ -94,7 +99,7 @@ async fn application_settings_include_frontend_layout_against_postgres() {
 
     assert_eq!(layout_setting.category, "frontend");
     assert_eq!(layout_setting.value_kind, SettingValueKind::Json);
-    assert_eq!(layout_setting.value["schemaVersion"], json!(1));
+    assert_eq!(layout_setting.value["schemaVersion"], json!(2));
     assert!(layout_setting.value["views"].is_object());
     assert!(layout_setting.is_editable);
 }
@@ -127,10 +132,10 @@ async fn application_settings_include_frontend_sidebar_against_postgres() {
 
     assert_eq!(sidebar_setting.category, "frontend");
     assert_eq!(sidebar_setting.value_kind, SettingValueKind::Json);
-    assert_eq!(sidebar_setting.metadata["schema_version"], json!(2));
+    assert_eq!(sidebar_setting.metadata["schema_version"], json!(3));
     assert!(sidebar_setting.value["groups"].is_array());
     assert!(sidebar_setting.value["hiddenItemIds"].is_array());
-    if sidebar_setting.value["schemaVersion"] == json!(2) {
+    if sidebar_setting.value["schemaVersion"] == json!(3) {
         assert!(sidebar_setting.value["rootItemIds"].is_array());
         assert_eq!(
             sidebar_setting.value["rootItemIds"][1],
@@ -138,14 +143,127 @@ async fn application_settings_include_frontend_sidebar_against_postgres() {
         );
         assert_eq!(
             sidebar_setting.value["groups"][0]["itemIds"][0],
-            json!("communications.unified")
+            json!("communications.mail")
         );
         assert_eq!(
-            sidebar_setting.value["groups"][0]["separatorBeforeItemIds"][0],
-            json!("communications.mail")
+            sidebar_setting.value["groups"][0]["separatorBeforeItemIds"],
+            json!([])
         );
     }
     assert!(sidebar_setting.is_editable);
+}
+
+#[tokio::test]
+async fn application_settings_include_frontend_theme_against_postgres() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live frontend theme settings test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let store = ApplicationSettingsStore::new(database.pool().expect("configured pool").clone());
+    store
+        .repair_declared_settings()
+        .await
+        .expect("repair settings");
+
+    let settings = store.list_settings().await.expect("list settings");
+
+    let theme_setting = settings
+        .iter()
+        .find(|setting| setting.setting_key == "frontend.theme")
+        .expect("frontend theme setting");
+
+    assert_eq!(theme_setting.category, "frontend");
+    assert_eq!(theme_setting.value_kind, SettingValueKind::Json);
+    assert_eq!(theme_setting.metadata["schema_version"], json!(1));
+    assert_eq!(theme_setting.value["schemaVersion"], json!(1));
+    assert_eq!(
+        theme_setting.value["shellBackground"],
+        json!("network-mesh")
+    );
+    assert_eq!(theme_setting.value["backgroundBrightness"], json!(70));
+    assert_eq!(theme_setting.value["accentColor"], json!("teal"));
+    assert_eq!(theme_setting.value["panelOpacity"], json!(70));
+    assert_eq!(theme_setting.value["panelBlur"], json!(12));
+    assert!(theme_setting.is_editable);
+}
+
+#[tokio::test]
+async fn application_settings_update_repairs_missing_declared_setting_against_postgres() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live application settings update repair test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let store = ApplicationSettingsStore::new(pool.clone());
+    store
+        .repair_declared_settings()
+        .await
+        .expect("repair settings");
+
+    sqlx::query("DELETE FROM application_settings WHERE setting_key = 'frontend.theme'")
+        .execute(&pool)
+        .await
+        .expect("delete declared setting");
+
+    let updated = store
+        .update_setting_value(
+            "frontend.theme",
+            &json!({
+                "schemaVersion": 1,
+                "shellBackground": "forest-network",
+                "backgroundBrightness": 60,
+                "accentColor": "cyan",
+                "panelOpacity": 80,
+                "panelBlur": 16
+            }),
+            "settings-test",
+        )
+        .await
+        .expect("update repairs missing declared setting");
+
+    assert_eq!(updated.setting_key, "frontend.theme");
+    assert_eq!(updated.value["shellBackground"], json!("forest-network"));
+    assert_eq!(
+        updated.updated_by_actor_id.as_deref(),
+        Some("settings-test")
+    );
+
+    let restored = store
+        .setting("frontend.theme")
+        .await
+        .expect("fetch repaired setting")
+        .expect("frontend theme setting restored");
+    assert_eq!(restored.value["accentColor"], json!("cyan"));
+
+    store
+        .update_setting_value(
+            "frontend.theme",
+            &json!({
+                "schemaVersion": 1,
+                "shellBackground": "network-mesh",
+                "backgroundBrightness": 70,
+                "accentColor": "teal",
+                "panelOpacity": 70,
+                "panelBlur": 12
+            }),
+            "settings-test",
+        )
+        .await
+        .expect("restore frontend theme default");
 }
 
 #[tokio::test]
