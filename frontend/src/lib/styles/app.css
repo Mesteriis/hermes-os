@@ -90,6 +90,8 @@ textarea:focus-visible {
 }
 
 .desktop-shell {
+	--hh-shell-bottom-inset: 16px;
+
 	position: fixed;
 	inset: 0;
 	display: grid;
@@ -100,7 +102,7 @@ textarea:focus-visible {
 	height: 100dvh;
 	min-height: 0;
 	overflow: hidden;
-	padding: 0 14px 16px 0;
+	padding: 0 14px var(--hh-shell-bottom-inset) 0;
 	background:
 		radial-gradient(circle at 72% 2%, rgba(23, 122, 121, 0.14), transparent 34%),
 		linear-gradient(180deg, rgba(7, 28, 32, 0.88), rgba(2, 9, 11, 0.98) 46%),
@@ -295,7 +297,7 @@ textarea:focus-visible {
 	grid-template-rows: auto minmax(0, 1fr) auto;
 	min-width: 0;
 	min-height: 0;
-	height: 100%;
+	height: calc(100% + var(--hh-shell-bottom-inset, 0px));
 	overflow: hidden;
 	padding: 24px 12px 16px;
 	border: 1px solid rgba(37, 224, 197, 0.14);
@@ -5565,9 +5567,11 @@ input[type='checkbox'] {
 
 @media (max-width: 1359px) {
 	.desktop-shell {
+		--hh-shell-bottom-inset: 8px;
+
 		grid-template-columns: var(--hh-shell-sidebar-width-compact) minmax(0, 1fr);
 		gap: 8px;
-		padding: 0 8px 8px 0;
+		padding: 0 8px var(--hh-shell-bottom-inset) 0;
 	}
 
 	.sidebar {

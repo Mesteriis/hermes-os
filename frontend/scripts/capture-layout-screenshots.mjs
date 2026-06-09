@@ -370,6 +370,18 @@ async function captureViewport(viewport) {
 					if (unauthorizedScrollContainers.length >= 10) break;
 				}
 
+				const shell = document.querySelector('.desktop-shell');
+				const sidebar = document.querySelector('.sidebar');
+				const shellRect = shell?.getBoundingClientRect() ?? null;
+				const sidebarRect = sidebar?.getBoundingClientRect() ?? null;
+				const workspaceRect = workspace?.getBoundingClientRect() ?? null;
+				const roundMetric = (value) => Math.round(value * 100) / 100;
+				const shellMetrics = {
+					shellBottomGap: shellRect === null ? null : roundMetric(window.innerHeight - shellRect.bottom),
+					sidebarBottomGap: sidebarRect === null ? null : roundMetric(window.innerHeight - sidebarRect.bottom),
+					workspaceBottomGap: workspaceRect === null ? null : roundMetric(window.innerHeight - workspaceRect.bottom)
+				};
+
 				return {
 					h1: document.querySelector('h1')?.textContent?.trim() ?? null,
 					scrollX: window.scrollX,
@@ -379,6 +391,7 @@ async function captureViewport(viewport) {
 					documentScrollWidth: document.documentElement.scrollWidth,
 					documentScrollHeight: document.documentElement.scrollHeight,
 					outliers,
+					shellMetrics,
 					widgetFrameMetrics: {
 						widgetUnit,
 						widgetRow,
@@ -400,6 +413,7 @@ async function captureViewport(viewport) {
 				documentScrollHeight: layoutState.documentScrollHeight,
 				guardDisplay: await getViewportGuardDisplay(page, `capturing ${view.label} view state at ${viewport.id}`),
 				outliers: layoutState.outliers,
+				shellMetrics: layoutState.shellMetrics,
 				widgetFrameMetrics: layoutState.widgetFrameMetrics,
 				layoutColumnMetrics: layoutState.layoutColumnMetrics,
 				unauthorizedScrollContainers: layoutState.unauthorizedScrollContainers
@@ -443,6 +457,17 @@ async function captureViewport(viewport) {
 					scrollY: state.scrollY
 				});
 			}
+			if (
+				state.shellMetrics.sidebarBottomGap === null ||
+				Math.abs(state.shellMetrics.sidebarBottomGap) > 1
+			) {
+				failures.push({
+					type: 'sidebar-viewport-height',
+					viewport: viewport.id,
+					view: view.id,
+					shellMetrics: state.shellMetrics
+				});
+			}
 			if (state.unauthorizedScrollContainers.length > 0) {
 				failures.push({
 					type: 'unauthorized-scroll-container',
@@ -467,9 +492,12 @@ async function captureViewport(viewport) {
 		const railState = await page.evaluate(() => {
 			const sidebar = document.querySelector('.sidebar');
 			const subnav = document.querySelector('#communications-sidebar-sections');
+			const sidebarRect = sidebar?.getBoundingClientRect() ?? null;
 			return {
 				isRail: sidebar?.classList.contains('rail') ?? false,
 				sidebarWidth: sidebar ? Math.round(sidebar.getBoundingClientRect().width) : null,
+				sidebarBottomGap:
+					sidebarRect === null ? null : Math.round((window.innerHeight - sidebarRect.bottom) * 100) / 100,
 				hasVisibleSubnav:
 					subnav !== null &&
 					getComputedStyle(subnav).display !== 'none' &&
@@ -479,7 +507,13 @@ async function captureViewport(viewport) {
 		const railScreenshotPath = path.join(viewportDir, 'rail-home.png');
 		await page.screenshot({ path: railScreenshotPath, fullPage: false });
 		results.push({ type: 'rail', viewport, screenshotPath: railScreenshotPath, state: railState });
-		if (!railState.isRail || railState.sidebarWidth !== 64 || railState.hasVisibleSubnav) {
+		if (
+			!railState.isRail ||
+			railState.sidebarWidth !== 64 ||
+			railState.hasVisibleSubnav ||
+			railState.sidebarBottomGap === null ||
+			Math.abs(railState.sidebarBottomGap) > 1
+		) {
 			failures.push({ type: 'rail-mode', viewport: viewport.id, state: railState });
 		}
 
@@ -532,6 +566,7 @@ try {
 			horizontalOutliers: result.state.outliers.length,
 			bodyScrollHeight: result.state.bodyScrollHeight,
 			documentScrollHeight: result.state.documentScrollHeight,
+			sidebarBottomGap: result.state.shellMetrics.sidebarBottomGap,
 			unauthorizedScrollContainers: result.state.unauthorizedScrollContainers.length,
 			columnSpreads: result.state.layoutColumnMetrics.map((metric) => ({
 				selector: metric.selector,
