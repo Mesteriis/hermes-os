@@ -1,3 +1,4 @@
+import { defaultWidgetGrid } from './grid-defaults';
 import type { LayoutViewId, WidgetDefinition } from './types';
 
 const scrollableWidgetIds = new Set<string>([
@@ -50,32 +51,6 @@ const scrollableWidgetIds = new Set<string>([
 	'settings-security-runtime-status'
 ]);
 
-const defaultGridByZone: Record<string, { columns: number; rows: number }> = {
-	header: { columns: 12, rows: 3 },
-	hero: { columns: 12, rows: 3 },
-	metrics: { columns: 12, rows: 3 },
-	filters: { columns: 12, rows: 1 },
-	toolbar: { columns: 12, rows: 1 },
-	metadata: { columns: 12, rows: 2 },
-	tabs: { columns: 12, rows: 1 },
-	list: { columns: 3, rows: 12 },
-	detail: { columns: 6, rows: 12 },
-	main: { columns: 4, rows: 12 },
-	canvas: { columns: 9, rows: 12 },
-	rail: { columns: 3, rows: 6 },
-	inspector: { columns: 3, rows: 6 },
-	bottom: { columns: 12, rows: 4 }
-};
-
-const defaultGridByWidget: Record<string, { columns: number; rows: number }> = {
-	'documents-list': { columns: 6, rows: 12 },
-	'documents-related-context': { columns: 3, rows: 12 },
-	'telegram-account-status': { columns: 12, rows: 3 },
-	'telegram-sync-controls': { columns: 3, rows: 12 },
-	'telegram-selected-chat-metadata': { columns: 3, rows: 12 },
-	'whatsapp-sync-controls': { columns: 3, rows: 12 }
-};
-
 function widget(
 	id: string,
 	title: string,
@@ -84,7 +59,7 @@ function widget(
 	allowedZones: string[],
 	dataMode: WidgetDefinition['dataMode'] = 'static'
 ): WidgetDefinition {
-	const grid = defaultGridByWidget[id] ?? defaultGridByZone[defaultZone] ?? { columns: 4, rows: 4 };
+	const grid = defaultWidgetGrid(id, defaultZone);
 
 	return {
 		id,
@@ -92,12 +67,9 @@ function widget(
 		viewScope,
 		defaultZone,
 		allowedZones,
-		defaultColumns: grid.columns,
-		defaultRows: grid.rows,
 		minColumns: Math.min(grid.columns, defaultZone === 'rail' || defaultZone === 'inspector' ? 2 : 1),
 		minRows: Math.min(grid.rows, defaultZone === 'toolbar' || defaultZone === 'tabs' ? 1 : 2),
 		defaultScrollMode: scrollableWidgetIds.has(id) ? 'vertical' : 'none',
-		defaultSizeIntent: 'auto',
 		priority: 100,
 		canHide: true,
 		canAdd: true,

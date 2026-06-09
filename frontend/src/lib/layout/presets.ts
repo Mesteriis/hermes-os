@@ -1,55 +1,13 @@
+import { defaultWidgetGrid } from './grid-defaults';
+import { layoutViewIds } from './types';
 import type { LayoutPreset, LayoutViewId, LayoutWidgetInstance } from './types';
 
 export type AppShellLayoutViewId = LayoutViewId | 'knowledge' | 'agents';
 
-const layoutViewIds = [
-	'organizations',
-	'home',
-	'communications',
-	'timeline',
-	'persons',
-	'projects',
-	'tasks',
-	'calendar',
-	'documents',
-	'notes',
-	'knowledge-graph',
-	'telegram',
-	'whatsapp',
-	'ai-agents',
-	'settings'
-] as const satisfies readonly LayoutViewId[];
-
 const layoutViewIdSet = new Set<string>(layoutViewIds);
 
-const defaultGridByZone: Record<string, { columns: number; rows: number }> = {
-	header: { columns: 12, rows: 3 },
-	hero: { columns: 12, rows: 3 },
-	metrics: { columns: 12, rows: 3 },
-	filters: { columns: 12, rows: 1 },
-	toolbar: { columns: 12, rows: 1 },
-	metadata: { columns: 12, rows: 2 },
-	tabs: { columns: 12, rows: 1 },
-	list: { columns: 3, rows: 12 },
-	detail: { columns: 6, rows: 12 },
-	main: { columns: 4, rows: 12 },
-	canvas: { columns: 9, rows: 12 },
-	rail: { columns: 3, rows: 6 },
-	inspector: { columns: 3, rows: 6 },
-	bottom: { columns: 12, rows: 4 }
-};
-
-const defaultGridByWidget: Record<string, { columns: number; rows: number }> = {
-	'documents-list': { columns: 6, rows: 12 },
-	'documents-related-context': { columns: 3, rows: 12 },
-	'telegram-account-status': { columns: 12, rows: 3 },
-	'telegram-sync-controls': { columns: 3, rows: 12 },
-	'telegram-selected-chat-metadata': { columns: 3, rows: 12 },
-	'whatsapp-sync-controls': { columns: 3, rows: 12 }
-};
-
 function instance(widgetId: string, zoneId: string, order: number): LayoutWidgetInstance {
-	const grid = defaultGridByWidget[widgetId] ?? defaultGridByZone[zoneId] ?? { columns: 4, rows: 4 };
+	const grid = defaultWidgetGrid(widgetId, zoneId);
 
 	return {
 		widgetId,
@@ -57,7 +15,6 @@ function instance(widgetId: string, zoneId: string, order: number): LayoutWidget
 		order,
 		columns: grid.columns,
 		rows: grid.rows,
-		sizeIntent: 'auto',
 		highlight: 'none',
 		visible: true
 	};

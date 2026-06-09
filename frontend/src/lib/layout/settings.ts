@@ -1,6 +1,7 @@
 import {
 	LEGACY_LAYOUT_SCHEMA_VERSION,
 	LAYOUT_SCHEMA_VERSION,
+	layoutViewIds,
 	type WidgetGridOverride,
 	type WidgetScrollMode,
 	type LayoutSettings,
@@ -8,23 +9,6 @@ import {
 	type ViewLayoutOverride,
 	widgetScrollModes,
 } from './types';
-
-const layoutViewIds = [
-	'home',
-	'communications',
-	'timeline',
-	'persons',
-	'projects',
-	'tasks',
-	'calendar',
-	'documents',
-	'notes',
-	'knowledge-graph',
-	'telegram',
-	'whatsapp',
-	'ai-agents',
-	'settings'
-] as const satisfies readonly LayoutViewId[];
 
 const layoutViewIdSet = new Set<string>(layoutViewIds);
 const widgetScrollModeSet = new Set<string>(widgetScrollModes);
@@ -81,8 +65,7 @@ function parseViewOverride(value: unknown, isLegacySchema: boolean): ViewLayoutO
 		hiddenWidgetIds: parseStringArray(value.hiddenWidgetIds),
 		zoneOverrides: parseStringRecord(value.zoneOverrides),
 		orderOverrides: parseStringArrayRecord(value.orderOverrides),
-		gridOverrides: isLegacySchema ? {} : parseWidgetGridOverrideRecord(value.gridOverrides),
-		sizeIntentOverrides: {}
+		gridOverrides: isLegacySchema ? {} : parseWidgetGridOverrideRecord(value.gridOverrides)
 	};
 }
 

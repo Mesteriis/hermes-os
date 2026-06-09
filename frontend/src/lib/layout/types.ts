@@ -14,10 +14,6 @@ export const layoutArchetypes = [
 
 export type LayoutArchetype = (typeof layoutArchetypes)[number];
 
-export const widgetSizeIntents = ['auto', 'compact', 'normal', 'wide', 'tall', 'large'] as const;
-
-export type WidgetSizeIntent = (typeof widgetSizeIntents)[number];
-
 export const widgetHighlightStates = ['none', 'border', 'pulse-once', 'pulse-continuous'] as const;
 
 export type WidgetHighlightState = (typeof widgetHighlightStates)[number];
@@ -28,22 +24,28 @@ export type WidgetScrollMode = (typeof widgetScrollModes)[number];
 
 export type WidgetDataMode = 'static' | 'existing_state' | 'api_backed';
 
-export type LayoutViewId =
-	| 'home'
-	| 'communications'
-	| 'timeline'
-	| 'persons'
-	| 'projects'
-	| 'tasks'
-	| 'calendar'
-	| 'documents'
-	| 'notes'
-	| 'knowledge-graph'
-	| 'telegram'
-	| 'whatsapp'
-	| 'ai-agents'
-	| 'organizations'
-	| 'settings';
+// Single source of truth for layout view ids. The `LayoutViewId` type is derived
+// from this array so the runtime list and the type can never drift apart — that
+// drift is exactly what previously dropped persisted `organizations` overrides.
+export const layoutViewIds = [
+	'home',
+	'communications',
+	'timeline',
+	'persons',
+	'projects',
+	'tasks',
+	'calendar',
+	'documents',
+	'notes',
+	'knowledge-graph',
+	'telegram',
+	'whatsapp',
+	'ai-agents',
+	'organizations',
+	'settings'
+] as const;
+
+export type LayoutViewId = (typeof layoutViewIds)[number];
 
 export type WidgetGridOverride = {
 	columns?: number;
@@ -57,12 +59,9 @@ export type WidgetDefinition = {
 	viewScope: LayoutViewId[];
 	defaultZone: string;
 	allowedZones: string[];
-	defaultColumns: number;
-	defaultRows: number;
 	minColumns: number;
 	minRows: number;
 	defaultScrollMode: WidgetScrollMode;
-	defaultSizeIntent: WidgetSizeIntent;
 	priority: number;
 	canHide: boolean;
 	canAdd: boolean;
@@ -82,7 +81,6 @@ export type LayoutWidgetInstance = {
 	order: number;
 	columns: number;
 	rows: number;
-	sizeIntent: WidgetSizeIntent;
 	highlight: WidgetHighlightState;
 	visible: boolean;
 };
@@ -103,7 +101,6 @@ export type ViewLayoutOverride = {
 	zoneOverrides: Record<string, string>;
 	orderOverrides: Record<string, string[]>;
 	gridOverrides: Record<string, WidgetGridOverride>;
-	sizeIntentOverrides: Partial<Record<string, WidgetSizeIntent>>;
 };
 
 export type LayoutSettings = {

@@ -30,8 +30,6 @@ function testDefinition(
 	title: string,
 	allowedZones: string[],
 	priority: number,
-	defaultColumns = 4,
-	defaultRows = 4,
 	defaultScrollMode: WidgetDefinition['defaultScrollMode'] = 'none'
 ): WidgetDefinition {
 	return {
@@ -40,12 +38,9 @@ function testDefinition(
 		viewScope: ['home'],
 		defaultZone: 'main',
 		allowedZones,
-		defaultColumns,
-		defaultRows,
 		minColumns: 2,
 		minRows: 2,
 		defaultScrollMode,
-		defaultSizeIntent: 'auto',
 		priority,
 		canHide: true,
 		canAdd: true,
@@ -60,14 +55,13 @@ function testInstance(widgetId: string, zoneId: string, order: number): LayoutWi
 		order,
 		columns: 4,
 		rows: 4,
-		sizeIntent: 'auto',
 		highlight: 'none',
 		visible: true
 	};
 }
 
 const testWidgets: WidgetDefinition[] = [
-	testDefinition('home-whats-new', "What's New", ['main', 'rail'], 10, 4, 4, 'vertical'),
+	testDefinition('home-whats-new', "What's New", ['main', 'rail'], 10, 'vertical'),
 	testDefinition('home-priorities', "Today's Priorities", ['main'], 20),
 	testDefinition('home-later', 'Later', ['main'], 30),
 	testDefinition('home-extra', 'Extra', ['main'], 40)
@@ -231,8 +225,7 @@ describe('layout settings parser', () => {
 					orderOverrides: { main: ['home-priorities', 'home-whats-new'] },
 					gridOverrides: {
 						'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' }
-					},
-					sizeIntentOverrides: { 'home-whats-new': 'wide' }
+					}
 				}
 			}
 		});
@@ -247,10 +240,9 @@ describe('layout settings parser', () => {
 		expect(parsed.views.home?.gridOverrides).toEqual({
 			'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' }
 		});
-		expect(parsed.views.home?.sizeIntentOverrides).toEqual({});
 	});
 
-	it('migrates legacy schema v1 overrides while dropping size intent state', () => {
+	it('migrates legacy schema v1 overrides while dropping grid override state', () => {
 		const parsed = parseLayoutSettings({
 			schemaVersion: 1,
 			views: {
@@ -259,8 +251,7 @@ describe('layout settings parser', () => {
 					presetVersion: 1,
 					hiddenWidgetIds: ['home-system-status'],
 					zoneOverrides: { 'home-whats-new': 'rail' },
-					orderOverrides: { main: ['home-priorities', 'home-whats-new'] },
-					sizeIntentOverrides: { 'home-whats-new': 'wide' }
+					orderOverrides: { main: ['home-priorities', 'home-whats-new'] }
 				}
 			}
 		});
@@ -269,7 +260,25 @@ describe('layout settings parser', () => {
 		expect(parsed.views.home?.hiddenWidgetIds).toEqual(['home-system-status']);
 		expect(parsed.views.home?.zoneOverrides).toEqual({ 'home-whats-new': 'rail' });
 		expect(parsed.views.home?.gridOverrides).toEqual({});
-		expect(parsed.views.home?.sizeIntentOverrides).toEqual({});
+	});
+
+	it('keeps organizations view overrides (regression: parser allow-list dropped them)', () => {
+		const parsed = parseLayoutSettings({
+			schemaVersion: 2,
+			views: {
+				organizations: {
+					presetId: 'organizations-default',
+					presetVersion: 1,
+					hiddenWidgetIds: ['organizations-health'],
+					zoneOverrides: {},
+					orderOverrides: {},
+					gridOverrides: {}
+				}
+			}
+		});
+
+		expect(parsed.views.organizations?.presetId).toBe('organizations-default');
+		expect(parsed.views.organizations?.hiddenWidgetIds).toEqual(['organizations-health']);
 	});
 });
 
@@ -292,8 +301,7 @@ describe('resolveLayout', () => {
 			orderOverrides: {},
 			gridOverrides: {
 				'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' }
-			},
-			sizeIntentOverrides: { 'home-whats-new': 'wide' }
+			}
 		});
 
 		expect(resolved.widgetsByZone.main).toEqual([]);
@@ -304,10 +312,9 @@ describe('resolveLayout', () => {
 				widget.rows,
 				widget.minColumns,
 				widget.minRows,
-				widget.scrollMode,
-				widget.sizeIntent
+				widget.scrollMode
 			])
-		).toEqual([['home-whats-new', 6, 8, 2, 2, 'vertical', 'auto']]);
+		).toEqual([['home-whats-new', 6, 8, 2, 2, 'vertical']]);
 		expect(resolved.hiddenByUser.map((widget) => widget.widgetId)).toEqual(['home-priorities']);
 	});
 
@@ -321,8 +328,7 @@ describe('resolveLayout', () => {
 			gridOverrides: {
 				'home-whats-new': { columns: 99, rows: 99, scrollMode: 'vertical' },
 				'home-priorities': { columns: 1, rows: 1, scrollMode: 'both' }
-			},
-			sizeIntentOverrides: {}
+			}
 		});
 
 		const widgets = new Map(resolved.widgetsByZone.main.map((widget) => [widget.widgetId, widget]));
@@ -353,8 +359,7 @@ describe('resolveLayout', () => {
 			hiddenWidgetIds: [],
 			zoneOverrides: {},
 			orderOverrides: { main: ['home-whats-new', 'home-later'] },
-			gridOverrides: {},
-			sizeIntentOverrides: {}
+			gridOverrides: {}
 		});
 
 		expect(resolved.widgetsByZone.main.map((widget) => widget.widgetId)).toEqual([
@@ -372,8 +377,7 @@ describe('resolveLayout', () => {
 			hiddenWidgetIds: [],
 			zoneOverrides: { 'home-priorities': 'rail' },
 			orderOverrides: {},
-			gridOverrides: {},
-			sizeIntentOverrides: {}
+			gridOverrides: {}
 		});
 
 		expect(resolved.widgetsByZone.main.map((widget) => widget.widgetId)).toContain('home-priorities');
@@ -408,8 +412,7 @@ describe('resolveLayout', () => {
 			hiddenWidgetIds: ['home-priorities'],
 			zoneOverrides: { 'home-whats-new': 'rail' },
 			orderOverrides: { rail: ['home-whats-new'] },
-			gridOverrides: { 'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' } },
-			sizeIntentOverrides: { 'home-whats-new': 'wide' }
+			gridOverrides: { 'home-whats-new': { columns: 6, rows: 8, scrollMode: 'vertical' } }
 		};
 		const originalPreset = JSON.stringify(testPreset);
 		const originalWidgets = JSON.stringify(testWidgets);

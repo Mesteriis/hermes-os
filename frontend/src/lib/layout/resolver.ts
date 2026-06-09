@@ -37,12 +37,12 @@ export function resolveLayout(
 		);
 		const minRows = clampGridNumber(definition.minRows, LAYOUT_GRID_MIN_ROWS, LAYOUT_GRID_MAX_ROWS);
 		const columns = clampGridNumber(
-			gridOverride?.columns ?? instance.columns ?? definition.defaultColumns,
+			gridOverride?.columns ?? instance.columns,
 			minColumns,
 			LAYOUT_GRID_COLUMNS
 		);
 		const rows = clampGridNumber(
-			gridOverride?.rows ?? instance.rows ?? definition.defaultRows,
+			gridOverride?.rows ?? instance.rows,
 			minRows,
 			LAYOUT_GRID_MAX_ROWS
 		);
@@ -55,7 +55,6 @@ export function resolveLayout(
 			minColumns,
 			minRows,
 			scrollMode,
-			sizeIntent: instance.sizeIntent,
 			definition,
 			isHiddenByUser: hiddenWidgetIds.has(instance.widgetId)
 		};
