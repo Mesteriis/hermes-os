@@ -43,6 +43,22 @@
 	--hh-accent-control: rgba(25, 154, 132, 0.2);
 	--hh-danger-tint: rgba(128, 32, 40, 0.26);
 
+	/* Semantic status pills (mail workflow states, health/draft strips, org chips). */
+	--hh-status-accent-surface: var(--hh-accent-tint);
+	--hh-status-accent-text: var(--hh-color-accent);
+	--hh-status-warning-surface: rgba(240, 170, 70, 0.16);
+	--hh-status-warning-text: #f4c889;
+	--hh-status-info-surface: rgba(120, 156, 240, 0.18);
+	--hh-status-info-text: #aec6f7;
+	--hh-status-success-surface: rgba(45, 214, 150, 0.16);
+	--hh-status-success-text: #7fe6b4;
+	--hh-status-danger-surface: var(--hh-danger-tint);
+	--hh-status-danger-text: var(--hh-color-danger);
+	--hh-status-archive-surface: rgba(176, 132, 240, 0.18);
+	--hh-status-archive-text: #cdb2f2;
+	--hh-status-neutral-surface: rgba(124, 156, 156, 0.12);
+	--hh-status-neutral-text: var(--hh-color-text-muted);
+
 	--hh-radius-xs: 4px;
 	--hh-radius-sm: 6px;
 	--hh-radius-control: 7px;

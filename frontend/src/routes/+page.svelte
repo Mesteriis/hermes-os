@@ -2679,8 +2679,7 @@
 			hiddenWidgetIds: [],
 			zoneOverrides: {},
 			orderOverrides: {},
-			gridOverrides: {},
-			sizeIntentOverrides: {}
+			gridOverrides: {}
 		};
 
 		layoutDraft = {
