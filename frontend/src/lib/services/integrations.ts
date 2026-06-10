@@ -317,11 +317,7 @@ function accountConnectedServices(account: ProviderAccount): Set<string> {
 
 function isLinkedCalendarAccount(account: ProviderAccount, calendarAccount: CalendarAccount): boolean {
 	const mailAccountId = calendarAccount.capabilities.mail_account_id;
-	if (typeof mailAccountId === 'string' && mailAccountId === account.account_id) {
-		return true;
-	}
-
-	return calendarAccount.account_id.includes(account.account_id) || calendarAccount.email === account.external_account_id;
+	return typeof mailAccountId === 'string' && mailAccountId === account.account_id;
 }
 
 function accountSubtitle(account: ProviderAccount): string {

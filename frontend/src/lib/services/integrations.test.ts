@@ -154,6 +154,48 @@ describe('integration view models', () => {
 		expect(integrations.at(-1)?.integrationId).toBe('whatsapp');
 	});
 
+	it('does not link standalone calendars by matching email or account id text', () => {
+		const emailMatchingCalendar = calendarAccount({
+			account_id: 'caldav-calendar-primary',
+			provider: 'caldav',
+			account_name: 'Personal CalDAV',
+			email: 'person@example.com',
+			credentials_reference: null,
+			capabilities: { connected_services: ['calendar'] }
+		});
+		const accountIdMatchingCalendar = calendarAccount({
+			account_id: 'local-gmail-primary-calendar',
+			provider: 'local',
+			account_name: 'Local Gmail Named Calendar',
+			email: 'calendar@example.com',
+			credentials_reference: null,
+			capabilities: { connected_services: ['calendar'] }
+		});
+
+		const integrations = buildIntegrationViewModels(
+			[
+				providerAccount({
+					account_id: 'gmail-primary',
+					provider_kind: 'gmail',
+					display_name: 'Google Workspace',
+					external_account_id: 'person@example.com',
+					config: { connected_services: ['mail'] }
+				})
+			],
+			[emailMatchingCalendar, accountIdMatchingCalendar]
+		);
+
+		expect(integrations.map((integration) => integration.integrationId)).toEqual([
+			'gmail:gmail-primary',
+			'calendar:caldav-calendar-primary',
+			'calendar:local-gmail-primary-calendar',
+			'whatsapp'
+		]);
+		expect(integrations[0].calendarAccounts).toEqual([]);
+		expect(integrations[1].calendarAccounts).toEqual([emailMatchingCalendar]);
+		expect(integrations[2].calendarAccounts).toEqual([accountIdMatchingCalendar]);
+	});
+
 	it('marks requested calendar service as unknown when provider metadata exists but calendar row is missing', () => {
 		const [integration] = buildIntegrationViewModels(
 			[
