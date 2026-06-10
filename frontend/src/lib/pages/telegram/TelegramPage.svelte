@@ -467,19 +467,19 @@
 <section class="telegram-page communications-page">
 	<div class="view-header">
 		<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-telegram" width="28" height="28" /></span><div><h1>{_('Telegram')}</h1><p>{_('Telegram messages, chats, policies and calls')}</p></div></div>
-		<button type="button" class="primary-button" onclick={() => openAccountDrawer('telegram')}><Icon icon="tabler:plus" width="16" height="16" />Add Account</button>
-		<button type="button" class="primary-button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
+		<button type="button" class="primary-button" onclick={() => openAccountDrawer('telegram')}><Icon icon="tabler:plus" width="16" height="16" />{_('Add Account')}</button>
+		<button type="button" class="primary-button" onclick={() => void loadTelegramWorkspace()} disabled={isTelegramLoading}><Icon icon="tabler:refresh" width="16" height="16" />{_('Refresh')}</button>
 	</div>
 
 	<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="telegram-account-status" data-widget-hidden={!isWidgetVisible('telegram-account-status')}>
 		<WidgetEditChrome widgetId="telegram-account-status" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 		<div class="metric-grid">
-			<article class="metric-card"><span>Chats</span><strong>{telegramChats.length}</strong><small>{selectedTelegramChat?.sync_state ?? 'not synced'}</small></article>
-			<article class="metric-card"><span>Messages</span><strong>{telegramMessages.length}</strong><small>Projected channel records</small></article>
-			<article class="metric-card"><span>Templates</span><strong>{automationTemplates.length}</strong><small>UI-approved only</small></article>
-			<article class="metric-card"><span>Policies</span><strong>{automationPolicies.length}</strong><small>{automationPolicies.filter((policy) => policy.enabled).length} enabled</small></article>
-			<article class="metric-card"><span>Calls</span><strong>{telegramCalls.length}</strong><small>{selectedTelegramCall?.call_state ?? 'no history'}</small></article>
-			<article class="metric-card"><span>Transcript</span><strong>{callTranscript?.transcript_status ?? 'none'}</strong><small>{callTranscript?.stt_provider ?? 'fixture STT'}</small></article>
+			<article class="metric-card"><span>{_('Chats')}</span><strong>{telegramChats.length}</strong><small>{selectedTelegramChat?.sync_state ?? _('not synced')}</small></article>
+			<article class="metric-card"><span>{_('Messages')}</span><strong>{telegramMessages.length}</strong><small>{_('Projected channel records')}</small></article>
+			<article class="metric-card"><span>{_('Templates')}</span><strong>{automationTemplates.length}</strong><small>{_('UI-approved only')}</small></article>
+			<article class="metric-card"><span>{_('Policies')}</span><strong>{automationPolicies.length}</strong><small>{automationPolicies.filter((policy) => policy.enabled).length} {_('enabled')}</small></article>
+			<article class="metric-card"><span>{_('Calls')}</span><strong>{telegramCalls.length}</strong><small>{selectedTelegramCall?.call_state ?? _('no history')}</small></article>
+			<article class="metric-card"><span>{_('Transcript')}</span><strong>{callTranscript?.transcript_status ?? _('none')}</strong><small>{callTranscript?.stt_provider ?? _('fixture STT')}</small></article>
 		</div>
 	</div>
 

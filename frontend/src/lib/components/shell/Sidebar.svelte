@@ -45,7 +45,7 @@
 
 	function sidebarItemTitle(item: ResolvedSidebarItem<NavItem>) {
 		return item.kind === 'primary' && !item.primary.enabled
-			? `${item.primary.label} is not available in the current desktop scope`
+			? _('Not available in the current desktop scope')
 			: sidebarItemLabel(item);
 	}
 
@@ -78,14 +78,14 @@
 	}
 </script>
 
-<aside class="sidebar" class:rail={$isSidebarRail} aria-label="Hermes Hub navigation">
+<aside class="sidebar" class:rail={$isSidebarRail} aria-label={_('Hermes Hub navigation')}>
 	<div class="brand">
 		<button
 			type="button"
 			class="brand-mark-button"
-			aria-label={$isSidebarRail ? 'Expand sidebar' : 'Collapse sidebar'}
+			aria-label={$isSidebarRail ? _('Expand sidebar') : _('Collapse sidebar')}
 			aria-pressed={$isSidebarRail}
-			title={$isSidebarRail ? 'Expand sidebar' : 'Collapse sidebar'}
+			title={$isSidebarRail ? _('Expand sidebar') : _('Collapse sidebar')}
 			onclick={onToggleRail}
 		>
 			<img src="/assets/hermes-logo-mark.png" alt="" class="brand-mark" />
@@ -96,7 +96,7 @@
 		</div>
 	</div>
 
-	<nav class="nav-group primary-nav" aria-label="Primary workspaces">
+	<nav class="nav-group primary-nav" aria-label={_('Primary workspaces')}>
 		{#each sidebarRootEntries as entry, entryIndex}
 			{#if entry.kind === 'item'}
 				{@const item = entry.item}
@@ -141,7 +141,7 @@
 						<div
 							id={`sidebar-group-${group.id}-sections`}
 							class="communications-rail-dropdown"
-							aria-label={`${_(sidebarGroupLabel(group, entryIndex))} sections`}
+							aria-label={_('Sections')}
 						>
 							{#each group.items as item}
 								{#if sidebarGroupHasSeparatorBefore(group, item.itemId)}
@@ -169,7 +169,7 @@
 						<div
 							id={`sidebar-group-${group.id}-sections`}
 							class="communications-subnav"
-							aria-label={`${_(sidebarGroupLabel(group, entryIndex))} sections`}
+							aria-label={_('Sections')}
 						>
 							{#each group.items as item}
 								{#if sidebarGroupHasSeparatorBefore(group, item.itemId)}
@@ -198,8 +198,8 @@
 		{/each}
 	</nav>
 
-	<div class="sidebar-tools" aria-label="System navigation">
-		<button type="button" class="settings-link" class:active={$currentView === 'settings'} title="Open settings" onclick={onSettings}>
+	<div class="sidebar-tools" aria-label={_('System navigation')}>
+		<button type="button" class="settings-link" class:active={$currentView === 'settings'} title={_('Open settings')} onclick={onSettings}>
 			<Icon icon="tabler:settings" width="18" height="18" />
 			<span>{_('Settings')}</span>
 		</button>

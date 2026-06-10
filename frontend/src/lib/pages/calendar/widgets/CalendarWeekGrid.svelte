@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { currentLocale, t } from '$lib/i18n';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
 	import type { CalendarAccount, CalendarEvent } from '$lib/api';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		weekColumns: string[];
@@ -26,9 +29,9 @@
 		</div>
 		<div class="event-list">
 			{#if isCalendarLoading}
-				<div class="loading-state">Loading events...</div>
+				<div class="loading-state">{_('Loading events...')}</div>
 			{:else if (calendarSearchResults.length > 0 ? calendarSearchResults : filteredEvents).length === 0}
-				<div class="empty-state">No events</div>
+				<div class="empty-state">{_('No events')}</div>
 			{:else}
 				{#each (calendarSearchResults.length > 0 ? calendarSearchResults : filteredEvents) as evt (evt.event_id)}
 					{@const tone = evt.event_type === 'meeting' ? 'blue' : evt.event_type === 'deadline' ? 'red' : evt.event_type === 'focus' ? 'green' : 'neutral'}
@@ -37,7 +40,7 @@
 						<span class="event-day">{dayLabel}</span>
 						<span class="event-time">{new Date(evt.start_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})} - {new Date(evt.end_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
 						<strong>{evt.title}</strong>
-						<span class="event-type-chip">{evt.event_type || 'event'}</span>
+						<span class="event-type-chip">{evt.event_type || _('event')}</span>
 						{#if evt.importance_score && evt.importance_score > 0.5}<em class="importance-dot high"></em>{/if}
 						{#if evt.readiness_score != null && evt.readiness_score < 0.5}<em class="importance-dot warn"></em>{/if}
 					</div>

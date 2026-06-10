@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		telegramChats: unknown[];
@@ -26,11 +29,11 @@
 <div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="telegram-chat-list" data-widget-hidden={!isWidgetVisible('telegram-chat-list')}>
 	<WidgetEditChrome widgetId="telegram-chat-list" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 	<section class="panel conversation-list">
-		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search Telegram chats..." /></label>
+		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder={_('Search Telegram chats...')} /></label>
 		{#if isTelegramLoading && telegramChats.length === 0}
-			<div class="empty-panel">Loading Telegram state...</div>
+			<div class="empty-panel">{_('Loading Telegram state...')}</div>
 		{:else if telegramChats.length === 0}
-			<div class="empty-panel">No Telegram chats projected yet.</div>
+			<div class="empty-panel">{_('No Telegram chats projected yet.')}</div>
 		{:else}
 			{#each telegramChats as chat}
 				{@const c = chat as Record<string, unknown>}

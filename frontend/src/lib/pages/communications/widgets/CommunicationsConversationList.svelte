@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+	import { currentLocale, t } from '$lib/i18n';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		communicationMessages: unknown[];
@@ -34,13 +37,13 @@
 <div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-conversation-list" data-widget-hidden={!isWidgetVisible('communications-conversation-list')}>
 	<WidgetEditChrome widgetId="communications-conversation-list" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 	<section class="panel conversation-list">
-		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search conversations..." /></label>
+		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder={_('Search conversations...')} /></label>
 		{#if isCommunicationsLoading}
-			<div class="empty-panel">Loading messages...</div>
+			<div class="empty-panel">{_('Loading messages...')}</div>
 		{:else if communicationsError}
 			<div class="empty-panel error">{communicationsError}</div>
 		{:else if communicationMessages.length === 0}
-			<div class="empty-panel">No local messages yet.</div>
+			<div class="empty-panel">{_('No local messages yet.')}</div>
 		{:else}
 			{#each communicationMessages as message, index}
 				<button type="button" class:active={selectedConversationIndex === index} onclick={() => selectCommunication(index)}>

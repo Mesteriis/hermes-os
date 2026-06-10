@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { currentLocale, t } from '$lib/i18n';
 	import { communicationSections } from '$lib/layout';
+
+	const _ = (key: string) => t($currentLocale, key);
 	import AccountSetupModal from '$lib/components/shared/AccountSetupModal.svelte';
 	import ComposeDrawer from '$lib/components/shared/ComposeDrawer.svelte';
 	import DraftStrip from '$lib/components/shared/DraftStrip.svelte';
@@ -68,8 +71,8 @@
 </script>
 
 <svelte:head>
-	<title>Hermes Hub</title>
-	<meta name="description" content="Hermes Hub desktop personal OS dashboard." />
+	<title>{_('Hermes Hub')}</title>
+	<meta name="description" content={_('Hermes Hub desktop personal OS dashboard.')} />
 </svelte:head>
 
 {#if $currentView === 'home'}

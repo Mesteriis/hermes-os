@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+	import { currentLocale, t } from '$lib/i18n';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		selectedCommunication: unknown | null;
@@ -43,21 +46,21 @@
 				<img src="/assets/hermes-reference-avatar.png" alt="" />
 				<div><h2>{senderLabel((selectedCommunication as Record<string, unknown>).sender as string)}</h2><p>{(selectedCommunication as Record<string, unknown>).subject as string}</p></div>
 				<div class="chat-actions">
-					<button type="button" onclick={() => void handleWorkflowStateTransition((selectedCommunication as Record<string, unknown>).message_id as string, 'needs_action')} disabled={isMailStateTransitioning} title="Mark as Needs Action"><Icon icon="tabler:alert-triangle" width="17" height="17" /></button>
-					<button type="button" onclick={() => void handleWorkflowStateTransition((selectedCommunication as Record<string, unknown>).message_id as string, 'waiting')} disabled={isMailStateTransitioning} title="Mark as Waiting"><Icon icon="tabler:clock-hour-4" width="17" height="17" /></button>
-					<button type="button" onclick={() => void handleWorkflowStateTransition((selectedCommunication as Record<string, unknown>).message_id as string, 'done')} disabled={isMailStateTransitioning} title="Mark as Done"><Icon icon="tabler:circle-check" width="17" height="17" /></button>
-					<button type="button" onclick={() => void handleWorkflowStateTransition((selectedCommunication as Record<string, unknown>).message_id as string, 'archived')} disabled={isMailStateTransitioning} title="Archive"><Icon icon="tabler:archive" width="17" height="17" /></button>
+					<button type="button" onclick={() => void handleWorkflowStateTransition((selectedCommunication as Record<string, unknown>).message_id as string, 'needs_action')} disabled={isMailStateTransitioning} title={_('Mark as Needs Action')}><Icon icon="tabler:alert-triangle" width="17" height="17" /></button>
+					<button type="button" onclick={() => void handleWorkflowStateTransition((selectedCommunication as Record<string, unknown>).message_id as string, 'waiting')} disabled={isMailStateTransitioning} title={_('Mark as Waiting')}><Icon icon="tabler:clock-hour-4" width="17" height="17" /></button>
+					<button type="button" onclick={() => void handleWorkflowStateTransition((selectedCommunication as Record<string, unknown>).message_id as string, 'done')} disabled={isMailStateTransitioning} title={_('Mark as Done')}><Icon icon="tabler:circle-check" width="17" height="17" /></button>
+					<button type="button" onclick={() => void handleWorkflowStateTransition((selectedCommunication as Record<string, unknown>).message_id as string, 'archived')} disabled={isMailStateTransitioning} title={_('Archive')}><Icon icon="tabler:archive" width="17" height="17" /></button>
 					<button type="button" onclick={() => void askAiAboutSelectedMessage()} disabled={isAiAnswerSubmitting}><Icon icon="tabler:sparkles" width="17" height="17" /></button>
 				</div>
 			</header>
 			<div class="chat-body">
 				{#if aiAnalysisResult && (aiAnalysisResult as Record<string, unknown>).message_id === (selectedCommunication as Record<string, unknown>).message_id}
 					<article class="ai-analysis-card">
-						<strong><Icon icon="tabler:sparkles" width="16" height="16" />AI Analysis</strong>
-						{#if (aiAnalysisResult as Record<string, unknown>).category}<p><em>Category:</em> {(aiAnalysisResult as Record<string, unknown>).category as string}</p>{/if}
-						{#if (aiAnalysisResult as Record<string, unknown>).summary}<p><em>Summary:</em> {(aiAnalysisResult as Record<string, unknown>).summary as string}</p>{/if}
-						{#if (aiAnalysisResult as Record<string, unknown>).importance_score != null}<p><em>Importance:</em> {(aiAnalysisResult as Record<string, unknown>).importance_score as number}/100</p>{/if}
-						<p><em>State:</em> <span class="state-badge {(aiAnalysisResult as Record<string, unknown>).workflow_state as string}">{(aiAnalysisResult as Record<string, unknown>).workflow_state as string}</span></p>
+						<strong><Icon icon="tabler:sparkles" width="16" height="16" />{_('AI Analysis')}</strong>
+						{#if (aiAnalysisResult as Record<string, unknown>).category}<p><em>{_('Category:')}</em> {(aiAnalysisResult as Record<string, unknown>).category as string}</p>{/if}
+						{#if (aiAnalysisResult as Record<string, unknown>).summary}<p><em>{_('Summary:')}</em> {(aiAnalysisResult as Record<string, unknown>).summary as string}</p>{/if}
+						{#if (aiAnalysisResult as Record<string, unknown>).importance_score != null}<p><em>{_('Importance:')}</em> {(aiAnalysisResult as Record<string, unknown>).importance_score as number}/100</p>{/if}
+						<p><em>{_('State:')}</em> <span class="state-badge {(aiAnalysisResult as Record<string, unknown>).workflow_state as string}">{(aiAnalysisResult as Record<string, unknown>).workflow_state as string}</span></p>
 					</article>
 				{/if}
 				<div class="date-divider">{messageTime((selectedCommunicationDetail as Record<string, unknown>)?.message ?? selectedCommunication)}</div>
@@ -78,12 +81,12 @@
 				{/each}
 			</div>
 			<footer class="composer">
-				<input placeholder="Sending is not available yet" disabled />
+				<input placeholder={_('Sending is not available yet')} disabled />
 				<button type="button" disabled><Icon icon="tabler:paperclip" width="17" height="17" /></button>
 				<button type="button" disabled><Icon icon="tabler:send" width="18" height="18" /></button>
 			</footer>
 		{:else}
-			<div class="empty-panel fill">Select a local message.</div>
+			<div class="empty-panel fill">{_('Select a local message.')}</div>
 		{/if}
 	</section>
 </div>

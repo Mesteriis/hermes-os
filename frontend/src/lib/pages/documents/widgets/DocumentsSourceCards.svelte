@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { currentLocale, t } from '$lib/i18n';
 	import Icon from '@iconify/svelte';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		isLayoutEditing: boolean;
@@ -16,7 +19,7 @@
 		{#each ['Google Drive 1,243', 'OneDrive 812', 'Dropbox 342', 'Notion 256'] as source, index}
 			<div class="source-card">
 				<span class="round-icon"><Icon icon={['tabler:brand-google-drive','tabler:brand-office','tabler:brand-dropbox','tabler:brand-notion'][index]} width="24" height="24" /></span>
-				<strong>{source.split(' ')[0]}</strong>
+				<strong>{_(source.split(' ')[0])}</strong>
 				<em>{source.split(' ')[1]}</em>
 			</div>
 		{/each}

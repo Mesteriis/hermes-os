@@ -1,7 +1,10 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
 	import type { ProjectDetail, ProjectRecord, ProjectStats, ProjectSummary, ProjectPersonSummary } from '$lib/api';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		selectedProjectDetail: ProjectDetail | null;
@@ -31,16 +34,16 @@
 	<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-health" data-widget-hidden={!isWidgetVisible('projects-health')}>
 		<WidgetEditChrome widgetId="projects-health" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 		<section class="panel info-card">
-			<h2>Project Health</h2>
-			<div class="health-row"><span>Status</span><strong>{projectStatusLabel(selectedProjectRecord.status)}</strong></div>
-			<div class="health-row"><span>Progress</span><strong>{selectedProjectRecord.progress_percent}%</strong></div>
-			<div class="health-row"><span>Graph Links</span><strong>{formatNumber(selectedProjectStats.graph_connection_count)}</strong></div>
+			<h2>{_('Project Health')}</h2>
+			<div class="health-row"><span>{_('Status')}</span><strong>{projectStatusLabel(selectedProjectRecord.status)}</strong></div>
+			<div class="health-row"><span>{_('Progress')}</span><strong>{selectedProjectRecord.progress_percent}%</strong></div>
+			<div class="health-row"><span>{_('Graph Links')}</span><strong>{formatNumber(selectedProjectStats.graph_connection_count)}</strong></div>
 		</section>
 	</div>
 	<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-key-people" data-widget-hidden={!isWidgetVisible('projects-key-people')}>
 		<WidgetEditChrome widgetId="projects-key-people" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 		<section class="panel info-card">
-			<h2>Key People</h2>
+			<h2>{_('Key People')}</h2>
 			{#if selectedProjectDetail?.key_people.length}
 				{#each selectedProjectDetail.key_people as person}
 					<div class="person-compact">
@@ -50,14 +53,14 @@
 					</div>
 				{/each}
 			{:else}
-				<p class="muted-copy">No linked people.</p>
+				<p class="muted-copy">{_('No linked people.')}</p>
 			{/if}
 		</section>
 	</div>
 	<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="projects-related-projects" data-widget-hidden={!isWidgetVisible('projects-related-projects')}>
 		<WidgetEditChrome widgetId="projects-related-projects" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 		<section class="panel info-card">
-			<h2>Related Projects</h2>
+			<h2>{_('Related Projects')}</h2>
 			{#if relatedProjectSummaries.length}
 				{#each relatedProjectSummaries.slice(0, 4) as item}
 					<div class="related-row">
@@ -67,7 +70,7 @@
 					</div>
 				{/each}
 			{:else}
-				<p class="muted-copy">No related project records.</p>
+				<p class="muted-copy">{_('No related project records.')}</p>
 			{/if}
 		</section>
 	</div>

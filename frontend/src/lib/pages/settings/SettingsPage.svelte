@@ -80,21 +80,21 @@
 	<p class="inline-error">{$settingsError}</p>
 {/if}
 
-<div class="section-tabs settings-tabs" aria-label="Settings sections">
+<div class="section-tabs settings-tabs" aria-label={_('Settings sections')}>
 	<button type="button" class:active={$selectedSettingsSection === 'appearance'} onclick={() => selectedSettingsSection.set('appearance')}>
 		<Icon icon="tabler:palette" width="16" height="16" />{_('Appearance')}
 	</button>
 	<button type="button" class:active={$selectedSettingsSection === 'application'} onclick={() => selectedSettingsSection.set('application')}>
-		<Icon icon="tabler:adjustments-horizontal" width="16" height="16" />Application
+		<Icon icon="tabler:adjustments-horizontal" width="16" height="16" />{_('Application')}
 	</button>
 	<button type="button" class:active={$selectedSettingsSection === 'sidebar'} onclick={() => selectedSettingsSection.set('sidebar')}>
-		<Icon icon="tabler:layout-sidebar" width="16" height="16" />Sidebar
+		<Icon icon="tabler:layout-sidebar" width="16" height="16" />{_('Sidebar')}
 	</button>
 	<button type="button" class:active={$selectedSettingsSection === 'accounts'} onclick={() => selectedSettingsSection.set('accounts')}>
-		<Icon icon="tabler:users" width="16" height="16" />Accounts <em>{$providerAccounts.length}</em>
+		<Icon icon="tabler:users" width="16" height="16" />{_('Accounts')} <em>{$providerAccounts.length}</em>
 	</button>
 	<button type="button" class:active={$selectedSettingsSection === 'language'} onclick={() => selectedSettingsSection.set('language')}>
-		<Icon icon="tabler:language" width="16" height="16" />Language
+		<Icon icon="tabler:language" width="16" height="16" />{_('Language')}
 	</button>
 </div>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { currentLocale, t } from '$lib/i18n';
 	import * as projectsService from '$lib/services/projects';
 	import ProjectsHero from './widgets/ProjectsHero.svelte';
 	import ProjectsDashboard from './widgets/ProjectsDashboard.svelte';
@@ -12,6 +13,8 @@
 		ProjectMessageSummary,
 		ProjectDocumentSummary
 	} from '$lib/api';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		isLayoutEditing: boolean;
@@ -49,7 +52,7 @@
 	}
 
 	function projectMessageSender(message: ProjectMessageSummary) {
-		return message.sender || 'Unknown';
+		return message.sender || _('Unknown');
 	}
 
 	function projectDocumentIcon(document: ProjectDocumentSummary) {
@@ -61,21 +64,21 @@
 	}
 
 	function formatProjectDate(value: string | null) {
-		if (!value) return 'Not set';
+		if (!value) return _('Not set');
 		const date = new Date(`${value}T00:00:00`);
-		if (Number.isNaN(date.getTime())) return 'Invalid date';
-		return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
-	}
+	if (Number.isNaN(date.getTime())) return _('Invalid date');
+	return new Intl.DateTimeFormat($currentLocale ?? 'en', { month: 'short', day: 'numeric', year: 'numeric' }).format(date);
+}
 
-	function formatProjectDateTime(value: string | null) {
-		if (!value) return 'No activity';
-		const date = new Date(value);
-		if (Number.isNaN(date.getTime())) return 'Invalid date';
-		return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
+function formatProjectDateTime(value: string | null) {
+	if (!value) return _('No activity');
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return _('Invalid date');
+	return new Intl.DateTimeFormat($currentLocale ?? 'en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
 	}
 
 	function formatNumber(value: number) {
-		return new Intl.NumberFormat('en-US').format(value);
+		return new Intl.NumberFormat($currentLocale ?? 'en-US').format(value);
 	}
 
 	function selectProject(item: ProjectSummary) {
@@ -103,7 +106,7 @@
 			projectsError = result.error;
 			selectedProjectId = result.selectedProjectId;
 		} catch (e: unknown) {
-			projectsError = e instanceof Error ? e.message : 'Unknown projects error';
+			projectsError = e instanceof Error ? e.message : _('Unknown projects error');
 		}
 		isProjectsLoading = false;
 	}

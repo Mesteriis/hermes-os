@@ -24,20 +24,20 @@
 </script>
 
 {#if isOpen}
-	<button type="button" class="drawer-backdrop" onclick={onClose} aria-label="Close compose"></button>
-	<aside class="account-drawer" aria-label="Compose email">
+	<button type="button" class="drawer-backdrop" onclick={onClose} aria-label={_('Close compose')}></button>
+	<aside class="account-drawer" aria-label={_('Compose email')}>
 		<header>
-			<div><p>{_('Compose')}</p><h2>New Message</h2></div>
-			<button type="button" class="icon-button" onclick={onClose} aria-label="Close"><Icon icon="tabler:x" width="18" height="18" /></button>
+			<div><p>{_('Compose')}</p><h2>{_('New Message')}</h2></div>
+			<button type="button" class="icon-button" onclick={onClose} aria-label={_('Close')}><Icon icon="tabler:x" width="18" height="18" /></button>
 		</header>
 		<form class="setup-form" onsubmit={(event) => { event.preventDefault(); onSaveDraft(); }}>
-			<label><span>To</span><input bind:value={form.to_text} placeholder="recipient@example.com" autocomplete="off" /></label>
-			<label><span>CC</span><input bind:value={form.cc_text} placeholder="cc@example.com" autocomplete="off" /></label>
-			<label><span>Subject</span><input bind:value={form.subject} placeholder="Email subject" autocomplete="off" /></label>
-			<label class="wide"><span>Body</span><textarea bind:value={form.body} rows="8" placeholder="Write your message..."></textarea></label>
+			<label><span>{_('To')}</span><input bind:value={form.to_text} placeholder={_('recipient@example.com')} autocomplete="off" /></label>
+			<label><span>{_('CC')}</span><input bind:value={form.cc_text} placeholder={_('cc@example.com')} autocomplete="off" /></label>
+			<label><span>{_('Subject')}</span><input bind:value={form.subject} placeholder={_('Email subject')} autocomplete="off" /></label>
+			<label class="wide"><span>{_('Body')}</span><textarea bind:value={form.body} rows="8" placeholder={_('Write your message...')}></textarea></label>
 			<div class="form-actions wide">
-				<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />Save Draft</button>
-				<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />Send</button>
+				<button type="submit" class="primary-button"><Icon icon="tabler:device-floppy" width="16" height="16" />{_('Save Draft')}</button>
+				<button type="button" disabled><Icon icon="tabler:send" width="16" height="16" />{_('Send')}</button>
 			</div>
 		</form>
 	</aside>

@@ -158,17 +158,17 @@
 <section class="whatsapp-page communications-page">
 	<div class="view-header">
 		<div class="view-title-with-icon"><span class="hero-mark small"><Icon icon="tabler:brand-whatsapp" width="28" height="28" /></span><div><h1>{_('WhatsApp')}</h1><p>{_('WhatsApp Web sessions and messages')}</p></div></div>
-		<button type="button" class="primary-button" onclick={() => openAccountDrawer('whatsapp')}><Icon icon="tabler:plus" width="16" height="16" />Add Account</button>
-		<button type="button" class="primary-button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
+		<button type="button" class="primary-button" onclick={() => openAccountDrawer('whatsapp')}><Icon icon="tabler:plus" width="16" height="16" />{_('Add Account')}</button>
+		<button type="button" class="primary-button" onclick={() => void loadWhatsappWebWorkspace()} disabled={isWhatsappLoading}><Icon icon="tabler:refresh" width="16" height="16" />{_('Refresh')}</button>
 	</div>
 
 	<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="whatsapp-session-status" data-widget-hidden={!isWidgetVisible('whatsapp-session-status')}>
 		<WidgetEditChrome widgetId="whatsapp-session-status" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 		<div class="metric-grid">
-			<article class="metric-card"><span>Sessions</span><strong>{whatsappSessions.length}</strong><small>{selectedWhatsappSession?.link_state ?? 'not linked'}</small></article>
-			<article class="metric-card"><span>Messages</span><strong>{whatsappMessages.length}</strong><small>Canonical WhatsApp Web records</small></article>
-			<article class="metric-card"><span>Runtime</span><strong>{whatsappCapabilities?.runtime_mode ?? 'unknown'}</strong><small>Fixture/manual foundation</small></article>
-			<article class="metric-card"><span>Blocked</span><strong>{whatsappBlockedCapabilities.length}</strong><small>Live runtime remains blocked</small></article>
+			<article class="metric-card"><span>{_('Sessions')}</span><strong>{whatsappSessions.length}</strong><small>{selectedWhatsappSession?.link_state ?? _('not linked')}</small></article>
+			<article class="metric-card"><span>{_('Messages')}</span><strong>{whatsappMessages.length}</strong><small>{_('Canonical WhatsApp Web records')}</small></article>
+			<article class="metric-card"><span>{_('Runtime')}</span><strong>{whatsappCapabilities?.runtime_mode ?? _('unknown')}</strong><small>{_('Fixture/manual foundation')}</small></article>
+			<article class="metric-card"><span>{_('Blocked')}</span><strong>{whatsappBlockedCapabilities.length}</strong><small>{_('Live runtime remains blocked')}</small></article>
 		</div>
 	</div>
 

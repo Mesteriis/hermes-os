@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
 	import * as graphService from '$lib/services/graph';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
 	import KnowledgeGraphCanvas from './widgets/KnowledgeGraphCanvas.svelte';
@@ -13,6 +14,8 @@
 		GraphEdge,
 		GraphRelationshipType
 	} from '$lib/api';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	type GraphFilterChip = {
 		id: string;
@@ -121,9 +124,9 @@
 	}
 
 	function formatGraphTimestamp(value: string | null) {
-		if (!value) return 'No projection yet';
+		if (!value) return _('No projection yet');
 		const date = new Date(value);
-		if (Number.isNaN(date.getTime())) return 'Invalid timestamp';
+		if (Number.isNaN(date.getTime())) return _('Invalid timestamp');
 		return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date);
 	}
 
@@ -133,14 +136,14 @@
 
 	function buildGraphFilterChips(summary: GraphSummary | null): GraphFilterChip[] {
 		const nodeKinds: Array<{ id: GraphNodeKind; label: string }> = [
-			{ id: 'person', label: 'People' },
-			{ id: 'email_address', label: 'Email Addresses' },
-			{ id: 'message', label: 'Messages' },
-			{ id: 'document', label: 'Documents' },
-			{ id: 'project', label: 'Projects' }
+			{ id: 'person', label: _('People') },
+			{ id: 'email_address', label: _('Email Addresses') },
+			{ id: 'message', label: _('Messages') },
+			{ id: 'document', label: _('Documents') },
+			{ id: 'project', label: _('Projects') }
 		];
 		return [
-			{ id: 'all', label: 'All', count: summary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 0, enabled: true },
+			{ id: 'all', label: _('All'), count: summary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 0, enabled: true },
 			...nodeKinds.map((item) => ({
 				id: item.id, label: item.label,
 				count: summary?.node_counts.find((count) => count.key === item.id)?.count ?? 0,
@@ -263,15 +266,15 @@
 				type="button"
 				class:active={item.id === 'all'}
 				disabled={!item.enabled}
-				title={item.enabled ? `${item.label} graph view` : `${item.label} filtering is not available in this read-only slice`}
+				title={item.enabled ? _('{label} graph view').replace('{label}', item.label) : _('{label} filtering is not available in this read-only slice').replace('{label}', item.label)}
 			>
 				{item.label}
 				{#if item.count !== null}<em>{formatNumber(item.count)}</em>{/if}
 			</button>
 		{/each}
-		<button type="button" disabled title="Projection rebuild requires a command API boundary">
+		<button type="button" disabled title={_('Projection rebuild requires a command API boundary')}>
 			<Icon icon="tabler:refresh" width="15" height="15" />
-			Rebuild
+			{_('Rebuild')}
 		</button>
 	</div>
 
@@ -290,18 +293,18 @@
 						<Icon icon="tabler:search" width="17" height="17" />
 						<input
 							bind:value={graphSearchQuery}
-							placeholder="Search graph nodes..."
-							aria-label="Search graph nodes"
+							placeholder={_('Search graph nodes...')}
+							aria-label={_('Search graph nodes')}
 						/>
 						<button type="submit" disabled={isGraphSearchLoading || !graphSearchQuery.trim()}>
-							{isGraphSearchLoading ? 'Searching' : 'Search'}
+							{isGraphSearchLoading ? _('Searching') : _('Search')}
 						</button>
 					</form>
-					<button type="button" disabled title="Pan and zoom engine is not part of this slice">
+					<button type="button" disabled title={_('Pan and zoom engine is not part of this slice')}>
 						<Icon icon="tabler:hand-click" width="16" height="16" />
 					</button>
-					<button type="button" disabled title="Depth is fixed to 1 by the current graph API contract">
-						Depth 1
+					<button type="button" disabled title={_('Depth is fixed to 1 by the current graph API contract')}>
+						{_('Depth 1')}
 					</button>
 				</div>
 			</div>
@@ -312,15 +315,15 @@
 					{#if graphSearchError}
 						<div class="graph-strip-message error">
 							<span>{graphSearchError}</span>
-							<button type="button" onclick={() => void runGraphSearch()}>Retry</button>
+							<button type="button" onclick={() => void runGraphSearch()}>{_('Retry')}</button>
 						</div>
 					{:else if graphSearchResults.length > 0}
 						<div class="graph-picker">
 							<div class="graph-picker-head">
-								<span>Search results</span>
+								<span>{_('Search Results')}</span>
 								<em>{formatNumber(graphSearchResults.length)}</em>
 							</div>
-							<div class="graph-result-row" aria-label="Graph search results">
+							<div class="graph-result-row" aria-label={_('Graph search results')}>
 								{#each graphSearchResults as node}
 									<button
 										type="button"
@@ -336,20 +339,20 @@
 						</div>
 					{:else if graphSearchSubmitted && lastSubmittedGraphSearchQuery}
 						<div class="graph-strip-message">
-							<span>No graph nodes found for "{lastSubmittedGraphSearchQuery}".</span>
+							<span>{_('No graph nodes found for')} "{lastSubmittedGraphSearchQuery}".</span>
 						</div>
 					{:else if graphNodeChoicesError}
 						<div class="graph-strip-message error">
 							<span>{graphNodeChoicesError}</span>
-							<button type="button" onclick={() => void loadGraphNodeChoices()}>Retry</button>
+							<button type="button" onclick={() => void loadGraphNodeChoices()}>{_('Retry')}</button>
 						</div>
 					{:else if graphNodeChoices.length > 0}
 						<div class="graph-picker">
 							<div class="graph-picker-head">
-								<span>Suggested nodes</span>
+								<span>{_('Suggested nodes')}</span>
 								<em>{formatNumber(graphNodeChoices.length)}</em>
 							</div>
-							<div class="graph-result-row" aria-label="Suggested graph nodes">
+							<div class="graph-result-row" aria-label={_('Suggested graph nodes')}>
 								{#each graphNodeChoices as node}
 									<button
 										type="button"
@@ -365,11 +368,11 @@
 						</div>
 					{:else if isGraphNodeChoicesLoading}
 						<div class="graph-strip-message">
-							<span>Loading selectable graph nodes.</span>
+							<span>{_('Loading selectable graph nodes.')}</span>
 						</div>
 					{:else}
 						<div class="graph-strip-message">
-							<span>No selectable graph nodes returned by the local projection.</span>
+							<span>{_('No selectable graph nodes returned by the local projection.')}</span>
 						</div>
 					{/if}
 				</div>
@@ -395,10 +398,10 @@
 			/>
 
 			<footer class="graph-status-bar">
-				<span>Projection: {formatGraphTimestamp(graphSummary?.latest_projection_at ?? null)}</span>
-				<span>Evidence: {formatNumber(graphEvidenceTotal())}</span>
-				{#if graphNeighborhood?.truncated}<span>Neighborhood truncated at {graphNeighborhood.edge_limit} edges</span>{/if}
-				{#if graphNeighborhood?.evidence_truncated}<span>Evidence truncated at {graphNeighborhood.evidence_limit} rows</span>{/if}
+				<span>{_('Projection')}: {formatGraphTimestamp(graphSummary?.latest_projection_at ?? null)}</span>
+				<span>{_('Evidence')}: {formatNumber(graphEvidenceTotal())}</span>
+				{#if graphNeighborhood?.truncated}<span>{_('Neighborhood truncated at {limit} edges').replace('{limit}', String(graphNeighborhood.edge_limit))}</span>{/if}
+				{#if graphNeighborhood?.evidence_truncated}<span>{_('Evidence truncated at {limit} rows').replace('{limit}', String(graphNeighborhood.evidence_limit))}</span>{/if}
 			</footer>
 		</section>
 

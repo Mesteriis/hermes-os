@@ -97,10 +97,10 @@
 </script>
 
 <section class="calendar-page">
-	<CalendarToolbar
-		activeViewTitle="Calendar"
-		activeViewSubtitle="All your events from connected calendars"
-		{calendarViewMode}
+		<CalendarToolbar
+			activeViewTitle="Calendar"
+			activeViewSubtitle="All your events from connected calendars"
+			{calendarViewMode}
 		{calendarSearchQuery}
 		{isLayoutEditing}
 		{isWidgetVisible}
@@ -114,25 +114,25 @@
 
 	{#if showNewEventForm}
 		<div class="panel new-event-form">
-			<h3>New Event</h3>
+			<h3>{_('New Event')}</h3>
 			<div class="form-row">
-				<input type="text" placeholder="Event title" bind:value={newEventTitle} />
+				<input type="text" placeholder={_('Event title')} bind:value={newEventTitle} />
 				<select bind:value={newEventType}>
-					<option value="meeting">Meeting</option><option value="focus">Focus</option>
-					<option value="deadline">Deadline</option><option value="personal">Personal</option>
-					<option value="travel">Travel</option><option value="tax">Tax</option>
-					<option value="review">Review</option><option value="planning">Planning</option>
+					<option value="meeting">{_('Meeting')}</option><option value="focus">{_('Focus')}</option>
+					<option value="deadline">{_('Deadline')}</option><option value="personal">{_('Personal')}</option>
+					<option value="travel">{_('Travel')}</option><option value="tax">{_('Tax')}</option>
+					<option value="review">{_('Review')}</option><option value="planning">{_('Planning')}</option>
 				</select>
 			</div>
 			<div class="form-row"><input type="datetime-local" bind:value={newEventStart} /><span>→</span><input type="datetime-local" bind:value={newEventEnd} /></div>
-			<div class="form-actions"><button type="button" class="primary-button" onclick={handleCreateEvent}>Create</button><button type="button" class="ghost-button" onclick={() => (showNewEventForm = false)}>Cancel</button></div>
+			<div class="form-actions"><button type="button" class="primary-button" onclick={handleCreateEvent}>{_('Create')}</button><button type="button" class="ghost-button" onclick={() => (showNewEventForm = false)}>{_('Cancel')}</button></div>
 		</div>
 	{/if}
 
 	<div class="filter-bar">
-		<span>{calendarAccounts.length} accounts &middot; {calendarEvents.length} events</span>
+		<span>{calendarAccounts.length} {_('accounts')} &middot; {calendarEvents.length} {_('events')}</span>
 		{#if calendarError}<span class="error-text">{calendarError}</span>{/if}
-		{#if calendarSearchResults.length > 0}<span class="search-hint">Search: {calendarSearchResults.length} results for "{calendarSearchQuery}"</span>{/if}
+		{#if calendarSearchResults.length > 0}<span class="search-hint">{_('Search')}: {calendarSearchResults.length} {_('results for')} "{calendarSearchQuery}"</span>{/if}
 	</div>
 
 	<div class="calendar-layout">
@@ -148,14 +148,14 @@
 		/>
 		<aside class="stacked-rail">
 			<div class="panel info-card">
-				<h2>Weekly Brief <button type="button" class="link-row" onclick={loadWeeklyBrief}><Icon icon="tabler:refresh" width="12" height="12" /></button></h2>
+				<h2>{_('Weekly Brief')} <button type="button" class="link-row" onclick={loadWeeklyBrief}><Icon icon="tabler:refresh" width="12" height="12" /></button></h2>
 				{#if weeklyBrief}
 					<div class="metric-grid tiny">
-						<article class="metric-card"><span>Events</span><strong>{weeklyBrief.upcoming_events_this_week as number || 0}</strong></article>
-						<article class="metric-card"><span>Overdue</span><strong>{weeklyBrief.overdue_deadlines as number || 0}</strong></article>
-						<article class="metric-card"><span>No Notes</span><strong>{weeklyBrief.past_events_without_notes as number || 0}</strong></article>
+						<article class="metric-card"><span>{_('Events')}</span><strong>{weeklyBrief.upcoming_events_this_week as number || 0}</strong></article>
+						<article class="metric-card"><span>{_('Overdue')}</span><strong>{weeklyBrief.overdue_deadlines as number || 0}</strong></article>
+						<article class="metric-card"><span>{_('No Notes')}</span><strong>{weeklyBrief.past_events_without_notes as number || 0}</strong></article>
 					</div>
-				{:else}<p class="muted">Click refresh to load</p>{/if}
+				{:else}<p class="muted">{_('Click refresh to load')}</p>{/if}
 			</div>
 			<CalendarUpcoming {calendarEvents} {isLayoutEditing} {isWidgetVisible} onPrepareEvent={prepareEvent} />
 			{#if selectedEvent}
@@ -167,19 +167,19 @@
 						<span class="chip {selectedEvent.status}">{selectedEvent.status}</span>
 					</div>
 					{#if eventBrief}
-						<div class="brief-section"><h4>Brief</h4>
+						<div class="brief-section"><h4>{_('Brief')}</h4>
 							{#if (eventBrief.participants as any[])}<div class="brief-participants">{#each (eventBrief.participants as any[]) as p}<span class="participant-chip">{p.name || p.email}</span>{/each}</div>{/if}
 							{#if (eventBrief.context as any)?.summary}<p class="muted">{(eventBrief.context as any).summary}</p>{/if}
 						</div>
 					{/if}
 					{#if eventAgenda}
-						<div class="brief-section"><h4>Agenda</h4>
+						<div class="brief-section"><h4>{_('Agenda')}</h4>
 							{#if eventAgenda.suggested_agenda}<ul class="agenda-list">{#each (eventAgenda.suggested_agenda as any[]) as item}<li>{item}</li>{/each}</ul>{/if}
 						</div>
 					{/if}
 					<div class="event-actions">
-						<button type="button" class="primary-button small" onclick={() => selectedEvent && prepareEvent(selectedEvent)}><Icon icon="tabler:brain" width="14" height="14" /> Prepare</button>
-						<button type="button" class="ghost-button small" onclick={() => selectedEvent && completeEvent(selectedEvent)}><Icon icon="tabler:check" width="14" height="14" /> Complete</button>
+					<button type="button" class="primary-button small" onclick={() => selectedEvent && prepareEvent(selectedEvent)}><Icon icon="tabler:brain" width="14" height="14" /> {_('Prepare')}</button>
+					<button type="button" class="ghost-button small" onclick={() => selectedEvent && completeEvent(selectedEvent)}><Icon icon="tabler:check" width="14" height="14" /> {_('Complete')}</button>
 					</div>
 				</div>
 			{/if}

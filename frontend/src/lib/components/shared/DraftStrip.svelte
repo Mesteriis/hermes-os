@@ -1,5 +1,8 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Draft {
 		draft_id: string;
@@ -30,7 +33,7 @@
 
 {#if drafts.length > 0}
 	<div class="draft-strip">
-		<strong>Drafts ({drafts.length})</strong>
+		<strong>{_('Drafts')} ({drafts.length})</strong>
 		{#each drafts.slice(0, 3) as draft}
 			<button type="button" class="draft-chip" onclick={() => onOpenCompose(draft)}>
 				<Icon icon="tabler:pencil" width="14" height="14" />{draft.subject}

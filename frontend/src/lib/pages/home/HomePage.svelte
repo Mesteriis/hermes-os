@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { currentLocale, t } from '$lib/i18n';
 	import HomeMetrics from './widgets/HomeMetrics.svelte';
 	import HomeWhatsNew from './widgets/HomeWhatsNew.svelte';
 	import HomePriorities from './widgets/HomePriorities.svelte';
@@ -9,6 +10,8 @@
 	import { communicationMessages, mailboxHealth, communicationProjects, communicationTasks } from '$lib/stores/communications';
 	import { vaultStatusError } from '$lib/stores/vault';
 	import { navigateTo } from '$lib/stores/navigation';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	type StatCard = { label: string; value: string; delta: string; icon: string; tone?: string };
 	type FeedItem = { icon: string; title: string; meta: string; time: string; tag?: string; tone?: string };
@@ -26,12 +29,12 @@
 	const homeStats = $derived.by(() => {
 		const stats: StatCard[] = [];
 			if ($mailboxHealth) {
-				stats.push({ label: 'Messages', value: String($mailboxHealth.total_messages), delta: `+${$mailboxHealth.unread}`, icon: 'tabler:mail' });
-				stats.push({ label: 'Needs attention', value: String($mailboxHealth.needs_action), delta: `+${$mailboxHealth.important}`, icon: 'tabler:alert-circle' });
-				stats.push({ label: 'Waiting', value: String($mailboxHealth.waiting), delta: `${$mailboxHealth.done} done`, icon: 'tabler:message-reply' });
+				stats.push({ label: _('Messages'), value: String($mailboxHealth.total_messages), delta: `+${$mailboxHealth.unread}`, icon: 'tabler:mail' });
+				stats.push({ label: _('Needs attention'), value: String($mailboxHealth.needs_action), delta: `+${$mailboxHealth.important}`, icon: 'tabler:alert-circle' });
+				stats.push({ label: _('Waiting'), value: String($mailboxHealth.waiting), delta: `${$mailboxHealth.done} ${_('done')}`, icon: 'tabler:message-reply' });
 			}
-		stats.push({ label: 'Projects', value: '—', delta: 'active', icon: 'tabler:briefcase' });
-		stats.push({ label: 'Persons', value: '—', delta: 'enriched', icon: 'tabler:user-plus' });
+		stats.push({ label: _('Projects'), value: '—', delta: _('active'), icon: 'tabler:briefcase' });
+		stats.push({ label: _('Persons'), value: '—', delta: _('enriched'), icon: 'tabler:user-plus' });
 		return stats;
 	});
 
@@ -47,10 +50,10 @@
 			whatsapp_web: 'tabler:brand-whatsapp'
 		};
 			for (const msg of $communicationMessages.slice(0, 5)) {
-			const sender = msg.sender_display_name || msg.sender || 'Unknown';
+			const sender = msg.sender_display_name || msg.sender || _('Unknown');
 			items.push({
 				icon: channelIcons[msg.channel_kind] || 'tabler:message',
-				title: `New message from ${sender}`,
+				title: _('New message from {sender}').replace('{sender}', sender),
 				meta: msg.subject || msg.body_text_preview,
 				time: msg.occurred_at || msg.projected_at,
 				tone: 'blue'
@@ -63,7 +66,7 @@
 		const seen = new Set<string>();
 		const result: PersonItem[] = [];
 			for (const msg of $communicationMessages) {
-			const sender = msg.sender_display_name || msg.sender || 'Unknown';
+			const sender = msg.sender_display_name || msg.sender || _('Unknown');
 			if (seen.has(sender)) continue;
 			seen.add(sender);
 			result.push({

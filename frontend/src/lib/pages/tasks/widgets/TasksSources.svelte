@@ -1,5 +1,8 @@
 <script lang="ts">
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+	import { currentLocale, t } from '$lib/i18n';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		isLayoutEditing: boolean;
@@ -11,5 +14,5 @@
 
 <div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="tasks-deadlines-priority" data-widget-hidden={!isWidgetVisible('tasks-deadlines-priority')}>
 	<WidgetEditChrome widgetId="tasks-deadlines-priority" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
-	<section class="panel info-card"><h2>Active Task Sources</h2>{#each ['message','document'] as source}<div class="bar-row"><span>{source}</span><div><i></i></div></div>{/each}</section>
+	<section class="panel info-card"><h2>{_('Active Task Sources')}</h2>{#each ['message','document'] as source}<div class="bar-row"><span>{source}</span><div><i></i></div></div>{/each}</section>
 </div>

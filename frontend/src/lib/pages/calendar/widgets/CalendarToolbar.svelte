@@ -36,16 +36,16 @@
 			<div><h1>{_(activeViewTitle)}</h1><p>{_(activeViewSubtitle)}</p></div>
 		</div>
 		<div class="search-bar">
-			<input type="text" placeholder="Search events..." bind:value={calendarSearchQuery} oninput={() => onSearchCalendar()} />
+			<input type="text" placeholder={_('Search events...')} bind:value={calendarSearchQuery} oninput={() => onSearchCalendar()} />
 		</div>
 		<div class="section-tabs pill-tabs">
-			<button type="button" class:active={calendarViewMode === 'day'} onclick={() => onCalendarViewMode('day')}>Day</button>
-			<button type="button" class:active={calendarViewMode === 'week'} onclick={() => onCalendarViewMode('week')}>Week</button>
-			<button type="button" class:active={calendarViewMode === 'month'} onclick={() => onCalendarViewMode('month')}>Month</button>
-			<button type="button" class:active={calendarViewMode === 'agenda'} onclick={() => onCalendarViewMode('agenda')}>Agenda</button>
+			<button type="button" class:active={calendarViewMode === 'day'} onclick={() => onCalendarViewMode('day')}>{_('Day')}</button>
+			<button type="button" class:active={calendarViewMode === 'week'} onclick={() => onCalendarViewMode('week')}>{_('Week')}</button>
+			<button type="button" class:active={calendarViewMode === 'month'} onclick={() => onCalendarViewMode('month')}>{_('Month')}</button>
+			<button type="button" class:active={calendarViewMode === 'agenda'} onclick={() => onCalendarViewMode('agenda')}>{_('Agenda')}</button>
 		</div>
-		<button type="button" class="primary-button" onclick={onToggleNewEventForm}><Icon icon="tabler:plus" width="16" height="16" /> New Event</button>
-		<button type="button" class="ghost-button" onclick={onOpenAccountDrawer}><Icon icon="tabler:calendar-plus" width="16" height="16" />Add Calendar</button>
-		<button type="button" class="ghost-button" onclick={() => { onLoadCalendar(); onLoadWeeklyBrief(); }} title="Refresh"><Icon icon="tabler:refresh" width="16" height="16" /></button>
+		<button type="button" class="primary-button" onclick={onToggleNewEventForm}><Icon icon="tabler:plus" width="16" height="16" /> {_('New Event')}</button>
+		<button type="button" class="ghost-button" onclick={onOpenAccountDrawer}><Icon icon="tabler:calendar-plus" width="16" height="16" />{_('Add Calendar')}</button>
+		<button type="button" class="ghost-button" onclick={() => { onLoadCalendar(); onLoadWeeklyBrief(); }} title={_('Refresh')}><Icon icon="tabler:refresh" width="16" height="16" /></button>
 	</div>
 </div>

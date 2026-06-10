@@ -1,5 +1,8 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface AddableWidget {
 		id: string;
@@ -18,15 +21,15 @@
 </script>
 
 {#if isOpen}
-	<div class="widget-drawer" role="dialog" aria-label="Add widget">
+	<div class="widget-drawer" role="dialog" aria-label={_('Add widget')}>
 		<header>
-			<h2>Add widget</h2>
+			<h2>{_('Add widget')}</h2>
 			<button
 				type="button"
 				class="icon-button"
 				onclick={onClose}
-				title="Close add widget drawer"
-				aria-label="Close add widget drawer"
+				title={_('Close add widget drawer')}
+				aria-label={_('Close add widget drawer')}
 			>
 				<Icon icon="tabler:x" width="16" height="16" />
 			</button>
@@ -38,7 +41,7 @@
 					<span>{widget.defaultZone}</span>
 				</button>
 			{:else}
-				<p>No widgets available.</p>
+				<p>{_('No widgets available.')}</p>
 			{/each}
 		</div>
 	</div>

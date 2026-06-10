@@ -1,11 +1,14 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
 	import * as personsService from '$lib/services/persons';
 	import type { PersonIdentityCandidate } from '$lib/api';
 	import PersonsList from './widgets/PersonsList.svelte';
 	import PersonsDetail from './widgets/PersonsDetail.svelte';
 	import PersonsIdentityReview from './widgets/PersonsIdentityReview.svelte';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	type FeedItem = {
 		icon: string;
@@ -131,9 +134,9 @@
 		const result = await personsService.loadPersons();
 		persons = result.persons.map((p) => ({
 			name: p.display_name,
-			role: p.preferred_channel || 'Contact',
+			role: p.preferred_channel || _('Contact'),
 			company: p.email_address,
-			status: p.last_interaction_at ? 'Online' : undefined,
+			status: p.last_interaction_at ? _('Online') : undefined,
 			channel: p.preferred_channel ?? undefined
 		}));
 		personList = [...persons];
@@ -172,7 +175,7 @@
 		<aside class="stacked-rail">
 			<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-ai-summary" data-widget-hidden={!isWidgetVisible('persons-ai-summary')}>
 				<WidgetEditChrome widgetId="persons-ai-summary" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
-				<section class="panel info-card"><h2>AI Summary</h2><p>John is a key strategic partner and decision maker. You have a strong professional relationship with frequent communication across multiple projects.</p></section>
+				<section class="panel info-card"><h2>{_('AI Summary')}</h2><p>{_('John is a key strategic partner and decision maker. You have a strong professional relationship with frequent communication across multiple projects.')}</p></section>
 			</div>
 			<PersonsIdentityReview
 				{suggestedIdentityCandidates}
@@ -188,11 +191,11 @@
 			/>
 			<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-related-documents" data-widget-hidden={!isWidgetVisible('persons-related-documents')}>
 				<WidgetEditChrome widgetId="persons-related-documents" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
-				<section class="panel info-card"><h2>Related Documents</h2><p>Documents will appear here when processing is complete.</p></section>
+				<section class="panel info-card"><h2>{_('Related Documents')}</h2><p>{_('Documents will appear here when processing is complete.')}</p></section>
 			</div>
 			<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-recent-notes" data-widget-hidden={!isWidgetVisible('persons-recent-notes')}>
 				<WidgetEditChrome widgetId="persons-recent-notes" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
-				<section class="panel info-card"><h2>Recent Notes</h2><p>Discussed expansion to EU market</p><p>Prefers email for official communication</p><p>Interested in AI/ML integration</p></section>
+				<section class="panel info-card"><h2>{_('Recent Notes')}</h2><p>{_('Discussed expansion to EU market')}</p><p>{_('Prefers email for official communication')}</p><p>{_('Interested in AI/ML integration')}</p></section>
 			</div>
 		</aside>
 	</div>

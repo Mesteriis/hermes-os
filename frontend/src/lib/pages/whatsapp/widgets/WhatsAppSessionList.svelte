@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		whatsappSessions: unknown[];
@@ -26,11 +29,11 @@
 <div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="whatsapp-account-session-metadata" data-widget-hidden={!isWidgetVisible('whatsapp-account-session-metadata')}>
 	<WidgetEditChrome widgetId="whatsapp-account-session-metadata" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 	<section class="panel conversation-list">
-		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search WhatsApp sessions..." /></label>
+		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder={_('Search WhatsApp sessions...')} /></label>
 		{#if isWhatsappLoading && whatsappSessions.length === 0}
-			<div class="empty-panel">Loading WhatsApp Web state...</div>
+			<div class="empty-panel">{_('Loading WhatsApp Web state...')}</div>
 		{:else if whatsappSessions.length === 0}
-			<div class="empty-panel">No WhatsApp Web sessions saved yet.</div>
+			<div class="empty-panel">{_('No WhatsApp Web sessions saved yet.')}</div>
 		{:else}
 			{#each whatsappSessions as session}
 				{@const s = session as Record<string, unknown>}

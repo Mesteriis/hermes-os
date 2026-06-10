@@ -1,5 +1,8 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		activeCommunicationEmptySection: {
@@ -18,7 +21,7 @@
 				<span class="hero-mark small"><Icon icon={activeCommunicationEmptySection.icon} width="28" height="28" /></span>
 				<div>
 					<h1>{activeCommunicationEmptySection.label}</h1>
-					<p>This Communications workspace is ready in navigation, but no data contract is implemented yet.</p>
+					<p>{_('This Communications workspace is ready in navigation, but no data contract is implemented yet.')}</p>
 				</div>
 			</div>
 		</div>
@@ -26,7 +29,7 @@
 			<Icon icon={activeCommunicationEmptySection.icon} width="42" height="42" />
 			<div>
 				<h2>{activeCommunicationEmptySection.label}</h2>
-				<p>Hermes Hub will keep this as a second-level Communications context. It is intentionally empty until a scoped backend and UI slice defines real records for this workspace.</p>
+				<p>{_('Hermes Hub will keep this as a second-level Communications context. It is intentionally empty until a scoped backend and UI slice defines real records for this workspace.')}</p>
 			</div>
 		</section>
 	</section>

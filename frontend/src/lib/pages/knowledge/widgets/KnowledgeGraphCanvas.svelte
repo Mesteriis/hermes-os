@@ -1,7 +1,10 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
 	import type { GraphNode, GraphSummary, GraphNeighborhood } from '$lib/api';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	type GraphCanvasNode = {
 		node_id: string;
@@ -68,21 +71,21 @@
 		{#if graphError && !graphSummary}
 			<div class="graph-state-card error">
 				<Icon icon="tabler:alert-triangle" width="26" height="26" />
-				<h2>Graph summary unavailable</h2>
+				<h2>{_('Graph summary unavailable')}</h2>
 				<p>{graphError}</p>
-				<button type="button" onclick={() => void loadGraphSummary()}>Retry summary</button>
+				<button type="button" onclick={() => void loadGraphSummary()}>{_('Retry summary')}</button>
 			</div>
 		{:else if isGraphSummaryLoading && !graphSummary}
 			<div class="graph-state-card">
 				<Icon icon="tabler:loader-2" width="26" height="26" />
-				<h2>Loading graph summary</h2>
-				<p>Reading local graph projection metadata.</p>
+				<h2>{_('Loading graph summary')}</h2>
+				<p>{_('Reading local graph projection metadata.')}</p>
 			</div>
 		{:else if graphSummary?.is_empty}
 			<div class="graph-state-card">
 				<Icon icon="tabler:database-off" width="26" height="26" />
-				<h2>No graph projection yet</h2>
-				<p>Import persons, messages or documents, then run the existing projection smoke command to create graph data.</p>
+				<h2>{_('No graph projection yet')}</h2>
+				<p>{_('Import persons, messages or documents, then run the existing projection smoke command to create graph data.')}</p>
 			</div>
 		{:else if graphNeighborhood}
 			<svg class="graph-edge-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
@@ -126,14 +129,14 @@
 		{:else}
 			<div class="graph-state-card">
 				<img src="/assets/hermes-logo-mark.png" alt="" />
-				<h2>Select a graph node</h2>
-				<p>{formatNumber(graphNodeTotal())} nodes and {formatNumber(graphRelationshipTotal())} connections are available from the local projection. Use Suggested nodes or search to load a neighborhood.</p>
+				<h2>{_('Select a graph node')}</h2>
+				<p>{_('{nodeCount} nodes and {edgeCount} connections are available from the local projection. Use Suggested nodes or search to load a neighborhood.').replace('{nodeCount}', formatNumber(graphNodeTotal())).replace('{edgeCount}', formatNumber(graphRelationshipTotal()))}</p>
 			</div>
 		{/if}
 		{#if isGraphNeighborhoodLoading}
 			<div class="graph-loading-overlay" role="status" aria-live="polite">
 				<Icon icon="tabler:loader-2" width="22" height="22" />
-				<span>Loading neighborhood</span>
+				<span>{_('Loading neighborhood')}</span>
 			</div>
 		{/if}
 	</div>

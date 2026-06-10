@@ -196,12 +196,12 @@
 		<button
 			type="button"
 			class="sidebar-rail-dropdown-backdrop"
-			aria-label="Close sidebar menu"
+			aria-label={_('Close sidebar menu')}
 			onclick={() => activeSidebarRailGroupId.set(null)}
 		></button>
 	{/if}
 
-	<section class="workspace" class:layout-editing={$isLayoutEditing} aria-label={`${_($activeView.title)} workspace`}>
+	<section class="workspace" class:layout-editing={$isLayoutEditing} 	aria-label={_('{title} workspace').replace('{title}', _($activeView.title))}>
 		<Topbar
 			viewTitle={$activeView.title}
 			viewSubtitle={$activeView.subtitle}

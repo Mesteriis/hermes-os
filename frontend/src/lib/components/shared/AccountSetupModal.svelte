@@ -433,19 +433,19 @@
 	function telegramQrStatusLabel(status: string) {
 		switch (status) {
 			case 'waiting_qr_scan':
-				return 'Waiting for QR scan';
+				return _('Waiting for QR scan');
 			case 'waiting_password':
-				return 'Telegram password required';
+				return _('Telegram password required');
 			case 'ready':
-				return 'Telegram authorized';
+				return _('Telegram authorized');
 			case 'expired':
-				return 'QR code expired';
+				return _('QR code expired');
 			case 'failed':
-				return 'QR login failed';
+				return _('QR login failed');
 			case 'runtime_unavailable':
-				return 'TDLib runtime unavailable';
+				return _('TDLib runtime unavailable');
 			default:
-				return 'QR login status';
+				return _('QR login status');
 		}
 	}
 
@@ -507,27 +507,27 @@
 
 	function telegramWizardNote() {
 		if (telegramAuthMethod === 'fixture') {
-			return 'Fixture mode creates local Telegram records for UI and policy testing.';
+			return _('Fixture mode creates local Telegram records for UI and policy testing.');
 		}
 		if (telegramAuthMethod === 'qr') {
 			if (isTelegramCapabilitiesLoading && !effectiveTelegramCapabilities) {
-				return 'Preparing Telegram QR login...';
+				return _('Preparing Telegram QR login...');
 			}
 			if (telegramQrRuntimeBlocked) {
-				return 'TDLib JSON runtime is not available in the running backend.';
+				return _('TDLib JSON runtime is not available in the running backend.');
 			}
 			if (telegramQrAppCredentialsMissing) {
-				return 'Telegram app credentials must be configured in the backend environment before QR login.';
+				return _('Telegram app credentials must be configured in the backend environment before QR login.');
 			}
 			if (telegramQrLogin?.status === 'waiting_password') {
-				return 'Enter the Telegram 2-step verification password to finish local TDLib authorization.';
+				return _('Enter the Telegram 2-step verification password to finish local TDLib authorization.');
 			}
 			if (telegramQrLogin?.status === 'ready') {
-				return 'Telegram authorization is complete. Save the account to finish setup.';
+				return _('Telegram authorization is complete. Save the account to finish setup.');
 			}
-			return 'Open Telegram on an already logged-in device and scan the QR code.';
+			return _('Open Telegram on an already logged-in device and scan the QR code.');
 		}
-		return 'Live credentials are stored in the encrypted database vault. Telegram live runtime remains blocked until the adapter is implemented.';
+		return _('Live credentials are stored in the encrypted database vault. Telegram live runtime remains blocked until the adapter is implemented.');
 	}
 
 	async function startGmailSetup() {
@@ -965,156 +965,156 @@
 	<button
 		type="button"
 		class="drawer-backdrop modal-backdrop"
-		aria-label="Close account setup"
+		aria-label={_('Close account setup')}
 		onclick={closeAccountDrawer}
 	></button>
 	<div class="account-modal" role="dialog" aria-modal="true" aria-labelledby="account-setup-heading">
 		<header>
 			<div>
-				<p>{accountWizardKind === 'mail' ? 'Mail Account' : accountWizardKind === 'calendar' ? 'Calendar Account' : accountWizardKind === 'telegram' ? 'Telegram Account' : 'WhatsApp Account'}</p>
-				<h2 id="account-setup-heading">{accountWizardKind === 'mail' ? 'New Mail Account' : accountWizardKind === 'calendar' ? 'New Calendar Account' : accountWizardKind === 'telegram' ? 'New Telegram Account' : 'New WhatsApp Account'}</h2>
+				<p>{accountWizardKind === 'mail' ? _('Mail Account') : accountWizardKind === 'calendar' ? _('Calendar Account') : accountWizardKind === 'telegram' ? _('Telegram Account') : _('WhatsApp Account')}</p>
+				<h2 id="account-setup-heading">{accountWizardKind === 'mail' ? _('New Mail Account') : accountWizardKind === 'calendar' ? _('New Calendar Account') : accountWizardKind === 'telegram' ? _('New Telegram Account') : _('New WhatsApp Account')}</h2>
 			</div>
-			<button type="button" class="icon-button" onclick={closeAccountDrawer} aria-label="Close">
+			<button type="button" class="icon-button" onclick={closeAccountDrawer} aria-label={_('Close')}>
 				<Icon icon="tabler:x" width="18" height="18" />
 			</button>
 		</header>
 
 		{#if accountWizardKind === 'mail'}
-			<div class="wizard-progress" aria-label="Mail setup steps">
-				<span class:active={mailWizardStep === 'provider'}>1. Service</span>
-				<span class:active={mailWizardStep === 'details'}>2. Details</span>
+			<div class="wizard-progress" aria-label={_('Mail setup steps')}>
+				<span class:active={mailWizardStep === 'provider'}>{_('1. Service')}</span>
+				<span class:active={mailWizardStep === 'details'}>{_('2. Details')}</span>
 			</div>
 			{#if mailWizardStep === 'provider'}
 				<form class="wizard-step" onsubmit={(event) => { event.preventDefault(); continueMailWizard(); }}>
-					<label class="wide wizard-email-field"><span>Email address</span><input bind:value={mailAddress} type="email" placeholder="name@example.com" autocomplete="email" /></label>
-					<div class="wizard-divider"><span>or choose mail service</span></div>
+					<label class="wide wizard-email-field"><span>{_('Email address')}</span><input bind:value={mailAddress} type="email" placeholder={_('name@example.com')} autocomplete="email" /></label>
+					<div class="wizard-divider"><span>{_('or choose mail service')}</span></div>
 					<div class="wizard-choice-list">
-						<button type="button" class:active={selectedMailService === 'icloud'} onclick={() => selectMailService('icloud')}><Icon icon="tabler:cloud" width="34" height="34" /><strong>iCloud</strong></button>
-						<button type="button" class:active={selectedMailService === 'microsoft'} onclick={() => selectMailService('microsoft')}><Icon icon="tabler:brand-office" width="34" height="34" /><strong>Microsoft Exchange</strong></button>
-						<button type="button" class:active={selectedMailService === 'gmail'} onclick={() => selectMailService('gmail')}><Icon icon="tabler:brand-gmail" width="34" height="34" /><strong>Google</strong></button>
-						<button type="button" class:active={selectedMailService === 'yahoo'} onclick={() => selectMailService('yahoo')}><Icon icon="tabler:mail" width="34" height="34" /><strong>Yahoo</strong></button>
-						<button type="button" class:active={selectedMailService === 'aol'} onclick={() => selectMailService('aol')}><Icon icon="tabler:mail-bolt" width="34" height="34" /><strong>AOL</strong></button>
-						<button type="button" class:active={selectedMailService === 'imap'} onclick={() => selectMailService('imap')}><Icon icon="tabler:server" width="34" height="34" /><strong>Other Mail Account</strong></button>
+						<button type="button" class:active={selectedMailService === 'icloud'} onclick={() => selectMailService('icloud')}><Icon icon="tabler:cloud" width="34" height="34" /><strong>{_('iCloud')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'microsoft'} onclick={() => selectMailService('microsoft')}><Icon icon="tabler:brand-office" width="34" height="34" /><strong>{_('Microsoft Exchange')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'gmail'} onclick={() => selectMailService('gmail')}><Icon icon="tabler:brand-gmail" width="34" height="34" /><strong>{_('Google')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'yahoo'} onclick={() => selectMailService('yahoo')}><Icon icon="tabler:mail" width="34" height="34" /><strong>{_('Yahoo')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'aol'} onclick={() => selectMailService('aol')}><Icon icon="tabler:mail-bolt" width="34" height="34" /><strong>{_('AOL')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'imap'} onclick={() => selectMailService('imap')}><Icon icon="tabler:server" width="34" height="34" /><strong>{_('Other Mail Account')}</strong></button>
 					</div>
 					<div class="wizard-actions">
-						<button type="submit" class="primary-button">Continue</button>
+						<button type="submit" class="primary-button">{_('Continue')}</button>
 					</div>
 				</form>
 			{:else}
 				<div class="wizard-step">
-					<button type="button" class="wizard-back" onclick={() => (mailWizardStep = 'provider' as MailWizardStep)}><Icon icon="tabler:arrow-left" width="15" height="15" />Service</button>
+					<button type="button" class="wizard-back" onclick={() => (mailWizardStep = 'provider' as MailWizardStep)}><Icon icon="tabler:arrow-left" width="15" height="15" />{_('Service')}</button>
 					{#if selectedMailService === 'gmail'}
 						<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
-							<label><span>Account ID</span><input bind:value={gmailForm.account_id} autocomplete="off" /></label>
-							<label><span>Display name</span><input bind:value={gmailForm.display_name} autocomplete="off" /></label>
-							<label><span>Gmail address</span><input bind:value={gmailForm.external_account_id} autocomplete="email" /></label>
-							<label><span>OAuth client ID</span><input bind:value={gmailForm.client_id} autocomplete="off" /></label>
-							<label><span>OAuth client secret</span><input bind:value={gmailForm.client_secret} type="password" autocomplete="off" /></label>
-							<label class="wide"><span>Redirect URI</span><input bind:value={gmailForm.redirect_uri} autocomplete="off" /></label>
-							<div class="form-actions wide"><button type="button" onclick={startGmailSetup} disabled={isSetupSubmitting}>Start OAuth</button></div>
+							<label><span>{_('Account ID')}</span><input bind:value={gmailForm.account_id} autocomplete="off" /></label>
+							<label><span>{_('Display name')}</span><input bind:value={gmailForm.display_name} autocomplete="off" /></label>
+							<label><span>{_('Gmail address')}</span><input bind:value={gmailForm.external_account_id} autocomplete="email" /></label>
+							<label><span>{_('OAuth client ID')}</span><input bind:value={gmailForm.client_id} autocomplete="off" /></label>
+							<label><span>{_('OAuth client secret')}</span><input bind:value={gmailForm.client_secret} type="password" autocomplete="off" /></label>
+							<label class="wide"><span>{_('Redirect URI')}</span><input bind:value={gmailForm.redirect_uri} autocomplete="off" /></label>
+							<div class="form-actions wide"><button type="button" onclick={startGmailSetup} disabled={isSetupSubmitting}>{_('Start OAuth')}</button></div>
 						</form>
 						{#if gmailPending}
 							<div class="oauth-box">
-								<a href={gmailPending.authorization_url} target="_blank" rel="noreferrer">Open Google consent</a>
-								<label><span>Authorization code</span><input bind:value={gmailAuthorizationCode} autocomplete="off" /></label>
-								<button type="button" onclick={completeGmailSetup} disabled={isSetupSubmitting}>Complete Gmail</button>
+								<a href={gmailPending.authorization_url} target="_blank" rel="noreferrer">{_('Open Google consent')}</a>
+								<label><span>{_('Authorization code')}</span><input bind:value={gmailAuthorizationCode} autocomplete="off" /></label>
+								<button type="button" onclick={completeGmailSetup} disabled={isSetupSubmitting}>{_('Complete Gmail')}</button>
 							</div>
 						{/if}
 					{:else if hasFixedMailServerPreset(selectedMailService)}
-						<div class="setup-summary-card" aria-label="Selected mail service">
+						<div class="setup-summary-card" aria-label={_('Selected mail service')}>
 							<span class="round-icon cyan"><Icon icon={mailServiceIcon(selectedMailService)} width="18" height="18" /></span>
 							<div>
 								<strong>{mailServiceDisplayName(selectedMailService)}</strong>
 							</div>
 						</div>
 						<form class="setup-form compact-form" onsubmit={(event) => event.preventDefault()}>
-							<label><span>Login</span><input bind:value={imapForm.username} autocomplete="username" /></label>
-							<label><span>Password</span><input bind:value={imapForm.password} type="password" autocomplete="current-password" /></label>
-							<div class="form-actions wide"><button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>Save Account</button></div>
+							<label><span>{_('Login')}</span><input bind:value={imapForm.username} autocomplete="username" /></label>
+							<label><span>{_('Password')}</span><input bind:value={imapForm.password} type="password" autocomplete="current-password" /></label>
+							<div class="form-actions wide"><button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>{_('Save Account')}</button></div>
 						</form>
 					{:else}
 						<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
-							<label><span>Account ID</span><input bind:value={imapForm.account_id} autocomplete="off" /></label>
-							<label><span>Display name</span><input bind:value={imapForm.display_name} autocomplete="off" /></label>
-							<label><span>Email address</span><input bind:value={imapForm.external_account_id} autocomplete="email" /></label>
-							<label><span>Username</span><input bind:value={imapForm.username} autocomplete="username" /></label>
-							<label><span>Host</span><input bind:value={imapForm.host} autocomplete="off" /></label>
-							<label><span>Port</span><input bind:value={imapForm.port} type="number" min="1" max="65535" /></label>
-							<label><span>Mailbox</span><input bind:value={imapForm.mailbox} autocomplete="off" /></label>
-							<label><span>Password</span><input bind:value={imapForm.password} type="password" autocomplete="current-password" /></label>
-							<label class="checkbox-row"><input bind:checked={imapForm.tls} type="checkbox" /><span>TLS</span></label>
-							<div class="form-actions"><button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>Save Account</button></div>
+							<label><span>{_('Account ID')}</span><input bind:value={imapForm.account_id} autocomplete="off" /></label>
+							<label><span>{_('Display name')}</span><input bind:value={imapForm.display_name} autocomplete="off" /></label>
+							<label><span>{_('Email address')}</span><input bind:value={imapForm.external_account_id} autocomplete="email" /></label>
+							<label><span>{_('Username')}</span><input bind:value={imapForm.username} autocomplete="username" /></label>
+							<label><span>{_('Host')}</span><input bind:value={imapForm.host} autocomplete="off" /></label>
+							<label><span>{_('Port')}</span><input bind:value={imapForm.port} type="number" min="1" max="65535" /></label>
+							<label><span>{_('Mailbox')}</span><input bind:value={imapForm.mailbox} autocomplete="off" /></label>
+							<label><span>{_('Password')}</span><input bind:value={imapForm.password} type="password" autocomplete="current-password" /></label>
+							<label class="checkbox-row"><input bind:checked={imapForm.tls} type="checkbox" /><span>{_('TLS')}</span></label>
+							<div class="form-actions"><button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>{_('Save Account')}</button></div>
 						</form>
 					{/if}
 				</div>
 			{/if}
 		{:else if accountWizardKind === 'calendar'}
-			<div class="wizard-progress" aria-label="Calendar setup steps">
-				<span class:active={calendarWizardStep === 'provider'}>1. Provider</span>
-				<span class:active={calendarWizardStep === 'details'}>2. Details</span>
+			<div class="wizard-progress" aria-label={_('Calendar setup steps')}>
+				<span class:active={calendarWizardStep === 'provider'}>{_('1. Provider')}</span>
+				<span class:active={calendarWizardStep === 'details'}>{_('2. Details')}</span>
 			</div>
 			{#if calendarWizardStep === 'provider'}
 				<div class="wizard-step">
 					<div class="wizard-choice-grid">
-						<button type="button" onclick={() => continueCalendarWizard('local')}><Icon icon="tabler:calendar" width="28" height="28" /><strong>Local</strong></button>
-						<button type="button" onclick={() => continueCalendarWizard('google')}><Icon icon="tabler:brand-google" width="28" height="28" /><strong>Google Calendar</strong></button>
-						<button type="button" onclick={() => continueCalendarWizard('microsoft')}><Icon icon="tabler:brand-office" width="28" height="28" /><strong>Microsoft 365</strong></button>
-						<button type="button" onclick={() => continueCalendarWizard('apple')}><Icon icon="tabler:apple" width="28" height="28" /><strong>Apple Calendar</strong></button>
-						<button type="button" onclick={() => continueCalendarWizard('caldav')}><Icon icon="tabler:server" width="28" height="28" /><strong>CalDAV</strong></button>
-						<button type="button" onclick={() => continueCalendarWizard('ics')}><Icon icon="tabler:rss" width="28" height="28" /><strong>ICS Feed</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('local')}><Icon icon="tabler:calendar" width="28" height="28" /><strong>{_('Local')}</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('google')}><Icon icon="tabler:brand-google" width="28" height="28" /><strong>{_('Google Calendar')}</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('microsoft')}><Icon icon="tabler:brand-office" width="28" height="28" /><strong>{_('Microsoft 365')}</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('apple')}><Icon icon="tabler:apple" width="28" height="28" /><strong>{_('Apple Calendar')}</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('caldav')}><Icon icon="tabler:server" width="28" height="28" /><strong>{_('CalDAV')}</strong></button>
+						<button type="button" onclick={() => continueCalendarWizard('ics')}><Icon icon="tabler:rss" width="28" height="28" /><strong>{_('ICS Feed')}</strong></button>
 					</div>
 				</div>
 			{:else}
 				<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void saveCalendarAccount(); }}>
-					<button type="button" class="wizard-back wide" onclick={() => (calendarWizardStep = 'provider' as CalendarWizardStep)}><Icon icon="tabler:arrow-left" width="15" height="15" />Provider</button>
-					<label><span>Provider</span><select bind:value={calendarAccountForm.provider}><option value="local">Local</option><option value="google">Google Calendar</option><option value="microsoft">Microsoft 365</option><option value="apple">Apple Calendar</option><option value="caldav">CalDAV</option><option value="ics">ICS Feed</option></select></label>
-					<label><span>Account name</span><input bind:value={calendarAccountForm.account_name} autocomplete="off" /></label>
-					<label class="wide"><span>Email or owner</span><input bind:value={calendarAccountForm.email} autocomplete="email" /></label>
-					<div class="form-actions wide"><button type="submit" disabled={isSetupSubmitting || !calendarAccountForm.account_name.trim()}>Save Calendar</button></div>
+					<button type="button" class="wizard-back wide" onclick={() => (calendarWizardStep = 'provider' as CalendarWizardStep)}><Icon icon="tabler:arrow-left" width="15" height="15" />{_('Provider')}</button>
+					<label><span>{_('Provider')}</span><select bind:value={calendarAccountForm.provider}><option value="local">{_('Local')}</option><option value="google">{_('Google Calendar')}</option><option value="microsoft">{_('Microsoft 365')}</option><option value="apple">{_('Apple Calendar')}</option><option value="caldav">{_('CalDAV')}</option><option value="ics">{_('ICS Feed')}</option></select></label>
+					<label><span>{_('Account name')}</span><input bind:value={calendarAccountForm.account_name} autocomplete="off" /></label>
+					<label class="wide"><span>{_('Email or owner')}</span><input bind:value={calendarAccountForm.email} autocomplete="email" /></label>
+					<div class="form-actions wide"><button type="submit" disabled={isSetupSubmitting || !calendarAccountForm.account_name.trim()}>{_('Save Calendar')}</button></div>
 				</form>
 			{/if}
 		{:else if accountWizardKind === 'telegram'}
-			<div class="wizard-progress" aria-label="Telegram setup steps">
-				<span class:active={telegramWizardStep === 'account'}>1. Account</span>
-				<span class:active={telegramWizardStep === 'auth'}>2. Login</span>
-				<span class:active={telegramWizardStep === 'details'}>3. Details</span>
+			<div class="wizard-progress" aria-label={_('Telegram setup steps')}>
+				<span class:active={telegramWizardStep === 'account'}>{_('1. Account')}</span>
+				<span class:active={telegramWizardStep === 'auth'}>{_('2. Login')}</span>
+				<span class:active={telegramWizardStep === 'details'}>{_('3. Details')}</span>
 			</div>
 			{#if telegramWizardStep === 'account'}
 				<div class="wizard-step">
 					<div class="wizard-choice-grid two">
-						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_user'} onclick={() => { selectTelegramProviderKind('telegram_user'); selectTelegramAuthMethod('phone'); continueTelegramWizard('auth'); }}><Icon icon="tabler:user" width="30" height="30" /><strong>User Account</strong><span>Phone or QR login</span></button>
-						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_bot'} onclick={() => { selectTelegramProviderKind('telegram_bot'); selectTelegramAuthMethod('bot_token'); continueTelegramWizard('auth'); }}><Icon icon="tabler:robot" width="30" height="30" /><strong>Bot Account</strong><span>Bot token</span></button>
+						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_user'} onclick={() => { selectTelegramProviderKind('telegram_user'); selectTelegramAuthMethod('phone'); continueTelegramWizard('auth'); }}><Icon icon="tabler:user" width="30" height="30" /><strong>{_('User Account')}</strong><span>{_('Phone or QR login')}</span></button>
+						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_bot'} onclick={() => { selectTelegramProviderKind('telegram_bot'); selectTelegramAuthMethod('bot_token'); continueTelegramWizard('auth'); }}><Icon icon="tabler:robot" width="30" height="30" /><strong>{_('Bot Account')}</strong><span>{_('Bot token')}</span></button>
 					</div>
 				</div>
 			{:else if telegramWizardStep === 'auth'}
 				<div class="wizard-step">
-					<button type="button" class="wizard-back" onclick={() => continueTelegramWizard('account')}><Icon icon="tabler:arrow-left" width="15" height="15" />Account</button>
+					<button type="button" class="wizard-back" onclick={() => continueTelegramWizard('account')}><Icon icon="tabler:arrow-left" width="15" height="15" />{_('Account')}</button>
 					<div class="wizard-choice-grid">
 						{#if telegramAccountForm.provider_kind === 'telegram_user'}
-							<button type="button" class:active={telegramAuthMethod === 'phone'} onclick={() => { selectTelegramAuthMethod('phone'); continueTelegramWizard('details'); }}><Icon icon="tabler:phone" width="28" height="28" /><strong>Phone Number</strong></button>
-							<button type="button" class:active={telegramAuthMethod === 'qr'} onclick={() => { selectTelegramAuthMethod('qr'); continueTelegramWizard('details'); }}><Icon icon="tabler:qrcode" width="28" height="28" /><strong>QR Code</strong></button>
+							<button type="button" class:active={telegramAuthMethod === 'phone'} onclick={() => { selectTelegramAuthMethod('phone'); continueTelegramWizard('details'); }}><Icon icon="tabler:phone" width="28" height="28" /><strong>{_('Phone Number')}</strong></button>
+							<button type="button" class:active={telegramAuthMethod === 'qr'} onclick={() => { selectTelegramAuthMethod('qr'); continueTelegramWizard('details'); }}><Icon icon="tabler:qrcode" width="28" height="28" /><strong>{_('QR Code')}</strong></button>
 						{/if}
 						{#if telegramAccountForm.provider_kind === 'telegram_bot'}
-							<button type="button" class:active={telegramAuthMethod === 'bot_token'} onclick={() => { selectTelegramAuthMethod('bot_token'); continueTelegramWizard('details'); }}><Icon icon="tabler:key" width="28" height="28" /><strong>Bot Token</strong></button>
+							<button type="button" class:active={telegramAuthMethod === 'bot_token'} onclick={() => { selectTelegramAuthMethod('bot_token'); continueTelegramWizard('details'); }}><Icon icon="tabler:key" width="28" height="28" /><strong>{_('Bot Token')}</strong></button>
 						{/if}
-						<button type="button" class:active={telegramAuthMethod === 'fixture'} onclick={() => { selectTelegramAuthMethod('fixture'); continueTelegramWizard('details'); }}><Icon icon="tabler:flask" width="28" height="28" /><strong>Fixture</strong></button>
+						<button type="button" class:active={telegramAuthMethod === 'fixture'} onclick={() => { selectTelegramAuthMethod('fixture'); continueTelegramWizard('details'); }}><Icon icon="tabler:flask" width="28" height="28" /><strong>{_('Fixture')}</strong></button>
 					</div>
 				</div>
 			{:else}
 					<form class="setup-form" class:telegram-qr-setup-form={telegramAuthMethod === 'qr'} onsubmit={(event) => { event.preventDefault(); telegramAuthMethod === 'qr' ? submitTelegramQrStepFromWizard() : void saveTelegramAccountFromWizard(); }}>
-						<button type="button" class="wizard-back wide" onclick={() => continueTelegramWizard('auth')}><Icon icon="tabler:arrow-left" width="15" height="15" />Login</button>
+						<button type="button" class="wizard-back wide" onclick={() => continueTelegramWizard('auth')}><Icon icon="tabler:arrow-left" width="15" height="15" />{_('Login')}</button>
 					{#if telegramAuthMethod !== 'qr'}
-						<label><span>Account ID</span><input bind:value={telegramAccountForm.account_id} autocomplete="off" /></label>
-						<label><span>Display name</span><input bind:value={telegramAccountForm.display_name} autocomplete="off" /></label>
+						<label><span>{_('Account ID')}</span><input bind:value={telegramAccountForm.account_id} autocomplete="off" /></label>
+						<label><span>{_('Display name')}</span><input bind:value={telegramAccountForm.display_name} autocomplete="off" /></label>
 					{/if}
 					{#if telegramAuthMethod === 'phone'}
-						<label class="wide"><span>Phone number</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="tel" placeholder="+15551234567" /></label>
+						<label class="wide"><span>{_('Phone number')}</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="tel" placeholder={_('+15551234567')} /></label>
 					{:else if telegramAuthMethod === 'qr'}
 						<div class="qr-login-panel telegram-qr-panel wide" class:large={Boolean(telegramQrLogin?.qr_svg)}>
 							{#if telegramQrLogin?.qr_svg}
-								<div class="qr-svg" aria-label="Telegram QR code">{@html telegramQrLogin.qr_svg}</div>
+								<div class="qr-svg" aria-label={_('Telegram QR code')}>{@html telegramQrLogin.qr_svg}</div>
 							{:else if telegramQrIsPreparing}
-								<div class="qr-skeleton" aria-label="Loading Telegram QR code">
+								<div class="qr-skeleton" aria-label={_('Loading Telegram QR code')}>
 									<span></span>
 									<span></span>
 									<span></span>
@@ -1123,55 +1123,55 @@
 								<Icon icon="tabler:qrcode" width="58" height="58" />
 							{/if}
 							<div class="qr-login-copy">
-								<strong>{telegramQrLogin ? telegramQrStatusLabel(telegramQrLogin.status) : telegramQrIsPreparing ? 'Preparing QR login' : 'QR login'}</strong>
-								<p>{telegramQrLogin?.message ?? (telegramQrIsPreparing ? 'Requesting a fresh Telegram QR code...' : 'Telegram QR login starts automatically for this account.')}</p>
-								<p class="qr-account-hint">Account ID: {telegramAccountForm.account_id}</p>
+								<strong>{telegramQrLogin ? telegramQrStatusLabel(telegramQrLogin.status) : telegramQrIsPreparing ? _('Preparing QR login') : _('QR login')}</strong>
+								<p>{telegramQrLogin?.message ?? (telegramQrIsPreparing ? _('Requesting a fresh Telegram QR code...') : _('Telegram QR login starts automatically for this account.'))}</p>
+								<p class="qr-account-hint">{_('Account ID')}: {telegramAccountForm.account_id}</p>
 								{#if telegramQrLogin?.qr_link}
-									<a href={telegramQrLogin.qr_link}>Open Telegram login link</a>
+									<a href={telegramQrLogin.qr_link}>{_('Open Telegram login link')}</a>
 								{/if}
 							</div>
 						</div>
 						{#if telegramQrLogin?.status === 'waiting_password'}
-							<label class="wide"><span>Telegram Cloud Password</span><input bind:value={telegramQrPassword} type="password" autocomplete="current-password" /></label>
+							<label class="wide"><span>{_('Telegram Cloud Password')}</span><input bind:value={telegramQrPassword} type="password" autocomplete="current-password" /></label>
 						{/if}
 					{:else}
-						<label class="wide"><span>External ID</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="off" /></label>
+						<label class="wide"><span>{_('External ID')}</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="off" /></label>
 					{/if}
 					{#if telegramNeedsFormAppCredentials}
-						<label><span>API ID</span><input bind:value={telegramAccountForm.api_id} inputmode="numeric" autocomplete="off" /></label>
-						<label><span>API hash</span><input bind:value={telegramAccountForm.api_hash} type="password" autocomplete="off" /></label>
-						<label class="wide"><span>Session encryption key</span><input bind:value={telegramAccountForm.session_encryption_key} type="password" autocomplete="off" /></label>
+						<label><span>{_('API ID')}</span><input bind:value={telegramAccountForm.api_id} inputmode="numeric" autocomplete="off" /></label>
+						<label><span>{_('API hash')}</span><input bind:value={telegramAccountForm.api_hash} type="password" autocomplete="off" /></label>
+						<label class="wide"><span>{_('Session encryption key')}</span><input bind:value={telegramAccountForm.session_encryption_key} type="password" autocomplete="off" /></label>
 					{/if}
 					{#if telegramAuthMethod === 'bot_token'}
-						<label class="wide"><span>Bot token</span><input bind:value={telegramAccountForm.bot_token} type="password" autocomplete="off" /></label>
+						<label class="wide"><span>{_('Bot token')}</span><input bind:value={telegramAccountForm.bot_token} type="password" autocomplete="off" /></label>
 					{/if}
 						<div class="wizard-note wide">
 							{telegramWizardNote()}
 						</div>
 						<div class="form-actions wide">
 							{#if telegramAuthMethod === 'qr'}
-								<button type="button" class="secondary-action" onclick={closeAccountDrawer}>Cancel QR login</button>
+								<button type="button" class="secondary-action" onclick={closeAccountDrawer}>{_('Cancel QR login')}</button>
 								{#if telegramQrLogin?.status === 'waiting_password'}
-									<button type="submit" disabled={isTelegramActionSubmitting || !telegramQrPassword}>Continue</button>
+									<button type="submit" disabled={isTelegramActionSubmitting || !telegramQrPassword}>{_('Continue')}</button>
 								{/if}
 								{#if telegramQrLogin?.status === 'ready'}
-									<button type="button" onclick={() => void saveTelegramAccountFromWizard()} disabled={isTelegramActionSubmitting}>Save Account</button>
+									<button type="button" onclick={() => void saveTelegramAccountFromWizard()} disabled={isTelegramActionSubmitting}>{_('Save Account')}</button>
 								{/if}
 							{:else}
-								<button type="submit" disabled={isTelegramActionSubmitting}>{telegramAuthMethod === 'fixture' ? 'Save Fixture' : 'Save Live Record'}</button>
+								<button type="submit" disabled={isTelegramActionSubmitting}>{telegramAuthMethod === 'fixture' ? _('Save Fixture') : _('Save Live Record')}</button>
 							{/if}
 						</div>
 					</form>
 			{/if}
 		{:else if accountWizardKind === 'whatsapp'}
 			<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void setupWhatsappWebFixture(); }}>
-				<label><span>Account ID</span><input bind:value={whatsappAccountForm.account_id} autocomplete="off" /></label>
-				<label><span>Display name</span><input bind:value={whatsappAccountForm.display_name} autocomplete="off" /></label>
-				<label><span>External ID</span><input bind:value={whatsappAccountForm.external_account_id} autocomplete="off" /></label>
-				<label><span>Device name</span><input bind:value={whatsappAccountForm.device_name} autocomplete="off" /></label>
-				<label class="wide"><span>Local state path</span><input bind:value={whatsappAccountForm.local_state_path} autocomplete="off" /></label>
-				<div class="wizard-note wide">WhatsApp Web live runtime remains blocked; this creates a fixture companion-session record.</div>
-				<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting}>Save Fixture</button></div>
+				<label><span>{_('Account ID')}</span><input bind:value={whatsappAccountForm.account_id} autocomplete="off" /></label>
+				<label><span>{_('Display name')}</span><input bind:value={whatsappAccountForm.display_name} autocomplete="off" /></label>
+				<label><span>{_('External ID')}</span><input bind:value={whatsappAccountForm.external_account_id} autocomplete="off" /></label>
+				<label><span>{_('Device name')}</span><input bind:value={whatsappAccountForm.device_name} autocomplete="off" /></label>
+				<label class="wide"><span>{_('Local state path')}</span><input bind:value={whatsappAccountForm.local_state_path} autocomplete="off" /></label>
+				<div class="wizard-note wide">{_('WhatsApp Web live runtime remains blocked; this creates a fixture companion-session record.')}</div>
+				<div class="form-actions wide"><button type="submit" disabled={isWhatsappActionSubmitting}>{_('Save Fixture')}</button></div>
 			</form>
 		{/if}
 

@@ -1,6 +1,9 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import { currentLocale, t } from '$lib/i18n';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		telegramClosureCapabilities: unknown[];
@@ -65,22 +68,22 @@
 	<div class="widget-frame stacked-rail" class:editing={isLayoutEditing} data-widget-id="telegram-sync-controls" data-widget-hidden={!isWidgetVisible('telegram-sync-controls')}>
 		<WidgetEditChrome widgetId="telegram-sync-controls" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 		<section class="panel info-card">
-		<h2>Account Setup</h2>
+		<h2>{_('Account Setup')}</h2>
 		<div class="setup-summary-card">
 			<span class="round-icon purple"><Icon icon="tabler:brand-telegram" width="22" height="22" /></span>
 			<div>
-				<strong>{telegramProviderAccounts.length} Telegram accounts</strong>
-				<p>{telegramProviderAccounts.length ? 'User and bot records are available for ingestion and policies.' : 'No Telegram account record is configured yet.'}</p>
+				<strong>{telegramProviderAccounts.length} {_('Telegram accounts')}</strong>
+				<p>{telegramProviderAccounts.length ? _('User and bot records are available for ingestion and policies.') : _('No Telegram account record is configured yet.')}</p>
 			</div>
 		</div>
 		<div class="form-actions wide">
-			<button type="button" onclick={() => openAccountDrawer('telegram')} disabled={isTelegramActionSubmitting}>Open Wizard</button>
+			<button type="button" onclick={() => openAccountDrawer('telegram')} disabled={isTelegramActionSubmitting}>{_('Open Wizard')}</button>
 		</div>
 		</section>
 
 		<section class="panel info-card">
-		<h2>Runtime Guardrails</h2>
-		<div class="health-row"><span>Mode</span><strong>{(telegramCapabilities as Record<string, unknown>)?.runtime_mode ?? 'unknown' as string}</strong></div>
+		<h2>{_('Runtime Guardrails')}</h2>
+		<div class="health-row"><span>{_('Mode')}</span><strong>{(telegramCapabilities as Record<string, unknown>)?.runtime_mode ?? _('unknown') as string}</strong></div>
 		{#if telegramClosureCapabilities.length}
 			<ul class="detail-list">
 				{#each telegramClosureCapabilities as capability}
@@ -88,30 +91,30 @@
 				{/each}
 			</ul>
 		{:else}
-			<p>Capability contract is not loaded yet.</p>
+			<p>{_('Capability contract is not loaded yet.')}</p>
 		{/if}
 		{#if telegramBlockedCapabilities.length}
 			<div class="evidence-row">
-				<strong>Blocked Live Runtime</strong>
+				<strong>{_('Blocked Live Runtime')}</strong>
 				<p>{telegramBlockedCapabilities.map((capability) => capabilityLabel((capability as Record<string, unknown>).capability as string)).join(', ')}</p>
 			</div>
 		{/if}
 		{#if (telegramCapabilities as Record<string, unknown>)?.unsupported_features && ((telegramCapabilities as Record<string, unknown>).unsupported_features as unknown[]).length}
 			<div class="evidence-row">
-				<strong>Telegram Scope</strong>
+				<strong>{_('Telegram Scope')}</strong>
 				<p>{((telegramCapabilities as Record<string, unknown>).unsupported_features as unknown[]).map(capabilityLabel as unknown as (f: unknown) => string).join(', ')}</p>
 			</div>
 		{/if}
 		</section>
 
 		<section class="panel info-card">
-		<h2>Template</h2>
+		<h2>{_('Template')}</h2>
 		<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveTelegramAutomationTemplate(); }}>
-			<label><span>Template ID</span><input bind:value={automationTemplateForm.template_id} autocomplete="off" /></label>
-			<label><span>Name</span><input bind:value={automationTemplateForm.name} autocomplete="off" /></label>
-			<label class="wide"><span>Body</span><textarea bind:value={automationTemplateForm.body_template} rows="3"></textarea></label>
-			<label class="wide"><span>Required variables</span><input bind:value={automationTemplateForm.required_variables_text} autocomplete="off" /></label>
-			<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>Save Template</button></div>
+			<label><span>{_('Template ID')}</span><input bind:value={automationTemplateForm.template_id} autocomplete="off" /></label>
+			<label><span>{_('Name')}</span><input bind:value={automationTemplateForm.name} autocomplete="off" /></label>
+			<label class="wide"><span>{_('Body')}</span><textarea bind:value={automationTemplateForm.body_template} rows="3"></textarea></label>
+			<label class="wide"><span>{_('Required variables')}</span><input bind:value={automationTemplateForm.required_variables_text} autocomplete="off" /></label>
+			<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>{_('Save Template')}</button></div>
 		</form>
 		{#if automationTemplates.length}
 			<ul class="detail-list">
@@ -123,30 +126,30 @@
 		</section>
 
 		<section class="panel info-card">
-		<h2>Policy</h2>
+		<h2>{_('Policy')}</h2>
 		<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveTelegramAutomationPolicy(); }}>
-			<label><span>Policy ID</span><input bind:value={automationPolicyForm.policy_id} autocomplete="off" /></label>
-			<label><span>Template ID</span><input bind:value={automationPolicyForm.template_id} autocomplete="off" /></label>
-			<label><span>Name</span><input bind:value={automationPolicyForm.name} autocomplete="off" /></label>
-			<label><span>Account ID</span><input bind:value={automationPolicyForm.account_id} autocomplete="off" /></label>
-			<label class="wide"><span>Allowed chat IDs</span><input bind:value={automationPolicyForm.allowed_chat_ids_text} autocomplete="off" /></label>
-			<label><span>Trigger</span><input bind:value={automationPolicyForm.trigger_kind} autocomplete="off" /></label>
-			<label><span>Max/hour</span><input bind:value={automationPolicyForm.max_sends_per_hour} type="number" min="1" max="100" /></label>
-			<label class="wide"><span>Quiet hours JSON</span><textarea bind:value={automationPolicyForm.quiet_hours_text} rows="2"></textarea></label>
-			<label class="wide"><span>Conditions JSON</span><textarea bind:value={automationPolicyForm.conditions_text} rows="2"></textarea></label>
-			<label class="checkbox-row"><input bind:checked={automationPolicyForm.enabled} type="checkbox" /><span>Enabled</span></label>
-			<div class="form-actions"><button type="submit" disabled={isTelegramActionSubmitting}>Save Policy</button></div>
+			<label><span>{_('Policy ID')}</span><input bind:value={automationPolicyForm.policy_id} autocomplete="off" /></label>
+			<label><span>{_('Template ID')}</span><input bind:value={automationPolicyForm.template_id} autocomplete="off" /></label>
+			<label><span>{_('Name')}</span><input bind:value={automationPolicyForm.name} autocomplete="off" /></label>
+			<label><span>{_('Account ID')}</span><input bind:value={automationPolicyForm.account_id} autocomplete="off" /></label>
+			<label class="wide"><span>{_('Allowed chat IDs')}</span><input bind:value={automationPolicyForm.allowed_chat_ids_text} autocomplete="off" /></label>
+			<label><span>{_('Trigger')}</span><input bind:value={automationPolicyForm.trigger_kind} autocomplete="off" /></label>
+			<label><span>{_('Max/hour')}</span><input bind:value={automationPolicyForm.max_sends_per_hour} type="number" min="1" max="100" /></label>
+			<label class="wide"><span>{_('Quiet hours JSON')}</span><textarea bind:value={automationPolicyForm.quiet_hours_text} rows="2"></textarea></label>
+			<label class="wide"><span>{_('Conditions JSON')}</span><textarea bind:value={automationPolicyForm.conditions_text} rows="2"></textarea></label>
+			<label class="checkbox-row"><input bind:checked={automationPolicyForm.enabled} type="checkbox" /><span>{_('Enabled')}</span></label>
+			<div class="form-actions"><button type="submit" disabled={isTelegramActionSubmitting}>{_('Save Policy')}</button></div>
 		</form>
 		</section>
 
 		<section class="panel info-card">
-		<h2>Dry Run</h2>
+		<h2>{_('Dry Run')}</h2>
 		<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void runTelegramAutomationDryRun(); }}>
-			<label><span>Policy ID</span><input bind:value={telegramSendForm.policy_id} autocomplete="off" /></label>
-			<label><span>Chat ID</span><input bind:value={telegramSendForm.provider_chat_id} autocomplete="off" /></label>
-			<label class="wide"><span>Variables JSON</span><textarea bind:value={telegramSendForm.variables_text} rows="3"></textarea></label>
-			<label class="wide"><span>Source context JSON</span><textarea bind:value={telegramSendForm.source_context_text} rows="2"></textarea></label>
-			<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>Run Dry-run</button></div>
+			<label><span>{_('Policy ID')}</span><input bind:value={telegramSendForm.policy_id} autocomplete="off" /></label>
+			<label><span>{_('Chat ID')}</span><input bind:value={telegramSendForm.provider_chat_id} autocomplete="off" /></label>
+			<label class="wide"><span>{_('Variables JSON')}</span><textarea bind:value={telegramSendForm.variables_text} rows="3"></textarea></label>
+			<label class="wide"><span>{_('Source context JSON')}</span><textarea bind:value={telegramSendForm.source_context_text} rows="2"></textarea></label>
+			<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>{_('Run Dry-run')}</button></div>
 		</form>
 		{#if telegramSendDryRunResult}
 			<div class="evidence-row">
@@ -161,7 +164,7 @@
 	<div class="widget-frame stacked-rail" class:editing={isLayoutEditing} data-widget-id="telegram-selected-chat-metadata" data-widget-hidden={!isWidgetVisible('telegram-selected-chat-metadata')}>
 		<WidgetEditChrome widgetId="telegram-selected-chat-metadata" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 		<section class="panel info-card">
-		<h2>Calls</h2>
+		<h2>{_('Calls')}</h2>
 		{#if telegramCalls.length}
 			{#each (telegramCalls as unknown[]).slice(0, 4) as call}
 				<button type="button" class="collection-row as-button" class:active={(selectedTelegramCall as Record<string, unknown>)?.call_id === (call as Record<string, unknown>).call_id} onclick={() => selectTelegramCall(call)}>
@@ -170,24 +173,24 @@
 				</button>
 			{/each}
 		{:else}
-			<p>No calls saved.</p>
+			<p>{_('No calls saved.')}</p>
 		{/if}
 		<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveTelegramCallFixture(); }}>
-			<label><span>Call ID</span><input bind:value={telegramCallForm.call_id} autocomplete="off" /></label>
-			<label><span>Provider call ID</span><input bind:value={telegramCallForm.provider_call_id} autocomplete="off" /></label>
-			<label><span>Account ID</span><input bind:value={telegramCallForm.account_id} autocomplete="off" /></label>
-			<label><span>Chat ID</span><input bind:value={telegramCallForm.provider_chat_id} autocomplete="off" /></label>
-			<label><span>Direction</span><select bind:value={telegramCallForm.direction}><option value="incoming">Incoming</option><option value="outgoing">Outgoing</option></select></label>
-			<label><span>State</span><select bind:value={telegramCallForm.call_state}><option value="ringing">Ringing</option><option value="active">Active</option><option value="ended">Ended</option><option value="missed">Missed</option><option value="declined">Declined</option><option value="failed">Failed</option></select></label>
-			<label class="wide"><span>Metadata JSON</span><textarea bind:value={telegramCallForm.metadata_text} rows="2"></textarea></label>
-			<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>Save Call</button></div>
+			<label><span>{_('Call ID')}</span><input bind:value={telegramCallForm.call_id} autocomplete="off" /></label>
+			<label><span>{_('Provider call ID')}</span><input bind:value={telegramCallForm.provider_call_id} autocomplete="off" /></label>
+			<label><span>{_('Account ID')}</span><input bind:value={telegramCallForm.account_id} autocomplete="off" /></label>
+			<label><span>{_('Chat ID')}</span><input bind:value={telegramCallForm.provider_chat_id} autocomplete="off" /></label>
+			<label><span>{_('Direction')}</span><select bind:value={telegramCallForm.direction}><option value="incoming">{_('Incoming')}</option><option value="outgoing">{_('Outgoing')}</option></select></label>
+			<label><span>{_('State')}</span><select bind:value={telegramCallForm.call_state}><option value="ringing">{_('Ringing')}</option><option value="active">{_('Active')}</option><option value="ended">{_('Ended')}</option><option value="missed">{_('Missed')}</option><option value="declined">{_('Declined')}</option><option value="failed">{_('Failed')}</option></select></label>
+			<label class="wide"><span>{_('Metadata JSON')}</span><textarea bind:value={telegramCallForm.metadata_text} rows="2"></textarea></label>
+			<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting}>{_('Save Call')}</button></div>
 		</form>
 		</section>
 
 		<section class="panel info-card">
-		<h2>Transcript</h2>
+		<h2>{_('Transcript')}</h2>
 		{#if selectedTelegramCall}
-			<div class="health-row"><span>Selected call</span><strong>{(selectedTelegramCall as Record<string, unknown>).call_id as string}</strong></div>
+			<div class="health-row"><span>{_('Selected call')}</span><strong>{(selectedTelegramCall as Record<string, unknown>).call_id as string}</strong></div>
 		{/if}
 		{#if callTranscript}
 			<div class="evidence-row">
@@ -195,14 +198,14 @@
 				<p>{(callTranscript as Record<string, unknown>).transcript_text as string}</p>
 			</div>
 		{:else}
-			<p>No transcript for selected call.</p>
+			<p>{_('No transcript for selected call.')}</p>
 		{/if}
 		<form class="setup-form compact-form" onsubmit={(event) => { event.preventDefault(); void saveCallTranscriptFixtureFromUi(); }}>
-			<label><span>Transcript ID</span><input bind:value={transcriptForm.transcript_id} autocomplete="off" /></label>
-			<label><span>Audio ref</span><input bind:value={transcriptForm.source_audio_ref} autocomplete="off" /></label>
-			<label><span>Language</span><input bind:value={transcriptForm.language_code} autocomplete="off" /></label>
-			<label class="checkbox-row"><input bind:checked={transcriptForm.always_on_policy} type="checkbox" /><span>Always-on policy</span></label>
-			<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting || !selectedTelegramCallId}>Save Transcript</button></div>
+			<label><span>{_('Transcript ID')}</span><input bind:value={transcriptForm.transcript_id} autocomplete="off" /></label>
+			<label><span>{_('Audio ref')}</span><input bind:value={transcriptForm.source_audio_ref} autocomplete="off" /></label>
+			<label><span>{_('Language')}</span><input bind:value={transcriptForm.language_code} autocomplete="off" /></label>
+			<label class="checkbox-row"><input bind:checked={transcriptForm.always_on_policy} type="checkbox" /><span>{_('Always-on policy')}</span></label>
+			<div class="form-actions wide"><button type="submit" disabled={isTelegramActionSubmitting || !selectedTelegramCallId}>{_('Save Transcript')}</button></div>
 		</form>
 		</section>
 	</div>

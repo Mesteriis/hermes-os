@@ -75,16 +75,16 @@
 		<div class="header-actions">
 			<button type="button" class="segmented active"><Icon icon="tabler:message" width="16" height="16" /></button>
 			<button type="button" class="segmented" disabled><Icon icon="tabler:layout-grid" width="16" height="16" /></button>
-			<button type="button" class="primary-button">New Message</button>
+			<button type="button" class="primary-button">{_('New Message')}</button>
 		</div>
 	</div>
 	<div class="filter-tabs">
-			<button type="button" class:active={$mailStateFilter === ''} onclick={() => void selectCommunicationSection('unified')}>Unified <em>{$communicationMessages.length}</em></button>
-			<button type="button" class:active={$mailStateFilter === 'needs_action'} onclick={() => void selectCommunicationSection('needs_reply')}>Needs Reply <em>{$mailStateCounts.find(c => c.state === 'needs_action')?.count ?? 0}</em></button>
-			<button type="button" class:active={$mailStateFilter === 'waiting'} onclick={() => void selectCommunicationSection('waiting')}>Waiting <em>{$mailStateCounts.find(c => c.state === 'waiting')?.count ?? 0}</em></button>
-			<button type="button" class:active={$mailStateFilter === 'new'} onclick={() => void selectCommunicationSection('inbox')}>Inbox <em>{$mailStateCounts.find(c => c.state === 'new')?.count ?? 0}</em></button>
-			<button type="button" class:active={$mailStateFilter === 'done'} onclick={() => { mailStateFilter.set('done'); void loadCommunicationMessagesFiltered('done'); }}>Done <em>{$mailStateCounts.find(c => c.state === 'done')?.count ?? 0}</em></button>
-			<button type="button" class:active={$mailStateFilter === 'archived'} onclick={() => { mailStateFilter.set('archived'); void loadCommunicationMessagesFiltered('archived'); }}>Archived <em>{$mailStateCounts.find(c => c.state === 'archived')?.count ?? 0}</em></button>
+			<button type="button" class:active={$mailStateFilter === ''} onclick={() => void selectCommunicationSection('unified')}>{_('Unified')} <em>{$communicationMessages.length}</em></button>
+			<button type="button" class:active={$mailStateFilter === 'needs_action'} onclick={() => void selectCommunicationSection('needs_reply')}>{_('Needs Reply')} <em>{$mailStateCounts.find(c => c.state === 'needs_action')?.count ?? 0}</em></button>
+			<button type="button" class:active={$mailStateFilter === 'waiting'} onclick={() => void selectCommunicationSection('waiting')}>{_('Waiting')} <em>{$mailStateCounts.find(c => c.state === 'waiting')?.count ?? 0}</em></button>
+			<button type="button" class:active={$mailStateFilter === 'new'} onclick={() => void selectCommunicationSection('inbox')}>{_('Inbox')} <em>{$mailStateCounts.find(c => c.state === 'new')?.count ?? 0}</em></button>
+			<button type="button" class:active={$mailStateFilter === 'done'} onclick={() => { mailStateFilter.set('done'); void loadCommunicationMessagesFiltered('done'); }}>{_('Done')} <em>{$mailStateCounts.find(c => c.state === 'done')?.count ?? 0}</em></button>
+			<button type="button" class:active={$mailStateFilter === 'archived'} onclick={() => { mailStateFilter.set('archived'); void loadCommunicationMessagesFiltered('archived'); }}>{_('Archived')} <em>{$mailStateCounts.find(c => c.state === 'archived')?.count ?? 0}</em></button>
 	</div>
 	<div class="three-pane communications-grid">
 		<CommunicationsConversationList

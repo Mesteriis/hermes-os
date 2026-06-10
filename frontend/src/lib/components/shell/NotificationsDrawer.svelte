@@ -45,16 +45,16 @@
 	<button
 		type="button"
 		class="notifications-backdrop"
-		aria-label="Close notifications"
+		aria-label={_('Close notifications')}
 		onclick={closeNotificationsDrawer}
 	></button>
-	<aside id="notifications-drawer" class="notifications-drawer" aria-label="Notifications">
+	<aside id="notifications-drawer" class="notifications-drawer" aria-label={_('Notifications')}>
 		<header>
 			<div>
 				<h2>{_('Notifications')}</h2>
-				<p>{notificationItems.length} active</p>
+				<p>{notificationItems.length} {_('active')}</p>
 			</div>
-			<button type="button" class="icon-button" aria-label="Close notifications" onclick={closeNotificationsDrawer}>
+			<button type="button" class="icon-button" aria-label={_('Close notifications')} onclick={closeNotificationsDrawer}>
 				<Icon icon="tabler:x" width="18" height="18" />
 			</button>
 		</header>
@@ -88,13 +88,13 @@
 								aria-expanded={isNotificationExpanded(notification.id, $expandedNotificationIds)}
 								onclick={() => toggleNotificationExpanded(notification.id)}
 							>
-								{isNotificationExpanded(notification.id, $expandedNotificationIds) ? 'Show less' : 'Show full text'}
+								{isNotificationExpanded(notification.id, $expandedNotificationIds) ? _('Show less') : _('Show full text')}
 							</button>
 						{/if}
 						<button
 							type="button"
 							class="notification-dismiss"
-							aria-label={`Dismiss ${notification.title}`}
+							aria-label={_('Dismiss notification')}
 							onclick={(event) => {
 								event.stopPropagation();
 								dismissNotification(notification.id);

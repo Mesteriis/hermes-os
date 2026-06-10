@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { currentLocale, t } from '$lib/i18n';
 	import Icon from '@iconify/svelte';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	type Note = { title: string; body: string; source: string; tag: string; time: string; icon: string };
 
@@ -16,7 +19,7 @@
 <div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="notes-list" data-widget-hidden={!isWidgetVisible('notes-list')}>
 	<WidgetEditChrome widgetId="notes-list" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 	<div class="notes-main-list">
-		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search notes..." /></label>
+		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder={_('Search notes...')} /></label>
 		{#each notes as note}
 			<article class="note-card">
 				<span class="round-icon"><Icon icon={note.icon} width="22" height="22" /></span>

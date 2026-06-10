@@ -45,10 +45,10 @@
 			type="button"
 			class="icon-button"
 			class:active={$isNotificationsDrawerOpen}
-			aria-label="Open notifications"
+			aria-label={_('Open notifications')}
 			aria-expanded={$isNotificationsDrawerOpen}
 			aria-controls="notifications-drawer"
-			title="Open notifications"
+			title={_('Open notifications')}
 			onclick={onToggleNotifications}
 		>
 			<Icon icon="tabler:bell" width="18" height="18" />
@@ -60,18 +60,18 @@
 			<button
 				type="button"
 				class="menu-button"
-				aria-label="Open user menu"
+				aria-label={_('Open user menu')}
 				aria-haspopup="menu"
 				aria-expanded={isUserMenuOpen}
 				aria-controls="user-menu"
 				onclick={onToggleUserMenu}
-				title="Open user menu"
+				title={_('Open user menu')}
 			>
 				<Icon icon="tabler:menu-2" width="20" height="20" />
 			</button>
 			{#if isUserMenuOpen}
-				<button type="button" class="user-menu-backdrop" aria-label="Close user menu" onclick={onCloseUserMenu}></button>
-				<div id="user-menu" class="user-menu" role="menu" aria-label="User menu">
+				<button type="button" class="user-menu-backdrop" aria-label={_('Close user menu')} onclick={onCloseUserMenu}></button>
+				<div id="user-menu" class="user-menu" role="menu" aria-label={_('User menu')}>
 					<button type="button" role="menuitem" onclick={onStartLayoutEditing} disabled={isLayoutEditing}>
 						<Icon icon="tabler:layout-dashboard" width="16" height="16" />
 						<span>{_('Constructor Mode')}</span>

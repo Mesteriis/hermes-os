@@ -39,63 +39,63 @@
 	}: Props = $props();
 </script>
 
-<section class="vault-onboarding" aria-label="Secure vault onboarding" onmousemove={onEntropyMove}>
+<section class="vault-onboarding" aria-label={_('Secure vault onboarding')} onmousemove={onEntropyMove}>
 	<div class="vault-panel">
 		<div class="vault-panel__header">
 			<div class="vault-emblem"><Icon icon="tabler:shield-lock" width="30" height="30" /></div>
 			<div>
-				<p class="vault-kicker">Hermes Secure Vault</p>
-				<h1>Create Your Personal Secure Vault</h1>
+				<p class="vault-kicker">{_('Hermes Secure Vault')}</p>
+				<h1>{_('Create Your Personal Secure Vault')}</h1>
 			</div>
 		</div>
 
 		{#if wizardStep === 'intro'}
 			<div class="vault-step">
-				<p>Hermes Hub encrypts credentials stored on this Mac. Secrets live in a dedicated host vault under <strong>~/.hermes/vault</strong>; PostgreSQL keeps only non-secret bindings.</p>
-				<p class="vault-warning">Если потерять recovery phrase/file, доступ к зашифрованным секретам может стать невозможным.</p>
+				<p>{_('Hermes Hub encrypts credentials stored on this device. Secrets live in a dedicated host vault; PostgreSQL keeps only non-secret bindings.')}</p>
+				<p class="vault-warning">{_('If you lose the recovery phrase or file, access to encrypted secrets may become impossible.')}</p>
 				<div class="vault-actions">
-					<button type="button" onclick={onStartWizard}>Start Entropy Collection</button>
+					<button type="button" onclick={onStartWizard}>{_('Start Entropy Collection')}</button>
 				</div>
 			</div>
 		{:else if wizardStep === 'entropy'}
 			<div class="vault-step">
-				<p>Move your mouse around the screen. Hermes combines OS randomness, timing entropy and mouse movement before creating the master key.</p>
+				<p>{_('Move your mouse around the screen. Hermes combines OS randomness, timing entropy and mouse movement before creating the master key.')}</p>
 				<div class="vault-entropy-canvas">
 					<div class="vault-entropy-meter">
-						<span>Entropy</span>
+						<span>{_('Entropy')}</span>
 						<strong>{status?.entropy_progress ?? 0}%</strong>
 					</div>
 					<progress class="vault-progress" value={status?.entropy_progress ?? 0} max="100"></progress>
 					<p>{Math.min(entropyEventsCount, 2000)} / 2000 events</p>
 				</div>
 				<div class="vault-actions">
-					<button type="button" onclick={onCreateVault} disabled={(status?.entropy_progress ?? 0) < 100 || isActionSubmitting}>Create Vault</button>
+					<button type="button" onclick={onCreateVault} disabled={(status?.entropy_progress ?? 0) < 100 || isActionSubmitting}>{_('Create Vault')}</button>
 				</div>
 			</div>
 		{:else if wizardStep === 'biometric'}
 			<div class="vault-step">
-				<p>Vault material is ready. In release runtime Hermes will use macOS Keychain as source-of-truth for the master key. Docker dev uses the configured dev key path.</p>
+				<p>{_('Vault material is ready. In release runtime Hermes will use macOS Keychain as source-of-truth for the master key. Docker dev uses the configured dev key path.')}</p>
 				<div class="vault-actions">
-					<button type="button" onclick={onCreateVault} disabled={isActionSubmitting}>Create Vault</button>
-					<button type="button" onclick={onUnlockVault} disabled={isActionSubmitting}>Unlock Existing Vault</button>
+					<button type="button" onclick={onCreateVault} disabled={isActionSubmitting}>{_('Create Vault')}</button>
+					<button type="button" onclick={onUnlockVault} disabled={isActionSubmitting}>{_('Unlock Existing Vault')}</button>
 				</div>
 			</div>
 		{:else if wizardStep === 'recovery'}
 			<div class="vault-step">
-				<p>Export recovery material before continuing. Store the phrase and file safely outside Hermes.</p>
-				<p class="vault-warning">Без recovery phrase/file восстановление после переустановки или потери Keychain-доступа невозможно.</p>
+				<p>{_('Export recovery material before continuing. Store the phrase and file safely outside Hermes.')}</p>
+				<p class="vault-warning">{_('Without the recovery phrase or file, restoration after reinstall or Keychain access loss is impossible.')}</p>
 				<div class="vault-actions">
-					<button type="button" onclick={onExportRecovery} disabled={isActionSubmitting}>Export Recovery</button>
+					<button type="button" onclick={onExportRecovery} disabled={isActionSubmitting}>{_('Export Recovery')}</button>
 				</div>
 			</div>
 		{:else}
 			<div class="vault-step">
-				<p>Vault is ready. Recovery file: <strong>{recovery?.path ?? '~/.hermes/vault/hermes-recovery.key'}</strong></p>
+				<p>{_('Vault is ready.')} {_('Recovery file')}: <strong>{recovery?.path ?? '~/.hermes/vault/hermes-recovery.key'}</strong></p>
 				{#if recovery?.recovery_phrase}
 					<div class="vault-recovery-phrase">{recovery.recovery_phrase}</div>
 				{/if}
 				<div class="vault-actions">
-					<button type="button" onclick={onContinue}>Continue</button>
+					<button type="button" onclick={onContinue}>{_('Continue')}</button>
 				</div>
 			</div>
 		{/if}

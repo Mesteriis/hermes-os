@@ -1,6 +1,9 @@
 <script lang="ts">
+	import { currentLocale, t } from '$lib/i18n';
 	import Icon from '@iconify/svelte';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+
+	const _ = (key: string) => t($currentLocale, key);
 
 	type Doc = { name: string; source: string; project: string; type: string; date: string; size: string; icon: string; tone: string };
 
@@ -17,8 +20,8 @@
 	<WidgetEditChrome widgetId="documents-list" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 	<div class="document-main-list">
 		<div class="document-filter-bar">
-			<div class="segmented"><button type="button" class="segmented active">All</button><button type="button" class="segmented">Shared</button><button type="button" class="segmented">Recent</button></div>
-			<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder="Search documents..." /></label>
+			<div class="segmented"><button type="button" class="segmented active">{_('All')}</button><button type="button" class="segmented">{_('Shared')}</button><button type="button" class="segmented">{_('Recent')}</button></div>
+			<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder={_('Search documents...')} /></label>
 		</div>
 		{#each documents as doc}
 			<article class="document-row">
