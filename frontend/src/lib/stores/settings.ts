@@ -12,6 +12,7 @@ import {
 } from '$lib/layout';
 import { accountProviderIcon, accountProviderLabel, accountUpdatedLabel } from '$lib/services/accounts';
 import { formatDateTime } from '$lib/services/formatting';
+import { buildIntegrationViewModels } from '$lib/services/integrations';
 import * as settingsService from '$lib/services/settings';
 import {
 	isLayoutSettingsSaving,
@@ -93,6 +94,12 @@ export const contactsProviderAccounts = derived(providerAccounts, ($providerAcco
 			Array.isArray(account.config.connected_services) &&
 			account.config.connected_services.includes('contacts')
 	)
+);
+
+export const integrationViewModels = derived(
+	[providerAccounts, calendarAccounts],
+	([$providerAccounts, $calendarAccounts]) =>
+		buildIntegrationViewModels($providerAccounts, $calendarAccounts)
 );
 
 export {

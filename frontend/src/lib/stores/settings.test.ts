@@ -137,6 +137,18 @@ describe('settings store', () => {
 			expect.objectContaining({ account_id: 'gmail-primary' }),
 			expect.objectContaining({ account_id: 'icloud-primary' })
 		]);
+		expect(get(settingsStore.integrationViewModels).map((integration) => integration.integrationId)).toEqual([
+			'gmail:gmail-primary',
+			'icloud:icloud-primary',
+			'telegram',
+			'whatsapp'
+		]);
+		expect(get(settingsStore.integrationViewModels)[0].services.map((service) => service.state)).toEqual([
+			'ready',
+			'ready',
+			'ready',
+			'not_applicable'
+		]);
 		expect(get(layoutSettings).views.home?.hiddenWidgetIds).toEqual(['home-priorities']);
 		expect(get(sidebarSettings).hiddenItemIds).toEqual(['tasks']);
 		expect(get(themeSettings).shellBackground).toBe('rune-teal');
