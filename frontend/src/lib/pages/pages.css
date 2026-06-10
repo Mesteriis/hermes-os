@@ -2456,8 +2456,7 @@
 	min-width: 0;
 }
 
-.setting-copy code,
-.account-card code {
+.setting-copy code {
 	overflow: hidden;
 	border: 1px solid rgba(111, 205, 195, 0.1);
 	border-radius: var(--hh-radius-pill);
@@ -2841,88 +2840,6 @@
 	white-space: nowrap;
 }
 
-.settings-account-layout {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	grid-auto-rows: minmax(0, 1fr);
-	gap: 12px;
-	width: 100%;
-	min-width: 0;
-	min-height: 0;
-	height: 100%;
-	overflow: hidden;
-}
-
-.account-section {
-	display: flex;
-	flex-direction: column;
-	min-width: 0;
-	min-height: 0;
-	height: 100%;
-}
-
-.account-card-grid {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-	align-content: start;
-	flex: 1 1 auto;
-	gap: 10px;
-	min-height: 0;
-	overflow-x: hidden;
-	overflow-y: auto;
-	padding: 14px;
-	scrollbar-color: rgba(45, 240, 206, 0.25) transparent;
-}
-
-.account-card {
-	display: grid;
-	grid-template-columns: 38px minmax(0, 1fr);
-	gap: 10px;
-	min-height: calc(var(--hh-widget-row) * 5);
-	border: 1px solid rgba(111, 205, 195, 0.1);
-	border-radius: var(--hh-radius-md);
-	background: rgba(4, 21, 24, 0.5);
-	padding: 12px;
-}
-
-.account-card div {
-	min-width: 0;
-}
-
-.account-card strong {
-	display: block;
-	overflow: hidden;
-	color: var(--hh-color-text);
-	font-size: 13px;
-	font-weight: 650;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.account-card p,
-.account-card small {
-	display: block;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.account-card p {
-	margin-top: 4px;
-	color: #c7d9d8;
-	font-size: 12px;
-}
-
-.account-card small {
-	margin-top: 6px;
-	color: var(--hh-color-text-muted);
-	font-size: 11px;
-}
-
-.account-card code {
-	grid-column: 1 / -1;
-}
-
 .setup-state {
 	border-radius: var(--hh-radius-md);
 	font-size: 12px;
@@ -3016,9 +2933,6 @@
 .agent-grid {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
-.account-card-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
 }
 
 @media (max-width: 1359px) {
@@ -3052,9 +2966,6 @@
 .integrations-table-head,
 	.integrations-table-row {
 		grid-template-columns: minmax(180px, 1.3fr) repeat(4, minmax(58px, 0.38fr)) 82px 92px;
-	}
-.account-card-grid {
-		grid-template-columns: minmax(0, 1fr);
 	}
 .week-header strong,
 	.event-block strong {
@@ -3094,13 +3005,6 @@
 	}
 .settings-integration-inspector {
 		min-height: 260px;
-	}
-.settings-account-layout {
-		grid-template-columns: minmax(0, 1fr);
-		grid-auto-rows: minmax(220px, auto);
-		overflow-x: hidden;
-		overflow-y: auto;
-		scrollbar-color: rgba(45, 240, 206, 0.25) transparent;
 	}
 .context-rail,
 	.settings-rail {
