@@ -1,5 +1,6 @@
 import {
 	fetchApplicationSettings,
+	fetchCalendarAccounts,
 	fetchProviderAccounts,
 	saveApplicationSetting,
 	saveFrontendLayoutSetting,
@@ -10,6 +11,7 @@ import {
 	findFrontendThemeSetting,
 	FRONTEND_THEME_SETTING_KEY,
 	type ApplicationSetting,
+	type CalendarAccount,
 	type ProviderAccount
 } from '$lib/api';
 import {
@@ -31,6 +33,7 @@ export type SettingsWorkspaceResult = {
 	sidebarSettings: SidebarSettings;
 	themeSettings: FrontendThemeSettings;
 	providerAccounts: ProviderAccount[];
+	calendarAccounts: CalendarAccount[];
 	settingDrafts: Record<string, string>;
 	locale: Locale | null;
 	layoutError: string;
@@ -42,9 +45,10 @@ export type SettingsWorkspaceResult = {
 
 export async function loadSettingsWorkspace(): Promise<SettingsWorkspaceResult> {
 	try {
-		const [settingsResponse, accountsResponse] = await Promise.all([
+		const [settingsResponse, accountsResponse, calendarAccountsResponse] = await Promise.all([
 			fetchApplicationSettings(),
-			fetchProviderAccounts()
+			fetchProviderAccounts(),
+			fetchCalendarAccounts()
 		]);
 		const frontendLayoutSetting = findFrontendLayoutSetting(settingsResponse.items);
 		const frontendSidebarSetting = findFrontendSidebarSetting(settingsResponse.items);
@@ -69,6 +73,7 @@ export async function loadSettingsWorkspace(): Promise<SettingsWorkspaceResult> 
 			sidebarSettings,
 			themeSettings,
 			providerAccounts: accountsResponse.items,
+			calendarAccounts: calendarAccountsResponse.items,
 			settingDrafts,
 			locale,
 			layoutError: '',
@@ -84,6 +89,7 @@ export async function loadSettingsWorkspace(): Promise<SettingsWorkspaceResult> 
 			sidebarSettings: defaultSidebarSettings(),
 			themeSettings: defaultFrontendThemeSettings(),
 			providerAccounts: [],
+			calendarAccounts: [],
 			settingDrafts: {},
 			locale: null,
 			layoutError: error instanceof Error ? error.message : 'Unknown layout settings error',

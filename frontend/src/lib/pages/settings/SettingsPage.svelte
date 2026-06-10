@@ -11,6 +11,7 @@
 		calendarAccounts,
 		cancelSidebarSettingsEditing,
 		checkboxEventValue,
+		contactsProviderAccounts,
 		effectiveSidebarSettings,
 		emailProviderAccounts,
 		formatDateTime,
@@ -157,6 +158,7 @@
 		providerAccounts={$providerAccounts}
 		calendarAccounts={$calendarAccounts}
 		emailProviderAccounts={$emailProviderAccounts}
+		contactsProviderAccounts={$contactsProviderAccounts}
 		telegramProviderAccounts={$telegramProviderAccounts}
 		whatsappProviderAccounts={$whatsappProviderAccounts}
 		onOpenAccountDrawer={openAccountWizard}

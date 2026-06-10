@@ -4,9 +4,7 @@ import type { VaultStatus as ApiVaultStatus } from '$lib/api';
 export type VaultStatus = ApiVaultStatus | null;
 
 export const vaultStatus = writable<VaultStatus>(null);
-export const isVaultReady = derived(vaultStatus, ($vs) =>
-	$vs?.state === 'locked' || $vs?.state === 'unlocked'
-);
+export const isVaultReady = derived(vaultStatus, ($vs) => $vs?.state === 'unlocked');
 export const vaultOnboardingDismissed = writable(false);
 
 export const vaultWizardStep = writable<'intro' | 'entropy' | 'biometric' | 'recovery' | 'done'>('intro');
@@ -20,6 +18,9 @@ export const vaultStatusError = writable('');
 export const shouldShowVaultOnboarding = derived(
 	[vaultStatus, vaultWizardStep, vaultOnboardingDismissed],
 	([$vaultStatus, $vaultWizardStep, $vaultOnboardingDismissed]) => {
+		if ($vaultStatus?.state === 'locked') {
+			return true;
+		}
 		if ($vaultOnboardingDismissed) {
 			return false;
 		}

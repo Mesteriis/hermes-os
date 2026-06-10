@@ -30,6 +30,7 @@
       "binaries/hermes-hub-backend"
     ],
     "resources": {
+      "resources/google-oauth/": "google-oauth",
       "resources/tdlib/": "tdlib"
     },
     "icon": [

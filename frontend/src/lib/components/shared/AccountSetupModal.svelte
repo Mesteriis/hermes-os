@@ -6,7 +6,6 @@
 	import { apiBaseUrl } from '$lib/config';
 	import {
 		startGmailOAuthSetup,
-		completeGmailOAuthSetup,
 		setupImapAccount,
 		createCalendarAccount,
 		setupTelegramAccount,
@@ -26,16 +25,17 @@
 	} from '$lib/api';
 	import {
 		hasFixedMailServerPreset,
+		createGoogleWorkspaceOAuthStartRequest,
 		mailServiceDisplayName,
 		mailServiceIcon,
 		mailServicePreset,
 		mailServiceAccountPrefix,
-		inferMailService,
 		accountIdFromEmail,
 		calendarProviderDefaultName,
 		createTelegramAccountDraft,
 		providerKindLabel
 	} from '$lib/services/accounts';
+	import { buildGmailOAuthReturnUrl } from '$lib/services/oauth-callback';
 	import { shouldPollTelegramQrLoginStatus } from '$lib/services/telegram';
 
 	const _ = (key: string) => t($currentLocale, key);
@@ -61,16 +61,14 @@
 	let accountWizardKind = $state<AccountWizardKind>('mail');
 	let mailWizardStep = $state<MailWizardStep>('provider');
 	let selectedMailService = $state<MailService>('icloud');
-	let mailAddress = $state('');
 	let calendarWizardStep = $state<CalendarWizardStep>('provider');
 	let isSetupSubmitting = $state(false);
 	let setupMessage = $state('');
 	let setupError = $state('');
 	let gmailPending = $state<GmailOAuthStartResponse | null>(null);
-	let gmailAuthorizationCode = $state('');
 	let gmailForm = $state({
 		account_id: 'gmail-primary',
-		display_name: 'Primary Gmail',
+		display_name: 'Google Workspace',
 		external_account_id: '',
 		client_id: '',
 		client_secret: '',
@@ -261,27 +259,17 @@
 		};
 	}
 
-	function continueMailWizard() {
-		const email = mailAddress.trim();
-		if (email) {
-			const inferred = inferMailService(email);
-			if (inferred) {
-				selectMailService(inferred);
-			}
-			gmailForm = {
-				...gmailForm,
-				external_account_id: email,
-				account_id: gmailForm.account_id || accountIdFromEmail(email, 'gmail'),
-				display_name: gmailForm.display_name || email
-			};
-			imapForm = {
-				...imapForm,
-				external_account_id: email,
-				username: imapForm.username || email,
-				account_id: imapForm.account_id || accountIdFromEmail(email, 'mail'),
-				display_name: imapForm.display_name || email
-			};
+	function chooseMailService(service: MailService) {
+		selectMailService(service);
+		if (service === 'gmail') {
+			continueMailWizard();
+			void startGmailSetup({ openAuthorization: true });
+			return;
 		}
+		continueMailWizard();
+	}
+
+	function continueMailWizard() {
 		mailWizardStep = 'details';
 	}
 
@@ -530,50 +518,49 @@
 		return _('Live credentials are stored in the encrypted database vault. Telegram live runtime remains blocked until the adapter is implemented.');
 	}
 
-	async function startGmailSetup() {
-		isSetupSubmitting = true;
-		setupMessage = '';
-		setupError = '';
-
-		try {
-			gmailPending = await startGmailOAuthSetup({
-				account_id: gmailForm.account_id,
-				display_name: gmailForm.display_name,
-				external_account_id: gmailForm.external_account_id,
-				client_id: gmailForm.client_id,
-				client_secret: gmailForm.client_secret || undefined,
-				redirect_uri: gmailForm.redirect_uri
-			});
-			setupMessage = 'Gmail OAuth grant started';
-		} catch (error) {
-			setupError = error instanceof Error ? error.message : 'Gmail setup failed';
-		} finally {
-			isSetupSubmitting = false;
+	function navigateGoogleAuthorization(authorizationUrl: string) {
+		if (typeof window !== 'undefined') {
+			window.open(authorizationUrl, '_blank', 'noopener,noreferrer');
 		}
 	}
 
-	async function completeGmailSetup() {
-		if (!gmailPending) {
-			setupError = 'Gmail OAuth grant has not been started';
-			return;
+	function gmailSetupErrorMessage(error: unknown) {
+		const message = error instanceof Error ? error.message : 'Gmail setup failed';
+		if (message.includes('host vault is locked')) {
+			return _(
+				'Hermes Secure Vault is locked. Unlock the vault, then start Google mail connection again.'
+			);
 		}
+		if (message.includes('host vault is not initialized')) {
+			return _(
+				'Hermes Secure Vault is not initialized. Create the vault, then start Google mail connection again.'
+			);
+		}
+		if (message.includes('HERMES_GOOGLE_OAUTH_CLIENT_ID')) {
+			return _(
+				'Google OAuth client credentials are not configured. Add HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH or HERMES_GOOGLE_OAUTH_CLIENT_ID to docker/.env, then restart make dev.'
+			);
+		}
+		return message;
+	}
 
+	async function startGmailSetup(options: { openAuthorization?: boolean } = {}) {
 		isSetupSubmitting = true;
 		setupMessage = '';
 		setupError = '';
 
 		try {
-			const result = await completeGmailOAuthSetup({
-				setup_id: gmailPending.setup_id,
-				state: gmailPending.state,
-				authorization_code: gmailAuthorizationCode
-			});
-			setupMessage = `Gmail account ${result.account_id} saved`;
-			gmailAuthorizationCode = '';
-			gmailPending = null;
-			await reloadAfterSave();
+			const request = createGoogleWorkspaceOAuthStartRequest(gmailForm);
+			if (typeof window !== 'undefined') {
+				request.app_return_url = buildGmailOAuthReturnUrl(window.location.origin);
+			}
+			gmailPending = await startGmailOAuthSetup(request);
+			if (options.openAuthorization) {
+				navigateGoogleAuthorization(gmailPending.authorization_url);
+			}
+			setupMessage = 'Google authorization opened in browser. Complete consent to save the account.';
 		} catch (error) {
-			setupError = error instanceof Error ? error.message : 'Gmail setup failed';
+			setupError = gmailSetupErrorMessage(error);
 		} finally {
 			isSetupSubmitting = false;
 		}
@@ -985,40 +972,34 @@
 				<span class:active={mailWizardStep === 'details'}>{_('2. Details')}</span>
 			</div>
 			{#if mailWizardStep === 'provider'}
-				<form class="wizard-step" onsubmit={(event) => { event.preventDefault(); continueMailWizard(); }}>
-					<label class="wide wizard-email-field"><span>{_('Email address')}</span><input bind:value={mailAddress} type="email" placeholder={_('name@example.com')} autocomplete="email" /></label>
-					<div class="wizard-divider"><span>{_('or choose mail service')}</span></div>
+				<div class="wizard-step">
 					<div class="wizard-choice-list">
-						<button type="button" class:active={selectedMailService === 'icloud'} onclick={() => selectMailService('icloud')}><Icon icon="tabler:cloud" width="34" height="34" /><strong>{_('iCloud')}</strong></button>
-						<button type="button" class:active={selectedMailService === 'microsoft'} onclick={() => selectMailService('microsoft')}><Icon icon="tabler:brand-office" width="34" height="34" /><strong>{_('Microsoft Exchange')}</strong></button>
-						<button type="button" class:active={selectedMailService === 'gmail'} onclick={() => selectMailService('gmail')}><Icon icon="tabler:brand-gmail" width="34" height="34" /><strong>{_('Google')}</strong></button>
-						<button type="button" class:active={selectedMailService === 'yahoo'} onclick={() => selectMailService('yahoo')}><Icon icon="tabler:mail" width="34" height="34" /><strong>{_('Yahoo')}</strong></button>
-						<button type="button" class:active={selectedMailService === 'aol'} onclick={() => selectMailService('aol')}><Icon icon="tabler:mail-bolt" width="34" height="34" /><strong>{_('AOL')}</strong></button>
-						<button type="button" class:active={selectedMailService === 'imap'} onclick={() => selectMailService('imap')}><Icon icon="tabler:server" width="34" height="34" /><strong>{_('Other Mail Account')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'icloud'} onclick={() => chooseMailService('icloud')}><Icon icon="tabler:cloud" width="34" height="34" /><strong>{_('iCloud')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'microsoft'} onclick={() => chooseMailService('microsoft')}><Icon icon="tabler:brand-office" width="34" height="34" /><strong>{_('Microsoft Exchange')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'gmail'} onclick={() => chooseMailService('gmail')}><Icon icon="tabler:brand-gmail" width="34" height="34" /><strong>{_('Google')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'yahoo'} onclick={() => chooseMailService('yahoo')}><Icon icon="tabler:mail" width="34" height="34" /><strong>{_('Yahoo')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'aol'} onclick={() => chooseMailService('aol')}><Icon icon="tabler:mail-bolt" width="34" height="34" /><strong>{_('AOL')}</strong></button>
+						<button type="button" class:active={selectedMailService === 'imap'} onclick={() => chooseMailService('imap')}><Icon icon="tabler:server" width="34" height="34" /><strong>{_('Other Mail Account')}</strong></button>
 					</div>
-					<div class="wizard-actions">
-						<button type="submit" class="primary-button">{_('Continue')}</button>
-					</div>
-				</form>
+				</div>
 			{:else}
 				<div class="wizard-step">
 					<button type="button" class="wizard-back" onclick={() => (mailWizardStep = 'provider' as MailWizardStep)}><Icon icon="tabler:arrow-left" width="15" height="15" />{_('Service')}</button>
 					{#if selectedMailService === 'gmail'}
-						<form class="setup-form" onsubmit={(event) => event.preventDefault()}>
-							<label><span>{_('Account ID')}</span><input bind:value={gmailForm.account_id} autocomplete="off" /></label>
-							<label><span>{_('Display name')}</span><input bind:value={gmailForm.display_name} autocomplete="off" /></label>
-							<label><span>{_('Gmail address')}</span><input bind:value={gmailForm.external_account_id} autocomplete="email" /></label>
-							<label><span>{_('OAuth client ID')}</span><input bind:value={gmailForm.client_id} autocomplete="off" /></label>
-							<label><span>{_('OAuth client secret')}</span><input bind:value={gmailForm.client_secret} type="password" autocomplete="off" /></label>
-							<label class="wide"><span>{_('Redirect URI')}</span><input bind:value={gmailForm.redirect_uri} autocomplete="off" /></label>
-							<div class="form-actions wide"><button type="button" onclick={startGmailSetup} disabled={isSetupSubmitting}>{_('Start OAuth')}</button></div>
-						</form>
+						<div class="setup-summary-card" aria-label={_('Selected mail service')}>
+							<span class="round-icon cyan"><Icon icon="tabler:brand-gmail" width="18" height="18" /></span>
+							<div>
+								<strong>{_('Google')}</strong>
+								<p>{_('Authorization opened in browser. Complete Google consent to save the account.')}</p>
+							</div>
+						</div>
 						{#if gmailPending}
 							<div class="oauth-box">
-								<a href={gmailPending.authorization_url} target="_blank" rel="noreferrer">{_('Open Google consent')}</a>
-								<label><span>{_('Authorization code')}</span><input bind:value={gmailAuthorizationCode} autocomplete="off" /></label>
-								<button type="button" onclick={completeGmailSetup} disabled={isSetupSubmitting}>{_('Complete Gmail')}</button>
+								<a href={gmailPending.authorization_url} target="_blank" rel="noreferrer">{_('Reopen Google consent')}</a>
+								<button type="button" onclick={() => void reloadAfterSave()} disabled={isSetupSubmitting}>{_('Refresh accounts')}</button>
 							</div>
+						{:else}
+							<div class="form-actions wide"><button type="button" onclick={() => void startGmailSetup({ openAuthorization: true })} disabled={isSetupSubmitting}>{_('Start OAuth')}</button></div>
 						{/if}
 					{:else if hasFixedMailServerPreset(selectedMailService)}
 						<div class="setup-summary-card" aria-label={_('Selected mail service')}>
@@ -1028,7 +1009,7 @@
 							</div>
 						</div>
 						<form class="setup-form compact-form" onsubmit={(event) => event.preventDefault()}>
-							<label><span>{_('Login')}</span><input bind:value={imapForm.username} autocomplete="username" /></label>
+							<label><span>{_('Email address')}</span><input bind:value={imapForm.username} type="email" autocomplete="email" /></label>
 							<label><span>{_('Password')}</span><input bind:value={imapForm.password} type="password" autocomplete="current-password" /></label>
 							<div class="form-actions wide"><button type="button" onclick={saveImapAccount} disabled={isSetupSubmitting}>{_('Save Account')}</button></div>
 						</form>

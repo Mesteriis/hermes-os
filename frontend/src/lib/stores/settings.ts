@@ -2,6 +2,7 @@ import { derived, get, writable } from 'svelte/store';
 import {
 	FRONTEND_THEME_SETTING_KEY,
 	type ApplicationSetting,
+	type CalendarAccount,
 	type ProviderAccount
 } from '$lib/api';
 import {
@@ -54,7 +55,7 @@ export type SettingsSection = 'appearance' | 'application' | 'sidebar' | 'accoun
 
 export const applicationSettings = writable<ApplicationSetting[]>([]);
 export const providerAccounts = writable<ProviderAccount[]>([]);
-export const calendarAccounts = writable<[]>([]);
+export const calendarAccounts = writable<CalendarAccount[]>([]);
 export const settingDrafts = writable<Record<string, string>>({});
 export const settingsError = writable('');
 export const settingsActionMessage = writable('');
@@ -84,6 +85,14 @@ export const telegramProviderAccounts = derived(providerAccounts, ($providerAcco
 
 export const whatsappProviderAccounts = derived(providerAccounts, ($providerAccounts) =>
 	$providerAccounts.filter((account) => account.provider_kind === 'whatsapp_web')
+);
+
+export const contactsProviderAccounts = derived(providerAccounts, ($providerAccounts) =>
+	$providerAccounts.filter(
+		(account) =>
+			Array.isArray(account.config.connected_services) &&
+			account.config.connected_services.includes('contacts')
+	)
 );
 
 export {
@@ -126,6 +135,7 @@ export async function loadSettingsWorkspace(): Promise<void> {
 	const result = await settingsService.loadSettingsWorkspace();
 	applicationSettings.set(result.applicationSettings);
 	providerAccounts.set(result.providerAccounts);
+	calendarAccounts.set(result.calendarAccounts);
 	settingDrafts.set(result.settingDrafts);
 	setLayoutSettings(result.layoutSettings);
 	setSidebarSettings(result.sidebarSettings);

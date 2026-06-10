@@ -64,6 +64,10 @@ fn start_backend_sidecar<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn s
         "HERMES_OLLAMA_CHAT_MODEL",
         "HERMES_OLLAMA_EMBED_MODEL",
         "HERMES_OLLAMA_TIMEOUT_SECONDS",
+        "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON",
+        "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH",
+        "HERMES_GOOGLE_OAUTH_CLIENT_ID",
+        "HERMES_GOOGLE_OAUTH_CLIENT_SECRET",
     ] {
         if let Some(value) = std::env::var_os(key) {
             command = command.env(key, value);
@@ -83,6 +87,18 @@ fn start_backend_sidecar<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn s
     if std::env::var_os("HERMES_TDJSON_PATH").is_none() {
         if let Some(tdjson_path) = bundled_tdjson_path(app) {
             command = command.env("HERMES_TDJSON_PATH", tdjson_path);
+        }
+    }
+    if std::env::var_os("HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH").is_none()
+        && std::env::var_os("HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON").is_none()
+        && std::env::var_os("HERMES_GOOGLE_OAUTH_CLIENT_ID").is_none()
+    {
+        if let Some(google_oauth_client_config_path) = bundled_google_oauth_client_config_path(app)
+        {
+            command = command.env(
+                "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH",
+                google_oauth_client_config_path,
+            );
         }
     }
 
@@ -140,6 +156,12 @@ fn bundled_tdjson_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
         .join("macos-universal")
         .join(tdlib_library_file_name());
     universal_path.is_file().then_some(universal_path)
+}
+
+fn bundled_google_oauth_client_config_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
+    let resource_dir = app.path().resource_dir().ok()?;
+    let client_config_path = resource_dir.join("google-oauth").join("client_secret.json");
+    client_config_path.is_file().then_some(client_config_path)
 }
 
 fn tdlib_platform_dir() -> &'static str {

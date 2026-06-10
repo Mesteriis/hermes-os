@@ -4,6 +4,7 @@ import {
 	setupImapAccount,
 	createCalendarAccount,
 	type ProviderAccount,
+	type GmailOAuthStartRequest,
 	type GmailOAuthStartResponse,
 	type TelegramProviderKind
 } from '$lib/api';
@@ -17,6 +18,12 @@ type MailWizardStep = 'provider' | 'details';
 type CalendarProvider = 'local' | 'google' | 'microsoft' | 'apple' | 'caldav' | 'ics';
 type CalendarWizardStep = 'provider' | 'details';
 type TelegramWizardStep = 'account' | 'auth' | 'details';
+
+export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
+	'https://www.googleapis.com/auth/gmail.readonly',
+	'https://www.googleapis.com/auth/calendar.readonly',
+	'https://www.googleapis.com/auth/contacts.readonly'
+];
 
 export type TelegramAccountDraft = {
 	account_id: string;
@@ -97,6 +104,37 @@ export function createTelegramAccountDraft(
 		tdlib_data_path: `docker/data/telegram/${accountId}`,
 		transcription_enabled: false
 	};
+}
+
+export function createGoogleWorkspaceOAuthStartRequest(gmailForm: {
+	account_id: string;
+	display_name: string;
+	external_account_id: string;
+	client_id: string;
+	client_secret: string;
+	redirect_uri: string;
+}): GmailOAuthStartRequest {
+	const request: GmailOAuthStartRequest = {
+		account_id: optionalTrimmed(gmailForm.account_id) ?? 'gmail-primary',
+		display_name: optionalTrimmed(gmailForm.display_name) ?? 'Google Workspace',
+		redirect_uri: gmailForm.redirect_uri.trim(),
+		scopes: [...GOOGLE_WORKSPACE_OAUTH_SCOPES]
+	};
+	const externalAccountId = optionalTrimmed(gmailForm.external_account_id);
+	const clientId = optionalTrimmed(gmailForm.client_id);
+	const clientSecret = optionalTrimmed(gmailForm.client_secret);
+
+	if (externalAccountId) {
+		request.external_account_id = externalAccountId;
+	}
+	if (clientId) {
+		request.client_id = clientId;
+	}
+	if (clientSecret) {
+		request.client_secret = clientSecret;
+	}
+
+	return request;
 }
 
 export function selectMailService(
@@ -475,14 +513,7 @@ export async function startGmailSetup(gmailForm: {
 	error: string;
 }> {
 	try {
-		const pending = await startGmailOAuthSetup({
-			account_id: gmailForm.account_id,
-			display_name: gmailForm.display_name,
-			external_account_id: gmailForm.external_account_id,
-			client_id: gmailForm.client_id,
-			client_secret: gmailForm.client_secret || undefined,
-			redirect_uri: gmailForm.redirect_uri
-		});
+		const pending = await startGmailOAuthSetup(createGoogleWorkspaceOAuthStartRequest(gmailForm));
 		return { pending, message: 'Gmail OAuth grant started', error: '' };
 	} catch (error) {
 		return {
@@ -495,7 +526,8 @@ export async function startGmailSetup(gmailForm: {
 
 export async function completeGmailSetup(
 	pending: GmailOAuthStartResponse | null,
-	authorizationCode: string
+	authorizationCode: string,
+	externalAccountId = ''
 ): Promise<{
 	message: string;
 	error: string;
@@ -509,7 +541,8 @@ export async function completeGmailSetup(
 		const result = await completeGmailOAuthSetup({
 			setup_id: pending.setup_id,
 			state: pending.state,
-			authorization_code: authorizationCode
+			authorization_code: authorizationCode,
+			external_account_id: optionalTrimmed(externalAccountId)
 		});
 		return { message: `Gmail account ${result.account_id} saved`, error: '', success: true };
 	} catch (error) {
@@ -519,6 +552,11 @@ export async function completeGmailSetup(
 			success: false
 		};
 	}
+}
+
+function optionalTrimmed(value: string): string | undefined {
+	const trimmed = value.trim();
+	return trimmed ? trimmed : undefined;
 }
 
 export async function saveImapAccount(params: {

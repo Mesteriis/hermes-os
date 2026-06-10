@@ -102,6 +102,22 @@ environment. Packaged macOS builds can inject them into the Tauri launcher with
 launcher forwards those values to the backend sidecar as runtime
 `HERMES_TELEGRAM_API_ID` and `HERMES_TELEGRAM_API_HASH`.
 
+Google mail setup needs one project-owned OAuth Desktop app client. End users of
+the packaged app should not create their own Google Cloud project. Release builds
+copy the downloaded Desktop app JSON into the Tauri resource bundle:
+
+```sh
+make google-oauth-resource
+make frontend-tauri-build
+```
+
+`make google-oauth-resource` reads `HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH` from
+`docker/.env`, or `HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_SOURCE` from the shell, and
+copies the file to `frontend/src-tauri/resources/google-oauth/client_secret.json`.
+That generated resource is ignored by Git. The packaged launcher passes the
+bundled resource path to the backend sidecar as
+`HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH`.
+
 ## Bundled Backend Sidecar
 
 macOS release builds package the Rust backend as a Tauri sidecar from
@@ -113,8 +129,8 @@ make backend-sidecar-macos
 make frontend-tauri-build
 ```
 
-`make frontend-tauri-build` runs both `backend-sidecar-macos` and
-`tdlib-macos-resource` before invoking Tauri.
+`make frontend-tauri-build` runs `google-oauth-resource`,
+`backend-sidecar-macos` and `tdlib-macos-resource` before invoking Tauri.
 
 ## Backend Dependency
 

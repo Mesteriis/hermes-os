@@ -1,7 +1,7 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config validate lint lint-rust lint-frontend lint-architecture pre-commit-install pre-commit-run dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-lint frontend-lint-ts frontend-check frontend-build tdlib-macos-resource backend-sidecar-macos frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-workflow-smoke-dev backend-ai-smoke-dev backend-telegram-smoke-dev backend-whatsapp-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-test-unit backend-test-integration backend-test-all backend-validate
+.PHONY: help docker-env compose-config validate lint lint-rust lint-frontend lint-architecture pre-commit-install pre-commit-run dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-lint frontend-lint-ts frontend-check frontend-build google-oauth-resource tdlib-macos-resource backend-sidecar-macos frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-workflow-smoke-dev backend-ai-smoke-dev backend-telegram-smoke-dev backend-whatsapp-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-test-unit backend-test-integration backend-test-all backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
@@ -32,6 +32,7 @@ help:
 	@printf '%s\n' '  make frontend-lint   Run frontend style and TS/Svelte lint without tests'
 	@printf '%s\n' '  make frontend-check  Run frontend style and SvelteKit type checks'
 	@printf '%s\n' '  make frontend-build  Build the SvelteKit frontend'
+	@printf '%s\n' '  make google-oauth-resource Prepare bundled Google OAuth Desktop client resource'
 	@printf '%s\n' '  make tdlib-macos-resource Prepare bundled macOS TDLib JSON runtime resource'
 	@printf '%s\n' '  make backend-sidecar-macos Prepare bundled macOS backend sidecar binary'
 	@printf '%s\n' '  make frontend-tauri-dev Run the Tauri desktop shell in development'
@@ -196,6 +197,9 @@ dev: docker-env
 		$(MAKE) db-up; \
 		export DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}"; \
 		export HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}"; \
+		export HERMES_DEV_MODE="$${HERMES_DEV_MODE:-true}"; \
+		export HERMES_VAULT_HOME="$${HERMES_HOST_VAULT_HOME:-$${HOME}/.hermes/vault}"; \
+		export HERMES_DEV_KEY_PATH="$${HERMES_HOST_VAULT_HOME:-$${HOME}/.hermes/vault}/dev/master.key"; \
 		export HERMES_SECRET_VAULT_KEY="$${HERMES_SECRET_VAULT_KEY}"; \
 		export HERMES_HTTP_ADDR="$$backend_bind:$$backend_port"; \
 		if command -v watchexec >/dev/null 2>&1; then \
@@ -286,6 +290,10 @@ frontend-check:
 frontend-build:
 	cd frontend && pnpm build
 
+google-oauth-resource: docker-env
+	@set -a; . docker/.env; set +a; \
+		./scripts/prepare-google-oauth-resource.sh
+
 tdlib-macos-resource:
 	./scripts/prepare-tdlib-macos.sh
 
@@ -295,7 +303,7 @@ backend-sidecar-macos:
 frontend-tauri-dev:
 	cd frontend && pnpm tauri dev
 
-frontend-tauri-build: backend-sidecar-macos tdlib-macos-resource
+frontend-tauri-build: google-oauth-resource backend-sidecar-macos tdlib-macos-resource
 	cd frontend && pnpm tauri build
 
 backend-run:

@@ -42,4 +42,13 @@ describe('vault store', () => {
 		continueVaultOnboarding();
 		expect(get(shouldShowVaultOnboarding)).toBe(false);
 	});
+
+	it('shows onboarding again when an initialized vault is locked after backend restart', () => {
+		vaultStatus.set(status('unlocked', 100));
+		continueVaultOnboarding();
+		expect(get(shouldShowVaultOnboarding)).toBe(false);
+
+		vaultStatus.set(status('locked', 100));
+		expect(get(shouldShowVaultOnboarding)).toBe(true);
+	});
 });

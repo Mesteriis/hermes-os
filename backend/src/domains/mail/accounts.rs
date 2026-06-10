@@ -25,7 +25,14 @@ use crate::vault::{HostVault, HostVaultError, SecretEntryContext};
 
 const DEFAULT_GOOGLE_AUTHORIZATION_ENDPOINT: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 const DEFAULT_GOOGLE_TOKEN_ENDPOINT: &str = "https://oauth2.googleapis.com/token";
-const GMAIL_READONLY_SCOPE: &str = "https://www.googleapis.com/auth/gmail.readonly";
+const GOOGLE_GMAIL_READONLY_SCOPE: &str = "https://www.googleapis.com/auth/gmail.readonly";
+const GOOGLE_CALENDAR_READONLY_SCOPE: &str = "https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_CONTACTS_READONLY_SCOPE: &str = "https://www.googleapis.com/auth/contacts.readonly";
+const DEFAULT_GOOGLE_WORKSPACE_SCOPES: [&str; 3] = [
+    GOOGLE_GMAIL_READONLY_SCOPE,
+    GOOGLE_CALENDAR_READONLY_SCOPE,
+    GOOGLE_CONTACTS_READONLY_SCOPE,
+];
 
 #[derive(Clone)]
 enum AccountSecretVault {
@@ -171,6 +178,11 @@ impl EmailAccountSetupService {
         authorization_code: &str,
     ) -> Result<EmailAccountSetupResult, EmailAccountSetupError> {
         validate_non_empty("authorization_code", authorization_code)?;
+        let external_account_id = if pending.request.external_account_id.trim().is_empty() {
+            pending.account_id.clone()
+        } else {
+            pending.request.external_account_id.clone()
+        };
         let token = self
             .exchange_authorization_code(&pending, authorization_code)
             .await?;
@@ -208,7 +220,8 @@ impl EmailAccountSetupService {
                 )
                 .metadata(json!({
                     "provider": "gmail",
-                    "account_id": pending.account_id
+                    "account_id": pending.account_id,
+                    "connected_services": ["mail", "calendar", "contacts"]
                 })),
             )
             .await?;
@@ -224,7 +237,8 @@ impl EmailAccountSetupService {
                     label: "Gmail OAuth credential",
                     metadata: &json!({
                         "provider": "gmail",
-                        "account_id": pending.account_id
+                        "account_id": pending.account_id,
+                        "connected_services": ["mail", "calendar", "contacts"]
                     }),
                 },
             )
@@ -235,12 +249,14 @@ impl EmailAccountSetupService {
                     &pending.account_id,
                     EmailProviderKind::Gmail,
                     &pending.request.display_name,
-                    &pending.request.external_account_id,
+                    &external_account_id,
                 )
                 .config(json!({
                     "auth": "oauth",
                     "api": "gmail",
                     "oauth_client_id": pending.request.client_id,
+                    "requested_scopes": pending.request.scopes,
+                    "connected_services": ["mail", "calendar", "contacts"],
                     "history_stream_id": "gmail:history"
                 })),
             )
@@ -312,6 +328,14 @@ impl EmailAccountSetupService {
     ) -> Result<EmailAccountSetupResult, EmailAccountSetupError> {
         request.validate()?;
         let secret_ref = imap_secret_ref(&request.account_id);
+        let connected_services = email_provider_connected_services(request.provider_kind);
+        let mut secret_metadata = json!({
+            "provider": request.provider_kind.as_str(),
+            "account_id": request.account_id
+        });
+        if let Some(services) = connected_services {
+            secret_metadata["connected_services"] = json!(services);
+        }
 
         let secret_store = self.secret_store()?;
         let communication_store = self.communication_store()?;
@@ -323,10 +347,7 @@ impl EmailAccountSetupService {
                     self.vault.store_kind(),
                     format!("IMAP credential for {}", request.display_name),
                 )
-                .metadata(json!({
-                    "provider": request.provider_kind.as_str(),
-                    "account_id": request.account_id
-                })),
+                .metadata(secret_metadata.clone()),
             )
             .await?;
         self.vault
@@ -339,13 +360,20 @@ impl EmailAccountSetupService {
                     purpose: ProviderAccountSecretPurpose::ImapPassword.as_str(),
                     secret_kind: request.secret_kind,
                     label: "IMAP password",
-                    metadata: &json!({
-                        "provider": request.provider_kind.as_str(),
-                        "account_id": request.account_id
-                    }),
+                    metadata: &secret_metadata,
                 },
             )
             .await?;
+        let mut account_config = json!({
+            "host": request.host,
+            "port": request.port,
+            "tls": request.tls,
+            "mailbox": request.mailbox,
+            "username": request.username
+        });
+        if let Some(services) = connected_services {
+            account_config["connected_services"] = json!(services);
+        }
         communication_store
             .upsert_provider_account(
                 &NewProviderAccount::new(
@@ -354,13 +382,7 @@ impl EmailAccountSetupService {
                     &request.display_name,
                     &request.external_account_id,
                 )
-                .config(json!({
-                    "host": request.host,
-                    "port": request.port,
-                    "tls": request.tls,
-                    "mailbox": request.mailbox,
-                    "username": request.username
-                })),
+                .config(account_config),
             )
             .await?;
         communication_store
@@ -451,6 +473,7 @@ pub struct GmailOAuthSetupRequest {
     pub client_id: String,
     pub client_secret: Option<String>,
     pub redirect_uri: String,
+    pub app_return_url: Option<String>,
     pub authorization_endpoint: String,
     pub token_endpoint: String,
     pub scopes: Vec<String>,
@@ -471,14 +494,28 @@ impl GmailOAuthSetupRequest {
             client_id: client_id.into(),
             client_secret: None,
             redirect_uri: redirect_uri.into(),
+            app_return_url: None,
             authorization_endpoint: DEFAULT_GOOGLE_AUTHORIZATION_ENDPOINT.to_owned(),
             token_endpoint: DEFAULT_GOOGLE_TOKEN_ENDPOINT.to_owned(),
-            scopes: vec![GMAIL_READONLY_SCOPE.to_owned()],
+            scopes: DEFAULT_GOOGLE_WORKSPACE_SCOPES
+                .iter()
+                .map(|scope| (*scope).to_owned())
+                .collect(),
         }
+    }
+
+    pub fn external_account_id(mut self, external_account_id: impl Into<String>) -> Self {
+        self.external_account_id = external_account_id.into();
+        self
     }
 
     pub fn client_secret(mut self, client_secret: impl Into<String>) -> Self {
         self.client_secret = Some(client_secret.into());
+        self
+    }
+
+    pub fn app_return_url(mut self, app_return_url: impl Into<String>) -> Self {
+        self.app_return_url = Some(app_return_url.into());
         self
     }
 
@@ -492,10 +529,14 @@ impl GmailOAuthSetupRequest {
         self
     }
 
+    pub fn scopes(mut self, scopes: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        self.scopes = scopes.into_iter().map(Into::into).collect();
+        self
+    }
+
     fn validate(&self) -> Result<(), EmailAccountSetupError> {
         validate_non_empty("account_id", &self.account_id)?;
         validate_non_empty("display_name", &self.display_name)?;
-        validate_non_empty("external_account_id", &self.external_account_id)?;
         validate_non_empty("client_id", &self.client_id)?;
         validate_non_empty("redirect_uri", &self.redirect_uri)?;
         validate_non_empty("authorization_endpoint", &self.authorization_endpoint)?;
@@ -655,6 +696,20 @@ fn oauth_secret_ref(account_id: &str) -> String {
 
 fn imap_secret_ref(account_id: &str) -> String {
     format!("secret:provider-account:{account_id}:imap_password")
+}
+
+fn email_provider_connected_services(
+    provider_kind: EmailProviderKind,
+) -> Option<&'static [&'static str]> {
+    match provider_kind {
+        EmailProviderKind::Gmail | EmailProviderKind::Icloud => {
+            Some(&["mail", "calendar", "contacts"])
+        }
+        EmailProviderKind::Imap
+        | EmailProviderKind::TelegramUser
+        | EmailProviderKind::TelegramBot
+        | EmailProviderKind::WhatsappWeb => None,
+    }
 }
 
 fn vault_secret_reference(

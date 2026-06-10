@@ -1115,10 +1115,12 @@ export type ProjectListResponse = {
 export type GmailOAuthStartRequest = {
 	account_id: string;
 	display_name: string;
-	external_account_id: string;
-	client_id: string;
+	external_account_id?: string;
+	client_id?: string;
 	client_secret?: string;
 	redirect_uri: string;
+	app_return_url?: string;
+	scopes?: string[];
 };
 
 export type GmailOAuthStartResponse = {
@@ -1132,6 +1134,7 @@ export type GmailOAuthCompleteRequest = {
 	setup_id: string;
 	state: string;
 	authorization_code: string;
+	external_account_id?: string;
 };
 
 export type EmailAccountSetupResponse = {

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
@@ -112,6 +112,108 @@ impl CalendarAccountStore {
         let row = sqlx::query(
             "UPDATE calendar_accounts SET account_name=COALESCE($2,account_name), email=COALESCE($3,email), sync_status=COALESCE($4,sync_status), updated_at=now() WHERE account_id=$1 RETURNING account_id, provider, account_name, email, credentials_reference, sync_status, capabilities, created_at, updated_at"
         ).bind(account_id).bind(update.account_name.as_deref()).bind(update.email.as_deref()).bind(update.sync_status.as_deref()).fetch_one(&self.pool).await?;
+        Ok(CalendarAccount {
+            account_id: row.try_get("account_id")?,
+            provider: row.try_get("provider")?,
+            account_name: row.try_get("account_name")?,
+            email: row.try_get("email")?,
+            credentials_reference: row.try_get("credentials_reference")?,
+            sync_status: row.try_get("sync_status")?,
+            capabilities: row.try_get("capabilities")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+        })
+    }
+
+    pub async fn upsert_google_workspace_account(
+        &self,
+        mail_account_id: &str,
+        account_name: &str,
+        email: Option<&str>,
+        credentials_reference: &str,
+    ) -> Result<CalendarAccount, CalendarError> {
+        self.upsert_linked_provider_account(
+            &format!("google-calendar:{mail_account_id}"),
+            "google",
+            mail_account_id,
+            account_name,
+            email,
+            credentials_reference,
+            "gmail",
+            "google_calendar_api",
+        )
+        .await
+    }
+
+    pub async fn upsert_apple_icloud_account(
+        &self,
+        mail_account_id: &str,
+        account_name: &str,
+        email: Option<&str>,
+        credentials_reference: &str,
+    ) -> Result<CalendarAccount, CalendarError> {
+        self.upsert_linked_provider_account(
+            &format!("icloud-calendar:{mail_account_id}"),
+            "apple",
+            mail_account_id,
+            account_name,
+            email,
+            credentials_reference,
+            "icloud",
+            "apple_caldav",
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn upsert_linked_provider_account(
+        &self,
+        account_id: &str,
+        provider: &str,
+        mail_account_id: &str,
+        account_name: &str,
+        email: Option<&str>,
+        credentials_reference: &str,
+        source_provider: &str,
+        sync_mode: &str,
+    ) -> Result<CalendarAccount, CalendarError> {
+        let capabilities = json!({
+            "mail_account_id": mail_account_id,
+            "source_provider": source_provider,
+            "connected_services": ["calendar"],
+            "sync_mode": sync_mode
+        });
+        let row = sqlx::query(
+            r#"
+            INSERT INTO calendar_accounts (
+                account_id,
+                provider,
+                account_name,
+                email,
+                credentials_reference,
+                capabilities,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, now())
+            ON CONFLICT (account_id)
+            DO UPDATE SET
+                provider = EXCLUDED.provider,
+                account_name = EXCLUDED.account_name,
+                email = EXCLUDED.email,
+                credentials_reference = EXCLUDED.credentials_reference,
+                capabilities = EXCLUDED.capabilities,
+                updated_at = now()
+            RETURNING account_id, provider, account_name, email, credentials_reference, sync_status, capabilities, created_at, updated_at
+            "#,
+        )
+        .bind(account_id)
+        .bind(provider)
+        .bind(account_name)
+        .bind(email)
+        .bind(credentials_reference)
+        .bind(&capabilities)
+        .fetch_one(&self.pool)
+        .await?;
         Ok(CalendarAccount {
             account_id: row.try_get("account_id")?,
             provider: row.try_get("provider")?,

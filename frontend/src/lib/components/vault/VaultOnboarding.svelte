@@ -2,11 +2,12 @@
 	import './vault.css';
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
+	import type { VaultStatus } from '$lib/api';
 	const _ = (key: string) => t($currentLocale, key);
 
 	interface Props {
 		wizardStep: 'intro' | 'entropy' | 'biometric' | 'recovery' | 'done';
-		status: { entropy_progress?: number } | null;
+		status: VaultStatus | null;
 		statusError: string;
 		entropyEventsCount: number;
 		wizardError: string;
@@ -45,11 +46,18 @@
 			<div class="vault-emblem"><Icon icon="tabler:shield-lock" width="30" height="30" /></div>
 			<div>
 				<p class="vault-kicker">{_('Hermes Secure Vault')}</p>
-				<h1>{_('Create Your Personal Secure Vault')}</h1>
+				<h1>{status?.state === 'locked' ? _('Unlock Secure Vault') : _('Create Your Personal Secure Vault')}</h1>
 			</div>
 		</div>
 
-		{#if wizardStep === 'intro'}
+		{#if status?.state === 'locked'}
+			<div class="vault-step">
+				<p>{_('Hermes Hub needs the secure vault unlocked before it can save provider credentials on this device.')}</p>
+				<div class="vault-actions">
+					<button type="button" onclick={onUnlockVault} disabled={isActionSubmitting}>{_('Unlock Existing Vault')}</button>
+				</div>
+			</div>
+		{:else if wizardStep === 'intro'}
 			<div class="vault-step">
 				<p>{_('Hermes Hub encrypts credentials stored on this device. Secrets live in a dedicated host vault; PostgreSQL keeps only non-secret bindings.')}</p>
 				<p class="vault-warning">{_('If you lose the recovery phrase or file, access to encrypted secrets may become impossible.')}</p>

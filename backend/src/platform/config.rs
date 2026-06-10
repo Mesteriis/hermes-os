@@ -1,8 +1,11 @@
 use std::env;
+use std::fs;
+use std::io;
 use std::net::{AddrParseError, SocketAddr};
 use std::num::ParseIntError;
 use std::path::{Path, PathBuf};
 
+use serde::Deserialize;
 use thiserror::Error;
 
 use crate::platform::secrets::{ResolvedSecret, SecretResolutionError};
@@ -29,6 +32,9 @@ pub struct AppConfig {
     tdjson_path: Option<PathBuf>,
     telegram_api_id: Option<i64>,
     telegram_api_hash: Option<ResolvedSecret>,
+    google_oauth_client: Option<GoogleOAuthClientConfig>,
+    google_oauth_client_id: Option<String>,
+    google_oauth_client_secret: Option<ResolvedSecret>,
     ollama_base_url: String,
     ollama_chat_model: String,
     ollama_embed_model: String,
@@ -47,6 +53,10 @@ impl AppConfig {
         V: AsRef<str>,
     {
         let mut config = Self::default();
+        if let Some(raw_json) = option_env!("HERMES_BUNDLED_GOOGLE_OAUTH_CLIENT_JSON") {
+            config.google_oauth_client =
+                Some(GoogleOAuthClientConfig::from_client_secret_json(raw_json)?);
+        }
 
         for (key, value) in pairs {
             match key.as_ref() {
@@ -137,6 +147,41 @@ impl AppConfig {
                         return Err(ConfigError::EmptyTelegramApiHash);
                     }
                     config.telegram_api_hash = Some(ResolvedSecret::new(raw_hash)?);
+                }
+                "HERMES_GOOGLE_OAUTH_CLIENT_ID" => {
+                    let raw_client_id = value.as_ref().trim();
+                    if raw_client_id.is_empty() {
+                        return Err(ConfigError::EmptyGoogleOAuthClientId);
+                    }
+                    config.google_oauth_client_id = Some(raw_client_id.to_owned());
+                }
+                "HERMES_GOOGLE_OAUTH_CLIENT_SECRET" => {
+                    let raw_client_secret = value.as_ref().trim();
+                    if raw_client_secret.is_empty() {
+                        return Err(ConfigError::EmptyGoogleOAuthClientSecret);
+                    }
+                    config.google_oauth_client_secret =
+                        Some(ResolvedSecret::new(raw_client_secret)?);
+                }
+                "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON" => {
+                    let raw_json = value.as_ref().trim();
+                    if raw_json.is_empty() {
+                        return Err(ConfigError::EmptyGoogleOAuthClientConfigJson);
+                    }
+                    config.google_oauth_client =
+                        Some(GoogleOAuthClientConfig::from_client_secret_json(raw_json)?);
+                }
+                "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH" => {
+                    let raw_path = value.as_ref().trim();
+                    if raw_path.is_empty() {
+                        return Err(ConfigError::EmptyGoogleOAuthClientConfigPath);
+                    }
+                    let path = PathBuf::from(raw_path);
+                    let raw_json = fs::read_to_string(&path).map_err(|source| {
+                        ConfigError::GoogleOAuthClientConfigRead { path, source }
+                    })?;
+                    config.google_oauth_client =
+                        Some(GoogleOAuthClientConfig::from_client_secret_json(&raw_json)?);
                 }
                 "HERMES_OLLAMA_BASE_URL" => {
                     let raw_url = value.as_ref().trim();
@@ -232,6 +277,26 @@ impl AppConfig {
         self.telegram_api_hash.as_ref()
     }
 
+    pub fn google_oauth_client_id(&self) -> Option<&str> {
+        self.google_oauth_client_id.as_deref().or_else(|| {
+            self.google_oauth_client
+                .as_ref()
+                .map(GoogleOAuthClientConfig::client_id)
+        })
+    }
+
+    pub fn google_oauth_client_secret(&self) -> Option<&ResolvedSecret> {
+        self.google_oauth_client_secret.as_ref().or_else(|| {
+            self.google_oauth_client
+                .as_ref()
+                .and_then(GoogleOAuthClientConfig::client_secret)
+        })
+    }
+
+    pub fn google_oauth_client(&self) -> Option<&GoogleOAuthClientConfig> {
+        self.google_oauth_client.as_ref()
+    }
+
     pub fn ollama_base_url(&self) -> &str {
         &self.ollama_base_url
     }
@@ -269,12 +334,135 @@ impl Default for AppConfig {
             tdjson_path: None,
             telegram_api_id: None,
             telegram_api_hash: None,
+            google_oauth_client: None,
+            google_oauth_client_id: None,
+            google_oauth_client_secret: None,
             ollama_base_url: DEFAULT_OLLAMA_BASE_URL.to_owned(),
             ollama_chat_model: DEFAULT_OLLAMA_CHAT_MODEL.to_owned(),
             ollama_embed_model: DEFAULT_OLLAMA_EMBED_MODEL.to_owned(),
             ollama_timeout_seconds: DEFAULT_OLLAMA_TIMEOUT_SECONDS,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum GoogleOAuthClientType {
+    Installed,
+    Web,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GoogleOAuthClientConfig {
+    client_type: GoogleOAuthClientType,
+    client_id: String,
+    client_secret: Option<ResolvedSecret>,
+    authorization_endpoint: String,
+    token_endpoint: String,
+    redirect_uris: Vec<String>,
+}
+
+impl GoogleOAuthClientConfig {
+    fn from_client_secret_json(raw_json: &str) -> Result<Self, ConfigError> {
+        let file: GoogleOAuthClientSecretsFile =
+            serde_json::from_str(raw_json).map_err(ConfigError::GoogleOAuthClientConfigJson)?;
+        if let Some(installed) = file.installed {
+            return Self::from_payload(GoogleOAuthClientType::Installed, installed);
+        }
+        if let Some(web) = file.web {
+            return Self::from_payload(GoogleOAuthClientType::Web, web);
+        }
+
+        Err(ConfigError::InvalidGoogleOAuthClientConfig {
+            field: "client_type",
+            message: "must contain installed or web client credentials",
+        })
+    }
+
+    fn from_payload(
+        client_type: GoogleOAuthClientType,
+        payload: GoogleOAuthClientSecretsPayload,
+    ) -> Result<Self, ConfigError> {
+        let client_id = required_trimmed("client_id", payload.client_id)?;
+        let authorization_endpoint = required_trimmed("auth_uri", payload.auth_uri)?;
+        let token_endpoint = required_trimmed("token_uri", payload.token_uri)?;
+        let client_secret = payload
+            .client_secret
+            .map(|secret| required_trimmed("client_secret", Some(secret)))
+            .transpose()?
+            .map(ResolvedSecret::new)
+            .transpose()?;
+        let redirect_uris = payload
+            .redirect_uris
+            .unwrap_or_default()
+            .into_iter()
+            .map(|uri| required_trimmed("redirect_uris", Some(uri)))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Self {
+            client_type,
+            client_id,
+            client_secret,
+            authorization_endpoint,
+            token_endpoint,
+            redirect_uris,
+        })
+    }
+
+    pub fn client_type(&self) -> GoogleOAuthClientType {
+        self.client_type
+    }
+
+    pub fn client_id(&self) -> &str {
+        &self.client_id
+    }
+
+    pub fn client_secret(&self) -> Option<&ResolvedSecret> {
+        self.client_secret.as_ref()
+    }
+
+    pub fn authorization_endpoint(&self) -> &str {
+        &self.authorization_endpoint
+    }
+
+    pub fn token_endpoint(&self) -> &str {
+        &self.token_endpoint
+    }
+
+    pub fn redirect_uris(&self) -> &[String] {
+        &self.redirect_uris
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct GoogleOAuthClientSecretsFile {
+    installed: Option<GoogleOAuthClientSecretsPayload>,
+    web: Option<GoogleOAuthClientSecretsPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GoogleOAuthClientSecretsPayload {
+    client_id: Option<String>,
+    client_secret: Option<String>,
+    auth_uri: Option<String>,
+    token_uri: Option<String>,
+    redirect_uris: Option<Vec<String>>,
+}
+
+fn required_trimmed(field: &'static str, value: Option<String>) -> Result<String, ConfigError> {
+    let Some(value) = value else {
+        return Err(ConfigError::InvalidGoogleOAuthClientConfig {
+            field,
+            message: "must be present",
+        });
+    };
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(ConfigError::InvalidGoogleOAuthClientConfig {
+            field,
+            message: "must not be empty",
+        });
+    }
+    Ok(value.to_owned())
 }
 
 fn parse_bool_env(name: &'static str, value: &str) -> Result<bool, ConfigError> {
@@ -331,6 +519,34 @@ pub enum ConfigError {
 
     #[error("HERMES_TELEGRAM_API_HASH is set but empty")]
     EmptyTelegramApiHash,
+
+    #[error("HERMES_GOOGLE_OAUTH_CLIENT_ID is set but empty")]
+    EmptyGoogleOAuthClientId,
+
+    #[error("HERMES_GOOGLE_OAUTH_CLIENT_SECRET is set but empty")]
+    EmptyGoogleOAuthClientSecret,
+
+    #[error("HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON is set but empty")]
+    EmptyGoogleOAuthClientConfigJson,
+
+    #[error("HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH is set but empty")]
+    EmptyGoogleOAuthClientConfigPath,
+
+    #[error("failed to read HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH `{}`: {source}", path.display())]
+    GoogleOAuthClientConfigRead {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    #[error("invalid Google OAuth client credentials JSON: {0}")]
+    GoogleOAuthClientConfigJson(serde_json::Error),
+
+    #[error("invalid Google OAuth client config field {field}: {message}")]
+    InvalidGoogleOAuthClientConfig {
+        field: &'static str,
+        message: &'static str,
+    },
 
     #[error("HERMES_OLLAMA_BASE_URL is set but empty")]
     EmptyOllamaBaseUrl,

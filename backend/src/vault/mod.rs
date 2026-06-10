@@ -133,6 +133,13 @@ impl HostVault {
         self.status()
     }
 
+    pub fn unlock_existing(&self) -> Result<VaultStatus, HostVaultError> {
+        if !self.has_stored_master_key()? {
+            return self.status();
+        }
+        self.unlock()
+    }
+
     pub fn lock(&self) -> Result<VaultStatus, HostVaultError> {
         let mut state = self
             .state

@@ -10,6 +10,7 @@
 		calendarAccounts: CalendarAccount[];
 
 		emailProviderAccounts: ProviderAccount[];
+		contactsProviderAccounts: ProviderAccount[];
 		telegramProviderAccounts: ProviderAccount[];
 		whatsappProviderAccounts: ProviderAccount[];
 
@@ -24,6 +25,7 @@
 		providerAccounts,
 		calendarAccounts,
 		emailProviderAccounts,
+		contactsProviderAccounts = [],
 		telegramProviderAccounts,
 		whatsappProviderAccounts,
 		onOpenAccountDrawer,
@@ -32,6 +34,12 @@
 		accountUpdatedLabelFn,
 		formatDateTimeFn
 	}: Props = $props();
+
+	function contactsProviderLabel(providerKind: string): string {
+		if (providerKind === 'icloud') return 'iCloud Contacts';
+		if (providerKind === 'gmail') return 'Google Contacts';
+		return 'Contacts';
+	}
 </script>
 
 <div class="settings-account-layout">
@@ -75,6 +83,30 @@
 							<strong>{account.account_name}</strong>
 							<p>{account.email || account.account_id}</p>
 							<small>{account.provider} · updated {formatDateTimeFn(account.updated_at)}</small>
+						</div>
+						<code>{account.account_id}</code>
+					</article>
+				{/each}
+			{/if}
+		</div>
+	</section>
+
+	<section class="panel account-section">
+		<header class="panel-title-row">
+			<div><h2>Contacts Sources</h2><p>Provider accounts that can read people and address book data.</p></div>
+			<button type="button" class="primary-button" onclick={() => onOpenAccountDrawer('mail')}><Icon icon="tabler:user-plus" width="16" height="16" />Add Source</button>
+		</header>
+		<div class="account-card-grid">
+			{#if contactsProviderAccounts.length === 0}
+				<div class="empty-panel fill">No contacts sources configured.</div>
+			{:else}
+				{#each contactsProviderAccounts as account}
+					<article class="account-card">
+						<span class="round-icon cyan"><Icon icon="tabler:address-book" width="22" height="22" /></span>
+						<div>
+							<strong>{account.display_name}</strong>
+							<p>{account.external_account_id || account.account_id}</p>
+							<small>{contactsProviderLabel(account.provider_kind)} · updated {accountUpdatedLabelFn(account)}</small>
 						</div>
 						<code>{account.account_id}</code>
 					</article>

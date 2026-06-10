@@ -37,8 +37,18 @@
 		selectedCommunication as selectedCommunicationStore
 	} from '$lib/stores/communications';
 	import { isLayoutEditing, visibleWidgetIds } from '$lib/stores/layoutEditor';
-	import { activeCommunicationSection, currentView } from '$lib/stores/navigation';
-	import { loadSettingsWorkspace } from '$lib/stores/settings';
+	import { activeCommunicationSection, currentView, navigateTo } from '$lib/stores/navigation';
+	import {
+		loadSettingsWorkspace,
+		selectedSettingsSection,
+		settingsActionMessage
+	} from '$lib/stores/settings';
+	import { apiBaseUrl } from '$lib/config';
+	import {
+		isGmailOAuthConnectedSearch,
+		isTrustedGmailOAuthConnectedMessage,
+		removeHermesOAuthSearch
+	} from '$lib/services/oauth-callback';
 
 	const notes = [
 		{ title: 'Hermes Hub - Product Strategy', body: 'Основные принципы: единое пространство памяти, интеграция всех коммуникаций...', source: 'Apple Notes', tag: '#project', time: '10:42', icon: 'tabler:notes' },
@@ -67,6 +77,27 @@
 	onMount(() => {
 		void loadCommunicationsWorkspace();
 		void loadSettingsWorkspace();
+
+		function showConnectedAccounts() {
+			navigateTo('settings');
+			selectedSettingsSection.set('accounts');
+			settingsActionMessage.set('Google mail connected');
+			void loadSettingsWorkspace();
+		}
+
+		if (isGmailOAuthConnectedSearch(window.location.search)) {
+			showConnectedAccounts();
+			window.history.replaceState(null, '', removeHermesOAuthSearch(new URL(window.location.href)));
+		}
+
+		function handleOAuthMessage(event: MessageEvent) {
+			if (isTrustedGmailOAuthConnectedMessage(event, apiBaseUrl)) {
+				showConnectedAccounts();
+			}
+		}
+
+		window.addEventListener('message', handleOAuthMessage);
+		return () => window.removeEventListener('message', handleOAuthMessage);
 	});
 </script>
 

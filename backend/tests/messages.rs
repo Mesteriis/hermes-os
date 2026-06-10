@@ -5,6 +5,7 @@ use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
+use hermes_hub_backend::domains::mail::analytics::EmailAnalyticsStore;
 use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
     StoredRawCommunicationRecord,
@@ -15,6 +16,7 @@ use hermes_hub_backend::domains::mail::messages::{
 };
 use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
 use hermes_hub_backend::platform::storage::Database;
+use testkit::context::TestContext;
 
 #[tokio::test]
 async fn message_projection_upserts_canonical_message_against_postgres() {
@@ -992,6 +994,61 @@ async fn message_set_ai_analysis_against_postgres() {
         .expect("message exists");
     assert_eq!(fetched.ai_category.as_deref(), Some("work"));
     assert_eq!(fetched.importance_score, Some(85));
+}
+
+#[tokio::test]
+async fn message_analytics_decodes_averages_against_postgres() {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let message_store = MessageProjectionStore::new(pool.clone());
+    let suffix = unique_suffix();
+    let account_id = format!("acct_analytics_{suffix}");
+
+    store_provider_account(
+        &communication_store,
+        &account_id,
+        "Analytics Gmail",
+        format!("analytics-{suffix}@example.com"),
+    )
+    .await;
+
+    let raw = record_raw_email_message(
+        &communication_store,
+        &account_id,
+        &format!("raw_analytics_{suffix}"),
+        &format!("provider-analytics-{suffix}"),
+        "Analytics subject",
+        "Analytics body",
+    )
+    .await;
+    let projected = project_raw_email_message(&message_store, &raw)
+        .await
+        .expect("project message");
+    message_store
+        .set_ai_analysis(
+            &projected.message_id,
+            Some("work"),
+            Some("summary"),
+            Some(80),
+        )
+        .await
+        .expect("set ai analysis");
+
+    let analytics = EmailAnalyticsStore::new(pool);
+    let health = analytics
+        .mailbox_health(Some(&account_id))
+        .await
+        .expect("mailbox health");
+    let senders = analytics
+        .top_senders(Some(&account_id), 10)
+        .await
+        .expect("top senders");
+
+    assert_eq!(health.total_messages, 1);
+    assert_eq!(health.average_importance, 80.0);
+    assert_eq!(senders.len(), 1);
+    assert_eq!(senders[0].avg_importance, 80.0);
 }
 
 #[tokio::test]

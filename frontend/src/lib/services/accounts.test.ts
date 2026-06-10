@@ -1,6 +1,42 @@
 import { describe, expect, it } from 'vitest';
 
-import { createTelegramAccountDraft, safeAccountIdSegment } from './accounts';
+import {
+	GOOGLE_WORKSPACE_OAUTH_SCOPES,
+	createGoogleWorkspaceOAuthStartRequest,
+	createTelegramAccountDraft,
+	safeAccountIdSegment
+} from './accounts';
+
+describe('Google Workspace OAuth setup', () => {
+	it('requests mail, calendar, and contacts read scopes', () => {
+		expect(GOOGLE_WORKSPACE_OAUTH_SCOPES).toEqual([
+			'https://www.googleapis.com/auth/gmail.readonly',
+			'https://www.googleapis.com/auth/calendar.readonly',
+			'https://www.googleapis.com/auth/contacts.readonly'
+		]);
+	});
+
+	it('builds a start request without requiring the Gmail address first', () => {
+		const request = createGoogleWorkspaceOAuthStartRequest({
+			account_id: '',
+			display_name: '',
+			external_account_id: '',
+			client_id: '',
+			client_secret: '',
+			redirect_uri: 'http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback'
+		});
+
+		expect(request).toMatchObject({
+			account_id: 'gmail-primary',
+			display_name: 'Google Workspace',
+			redirect_uri: 'http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback',
+			scopes: GOOGLE_WORKSPACE_OAUTH_SCOPES
+		});
+		expect(request).not.toHaveProperty('external_account_id');
+		expect(request).not.toHaveProperty('client_id');
+		expect(request).not.toHaveProperty('client_secret');
+	});
+});
 
 describe('Telegram account drafts', () => {
 	it('creates account-scoped Telegram user draft identities', () => {

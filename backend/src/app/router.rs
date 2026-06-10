@@ -172,6 +172,9 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         dev_key_path: config.dev_key_path().to_path_buf(),
     })
     .expect("host vault runtime must initialize");
+    if let Err(error) = vault.unlock_existing() {
+        tracing::warn!(error = %error, "host vault auto-unlock skipped");
+    }
     let state = AppState {
         config,
         database,
@@ -889,10 +892,6 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/email-accounts/gmail/oauth/complete",
             post(post_gmail_oauth_complete),
         )
-        .route(
-            "/api/v1/email-accounts/gmail/oauth/callback",
-            get(get_gmail_oauth_callback),
-        )
         .route("/api/v1/email-accounts/imap", post(post_imap_account_setup))
         .route("/api/v1/audit/events", get(get_audit_events))
         .route("/api/v1/events", post(post_event))
@@ -905,6 +904,10 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
     Router::new()
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
+        .route(
+            "/api/v1/email-accounts/gmail/oauth/callback",
+            get(get_gmail_oauth_callback),
+        )
         .merge(api_routes)
         .with_state(state)
         .layer(local_frontend_cors_layer())

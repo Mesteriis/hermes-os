@@ -1,6 +1,6 @@
 import { get } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ApplicationSetting, ProviderAccount } from '$lib/api';
+import type { ApplicationSetting, CalendarAccount, ProviderAccount } from '$lib/api';
 import { layoutSettings } from './layoutEditor';
 import { sidebarSettings } from './sidebar';
 import { themeSettings } from './theme';
@@ -25,6 +25,42 @@ const workspaceResult = vi.hoisted(() => {
 		display_name: 'Primary Telegram',
 		external_account_id: '@telegram',
 		config: {},
+		created_at: '2026-06-10T00:00:00Z',
+		updated_at: '2026-06-10T00:00:00Z'
+	};
+	const gmailAccount: ProviderAccount = {
+		account_id: 'gmail-primary',
+		provider_kind: 'gmail',
+		display_name: 'Google Workspace',
+		external_account_id: 'gmail-primary',
+		config: {
+			connected_services: ['mail', 'calendar', 'contacts']
+		},
+		created_at: '2026-06-10T00:00:00Z',
+		updated_at: '2026-06-10T00:00:00Z'
+	};
+	const icloudAccount: ProviderAccount = {
+		account_id: 'icloud-primary',
+		provider_kind: 'icloud',
+		display_name: 'Primary iCloud',
+		external_account_id: 'user@icloud.com',
+		config: {
+			connected_services: ['mail', 'calendar', 'contacts']
+		},
+		created_at: '2026-06-10T00:00:00Z',
+		updated_at: '2026-06-10T00:00:00Z'
+	};
+	const calendarAccount: CalendarAccount = {
+		account_id: 'google-calendar:gmail-primary',
+		provider: 'google',
+		account_name: 'Google Workspace',
+		email: 'gmail-primary',
+		credentials_reference: 'secret:provider-account:gmail-primary:oauth_token',
+		sync_status: 'idle',
+		capabilities: {
+			mail_account_id: 'gmail-primary',
+			connected_services: ['calendar']
+		},
 		created_at: '2026-06-10T00:00:00Z',
 		updated_at: '2026-06-10T00:00:00Z'
 	};
@@ -66,7 +102,8 @@ const workspaceResult = vi.hoisted(() => {
 			panelOpacity: 50,
 			panelBlur: 20
 		},
-		providerAccounts: [telegramAccount],
+		providerAccounts: [gmailAccount, icloudAccount, telegramAccount],
+		calendarAccounts: [calendarAccount],
 		settingDrafts: { 'frontend.locale': 'en' },
 		locale: 'en',
 		layoutError: '',
@@ -95,6 +132,11 @@ describe('settings store', () => {
 			'frontend.locale'
 		]);
 		expect(get(settingsStore.telegramProviderAccounts)).toHaveLength(1);
+		expect(get(settingsStore.calendarAccounts)).toHaveLength(1);
+		expect(get(settingsStore.contactsProviderAccounts)).toEqual([
+			expect.objectContaining({ account_id: 'gmail-primary' }),
+			expect.objectContaining({ account_id: 'icloud-primary' })
+		]);
 		expect(get(layoutSettings).views.home?.hiddenWidgetIds).toEqual(['home-priorities']);
 		expect(get(sidebarSettings).hiddenItemIds).toEqual(['tasks']);
 		expect(get(themeSettings).shellBackground).toBe('rune-teal');

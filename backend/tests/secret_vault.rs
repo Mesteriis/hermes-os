@@ -233,6 +233,60 @@ async fn host_vault_create_unlock_store_and_resolve_secret() {
 }
 
 #[tokio::test]
+async fn host_vault_unlock_existing_reopens_session_after_runtime_restart() {
+    let directory = tempdir().expect("tempdir");
+    let vault_home = directory.path().join("vault");
+    let dev_key_path = directory.path().join("dev").join("master.key");
+    let metadata = serde_json::json!({
+        "provider": "imap",
+        "account_id": "acct-host-vault-restart"
+    });
+    let secret_ref = "secret:provider-account:acct-host-vault-restart:imap_password";
+
+    let vault = HostVault::new(HostVaultConfig {
+        home: vault_home.clone(),
+        dev_mode: true,
+        dev_key_path: dev_key_path.clone(),
+    })
+    .expect("host vault");
+    vault
+        .collect_entropy(entropy_events(2_000))
+        .expect("collect entropy");
+    vault.create().expect("create vault");
+    vault
+        .store_secret(
+            secret_ref,
+            "restart-secret",
+            SecretEntryContext {
+                entry_kind: "provider_credential",
+                account_id: "acct-host-vault-restart",
+                purpose: "imap_password",
+                secret_kind: "password",
+                label: "IMAP password",
+                metadata: &metadata,
+            },
+        )
+        .expect("store host vault secret");
+
+    let restarted = HostVault::new(HostVaultConfig {
+        home: vault_home,
+        dev_mode: true,
+        dev_key_path,
+    })
+    .expect("restarted host vault");
+    assert_eq!(restarted.status().expect("status").state, VaultMode::Locked);
+
+    let status = restarted.unlock_existing().expect("unlock existing vault");
+    assert_eq!(status.state, VaultMode::Unlocked);
+    assert_eq!(
+        restarted
+            .read_secret(secret_ref)
+            .expect("read restarted secret"),
+        "restart-secret"
+    );
+}
+
+#[tokio::test]
 async fn host_vault_rejects_tampered_ciphertext() {
     let directory = tempdir().expect("tempdir");
     let vault = test_host_vault(directory.path());

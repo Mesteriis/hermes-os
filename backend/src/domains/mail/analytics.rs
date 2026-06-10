@@ -51,8 +51,8 @@ impl EmailAnalyticsStore {
                 count(*) FILTER (WHERE workflow_state = 'spam')::BIGINT AS spam,
                 count(*) FILTER (WHERE importance_score >= 75)::BIGINT AS important,
                 count(*) FILTER (WHERE EXISTS(SELECT 1 FROM communication_attachments a WHERE a.message_id = communication_messages.message_id))::BIGINT AS with_attachments,
-                COALESCE(avg(importance_score), 0) AS average_importance,
-                EXTRACT(EPOCH FROM now() - min(occurred_at)) / 86400.0 AS oldest_message_days
+                COALESCE(avg(importance_score), 0)::DOUBLE PRECISION AS average_importance,
+                EXTRACT(EPOCH FROM now() - min(occurred_at))::DOUBLE PRECISION / 86400.0::DOUBLE PRECISION AS oldest_message_days
             FROM communication_messages
             WHERE ($1::text IS NULL OR account_id = $1) AND channel_kind = 'email'"#,
         ).bind(account_id).fetch_one(&self.pool).await?;
@@ -80,8 +80,8 @@ impl EmailAnalyticsStore {
         let limit = limit.clamp(1, 50);
         let rows = sqlx::query(
             r#"SELECT sender, count(*)::BIGINT AS message_count,
-                COALESCE(avg(importance_score), 0) AS avg_importance,
-                EXTRACT(EPOCH FROM now() - max(occurred_at)) / 86400.0 AS last_message_days
+                COALESCE(avg(importance_score), 0)::DOUBLE PRECISION AS avg_importance,
+                EXTRACT(EPOCH FROM now() - max(occurred_at))::DOUBLE PRECISION / 86400.0::DOUBLE PRECISION AS last_message_days
             FROM communication_messages
             WHERE ($1::text IS NULL OR account_id = $1) AND channel_kind = 'email'
             GROUP BY sender ORDER BY message_count DESC LIMIT $2"#,
