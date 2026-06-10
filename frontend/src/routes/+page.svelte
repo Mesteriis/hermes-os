@@ -80,7 +80,7 @@
 
 		function showConnectedAccounts() {
 			navigateTo('settings');
-			selectedSettingsSection.set('accounts');
+			selectedSettingsSection.set('integrations');
 			settingsActionMessage.set('Google mail connected');
 			void loadSettingsWorkspace();
 		}

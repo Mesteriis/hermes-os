@@ -52,7 +52,7 @@ import {
 } from './sidebar';
 import { setThemeSettings, themeDraft, themeError, themeSettings } from './theme';
 
-export type SettingsSection = 'appearance' | 'application' | 'sidebar' | 'accounts' | 'language';
+export type SettingsSection = 'appearance' | 'application' | 'sidebar' | 'integrations' | 'language';
 
 export const applicationSettings = writable<ApplicationSetting[]>([]);
 export const providerAccounts = writable<ProviderAccount[]>([]);

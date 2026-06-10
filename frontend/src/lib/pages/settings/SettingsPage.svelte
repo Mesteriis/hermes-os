@@ -3,19 +3,14 @@
 	import { currentLocale, t } from '$lib/i18n';
 	import { openAccountDrawer } from '$lib/stores/accountWizard';
 	import {
-		accountProviderIcon,
-		accountProviderLabel,
-		accountUpdatedLabel,
 		addSidebarGroup,
 		applicationSettings,
-		calendarAccounts,
 		cancelSidebarSettingsEditing,
 		checkboxEventValue,
-		contactsProviderAccounts,
 		effectiveSidebarSettings,
-		emailProviderAccounts,
 		formatDateTime,
 		hasSidebarChanges,
+		integrationViewModels,
 		inputEventValue,
 		isSettingsLoading,
 		isSidebarSettingsSaving,
@@ -24,7 +19,6 @@
 		moveSidebarItemToGroup,
 		moveSidebarRootItem,
 		newSidebarGroupLabel,
-		providerAccounts,
 		removeSidebarGroup,
 		resetSidebarSettingsToDefault,
 		saveSetting,
@@ -52,25 +46,67 @@
 		sidebarRootEntries,
 		sidebarRootIndexForGroup,
 		savingSettingKey,
-		telegramProviderAccounts,
 		toggleSidebarGroupSeparator,
 		toggleSidebarItemHidden,
 		updateNewSidebarGroupLabel,
 		updateSettingDraft,
 		updateSidebarGroupLabel,
-		whatsappProviderAccounts
+		type SettingsSection
 	} from '$lib/stores/settings';
 
 	import AppearanceSettings from './widgets/AppearanceSettings.svelte';
 	import LanguageSettings from './widgets/LanguageSettings.svelte';
 	import ApplicationSettings from './widgets/ApplicationSettings.svelte';
 	import SidebarSettingsWidget from './widgets/SidebarSettings.svelte';
-	import AccountsSettings from './widgets/AccountsSettings.svelte';
+	import IntegrationsSettings from './widgets/IntegrationsSettings.svelte';
 
 	const _ = (key: string) => t($currentLocale, key);
 
 	function openAccountWizard(target?: string) {
 		openAccountDrawer(target as Parameters<typeof openAccountDrawer>[0]);
+	}
+
+	type SettingsTreeItem = {
+		id: SettingsSection;
+		label: string;
+		icon: string;
+	};
+
+	const settingsTreeGroups: Array<{ label: string; items: SettingsTreeItem[] }> = [
+		{
+			label: 'General',
+			items: [
+				{ id: 'application', label: 'Application', icon: 'tabler:adjustments-horizontal' },
+				{ id: 'language', label: 'Language', icon: 'tabler:language' }
+			]
+		},
+		{
+			label: 'Interface',
+			items: [
+				{ id: 'appearance', label: 'Appearance', icon: 'tabler:palette' },
+				{ id: 'sidebar', label: 'Sidebar', icon: 'tabler:layout-sidebar' }
+			]
+		},
+		{
+			label: 'Sources',
+			items: [{ id: 'integrations', label: 'Integrations', icon: 'tabler:plug-connected' }]
+		}
+	];
+
+	let selectedIntegrationId = $state<string | null>(null);
+
+	$effect(() => {
+		if ($integrationViewModels.length === 0) {
+			selectedIntegrationId = null;
+			return;
+		}
+		if (!selectedIntegrationId || !$integrationViewModels.some((item) => item.integrationId === selectedIntegrationId)) {
+			selectedIntegrationId = $integrationViewModels[0].integrationId;
+		}
+	});
+
+	function selectIntegration(integrationId: string) {
+		selectedIntegrationId = integrationId;
 	}
 </script>
 
@@ -81,90 +117,91 @@
 	<p class="inline-error">{$settingsError}</p>
 {/if}
 
-<div class="section-tabs settings-tabs" aria-label={_('Settings sections')}>
-	<button type="button" class:active={$selectedSettingsSection === 'appearance'} onclick={() => selectedSettingsSection.set('appearance')}>
-		<Icon icon="tabler:palette" width="16" height="16" />{_('Appearance')}
-	</button>
-	<button type="button" class:active={$selectedSettingsSection === 'application'} onclick={() => selectedSettingsSection.set('application')}>
-		<Icon icon="tabler:adjustments-horizontal" width="16" height="16" />{_('Application')}
-	</button>
-	<button type="button" class:active={$selectedSettingsSection === 'sidebar'} onclick={() => selectedSettingsSection.set('sidebar')}>
-		<Icon icon="tabler:layout-sidebar" width="16" height="16" />{_('Sidebar')}
-	</button>
-	<button type="button" class:active={$selectedSettingsSection === 'accounts'} onclick={() => selectedSettingsSection.set('accounts')}>
-		<Icon icon="tabler:users" width="16" height="16" />{_('Accounts')} <em>{$providerAccounts.length}</em>
-	</button>
-	<button type="button" class:active={$selectedSettingsSection === 'language'} onclick={() => selectedSettingsSection.set('language')}>
-		<Icon icon="tabler:language" width="16" height="16" />{_('Language')}
-	</button>
-</div>
+<div class="settings-workbench">
+	<nav class="settings-tree" aria-label={_('Settings sections')}>
+		{#each settingsTreeGroups as group}
+			<section class="settings-tree-group">
+				<h2>{_(group.label)}</h2>
+				{#each group.items as item}
+					<button
+						type="button"
+						class:active={$selectedSettingsSection === item.id}
+						onclick={() => selectedSettingsSection.set(item.id)}
+					>
+						<Icon icon={item.icon} width="16" height="16" />
+						<span>{_(item.label)}</span>
+						{#if item.id === 'integrations'}
+							<em>{$integrationViewModels.length}</em>
+						{/if}
+					</button>
+				{/each}
+			</section>
+		{/each}
+	</nav>
 
-{#if $selectedSettingsSection === 'appearance'}
-	<AppearanceSettings />
-{:else if $selectedSettingsSection === 'language'}
-	<LanguageSettings />
-{:else if $selectedSettingsSection === 'application'}
-	<ApplicationSettings
-		applicationSettings={$applicationSettings}
-		settingDrafts={$settingDrafts}
-		isSettingsLoading={$isSettingsLoading}
-		savingSettingKey={$savingSettingKey}
-		settingsByCategory={$settingsByCategory}
-		onSaveSetting={saveSetting}
-		onUpdateSettingDraft={updateSettingDraft}
-		settingsCategoryLabelFn={settingsCategoryLabel}
-		settingDraftValueFn={settingDraftValue}
-		settingHasChangedFn={settingHasChanged}
-		settingAllowedValuesFn={settingAllowedValues}
-		settingControlFn={settingControl}
-		settingMetadataFlagFn={settingMetadataFlag}
-		settingMetadataTextFn={settingMetadataText}
-		settingValueTextFn={settingValueText}
-		inputEventValueFn={inputEventValue}
-		checkboxEventValueFn={checkboxEventValue}
-	/>
-{:else if $selectedSettingsSection === 'sidebar'}
-	<SidebarSettingsWidget
-		sidebarError={$sidebarError}
-		isSidebarSettingsSaving={$isSidebarSettingsSaving}
-		newSidebarGroupLabel={$newSidebarGroupLabel}
-		sidebarRootEntries={$sidebarRootEntries}
-		sidebarHiddenNavItems={$sidebarHiddenNavItems}
-		effectiveSidebarSettings={$effectiveSidebarSettings}
-		hasSidebarChanges={$hasSidebarChanges}
-		onCancelSidebarEditing={cancelSidebarSettingsEditing}
-		onResetSidebar={resetSidebarSettingsToDefault}
-		onSaveSidebar={saveSidebarSettings}
-		onAddSidebarGroup={addSidebarGroup}
-		onRemoveSidebarGroup={removeSidebarGroup}
-		onMoveSidebarGroup={moveSidebarGroup}
-		onMoveSidebarRootItem={moveSidebarRootItem}
-		onMoveSidebarItem={moveSidebarItem}
-		onMoveSidebarItemToGroup={moveSidebarItemToGroup}
-		onToggleSidebarGroupSeparator={toggleSidebarGroupSeparator}
-		onToggleSidebarItemHidden={toggleSidebarItemHidden}
-		onUpdateSidebarGroupLabel={updateSidebarGroupLabel}
-		onUpdateNewSidebarGroupLabel={updateNewSidebarGroupLabel}
-		sidebarGroupLabelFn={sidebarGroupLabel}
-		sidebarItemLabelFn={sidebarItemLabel}
-		sidebarGroupHasSeparatorBeforeFn={sidebarGroupHasSeparatorBefore}
-		sidebarRootIndexForGroupFn={sidebarRootIndexForGroup}
-		sidebarGroupIdFromLabelFn={sidebarGroupIdFromLabel}
-		sidebarConfigItemFn={sidebarConfigItem}
-		inputEventValueFn={inputEventValue}
-	/>
-{:else}
-	<AccountsSettings
-		providerAccounts={$providerAccounts}
-		calendarAccounts={$calendarAccounts}
-		emailProviderAccounts={$emailProviderAccounts}
-		contactsProviderAccounts={$contactsProviderAccounts}
-		telegramProviderAccounts={$telegramProviderAccounts}
-		whatsappProviderAccounts={$whatsappProviderAccounts}
-		onOpenAccountDrawer={openAccountWizard}
-		accountProviderIconFn={accountProviderIcon}
-		accountProviderLabelFn={accountProviderLabel}
-		accountUpdatedLabelFn={accountUpdatedLabel}
-		formatDateTimeFn={formatDateTime}
-	/>
-{/if}
+	<div class="settings-workbench-content">
+		{#if $selectedSettingsSection === 'appearance'}
+			<AppearanceSettings />
+		{:else if $selectedSettingsSection === 'language'}
+			<LanguageSettings />
+		{:else if $selectedSettingsSection === 'application'}
+			<ApplicationSettings
+				applicationSettings={$applicationSettings}
+				settingDrafts={$settingDrafts}
+				isSettingsLoading={$isSettingsLoading}
+				savingSettingKey={$savingSettingKey}
+				settingsByCategory={$settingsByCategory}
+				onSaveSetting={saveSetting}
+				onUpdateSettingDraft={updateSettingDraft}
+				settingsCategoryLabelFn={settingsCategoryLabel}
+				settingDraftValueFn={settingDraftValue}
+				settingHasChangedFn={settingHasChanged}
+				settingAllowedValuesFn={settingAllowedValues}
+				settingControlFn={settingControl}
+				settingMetadataFlagFn={settingMetadataFlag}
+				settingMetadataTextFn={settingMetadataText}
+				settingValueTextFn={settingValueText}
+				inputEventValueFn={inputEventValue}
+				checkboxEventValueFn={checkboxEventValue}
+			/>
+		{:else if $selectedSettingsSection === 'sidebar'}
+			<SidebarSettingsWidget
+				sidebarError={$sidebarError}
+				isSidebarSettingsSaving={$isSidebarSettingsSaving}
+				newSidebarGroupLabel={$newSidebarGroupLabel}
+				sidebarRootEntries={$sidebarRootEntries}
+				sidebarHiddenNavItems={$sidebarHiddenNavItems}
+				effectiveSidebarSettings={$effectiveSidebarSettings}
+				hasSidebarChanges={$hasSidebarChanges}
+				onCancelSidebarEditing={cancelSidebarSettingsEditing}
+				onResetSidebar={resetSidebarSettingsToDefault}
+				onSaveSidebar={saveSidebarSettings}
+				onAddSidebarGroup={addSidebarGroup}
+				onRemoveSidebarGroup={removeSidebarGroup}
+				onMoveSidebarGroup={moveSidebarGroup}
+				onMoveSidebarRootItem={moveSidebarRootItem}
+				onMoveSidebarItem={moveSidebarItem}
+				onMoveSidebarItemToGroup={moveSidebarItemToGroup}
+				onToggleSidebarGroupSeparator={toggleSidebarGroupSeparator}
+				onToggleSidebarItemHidden={toggleSidebarItemHidden}
+				onUpdateSidebarGroupLabel={updateSidebarGroupLabel}
+				onUpdateNewSidebarGroupLabel={updateNewSidebarGroupLabel}
+				sidebarGroupLabelFn={sidebarGroupLabel}
+				sidebarItemLabelFn={sidebarItemLabel}
+				sidebarGroupHasSeparatorBeforeFn={sidebarGroupHasSeparatorBefore}
+				sidebarRootIndexForGroupFn={sidebarRootIndexForGroup}
+				sidebarGroupIdFromLabelFn={sidebarGroupIdFromLabel}
+				sidebarConfigItemFn={sidebarConfigItem}
+				inputEventValueFn={inputEventValue}
+			/>
+		{:else}
+			<IntegrationsSettings
+				integrations={$integrationViewModels}
+				{selectedIntegrationId}
+				onSelectIntegration={selectIntegration}
+				onOpenAccountDrawer={openAccountWizard}
+				formatDateTimeFn={formatDateTime}
+			/>
+		{/if}
+	</div>
+</div>
