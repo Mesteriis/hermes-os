@@ -1,0 +1,157 @@
+@media (max-width: 1359px) {
+.vault-onboarding {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: grid;
+	place-items: center;
+	padding: 32px;
+	background:
+		radial-gradient(circle at 20% 20%, rgba(34, 211, 238, 0.16), transparent 32%),
+		radial-gradient(circle at 80% 12%, rgba(16, 185, 129, 0.14), transparent 30%),
+		linear-gradient(135deg, #071016 0%, #0d141b 58%, #10151a 100%);
+}
+.vault-panel {
+	width: min(720px, 100%);
+	border: 1px solid rgba(148, 163, 184, 0.24);
+	border-radius: 8px;
+	background: rgba(8, 13, 18, 0.9);
+	box-shadow: 0 24px 80px rgba(0, 0, 0, 0.48);
+	padding: 28px;
+	color: #e5edf5;
+}
+.vault-panel__header {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-bottom: 24px;
+}
+.vault-emblem {
+	display: grid;
+	place-items: center;
+	width: 54px;
+	height: 54px;
+	border: 1px solid rgba(45, 212, 191, 0.42);
+	border-radius: 8px;
+	color: #67e8f9;
+	background: rgba(8, 47, 73, 0.32);
+}
+.vault-kicker {
+	margin: 0 0 4px;
+	color: #8bd8dc;
+	font-size: 12px;
+	font-weight: 700;
+	text-transform: uppercase;
+}
+.vault-panel h1 {
+	margin: 0;
+	font-size: 28px;
+	line-height: 1.1;
+	letter-spacing: 0;
+}
+.vault-step {
+	display: grid;
+	gap: 16px;
+}
+.vault-step p {
+	margin: 0;
+	color: #b7c7d6;
+	line-height: 1.55;
+}
+.vault-warning {
+	border-left: 3px solid #f59e0b;
+	padding-left: 12px;
+	color: #fde68a !important;
+}
+.vault-entropy-canvas {
+	min-height: 260px;
+	border: 1px solid rgba(148, 163, 184, 0.22);
+	border-radius: 8px;
+	display: grid;
+	align-content: center;
+	gap: 18px;
+	padding: 28px;
+	background:
+		linear-gradient(rgba(103, 232, 249, 0.08) 1px, transparent 1px),
+		linear-gradient(90deg, rgba(103, 232, 249, 0.08) 1px, transparent 1px),
+		rgba(15, 23, 42, 0.42);
+	background-size: 28px 28px;
+	cursor: crosshair;
+}
+.vault-entropy-meter {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 16px;
+}
+.vault-entropy-meter span {
+	color: #9fb2c5;
+	font-size: 13px;
+	text-transform: uppercase;
+}
+.vault-entropy-meter strong {
+	color: #67e8f9;
+	font-size: 34px;
+	line-height: 1;
+}
+.vault-progress {
+	height: 10px;
+	width: 100%;
+	overflow: hidden;
+	appearance: none;
+	border: 0;
+	border-radius: 999px;
+	background: rgba(148, 163, 184, 0.18);
+}
+.vault-progress::-webkit-progress-bar {
+	border-radius: inherit;
+	background: rgba(148, 163, 184, 0.18);
+}
+.vault-progress::-webkit-progress-value {
+	height: 100%;
+	border-radius: inherit;
+	background: linear-gradient(90deg, #22d3ee, #34d399);
+	transition: width 180ms ease;
+}
+.vault-progress::-moz-progress-bar {
+	border-radius: inherit;
+	background: linear-gradient(90deg, #22d3ee, #34d399);
+}
+.vault-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+.vault-actions button {
+	border: 0;
+	border-radius: 8px;
+	padding: 11px 16px;
+	background: #d9f99d;
+	color: #13220a;
+	font-weight: 800;
+	cursor: pointer;
+}
+.vault-actions button:disabled {
+	cursor: not-allowed;
+	opacity: 0.45;
+}
+.vault-state {
+	margin: 18px 0 0;
+	font-size: 13px;
+}
+.vault-state.success {
+	color: #86efac;
+}
+.vault-state.error {
+	color: #fca5a5;
+}
+.vault-recovery-phrase {
+	border: 1px solid rgba(252, 211, 77, 0.32);
+	border-radius: 8px;
+	padding: 14px;
+	background: rgba(120, 53, 15, 0.22);
+	color: #fde68a;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	line-height: 1.7;
+}
+}

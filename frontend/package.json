@@ -11,10 +11,11 @@
 		"lint:styles": "node scripts/check-no-inline-styles.mjs",
 		"lint:ts": "svelte-kit sync && svelte-check --fail-on-warnings --tsconfig ./tsconfig.json",
 		"capture:layout": "node scripts/capture-layout-screenshots.mjs",
+		"test:unit": "vitest run src/lib",
 		"test:layout": "vitest run src/lib/layout",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"check": "pnpm lint && pnpm test:layout",
+		"check": "pnpm lint && pnpm test:unit",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
 	},
 	"devDependencies": {

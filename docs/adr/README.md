@@ -80,3 +80,5 @@ ADR status vocabulary:
 - [ADR-0069 Calendar Intelligence Heuristic Fallbacks](ADR-0069-calendar-intelligence-heuristic-fallbacks.md)
 - [ADR-0070 Tasks First-Class Domain](ADR-0070-tasks-first-class-domain.md)
 - [ADR-0073 Backend Module Organization](ADR-0073-backend-module-organization.md)
+- [ADR-0078 Frontend Component Decomposition — SPA Pages and Widgets](ADR-0078-frontend-component-decomposition.md)
+- [ADR-0079 Script Logic Decomposition — Services, Smart Pages and Config](ADR-0079-script-logic-decomposition.md)
