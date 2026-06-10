@@ -2,7 +2,7 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
-use axum::http::{Request, StatusCode, header};
+use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
 use sqlx::Row;
 use tempfile::tempdir;
@@ -508,6 +508,180 @@ async fn telegram_live_account_setup_stores_bot_token_in_host_vault() {
 }
 
 #[tokio::test]
+async fn telegram_qr_authorized_account_setup_persists_metadata_without_host_vault_secret() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-user-{suffix}");
+    let tdlib_data_path = format!("docker/data/telegram/{account_id}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_dir.path().join("vault").to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                vault_dir
+                    .path()
+                    .join("dev")
+                    .join("master.key")
+                    .to_str()
+                    .expect("dev key path"),
+            ),
+            ("DATABASE_URL", database_url.as_str()),
+            ("HERMES_TELEGRAM_API_ID", "12345"),
+            ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/accounts",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "telegram_user",
+                "display_name": "@second_account",
+                "external_account_id": format!("telegram:{suffix}"),
+                "tdlib_data_path": tdlib_data_path,
+                "transcription_enabled": false,
+                "qr_authorized": true
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("account response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["account_id"], json!(account_id));
+    assert_eq!(body["provider_kind"], json!("telegram_user"));
+    assert_eq!(body["runtime"], json!("tdlib_qr_authorized"));
+    assert_eq!(body["credential_bindings"], json!([]));
+
+    let account = sqlx::query(
+        "SELECT provider_kind, display_name, external_account_id, config FROM communication_provider_accounts WHERE account_id = $1",
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider account");
+    let provider_kind: String = account.try_get("provider_kind").expect("provider kind");
+    let display_name: String = account.try_get("display_name").expect("display name");
+    let external_account_id: String = account
+        .try_get("external_account_id")
+        .expect("external account id");
+    let config: Value = account.try_get("config").expect("config");
+    assert_eq!(provider_kind, "telegram_user");
+    assert_eq!(display_name, "@second_account");
+    assert_eq!(external_account_id, format!("telegram:{suffix}"));
+    assert_eq!(config["runtime"], json!("tdlib_qr_authorized"));
+    assert_eq!(config["tdlib_data_path"], json!(tdlib_data_path));
+    assert_eq!(config["transcription_enabled"], json!(false));
+    assert!(config.get("api_hash").is_none());
+    assert!(config.get("bot_token").is_none());
+
+    let binding_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM communication_provider_account_secret_refs WHERE account_id = $1",
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("binding count");
+    assert_eq!(binding_count, 0);
+}
+
+#[tokio::test]
+async fn telegram_finalized_qr_account_setup_infers_qr_authorized_runtime() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-user-inferred-{suffix}");
+    let tdlib_data_path = format!("docker/data/telegram/{account_id}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_dir.path().join("vault").to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                vault_dir
+                    .path()
+                    .join("dev")
+                    .join("master.key")
+                    .to_str()
+                    .expect("dev key path"),
+            ),
+            ("DATABASE_URL", database_url.as_str()),
+            ("HERMES_TELEGRAM_API_ID", "12345"),
+            ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/accounts",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "telegram_user",
+                "display_name": "@inferred_qr",
+                "external_account_id": format!("telegram:{suffix}"),
+                "tdlib_data_path": tdlib_data_path,
+                "transcription_enabled": false
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("account response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["runtime"], json!("tdlib_qr_authorized"));
+    assert_eq!(body["credential_bindings"], json!([]));
+
+    let config: Value = sqlx::query_scalar(
+        "SELECT config FROM communication_provider_accounts WHERE account_id = $1",
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider account config");
+    assert_eq!(config["runtime"], json!("tdlib_qr_authorized"));
+    assert_eq!(config["tdlib_data_path"], json!(tdlib_data_path));
+    assert!(config.get("api_hash").is_none());
+
+    let binding_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM communication_provider_account_secret_refs WHERE account_id = $1",
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("binding count");
+    assert_eq!(binding_count, 0);
+}
+
+#[tokio::test]
 async fn telegram_live_account_setup_api_requires_configured_database() {
     let app = build_router_with_database(
         AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
@@ -681,6 +855,26 @@ async fn telegram_qr_login_password_unknown_setup_returns_json_not_found() {
     assert_eq!(body["error"], json!("telegram_qr_login_not_found"));
 }
 
+#[tokio::test]
+async fn telegram_qr_login_cancel_unknown_setup_returns_json_not_found() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
+        Database::disabled(),
+    );
+
+    let response = app
+        .oneshot(delete_request_with_token(
+            "/api/v1/telegram/login/qr/missing-setup",
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("QR cancel response");
+
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], json!("telegram_qr_login_not_found"));
+}
+
 fn assert_capability_status(body: &Value, capability: &str, status: &str, closure_gate: bool) {
     let capabilities = body["capabilities"].as_array().expect("capabilities");
     assert!(
@@ -719,6 +913,15 @@ fn json_post_request_with_actor(path: &str, body: Value, token: &str) -> Request
 fn get_request_with_token(path: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method("GET")
+        .uri(path)
+        .header("x-hermes-secret", token)
+        .body(Body::empty())
+        .expect("request")
+}
+
+fn delete_request_with_token(path: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method(Method::DELETE)
         .uri(path)
         .header("x-hermes-secret", token)
         .body(Body::empty())

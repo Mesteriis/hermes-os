@@ -4,7 +4,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_void};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -26,10 +26,12 @@ use crate::platform::config::AppConfig;
 
 const QR_FIRST_LINK_TIMEOUT: Duration = Duration::from_secs(20);
 const QR_SESSION_LIFETIME: Duration = Duration::from_secs(10 * 60);
+const QR_CANCEL_WAIT_TIMEOUT: Duration = Duration::from_secs(5);
 const QR_GET_ME_TIMEOUT: Duration = Duration::from_secs(5);
 const QR_POLL_AFTER_MS: u64 = 2_000;
 
 pub(crate) type PendingQrLoginMap = Arc<Mutex<HashMap<String, TelegramQrLoginSession>>>;
+type QrLoginWorkerCompletion = Arc<(Mutex<bool>, Condvar)>;
 type TdJsonClientCreate = unsafe extern "C" fn() -> *mut c_void;
 type TdJsonClientSend = unsafe extern "C" fn(*mut c_void, *const c_char);
 type TdJsonClientReceive = unsafe extern "C" fn(*mut c_void, f64) -> *const c_char;
@@ -40,11 +42,20 @@ type TdJsonClientDestroy = unsafe extern "C" fn(*mut c_void);
 pub(crate) struct TelegramQrLoginSession {
     pub(crate) response: TelegramQrLoginStatusResponse,
     command_tx: Sender<TelegramQrLoginCommand>,
+    worker_completion: QrLoginWorkerCompletion,
 }
 
 #[derive(Debug, Eq, PartialEq)]
 enum TelegramQrLoginCommand {
     CheckPassword(String),
+    Cancel,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum DrainedQrLoginCommand {
+    None,
+    PasswordSubmitted,
+    Cancelled,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -275,56 +286,127 @@ pub(crate) fn submit_qr_login_password(
     Ok(session.response.clone())
 }
 
+pub(crate) fn cancel_qr_login(
+    pending_logins: PendingQrLoginMap,
+    setup_id: &str,
+) -> Result<(), TelegramError> {
+    let setup_id = setup_id.trim();
+    if setup_id.is_empty() {
+        return Err(TelegramError::InvalidRequest(
+            "setup_id must not be empty".to_owned(),
+        ));
+    }
+
+    let session = {
+        let mut pending_logins = pending_logins.lock().map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram QR login state lock was poisoned".to_owned())
+        })?;
+        pending_logins
+            .remove(setup_id)
+            .ok_or(TelegramError::QrLoginNotFound)?
+    };
+    let _ = session.command_tx.send(TelegramQrLoginCommand::Cancel);
+    wait_for_worker_completion(&session.worker_completion)?;
+    let mut pending_logins = pending_logins.lock().map_err(|_| {
+        TelegramError::TdlibRuntime("Telegram QR login state lock was poisoned".to_owned())
+    })?;
+    pending_logins.remove(setup_id);
+    Ok(())
+}
+
+fn cancel_existing_qr_logins_for_account(
+    pending_logins: &PendingQrLoginMap,
+    account_id: &str,
+) -> Result<(), TelegramError> {
+    let sessions = {
+        let mut pending = pending_logins.lock().map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram QR login state lock was poisoned".to_owned())
+        })?;
+        let setup_ids = pending
+            .iter()
+            .filter(|(_, session)| session.response.account_id == account_id)
+            .map(|(setup_id, _)| setup_id.clone())
+            .collect::<Vec<_>>();
+        setup_ids
+            .into_iter()
+            .filter_map(|setup_id| pending.remove(&setup_id).map(|session| (setup_id, session)))
+            .collect::<Vec<_>>()
+    };
+
+    for (setup_id, session) in sessions {
+        let _ = session.command_tx.send(TelegramQrLoginCommand::Cancel);
+        wait_for_worker_completion(&session.worker_completion)?;
+        let mut pending = pending_logins.lock().map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram QR login state lock was poisoned".to_owned())
+        })?;
+        pending.remove(&setup_id);
+    }
+
+    Ok(())
+}
+
 fn start_qr_login_driver(
     config: AppConfig,
     pending_logins: PendingQrLoginMap,
     request: TelegramQrLoginStartRequest,
 ) -> Result<TelegramQrLoginStatusResponse, TelegramError> {
-    let (first_response_tx, first_response_rx) = mpsc::channel();
+    let _runtime_probe = TdJsonLibrary::load(config.tdjson_path())?;
+    cancel_existing_qr_logins_for_account(&pending_logins, &request.account_id)?;
     let (command_tx, command_rx) = mpsc::channel();
+    let worker_completion = new_worker_completion();
     let setup_id = new_setup_id(&request.account_id);
+    let response = qr_preparing_response(&setup_id, &request.account_id);
     let thread_name = format!(
         "telegram-qr-login-{}",
         short_thread_suffix(&request.account_id)
     );
+
+    upsert_pending_response(
+        &pending_logins,
+        response.clone(),
+        command_tx.clone(),
+        Arc::clone(&worker_completion),
+    )?;
 
     thread::Builder::new()
         .name(thread_name)
         .spawn({
             let setup_id = setup_id.clone();
             let pending_logins = Arc::clone(&pending_logins);
+            let worker_completion = Arc::clone(&worker_completion);
             move || {
-                let mut first_response_tx = Some(first_response_tx);
                 let result = drive_qr_login(
                     config,
                     pending_logins.clone(),
                     request,
-                    setup_id,
+                    setup_id.clone(),
                     command_tx,
                     command_rx,
-                    &mut first_response_tx,
+                    Arc::clone(&worker_completion),
                 );
                 if let Err(error) = result {
-                    if let Some(first_response_tx) = first_response_tx.take() {
-                        let _ = first_response_tx.send(Err(error));
-                    } else {
-                        tracing::warn!(error = %error, "Telegram QR login failed after QR link was issued");
-                    }
+                    let _ = mark_pending_status(
+                        &pending_logins,
+                        &setup_id,
+                        TelegramQrLoginStatus::Failed,
+                        "Telegram QR login failed before the QR code was issued.",
+                        0,
+                    );
+                    tracing::warn!(error = %error, "Telegram QR login worker failed");
                 }
+                mark_worker_complete(&worker_completion);
             }
         })
         .map_err(|error| {
-            TelegramError::TdlibRuntime(format!("failed to spawn Telegram QR login worker: {error}"))
+            let _ = pending_logins.lock().map(|mut pending| {
+                pending.remove(&setup_id);
+            });
+            TelegramError::TdlibRuntime(format!(
+                "failed to spawn Telegram QR login worker: {error}"
+            ))
         })?;
 
-    first_response_rx
-        .recv_timeout(QR_FIRST_LINK_TIMEOUT)
-        .map_err(|error| {
-            TelegramError::TdlibRuntime(format!(
-                "Telegram TDLib did not return a QR confirmation link within {} seconds: {error}",
-                QR_FIRST_LINK_TIMEOUT.as_secs()
-            ))
-        })?
+    Ok(response)
 }
 
 fn drive_qr_login(
@@ -334,7 +416,7 @@ fn drive_qr_login(
     setup_id: String,
     command_tx: Sender<TelegramQrLoginCommand>,
     command_rx: Receiver<TelegramQrLoginCommand>,
-    first_response_tx: &mut Option<Sender<Result<TelegramQrLoginStatusResponse, TelegramError>>>,
+    worker_completion: QrLoginWorkerCompletion,
 ) -> Result<(), TelegramError> {
     let library = TdJsonLibrary::load(config.tdjson_path())?;
     let client = library.create_client()?;
@@ -360,25 +442,35 @@ fn drive_qr_login(
     let mut tdlib_parameters_sent = false;
     let mut database_encryption_key_checked = false;
     let mut qr_requested = false;
+    let mut qr_link_issued = false;
     let mut password_check_in_flight = false;
 
     loop {
-        if drain_qr_login_commands(&client, &command_rx)? {
-            password_check_in_flight = true;
+        match drain_qr_login_commands(&client, &command_rx)? {
+            DrainedQrLoginCommand::Cancelled => return Ok(()),
+            DrainedQrLoginCommand::PasswordSubmitted => {
+                password_check_in_flight = true;
+                mark_pending_status(
+                    &pending_logins,
+                    &setup_id,
+                    TelegramQrLoginStatus::WaitingPassword,
+                    "Checking Telegram password.",
+                    QR_POLL_AFTER_MS,
+                )?;
+            }
+            DrainedQrLoginCommand::None => {}
+        }
+
+        if !qr_link_issued && started_at.elapsed() > QR_FIRST_LINK_TIMEOUT {
             mark_pending_status(
                 &pending_logins,
                 &setup_id,
-                TelegramQrLoginStatus::WaitingPassword,
-                "Checking Telegram password.",
-                QR_POLL_AFTER_MS,
+                TelegramQrLoginStatus::Failed,
+                "Telegram TDLib did not return a QR confirmation link in time.",
+                0,
             )?;
-        }
-
-        if first_response_tx.is_some() && started_at.elapsed() > QR_FIRST_LINK_TIMEOUT {
-            return Err(TelegramError::TdlibRuntime(format!(
-                "Telegram TDLib did not enter QR confirmation state within {} seconds",
-                QR_FIRST_LINK_TIMEOUT.as_secs()
-            )));
+            let _ = client.send_json(&json!({ "@type": "close" }));
+            return Ok(());
         }
         if started_at.elapsed() > QR_SESSION_LIFETIME {
             mark_pending_status(
@@ -451,6 +543,7 @@ fn drive_qr_login(
                 qr_requested = true;
             }
             "authorizationStateWaitOtherDeviceConfirmation" => {
+                qr_link_issued = true;
                 let link = authorization_state
                     .get("link")
                     .and_then(Value::as_str)
@@ -462,10 +555,12 @@ fn drive_qr_login(
                         )
                     })?;
                 let response = qr_waiting_response(&setup_id, &request.account_id, link)?;
-                upsert_pending_response(&pending_logins, response.clone(), command_tx.clone())?;
-                if let Some(first_response_tx) = first_response_tx.take() {
-                    let _ = first_response_tx.send(Ok(response));
-                }
+                upsert_pending_response(
+                    &pending_logins,
+                    response.clone(),
+                    command_tx.clone(),
+                    Arc::clone(&worker_completion),
+                )?;
             }
             "authorizationStateWaitPassword" => {
                 password_check_in_flight = false;
@@ -478,22 +573,13 @@ fn drive_qr_login(
                     .unwrap_or_else(|| {
                         "Telegram requires your 2-step verification password.".to_owned()
                     });
-                if first_response_tx.is_some() {
-                    let response =
-                        password_waiting_response(&setup_id, &request.account_id, &message);
-                    upsert_pending_response(&pending_logins, response.clone(), command_tx.clone())?;
-                    if let Some(first_response_tx) = first_response_tx.take() {
-                        let _ = first_response_tx.send(Ok(response));
-                    }
-                } else {
-                    mark_pending_status(
-                        &pending_logins,
-                        &setup_id,
-                        TelegramQrLoginStatus::WaitingPassword,
-                        &message,
-                        QR_POLL_AFTER_MS,
-                    )?;
-                }
+                mark_pending_status(
+                    &pending_logins,
+                    &setup_id,
+                    TelegramQrLoginStatus::WaitingPassword,
+                    &message,
+                    QR_POLL_AFTER_MS,
+                )?;
             }
             "authorizationStateReady" => {
                 let identity = match fetch_authorized_user_identity(&client) {
@@ -511,21 +597,7 @@ fn drive_qr_login(
                 } else {
                     "Telegram TDLib session is already authorized."
                 };
-                if first_response_tx.is_some() {
-                    let response =
-                        ready_response(&setup_id, &request.account_id, message, identity.as_ref());
-                    upsert_pending_response(&pending_logins, response.clone(), command_tx.clone())?;
-                    if let Some(first_response_tx) = first_response_tx.take() {
-                        let _ = first_response_tx.send(Ok(response));
-                    }
-                } else {
-                    mark_pending_ready_status(
-                        &pending_logins,
-                        &setup_id,
-                        message,
-                        identity.as_ref(),
-                    )?;
-                }
+                mark_pending_ready_status(&pending_logins, &setup_id, message, identity.as_ref())?;
                 let _ = client.send_json(&json!({ "@type": "close" }));
                 return Ok(());
             }
@@ -569,7 +641,7 @@ fn drive_qr_login(
 fn drain_qr_login_commands(
     client: &TdJsonClient,
     command_rx: &Receiver<TelegramQrLoginCommand>,
-) -> Result<bool, TelegramError> {
+) -> Result<DrainedQrLoginCommand, TelegramError> {
     let mut password_submitted = false;
     loop {
         match command_rx.try_recv() {
@@ -581,11 +653,49 @@ fn drain_qr_login_commands(
                 }))?;
                 password_submitted = true;
             }
+            Ok(TelegramQrLoginCommand::Cancel) => {
+                client.send_json(&json!({ "@type": "close" }))?;
+                return Ok(DrainedQrLoginCommand::Cancelled);
+            }
             Err(TryRecvError::Empty | TryRecvError::Disconnected) => {
-                return Ok(password_submitted);
+                return Ok(if password_submitted {
+                    DrainedQrLoginCommand::PasswordSubmitted
+                } else {
+                    DrainedQrLoginCommand::None
+                });
             }
         }
     }
+}
+
+fn new_worker_completion() -> QrLoginWorkerCompletion {
+    Arc::new((Mutex::new(false), Condvar::new()))
+}
+
+fn mark_worker_complete(worker_completion: &QrLoginWorkerCompletion) {
+    let (lock, cvar) = &**worker_completion;
+    if let Ok(mut completed) = lock.lock() {
+        *completed = true;
+        cvar.notify_all();
+    }
+}
+
+fn wait_for_worker_completion(
+    worker_completion: &QrLoginWorkerCompletion,
+) -> Result<(), TelegramError> {
+    let (lock, cvar) = &**worker_completion;
+    let completed = lock.lock().map_err(|_| {
+        TelegramError::TdlibRuntime("Telegram QR login worker lock was poisoned".to_owned())
+    })?;
+    if *completed {
+        return Ok(());
+    }
+    let _ = cvar
+        .wait_timeout(completed, QR_CANCEL_WAIT_TIMEOUT)
+        .map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram QR login worker lock was poisoned".to_owned())
+        })?;
+    Ok(())
 }
 
 fn send_tdlib_parameters(
@@ -894,6 +1004,24 @@ fn qr_waiting_response(
     })
 }
 
+fn qr_preparing_response(setup_id: &str, account_id: &str) -> TelegramQrLoginStatusResponse {
+    TelegramQrLoginStatusResponse {
+        setup_id: setup_id.to_owned(),
+        account_id: account_id.to_owned(),
+        status: TelegramQrLoginStatus::WaitingQrScan,
+        qr_link: None,
+        qr_svg: None,
+        telegram_user_id: None,
+        telegram_username: None,
+        suggested_account_id: None,
+        suggested_display_name: None,
+        suggested_external_account_id: None,
+        expires_at: None,
+        poll_after_ms: 1_000,
+        message: Some("Preparing Telegram QR code.".to_owned()),
+    }
+}
+
 fn password_waiting_response(
     setup_id: &str,
     account_id: &str,
@@ -1059,6 +1187,7 @@ fn upsert_pending_response(
     pending_logins: &PendingQrLoginMap,
     response: TelegramQrLoginStatusResponse,
     command_tx: Sender<TelegramQrLoginCommand>,
+    worker_completion: QrLoginWorkerCompletion,
 ) -> Result<(), TelegramError> {
     let mut pending_logins = pending_logins.lock().map_err(|_| {
         TelegramError::TdlibRuntime("Telegram QR login state lock was poisoned".to_owned())
@@ -1068,6 +1197,7 @@ fn upsert_pending_response(
         TelegramQrLoginSession {
             response,
             command_tx,
+            worker_completion,
         },
     );
     Ok(())
@@ -1428,6 +1558,17 @@ mod tests {
     }
 
     #[test]
+    fn qr_preparing_response_is_cancellable_without_exposing_qr_token() {
+        let response = super::qr_preparing_response("setup-id", "telegram-account");
+
+        assert_eq!(response.setup_id, "setup-id");
+        assert_eq!(response.status, TelegramQrLoginStatus::WaitingQrScan);
+        assert_eq!(response.qr_link, None);
+        assert_eq!(response.qr_svg, None);
+        assert_eq!(response.poll_after_ms, 1_000);
+    }
+
+    #[test]
     fn qr_password_submission_sends_command_to_pending_session() {
         let (command_tx, command_rx) = mpsc::channel();
         let pending = Arc::new(Mutex::new(HashMap::from([(
@@ -1435,6 +1576,7 @@ mod tests {
             TelegramQrLoginSession {
                 response: test_qr_login_response(TelegramQrLoginStatus::WaitingPassword),
                 command_tx,
+                worker_completion: super::new_worker_completion(),
             },
         )])));
 
@@ -1468,6 +1610,7 @@ mod tests {
             TelegramQrLoginSession {
                 response: test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan),
                 command_tx,
+                worker_completion: super::new_worker_completion(),
             },
         )])));
 
@@ -1484,6 +1627,87 @@ mod tests {
 
         assert!(matches!(error, TelegramError::InvalidRequest(_)));
         assert!(command_rx.try_recv().is_err());
+    }
+
+    #[test]
+    fn qr_login_cancel_removes_pending_session_and_notifies_worker() {
+        let (command_tx, command_rx) = mpsc::channel();
+        let worker_completion = super::new_worker_completion();
+        super::mark_worker_complete(&worker_completion);
+        let pending = Arc::new(Mutex::new(HashMap::from([(
+            "setup-id".to_owned(),
+            TelegramQrLoginSession {
+                response: test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan),
+                command_tx,
+                worker_completion,
+            },
+        )])));
+
+        super::cancel_qr_login(Arc::clone(&pending), "setup-id").expect("QR login cancelled");
+
+        assert!(
+            !pending
+                .lock()
+                .expect("pending lock")
+                .contains_key("setup-id")
+        );
+        assert_eq!(
+            command_rx.try_recv().expect("cancel command"),
+            TelegramQrLoginCommand::Cancel
+        );
+    }
+
+    #[test]
+    fn qr_login_cancel_unknown_setup_returns_not_found() {
+        let pending = Arc::new(Mutex::new(HashMap::new()));
+
+        let error = super::cancel_qr_login(pending, "missing-setup")
+            .expect_err("unknown QR setup must not be cancelled");
+
+        assert!(matches!(error, TelegramError::QrLoginNotFound));
+    }
+
+    #[test]
+    fn qr_login_start_cancels_existing_sessions_for_same_account() {
+        let (same_account_tx, same_account_rx) = mpsc::channel();
+        let (other_account_tx, other_account_rx) = mpsc::channel();
+        let same_account_completion = super::new_worker_completion();
+        let other_account_completion = super::new_worker_completion();
+        super::mark_worker_complete(&same_account_completion);
+        super::mark_worker_complete(&other_account_completion);
+        let mut other_response = test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan);
+        other_response.setup_id = "other-setup-id".to_owned();
+        other_response.account_id = "other-account".to_owned();
+        let pending = Arc::new(Mutex::new(HashMap::from([
+            (
+                "setup-id".to_owned(),
+                TelegramQrLoginSession {
+                    response: test_qr_login_response(TelegramQrLoginStatus::WaitingQrScan),
+                    command_tx: same_account_tx,
+                    worker_completion: same_account_completion,
+                },
+            ),
+            (
+                "other-setup-id".to_owned(),
+                TelegramQrLoginSession {
+                    response: other_response,
+                    command_tx: other_account_tx,
+                    worker_completion: other_account_completion,
+                },
+            ),
+        ])));
+
+        super::cancel_existing_qr_logins_for_account(&pending, "telegram-account")
+            .expect("same-account sessions cancelled");
+
+        let pending = pending.lock().expect("pending lock");
+        assert!(!pending.contains_key("setup-id"));
+        assert!(pending.contains_key("other-setup-id"));
+        assert_eq!(
+            same_account_rx.try_recv().expect("same account cancel"),
+            TelegramQrLoginCommand::Cancel
+        );
+        assert!(other_account_rx.try_recv().is_err());
     }
 
     fn test_qr_login_response(status: TelegramQrLoginStatus) -> TelegramQrLoginStatusResponse {

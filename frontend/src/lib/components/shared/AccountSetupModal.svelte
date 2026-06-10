@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import { accountWizardTarget, type AccountWizardKind } from '$lib/stores/accountWizard';
@@ -14,10 +15,13 @@
 		startTelegramQrLogin,
 		submitTelegramQrLoginPassword,
 		fetchTelegramQrLoginStatus,
+		cancelTelegramQrLogin,
 		fetchTelegramCapabilities,
 		type GmailOAuthStartResponse,
 		type TelegramQrLoginStatusResponse,
 		type TelegramCapabilitiesResponse,
+		type TelegramAccountSetupResponse,
+		type TelegramLiveAccountSetupRequest,
 		type TelegramProviderKind
 	} from '$lib/api';
 	import {
@@ -29,8 +33,10 @@
 		inferMailService,
 		accountIdFromEmail,
 		calendarProviderDefaultName,
+		createTelegramAccountDraft,
 		providerKindLabel
 	} from '$lib/services/accounts';
+	import { shouldPollTelegramQrLoginStatus } from '$lib/services/telegram';
 
 	const _ = (key: string) => t($currentLocale, key);
 
@@ -91,22 +97,20 @@
 	let telegramError = $state('');
 	let telegramActionMessage = $state('');
 	let isTelegramActionSubmitting = $state(false);
+	let isTelegramCapabilitiesLoading = $state(false);
 	let telegramAuthMethod = $state<TelegramAuthMethod>('fixture');
 	let telegramWizardStep = $state<TelegramWizardStep>('account');
 	let telegramQrLogin = $state<TelegramQrLoginStatusResponse | null>(null);
 	let telegramQrPassword = $state('');
-	let telegramAccountForm = $state({
-		account_id: 'telegram-primary',
-		provider_kind: 'telegram_user' as TelegramProviderKind,
-		display_name: 'Primary Telegram',
-		external_account_id: '@telegram_fixture',
-		api_id: '',
-		api_hash: '',
-		bot_token: '',
-		session_encryption_key: '',
-		tdlib_data_path: 'docker/data/telegram/telegram-primary',
-		transcription_enabled: false
-	});
+	let telegramQrAutoStartKey = $state('');
+	let fetchedTelegramCapabilities = $state<TelegramCapabilitiesResponse | null>(null);
+	let telegramCapabilitiesRequest: Promise<TelegramCapabilitiesResponse | null> | null = null;
+	let telegramQrStatusPollTimer: ReturnType<typeof setTimeout> | null = null;
+	let telegramQrStatusRequestInFlight = false;
+	let telegramQrSessionGeneration = 0;
+	let telegramQrReleasePromise: Promise<void> | null = null;
+	let wasAccountDrawerOpen = false;
+	let telegramAccountForm = $state(createTelegramAccountDraft());
 	let whatsappAccountForm = $state({
 		account_id: 'whatsapp-primary',
 		display_name: 'Primary WhatsApp Web',
@@ -118,47 +122,107 @@
 	let whatsappError = $state('');
 	let isWhatsappActionSubmitting = $state(false);
 
+	const effectiveTelegramCapabilities = $derived(telegramCapabilities ?? fetchedTelegramCapabilities);
 	const telegramQrRuntimeBlocked = $derived(
 		telegramAuthMethod === 'qr' &&
-			telegramCapabilities !== null &&
-			!telegramCapabilities.tdjson_runtime_available
+			effectiveTelegramCapabilities !== null &&
+			!effectiveTelegramCapabilities.tdjson_runtime_available
 	);
-	const telegramQrNeedsFormAppCredentials = $derived(
+	const telegramQrAppCredentialsMissing = $derived(
 		telegramAuthMethod === 'qr' &&
-			!(telegramCapabilities?.telegram_app_credentials_configured ?? false)
+			effectiveTelegramCapabilities !== null &&
+			!effectiveTelegramCapabilities.telegram_app_credentials_configured
 	);
-	const telegramNeedsFormAppCredentials = $derived(
-		telegramAuthMethod === 'phone' || telegramQrNeedsFormAppCredentials
+	const telegramNeedsFormAppCredentials = $derived(telegramAuthMethod === 'phone');
+	const telegramQrIsPreparing = $derived(
+		telegramAuthMethod === 'qr' &&
+			((!telegramQrLogin && (isTelegramCapabilitiesLoading || isTelegramActionSubmitting)) ||
+				(telegramQrLogin?.status === 'waiting_qr_scan' && !telegramQrLogin.qr_svg))
 	);
 
 	$effect(() => {
-		if (isOpen) {
-			const target = $accountWizardTarget;
-			accountWizardKind = target === 'gmail' || target === 'icloud' || target === 'imap' ? 'mail' : target;
-			if (target === 'gmail' || target === 'icloud' || target === 'imap') {
-				selectMailService(target);
+		if (!isOpen) {
+			if (wasAccountDrawerOpen) {
+				releaseTelegramQrSession();
 			}
-			if (accountWizardKind === 'mail') {
-				mailWizardStep = 'provider';
-			}
-			if (accountWizardKind === 'calendar') {
-				calendarWizardStep = 'provider';
-			}
-			if (accountWizardKind === 'telegram') {
-				telegramWizardStep = 'account';
-			}
-			telegramQrLogin = null;
-			telegramQrPassword = '';
-			setupMessage = '';
-			setupError = '';
-			telegramActionMessage = '';
-			telegramError = '';
-			whatsappActionMessage = '';
-			whatsappError = '';
+			wasAccountDrawerOpen = false;
+			return;
 		}
+		const isOpeningDrawer = !wasAccountDrawerOpen;
+		wasAccountDrawerOpen = true;
+
+		const target = $accountWizardTarget;
+		accountWizardKind = target === 'gmail' || target === 'icloud' || target === 'imap' ? 'mail' : target;
+		if (target === 'gmail' || target === 'icloud' || target === 'imap') {
+			selectMailService(target);
+		}
+		if (accountWizardKind === 'mail') {
+			mailWizardStep = 'provider';
+		}
+		if (accountWizardKind === 'calendar') {
+			calendarWizardStep = 'provider';
+		}
+		if (accountWizardKind === 'telegram') {
+			telegramWizardStep = 'account';
+			if (isOpeningDrawer) {
+				telegramAuthMethod = 'fixture';
+				telegramSetupMode = 'fixture';
+				telegramAccountForm = createTelegramAccountDraft();
+			}
+		}
+		resetTelegramQrSessionLocal();
+		setupMessage = '';
+		setupError = '';
+		telegramActionMessage = '';
+		telegramError = '';
+		whatsappActionMessage = '';
+		whatsappError = '';
+	});
+
+	$effect(() => {
+		const shouldAutoStartQrLogin =
+			isOpen &&
+			accountWizardKind === 'telegram' &&
+			telegramWizardStep === 'details' &&
+			telegramAuthMethod === 'qr' &&
+			!telegramQrLogin &&
+			!isTelegramActionSubmitting &&
+			!setupError &&
+			!telegramError;
+		if (!shouldAutoStartQrLogin) {
+			return;
+		}
+
+		const accountId = telegramAccountForm.account_id.trim() || 'telegram-primary';
+		const autoStartKey = `${accountId}:${telegramWizardExternalAccountId()}`;
+		if (telegramQrAutoStartKey === autoStartKey) {
+			return;
+		}
+
+		telegramQrAutoStartKey = autoStartKey;
+		void startTelegramQrLoginFromWizard();
+	});
+
+	$effect(() => {
+		if (
+			!isTelegramQrStepVisible() ||
+			!shouldPollTelegramQrLoginStatus(telegramQrLogin?.status) ||
+			isTelegramActionSubmitting ||
+			telegramQrStatusRequestInFlight ||
+			telegramQrStatusPollTimer
+		) {
+			return;
+		}
+
+		scheduleTelegramQrStatusPolling(telegramQrLogin);
+	});
+
+	onDestroy(() => {
+		releaseTelegramQrSession();
 	});
 
 	function closeAccountDrawer() {
+		releaseTelegramQrSession();
 		isOpen = false;
 	}
 
@@ -233,14 +297,44 @@
 	}
 
 	function continueTelegramWizard(nextStep: TelegramWizardStep) {
+		const shouldPreserveQrSession =
+			telegramAuthMethod === 'qr' &&
+			nextStep === 'auth' &&
+			isReusableTelegramQrLogin(telegramQrLogin);
+
+		if (nextStep !== 'details') {
+			if (!shouldPreserveQrSession) {
+				releaseTelegramQrSession();
+			} else {
+				clearTelegramQrStatusPolling();
+			}
+		}
 		telegramWizardStep = nextStep;
+
+		if (
+			nextStep === 'details' &&
+			telegramAuthMethod === 'qr' &&
+			telegramQrLogin?.status === 'waiting_qr_scan'
+		) {
+			scheduleTelegramQrStatusPolling(telegramQrLogin);
+		}
 	}
 
 	function selectTelegramAuthMethod(method: TelegramAuthMethod) {
+		const shouldPreserveQrSession =
+			method === 'qr' &&
+			telegramAuthMethod === 'qr' &&
+			isReusableTelegramQrLogin(telegramQrLogin);
+
 		telegramAuthMethod = method;
 		telegramSetupMode = method === 'fixture' ? 'fixture' : 'live';
-		telegramQrLogin = null;
-		telegramQrPassword = '';
+		if (!shouldPreserveQrSession) {
+			releaseTelegramQrSession();
+		} else {
+			clearTelegramQrStatusPolling();
+		}
+		telegramError = '';
+		telegramActionMessage = '';
 		if (method === 'qr' && telegramAccountForm.external_account_id === '@telegram_fixture') {
 			telegramAccountForm = {
 				...telegramAccountForm,
@@ -254,6 +348,18 @@
 		}
 	}
 
+	function selectTelegramProviderKind(providerKind: TelegramProviderKind) {
+		if (telegramAccountForm.provider_kind !== providerKind) {
+			telegramAccountForm = createTelegramAccountDraft(providerKind);
+			return;
+		}
+
+		telegramAccountForm = {
+			...telegramAccountForm,
+			provider_kind: providerKind
+		};
+	}
+
 	function telegramWizardExternalAccountId() {
 		return (
 			telegramAccountForm.external_account_id.trim() ||
@@ -261,6 +367,67 @@
 				? `qr-login:${telegramAccountForm.account_id}`
 				: telegramAccountForm.account_id)
 		);
+	}
+
+	function isReusableTelegramQrLogin(result: TelegramQrLoginStatusResponse | null) {
+		return (
+			result?.status === 'waiting_qr_scan' ||
+			result?.status === 'waiting_password' ||
+			result?.status === 'ready'
+		);
+	}
+
+	function isTelegramQrStepVisible() {
+		return (
+			isOpen &&
+			accountWizardKind === 'telegram' &&
+			telegramWizardStep === 'details' &&
+			telegramAuthMethod === 'qr'
+		);
+	}
+
+	function resetTelegramQrSessionLocal(options: { resetAutoStartKey?: boolean } = {}) {
+		clearTelegramQrStatusPolling();
+		telegramQrLogin = null;
+		telegramQrPassword = '';
+		if (options.resetAutoStartKey !== false) {
+			telegramQrAutoStartKey = '';
+		}
+	}
+
+	function cancelTelegramQrBackendSession(setupId: string): Promise<void> {
+		let releasePromise: Promise<void>;
+		releasePromise = cancelTelegramQrLogin(setupId).catch(() => {
+			// The session may already be closed or expired by the TDLib worker.
+		}).then(() => undefined).finally(() => {
+			if (telegramQrReleasePromise === releasePromise) {
+				telegramQrReleasePromise = null;
+			}
+		});
+		telegramQrReleasePromise = releasePromise;
+		return releasePromise;
+	}
+
+	async function waitForTelegramQrSessionRelease() {
+		const pendingRelease = telegramQrReleasePromise;
+		if (pendingRelease) {
+			await pendingRelease;
+		}
+	}
+
+	function releaseTelegramQrSession(options: { cancelBackend?: boolean; resetAutoStartKey?: boolean } = {}) {
+		const setupId = telegramQrLogin?.setup_id;
+		const shouldCancel =
+			options.cancelBackend !== false &&
+			Boolean(setupId) &&
+			isReusableTelegramQrLogin(telegramQrLogin);
+
+		telegramQrSessionGeneration += 1;
+		resetTelegramQrSessionLocal({ resetAutoStartKey: options.resetAutoStartKey });
+
+		if (shouldCancel && setupId) {
+			void cancelTelegramQrBackendSession(setupId);
+		}
 	}
 
 	function telegramQrStatusLabel(status: string) {
@@ -280,6 +447,47 @@
 			default:
 				return 'QR login status';
 		}
+	}
+
+	function clearTelegramQrStatusPolling() {
+		if (!telegramQrStatusPollTimer) {
+			return;
+		}
+		clearTimeout(telegramQrStatusPollTimer);
+		telegramQrStatusPollTimer = null;
+	}
+
+	function scheduleTelegramQrStatusPolling(result: TelegramQrLoginStatusResponse | null) {
+		clearTelegramQrStatusPolling();
+		if (!isTelegramQrStepVisible() || !shouldPollTelegramQrLoginStatus(result?.status)) {
+			return;
+		}
+		const delay = Math.max(1000, Math.min(result.poll_after_ms || 2500, 10_000));
+		telegramQrStatusPollTimer = setTimeout(() => {
+			telegramQrStatusPollTimer = null;
+			void refreshTelegramQrLoginStatus({ silent: true });
+		}, delay);
+	}
+
+	async function ensureTelegramCapabilities(): Promise<TelegramCapabilitiesResponse | null> {
+		const currentCapabilities = telegramCapabilities ?? fetchedTelegramCapabilities;
+		if (currentCapabilities) {
+			return currentCapabilities;
+		}
+		if (!telegramCapabilitiesRequest) {
+			isTelegramCapabilitiesLoading = true;
+			telegramCapabilitiesRequest = fetchTelegramCapabilities()
+				.then((capabilities) => {
+					fetchedTelegramCapabilities = capabilities;
+					return capabilities;
+				})
+				.catch(() => null)
+				.finally(() => {
+					isTelegramCapabilitiesLoading = false;
+					telegramCapabilitiesRequest = null;
+				});
+		}
+		return telegramCapabilitiesRequest;
 	}
 
 	function applyTelegramQrLoginResult(result: TelegramQrLoginStatusResponse) {
@@ -302,16 +510,22 @@
 			return 'Fixture mode creates local Telegram records for UI and policy testing.';
 		}
 		if (telegramAuthMethod === 'qr') {
-			if (telegramCapabilities !== null && !telegramCapabilities.tdjson_runtime_available) {
+			if (isTelegramCapabilitiesLoading && !effectiveTelegramCapabilities) {
+				return 'Preparing Telegram QR login...';
+			}
+			if (telegramQrRuntimeBlocked) {
 				return 'TDLib JSON runtime is not available in the running backend.';
 			}
-			if (telegramQrNeedsFormAppCredentials) {
-				return 'Enter Telegram API ID and API hash to start QR login in this dev session.';
+			if (telegramQrAppCredentialsMissing) {
+				return 'Telegram app credentials must be configured in the backend environment before QR login.';
 			}
 			if (telegramQrLogin?.status === 'waiting_password') {
 				return 'Enter the Telegram 2-step verification password to finish local TDLib authorization.';
 			}
-			return 'Telegram app credentials are configured in the backend environment. QR login is ready.';
+			if (telegramQrLogin?.status === 'ready') {
+				return 'Telegram authorization is complete. Save the account to finish setup.';
+			}
+			return 'Open Telegram on an already logged-in device and scan the QR code.';
 		}
 		return 'Live credentials are stored in the encrypted database vault. Telegram live runtime remains blocked until the adapter is implemented.';
 	}
@@ -473,54 +687,54 @@
 					? 'telegram_user'
 					: telegramAccountForm.provider_kind;
 		const externalAccountId = telegramWizardExternalAccountId();
+		const isQrAuthorizedAccount =
+			telegramAuthMethod === 'qr' && telegramQrLogin?.status === 'ready';
 
 		isTelegramActionSubmitting = true;
 		telegramActionMessage = '';
 		setupMessage = '';
 		setupError = '';
 		try {
-			const result =
-				isFixtureSetup
-					? await setupTelegramFixtureAccount({
-							account_id: telegramAccountForm.account_id,
-							provider_kind: providerKind,
-							display_name: telegramAccountForm.display_name,
-							external_account_id: externalAccountId,
-							tdlib_data_path:
-								telegramAuthMethod === 'qr'
-									? undefined
-									: telegramAccountForm.tdlib_data_path || undefined,
-							transcription_enabled:
-								telegramAuthMethod === 'qr' ? false : telegramAccountForm.transcription_enabled
-						})
-					: await setupTelegramAccount({
-							account_id: telegramAccountForm.account_id,
-							provider_kind: providerKind,
-							display_name: telegramAccountForm.display_name,
-							external_account_id: externalAccountId,
-							api_id:
-								providerKind === 'telegram_user' && telegramAccountForm.api_id.trim()
-									? Number(telegramAccountForm.api_id.trim())
-									: undefined,
-							api_hash:
-								providerKind === 'telegram_user'
-									? telegramAccountForm.api_hash.trim() || undefined
-									: undefined,
-							bot_token:
-								providerKind === 'telegram_bot'
-									? telegramAccountForm.bot_token || undefined
-									: undefined,
-							session_encryption_key:
-								providerKind === 'telegram_user'
-									? telegramAccountForm.session_encryption_key || undefined
-									: undefined,
-							tdlib_data_path:
-								telegramAuthMethod === 'qr'
-									? undefined
-									: telegramAccountForm.tdlib_data_path || undefined,
-							transcription_enabled:
-								telegramAuthMethod === 'qr' ? false : telegramAccountForm.transcription_enabled
-						});
+			let result: TelegramAccountSetupResponse;
+			if (isFixtureSetup) {
+				result = await setupTelegramFixtureAccount({
+					account_id: telegramAccountForm.account_id,
+					provider_kind: providerKind,
+					display_name: telegramAccountForm.display_name,
+					external_account_id: externalAccountId,
+					tdlib_data_path: telegramAccountForm.tdlib_data_path || undefined,
+					transcription_enabled:
+						telegramAuthMethod === 'qr' ? false : telegramAccountForm.transcription_enabled
+				});
+			} else {
+				const request: TelegramLiveAccountSetupRequest = {
+					account_id: telegramAccountForm.account_id,
+					provider_kind: providerKind,
+					display_name: telegramAccountForm.display_name,
+					external_account_id: externalAccountId,
+					tdlib_data_path: telegramAccountForm.tdlib_data_path || undefined,
+					transcription_enabled:
+						telegramAuthMethod === 'qr' ? false : telegramAccountForm.transcription_enabled
+				};
+				if (providerKind === 'telegram_user' && isQrAuthorizedAccount) {
+					request.qr_authorized = true;
+				} else if (providerKind === 'telegram_user') {
+					const apiId = telegramAccountForm.api_id.trim();
+					const apiHash = telegramAccountForm.api_hash.trim();
+					if (apiId) {
+						request.api_id = Number(apiId);
+					}
+					if (apiHash) {
+						request.api_hash = apiHash;
+					}
+					if (telegramAccountForm.session_encryption_key) {
+						request.session_encryption_key = telegramAccountForm.session_encryption_key;
+					}
+				} else if (providerKind === 'telegram_bot' && telegramAccountForm.bot_token) {
+					request.bot_token = telegramAccountForm.bot_token;
+				}
+				result = await setupTelegramAccount(request);
+			}
 			const runtimeLabel =
 				telegramAuthMethod === 'qr' && telegramQrLogin?.status === 'ready'
 					? 'saved after QR authorization'
@@ -558,66 +772,58 @@
 			return;
 		}
 
-		let capabilities = telegramCapabilities;
-		if (!capabilities) {
-			try {
-				capabilities = await fetchTelegramCapabilities();
-			} catch {
-				capabilities = null;
-			}
-		}
-
-		if (capabilities && !capabilities.tdjson_runtime_available) {
-			setupError = 'TDLib JSON runtime is not available in the running backend';
-			telegramError = setupError;
-			return;
-		}
-
-		const apiIdValue = telegramAccountForm.api_id.trim();
-		const apiHashValue = telegramAccountForm.api_hash.trim();
-		const appCredentialsConfigured = capabilities?.telegram_app_credentials_configured ?? false;
-		if (!appCredentialsConfigured && (!apiIdValue || !apiHashValue)) {
-			setupError = 'Telegram API ID and API hash are required for QR login in this dev session';
-			telegramError = setupError;
-			return;
-		}
-		const parsedApiId = Number(apiIdValue);
-		if (apiIdValue && (!Number.isInteger(parsedApiId) || parsedApiId <= 0)) {
-			setupError = 'Telegram API ID must be greater than zero';
-			telegramError = setupError;
-			return;
-		}
-		const apiId = apiIdValue ? parsedApiId : undefined;
-
+		releaseTelegramQrSession({ resetAutoStartKey: false });
+		const sessionGeneration = telegramQrSessionGeneration;
 		isTelegramActionSubmitting = true;
 		telegramActionMessage = '';
 		telegramError = '';
 		setupMessage = '';
 		setupError = '';
-		telegramQrLogin = null;
-		telegramQrPassword = '';
 
 		try {
+			await waitForTelegramQrSessionRelease();
+			if (sessionGeneration !== telegramQrSessionGeneration || !isTelegramQrStepVisible()) {
+				return;
+			}
+			const capabilities = await ensureTelegramCapabilities();
+			if (sessionGeneration !== telegramQrSessionGeneration || !isTelegramQrStepVisible()) {
+				return;
+			}
+			if (!capabilities) {
+				throw new Error('Telegram backend capabilities could not be loaded');
+			}
+			if (!capabilities.tdjson_runtime_available) {
+				throw new Error('TDLib JSON runtime is not available in the running backend');
+			}
+			if (!capabilities.telegram_app_credentials_configured) {
+				throw new Error('Telegram app credentials are not configured in the backend environment');
+			}
+
 			const result = await startTelegramQrLogin({
 				account_id: telegramAccountForm.account_id,
 				display_name: telegramAccountForm.display_name,
 				external_account_id: telegramWizardExternalAccountId(),
-				api_id: apiId,
-				api_hash: apiHashValue || undefined,
-				session_encryption_key: telegramAccountForm.session_encryption_key || undefined,
-				tdlib_data_path: undefined,
+				tdlib_data_path: telegramAccountForm.tdlib_data_path || undefined,
 				transcription_enabled: false
 			});
+			if (sessionGeneration !== telegramQrSessionGeneration || !isTelegramQrStepVisible()) {
+				void cancelTelegramQrBackendSession(result.setup_id);
+				return;
+			}
 			applyTelegramQrLoginResult(result);
 			if (result.status === 'ready') {
 				await saveReadyTelegramQrAccountFromWizard();
 			} else {
+				scheduleTelegramQrStatusPolling(result);
 				setupMessage =
-					result.status === 'waiting_qr_scan'
+					result.status === 'waiting_qr_scan' && result.qr_svg
 						? 'Scan the Telegram QR code to continue'
 						: result.message ?? `Telegram QR login status: ${result.status}`;
 			}
 		} catch (error) {
+			if (sessionGeneration !== telegramQrSessionGeneration || !isTelegramQrStepVisible()) {
+				return;
+			}
 			const message = error instanceof Error ? error.message : 'Telegram QR login start failed';
 			setupError = message;
 			telegramError = message;
@@ -643,22 +849,35 @@
 			return;
 		}
 
+		const setupId = telegramQrLogin.setup_id;
+		const sessionGeneration = telegramQrSessionGeneration;
 		isTelegramActionSubmitting = true;
 		setupError = '';
 		telegramError = '';
 		try {
 			const result = await submitTelegramQrLoginPassword(
-				telegramQrLogin.setup_id,
+				setupId,
 				{ password: telegramQrPassword }
 			);
+			if (
+				sessionGeneration !== telegramQrSessionGeneration ||
+				telegramQrLogin?.setup_id !== setupId ||
+				!isTelegramQrStepVisible()
+			) {
+				return;
+			}
 			telegramQrPassword = '';
 			applyTelegramQrLoginResult(result);
 			if (result.status === 'ready') {
 				await saveReadyTelegramQrAccountFromWizard();
 			} else {
+				scheduleTelegramQrStatusPolling(result);
 				setupMessage = result.message ?? `Telegram QR login status: ${result.status}`;
 			}
 		} catch (error) {
+			if (sessionGeneration !== telegramQrSessionGeneration || !isTelegramQrStepVisible()) {
+				return;
+			}
 			const message =
 				error instanceof Error ? error.message : 'Telegram QR login password submit failed';
 			setupError = message;
@@ -676,31 +895,68 @@
 		void startTelegramQrLoginFromWizard();
 	}
 
-	async function refreshTelegramQrLoginStatus() {
-		if (!telegramQrLogin || isTelegramActionSubmitting) {
+	async function refreshTelegramQrLoginStatus(options: { silent?: boolean } = {}) {
+		if (!telegramQrLogin || isTelegramActionSubmitting || telegramQrStatusRequestInFlight) {
 			return;
 		}
 
-		isTelegramActionSubmitting = true;
-		setupError = '';
-		telegramError = '';
+		const setupId = telegramQrLogin.setup_id;
+		const sessionGeneration = telegramQrSessionGeneration;
+		const hadQrSvg = Boolean(telegramQrLogin.qr_svg);
+		telegramQrStatusRequestInFlight = true;
+		if (!options.silent) {
+			isTelegramActionSubmitting = true;
+			setupError = '';
+			telegramError = '';
+		}
 		try {
-			const result = await fetchTelegramQrLoginStatus(
-				telegramQrLogin.setup_id
-			);
+			const result = await fetchTelegramQrLoginStatus(setupId);
+			if (
+				sessionGeneration !== telegramQrSessionGeneration ||
+				telegramQrLogin?.setup_id !== setupId ||
+				!isTelegramQrStepVisible()
+			) {
+				return;
+			}
+			if (
+				options.silent &&
+				telegramQrLogin.status === 'waiting_qr_scan' &&
+				result.status === 'waiting_qr_scan' &&
+				Boolean(telegramQrLogin.qr_svg) &&
+				Boolean(result.qr_svg)
+			) {
+				scheduleTelegramQrStatusPolling(result);
+				return;
+			}
+
 			applyTelegramQrLoginResult(result);
 			if (result.status === 'ready') {
 				await saveReadyTelegramQrAccountFromWizard();
 			} else {
-				setupMessage = result.message ?? `Telegram QR login status: ${result.status}`;
+				scheduleTelegramQrStatusPolling(result);
+				const didReceiveFirstQrSvg =
+					result.status === 'waiting_qr_scan' && !hadQrSvg && Boolean(result.qr_svg);
+				if (!options.silent || result.status !== 'waiting_qr_scan' || didReceiveFirstQrSvg) {
+					setupMessage =
+						didReceiveFirstQrSvg
+							? 'Scan the Telegram QR code to continue'
+							: result.message ?? `Telegram QR login status: ${result.status}`;
+				}
 			}
 		} catch (error) {
+			if (sessionGeneration !== telegramQrSessionGeneration || !isTelegramQrStepVisible()) {
+				return;
+			}
 			const message =
 				error instanceof Error ? error.message : 'Telegram QR login status request failed';
 			setupError = message;
 			telegramError = message;
+			clearTelegramQrStatusPolling();
 		} finally {
-			isTelegramActionSubmitting = false;
+			telegramQrStatusRequestInFlight = false;
+			if (!options.silent) {
+				isTelegramActionSubmitting = false;
+			}
 		}
 	}
 </script>
@@ -826,13 +1082,13 @@
 			{#if telegramWizardStep === 'account'}
 				<div class="wizard-step">
 					<div class="wizard-choice-grid two">
-						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_user'} onclick={() => { telegramAccountForm = { ...telegramAccountForm, provider_kind: 'telegram_user' }; selectTelegramAuthMethod('phone'); continueTelegramWizard('auth'); }}><Icon icon="tabler:user" width="30" height="30" /><strong>User Account</strong><span>Phone or QR login</span></button>
-						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_bot'} onclick={() => { telegramAccountForm = { ...telegramAccountForm, provider_kind: 'telegram_bot' }; selectTelegramAuthMethod('bot_token'); continueTelegramWizard('auth'); }}><Icon icon="tabler:robot" width="30" height="30" /><strong>Bot Account</strong><span>Bot token</span></button>
+						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_user'} onclick={() => { selectTelegramProviderKind('telegram_user'); selectTelegramAuthMethod('phone'); continueTelegramWizard('auth'); }}><Icon icon="tabler:user" width="30" height="30" /><strong>User Account</strong><span>Phone or QR login</span></button>
+						<button type="button" class:active={telegramAccountForm.provider_kind === 'telegram_bot'} onclick={() => { selectTelegramProviderKind('telegram_bot'); selectTelegramAuthMethod('bot_token'); continueTelegramWizard('auth'); }}><Icon icon="tabler:robot" width="30" height="30" /><strong>Bot Account</strong><span>Bot token</span></button>
 					</div>
 				</div>
 			{:else if telegramWizardStep === 'auth'}
 				<div class="wizard-step">
-					<button type="button" class="wizard-back" onclick={() => (telegramWizardStep = 'account' as TelegramWizardStep)}><Icon icon="tabler:arrow-left" width="15" height="15" />Account</button>
+					<button type="button" class="wizard-back" onclick={() => continueTelegramWizard('account')}><Icon icon="tabler:arrow-left" width="15" height="15" />Account</button>
 					<div class="wizard-choice-grid">
 						{#if telegramAccountForm.provider_kind === 'telegram_user'}
 							<button type="button" class:active={telegramAuthMethod === 'phone'} onclick={() => { selectTelegramAuthMethod('phone'); continueTelegramWizard('details'); }}><Icon icon="tabler:phone" width="28" height="28" /><strong>Phone Number</strong></button>
@@ -845,32 +1101,39 @@
 					</div>
 				</div>
 			{:else}
-					<form class="setup-form" onsubmit={(event) => { event.preventDefault(); telegramAuthMethod === 'qr' ? submitTelegramQrStepFromWizard() : void saveTelegramAccountFromWizard(); }}>
-					<button type="button" class="wizard-back wide" onclick={() => (telegramWizardStep = 'auth' as TelegramWizardStep)}><Icon icon="tabler:arrow-left" width="15" height="15" />Login</button>
+					<form class="setup-form" class:telegram-qr-setup-form={telegramAuthMethod === 'qr'} onsubmit={(event) => { event.preventDefault(); telegramAuthMethod === 'qr' ? submitTelegramQrStepFromWizard() : void saveTelegramAccountFromWizard(); }}>
+						<button type="button" class="wizard-back wide" onclick={() => continueTelegramWizard('auth')}><Icon icon="tabler:arrow-left" width="15" height="15" />Login</button>
 					{#if telegramAuthMethod !== 'qr'}
 						<label><span>Account ID</span><input bind:value={telegramAccountForm.account_id} autocomplete="off" /></label>
 						<label><span>Display name</span><input bind:value={telegramAccountForm.display_name} autocomplete="off" /></label>
 					{/if}
 					{#if telegramAuthMethod === 'phone'}
 						<label class="wide"><span>Phone number</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="tel" placeholder="+15551234567" /></label>
-						{:else if telegramAuthMethod === 'qr'}
-							<div class="qr-login-panel wide" class:large={Boolean(telegramQrLogin?.qr_svg)}>
-								{#if telegramQrLogin?.qr_svg}
-									<div class="qr-svg" aria-label="Telegram QR code">{@html telegramQrLogin.qr_svg}</div>
-								{:else}
-									<Icon icon="tabler:qrcode" width="58" height="58" />
-								{/if}
-								<div>
-									<strong>{telegramQrLogin ? telegramQrStatusLabel(telegramQrLogin.status) : 'QR login'}</strong>
-									<p>{telegramQrLogin?.message ?? 'Telegram QR code is ready to be generated for this account.'}</p>
-									{#if telegramQrLogin?.qr_link}
-										<a href={telegramQrLogin.qr_link}>Open Telegram login link</a>
-									{/if}
+					{:else if telegramAuthMethod === 'qr'}
+						<div class="qr-login-panel telegram-qr-panel wide" class:large={Boolean(telegramQrLogin?.qr_svg)}>
+							{#if telegramQrLogin?.qr_svg}
+								<div class="qr-svg" aria-label="Telegram QR code">{@html telegramQrLogin.qr_svg}</div>
+							{:else if telegramQrIsPreparing}
+								<div class="qr-skeleton" aria-label="Loading Telegram QR code">
+									<span></span>
+									<span></span>
+									<span></span>
 								</div>
-							</div>
-							{#if telegramQrLogin?.status === 'waiting_password'}
-								<label class="wide"><span>Telegram Cloud Password</span><input bind:value={telegramQrPassword} type="password" autocomplete="current-password" /></label>
+							{:else}
+								<Icon icon="tabler:qrcode" width="58" height="58" />
 							{/if}
+							<div class="qr-login-copy">
+								<strong>{telegramQrLogin ? telegramQrStatusLabel(telegramQrLogin.status) : telegramQrIsPreparing ? 'Preparing QR login' : 'QR login'}</strong>
+								<p>{telegramQrLogin?.message ?? (telegramQrIsPreparing ? 'Requesting a fresh Telegram QR code...' : 'Telegram QR login starts automatically for this account.')}</p>
+								<p class="qr-account-hint">Account ID: {telegramAccountForm.account_id}</p>
+								{#if telegramQrLogin?.qr_link}
+									<a href={telegramQrLogin.qr_link}>Open Telegram login link</a>
+								{/if}
+							</div>
+						</div>
+						{#if telegramQrLogin?.status === 'waiting_password'}
+							<label class="wide"><span>Telegram Cloud Password</span><input bind:value={telegramQrPassword} type="password" autocomplete="current-password" /></label>
+						{/if}
 					{:else}
 						<label class="wide"><span>External ID</span><input bind:value={telegramAccountForm.external_account_id} autocomplete="off" /></label>
 					{/if}
@@ -887,12 +1150,10 @@
 						</div>
 						<div class="form-actions wide">
 							{#if telegramAuthMethod === 'qr'}
+								<button type="button" class="secondary-action" onclick={closeAccountDrawer}>Cancel QR login</button>
 								{#if telegramQrLogin?.status === 'waiting_password'}
 									<button type="submit" disabled={isTelegramActionSubmitting || !telegramQrPassword}>Continue</button>
-								{:else}
-									<button type="submit" disabled={isTelegramActionSubmitting || telegramQrLogin?.status === 'ready' || telegramQrRuntimeBlocked}>Start QR Login</button>
 								{/if}
-								<button type="button" onclick={refreshTelegramQrLoginStatus} disabled={isTelegramActionSubmitting || !telegramQrLogin || telegramQrLogin.status === 'ready'}>Refresh Status</button>
 								{#if telegramQrLogin?.status === 'ready'}
 									<button type="button" onclick={() => void saveTelegramAccountFromWizard()} disabled={isTelegramActionSubmitting}>Save Account</button>
 								{/if}

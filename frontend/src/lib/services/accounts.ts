@@ -4,7 +4,8 @@ import {
 	setupImapAccount,
 	createCalendarAccount,
 	type ProviderAccount,
-	type GmailOAuthStartResponse
+	type GmailOAuthStartResponse,
+	type TelegramProviderKind
 } from '$lib/api';
 import { formatDateTime } from './formatting';
 
@@ -16,6 +17,19 @@ type MailWizardStep = 'provider' | 'details';
 type CalendarProvider = 'local' | 'google' | 'microsoft' | 'apple' | 'caldav' | 'ics';
 type CalendarWizardStep = 'provider' | 'details';
 type TelegramWizardStep = 'account' | 'auth' | 'details';
+
+export type TelegramAccountDraft = {
+	account_id: string;
+	provider_kind: TelegramProviderKind;
+	display_name: string;
+	external_account_id: string;
+	api_id: string;
+	api_hash: string;
+	bot_token: string;
+	session_encryption_key: string;
+	tdlib_data_path: string;
+	transcription_enabled: boolean;
+};
 
 export function openAccountDrawer(target: AccountWizardTarget): {
 	wizardKind: AccountWizardKind;
@@ -48,6 +62,41 @@ export function openAccountDrawer(target: AccountWizardTarget): {
 
 export function closeAccountDrawer(): boolean {
 	return false;
+}
+
+function defaultTelegramDraftSeed() {
+	return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function safeAccountIdSegment(value: string) {
+	return value
+		.trim()
+		.toLowerCase()
+		.replace(/[^a-z0-9_-]+/g, '-')
+		.replace(/^-+|-+$/g, '')
+		.slice(0, 48);
+}
+
+export function createTelegramAccountDraft(
+	providerKind: TelegramProviderKind = 'telegram_user',
+	seed = defaultTelegramDraftSeed()
+): TelegramAccountDraft {
+	const suffix = safeAccountIdSegment(seed) || 'draft';
+	const prefix = providerKind === 'telegram_bot' ? 'telegram-bot' : 'telegram-user';
+	const accountId = `${prefix}-${suffix}`;
+
+	return {
+		account_id: accountId,
+		provider_kind: providerKind,
+		display_name: providerKind === 'telegram_bot' ? 'Telegram Bot' : 'Telegram Account',
+		external_account_id: '',
+		api_id: '',
+		api_hash: '',
+		bot_token: '',
+		session_encryption_key: '',
+		tdlib_data_path: `docker/data/telegram/${accountId}`,
+		transcription_enabled: false
+	};
 }
 
 export function selectMailService(

@@ -5,6 +5,7 @@ import type {
 	TelegramChatListResponse,
 	TelegramMessageListResponse,
 	TelegramQrLoginStatusResponse,
+	TelegramQrLoginCancelResponse,
 	TelegramQrLoginStartRequest,
 	TelegramQrLoginPasswordRequest,
 	TelegramAccountSetupRequest,
@@ -78,6 +79,13 @@ export async function fetchTelegramQrLoginStatus(setupId: string): Promise<Teleg
 	return ApiClient.instance.get<TelegramQrLoginStatusResponse>(
 		`/api/v1/telegram/login/qr/${encodeURIComponent(setupId)}`,
 		'Telegram QR login status request failed'
+	);
+}
+
+export async function cancelTelegramQrLogin(setupId: string): Promise<TelegramQrLoginCancelResponse> {
+	return ApiClient.instance.delete<TelegramQrLoginCancelResponse>(
+		`/api/v1/telegram/login/qr/${encodeURIComponent(setupId)}`,
+		'Telegram QR login cancel request failed'
 	);
 }
 

@@ -55,31 +55,26 @@ export const hiddenWidgetTitles = derived(activeLayout, ($activeLayout) =>
 	($activeLayout?.hiddenByUser ?? []).map((widget) => widget.definition.title)
 );
 
+export const visibleWidgetIds = derived(activeLayout, ($activeLayout) => {
+	const widgets = Object.values($activeLayout?.widgetsByZone ?? {}).flat();
+	return new Set(widgets.map((widget) => widget.widgetId));
+});
+
 export const addableWidgetsForCurrentView = derived(activeLayout, ($activeLayout) => {
-	const preset = $activeLayout?.preset;
-	if (!preset) {
+	if (!$activeLayout) {
 		return [];
 	}
 
-	const currentWidgetIds = new Set(preset.widgets.map((widget) => widget.widgetId));
-	for (const widget of $activeLayout.hiddenByUser ?? []) {
-		currentWidgetIds.add(widget.widgetId);
-	}
 	const hiddenWidgetIds = new Set(($activeLayout.hiddenByUser ?? []).map((widget) => widget.widgetId));
 
 	return widgetRegistry
 		.filter(
 			(widget) =>
 				widget.canAdd &&
-				widget.viewScope.includes(preset.viewId) &&
-				currentWidgetIds.has(widget.id)
+				widget.viewScope.includes($activeLayout.preset.viewId) &&
+				hiddenWidgetIds.has(widget.id)
 		)
 		.sort((left, right) => {
-			const leftHidden = hiddenWidgetIds.has(left.id);
-			const rightHidden = hiddenWidgetIds.has(right.id);
-			if (leftHidden !== rightHidden) {
-				return leftHidden ? -1 : 1;
-			}
 			return left.title.localeCompare(right.title);
 		});
 });
@@ -345,6 +340,7 @@ export function syncWidgetGridClasses(widgetsById = get(activeWidgetById)): void
 		return;
 	}
 
+	const layoutEditing = get(isLayoutEditing);
 	if (window.scrollX !== 0 || window.scrollY !== 0) {
 		window.scrollTo(0, 0);
 	}
@@ -382,6 +378,11 @@ export function syncWidgetGridClasses(widgetsById = get(activeWidgetById)): void
 		element.dataset.widgetPanelOpacity =
 			widget.panelOpacity === undefined ? 'global' : String(widget.panelOpacity);
 		element.dataset.widgetPanelBlur = widget.panelBlur === undefined ? 'global' : String(widget.panelBlur);
+	}
+
+	if (layoutEditing) {
+		viewportHiddenWidgetTitles.set([]);
+		return;
 	}
 
 	requestAnimationFrame(() => {

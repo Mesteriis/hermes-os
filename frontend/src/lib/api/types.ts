@@ -737,6 +737,7 @@ export type TelegramLiveAccountSetupRequest = {
 	bot_token?: string;
 	session_encryption_key?: string;
 	tdlib_data_path?: string;
+	qr_authorized?: boolean;
 	transcription_enabled: boolean;
 };
 
@@ -753,6 +754,11 @@ export type TelegramQrLoginStartRequest = {
 
 export type TelegramQrLoginPasswordRequest = {
 	password: string;
+};
+
+export type TelegramQrLoginCancelResponse = {
+	setup_id: string;
+	cancelled: boolean;
 };
 
 export type TelegramQrLoginStatus =

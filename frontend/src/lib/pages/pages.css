@@ -1701,11 +1701,122 @@
 	height: 146px;
 }
 
+.telegram-qr-panel {
+	grid-template-columns: minmax(0, 1fr);
+	justify-items: center;
+	align-content: center;
+	width: min(420px, 100%);
+	min-height: 360px;
+	text-align: center;
+}
+
+.telegram-qr-panel.large {
+	grid-template-columns: minmax(0, 1fr);
+	min-height: 420px;
+}
+
+.telegram-qr-panel .qr-svg {
+	width: 240px;
+	height: 240px;
+}
+
+.telegram-qr-panel .qr-svg svg {
+	width: 228px;
+	height: 228px;
+}
+
+.telegram-qr-panel.large .qr-svg {
+	width: 260px;
+	height: 260px;
+}
+
+.telegram-qr-panel.large .qr-svg svg {
+	width: 248px;
+	height: 248px;
+}
+
+.qr-login-copy {
+	display: grid;
+	gap: 6px;
+	justify-items: center;
+	max-width: 320px;
+}
+
+.qr-login-copy .qr-account-hint {
+	color: var(--hh-color-text-dim);
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+
+.qr-skeleton {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 10px;
+	width: 220px;
+	height: 220px;
+	border-radius: var(--hh-radius-control);
+	background:
+		linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
+		rgba(255, 255, 255, 0.94);
+	background-size: 240% 100%;
+	padding: 22px;
+	animation: qr-skeleton-pulse 1.3s ease-in-out infinite;
+}
+
+.qr-skeleton span {
+	border-radius: 6px;
+	background: rgba(4, 21, 24, 0.72);
+}
+
+.qr-skeleton span:nth-child(2) {
+	align-self: center;
+	height: 42%;
+	background: rgba(4, 21, 24, 0.36);
+}
+
+.qr-skeleton span:nth-child(3) {
+	align-self: end;
+	height: 68%;
+}
+
+@keyframes qr-skeleton-pulse {
+	0% {
+		background-position: 120% 0;
+	}
+	100% {
+		background-position: -120% 0;
+	}
+}
+
 .setup-form {
 	display: grid;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 12px;
 	align-content: start;
+}
+
+.telegram-qr-setup-form {
+	grid-template-columns: minmax(0, 1fr);
+	justify-items: center;
+}
+
+.telegram-qr-setup-form .wizard-back {
+	justify-self: start;
+}
+
+.telegram-qr-setup-form .wizard-note,
+.telegram-qr-setup-form .form-actions {
+	justify-self: center;
+	width: min(420px, 100%);
+	text-align: center;
+}
+
+.telegram-qr-setup-form .form-actions {
+	justify-content: center;
+	min-height: 51px;
+	border-top: 1px solid rgba(111, 205, 195, 0.12);
+	padding-top: 12px;
 }
 
 .setup-form label {
@@ -1844,6 +1955,12 @@
 	color: #02201f;
 	font-weight: 700;
 	padding: 0 15px;
+}
+
+.form-actions button.secondary-action {
+	border: 1px solid rgba(111, 205, 195, 0.18);
+	background: rgba(4, 21, 24, 0.76);
+	color: var(--hh-color-text-soft);
 }
 
 .oauth-box {

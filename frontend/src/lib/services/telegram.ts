@@ -24,6 +24,8 @@ import {
 	type AutomationPolicy,
 	type TelegramCall,
 	type CallTranscript,
+	type TelegramAccountSetupResponse,
+	type TelegramLiveAccountSetupRequest,
 	type TelegramProviderKind,
 	type TelegramQrLoginStatusResponse,
 	type TelegramSendDryRunResponse
@@ -138,45 +140,47 @@ export async function saveTelegramAccountFromWizard(params: {
 			: authMethod === 'phone' || authMethod === 'qr'
 				? 'telegram_user'
 				: accountForm.provider_kind;
+	const isQrAuthorizedAccount = authMethod === 'qr' && qrLogin?.status === 'ready';
 
 	try {
-		const result = isFixtureSetup
-			? await setupTelegramFixtureAccount({
-					account_id: accountForm.account_id,
-					provider_kind: providerKind,
-					display_name: accountForm.display_name,
-					external_account_id: accountForm.external_account_id,
-					tdlib_data_path:
-						authMethod === 'qr' ? undefined : accountForm.tdlib_data_path || undefined,
-					transcription_enabled:
-						authMethod === 'qr' ? false : accountForm.transcription_enabled
-				})
-			: await setupTelegramAccount({
-					account_id: accountForm.account_id,
-					provider_kind: providerKind,
-					display_name: accountForm.display_name,
-					external_account_id: accountForm.external_account_id,
-					api_id:
-						providerKind === 'telegram_user' && accountForm.api_id.trim()
-							? Number(accountForm.api_id.trim())
-							: undefined,
-					api_hash:
-						providerKind === 'telegram_user'
-							? accountForm.api_hash.trim() || undefined
-							: undefined,
-					bot_token:
-						providerKind === 'telegram_bot'
-							? accountForm.bot_token || undefined
-							: undefined,
-					session_encryption_key:
-						providerKind === 'telegram_user'
-							? accountForm.session_encryption_key || undefined
-							: undefined,
-					tdlib_data_path:
-						authMethod === 'qr' ? undefined : accountForm.tdlib_data_path || undefined,
-					transcription_enabled:
-						authMethod === 'qr' ? false : accountForm.transcription_enabled
-				});
+		let result: TelegramAccountSetupResponse;
+		if (isFixtureSetup) {
+			result = await setupTelegramFixtureAccount({
+				account_id: accountForm.account_id,
+				provider_kind: providerKind,
+				display_name: accountForm.display_name,
+				external_account_id: accountForm.external_account_id,
+				tdlib_data_path: accountForm.tdlib_data_path || undefined,
+				transcription_enabled: authMethod === 'qr' ? false : accountForm.transcription_enabled
+			});
+		} else {
+			const request: TelegramLiveAccountSetupRequest = {
+				account_id: accountForm.account_id,
+				provider_kind: providerKind,
+				display_name: accountForm.display_name,
+				external_account_id: accountForm.external_account_id,
+				tdlib_data_path: accountForm.tdlib_data_path || undefined,
+				transcription_enabled: authMethod === 'qr' ? false : accountForm.transcription_enabled
+			};
+			if (providerKind === 'telegram_user' && isQrAuthorizedAccount) {
+				request.qr_authorized = true;
+			} else if (providerKind === 'telegram_user') {
+				const apiId = accountForm.api_id.trim();
+				const apiHash = accountForm.api_hash.trim();
+				if (apiId) {
+					request.api_id = Number(apiId);
+				}
+				if (apiHash) {
+					request.api_hash = apiHash;
+				}
+				if (accountForm.session_encryption_key) {
+					request.session_encryption_key = accountForm.session_encryption_key;
+				}
+			} else if (providerKind === 'telegram_bot' && accountForm.bot_token) {
+				request.bot_token = accountForm.bot_token;
+			}
+			result = await setupTelegramAccount(request);
+		}
 		const runtimeLabel =
 			authMethod === 'qr' && qrLogin?.status === 'ready'
 				? 'saved after QR authorization'
@@ -217,6 +221,7 @@ export async function startTelegramQrLoginFromWizard(params: {
 		api_id: string;
 		api_hash: string;
 		session_encryption_key: string;
+		tdlib_data_path?: string;
 	};
 	capabilities: TelegramCapabilitiesResponse | null;
 	externalAccountId: string;
@@ -235,35 +240,20 @@ export async function startTelegramQrLoginFromWizard(params: {
 		};
 	}
 
-	const apiIdValue = accountForm.api_id.trim();
-	const apiHashValue = accountForm.api_hash.trim();
-	const appCredentialsConfigured = capabilities?.telegram_app_credentials_configured ?? false;
-	if (!appCredentialsConfigured && (!apiIdValue || !apiHashValue)) {
+	if (capabilities && !capabilities.telegram_app_credentials_configured) {
 		return {
 			qrLogin: null,
 			message: '',
-			error: 'Telegram API ID and API hash are required for QR login in this dev session'
+			error: 'Telegram app credentials are not configured in the backend environment'
 		};
 	}
-	const parsedApiId = Number(apiIdValue);
-	if (apiIdValue && (!Number.isInteger(parsedApiId) || parsedApiId <= 0)) {
-		return {
-			qrLogin: null,
-			message: '',
-			error: 'Telegram API ID must be greater than zero'
-		};
-	}
-	const apiId = apiIdValue ? parsedApiId : undefined;
 
 	try {
 		const result = await startTelegramQrLogin({
 			account_id: accountForm.account_id,
 			display_name: accountForm.display_name,
 			external_account_id: externalAccountId,
-			api_id: apiId,
-			api_hash: apiHashValue || undefined,
-			session_encryption_key: accountForm.session_encryption_key || undefined,
-			tdlib_data_path: undefined,
+			tdlib_data_path: accountForm.tdlib_data_path || undefined,
 			transcription_enabled: false
 		});
 		const message =
@@ -318,6 +308,12 @@ export async function submitTelegramQrPasswordFromWizard(
 			error: error instanceof Error ? error.message : 'Telegram QR login password submit failed'
 		};
 	}
+}
+
+export function shouldPollTelegramQrLoginStatus(
+	status: TelegramQrLoginStatusResponse['status'] | null | undefined
+) {
+	return status === 'waiting_qr_scan' || status === 'waiting_password';
 }
 
 export function submitTelegramQrStepFromWizard(qrLogin: TelegramQrLoginStatusResponse | null) {

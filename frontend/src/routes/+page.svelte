@@ -33,7 +33,7 @@
 		openComposeForDraft,
 		selectedCommunication as selectedCommunicationStore
 	} from '$lib/stores/communications';
-	import { isLayoutEditing, isWidgetVisible } from '$lib/stores/layoutEditor';
+	import { isLayoutEditing, visibleWidgetIds } from '$lib/stores/layoutEditor';
 	import { activeCommunicationSection, currentView } from '$lib/stores/navigation';
 	import { loadSettingsWorkspace } from '$lib/stores/settings';
 
@@ -56,6 +56,10 @@
 			? communicationSections.find((item) => item.id === $activeCommunicationSection) ?? null
 			: null
 	);
+	const isWidgetVisible = $derived.by(() => {
+		const widgetIds = $visibleWidgetIds;
+		return (widgetId: string) => widgetIds.has(widgetId);
+	});
 
 	onMount(() => {
 		void loadCommunicationsWorkspace();

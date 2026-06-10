@@ -169,10 +169,12 @@ pub(crate) async fn post_telegram_account(
         return Err(ApiError::DatabaseNotConfigured);
     };
     let secret_store = SecretReferenceStore::new(pool.clone());
-    let request = request.with_app_credentials(
-        state.config.telegram_api_id(),
-        telegram_api_hash_from_config(&state.config),
-    );
+    let request = request
+        .with_inferred_qr_authorization()
+        .with_app_credentials(
+            state.config.telegram_api_id(),
+            telegram_api_hash_from_config(&state.config),
+        );
 
     Ok(Json(
         telegram_store(&state)?
@@ -221,6 +223,22 @@ pub(crate) async fn get_telegram_qr_login_status(
         .ok_or(ApiError::Telegram(TelegramError::QrLoginNotFound))?;
 
     Ok(Json(session))
+}
+
+pub(crate) async fn delete_telegram_qr_login(
+    State(state): State<AppState>,
+    Path(setup_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let setup_id = setup_id.trim().to_owned();
+    tdjson::cancel_qr_login(
+        state.account_setup.pending_telegram_qr_login.clone(),
+        &setup_id,
+    )?;
+
+    Ok(Json(json!({
+        "setup_id": setup_id,
+        "cancelled": true
+    })))
 }
 
 pub(crate) async fn post_telegram_qr_login_password(

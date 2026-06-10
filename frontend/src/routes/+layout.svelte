@@ -201,7 +201,7 @@
 		></button>
 	{/if}
 
-	<section class="workspace" aria-label={`${_($activeView.title)} workspace`}>
+	<section class="workspace" class:layout-editing={$isLayoutEditing} aria-label={`${_($activeView.title)} workspace`}>
 		<Topbar
 			viewTitle={$activeView.title}
 			viewSubtitle={$activeView.subtitle}

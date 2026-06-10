@@ -847,7 +847,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         )
         .route(
             "/api/v1/telegram/login/qr/{setup_id}",
-            get(get_telegram_qr_login_status),
+            get(get_telegram_qr_login_status).delete(delete_telegram_qr_login),
         )
         .route(
             "/api/v1/telegram/login/qr/{setup_id}/password",

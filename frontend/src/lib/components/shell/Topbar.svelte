@@ -60,6 +60,7 @@
 			<button
 				type="button"
 				class="menu-button"
+				aria-label="Open user menu"
 				aria-haspopup="menu"
 				aria-expanded={isUserMenuOpen}
 				aria-controls="user-menu"
