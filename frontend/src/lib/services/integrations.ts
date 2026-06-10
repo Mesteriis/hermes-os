@@ -9,6 +9,7 @@ export type IntegrationService = {
 	id: IntegrationServiceId;
 	label: string;
 	state: IntegrationServiceState;
+	description: string;
 };
 
 export type IntegrationViewModel = {
@@ -18,10 +19,12 @@ export type IntegrationViewModel = {
 	subtitle: string;
 	status: IntegrationStatus;
 	icon: string;
+	updatedAt: string | null;
 	updatedLabel: string;
 	services: IntegrationService[];
 	accounts: ProviderAccount[];
 	calendarAccounts: CalendarAccount[];
+	metadata: Record<string, string>;
 };
 
 const SERVICE_IDS: IntegrationServiceId[] = ['mail', 'calendar', 'people', 'messages'];
@@ -94,10 +97,30 @@ function buildMailIntegration(
 	const peopleState: IntegrationServiceState =
 		connectedServices.has('contacts') || connectedServices.has('people') ? 'ready' : 'not_applicable';
 	const services = servicesFor({
-		mail: 'ready',
-		calendar: calendarState,
-		people: peopleState,
-		messages: 'not_applicable'
+		mail: {
+			state: 'ready',
+			description: 'Mail account metadata is available for this provider.'
+		},
+		calendar: {
+			state: calendarState,
+			description:
+				calendarState === 'ready'
+					? 'Calendar account metadata is linked to this provider.'
+					: calendarState === 'unknown'
+						? 'Calendar access was requested, but no calendar account record is linked.'
+						: 'Calendar is not configured for this provider.'
+		},
+		people: {
+			state: peopleState,
+			description:
+				peopleState === 'ready'
+					? 'Contacts capability is available from this provider.'
+					: 'Contacts are not configured for this provider.'
+		},
+		messages: {
+			state: 'not_applicable',
+			description: 'Messages are not provided by this integration.'
+		}
 	});
 
 	return {
@@ -107,10 +130,19 @@ function buildMailIntegration(
 		subtitle: account.external_account_id || account.account_id,
 		status: services.some((service) => service.state === 'unknown') ? 'partial' : 'connected',
 		icon: accountProviderIcon(account.provider_kind),
+		updatedAt: latestTimestamp([
+			account.updated_at,
+			...linkedCalendarAccounts.map((calendarAccount) => calendarAccount.updated_at)
+		]),
 		updatedLabel: accountUpdatedLabel(account),
 		services,
 		accounts: [account],
-		calendarAccounts: linkedCalendarAccounts
+		calendarAccounts: linkedCalendarAccounts,
+		metadata: {
+			'Provider': accountProviderLabel(account.provider_kind),
+			'Account ID': account.account_id,
+			'External ID': account.external_account_id || account.account_id
+		}
 	};
 }
 
@@ -127,15 +159,32 @@ function buildMessagingIntegration(
 		subtitle: accounts.map(accountSubtitle).join(', '),
 		status: 'connected',
 		icon: accountProviderIcon(accounts[0]?.provider_kind ?? providerKind),
+		updatedAt: latestTimestamp(accounts.map((account) => account.updated_at)),
 		updatedLabel: mostRecentAccountUpdatedLabel(accounts),
 		services: servicesFor({
-			mail: 'not_applicable',
-			calendar: 'not_applicable',
-			people: 'not_applicable',
-			messages: 'ready'
+			mail: {
+				state: 'not_applicable',
+				description: 'Mail is not provided by this integration.'
+			},
+			calendar: {
+				state: 'not_applicable',
+				description: 'Calendar is not provided by this integration.'
+			},
+			people: {
+				state: 'not_applicable',
+				description: 'Contacts are not provided by this integration.'
+			},
+			messages: {
+				state: 'ready',
+				description: 'Messaging account metadata is available.'
+			}
 		}),
 		accounts,
-		calendarAccounts: []
+		calendarAccounts: [],
+		metadata: {
+			'Provider': title,
+			'Accounts': String(accounts.length)
+		}
 	};
 }
 
@@ -148,26 +197,46 @@ function buildWhatsappIntegration(accounts: ProviderAccount[]): IntegrationViewM
 			subtitle: 'No account configured',
 			status: 'empty',
 			icon: accountProviderIcon('whatsapp_web'),
+			updatedAt: null,
 			updatedLabel: 'Never',
 			services: servicesFor({
-				mail: 'not_applicable',
-				calendar: 'not_applicable',
-				people: 'not_applicable',
-				messages: 'disabled'
+				mail: {
+					state: 'not_applicable',
+					description: 'Mail is not provided by WhatsApp.'
+				},
+				calendar: {
+					state: 'not_applicable',
+					description: 'Calendar is not provided by WhatsApp.'
+				},
+				people: {
+					state: 'not_applicable',
+					description: 'Contacts are not provided by WhatsApp.'
+				},
+				messages: {
+					state: 'disabled',
+					description: 'No WhatsApp account is configured.'
+				}
 			}),
 			accounts: [],
-			calendarAccounts: []
+			calendarAccounts: [],
+			metadata: {
+				'Provider': 'WhatsApp Web',
+				'Accounts': '0'
+			}
 		};
 	}
 
 	return buildMessagingIntegration('whatsapp', 'whatsapp_web', 'WhatsApp', accounts);
 }
 
-function servicesFor(states: Record<IntegrationServiceId, IntegrationServiceState>): IntegrationService[] {
+function servicesFor(
+	states: Record<IntegrationServiceId, { state: IntegrationServiceState; description: string }>
+): IntegrationService[] {
 	return SERVICE_IDS.map((id) => ({
 		id,
 		label: serviceLabel(id),
-		state: states[id]
+		state: states[id].state,
+		description: states[id].description
 	}));
 }
 
@@ -221,4 +290,12 @@ function mostRecentAccountUpdatedLabel(accounts: ProviderAccount[]): string {
 	}, null);
 
 	return newestAccount ? accountUpdatedLabel(newestAccount) : 'Never';
+}
+
+function latestTimestamp(values: Array<string | null | undefined>): string | null {
+	const timestamps = values.filter((value): value is string => typeof value === 'string' && value.length > 0);
+	if (timestamps.length === 0) {
+		return null;
+	}
+	return timestamps.sort().at(-1) ?? null;
 }

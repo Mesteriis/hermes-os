@@ -52,7 +52,13 @@ describe('integration view models', () => {
 			providerKind: 'gmail',
 			title: 'Google Workspace',
 			subtitle: 'gmail-primary',
-			status: 'connected'
+			status: 'connected',
+			updatedAt: '2026-06-10T10:30:00Z',
+			metadata: {
+				'Provider': 'Gmail',
+				'Account ID': 'gmail-primary',
+				'External ID': 'gmail-primary'
+			}
 		});
 		expect(integrations[0].services.map((service) => [service.id, service.state])).toEqual([
 			['mail', 'ready'],
@@ -60,6 +66,9 @@ describe('integration view models', () => {
 			['people', 'ready'],
 			['messages', 'not_applicable']
 		]);
+		expect(integrations[0].services.find((service) => service.id === 'calendar')?.description).toBe(
+			'Calendar account metadata is linked to this provider.'
+		);
 		expect(integrations[0].calendarAccounts).toEqual([linkedCalendarAccount]);
 	});
 
@@ -91,7 +100,13 @@ describe('integration view models', () => {
 			providerKind: 'icloud',
 			title: 'Primary iCloud',
 			subtitle: 'user@icloud.com',
-			status: 'connected'
+			status: 'connected',
+			updatedAt: '2026-06-10T10:30:00Z',
+			metadata: {
+				'Provider': 'Icloud',
+				'Account ID': 'icloud-primary',
+				'External ID': 'user@icloud.com'
+			}
 		});
 		expect(integration.services.map((service) => [service.id, service.state])).toEqual([
 			['mail', 'ready'],
@@ -124,6 +139,9 @@ describe('integration view models', () => {
 			['messages', 'not_applicable']
 		]);
 		expect(integration.calendarAccounts).toEqual([]);
+		expect(integration.services.find((service) => service.id === 'calendar')?.description).toBe(
+			'Calendar access was requested, but no calendar account record is linked.'
+		);
 	});
 
 	it('groups Telegram accounts into one messaging integration row', () => {
@@ -150,7 +168,11 @@ describe('integration view models', () => {
 			providerKind: 'telegram',
 			title: 'Telegram',
 			subtitle: '@telegram_fixture_one, @telegram_fixture_two',
-			status: 'connected'
+			status: 'connected',
+			metadata: {
+				'Provider': 'Telegram',
+				'Accounts': '2'
+			}
 		});
 		expect(telegram?.services.map((service) => [service.id, service.state])).toEqual([
 			['mail', 'not_applicable'],
@@ -180,7 +202,11 @@ describe('integration view models', () => {
 				subtitle: 'WhatsApp Fixture',
 				status: 'connected',
 				accounts: [whatsappAccount],
-				calendarAccounts: []
+				calendarAccounts: [],
+				metadata: {
+					'Provider': 'WhatsApp',
+					'Accounts': '1'
+				}
 			})
 		]);
 		expect(integrations[0].services.map((service) => [service.id, service.state])).toEqual([
@@ -201,7 +227,11 @@ describe('integration view models', () => {
 				title: 'WhatsApp',
 				subtitle: 'No account configured',
 				status: 'empty',
-				calendarAccounts: []
+				calendarAccounts: [],
+				metadata: {
+					'Provider': 'WhatsApp Web',
+					'Accounts': '0'
+				}
 			})
 		]);
 	});
