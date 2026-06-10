@@ -21,6 +21,7 @@ export type IntegrationViewModel = {
 	updatedLabel: string;
 	services: IntegrationService[];
 	accounts: ProviderAccount[];
+	calendarAccounts: CalendarAccount[];
 };
 
 const SERVICE_IDS: IntegrationServiceId[] = ['mail', 'calendar', 'people', 'messages'];
@@ -81,9 +82,12 @@ function buildMailIntegration(
 	calendarAccounts: CalendarAccount[]
 ): IntegrationViewModel {
 	const connectedServices = accountConnectedServices(account);
+	const linkedCalendarAccounts = calendarAccounts.filter((calendarAccount) =>
+		isLinkedCalendarAccount(account, calendarAccount)
+	);
 	const calendarRequested = connectedServices.has('calendar');
 	const calendarState: IntegrationServiceState = calendarRequested
-		? hasLinkedCalendarAccount(account, calendarAccounts)
+		? linkedCalendarAccounts.length > 0
 			? 'ready'
 			: 'unknown'
 		: 'not_applicable';
@@ -105,7 +109,8 @@ function buildMailIntegration(
 		icon: accountProviderIcon(account.provider_kind),
 		updatedLabel: accountUpdatedLabel(account),
 		services,
-		accounts: [account]
+		accounts: [account],
+		calendarAccounts: linkedCalendarAccounts
 	};
 }
 
@@ -129,7 +134,8 @@ function buildMessagingIntegration(
 			people: 'not_applicable',
 			messages: 'ready'
 		}),
-		accounts
+		accounts,
+		calendarAccounts: []
 	};
 }
 
@@ -149,7 +155,8 @@ function buildWhatsappIntegration(accounts: ProviderAccount[]): IntegrationViewM
 				people: 'not_applicable',
 				messages: 'disabled'
 			}),
-			accounts: []
+			accounts: [],
+			calendarAccounts: []
 		};
 	}
 
@@ -192,15 +199,13 @@ function accountConnectedServices(account: ProviderAccount): Set<string> {
 	);
 }
 
-function hasLinkedCalendarAccount(account: ProviderAccount, calendarAccounts: CalendarAccount[]): boolean {
-	return calendarAccounts.some((calendarAccount) => {
-		const mailAccountId = calendarAccount.capabilities.mail_account_id;
-		if (typeof mailAccountId === 'string' && mailAccountId === account.account_id) {
-			return true;
-		}
+function isLinkedCalendarAccount(account: ProviderAccount, calendarAccount: CalendarAccount): boolean {
+	const mailAccountId = calendarAccount.capabilities.mail_account_id;
+	if (typeof mailAccountId === 'string' && mailAccountId === account.account_id) {
+		return true;
+	}
 
-		return calendarAccount.account_id.includes(account.account_id) || calendarAccount.email === account.external_account_id;
-	});
+	return calendarAccount.account_id.includes(account.account_id) || calendarAccount.email === account.external_account_id;
 }
 
 function accountSubtitle(account: ProviderAccount): string {
