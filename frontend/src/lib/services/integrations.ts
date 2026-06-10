@@ -37,11 +37,20 @@ export function buildIntegrationViewModels(
 	calendarAccounts: CalendarAccount[]
 ): IntegrationViewModel[] {
 	const integrations: IntegrationViewModel[] = [];
+	const linkedCalendarAccountIds = new Set<string>();
 
 	for (const providerKind of MAIL_PROVIDER_ORDER) {
 		for (const account of providerAccounts.filter((item) => item.provider_kind === providerKind)) {
-			integrations.push(buildMailIntegration(account, providerKind, calendarAccounts));
+			const integration = buildMailIntegration(account, providerKind, calendarAccounts);
+			for (const calendarAccount of integration.calendarAccounts) {
+				linkedCalendarAccountIds.add(calendarAccount.account_id);
+			}
+			integrations.push(integration);
 		}
+	}
+
+	for (const calendarAccount of calendarAccounts.filter((account) => !linkedCalendarAccountIds.has(account.account_id))) {
+		integrations.push(buildStandaloneCalendarIntegration(calendarAccount));
 	}
 
 	const telegramAccounts = providerAccounts.filter(isTelegramAccount);
@@ -142,6 +151,44 @@ function buildMailIntegration(
 			'Provider': accountProviderLabel(account.provider_kind),
 			'Account ID': account.account_id,
 			'External ID': account.external_account_id || account.account_id
+		}
+	};
+}
+
+function buildStandaloneCalendarIntegration(calendarAccount: CalendarAccount): IntegrationViewModel {
+	return {
+		integrationId: `calendar:${calendarAccount.account_id}`,
+		providerKind: `calendar:${calendarAccount.provider}`,
+		title: calendarAccount.account_name || accountProviderLabel(calendarAccount.provider),
+		subtitle: calendarAccount.email || calendarAccount.account_id,
+		status: 'connected',
+		icon: 'tabler:calendar',
+		updatedAt: calendarAccount.updated_at,
+		updatedLabel: calendarAccount.updated_at,
+		services: servicesFor({
+			mail: {
+				state: 'not_applicable',
+				description: 'Mail is not provided by this calendar integration.'
+			},
+			calendar: {
+				state: 'ready',
+				description: 'Calendar account metadata is available.'
+			},
+			people: {
+				state: 'not_applicable',
+				description: 'Contacts are not provided by this calendar integration.'
+			},
+			messages: {
+				state: 'not_applicable',
+				description: 'Messages are not provided by this integration.'
+			}
+		}),
+		accounts: [],
+		calendarAccounts: [calendarAccount],
+		metadata: {
+			'Provider': accountProviderLabel(calendarAccount.provider),
+			'Account ID': calendarAccount.account_id,
+			'External ID': calendarAccount.email || calendarAccount.account_id
 		}
 	};
 }

@@ -117,6 +117,43 @@ describe('integration view models', () => {
 		expect(integration.calendarAccounts).toEqual([linkedCalendarAccount]);
 	});
 
+	it('keeps standalone calendar accounts as integration rows', () => {
+		const standaloneCalendarAccount = calendarAccount({
+			account_id: 'local-calendar-primary',
+			provider: 'local',
+			account_name: 'Local Calendar',
+			email: null,
+			credentials_reference: null,
+			capabilities: { connected_services: ['calendar'] },
+			updated_at: '2026-06-10T11:00:00Z'
+		});
+
+		const integrations = buildIntegrationViewModels([], [standaloneCalendarAccount]);
+
+		expect(integrations[0]).toMatchObject({
+			integrationId: 'calendar:local-calendar-primary',
+			providerKind: 'calendar:local',
+			title: 'Local Calendar',
+			subtitle: 'local-calendar-primary',
+			status: 'connected',
+			updatedAt: '2026-06-10T11:00:00Z',
+			accounts: [],
+			calendarAccounts: [standaloneCalendarAccount],
+			metadata: {
+				'Provider': 'Local',
+				'Account ID': 'local-calendar-primary',
+				'External ID': 'local-calendar-primary'
+			}
+		});
+		expect(integrations[0].services.map((service) => [service.id, service.state])).toEqual([
+			['mail', 'not_applicable'],
+			['calendar', 'ready'],
+			['people', 'not_applicable'],
+			['messages', 'not_applicable']
+		]);
+		expect(integrations.at(-1)?.integrationId).toBe('whatsapp');
+	});
+
 	it('marks requested calendar service as unknown when provider metadata exists but calendar row is missing', () => {
 		const [integration] = buildIntegrationViewModels(
 			[

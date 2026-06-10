@@ -59,6 +59,7 @@
 		if (!integration) return 'mail';
 		if (integration.providerKind === 'telegram') return 'telegram';
 		if (integration.providerKind === 'whatsapp_web') return 'whatsapp';
+		if (integration.providerKind.startsWith('calendar:')) return 'calendar';
 		if (['gmail', 'icloud', 'imap'].includes(integration.providerKind)) return integration.providerKind;
 		return 'mail';
 	}
