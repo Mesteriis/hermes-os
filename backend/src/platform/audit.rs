@@ -222,6 +222,27 @@ impl NewApiAuditRecord {
         }
     }
 
+    pub fn communication_email_send(
+        actor_id: impl Into<String>,
+        account_id: impl Into<String>,
+        recipient_count: usize,
+    ) -> Self {
+        Self {
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "communication.email.send".to_owned(),
+            method: "POST".to_owned(),
+            path_template: "/api/v1/communications/send".to_owned(),
+            target_kind: "communication_provider_account".to_owned(),
+            target_id: Some(account_id.into()),
+            metadata: json!({
+                "action_class": "provider_write",
+                "transport": "smtp",
+                "recipient_count": recipient_count,
+            }),
+        }
+    }
+
     pub fn person_identity_review_set(
         actor_id: impl Into<String>,
         identity_candidate_id: impl Into<String>,

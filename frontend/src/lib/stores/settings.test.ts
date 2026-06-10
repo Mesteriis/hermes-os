@@ -140,7 +140,7 @@ describe('settings store', () => {
 		expect(get(settingsStore.integrationViewModels).map((integration) => integration.integrationId)).toEqual([
 			'gmail:gmail-primary',
 			'icloud:icloud-primary',
-			'telegram',
+			'telegram:telegram-primary',
 			'whatsapp'
 		]);
 		expect(get(settingsStore.integrationViewModels)[0].services.map((service) => service.state)).toEqual([

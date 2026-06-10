@@ -8,6 +8,7 @@ pub struct SmtpConfig {
     pub host: String,
     pub port: u16,
     pub tls: bool,
+    pub starttls: bool,
     pub username: String,
 }
 impl SmtpConfig {
@@ -16,8 +17,14 @@ impl SmtpConfig {
             host: host.into(),
             port,
             tls,
+            starttls: false,
             username: username.into(),
         }
+    }
+
+    pub fn starttls(mut self, starttls: bool) -> Self {
+        self.starttls = starttls;
+        self
     }
 }
 
@@ -60,7 +67,9 @@ impl SmtpClient {
     ) -> Result<SendResult, EmailSendError> {
         let address = (config.host.as_str(), config.port);
         let tcp_stream = tokio::net::TcpStream::connect(address).await?;
-        if config.tls {
+        if config.starttls {
+            starttls_smtp(tcp_stream, config, password, email).await
+        } else if config.tls {
             let tls = TlsConnector::new();
             let tls_stream = tls.connect(&config.host, tcp_stream).await?;
             send_smtp(tls_stream, config, password, email).await
@@ -79,8 +88,43 @@ async fn send_smtp<T: AsyncRead + AsyncWrite + Unpin>(
     let mut reader = BufReader::new(stream);
     let mut buf = String::new();
     read_line(&mut reader, &mut buf).await?;
+    send_smtp_after_greeting(reader, config, password, email).await
+}
+
+async fn starttls_smtp(
+    stream: tokio::net::TcpStream,
+    config: &SmtpConfig,
+    password: &ResolvedSecret,
+    email: &OutgoingEmail,
+) -> Result<SendResult, EmailSendError> {
+    let mut reader = BufReader::new(stream);
+    let mut buf = String::new();
+    let greeting = read_line(&mut reader, &mut buf).await?;
+    if !greeting.starts_with("220") {
+        return Err(EmailSendError::Protocol(greeting));
+    }
     write_cmd(&mut reader, "EHLO hermes-hub\r\n").await?;
-    while read_line(&mut reader, &mut buf).await?.contains('-') {}
+    read_ehlo_response(&mut reader, &mut buf).await?;
+    write_cmd(&mut reader, "STARTTLS\r\n").await?;
+    let response = read_line(&mut reader, &mut buf).await?;
+    if !response.starts_with("220") {
+        return Err(EmailSendError::Protocol(response));
+    }
+    let tcp_stream = reader.into_inner();
+    let tls = TlsConnector::new();
+    let tls_stream = tls.connect(&config.host, tcp_stream).await?;
+    send_smtp_after_greeting(BufReader::new(tls_stream), config, password, email).await
+}
+
+async fn send_smtp_after_greeting<T: AsyncRead + AsyncWrite + Unpin>(
+    mut reader: BufReader<T>,
+    config: &SmtpConfig,
+    password: &ResolvedSecret,
+    email: &OutgoingEmail,
+) -> Result<SendResult, EmailSendError> {
+    let mut buf = String::new();
+    write_cmd(&mut reader, "EHLO hermes-hub\r\n").await?;
+    read_ehlo_response(&mut reader, &mut buf).await?;
     write_cmd(&mut reader, "AUTH LOGIN\r\n").await?;
     read_line(&mut reader, &mut buf).await?;
     write_cmd(
@@ -119,6 +163,18 @@ async fn send_smtp<T: AsyncRead + AsyncWrite + Unpin>(
         message_id: resp.split_whitespace().nth(1).unwrap_or("unknown").into(),
         accepted_recipients: accepted,
     })
+}
+
+async fn read_ehlo_response<R: AsyncRead + Unpin>(
+    reader: &mut BufReader<R>,
+    buf: &mut String,
+) -> Result<(), EmailSendError> {
+    loop {
+        let line = read_line(reader, buf).await?;
+        if !line.starts_with("250-") {
+            return Ok(());
+        }
+    }
 }
 
 async fn read_line<R: AsyncRead + Unpin>(
@@ -166,4 +222,6 @@ pub enum EmailSendError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Tls(#[from] async_native_tls::Error),
+    #[error("SMTP protocol error: {0}")]
+    Protocol(String),
 }

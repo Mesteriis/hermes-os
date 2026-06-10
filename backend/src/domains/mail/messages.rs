@@ -454,10 +454,15 @@ impl MessageProjectionStore {
         account_id: Option<&str>,
         workflow_state: Option<WorkflowState>,
         channel_kind: Option<&str>,
+        query: Option<&str>,
         limit: i64,
     ) -> Result<Vec<ProjectedMessageSummary>, MessageProjectionError> {
         let limit = validate_limit(limit)?;
         let workflow_state_str = workflow_state.map(|s| s.as_str().to_owned());
+        let query = query
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
         let rows = sqlx::query(
             r#"
             SELECT
@@ -473,6 +478,24 @@ impl MessageProjectionStore {
             WHERE ($1::text IS NULL OR m.account_id = $1)
               AND ($2::text IS NULL OR m.workflow_state = $2)
               AND ($3::text IS NULL OR m.channel_kind = $3)
+              AND (
+                $4::text IS NULL
+                OR NOT EXISTS (
+                  SELECT 1
+                  FROM unnest(regexp_split_to_array(lower(trim($4)), '\s+')) AS term
+                  WHERE term <> ''
+                    AND lower(
+                      concat_ws(
+                        ' ',
+                        m.subject,
+                        m.sender,
+                        m.body_text,
+                        m.provider_record_id,
+                        m.sender_display_name
+                      )
+                    ) NOT LIKE '%' || term || '%'
+                )
+              )
             GROUP BY
                 m.message_id, m.raw_record_id, m.account_id, m.provider_record_id,
                 m.subject, m.sender, m.recipients, m.body_text,
@@ -481,12 +504,13 @@ impl MessageProjectionStore {
                 m.workflow_state, m.importance_score, m.ai_category,
                 m.ai_summary, m.ai_summary_generated_at
             ORDER BY COALESCE(m.occurred_at, m.projected_at) DESC, m.projected_at DESC, m.message_id ASC
-            LIMIT $4
+            LIMIT $5
             "#,
         )
         .bind(account_id)
         .bind(workflow_state_str.as_deref())
         .bind(channel_kind)
+        .bind(query.as_deref())
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;

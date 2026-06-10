@@ -11,9 +11,11 @@
 		communicationsError: string;
 		selectedConversationIndex: number;
 		selectedCommunication: unknown | null;
+		searchQuery: string;
 		isLayoutEditing: boolean;
 		isWidgetVisible: (id: string) => boolean;
 		selectCommunication: (index: number) => void;
+		onSearchQueryChange: (value: string) => void;
 		communicationChannelIcon: (kind: string) => string;
 		senderLabel: (sender: string) => string;
 		messageTime: (msg: unknown) => string;
@@ -25,9 +27,11 @@
 		communicationsError,
 		selectedConversationIndex,
 		selectedCommunication,
+		searchQuery,
 		isLayoutEditing,
 		isWidgetVisible,
 		selectCommunication,
+		onSearchQueryChange,
 		communicationChannelIcon,
 		senderLabel,
 		messageTime
@@ -37,7 +41,7 @@
 <div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="communications-conversation-list" data-widget-hidden={!isWidgetVisible('communications-conversation-list')}>
 	<WidgetEditChrome widgetId="communications-conversation-list" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
 	<section class="panel conversation-list">
-		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input placeholder={_('Search conversations...')} /></label>
+		<label class="local-search"><Icon icon="tabler:search" width="17" height="17" /><input value={searchQuery} oninput={(event) => onSearchQueryChange((event.currentTarget as HTMLInputElement).value)} placeholder={_('Search conversations...')} /></label>
 		{#if isCommunicationsLoading}
 			<div class="empty-panel">{_('Loading messages...')}</div>
 		{:else if communicationsError}

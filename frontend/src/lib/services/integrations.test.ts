@@ -49,6 +49,7 @@ describe('integration view models', () => {
 		expect(integrations).toHaveLength(2);
 		expect(integrations[0]).toMatchObject({
 			integrationId: 'gmail:gmail-primary',
+			group: 'mail',
 			providerKind: 'gmail',
 			title: 'Google Workspace',
 			subtitle: 'gmail-primary',
@@ -97,6 +98,7 @@ describe('integration view models', () => {
 
 		expect(integration).toMatchObject({
 			integrationId: 'icloud:icloud-primary',
+			group: 'mail',
 			providerKind: 'icloud',
 			title: 'Primary iCloud',
 			subtitle: 'user@icloud.com',
@@ -132,6 +134,7 @@ describe('integration view models', () => {
 
 		expect(integrations[0]).toMatchObject({
 			integrationId: 'calendar:local-calendar-primary',
+			group: 'calendar',
 			providerKind: 'calendar:local',
 			title: 'Local Calendar',
 			subtitle: 'local-calendar-primary',
@@ -223,47 +226,70 @@ describe('integration view models', () => {
 		);
 	});
 
-	it('groups Telegram accounts into one messaging integration row', () => {
+	it('keeps each Telegram account as its own messaging integration row', () => {
+		const telegramFixtureOne = providerAccount({
+			account_id: 'telegram-fixture-one',
+			provider_kind: 'telegram_user',
+			display_name: '@telegram_fixture_one',
+			external_account_id: 'telegram:100000001',
+			updated_at: '2026-06-10T11:00:00Z'
+		});
+		const telegramFixtureTwo = providerAccount({
+			account_id: 'telegram-fixture-two',
+			provider_kind: 'telegram_user',
+			display_name: '@telegram_fixture_two',
+			external_account_id: 'telegram:100000002',
+			updated_at: '2026-06-10T12:00:00Z'
+		});
 		const integrations = buildIntegrationViewModels(
-			[
-				providerAccount({
-					account_id: 'telegram-fixture-one',
-					provider_kind: 'telegram_user',
-					display_name: '@telegram_fixture_one',
-					external_account_id: 'telegram:100000001'
-				}),
-				providerAccount({
-					account_id: 'telegram-fixture-two',
-					provider_kind: 'telegram_user',
-					display_name: '@telegram_fixture_two',
-					external_account_id: 'telegram:100000002'
-				})
-			],
+			[telegramFixtureOne, telegramFixtureTwo],
 			[]
 		);
 
-		const telegram = integrations.find((integration) => integration.integrationId === 'telegram');
-		expect(telegram).toMatchObject({
+		expect(integrations.map((integration) => integration.integrationId)).toEqual([
+			'telegram:telegram-fixture-one',
+			'telegram:telegram-fixture-two',
+			'whatsapp'
+		]);
+		expect(integrations[0]).toMatchObject({
+			group: 'messages',
 			providerKind: 'telegram',
-			title: 'Telegram',
-			subtitle: '@telegram_fixture_one, @telegram_fixture_two',
+			title: '@telegram_fixture_one',
+			subtitle: 'telegram:100000001',
 			status: 'connected',
+			updatedAt: '2026-06-10T11:00:00Z',
+			accounts: [telegramFixtureOne],
+			calendarAccounts: [],
 			metadata: {
 				'Provider': 'Telegram',
-				'Accounts': '2'
+				'Account ID': 'telegram-fixture-one',
+				'External ID': 'telegram:100000001'
 			}
 		});
-		expect(telegram?.services.map((service) => [service.id, service.state])).toEqual([
+		expect(integrations[1]).toMatchObject({
+			group: 'messages',
+			providerKind: 'telegram',
+			title: '@telegram_fixture_two',
+			subtitle: 'telegram:100000002',
+			status: 'connected',
+			updatedAt: '2026-06-10T12:00:00Z',
+			accounts: [telegramFixtureTwo],
+			calendarAccounts: [],
+			metadata: {
+				'Provider': 'Telegram',
+				'Account ID': 'telegram-fixture-two',
+				'External ID': 'telegram:100000002'
+			}
+		});
+		expect(integrations[0].services.map((service) => [service.id, service.state])).toEqual([
 			['mail', 'not_applicable'],
 			['calendar', 'not_applicable'],
 			['people', 'not_applicable'],
 			['messages', 'ready']
 		]);
-		expect(telegram?.accounts).toHaveLength(2);
-		expect(telegram?.calendarAccounts).toEqual([]);
 	});
 
-	it('groups configured WhatsApp accounts into one messaging integration row', () => {
+	it('keeps each configured WhatsApp account as its own messaging integration row', () => {
 		const whatsappAccount = providerAccount({
 			account_id: 'whatsapp-fixture-primary',
 			provider_kind: 'whatsapp_web',
@@ -275,16 +301,18 @@ describe('integration view models', () => {
 
 		expect(integrations).toEqual([
 			expect.objectContaining({
-				integrationId: 'whatsapp',
+				integrationId: 'whatsapp:whatsapp-fixture-primary',
+				group: 'messages',
 				providerKind: 'whatsapp_web',
-				title: 'WhatsApp',
-				subtitle: 'WhatsApp Fixture',
+				title: 'WhatsApp Fixture',
+				subtitle: 'whatsapp:100000001',
 				status: 'connected',
 				accounts: [whatsappAccount],
 				calendarAccounts: [],
 				metadata: {
 					'Provider': 'WhatsApp',
-					'Accounts': '1'
+					'Account ID': 'whatsapp-fixture-primary',
+					'External ID': 'whatsapp:100000001'
 				}
 			})
 		]);
@@ -302,6 +330,7 @@ describe('integration view models', () => {
 		expect(integrations).toEqual([
 			expect.objectContaining({
 				integrationId: 'whatsapp',
+				group: 'messages',
 				providerKind: 'whatsapp_web',
 				title: 'WhatsApp',
 				subtitle: 'No account configured',

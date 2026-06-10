@@ -4,6 +4,7 @@ import { accountProviderIcon, accountProviderLabel, accountUpdatedLabel } from '
 export type IntegrationServiceId = 'mail' | 'calendar' | 'people' | 'messages';
 export type IntegrationServiceState = 'ready' | 'unknown' | 'disabled' | 'not_applicable';
 export type IntegrationStatus = 'connected' | 'partial' | 'empty';
+export type IntegrationGroupId = 'mail' | 'calendar' | 'messages';
 
 export type IntegrationService = {
 	id: IntegrationServiceId;
@@ -14,6 +15,7 @@ export type IntegrationService = {
 
 export type IntegrationViewModel = {
 	integrationId: string;
+	group: IntegrationGroupId;
 	providerKind: string;
 	title: string;
 	subtitle: string;
@@ -53,15 +55,31 @@ export function buildIntegrationViewModels(
 		integrations.push(buildStandaloneCalendarIntegration(calendarAccount));
 	}
 
-	const telegramAccounts = providerAccounts.filter(isTelegramAccount);
-	if (telegramAccounts.length > 0) {
-		integrations.push(buildMessagingIntegration('telegram', 'telegram', 'Telegram', telegramAccounts));
+	for (const account of providerAccounts.filter(isTelegramAccount)) {
+		integrations.push(buildMessagingAccountIntegration('telegram', 'telegram', 'Telegram', account));
 	}
 
 	const whatsappAccounts = providerAccounts.filter((account) => account.provider_kind === 'whatsapp_web');
-	integrations.push(buildWhatsappIntegration(whatsappAccounts));
+	if (whatsappAccounts.length > 0) {
+		for (const account of whatsappAccounts) {
+			integrations.push(buildMessagingAccountIntegration('whatsapp', 'whatsapp_web', 'WhatsApp', account));
+		}
+	} else {
+		integrations.push(buildEmptyWhatsappIntegration());
+	}
 
 	return integrations;
+}
+
+export function integrationGroupLabel(group: IntegrationGroupId): string {
+	switch (group) {
+		case 'mail':
+			return 'Mail';
+		case 'calendar':
+			return 'Calendar';
+		case 'messages':
+			return 'Messages';
+	}
 }
 
 export function serviceStateLabel(state: IntegrationServiceState): string {
@@ -134,6 +152,7 @@ function buildMailIntegration(
 
 	return {
 		integrationId: `${providerKind}:${account.account_id}`,
+		group: 'mail',
 		providerKind,
 		title: account.display_name || accountProviderLabel(account.provider_kind),
 		subtitle: account.external_account_id || account.account_id,
@@ -158,6 +177,7 @@ function buildMailIntegration(
 function buildStandaloneCalendarIntegration(calendarAccount: CalendarAccount): IntegrationViewModel {
 	return {
 		integrationId: `calendar:${calendarAccount.account_id}`,
+		group: 'calendar',
 		providerKind: `calendar:${calendarAccount.provider}`,
 		title: calendarAccount.account_name || accountProviderLabel(calendarAccount.provider),
 		subtitle: calendarAccount.email || calendarAccount.account_id,
@@ -193,21 +213,22 @@ function buildStandaloneCalendarIntegration(calendarAccount: CalendarAccount): I
 	};
 }
 
-function buildMessagingIntegration(
-	integrationId: string,
+function buildMessagingAccountIntegration(
+	integrationProvider: 'telegram' | 'whatsapp',
 	providerKind: string,
-	title: string,
-	accounts: ProviderAccount[]
+	providerTitle: string,
+	account: ProviderAccount
 ): IntegrationViewModel {
 	return {
-		integrationId,
+		integrationId: `${integrationProvider}:${account.account_id}`,
+		group: 'messages',
 		providerKind,
-		title,
-		subtitle: accounts.map(accountSubtitle).join(', '),
+		title: accountSubtitle(account),
+		subtitle: account.external_account_id || account.account_id,
 		status: 'connected',
-		icon: accountProviderIcon(accounts[0]?.provider_kind ?? providerKind),
-		updatedAt: latestTimestamp(accounts.map((account) => account.updated_at)),
-		updatedLabel: mostRecentAccountUpdatedLabel(accounts),
+		icon: accountProviderIcon(account.provider_kind),
+		updatedAt: account.updated_at,
+		updatedLabel: accountUpdatedLabel(account),
 		services: servicesFor({
 			mail: {
 				state: 'not_applicable',
@@ -226,54 +247,52 @@ function buildMessagingIntegration(
 				description: 'Messaging account metadata is available.'
 			}
 		}),
-		accounts,
+		accounts: [account],
 		calendarAccounts: [],
 		metadata: {
-			'Provider': title,
-			'Accounts': String(accounts.length)
+			'Provider': providerTitle,
+			'Account ID': account.account_id,
+			'External ID': account.external_account_id || account.account_id
 		}
 	};
 }
 
-function buildWhatsappIntegration(accounts: ProviderAccount[]): IntegrationViewModel {
-	if (accounts.length === 0) {
-		return {
-			integrationId: 'whatsapp',
-			providerKind: 'whatsapp_web',
-			title: 'WhatsApp',
-			subtitle: 'No account configured',
-			status: 'empty',
-			icon: accountProviderIcon('whatsapp_web'),
-			updatedAt: null,
-			updatedLabel: 'Never',
-			services: servicesFor({
-				mail: {
-					state: 'not_applicable',
-					description: 'Mail is not provided by WhatsApp.'
-				},
-				calendar: {
-					state: 'not_applicable',
-					description: 'Calendar is not provided by WhatsApp.'
-				},
-				people: {
-					state: 'not_applicable',
-					description: 'Contacts are not provided by WhatsApp.'
-				},
-				messages: {
-					state: 'disabled',
-					description: 'No WhatsApp account is configured.'
-				}
-			}),
-			accounts: [],
-			calendarAccounts: [],
-			metadata: {
-				'Provider': 'WhatsApp Web',
-				'Accounts': '0'
+function buildEmptyWhatsappIntegration(): IntegrationViewModel {
+	return {
+		integrationId: 'whatsapp',
+		group: 'messages',
+		providerKind: 'whatsapp_web',
+		title: 'WhatsApp',
+		subtitle: 'No account configured',
+		status: 'empty',
+		icon: accountProviderIcon('whatsapp_web'),
+		updatedAt: null,
+		updatedLabel: 'Never',
+		services: servicesFor({
+			mail: {
+				state: 'not_applicable',
+				description: 'Mail is not provided by WhatsApp.'
+			},
+			calendar: {
+				state: 'not_applicable',
+				description: 'Calendar is not provided by WhatsApp.'
+			},
+			people: {
+				state: 'not_applicable',
+				description: 'Contacts are not provided by WhatsApp.'
+			},
+			messages: {
+				state: 'disabled',
+				description: 'No WhatsApp account is configured.'
 			}
-		};
-	}
-
-	return buildMessagingIntegration('whatsapp', 'whatsapp_web', 'WhatsApp', accounts);
+		}),
+		accounts: [],
+		calendarAccounts: [],
+		metadata: {
+			'Provider': 'WhatsApp Web',
+			'Accounts': '0'
+		}
+	};
 }
 
 function servicesFor(
@@ -322,17 +341,6 @@ function isLinkedCalendarAccount(account: ProviderAccount, calendarAccount: Cale
 
 function accountSubtitle(account: ProviderAccount): string {
 	return account.display_name || account.external_account_id || account.account_id;
-}
-
-function mostRecentAccountUpdatedLabel(accounts: ProviderAccount[]): string {
-	const newestAccount = accounts.reduce<ProviderAccount | null>((newest, account) => {
-		if (newest === null || account.updated_at > newest.updated_at) {
-			return account;
-		}
-		return newest;
-	}, null);
-
-	return newestAccount ? accountUpdatedLabel(newestAccount) : 'Never';
 }
 
 function latestTimestamp(values: Array<string | null | undefined>): string | null {

@@ -9,6 +9,7 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
 use tempfile::tempdir;
+use tokio::time::{Duration, sleep};
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -17,7 +18,8 @@ use hermes_hub_backend::domains::mail::accounts::{
     EmailAccountSetupService, GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
 use hermes_hub_backend::domains::mail::core::{
-    CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
+    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
+    ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::platform::config::{AppConfig, GoogleOAuthClientType};
 use hermes_hub_backend::platform::secrets::DatabaseEncryptedSecretVault;
@@ -26,7 +28,7 @@ use hermes_hub_backend::platform::secrets::{
     SecretStoreKind,
 };
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::{HostVault, HostVaultConfig};
+use hermes_hub_backend::vault::{HostVault, HostVaultConfig, SecretEntryContext};
 use testkit::context::TestContext;
 
 const LOCAL_API_TOKEN: &str = "account-setup-test-token";
@@ -812,6 +814,8 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
     let ctx = TestContext::new().await;
     let vault_dir = tempdir().expect("vault tempdir");
     let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -821,16 +825,11 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
             ("HERMES_DEV_MODE", "true"),
             (
                 "HERMES_VAULT_HOME",
-                vault_dir.path().join("vault").to_str().expect("vault path"),
+                vault_home.to_str().expect("vault path"),
             ),
             (
                 "HERMES_DEV_KEY_PATH",
-                vault_dir
-                    .path()
-                    .join("dev")
-                    .join("master.key")
-                    .to_str()
-                    .expect("dev key path"),
+                dev_key_path.to_str().expect("dev key path"),
             ),
             ("DATABASE_URL", database_url.as_str()),
         ])
@@ -877,6 +876,57 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
         account.config["connected_services"],
         json!(["mail", "calendar", "contacts"])
     );
+    assert_eq!(account.config["smtp_host"], "smtp.mail.me.com");
+    assert_eq!(account.config["smtp_port"], 587);
+    assert_eq!(account.config["smtp_tls"], true);
+    assert_eq!(account.config["smtp_starttls"], true);
+    assert_eq!(account.config["smtp_username"], "user@icloud.com");
+    assert!(account.config.get("password").is_none());
+    assert!(account.config.get("smtp_password").is_none());
+
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let secret_store = SecretReferenceStore::new(pool.clone());
+    let imap_binding = communication_store
+        .provider_account_secret_binding(account_id, ProviderAccountSecretPurpose::ImapPassword)
+        .await
+        .expect("load imap binding")
+        .expect("imap binding");
+    let smtp_binding = communication_store
+        .provider_account_secret_binding(account_id, ProviderAccountSecretPurpose::SmtpPassword)
+        .await
+        .expect("load smtp binding")
+        .expect("smtp binding");
+    assert_eq!(
+        imap_binding.secret_ref,
+        "secret:provider-account:icloud-primary:imap_password"
+    );
+    assert_eq!(
+        smtp_binding.secret_ref,
+        "secret:provider-account:icloud-primary:smtp_password"
+    );
+
+    let smtp_reference = secret_store
+        .secret_reference(&smtp_binding.secret_ref)
+        .await
+        .expect("load smtp secret reference")
+        .expect("smtp secret reference");
+    assert_eq!(smtp_reference.store_kind, SecretStoreKind::HostVault);
+    assert_eq!(smtp_reference.secret_kind, SecretKind::AppPassword);
+    let vault = HostVault::new(HostVaultConfig {
+        home: vault_home,
+        dev_mode: true,
+        dev_key_path,
+    })
+    .expect("host vault");
+    vault.unlock_existing().expect("unlock host vault");
+    assert_eq!(
+        vault
+            .resolve(&smtp_reference)
+            .await
+            .expect("resolve smtp password")
+            .expose_for_runtime(),
+        "icloud-app-password"
+    );
 
     let calendar_account_id = format!("icloud-calendar:{account_id}");
     let calendar_account = CalendarAccountStore::new(pool)
@@ -896,6 +946,538 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
     assert_eq!(
         calendar_account.capabilities["connected_services"],
         json!(["calendar"])
+    );
+}
+
+#[tokio::test]
+async fn imap_send_api_sends_via_configured_smtp_against_postgres() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let config = AppConfig::from_pairs([
+        ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+        ("DATABASE_URL", database_url.as_str()),
+    ])
+    .expect("config");
+    let app = build_router_with_database(config, database);
+    unlock_test_vault(app.clone()).await;
+
+    let smtp_server = MockSmtpServer::start();
+    let account_id = "imap-send-primary";
+    let setup_response = app
+        .clone()
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/email-accounts/imap",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "imap",
+                "display_name": "IMAP Send",
+                "external_account_id": "sender@example.com",
+                "host": "imap.example.com",
+                "port": 993,
+                "tls": true,
+                "mailbox": "INBOX",
+                "username": "sender@example.com",
+                "password": "smtp-app-password",
+                "secret_kind": "password",
+                "smtp_host": smtp_server.addr().ip().to_string(),
+                "smtp_port": smtp_server.addr().port(),
+                "smtp_tls": false,
+                "smtp_starttls": false,
+                "smtp_username": "sender@example.com"
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("setup response");
+    assert_eq!(setup_response.status(), StatusCode::OK);
+
+    let send_response = app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/communications/send",
+            json!({
+                "account_id": account_id,
+                "to": ["recipient@example.com"],
+                "cc": ["copy@example.com"],
+                "subject": "SMTP send test",
+                "body_text": "Message body from Hermes test.",
+                "confirmed_provider_write": true
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("send response");
+    assert_eq!(send_response.status(), StatusCode::OK);
+    let send_body: Value = serde_json::from_slice(
+        &to_bytes(send_response.into_body(), 1024 * 1024)
+            .await
+            .expect("read send body"),
+    )
+    .expect("send json body");
+    assert_eq!(send_body["transport"], "smtp");
+    assert_eq!(send_body["status"], "sent");
+    assert_eq!(
+        send_body["accepted_recipients"],
+        json!(["recipient@example.com", "copy@example.com"])
+    );
+
+    let commands = smtp_server.commands();
+    assert!(commands.iter().any(|line| line == "AUTH LOGIN"));
+    assert!(
+        commands
+            .iter()
+            .any(|line| line == "MAIL FROM:<sender@example.com>")
+    );
+    assert!(
+        commands
+            .iter()
+            .any(|line| line == "RCPT TO:<recipient@example.com>")
+    );
+    assert!(
+        commands
+            .iter()
+            .any(|line| line == "RCPT TO:<copy@example.com>")
+    );
+    assert!(commands.iter().any(|line| line == "DATA"));
+}
+
+#[tokio::test]
+async fn gmail_send_api_is_explicitly_unsupported_against_postgres() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let config = AppConfig::from_pairs([
+        ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+        ("DATABASE_URL", database_url.as_str()),
+    ])
+    .expect("config");
+    let app = build_router_with_database(config, database);
+    unlock_test_vault(app.clone()).await;
+
+    let account_id = "gmail-send-disabled";
+    CommunicationIngestionStore::new(pool)
+        .upsert_provider_account(
+            &NewProviderAccount::new(
+                account_id,
+                EmailProviderKind::Gmail,
+                "Gmail Send Disabled",
+                "sender@gmail.com",
+            )
+            .config(json!({
+                "auth": "oauth",
+                "api": "gmail"
+            })),
+        )
+        .await
+        .expect("store gmail account");
+
+    let response = app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/communications/send",
+            json!({
+                "account_id": account_id,
+                "to": ["recipient@example.com"],
+                "subject": "Gmail send disabled",
+                "body_text": "Gmail provider-side send is not enabled.",
+                "confirmed_provider_write": true
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("send response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("read body"),
+    )
+    .expect("json body");
+    assert_eq!(body["error"], "invalid_communication_query");
+    assert_eq!(
+        body["message"],
+        "Gmail send is unavailable until OAuth send scopes are configured"
+    );
+}
+
+#[tokio::test]
+async fn imap_send_api_requires_smtp_password_binding_against_postgres() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let config = AppConfig::from_pairs([
+        ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+        ("DATABASE_URL", database_url.as_str()),
+    ])
+    .expect("config");
+    let app = build_router_with_database(config, database);
+    unlock_test_vault(app.clone()).await;
+
+    let smtp_server = MockSmtpServer::start();
+    let account_id = "imap-send-missing-smtp-password";
+    let setup_response = app
+        .clone()
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/email-accounts/imap",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "imap",
+                "display_name": "IMAP Missing SMTP Password",
+                "external_account_id": "sender@example.com",
+                "host": "imap.example.com",
+                "port": 993,
+                "tls": true,
+                "mailbox": "INBOX",
+                "username": "sender@example.com",
+                "password": "smtp-app-password",
+                "secret_kind": "password",
+                "smtp_host": smtp_server.addr().ip().to_string(),
+                "smtp_port": smtp_server.addr().port(),
+                "smtp_tls": false,
+                "smtp_starttls": false,
+                "smtp_username": "sender@example.com"
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("setup response");
+    assert_eq!(setup_response.status(), StatusCode::OK);
+
+    sqlx::query(
+        "DELETE FROM communication_provider_account_secret_refs WHERE account_id = $1 AND secret_purpose = 'smtp_password'",
+    )
+    .bind(account_id)
+    .execute(&pool)
+    .await
+    .expect("delete smtp binding");
+
+    let response = app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/communications/send",
+            json!({
+                "account_id": account_id,
+                "to": ["recipient@example.com"],
+                "subject": "Missing SMTP binding",
+                "body_text": "This must not reach SMTP.",
+                "confirmed_provider_write": true
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("send response");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(response.into_body(), 1024 * 1024)
+            .await
+            .expect("read body"),
+    )
+    .expect("json body");
+    assert_eq!(body["error"], "invalid_communication_query");
+    assert!(
+        smtp_server
+            .commands()
+            .iter()
+            .all(|line| !line.starts_with("MAIL FROM"))
+    );
+}
+
+#[tokio::test]
+async fn imap_send_api_does_not_send_when_audit_record_fails_against_postgres() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let config = AppConfig::from_pairs([
+        ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+        ("DATABASE_URL", database_url.as_str()),
+    ])
+    .expect("config");
+    let app = build_router_with_database(config, database);
+    unlock_test_vault(app.clone()).await;
+
+    let smtp_server = MockSmtpServer::start();
+    let account_id = "imap-send-audit-fail";
+    let setup_response = app
+        .clone()
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/email-accounts/imap",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "imap",
+                "display_name": "IMAP Audit Failure",
+                "external_account_id": "sender@example.com",
+                "host": "imap.example.com",
+                "port": 993,
+                "tls": true,
+                "mailbox": "INBOX",
+                "username": "sender@example.com",
+                "password": "smtp-app-password",
+                "secret_kind": "password",
+                "smtp_host": smtp_server.addr().ip().to_string(),
+                "smtp_port": smtp_server.addr().port(),
+                "smtp_tls": false,
+                "smtp_starttls": false,
+                "smtp_username": "sender@example.com"
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("setup response");
+    assert_eq!(setup_response.status(), StatusCode::OK);
+
+    sqlx::query("DROP TABLE api_audit_log")
+        .execute(&pool)
+        .await
+        .expect("drop audit table");
+
+    let response = app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/communications/send",
+            json!({
+                "account_id": account_id,
+                "to": ["recipient@example.com"],
+                "subject": "Audit fail closed",
+                "body_text": "This must not reach SMTP.",
+                "confirmed_provider_write": true
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("send response");
+    assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(
+        smtp_server
+            .commands()
+            .iter()
+            .all(|line| !line.starts_with("MAIL FROM"))
+    );
+}
+
+#[tokio::test]
+async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgres_metadata_wipe() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let config = AppConfig::from_pairs([
+        ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+        ("HERMES_DEV_MODE", "true"),
+        (
+            "HERMES_VAULT_HOME",
+            vault_home.to_str().expect("vault path"),
+        ),
+        (
+            "HERMES_DEV_KEY_PATH",
+            dev_key_path.to_str().expect("dev key path"),
+        ),
+        ("DATABASE_URL", database_url.as_str()),
+    ])
+    .expect("config");
+    let app = build_router_with_database(config.clone(), database.clone());
+    unlock_test_vault(app.clone()).await;
+
+    let account_id = "icloud-recover";
+    let secret_ref = "secret:provider-account:icloud-recover:imap_password";
+    let response = app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/email-accounts/imap",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "icloud",
+                "display_name": "Recovered iCloud",
+                "external_account_id": "recover@icloud.com",
+                "host": "imap.mail.me.com",
+                "port": 993,
+                "tls": true,
+                "mailbox": "INBOX",
+                "username": "recover@icloud.com",
+                "password": "icloud-app-password",
+                "secret_kind": "app_password"
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let pool = database.pool().expect("configured pool").clone();
+    let vault = HostVault::new(HostVaultConfig {
+        home: vault_home.clone(),
+        dev_mode: true,
+        dev_key_path: dev_key_path.clone(),
+    })
+    .expect("host vault");
+    vault.unlock_existing().expect("unlock host vault");
+    vault
+        .upsert_account_secret_manifest_entry(
+            secret_ref,
+            SecretEntryContext {
+                entry_kind: "provider_credential",
+                account_id,
+                purpose: ProviderAccountSecretPurpose::ImapPassword.as_str(),
+                secret_kind: SecretKind::AppPassword.as_str(),
+                label: "IMAP password",
+                metadata: &json!({
+                    "provider": "icloud",
+                    "account_id": account_id
+                }),
+            },
+        )
+        .expect("write sparse manifest entry");
+
+    let _enriching_app = build_router_with_database(config.clone(), database.clone());
+    wait_for_manifest_metadata_key(&vault, secret_ref, "display_name").await;
+
+    sqlx::query("DELETE FROM calendar_accounts WHERE account_id = $1")
+        .bind(format!("icloud-calendar:{account_id}"))
+        .execute(&pool)
+        .await
+        .expect("delete calendar metadata");
+    sqlx::query("DELETE FROM communication_provider_account_secret_refs WHERE account_id = $1")
+        .bind(account_id)
+        .execute(&pool)
+        .await
+        .expect("delete secret binding");
+    sqlx::query("DELETE FROM communication_provider_accounts WHERE account_id = $1")
+        .bind(account_id)
+        .execute(&pool)
+        .await
+        .expect("delete provider account");
+    sqlx::query("DELETE FROM secret_references WHERE secret_ref = $1")
+        .bind(secret_ref)
+        .execute(&pool)
+        .await
+        .expect("delete secret reference");
+
+    assert!(
+        CommunicationIngestionStore::new(pool.clone())
+            .provider_account(account_id)
+            .await
+            .expect("load deleted account")
+            .is_none()
+    );
+
+    let restarted_database = Database::connect(Some(&database_url))
+        .await
+        .expect("restarted database connection");
+    let _restarted_app = build_router_with_database(config, restarted_database.clone());
+    let restarted_pool = restarted_database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(restarted_pool.clone());
+    let secret_store = SecretReferenceStore::new(restarted_pool.clone());
+
+    let account = wait_for_provider_account(&communication_store, account_id).await;
+    assert_eq!(account.provider_kind, EmailProviderKind::Icloud);
+    assert_eq!(account.display_name, "Recovered iCloud");
+    assert_eq!(account.external_account_id, "recover@icloud.com");
+    assert_eq!(
+        account.config["connected_services"],
+        json!(["mail", "calendar", "contacts"])
+    );
+
+    let reference = secret_store
+        .secret_reference(secret_ref)
+        .await
+        .expect("load restored secret reference")
+        .expect("restored secret reference");
+    assert_eq!(reference.store_kind, SecretStoreKind::HostVault);
+    assert_eq!(reference.secret_kind, SecretKind::AppPassword);
+
+    let binding = communication_store
+        .provider_account_secret_binding(account_id, ProviderAccountSecretPurpose::ImapPassword)
+        .await
+        .expect("load restored binding")
+        .expect("restored binding");
+    assert_eq!(binding.secret_ref, secret_ref);
+
+    let calendar_store = CalendarAccountStore::new(restarted_pool.clone());
+    let calendar_account =
+        wait_for_calendar_account(&calendar_store, &format!("icloud-calendar:{account_id}")).await;
+    assert_eq!(calendar_account.provider, "apple");
+    assert_eq!(
+        calendar_account.email.as_deref(),
+        Some("recover@icloud.com")
+    );
+    assert_eq!(
+        calendar_account.credentials_reference.as_deref(),
+        Some(secret_ref)
+    );
+
+    assert_eq!(
+        vault
+            .resolve(&reference)
+            .await
+            .expect("resolve restored secret")
+            .expose_for_runtime(),
+        "icloud-app-password"
     );
 }
 
@@ -1049,6 +1631,105 @@ impl Drop for MockTokenServer {
     }
 }
 
+struct MockSmtpServer {
+    addr: SocketAddr,
+    commands: Arc<Mutex<Vec<String>>>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+impl MockSmtpServer {
+    fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind SMTP server");
+        let addr = listener.local_addr().expect("SMTP server addr");
+        let commands = Arc::new(Mutex::new(Vec::new()));
+        let commands_for_thread = Arc::clone(&commands);
+        let handle = thread::spawn(move || {
+            let Ok((mut stream, _)) = listener.accept() else {
+                return;
+            };
+            stream
+                .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                .expect("set SMTP read timeout");
+            write!(stream, "220 mock.smtp.local ESMTP\r\n").expect("write greeting");
+
+            let mut reader = BufReader::new(stream.try_clone().expect("clone SMTP stream"));
+            loop {
+                let mut line = String::new();
+                if reader.read_line(&mut line).expect("read SMTP line") == 0 {
+                    break;
+                }
+                let command = line.trim_end().to_owned();
+                commands_for_thread
+                    .lock()
+                    .expect("SMTP commands lock")
+                    .push(command.clone());
+                if command.starts_with("EHLO") {
+                    write!(stream, "250-mock.smtp.local\r\n250 AUTH LOGIN\r\n")
+                        .expect("write EHLO response");
+                } else if command == "AUTH LOGIN" {
+                    write!(stream, "334 VXNlcm5hbWU6\r\n").expect("write username prompt");
+                } else if command == "c2VuZGVyQGV4YW1wbGUuY29t" {
+                    write!(stream, "334 UGFzc3dvcmQ6\r\n").expect("write password prompt");
+                } else if command == "c210cC1hcHAtcGFzc3dvcmQ=" {
+                    write!(stream, "235 Authentication successful\r\n").expect("write auth ok");
+                } else if command.starts_with("MAIL FROM") || command.starts_with("RCPT TO") {
+                    write!(stream, "250 OK\r\n").expect("write envelope ok");
+                } else if command == "DATA" {
+                    write!(stream, "354 End data with <CR><LF>.<CR><LF>\r\n")
+                        .expect("write DATA response");
+                    loop {
+                        let mut data_line = String::new();
+                        if reader
+                            .read_line(&mut data_line)
+                            .expect("read SMTP data line")
+                            == 0
+                        {
+                            return;
+                        }
+                        let data_line = data_line.trim_end().to_owned();
+                        commands_for_thread
+                            .lock()
+                            .expect("SMTP commands lock")
+                            .push(data_line.clone());
+                        if data_line == "." {
+                            break;
+                        }
+                    }
+                    write!(stream, "250 mock-message-id queued\r\n").expect("write queued");
+                } else if command == "QUIT" {
+                    write!(stream, "221 Bye\r\n").expect("write bye");
+                    break;
+                } else {
+                    write!(stream, "250 OK\r\n").expect("write default ok");
+                }
+            }
+        });
+
+        Self {
+            addr,
+            commands,
+            handle: Some(handle),
+        }
+    }
+
+    fn addr(&self) -> SocketAddr {
+        self.addr
+    }
+
+    fn commands(&self) -> Vec<String> {
+        self.commands.lock().expect("SMTP commands lock").clone()
+    }
+}
+
+impl Drop for MockSmtpServer {
+    fn drop(&mut self) {
+        let _ = TcpStream::connect(self.addr);
+        if let Some(handle) = self.handle.take() {
+            handle.join().expect("SMTP server join");
+        }
+    }
+}
+
 fn read_http_request(stream: &mut TcpStream) -> TokenRequest {
     stream
         .set_read_timeout(Some(std::time::Duration::from_secs(5)))
@@ -1177,6 +1858,58 @@ where
         .await
         .expect("vault create response");
     assert_eq!(create_response.status(), StatusCode::OK);
+}
+
+async fn wait_for_provider_account(
+    communication_store: &CommunicationIngestionStore,
+    account_id: &str,
+) -> hermes_hub_backend::domains::mail::core::ProviderAccount {
+    for _ in 0..50 {
+        if let Some(account) = communication_store
+            .provider_account(account_id)
+            .await
+            .expect("load provider account")
+        {
+            return account;
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    panic!("provider account {account_id} was not reconciled");
+}
+
+async fn wait_for_calendar_account(
+    calendar_store: &CalendarAccountStore,
+    account_id: &str,
+) -> hermes_hub_backend::domains::calendar::events::CalendarAccount {
+    for _ in 0..50 {
+        if let Some(account) = calendar_store
+            .get(account_id)
+            .await
+            .expect("load calendar account")
+        {
+            return account;
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    panic!("calendar account {account_id} was not reconciled");
+}
+
+async fn wait_for_manifest_metadata_key(vault: &HostVault, secret_ref: &str, key: &str) {
+    for _ in 0..50 {
+        let has_key = vault
+            .account_secret_manifest()
+            .expect("read host vault manifest")
+            .into_iter()
+            .any(|entry| entry.secret_ref == secret_ref && entry.metadata.get(key).is_some());
+        if has_key {
+            return;
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    panic!("manifest entry {secret_ref} was not enriched with {key}");
 }
 
 fn vault_entropy_events(count: usize) -> Vec<Value> {

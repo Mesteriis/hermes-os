@@ -305,6 +305,46 @@ impl HostVault {
         self.status()
     }
 
+    pub fn account_secret_manifest(&self) -> Result<Vec<HostVaultManifestEntry>, HostVaultError> {
+        let connection = self.connection()?;
+        let mut statement = connection.prepare(
+            r#"
+            SELECT secret_ref, entry_kind, account_id, purpose, secret_kind, store_kind, label, metadata, updated_at
+            FROM account_secret_manifest
+            ORDER BY account_id ASC, purpose ASC, secret_ref ASC
+            "#,
+        )?;
+        let mut rows = statement.query([])?;
+        let mut entries = Vec::new();
+        while let Some(row) = rows.next()? {
+            let metadata: String = row.get("metadata")?;
+            entries.push(HostVaultManifestEntry {
+                secret_ref: row.get("secret_ref")?,
+                entry_kind: row.get("entry_kind")?,
+                account_id: row.get("account_id")?,
+                purpose: row.get("purpose")?,
+                secret_kind: row.get("secret_kind")?,
+                store_kind: row.get("store_kind")?,
+                label: row.get("label")?,
+                metadata: serde_json::from_str(&metadata)?,
+                updated_at: row.get("updated_at")?,
+            });
+        }
+        Ok(entries)
+    }
+
+    pub fn upsert_account_secret_manifest_entry(
+        &self,
+        secret_ref: &str,
+        context: SecretEntryContext<'_>,
+    ) -> Result<(), HostVaultError> {
+        validate_non_empty("secret_ref", secret_ref)?;
+        validate_non_empty("entry_kind", context.entry_kind)?;
+        validate_non_empty("account_id", context.account_id)?;
+        validate_non_empty("purpose", context.purpose)?;
+        self.upsert_manifest_entry(secret_ref, context)
+    }
+
     fn initialize_database(&self) -> Result<(), HostVaultError> {
         let connection = self.connection()?;
         connection.execute_batch(
@@ -619,6 +659,19 @@ pub struct SecretEntryContext<'a> {
 pub struct RecoveryExportResponse {
     pub path: PathBuf,
     pub recovery_phrase: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct HostVaultManifestEntry {
+    pub secret_ref: String,
+    pub entry_kind: String,
+    pub account_id: String,
+    pub purpose: String,
+    pub secret_kind: String,
+    pub store_kind: String,
+    pub label: String,
+    pub metadata: serde_json::Value,
+    pub updated_at: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

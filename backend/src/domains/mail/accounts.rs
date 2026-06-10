@@ -207,6 +207,22 @@ impl EmailAccountSetupService {
         };
         let secret_store = self.secret_store()?;
         let communication_store = self.communication_store()?;
+        let account_config = json!({
+            "auth": "oauth",
+            "api": "gmail",
+            "oauth_client_id": pending.request.client_id,
+            "requested_scopes": pending.request.scopes,
+            "connected_services": ["mail", "calendar", "contacts"],
+            "history_stream_id": "gmail:history"
+        });
+        let secret_metadata = json!({
+            "provider": "gmail",
+            "account_id": pending.account_id,
+            "display_name": pending.request.display_name,
+            "external_account_id": external_account_id,
+            "connected_services": ["mail", "calendar", "contacts"],
+            "provider_account_config": account_config.clone()
+        });
         secret_store
             .upsert_secret_reference(
                 &NewSecretReference::new(
@@ -218,11 +234,7 @@ impl EmailAccountSetupService {
                         pending.request.display_name
                     ),
                 )
-                .metadata(json!({
-                    "provider": "gmail",
-                    "account_id": pending.account_id,
-                    "connected_services": ["mail", "calendar", "contacts"]
-                })),
+                .metadata(secret_metadata.clone()),
             )
             .await?;
         self.vault
@@ -235,11 +247,7 @@ impl EmailAccountSetupService {
                     purpose: ProviderAccountSecretPurpose::OauthToken.as_str(),
                     secret_kind: SecretKind::OauthToken,
                     label: "Gmail OAuth credential",
-                    metadata: &json!({
-                        "provider": "gmail",
-                        "account_id": pending.account_id,
-                        "connected_services": ["mail", "calendar", "contacts"]
-                    }),
+                    metadata: &secret_metadata,
                 },
             )
             .await?;
@@ -251,14 +259,7 @@ impl EmailAccountSetupService {
                     &pending.request.display_name,
                     &external_account_id,
                 )
-                .config(json!({
-                    "auth": "oauth",
-                    "api": "gmail",
-                    "oauth_client_id": pending.request.client_id,
-                    "requested_scopes": pending.request.scopes,
-                    "connected_services": ["mail", "calendar", "contacts"],
-                    "history_stream_id": "gmail:history"
-                })),
+                .config(account_config),
             )
             .await?;
         communication_store
@@ -328,10 +329,30 @@ impl EmailAccountSetupService {
     ) -> Result<EmailAccountSetupResult, EmailAccountSetupError> {
         request.validate()?;
         let secret_ref = imap_secret_ref(&request.account_id);
+        let smtp_secret_ref = smtp_secret_ref(&request.account_id);
         let connected_services = email_provider_connected_services(request.provider_kind);
+        let smtp_config = request.smtp_config();
+        let mut account_config = json!({
+            "host": request.host,
+            "port": request.port,
+            "tls": request.tls,
+            "mailbox": request.mailbox,
+            "username": request.username,
+            "smtp_host": smtp_config.host,
+            "smtp_port": smtp_config.port,
+            "smtp_tls": smtp_config.tls,
+            "smtp_starttls": smtp_config.starttls,
+            "smtp_username": smtp_config.username
+        });
+        if let Some(services) = connected_services {
+            account_config["connected_services"] = json!(services);
+        }
         let mut secret_metadata = json!({
             "provider": request.provider_kind.as_str(),
-            "account_id": request.account_id
+            "account_id": request.account_id,
+            "display_name": request.display_name,
+            "external_account_id": request.external_account_id,
+            "provider_account_config": account_config.clone()
         });
         if let Some(services) = connected_services {
             secret_metadata["connected_services"] = json!(services);
@@ -364,16 +385,17 @@ impl EmailAccountSetupService {
                 },
             )
             .await?;
-        let mut account_config = json!({
-            "host": request.host,
-            "port": request.port,
-            "tls": request.tls,
-            "mailbox": request.mailbox,
-            "username": request.username
-        });
-        if let Some(services) = connected_services {
-            account_config["connected_services"] = json!(services);
-        }
+        secret_store
+            .upsert_secret_reference(
+                &NewSecretReference::new(
+                    &smtp_secret_ref,
+                    request.secret_kind,
+                    self.vault.store_kind(),
+                    format!("SMTP credential for {}", request.display_name),
+                )
+                .metadata(secret_metadata.clone()),
+            )
+            .await?;
         communication_store
             .upsert_provider_account(
                 &NewProviderAccount::new(
@@ -390,6 +412,27 @@ impl EmailAccountSetupService {
                 &request.account_id,
                 ProviderAccountSecretPurpose::ImapPassword,
                 &secret_ref,
+            ))
+            .await?;
+        self.vault
+            .store_secret(
+                &smtp_secret_ref,
+                &request.password,
+                SecretWriteContext {
+                    entry_kind: "provider_credential",
+                    account_id: &request.account_id,
+                    purpose: ProviderAccountSecretPurpose::SmtpPassword.as_str(),
+                    secret_kind: request.secret_kind,
+                    label: "SMTP password",
+                    metadata: &secret_metadata,
+                },
+            )
+            .await?;
+        communication_store
+            .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+                &request.account_id,
+                ProviderAccountSecretPurpose::SmtpPassword,
+                &smtp_secret_ref,
             ))
             .await?;
 
@@ -578,6 +621,11 @@ pub struct ImapAccountSetupRequest {
     pub username: String,
     pub password: String,
     pub secret_kind: SecretKind,
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub smtp_tls: Option<bool>,
+    pub smtp_starttls: Option<bool>,
+    pub smtp_username: Option<String>,
 }
 
 impl ImapAccountSetupRequest {
@@ -606,12 +654,59 @@ impl ImapAccountSetupRequest {
             username: username.into(),
             password: password.into(),
             secret_kind: SecretKind::Password,
+            smtp_host: None,
+            smtp_port: None,
+            smtp_tls: None,
+            smtp_starttls: None,
+            smtp_username: None,
         }
     }
 
     pub fn secret_kind(mut self, secret_kind: SecretKind) -> Self {
         self.secret_kind = secret_kind;
         self
+    }
+
+    pub fn smtp_host(mut self, smtp_host: impl Into<String>) -> Self {
+        self.smtp_host = Some(smtp_host.into());
+        self
+    }
+
+    pub fn smtp_port(mut self, smtp_port: u16) -> Self {
+        self.smtp_port = Some(smtp_port);
+        self
+    }
+
+    pub fn smtp_tls(mut self, smtp_tls: bool) -> Self {
+        self.smtp_tls = Some(smtp_tls);
+        self
+    }
+
+    pub fn smtp_starttls(mut self, smtp_starttls: bool) -> Self {
+        self.smtp_starttls = Some(smtp_starttls);
+        self
+    }
+
+    pub fn smtp_username(mut self, smtp_username: impl Into<String>) -> Self {
+        self.smtp_username = Some(smtp_username.into());
+        self
+    }
+
+    fn smtp_config(&self) -> ImapAccountSmtpConfig {
+        let default_host = match self.provider_kind {
+            EmailProviderKind::Icloud => "smtp.mail.me.com".to_owned(),
+            _ => self.host.clone(),
+        };
+        ImapAccountSmtpConfig {
+            host: self.smtp_host.clone().unwrap_or(default_host),
+            port: self.smtp_port.unwrap_or(587),
+            tls: self.smtp_tls.unwrap_or(true),
+            starttls: self.smtp_starttls.unwrap_or(true),
+            username: self
+                .smtp_username
+                .clone()
+                .unwrap_or_else(|| self.external_account_id.clone()),
+        }
     }
 
     fn validate(&self) -> Result<(), EmailAccountSetupError> {
@@ -643,9 +738,27 @@ impl ImapAccountSetupRequest {
                 message: "must be app_password or password",
             });
         }
+        let smtp_config = self.smtp_config();
+        validate_non_empty("smtp_host", &smtp_config.host)?;
+        validate_non_empty("smtp_username", &smtp_config.username)?;
+        if smtp_config.port == 0 {
+            return Err(EmailAccountSetupError::InvalidRequest {
+                field: "smtp_port",
+                message: "must be greater than zero",
+            });
+        }
 
         Ok(())
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ImapAccountSmtpConfig {
+    host: String,
+    port: u16,
+    tls: bool,
+    starttls: bool,
+    username: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -696,6 +809,10 @@ fn oauth_secret_ref(account_id: &str) -> String {
 
 fn imap_secret_ref(account_id: &str) -> String {
     format!("secret:provider-account:{account_id}:imap_password")
+}
+
+fn smtp_secret_ref(account_id: &str) -> String {
+    format!("secret:provider-account:{account_id}:smtp_password")
 }
 
 fn email_provider_connected_services(

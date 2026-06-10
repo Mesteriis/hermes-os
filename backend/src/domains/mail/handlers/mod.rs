@@ -22,6 +22,7 @@ use crate::ai::core::{
 };
 use crate::domains::mail::core::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
+    ProviderAccountSecretPurpose, ProviderCredentialReader,
 };
 use crate::domains::persons::analytics::{AnalyticsError, PersonAnalyticsService};
 use crate::domains::persons::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
@@ -988,39 +989,164 @@ pub(crate) struct SendRequest {
     bcc: Option<Vec<String>>,
     subject: String,
     body_text: String,
+    body_html: Option<String>,
     in_reply_to: Option<String>,
     references: Option<Vec<String>>,
+    confirmed_provider_write: Option<bool>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct SendResponse {
     message_id: String,
     accepted: Vec<String>,
+    accepted_recipients: Vec<String>,
+    transport: String,
+    status: String,
+    failure_reason: Option<String>,
 }
 
 pub(crate) async fn post_v1_send(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<SendRequest>,
 ) -> Result<Json<SendResponse>, ApiError> {
+    if req.confirmed_provider_write != Some(true) {
+        return Err(ApiError::ProviderWriteConfirmationRequired);
+    }
+
+    require_unlocked_host_vault(&state)?;
+
+    let communication_store = communication_ingestion_store(&state)?;
+    let account = communication_store
+        .provider_account(&req.account_id)
+        .await?
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "provider account was not found",
+        ))?;
+    let smtp_config = smtp_config_for_provider_account(&account)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let credential_reader = ProviderCredentialReader::new(
+        communication_store,
+        SecretReferenceStore::new(pool),
+        &state.vault,
+    );
+    let credential = credential_reader
+        .read(
+            &account.account_id,
+            ProviderAccountSecretPurpose::SmtpPassword,
+        )
+        .await
+        .map_err(provider_credential_api_error)?;
     let email = crate::domains::mail::send::OutgoingEmail {
-        from: req.account_id.clone(),
+        from: account.external_account_id.clone(),
         to: req.to,
         cc: req.cc.unwrap_or_default(),
         bcc: req.bcc.unwrap_or_default(),
         subject: req.subject,
         body_text: req.body_text,
-        body_html: None,
+        body_html: req.body_html,
         in_reply_to: req.in_reply_to,
         references: req.references.unwrap_or_default(),
     };
-    // Send is best-effort for now — SMTP config resolved from provider account
+
+    if email
+        .to
+        .iter()
+        .chain(email.cc.iter())
+        .chain(email.bcc.iter())
+        .all(|recipient| recipient.trim().is_empty())
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "at least one recipient is required",
+        ));
+    }
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::communication_email_send(
+            "hermes-frontend",
+            &account.account_id,
+            email.to.len() + email.cc.len() + email.bcc.len(),
+        ))
+        .await?;
+
+    let result = crate::domains::mail::send::SmtpClient::new()
+        .send(&smtp_config, &credential.secret, &email)
+        .await?;
+
     Ok(Json(SendResponse {
-        message_id: format!(
-            "sent-{}",
-            Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        ),
-        accepted: email.to.clone(),
+        message_id: result.message_id,
+        accepted: result.accepted_recipients.clone(),
+        accepted_recipients: result.accepted_recipients,
+        transport: "smtp".to_owned(),
+        status: "sent".to_owned(),
+        failure_reason: None,
     }))
+}
+
+fn smtp_config_for_provider_account(
+    account: &ProviderAccount,
+) -> Result<crate::domains::mail::send::SmtpConfig, ApiError> {
+    match account.provider_kind {
+        EmailProviderKind::Icloud | EmailProviderKind::Imap => {}
+        EmailProviderKind::Gmail => {
+            return Err(ApiError::InvalidCommunicationQuery(
+                "Gmail send is unavailable until OAuth send scopes are configured",
+            ));
+        }
+        _ => {
+            return Err(ApiError::InvalidCommunicationQuery(
+                "provider does not support SMTP send",
+            ));
+        }
+    }
+
+    let config = account
+        .config
+        .as_object()
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "provider account config must be a JSON object",
+        ))?;
+    let host = config
+        .get("smtp_host")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "SMTP config is unavailable for this account",
+        ))?;
+    let port = config
+        .get("smtp_port")
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0 && *value <= u64::from(u16::MAX))
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "SMTP port is unavailable for this account",
+        ))? as u16;
+    let username = config
+        .get("smtp_username")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(account.external_account_id.as_str());
+    let tls = config
+        .get("smtp_tls")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let starttls = config
+        .get("smtp_starttls")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    Ok(crate::domains::mail::send::SmtpConfig::new(host, port, tls, username).starttls(starttls))
+}
+
+fn provider_credential_api_error(
+    error: crate::domains::mail::core::ProviderCredentialError,
+) -> ApiError {
+    tracing::warn!(error = %error, "SMTP credential lookup failed");
+    ApiError::InvalidCommunicationQuery("SMTP credential is unavailable for this account")
 }
 
 pub(crate) async fn post_v1_reply(
@@ -1052,6 +1178,10 @@ pub(crate) async fn post_v1_reply(
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         ),
         accepted: req.to.clone(),
+        accepted_recipients: req.to.clone(),
+        transport: "local".to_owned(),
+        status: "queued".to_owned(),
+        failure_reason: None,
     }))
 }
 
@@ -1567,8 +1697,20 @@ pub(crate) async fn get_v1_communication_messages(
 ) -> Result<Json<CommunicationMessagesResponse>, ApiError> {
     let query = parse_communication_messages_query(raw_query.as_deref())?;
     let limit = query.limit.unwrap_or(50).clamp(1, 100);
+    let workflow_state = query
+        .workflow_state
+        .as_deref()
+        .map(str::parse::<WorkflowState>)
+        .transpose()
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid workflow state value"))?;
     let items = message_store(&state)?
-        .recent_messages(limit)
+        .list_messages(
+            query.account_id.as_deref(),
+            workflow_state,
+            query.channel_kind.as_deref(),
+            query.q.as_deref(),
+            limit,
+        )
         .await?
         .into_iter()
         .map(CommunicationMessageSummaryResponse::from)
@@ -2091,11 +2233,34 @@ pub(crate) struct ImapAccountSetupApiRequest {
     username: String,
     password: String,
     secret_kind: Option<String>,
+    smtp_host: Option<String>,
+    smtp_port: Option<u16>,
+    smtp_tls: Option<bool>,
+    smtp_starttls: Option<bool>,
+    smtp_username: Option<String>,
 }
 
 impl ImapAccountSetupApiRequest {
     fn into_setup_request(self) -> Result<ImapAccountSetupRequest, ApiError> {
-        let provider_kind = match self.provider_kind.trim() {
+        let Self {
+            account_id,
+            provider_kind,
+            display_name,
+            external_account_id,
+            host,
+            port,
+            tls,
+            mailbox,
+            username,
+            password,
+            secret_kind,
+            smtp_host,
+            smtp_port,
+            smtp_tls,
+            smtp_starttls,
+            smtp_username,
+        } = self;
+        let provider_kind = match provider_kind.trim() {
             "icloud" => EmailProviderKind::Icloud,
             "imap" => EmailProviderKind::Imap,
             _ => {
@@ -2106,7 +2271,7 @@ impl ImapAccountSetupApiRequest {
                 .into());
             }
         };
-        let secret_kind = match self.secret_kind.as_deref().unwrap_or("password").trim() {
+        let secret_kind = match secret_kind.as_deref().unwrap_or("password").trim() {
             "app_password" => SecretKind::AppPassword,
             "password" => SecretKind::Password,
             _ => {
@@ -2118,19 +2283,36 @@ impl ImapAccountSetupApiRequest {
             }
         };
 
-        Ok(ImapAccountSetupRequest::new(
-            self.account_id,
+        let mut request = ImapAccountSetupRequest::new(
+            account_id,
             provider_kind,
-            self.display_name,
-            self.external_account_id,
-            self.host,
-            self.port,
-            self.tls,
-            self.mailbox,
-            self.username,
-            self.password,
+            display_name,
+            external_account_id,
+            host,
+            port,
+            tls,
+            mailbox,
+            username,
+            password,
         )
-        .secret_kind(secret_kind))
+        .secret_kind(secret_kind);
+        if let Some(smtp_host) = trimmed_optional(smtp_host) {
+            request = request.smtp_host(smtp_host);
+        }
+        if let Some(smtp_port) = smtp_port {
+            request = request.smtp_port(smtp_port);
+        }
+        if let Some(smtp_tls) = smtp_tls {
+            request = request.smtp_tls(smtp_tls);
+        }
+        if let Some(smtp_starttls) = smtp_starttls {
+            request = request.smtp_starttls(smtp_starttls);
+        }
+        if let Some(smtp_username) = trimmed_optional(smtp_username) {
+            request = request.smtp_username(smtp_username);
+        }
+
+        Ok(request)
     }
 }
 

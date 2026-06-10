@@ -11,8 +11,8 @@ use hermes_hub_backend::domains::mail::core::{
     StoredRawCommunicationRecord,
 };
 use hermes_hub_backend::domains::mail::messages::{
-    MessageProjectionError, MessageProjectionStore, NewProjectedMessage, project_raw_email_message,
-    project_raw_email_message_from_blob,
+    MessageProjectionError, MessageProjectionStore, NewProjectedMessage, WorkflowState,
+    project_raw_email_message, project_raw_email_message_from_blob,
 };
 use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
 use hermes_hub_backend::platform::storage::Database;
@@ -252,6 +252,95 @@ async fn message_projection_reprojects_same_raw_record_idempotently_against_post
     .await
     .expect("idempotent projected message count");
     assert_eq!(count, 1);
+}
+
+#[tokio::test]
+async fn message_projection_list_messages_filters_by_account_state_channel_and_query_against_postgres()
+ {
+    let Some((_, communication_store, message_store)) =
+        live_projection_context("message filtered listing").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let account_left = format!("acct_message_filter_left_{suffix}");
+    let account_right = format!("acct_message_filter_right_{suffix}");
+
+    store_provider_account(
+        &communication_store,
+        &account_left,
+        "Filter Left",
+        format!("filter-left-{suffix}@example.com"),
+    )
+    .await;
+    store_provider_account(
+        &communication_store,
+        &account_right,
+        "Filter Right",
+        format!("filter-right-{suffix}@example.com"),
+    )
+    .await;
+
+    let left_raw = record_raw_email_message(
+        &communication_store,
+        &account_left,
+        &format!("raw_message_filter_left_{suffix}"),
+        &format!("provider-filter-left-{suffix}"),
+        "Quarterly Alpha Contract",
+        "The alpha renewal needs a legal review.",
+    )
+    .await;
+    let right_raw = record_raw_email_message(
+        &communication_store,
+        &account_right,
+        &format!("raw_message_filter_right_{suffix}"),
+        &format!("provider-filter-right-{suffix}"),
+        "Quarterly Beta Invoice",
+        "The beta invoice is already paid.",
+    )
+    .await;
+
+    let left = project_raw_email_message(&message_store, &left_raw)
+        .await
+        .expect("project left message");
+    let right = project_raw_email_message(&message_store, &right_raw)
+        .await
+        .expect("project right message");
+    message_store
+        .transition_workflow_state(&left.message_id, WorkflowState::NeedsAction)
+        .await
+        .expect("set left state");
+    message_store
+        .transition_workflow_state(&right.message_id, WorkflowState::Reviewed)
+        .await
+        .expect("set right state");
+
+    let filtered = message_store
+        .list_messages(
+            Some(&account_left),
+            Some(WorkflowState::NeedsAction),
+            Some("email"),
+            Some("alpha legal"),
+            10,
+        )
+        .await
+        .expect("list filtered messages");
+
+    assert_eq!(filtered.len(), 1);
+    assert_eq!(filtered[0].message.message_id, left.message_id);
+    assert_eq!(filtered[0].message.account_id, account_left);
+
+    let no_match = message_store
+        .list_messages(
+            Some(&account_left),
+            Some(WorkflowState::NeedsAction),
+            Some("email"),
+            Some("beta"),
+            10,
+        )
+        .await
+        .expect("list non-matching messages");
+    assert!(no_match.is_empty());
 }
 
 #[tokio::test]
@@ -851,7 +940,7 @@ async fn message_state_counts_against_postgres() {
 
     // Transition one to done
     let messages = message_store
-        .list_messages(Some(&account_id), None, None, 10)
+        .list_messages(Some(&account_id), None, None, None, 10)
         .await
         .expect("list messages");
     assert!(!messages.is_empty());
@@ -917,6 +1006,7 @@ async fn message_list_filtering_by_state_against_postgres() {
             Some(&account_id),
             Some(hermes_hub_backend::domains::mail::messages::WorkflowState::New),
             None,
+            None,
             10,
         )
         .await
@@ -928,6 +1018,7 @@ async fn message_list_filtering_by_state_against_postgres() {
         .list_messages(
             Some(&account_id),
             Some(hermes_hub_backend::domains::mail::messages::WorkflowState::Done),
+            None,
             None,
             10,
         )

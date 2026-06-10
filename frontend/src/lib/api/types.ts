@@ -355,6 +355,280 @@ export type WorkflowStateTransitionResponse = {
 	previous_state: string;
 };
 
+export type SendEmailRequest = {
+	account_id: string;
+	to: string[];
+	cc?: string[];
+	bcc?: string[];
+	subject: string;
+	body_text: string;
+	body_html?: string | null;
+	in_reply_to?: string | null;
+	references?: string[];
+	confirmed_provider_write: boolean;
+};
+
+export type SendEmailResponse = {
+	message_id: string;
+	accepted: string[];
+	accepted_recipients: string[];
+	transport: 'smtp' | 'local' | string;
+	status: 'sent' | 'queued' | string;
+	failure_reason: string | null;
+};
+
+export type MessageExplainResponse = {
+	reasons: string[];
+};
+
+export type SmartCcResponse = {
+	suggestions: string[];
+};
+
+export type MessagePinToggleResponse = {
+	message_id: string;
+	pinned: boolean;
+};
+
+export type MessageExportResponse = {
+	content_type: string;
+	content: string;
+	filename: string;
+};
+
+export type MailAuthResult = {
+	result: string;
+	domain?: string | null;
+	ip?: string | null;
+	selector?: string | null;
+	policy?: string | null;
+};
+
+export type MailAuthResults = {
+	spf: MailAuthResult | null;
+	dkim: MailAuthResult | null;
+	dmarc: MailAuthResult | null;
+	raw_headers: string[];
+};
+
+export type MailAuthRisk = {
+	has_spf: boolean;
+	spf_pass: boolean;
+	has_dkim: boolean;
+	dkim_pass: boolean;
+	has_dmarc: boolean;
+	dmarc_pass: boolean;
+	is_spoofed: boolean;
+	risk_summary: string;
+};
+
+export type MessageAuthCheckResponse = {
+	auth: MailAuthResults;
+	risk: MailAuthRisk;
+};
+
+export type SignatureDetection = {
+	has_signature: boolean;
+	signature_type: string | null;
+	signer_info: string | null;
+	is_valid: boolean | null;
+	cert_expiry_warning: string | null;
+};
+
+export type LanguageDetection = {
+	language: string;
+	confidence: number;
+	script: string | null;
+};
+
+export type TranslationResponse = {
+	translated: boolean;
+	text?: string;
+	target?: string;
+	model?: string;
+	reason?: string;
+};
+
+export type AiReplyResponse = {
+	subject?: string;
+	body?: string;
+	tone?: string;
+	language?: string;
+	generated?: boolean;
+	reason?: string;
+};
+
+export type ExtractedTask = {
+	title: string;
+	due_date: string | null;
+	assignee: string | null;
+	priority: string | null;
+	source: string;
+};
+
+export type ExtractedNote = {
+	title: string;
+	content: string;
+	tags: string[];
+	source: string;
+};
+
+export type ExtractTasksResponse = {
+	tasks: ExtractedTask[];
+};
+
+export type ExtractNotesResponse = {
+	notes: ExtractedNote[];
+};
+
+export type SubscriptionSource = {
+	sender: string;
+	message_count: number;
+	first_seen: string;
+	last_seen: string;
+	is_newsletter: boolean;
+	has_unsubscribe: boolean;
+};
+
+export type DuplicateAttachmentGroup = {
+	sha256: string;
+	filenames: string[];
+	message_ids: string[];
+	count: number;
+};
+
+export type InvoiceStatus =
+	| 'received'
+	| 'recognized'
+	| 'needs_review'
+	| 'approved'
+	| 'paid'
+	| 'closed'
+	| 'rejected';
+
+export type InvoiceRecord = {
+	invoice_id: string;
+	message_id: string | null;
+	amount: number | null;
+	currency: string | null;
+	invoice_number: string | null;
+	issue_date: string | null;
+	due_date: string | null;
+	counterparty: string | null;
+	tax_id: string | null;
+	status: InvoiceStatus;
+	linked_project_id: string | null;
+	linked_person_id: string | null;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type InvoiceListResponse = {
+	items: InvoiceRecord[];
+};
+
+export type LegalDocument = {
+	document_id: string;
+	message_id: string | null;
+	document_type: string;
+	title: string;
+	parties: string[];
+	effective_date: string | null;
+	expiry_date: string | null;
+	amount: number | null;
+	currency: string | null;
+	status: string;
+	linked_project_id: string | null;
+	risks: string[];
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type LegalDocumentListResponse = {
+	items: LegalDocument[];
+};
+
+export type CertificateRecord = {
+	cert_id: string;
+	owner_name: string;
+	issuer: string;
+	serial_number: string | null;
+	fingerprint_sha256: string | null;
+	valid_from: string | null;
+	valid_until: string | null;
+	cert_type: string;
+	provider: string;
+	storage_kind: string;
+	storage_ref: string | null;
+	trust_status: string;
+	is_revoked: boolean;
+	usage: string[];
+	linked_message_id: string | null;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type CertificateListResponse = {
+	items: CertificateRecord[];
+};
+
+export type RichTemplateListResponse = {
+	templates: EmailTemplate[];
+};
+
+export type RenderTemplateResponse = {
+	rendered: boolean;
+	template_id: string;
+	variables: Record<string, string>;
+};
+
+export type MailArchitectureBlocker = {
+	section: string;
+	feature: string;
+	reason: string;
+	resolution: string;
+};
+
+export type MailMessageInsight = {
+	messageId: string;
+	explain: MessageExplainResponse | null;
+	smartCc: SmartCcResponse | null;
+	auth: MessageAuthCheckResponse | null;
+	signature: SignatureDetection | null;
+	language: LanguageDetection | null;
+	aiReply: AiReplyResponse | null;
+	tasks: ExtractedTask[];
+	notes: ExtractedNote[];
+	translation: TranslationResponse | null;
+};
+
+export type MailResourceSnapshot = {
+	subscriptions: SubscriptionSource[];
+	duplicates: DuplicateAttachmentGroup[];
+	invoices: InvoiceRecord[];
+	legalDocuments: LegalDocument[];
+	certificates: CertificateRecord[];
+	expiringCertificates: CertificateRecord[];
+	personas: EmailPersona[];
+	templates: EmailTemplate[];
+	blockers: MailArchitectureBlocker[];
+};
+
+export type MailResourceSummary = {
+	subscriptions: number;
+	duplicates: number;
+	invoices: number;
+	legalDocuments: number;
+	certificates: number;
+	expiringCertificates: number;
+	personas: number;
+	templates: number;
+	blockers: number;
+};
+
 
 
 export type CommunicationMessageDetail = {

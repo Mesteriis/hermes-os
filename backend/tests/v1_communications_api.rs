@@ -1,7 +1,7 @@
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::body::Body;
+use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -9,6 +9,7 @@ use tower::ServiceExt;
 use hermes_hub_backend::app::{build_router, build_router_with_database};
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
+use testkit::context::TestContext;
 
 const T: &str = "v1comms-test-token";
 
@@ -30,6 +31,17 @@ fn pget(uri: &str, body: Value) -> Request<Body> {
         .uri(uri)
         .header(header::CONTENT_TYPE, "application/json")
         .header("x-hermes-secret", T)
+        .body(Body::from(body.to_string()))
+        .expect("req")
+}
+
+fn pget_with_actor(uri: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method(Method::POST)
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-hermes-secret", T)
+        .header("x-hermes-actor-id", "hermes-frontend")
         .body(Body::from(body.to_string()))
         .expect("req")
 }
@@ -171,6 +183,33 @@ v1_post_test!(
     "/api/v1/communications/templates/rich/render",
     json!({"template": "Hello {{name}}", "context": {"name": "Test"}})
 );
+
+#[tokio::test]
+async fn v1_send_requires_explicit_provider_write_confirmation() {
+    let ctx = TestContext::new().await;
+    let r = router(&ctx.connection_string()).await;
+    let resp = r
+        .oneshot(pget_with_actor(
+            "/api/v1/communications/send",
+            json!({
+                "account_id": "icloud-primary",
+                "to": ["recipient@example.com"],
+                "subject": "Provider write guard",
+                "body_text": "This request must not send without confirmation."
+            }),
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), 1024 * 1024)
+            .await
+            .expect("read response body"),
+    )
+    .expect("json response");
+    assert_eq!(body["error"], "provider_write_confirmation_required");
+}
 
 // ── Auth rejection ─────────────────────────────────────────────────────────
 

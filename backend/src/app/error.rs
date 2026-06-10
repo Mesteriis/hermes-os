@@ -180,6 +180,7 @@ pub enum ApiError {
     CommunicationIngestion(CommunicationIngestionError),
     MailStorage(MailStorageError),
     InvalidCommunicationQuery(&'static str),
+    ProviderWriteConfirmationRequired,
     CommunicationMessageNotFound,
     SecretVaultNotConfigured,
     HostVault(HostVaultError),
@@ -723,6 +724,12 @@ impl axum::response::IntoResponse for ApiError {
                 StatusCode::BAD_REQUEST,
                 "invalid_communication_query",
                 message.to_owned(),
+                false,
+            ),
+            Self::ProviderWriteConfirmationRequired => (
+                StatusCode::BAD_REQUEST,
+                "provider_write_confirmation_required",
+                "explicit provider write confirmation is required".to_owned(),
                 false,
             ),
             Self::CommunicationMessageNotFound => (

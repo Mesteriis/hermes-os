@@ -19,21 +19,44 @@
 		communicationProjects,
 		communicationTasks,
 		communicationsError,
+		addLabelToSelectedMessage,
+		exportSelectedMessage,
+		extractNotesForSelectedMessage,
+		extractTasksForSelectedMessage,
+		generateReplyForSelectedMessage,
 		handleWorkflowStateTransition,
 		isAiAnswerSubmitting,
 		isCommunicationsLoading,
+		isMailActionRunning,
 		isMailStateTransitioning,
 		loadCommunicationMessagesFiltered,
+		mailAccountOptions,
+		mailActionError,
+		mailActionStatus,
+		mailMessageInsight,
+		mailResources,
+		mailResourceSummary,
 		mailStateCounts,
 		mailStateFilter,
+		messageSearchQuery,
 		messageTime,
+		openForwardSelected,
+		openNewMessage,
+		openReplyToSelected,
 		selectCommunication,
 		selectCommunicationSection,
+		selectMailAccount,
 		selectedCommunication,
 		selectedCommunicationDetail,
 		selectedConversationIndex,
+		selectedMailAccountId,
 		senderEmail,
-		senderLabel
+		senderLabel,
+		snoozeSelectedMessage,
+		toggleMuteSelectedMessage,
+		togglePinSelectedMessage,
+		translateSelectedMessage,
+		updateMessageSearchQuery
 	} from '$lib/stores/communications';
 	import { formatBytes } from '$lib/services/formatting';
 
@@ -75,8 +98,18 @@
 		<div class="header-actions">
 			<button type="button" class="segmented active"><Icon icon="tabler:message" width="16" height="16" /></button>
 			<button type="button" class="segmented" disabled><Icon icon="tabler:layout-grid" width="16" height="16" /></button>
-			<button type="button" class="primary-button">{_('New Message')}</button>
+			<button type="button" class="primary-button" onclick={() => openNewMessage()}>{_('New Message')}</button>
 		</div>
+	</div>
+	<div class="filter-tabs account-tabs">
+		<button type="button" class:active={$selectedMailAccountId === ''} onclick={() => void selectMailAccount('')}>{_('All Accounts')}</button>
+		{#each $mailAccountOptions as account}
+			<button type="button" class:active={$selectedMailAccountId === account.accountId} onclick={() => void selectMailAccount(account.accountId)}>
+				<Icon icon={account.providerKind === 'gmail' ? 'tabler:brand-gmail' : 'tabler:mail'} width="15" height="15" />
+				{account.label}
+				{#if !account.canSend}<em>{_('Read only')}</em>{/if}
+			</button>
+		{/each}
 	</div>
 	<div class="filter-tabs">
 			<button type="button" class:active={$mailStateFilter === ''} onclick={() => void selectCommunicationSection('unified')}>{_('Unified')} <em>{$communicationMessages.length}</em></button>
@@ -93,30 +126,49 @@
 				communicationsError={$communicationsError}
 				selectedConversationIndex={$selectedConversationIndex}
 				selectedCommunication={$selectedCommunication as unknown | null}
+				searchQuery={$messageSearchQuery}
 			{isLayoutEditing}
 			{isWidgetVisible}
 			{selectCommunication}
+				onSearchQueryChange={(value: string) => void updateMessageSearchQuery(value)}
 			{communicationChannelIcon}
 			{senderLabel}
 				messageTime={formatMessageTime}
 		/>
 		<CommunicationsMessageDetail
-				selectedCommunication={$selectedCommunication as unknown | null}
+				selectedCommunication={$selectedCommunication}
 				selectedCommunicationDetail={$selectedCommunicationDetail}
 				aiAnalysisResult={$aiAnalysisResult}
+				mailMessageInsight={$mailMessageInsight}
+				isMailActionRunning={$isMailActionRunning}
+				mailActionStatus={$mailActionStatus}
+				mailActionError={$mailActionError}
 				isMailStateTransitioning={$isMailStateTransitioning}
 				isAiAnswerSubmitting={$isAiAnswerSubmitting}
 			{isLayoutEditing}
 			{isWidgetVisible}
-				handleWorkflowStateTransition={handleWorkflowStateTransition as unknown as (msgId: string, state: string) => void}
+				handleWorkflowStateTransition={handleWorkflowStateTransition}
 			{askAiAboutSelectedMessage}
+				onReply={openReplyToSelected}
+				onForward={openForwardSelected}
+				onPin={() => void togglePinSelectedMessage()}
+				onMute={() => void toggleMuteSelectedMessage()}
+				onSnooze={() => void snoozeSelectedMessage()}
+				onAddLabel={(label: string) => void addLabelToSelectedMessage(label)}
+				onExport={(format: 'md' | 'eml' | 'json') => void exportSelectedMessage(format)}
+				onGenerateAiReply={() => void generateReplyForSelectedMessage()}
+				onExtractTasks={() => void extractTasksForSelectedMessage()}
+				onExtractNotes={() => void extractNotesForSelectedMessage()}
+				onTranslate={() => void translateSelectedMessage('en')}
 				messageTime={formatMessageTime}
 			{senderLabel}
 			{attachmentIcon}
 			{formatBytes}
 		/>
 		<CommunicationsContextRail
-				selectedCommunication={$selectedCommunication as unknown | null}
+				selectedCommunication={$selectedCommunication}
+				mailResources={$mailResources}
+				mailResourceSummary={$mailResourceSummary}
 				projects={$communicationProjects as unknown[]}
 				tasks={$communicationTasks as unknown[]}
 			{isLayoutEditing}

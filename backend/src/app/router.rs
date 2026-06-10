@@ -143,6 +143,7 @@ use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntellig
 
 use crate::ai::api::*;
 use crate::app::guard;
+use crate::app::vault_reconciliation::spawn_host_vault_manifest_reconciliation;
 use crate::app::{AccountSetupState, AppError, AppState};
 use crate::domains::calendar::handlers::*;
 use crate::domains::documents::api::*;
@@ -181,6 +182,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         vault,
         account_setup: AccountSetupState::default(),
     };
+    spawn_host_vault_manifest_reconciliation(&state);
 
     let api_routes = Router::new()
         .route("/api/v1/status", get(get_v1_status))

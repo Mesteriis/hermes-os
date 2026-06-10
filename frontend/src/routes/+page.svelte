@@ -27,12 +27,20 @@
 	import { isAccountDrawerOpen } from '$lib/stores/accountWizard';
 	import {
 		aiAnalysisResult as communicationAiAnalysisResult,
+		closeSendReview,
 		composeForm as communicationComposeForm,
+		composeSendError,
+		composeStatusMessage,
+		confirmSendMessage,
 		drafts as communicationDrafts,
 		handleSaveDraft as saveCommunicationDraft,
 		isComposeOpen as communicationComposeOpen,
+		isSendReviewOpen,
+		isSendingMessage,
 		loadCommunicationsWorkspace,
+		mailAccountOptions,
 		mailboxHealth as communicationMailboxHealth,
+		openSendReview,
 		openComposeForDraft,
 		selectedCommunication as selectedCommunicationStore
 	} from '$lib/stores/communications';
@@ -59,14 +67,16 @@
 		{ title: 'Email: Partnership Opportunity', body: 'Интересное предложение о партнерстве. Нужно обсудить с командой...', source: 'Outlook', tag: '#partnership', time: 'May 12, 16:20', icon: 'tabler:mail' }
 	];
 
+	const currentViewId = $derived($currentView);
+	const activeCommunicationSectionId = $derived($activeCommunicationSection);
 	const isCommunicationMessagesSection = $derived(
-		$currentView === 'communications' &&
-			['unified', 'inbox', 'waiting', 'needs_reply', 'mail'].includes($activeCommunicationSection)
+		currentViewId === 'communications' &&
+			['unified', 'inbox', 'waiting', 'needs_reply', 'mail'].includes(activeCommunicationSectionId)
 	);
 	const activeCommunicationEmptySection = $derived(
-		$currentView === 'communications' &&
-			['mentions', 'calls', 'meetings'].includes($activeCommunicationSection)
-			? communicationSections.find((item) => item.id === $activeCommunicationSection) ?? null
+		currentViewId === 'communications' &&
+			['mentions', 'calls', 'meetings'].includes(activeCommunicationSectionId)
+			? communicationSections.find((item) => item.id === activeCommunicationSectionId) ?? null
 			: null
 	);
 	const isWidgetVisible = $derived.by(() => {
@@ -106,57 +116,65 @@
 	<meta name="description" content={_('Hermes Hub desktop personal OS dashboard.')} />
 </svelte:head>
 
-{#if $currentView === 'home'}
+{#if currentViewId === 'home'}
 	<HomePage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
 {:else if isCommunicationMessagesSection}
 	<CommunicationsPage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
 {:else if activeCommunicationEmptySection}
 	<CommunicationsEmptyPage activeCommunicationEmptySection={activeCommunicationEmptySection} />
-{:else if $currentView === 'persons'}
+{:else if currentViewId === 'persons'}
 	<PersonsPage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
-{:else if $currentView === 'projects'}
+{:else if currentViewId === 'projects'}
 	<ProjectsPage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
-{:else if $currentView === 'tasks'}
+{:else if currentViewId === 'tasks'}
 	<TasksPage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
-{:else if $currentView === 'calendar'}
+{:else if currentViewId === 'calendar'}
 	<CalendarPage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
-{:else if $currentView === 'documents'}
+{:else if currentViewId === 'documents'}
 	<DocumentsPage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
-{:else if $currentView === 'notes'}
+{:else if currentViewId === 'notes'}
 	<NotesPage {notes} isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
-{:else if $currentView === 'knowledge'}
+{:else if currentViewId === 'knowledge'}
 	<KnowledgePage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
-{:else if $currentView === 'communications' && $activeCommunicationSection === 'telegram'}
+{:else if currentViewId === 'communications' && activeCommunicationSectionId === 'telegram'}
 	<TelegramPage
 		isLayoutEditing={$isLayoutEditing}
 		{isWidgetVisible}
 		aiAnalysisResult={$communicationAiAnalysisResult}
 		selectedCommunication={$selectedCommunicationStore}
 	/>
-{:else if $currentView === 'communications' && $activeCommunicationSection === 'whatsapp'}
+{:else if currentViewId === 'communications' && activeCommunicationSectionId === 'whatsapp'}
 	<WhatsAppPage
 		isLayoutEditing={$isLayoutEditing}
 		{isWidgetVisible}
 		aiAnalysisResult={$communicationAiAnalysisResult}
 		selectedCommunication={$selectedCommunicationStore}
 	/>
-{:else if $currentView === 'settings'}
+{:else if currentViewId === 'settings'}
 	<section class="settings-page">
 		<SettingsPage />
 	</section>
-{:else if $currentView === 'agents'}
+{:else if currentViewId === 'agents'}
 	<AgentsPage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
-{:else if $currentView === 'organizations'}
+{:else if currentViewId === 'organizations'}
 	<OrganizationsPage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
-{:else if $currentView === 'timeline'}
+{:else if currentViewId === 'timeline'}
 	<TimelinePage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
 {/if}
 
 <ComposeDrawer
 	isOpen={$communicationComposeOpen}
 	bind:form={$communicationComposeForm}
+	accountOptions={$mailAccountOptions}
+	isSending={$isSendingMessage}
+	sendError={$composeSendError}
+	statusMessage={$composeStatusMessage}
+	isSendReviewOpen={$isSendReviewOpen}
 	onClose={() => communicationComposeOpen.set(false)}
 	onSaveDraft={saveCommunicationDraft}
+	onOpenSendReview={openSendReview}
+	onCloseSendReview={closeSendReview}
+	onConfirmSend={confirmSendMessage}
 />
 <DraftStrip drafts={$communicationDrafts} onOpenCompose={(draft) => openComposeForDraft(draft as never)} />
 {#if $communicationMailboxHealth}<HealthStrip health={$communicationMailboxHealth} />{/if}

@@ -100,13 +100,17 @@
 			selectedIntegrationId = null;
 			return;
 		}
-		if (!selectedIntegrationId || !$integrationViewModels.some((item) => item.integrationId === selectedIntegrationId)) {
-			selectedIntegrationId = $integrationViewModels[0].integrationId;
+		if (selectedIntegrationId && !$integrationViewModels.some((item) => item.integrationId === selectedIntegrationId)) {
+			selectedIntegrationId = null;
 		}
 	});
 
 	function selectIntegration(integrationId: string) {
 		selectedIntegrationId = integrationId;
+	}
+
+	function closeIntegrationInspector() {
+		selectedIntegrationId = null;
 	}
 </script>
 
@@ -199,6 +203,7 @@
 				integrations={$integrationViewModels}
 				{selectedIntegrationId}
 				onSelectIntegration={selectIntegration}
+				onCloseIntegration={closeIntegrationInspector}
 				onOpenAccountDrawer={openAccountWizard}
 				formatDateTimeFn={formatDateTime}
 			/>

@@ -14,7 +14,29 @@ import type {
 	MailboxHealth,
 	SenderStats,
 	ThreadListResponse,
-	ThreadMessagesResponse
+	ThreadMessagesResponse,
+	SendEmailRequest,
+	SendEmailResponse,
+	MessageExplainResponse,
+	SmartCcResponse,
+	MessagePinToggleResponse,
+	MessageExportResponse,
+	MessageAuthCheckResponse,
+	SignatureDetection,
+	LanguageDetection,
+	TranslationResponse,
+	AiReplyResponse,
+	ExtractTasksResponse,
+	ExtractNotesResponse,
+	SubscriptionSource,
+	DuplicateAttachmentGroup,
+	InvoiceListResponse,
+	LegalDocumentListResponse,
+	CertificateListResponse,
+	EmailPersona,
+	RichTemplateListResponse,
+	RenderTemplateResponse,
+	MailArchitectureBlocker
 } from '../types';
 
 export async function fetchCommunicationMessages(limit = 50): Promise<CommunicationMessagesResponse> {
@@ -73,15 +95,25 @@ export async function fetchMailMessages(
 	accountId?: string,
 	workflowState?: WorkflowState,
 	channelKind?: string,
+	query?: string,
 	limit = 50
 ): Promise<MailMessagesResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	if (accountId?.trim()) params.set('account_id', accountId.trim());
 	if (workflowState?.trim()) params.set('workflow_state', workflowState.trim());
 	if (channelKind?.trim()) params.set('channel_kind', channelKind.trim());
+	if (query?.trim()) params.set('q', query.trim());
 	return ApiClient.instance.get<MailMessagesResponse>(
 		`/api/v1/communications/messages?${params.toString()}`,
 		'Mail messages request failed'
+	);
+}
+
+export async function sendEmail(request: SendEmailRequest): Promise<SendEmailResponse> {
+	return ApiClient.instance.post<SendEmailResponse>(
+		'/api/v1/communications/send',
+		request,
+		'Email send failed'
 	);
 }
 
@@ -144,5 +176,206 @@ export async function fetchThreadMessages(
 	return ApiClient.instance.get<ThreadMessagesResponse>(
 		`/api/v1/communications/threads/messages?${params.toString()}`,
 		'Thread messages failed'
+	);
+}
+
+export async function fetchMessageExplain(messageId: string): Promise<MessageExplainResponse> {
+	return ApiClient.instance.get<MessageExplainResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/explain`,
+		'Message explain failed'
+	);
+}
+
+export async function fetchMessageSmartCc(messageId: string): Promise<SmartCcResponse> {
+	return ApiClient.instance.get<SmartCcResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/smart-cc`,
+		'Smart CC request failed'
+	);
+}
+
+export async function toggleMessagePin(messageId: string): Promise<MessagePinToggleResponse> {
+	return ApiClient.instance.post<MessagePinToggleResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/pin`,
+		{},
+		'Pin message failed'
+	);
+}
+
+export async function toggleMessageMute(messageId: string): Promise<MessagePinToggleResponse> {
+	return ApiClient.instance.post<MessagePinToggleResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/mute`,
+		{},
+		'Mute message failed'
+	);
+}
+
+export async function snoozeMessage(messageId: string, until: string): Promise<Record<string, unknown>> {
+	return ApiClient.instance.post<Record<string, unknown>>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/snooze`,
+		{ until },
+		'Snooze message failed'
+	);
+}
+
+export async function addMessageLabel(messageId: string, label: string): Promise<Record<string, unknown>> {
+	return ApiClient.instance.post<Record<string, unknown>>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/labels`,
+		{ label },
+		'Add message label failed'
+	);
+}
+
+export async function exportMessage(
+	messageId: string,
+	format: 'md' | 'eml' | 'json'
+): Promise<MessageExportResponse> {
+	const params = new URLSearchParams({ format });
+	return ApiClient.instance.get<MessageExportResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/export?${params.toString()}`,
+		'Message export failed'
+	);
+}
+
+export async function fetchMessageAuth(messageId: string): Promise<MessageAuthCheckResponse> {
+	return ApiClient.instance.get<MessageAuthCheckResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/spf-dkim`,
+		'Message authentication check failed'
+	);
+}
+
+export async function fetchMessageSignature(messageId: string): Promise<SignatureDetection> {
+	return ApiClient.instance.get<SignatureDetection>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/signature`,
+		'Signature detection failed'
+	);
+}
+
+export async function detectMessageLanguage(messageId: string): Promise<LanguageDetection> {
+	return ApiClient.instance.get<LanguageDetection>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/detect-language`,
+		'Language detection failed'
+	);
+}
+
+export async function translateMessage(messageId: string, targetLanguage: string): Promise<TranslationResponse> {
+	return ApiClient.instance.post<TranslationResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/translate`,
+		{ target_language: targetLanguage },
+		'Message translation failed'
+	);
+}
+
+export async function generateAiReply(
+	messageId: string,
+	request: { tone?: string; language?: string; context?: string } = {}
+): Promise<AiReplyResponse> {
+	return ApiClient.instance.post<AiReplyResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/ai-reply`,
+		request,
+		'AI reply generation failed'
+	);
+}
+
+export async function extractMessageTasks(messageId: string): Promise<ExtractTasksResponse> {
+	return ApiClient.instance.post<ExtractTasksResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/extract-tasks`,
+		{},
+		'Task extraction failed'
+	);
+}
+
+export async function extractMessageNotes(messageId: string): Promise<ExtractNotesResponse> {
+	return ApiClient.instance.post<ExtractNotesResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/extract-notes`,
+		{},
+		'Note extraction failed'
+	);
+}
+
+export async function fetchSubscriptions(accountId?: string, limit = 50): Promise<SubscriptionSource[]> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	if (accountId?.trim()) params.set('account_id', accountId.trim());
+	return ApiClient.instance.get<SubscriptionSource[]>(
+		`/api/v1/communications/subscriptions?${params.toString()}`,
+		'Subscriptions request failed'
+	);
+}
+
+export async function fetchAttachmentDuplicates(limit = 20): Promise<DuplicateAttachmentGroup[]> {
+	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
+	return ApiClient.instance.get<DuplicateAttachmentGroup[]>(
+		`/api/v1/communications/attachments/duplicates?${params.toString()}`,
+		'Attachment duplicate request failed'
+	);
+}
+
+export async function fetchInvoices(status?: string): Promise<InvoiceListResponse> {
+	const params = new URLSearchParams();
+	if (status?.trim()) params.set('status', status.trim());
+	const qs = params.toString();
+	return ApiClient.instance.get<InvoiceListResponse>(
+		`/api/v1/communications/finance/invoices${qs ? '?' + qs : ''}`,
+		'Invoice request failed'
+	);
+}
+
+export async function fetchLegalDocuments(
+	documentType?: string,
+	status?: string
+): Promise<LegalDocumentListResponse> {
+	const params = new URLSearchParams();
+	if (documentType?.trim()) params.set('document_type', documentType.trim());
+	if (status?.trim()) params.set('status', status.trim());
+	const qs = params.toString();
+	return ApiClient.instance.get<LegalDocumentListResponse>(
+		`/api/v1/communications/legal${qs ? '?' + qs : ''}`,
+		'Legal document request failed'
+	);
+}
+
+export async function fetchCertificates(): Promise<CertificateListResponse> {
+	return ApiClient.instance.get<CertificateListResponse>(
+		'/api/v1/communications/certificates',
+		'Certificate request failed'
+	);
+}
+
+export async function fetchExpiringCertificates(days = 90): Promise<CertificateListResponse> {
+	const params = new URLSearchParams({ days: String(Math.trunc(days)) });
+	return ApiClient.instance.get<CertificateListResponse>(
+		`/api/v1/communications/certificates/expiring?${params.toString()}`,
+		'Expiring certificate request failed'
+	);
+}
+
+export async function fetchPersonas(): Promise<{ items: EmailPersona[] }> {
+	return ApiClient.instance.get<{ items: EmailPersona[] }>(
+		'/api/v1/communications/personas',
+		'Persona request failed'
+	);
+}
+
+export async function fetchRichTemplates(): Promise<RichTemplateListResponse> {
+	return ApiClient.instance.get<RichTemplateListResponse>(
+		'/api/v1/communications/templates/rich',
+		'Rich template request failed'
+	);
+}
+
+export async function renderRichTemplate(
+	templateId: string,
+	variables: Record<string, string>
+): Promise<RenderTemplateResponse> {
+	return ApiClient.instance.post<RenderTemplateResponse>(
+		'/api/v1/communications/templates/rich/render',
+		{ template_id: templateId, variables },
+		'Template render failed'
+	);
+}
+
+export async function fetchMailBlockers(): Promise<MailArchitectureBlocker[]> {
+	return ApiClient.instance.get<MailArchitectureBlocker[]>(
+		'/api/v1/communications/blockers',
+		'Mail blockers request failed'
 	);
 }
