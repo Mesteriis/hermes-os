@@ -59,6 +59,7 @@
 	import ApplicationSettings from './widgets/ApplicationSettings.svelte';
 	import SidebarSettingsWidget from './widgets/SidebarSettings.svelte';
 	import IntegrationsSettings from './widgets/IntegrationsSettings.svelte';
+	import AISettingsControlCenter from './widgets/AISettingsControlCenter.svelte';
 
 	const _ = (key: string) => t($currentLocale, key);
 
@@ -90,6 +91,10 @@
 		{
 			label: 'Sources',
 			items: [{ id: 'integrations', label: 'Integrations', icon: 'tabler:plug-connected' }]
+		},
+		{
+			label: 'AI',
+			items: [{ id: 'ai', label: 'AI Control Center', icon: 'tabler:sparkles' }]
 		}
 	];
 
@@ -198,7 +203,7 @@
 				sidebarConfigItemFn={sidebarConfigItem}
 				inputEventValueFn={inputEventValue}
 			/>
-		{:else}
+		{:else if $selectedSettingsSection === 'integrations'}
 			<IntegrationsSettings
 				integrations={$integrationViewModels}
 				{selectedIntegrationId}
@@ -207,6 +212,8 @@
 				onOpenAccountDrawer={openAccountWizard}
 				formatDateTimeFn={formatDateTime}
 			/>
+		{:else}
+			<AISettingsControlCenter />
 		{/if}
 	</div>
 </div>

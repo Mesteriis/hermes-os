@@ -19,6 +19,19 @@ const workspaceResult = vi.hoisted(() => {
 		created_at: '2026-06-10T00:00:00Z',
 		updated_at: '2026-06-10T00:00:00Z'
 	};
+	const legacyAiSetting: ApplicationSetting = {
+		setting_key: 'ai.chat_model',
+		category: 'ai',
+		value_kind: 'string',
+		value: 'qwen3:4b',
+		label: 'AI chat model',
+		description: 'Legacy AI bootstrap fallback',
+		metadata: {},
+		is_editable: true,
+		updated_by_actor_id: null,
+		created_at: '2026-06-10T00:00:00Z',
+		updated_at: '2026-06-10T00:00:00Z'
+	};
 	const telegramAccount: ProviderAccount = {
 		account_id: 'telegram-primary',
 		provider_kind: 'telegram_user',
@@ -66,7 +79,7 @@ const workspaceResult = vi.hoisted(() => {
 	};
 
 	return {
-		applicationSettings: [frontendLocaleSetting],
+		applicationSettings: [frontendLocaleSetting, legacyAiSetting],
 		layoutSettings: {
 			schemaVersion: 2,
 			views: {
@@ -129,8 +142,10 @@ describe('settings store', () => {
 		await settingsStore.loadSettingsWorkspace();
 
 		expect(get(settingsStore.applicationSettings).map((setting) => setting.setting_key)).toEqual([
-			'frontend.locale'
+			'frontend.locale',
+			'ai.chat_model'
 		]);
+		expect(get(settingsStore.settingsByCategory).ai).toBeUndefined();
 		expect(get(settingsStore.telegramProviderAccounts)).toHaveLength(1);
 		expect(get(settingsStore.calendarAccounts)).toHaveLength(1);
 		expect(get(settingsStore.contactsProviderAccounts)).toEqual([

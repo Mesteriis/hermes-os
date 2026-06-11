@@ -53,7 +53,7 @@ import {
 } from './sidebar';
 import { setThemeSettings, themeDraft, themeError, themeSettings } from './theme';
 
-export type SettingsSection = 'appearance' | 'application' | 'sidebar' | 'integrations' | 'language';
+export type SettingsSection = 'appearance' | 'application' | 'sidebar' | 'integrations' | 'language' | 'ai';
 
 export const applicationSettings = writable<ApplicationSetting[]>([]);
 export const providerAccounts = writable<ProviderAccount[]>([]);
@@ -71,7 +71,8 @@ export const settingsByCategory = derived(applicationSettings, ($applicationSett
 			(setting) =>
 				setting.setting_key !== 'frontend.sidebar' &&
 				setting.setting_key !== FRONTEND_THEME_SETTING_KEY &&
-				setting.setting_key !== FRONTEND_UI_STATE_SETTING_KEY
+				setting.setting_key !== FRONTEND_UI_STATE_SETTING_KEY &&
+				!setting.setting_key.startsWith('ai.')
 		)
 	)
 );
