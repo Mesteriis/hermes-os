@@ -83,3 +83,4 @@ ADR status vocabulary:
 - [ADR-0078 Frontend Component Decomposition — SPA Pages and Widgets](ADR-0078-frontend-component-decomposition.md)
 - [ADR-0079 Script Logic Decomposition — Services, Smart Pages and Config](ADR-0079-script-logic-decomposition.md)
 - [ADR-0081 Opt-In OmniRoute AI Runtime](ADR-0081-opt-in-omniroute-ai-runtime.md)
+- [ADR-0082 AI Settings Control Center](ADR-0082-ai-settings-control-center.md)
