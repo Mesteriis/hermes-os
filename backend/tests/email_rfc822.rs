@@ -42,6 +42,10 @@ fn rfc822_parser_extracts_nested_multipart_attachments_for_current_basic_slice()
 
     assert_eq!(parsed.subject, "Nested attachments");
     assert_eq!(parsed.body_text, "Nested plain body.");
+    assert_eq!(
+        parsed.body_html.as_deref(),
+        Some("<p>Nested HTML body.</p>")
+    );
     assert_eq!(parsed.attachments.len(), 2);
 
     let pdf = &parsed.attachments[0];
@@ -60,6 +64,55 @@ fn rfc822_parser_extracts_nested_multipart_attachments_for_current_basic_slice()
     assert_eq!(notes.content_type, "text/plain");
     assert_eq!(notes.disposition, ParsedEmailAttachmentDisposition::Inline);
     assert_eq!(notes.body_bytes, b"note body\nsecond line");
+}
+
+#[test]
+fn rfc822_parser_preserves_html_links_for_rich_mail_rendering() {
+    let raw = concat!(
+        "Subject: Rich links\r\n",
+        "From: Fever <hello@example.invalid>\r\n",
+        "To: User <user@example.invalid>\r\n",
+        "Content-Type: text/html; charset=utf-8\r\n",
+        "Content-Transfer-Encoding: quoted-printable\r\n",
+        "\r\n",
+        "<p>Footer</p><a href=3D\"https://click.example.invalid/privacy?qs=3Dabc\">Privacy policy</a>",
+        "<a href=3D\"https://click.example.invalid/contact?qs=3Dabc\">Contact us</a>",
+        "<a href=3D\"https://click.example.invalid/unsub?qs=3Dabc\">Unsubscribe</a>\r\n"
+    );
+
+    let parsed = parse_rfc822_message(raw.as_bytes()).expect("parse rich html message");
+
+    assert!(parsed.body_text.contains("Privacy policy"));
+    let html = parsed.body_html.as_deref().expect("body html");
+    assert!(html.contains("href=\"https://click.example.invalid/privacy?qs=abc\""));
+    assert!(html.contains(">Privacy policy</a>"));
+    assert!(html.contains(">Contact us</a>"));
+    assert!(html.contains(">Unsubscribe</a>"));
+}
+
+#[test]
+fn rfc822_parser_preserves_source_headers_with_folded_values() {
+    let raw = concat!(
+        "Subject: Folded headers\r\n",
+        "From: Sender <sender@example.invalid>\r\n",
+        "To: Recipient <recipient@example.invalid>\r\n",
+        "X-Hermes-Trace: first line\r\n",
+        "\tcontinued line\r\n",
+        "Content-Type: text/plain; charset=utf-8\r\n",
+        "\r\n",
+        "Body.\r\n"
+    );
+
+    let parsed = parse_rfc822_message(raw.as_bytes()).expect("parse folded header message");
+
+    assert!(parsed.headers.contains(&(
+        "X-Hermes-Trace".to_owned(),
+        "first line continued line".to_owned()
+    )));
+    assert!(parsed.headers.contains(&(
+        "Content-Type".to_owned(),
+        "text/plain; charset=utf-8".to_owned()
+    )));
 }
 
 #[test]

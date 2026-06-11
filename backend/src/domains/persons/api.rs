@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use chrono::{DateTime, Utc};
-use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 #[derive(Clone)]
@@ -17,6 +17,17 @@ impl PersonProjectionStore {
 
     pub async fn upsert_email_person(
         &self,
+        email_address: &str,
+    ) -> Result<Person, PersonProjectionError> {
+        let mut transaction = self.pool.begin().await?;
+        let person =
+            Self::upsert_email_person_in_transaction(&mut transaction, email_address).await?;
+        transaction.commit().await?;
+        Ok(person)
+    }
+
+    pub(crate) async fn upsert_email_person_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
         email_address: &str,
     ) -> Result<Person, PersonProjectionError> {
         let normalized_email = normalize_email_address(email_address)?;
@@ -45,10 +56,29 @@ impl PersonProjectionStore {
         .bind(&person_id)
         .bind(&normalized_email)
         .bind(&normalized_email)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut **transaction)
         .await?;
 
-        row_to_person(row)
+        let person = row_to_person(row)?;
+        sqlx::query(
+            r#"
+            INSERT INTO person_identities (person_id, identity_type, identity_value, source, confidence, status)
+            VALUES ($1, 'email', $2, 'email_sync', 1.0, 'active')
+            ON CONFLICT (identity_type, identity_value) WHERE status = 'active'
+            DO UPDATE SET
+                person_id = EXCLUDED.person_id,
+                source = EXCLUDED.source,
+                confidence = EXCLUDED.confidence,
+                last_verified_at = now(),
+                updated_at = now()
+            "#,
+        )
+        .bind(&person.person_id)
+        .bind(&normalized_email)
+        .execute(&mut **transaction)
+        .await?;
+
+        Ok(person)
     }
 }
 
@@ -102,12 +132,25 @@ fn row_to_person(row: PgRow) -> Result<Person, PersonProjectionError> {
 }
 
 fn normalize_email_address(email_address: &str) -> Result<String, PersonProjectionError> {
-    let normalized_email = email_address.trim().to_ascii_lowercase();
+    let normalized_email = email_addr_spec(email_address).trim().to_ascii_lowercase();
     if normalized_email.is_empty() {
         return Err(PersonProjectionError::EmptyEmailAddress);
     }
+    if !normalized_email.contains('@') {
+        return Err(PersonProjectionError::InvalidEmailAddress(normalized_email));
+    }
 
     Ok(normalized_email)
+}
+
+fn email_addr_spec(value: &str) -> &str {
+    let value = value.trim();
+    if let Some((_, tail)) = value.rsplit_once('<') {
+        if let Some((addr, _)) = tail.split_once('>') {
+            return addr.trim();
+        }
+    }
+    value.trim_matches('"')
 }
 
 fn person_id_for_email(normalized_email: &str) -> String {
@@ -125,4 +168,7 @@ pub enum PersonProjectionError {
 
     #[error("email address must not be empty")]
     EmptyEmailAddress,
+
+    #[error("invalid email address: {0}")]
+    InvalidEmailAddress(String),
 }

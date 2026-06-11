@@ -1,6 +1,7 @@
 // ADR-0073: route registration remains centralized in app during the hard-v1
 // migration so endpoint paths and shared middleware stay auditable in one place.
 use std::io;
+use std::time::Duration;
 
 use axum::extract::{Path, Query, RawQuery, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
@@ -183,6 +184,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         account_setup: AccountSetupState::default(),
     };
     spawn_host_vault_manifest_reconciliation(&state);
+    spawn_mail_background_sync_scheduler(&state);
 
     let api_routes = Router::new()
         .route("/api/v1/status", get(get_v1_status))
@@ -221,6 +223,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/communications/messages/{message_id}/analyze",
             post(post_v1_message_analyze),
         )
+        .route("/api/v1/workflow-actions", post(post_v1_workflow_action))
         .route("/api/v1/communications/threads", get(get_v1_threads))
         .route(
             "/api/v1/communications/threads/messages",
@@ -303,6 +306,14 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route(
             "/api/v1/communications/messages/{message_id}/imap-delete",
             post(post_v1_imap_delete),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/trash",
+            post(post_v1_message_trash),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/restore",
+            post(post_v1_message_restore),
         )
         .route(
             "/api/v1/communications/certificates",
@@ -895,6 +906,18 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             post(post_gmail_oauth_complete),
         )
         .route("/api/v1/email-accounts/imap", post(post_imap_account_setup))
+        .route(
+            "/api/v1/email-accounts/sync-status",
+            get(get_v1_email_account_sync_status),
+        )
+        .route(
+            "/api/v1/email-accounts/{account_id}/sync-settings",
+            get(get_v1_email_account_sync_settings).put(put_v1_email_account_sync_settings),
+        )
+        .route(
+            "/api/v1/email-accounts/{account_id}/sync-now",
+            post(post_v1_email_account_sync_now),
+        )
         .route("/api/v1/audit/events", get(get_audit_events))
         .route("/api/v1/events", post(post_event))
         .route("/api/v1/events/{event_id}", get(get_event))
@@ -910,9 +933,41 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/email-accounts/gmail/oauth/callback",
             get(get_gmail_oauth_callback),
         )
+        .route(
+            "/api/v1/communications/messages/{message_id}/remote-image",
+            get(get_v1_communication_message_remote_image),
+        )
         .merge(api_routes)
         .with_state(state)
         .layer(local_frontend_cors_layer())
+}
+
+fn spawn_mail_background_sync_scheduler(state: &AppState) {
+    let Some(pool) = state.database.pool().cloned() else {
+        return;
+    };
+    let vault = state.vault.clone();
+
+    tokio::spawn(async move {
+        let store = crate::domains::mail::background_sync::MailSyncStore::new(pool.clone());
+        let service = crate::domains::mail::background_sync::MailBackgroundSyncService::new(
+            pool,
+            vault,
+            crate::domains::mail::background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+        );
+        if let Err(error) = store.mark_orphaned_active_runs_failed(Utc::now()).await {
+            tracing::warn!(error = %error, "mail background sync startup recovery failed");
+        }
+        let mut tick = tokio::time::interval(Duration::from_secs(30));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if let Err(error) = service.run_due_accounts().await {
+                tracing::warn!(error = %error, "mail background sync scheduler tick failed");
+            }
+        }
+    });
 }
 
 #[derive(Serialize)]

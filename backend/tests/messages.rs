@@ -11,8 +11,8 @@ use hermes_hub_backend::domains::mail::core::{
     StoredRawCommunicationRecord,
 };
 use hermes_hub_backend::domains::mail::messages::{
-    MessageProjectionError, MessageProjectionStore, NewProjectedMessage, WorkflowState,
-    project_raw_email_message, project_raw_email_message_from_blob,
+    LocalMessageState, MessageProjectionError, MessageProjectionStore, NewProjectedMessage,
+    WorkflowState, project_raw_email_message, project_raw_email_message_from_blob,
 };
 use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
 use hermes_hub_backend::platform::storage::Database;
@@ -321,6 +321,7 @@ async fn message_projection_list_messages_filters_by_account_state_channel_and_q
             Some(WorkflowState::NeedsAction),
             Some("email"),
             Some("alpha legal"),
+            LocalMessageState::Active,
             10,
         )
         .await
@@ -336,11 +337,106 @@ async fn message_projection_list_messages_filters_by_account_state_channel_and_q
             Some(WorkflowState::NeedsAction),
             Some("email"),
             Some("beta"),
+            LocalMessageState::Active,
             10,
         )
         .await
         .expect("list non-matching messages");
     assert!(no_match.is_empty());
+}
+
+#[tokio::test]
+async fn message_local_trash_hides_from_default_lists_and_survives_reprojection_against_postgres() {
+    let Some((_, communication_store, message_store)) =
+        live_projection_context("message local trash").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let account_id = format!("acct_message_local_trash_{suffix}");
+    let raw_record_id = format!("raw_message_local_trash_{suffix}");
+    let provider_record_id = format!("provider-local-trash-{suffix}");
+
+    store_provider_account(
+        &communication_store,
+        &account_id,
+        "Local Trash Gmail",
+        format!("local-trash-{suffix}@example.com"),
+    )
+    .await;
+    let raw = record_raw_email_message(
+        &communication_store,
+        &account_id,
+        &raw_record_id,
+        &provider_record_id,
+        "Local trash subject",
+        "Local trash body",
+    )
+    .await;
+
+    let projected = project_raw_email_message(&message_store, &raw)
+        .await
+        .expect("project local trash message");
+    assert_eq!(projected.local_state, LocalMessageState::Active);
+
+    let trashed = message_store
+        .move_to_local_trash(&projected.message_id, "user_deleted")
+        .await
+        .expect("move message to local trash");
+    assert_eq!(trashed.local_state, LocalMessageState::Trash);
+    assert_eq!(trashed.local_state_reason.as_deref(), Some("user_deleted"));
+    assert!(trashed.local_state_changed_at.is_some());
+
+    let default_messages = message_store
+        .list_messages(
+            Some(&account_id),
+            None,
+            None,
+            Some("Local trash"),
+            LocalMessageState::Active,
+            10,
+        )
+        .await
+        .expect("list active messages");
+    assert!(default_messages.is_empty());
+
+    let trash_messages = message_store
+        .list_messages(
+            Some(&account_id),
+            None,
+            None,
+            Some("Local trash"),
+            LocalMessageState::Trash,
+            10,
+        )
+        .await
+        .expect("list trash messages");
+    assert_eq!(trash_messages.len(), 1);
+    assert_eq!(trash_messages[0].message.message_id, projected.message_id);
+
+    let reprojected = project_raw_email_message(&message_store, &raw)
+        .await
+        .expect("reproject local trash message");
+    assert_eq!(reprojected.local_state, LocalMessageState::Trash);
+
+    let restored = message_store
+        .restore_from_local_trash(&projected.message_id)
+        .await
+        .expect("restore local trash message");
+    assert_eq!(restored.local_state, LocalMessageState::Active);
+
+    let restored_messages = message_store
+        .list_messages(
+            Some(&account_id),
+            None,
+            None,
+            Some("Local trash"),
+            LocalMessageState::Active,
+            10,
+        )
+        .await
+        .expect("list restored messages");
+    assert_eq!(restored_messages.len(), 1);
 }
 
 #[tokio::test]
@@ -940,7 +1036,14 @@ async fn message_state_counts_against_postgres() {
 
     // Transition one to done
     let messages = message_store
-        .list_messages(Some(&account_id), None, None, None, 10)
+        .list_messages(
+            Some(&account_id),
+            None,
+            None,
+            None,
+            LocalMessageState::Active,
+            10,
+        )
         .await
         .expect("list messages");
     assert!(!messages.is_empty());
@@ -1007,6 +1110,7 @@ async fn message_list_filtering_by_state_against_postgres() {
             Some(hermes_hub_backend::domains::mail::messages::WorkflowState::New),
             None,
             None,
+            LocalMessageState::Active,
             10,
         )
         .await
@@ -1020,6 +1124,7 @@ async fn message_list_filtering_by_state_against_postgres() {
             Some(hermes_hub_backend::domains::mail::messages::WorkflowState::Done),
             None,
             None,
+            LocalMessageState::Active,
             10,
         )
         .await

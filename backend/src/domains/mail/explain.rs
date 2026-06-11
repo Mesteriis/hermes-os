@@ -93,7 +93,7 @@ pub fn smart_cc_suggestions(message: &ProjectedMessage) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domains::mail::messages::WorkflowState;
+    use crate::domains::mail::messages::{LocalMessageState, WorkflowState};
     use chrono::Utc;
 
     fn test_message(subject: &str, body: &str, score: Option<i16>) -> ProjectedMessage {
@@ -118,6 +118,9 @@ mod tests {
             ai_category: None,
             ai_summary: None,
             ai_summary_generated_at: None,
+            local_state: LocalMessageState::Active,
+            local_state_changed_at: None,
+            local_state_reason: None,
         }
     }
 

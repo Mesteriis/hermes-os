@@ -17,7 +17,7 @@ use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 use crate::domains::graph::core::{GraphNodeKind, node_id};
-use crate::integrations::ollama::client::{OllamaClient, OllamaError};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
 
 pub const AI_EMBEDDING_DIMENSION: usize = 2560;
@@ -183,7 +183,7 @@ impl SemanticEmbeddingStore {
 
     pub async fn index_canonical_sources(
         &self,
-        ollama: &OllamaClient,
+        runtime: &AiRuntimeClient,
         embedding_model: &str,
     ) -> Result<SemanticIndexReport, AiError> {
         let sources = self.canonical_sources().await?;
@@ -205,7 +205,7 @@ impl SemanticEmbeddingStore {
                 continue;
             }
 
-            let embedding = ollama.embed(&source.source_text).await?;
+            let embedding = runtime.embed(&source.source_text).await?;
             if embedding.embedding.len() != AI_EMBEDDING_DIMENSION {
                 return Err(AiError::InvalidEmbeddingDimension {
                     expected: AI_EMBEDDING_DIMENSION,
@@ -716,7 +716,7 @@ pub struct AiAgentRun {
 #[derive(Clone)]
 pub struct AiService {
     pool: PgPool,
-    ollama: OllamaClient,
+    runtime: AiRuntimeClient,
     chat_model: String,
     embedding_model: String,
 }
@@ -735,39 +735,43 @@ struct AiRunEvent<'a> {
 impl AiService {
     pub fn new(
         pool: PgPool,
-        ollama: OllamaClient,
+        runtime: AiRuntimeClient,
         chat_model: impl Into<String>,
         embedding_model: impl Into<String>,
     ) -> Self {
         Self {
             pool,
-            ollama,
+            runtime,
             chat_model: chat_model.into(),
             embedding_model: embedding_model.into(),
         }
     }
 
     pub async fn status(&self) -> AiStatusResponse {
-        let version = self.ollama.version().await;
-        let tags = self.ollama.tags().await;
-        let chat_model_available = tags
+        let version = self.runtime.version().await;
+        let models = self.runtime.models().await;
+        let chat_model_available = models
             .as_ref()
             .map(|models| models.iter().any(|model| model == &self.chat_model))
             .unwrap_or(false);
-        let embedding_model_available = tags
+        let embedding_model_available = models
             .as_ref()
             .map(|models| models.iter().any(|model| model == &self.embedding_model))
             .unwrap_or(false);
 
         AiStatusResponse {
-            runtime: "ollama".to_owned(),
-            status: if version.is_ok() && chat_model_available && embedding_model_available {
+            runtime: self.runtime.runtime_name().to_owned(),
+            status: if version.is_ok()
+                && models.is_ok()
+                && chat_model_available
+                && embedding_model_available
+            {
                 "ok"
             } else {
                 "unavailable"
             }
             .to_owned(),
-            version: version.ok(),
+            version: version.ok().flatten(),
             chat_model: self.chat_model.clone(),
             embedding_model: self.embedding_model.clone(),
             embedding_dimension: AI_EMBEDDING_DIMENSION,
@@ -820,7 +824,7 @@ impl AiService {
 
         let citations = self.retrieve_citations(&query).await?;
         let prompt = answer_prompt(&query, &citations);
-        let chat = self.ollama.chat(&prompt).await?;
+        let chat = self.runtime.chat(&prompt).await?;
         let duration_ms = elapsed_ms(started_at);
         let stored = run_store
             .complete_run(
@@ -904,7 +908,7 @@ impl AiService {
 
         let citations = self.retrieve_citations(&query).await?;
         let prompt = task_candidate_prompt(&query, &citations);
-        let chat = self.ollama.chat(&prompt).await?;
+        let chat = self.runtime.chat(&prompt).await?;
         let drafts = parse_task_candidate_drafts(&chat.content, &citations)?;
         let created_count = self
             .upsert_ai_task_candidates(&run_id, &drafts, &citations)
@@ -1015,7 +1019,7 @@ impl AiService {
 
         let citations = self.retrieve_citations(&query).await?;
         let prompt = meeting_prep_prompt(&topic, &citations);
-        let chat = self.ollama.chat(&prompt).await?;
+        let chat = self.runtime.chat(&prompt).await?;
         let duration_ms = elapsed_ms(started_at);
         let stored = run_store
             .complete_run(
@@ -1058,9 +1062,9 @@ impl AiService {
     async fn retrieve_citations(&self, query: &str) -> Result<Vec<AiCitation>, AiError> {
         let semantic_store = SemanticEmbeddingStore::new(self.pool.clone());
         semantic_store
-            .index_canonical_sources(&self.ollama, &self.embedding_model)
+            .index_canonical_sources(&self.runtime, &self.embedding_model)
             .await?;
-        let query_embedding = self.ollama.embed(query).await?;
+        let query_embedding = self.runtime.embed(query).await?;
         if query_embedding.embedding.len() != AI_EMBEDDING_DIMENSION {
             return Err(AiError::InvalidEmbeddingDimension {
                 expected: AI_EMBEDDING_DIMENSION,
@@ -1195,7 +1199,7 @@ impl AiService {
             "details": event.payload,
         }))
         .provenance(json!({
-            "runtime": "local_ollama",
+            "runtime": self.runtime.runtime_name(),
             "chat_model": self.chat_model,
             "embedding_model": self.embedding_model,
             "prompt_template_version": AI_PROMPT_TEMPLATE_VERSION,
@@ -1213,7 +1217,7 @@ impl AiService {
 
     fn model_config(&self) -> Value {
         json!({
-            "runtime": "ollama",
+            "runtime": self.runtime.runtime_name(),
             "chat_model": self.chat_model,
             "embedding_model": self.embedding_model,
             "embedding_dimension": AI_EMBEDDING_DIMENSION,
@@ -1399,7 +1403,7 @@ pub enum AiError {
     RunNotFound,
 
     #[error(transparent)]
-    Ollama(#[from] OllamaError),
+    Runtime(#[from] AiRuntimeError),
 
     #[error(transparent)]
     EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),

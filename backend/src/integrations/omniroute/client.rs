@@ -5,24 +5,29 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use thiserror::Error;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct OllamaClientConfig {
+use crate::platform::secrets::ResolvedSecret;
+
+#[derive(Clone)]
+pub struct OmniRouteClientConfig {
     base_url: String,
     chat_model: String,
     embed_model: String,
+    api_key: ResolvedSecret,
     timeout_seconds: u64,
 }
 
-impl OllamaClientConfig {
+impl OmniRouteClientConfig {
     pub fn new(
         base_url: impl Into<String>,
         chat_model: impl Into<String>,
         embed_model: impl Into<String>,
+        api_key: ResolvedSecret,
     ) -> Self {
         Self {
             base_url: base_url.into().trim_end_matches('/').to_owned(),
             chat_model: chat_model.into(),
             embed_model: embed_model.into(),
+            api_key,
             timeout_seconds: 120,
         }
     }
@@ -34,34 +39,41 @@ impl OllamaClientConfig {
 }
 
 #[derive(Clone)]
-pub struct OllamaClient {
+pub struct OmniRouteClient {
     http: reqwest::Client,
     base_url: Url,
     chat_model: String,
     embed_model: String,
+    api_key: ResolvedSecret,
 }
 
-impl OllamaClient {
-    pub fn new(config: OllamaClientConfig) -> Result<Self, OllamaError> {
+impl OmniRouteClient {
+    pub fn new(config: OmniRouteClientConfig) -> Result<Self, OmniRouteError> {
         if config.base_url.trim().is_empty() {
-            return Err(OllamaError::InvalidConfig("base URL is empty".to_owned()));
+            return Err(OmniRouteError::InvalidConfig(
+                "base URL is empty".to_owned(),
+            ));
         }
         if config.chat_model.trim().is_empty() {
-            return Err(OllamaError::InvalidConfig("chat model is empty".to_owned()));
+            return Err(OmniRouteError::InvalidConfig(
+                "chat model is empty".to_owned(),
+            ));
         }
         if config.embed_model.trim().is_empty() {
-            return Err(OllamaError::InvalidConfig(
+            return Err(OmniRouteError::InvalidConfig(
                 "embedding model is empty".to_owned(),
             ));
         }
         if config.timeout_seconds == 0 {
-            return Err(OllamaError::InvalidConfig(
+            return Err(OmniRouteError::InvalidConfig(
                 "timeout must be greater than zero".to_owned(),
             ));
         }
 
-        let base_url = Url::parse(&config.base_url)
-            .map_err(|error| OllamaError::InvalidConfig(error.to_string()))?;
+        let mut base_url = config.base_url.trim_end_matches('/').to_owned();
+        base_url.push('/');
+        let base_url = Url::parse(&base_url)
+            .map_err(|error| OmniRouteError::InvalidConfig(error.to_string()))?;
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.timeout_seconds))
             .build()?;
@@ -71,8 +83,10 @@ impl OllamaClient {
             base_url,
             chat_model: config.chat_model,
             embed_model: config.embed_model,
+            api_key: config.api_key,
         })
     }
+
     pub fn chat_model(&self) -> &str {
         &self.chat_model
     }
@@ -81,31 +95,21 @@ impl OllamaClient {
         &self.embed_model
     }
 
-    pub async fn version(&self) -> Result<String, OllamaError> {
-        let response: VersionResponse = self.get_json("/api/version").await?;
-        if response.version.trim().is_empty() {
-            return Err(OllamaError::Protocol(
-                "Ollama version response omitted version".to_owned(),
-            ));
-        }
-        Ok(response.version)
-    }
-
-    pub async fn tags(&self) -> Result<Vec<String>, OllamaError> {
-        let response: TagsResponse = self.get_json("/api/tags").await?;
+    pub async fn models(&self) -> Result<Vec<String>, OmniRouteError> {
+        let response: ModelsResponse = self.get_json("models").await?;
         Ok(response
-            .models
+            .data
             .into_iter()
-            .map(|model| model.name)
-            .filter(|name| !name.trim().is_empty())
+            .map(|model| model.id)
+            .filter(|id| !id.trim().is_empty())
             .collect())
     }
 
-    pub async fn validate_required_models(&self) -> Result<(), OllamaError> {
-        let tags = self.tags().await?;
+    pub async fn validate_required_models(&self) -> Result<(), OmniRouteError> {
+        let models = self.models().await?;
         for model in [&self.chat_model, &self.embed_model] {
-            if !tags.iter().any(|tag| tag == model) {
-                return Err(OllamaError::MissingModel {
+            if !models.iter().any(|candidate| candidate == model) {
+                return Err(OmniRouteError::MissingModel {
                     model: model.to_owned(),
                 });
             }
@@ -113,11 +117,10 @@ impl OllamaClient {
         Ok(())
     }
 
-    pub async fn chat(&self, prompt: &str) -> Result<OllamaChatResult, OllamaError> {
+    pub async fn chat(&self, prompt: &str) -> Result<OmniRouteChatResult, OmniRouteError> {
         let body = json!({
             "model": self.chat_model,
             "stream": false,
-            "think": false,
             "messages": [
                 {
                     "role": "user",
@@ -125,80 +128,83 @@ impl OllamaClient {
                 }
             ],
         });
-        let response: ChatResponse = self.post_json("/api/chat", &body).await?;
+        let response: ChatCompletionsResponse = self.post_json("chat/completions", &body).await?;
         let content = response
-            .message
-            .and_then(|message| message.content)
+            .choices
+            .into_iter()
+            .next()
+            .and_then(|choice| choice.message.content)
             .ok_or_else(|| {
-                OllamaError::Protocol("Ollama chat response omitted assistant content".to_owned())
+                OmniRouteError::Protocol(
+                    "OmniRoute chat response omitted assistant content".to_owned(),
+                )
             })?;
         let content = strip_thinking_content(&content);
         if content.trim().is_empty() {
-            return Err(OllamaError::Protocol(
-                "Ollama chat response content is empty".to_owned(),
+            return Err(OmniRouteError::Protocol(
+                "OmniRoute chat response content is empty".to_owned(),
             ));
         }
 
-        Ok(OllamaChatResult {
+        Ok(OmniRouteChatResult {
             model: response.model.unwrap_or_else(|| self.chat_model.clone()),
             content,
-            total_duration_ns: response.total_duration,
         })
     }
 
-    pub async fn embed(&self, input: &str) -> Result<OllamaEmbedResult, OllamaError> {
+    pub async fn embed(&self, input: &str) -> Result<OmniRouteEmbedResult, OmniRouteError> {
         let body = json!({
             "model": self.embed_model,
             "input": input,
         });
-        let response: EmbedResponse = self.post_json("/api/embed", &body).await?;
+        let response: EmbeddingsResponse = self.post_json("embeddings", &body).await?;
         let embedding = response
-            .embeddings
-            .and_then(|mut embeddings| {
-                if embeddings.is_empty() {
-                    None
-                } else {
-                    Some(embeddings.remove(0))
-                }
-            })
-            .or(response.embedding)
+            .data
+            .into_iter()
+            .next()
+            .map(|item| item.embedding)
             .ok_or_else(|| {
-                OllamaError::Protocol("Ollama embed response omitted embeddings".to_owned())
+                OmniRouteError::Protocol("OmniRoute embeddings response omitted data".to_owned())
             })?;
         if embedding.is_empty() {
-            return Err(OllamaError::Protocol(
-                "Ollama embed response returned an empty vector".to_owned(),
+            return Err(OmniRouteError::Protocol(
+                "OmniRoute embeddings response returned an empty vector".to_owned(),
             ));
         }
 
-        Ok(OllamaEmbedResult {
+        Ok(OmniRouteEmbedResult {
             model: response.model.unwrap_or_else(|| self.embed_model.clone()),
             embedding,
-            total_duration_ns: response.total_duration,
         })
     }
 
-    fn endpoint(&self, path: &str) -> Result<Url, OllamaError> {
+    fn endpoint(&self, path: &str) -> Result<Url, OmniRouteError> {
         self.base_url
             .join(path.trim_start_matches('/'))
-            .map_err(|error| OllamaError::InvalidConfig(error.to_string()))
+            .map_err(|error| OmniRouteError::InvalidConfig(error.to_string()))
     }
 
-    async fn get_json<T>(&self, path: &str) -> Result<T, OllamaError>
+    async fn get_json<T>(&self, path: &str) -> Result<T, OmniRouteError>
     where
         T: for<'de> Deserialize<'de>,
     {
-        let response = self.http.get(self.endpoint(path)?).send().await?;
+        let response = self
+            .http
+            .get(self.endpoint(path)?)
+            .bearer_auth(self.api_key.expose_for_runtime())
+            .send()
+            .await?;
         decode_response(response).await
     }
 
-    async fn post_json<T>(&self, path: &str, body: &Value) -> Result<T, OllamaError>
+    async fn post_json<T>(&self, path: &str, body: &Value) -> Result<T, OmniRouteError>
     where
         T: for<'de> Deserialize<'de>,
     {
         let response = self
             .http
             .post(self.endpoint(path)?)
+            .bearer_auth(self.api_key.expose_for_runtime())
             .json(body)
             .send()
             .await?;
@@ -206,13 +212,13 @@ impl OllamaClient {
     }
 }
 
-async fn decode_response<T>(response: reqwest::Response) -> Result<T, OllamaError>
+async fn decode_response<T>(response: reqwest::Response) -> Result<T, OmniRouteError>
 where
     T: for<'de> Deserialize<'de>,
 {
     let status = response.status();
     if !status.is_success() {
-        return Err(OllamaError::Endpoint {
+        return Err(OmniRouteError::Endpoint {
             status: status.as_u16(),
         });
     }
@@ -220,7 +226,7 @@ where
     response
         .json::<T>()
         .await
-        .map_err(|error| OllamaError::Protocol(error.to_string()))
+        .map_err(|error| OmniRouteError::Protocol(error.to_string()))
 }
 
 fn strip_thinking_content(content: &str) -> String {
@@ -242,57 +248,57 @@ fn strip_thinking_content(content: &str) -> String {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct OllamaChatResult {
+pub struct OmniRouteChatResult {
     pub model: String,
     pub content: String,
-    pub total_duration_ns: Option<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct OllamaEmbedResult {
+pub struct OmniRouteEmbedResult {
     pub model: String,
     pub embedding: Vec<f32>,
-    pub total_duration_ns: Option<u64>,
 }
 
 #[derive(Debug, Error)]
-pub enum OllamaError {
-    #[error("invalid Ollama client config: {0}")]
+pub enum OmniRouteError {
+    #[error("invalid OmniRoute client config: {0}")]
     InvalidConfig(String),
 
-    #[error("Ollama endpoint returned HTTP {status}")]
+    #[error("OmniRoute API key is not configured")]
+    MissingApiKey,
+
+    #[error("OmniRoute endpoint returned HTTP {status}")]
     Endpoint { status: u16 },
 
-    #[error("Ollama model `{model}` is not available")]
+    #[error("OmniRoute model `{model}` is not available")]
     MissingModel { model: String },
 
-    #[error("Ollama protocol error: {0}")]
+    #[error("OmniRoute protocol error: {0}")]
     Protocol(String),
 
-    #[error("Ollama HTTP request failed")]
+    #[error("OmniRoute HTTP request failed")]
     Http(#[from] reqwest::Error),
 }
 
 #[derive(Deserialize)]
-struct VersionResponse {
-    version: String,
+struct ModelsResponse {
+    data: Vec<ModelItem>,
 }
 
 #[derive(Deserialize)]
-struct TagsResponse {
-    models: Vec<TaggedModel>,
+struct ModelItem {
+    id: String,
 }
 
 #[derive(Deserialize)]
-struct TaggedModel {
-    name: String,
-}
-
-#[derive(Deserialize)]
-struct ChatResponse {
+struct ChatCompletionsResponse {
     model: Option<String>,
-    message: Option<ChatMessage>,
-    total_duration: Option<u64>,
+    choices: Vec<ChatChoice>,
+}
+
+#[derive(Deserialize)]
+struct ChatChoice {
+    message: ChatMessage,
 }
 
 #[derive(Deserialize)]
@@ -301,9 +307,12 @@ struct ChatMessage {
 }
 
 #[derive(Deserialize)]
-struct EmbedResponse {
+struct EmbeddingsResponse {
     model: Option<String>,
-    embeddings: Option<Vec<Vec<f32>>>,
-    embedding: Option<Vec<f32>>,
-    total_duration: Option<u64>,
+    data: Vec<EmbeddingItem>,
+}
+
+#[derive(Deserialize)]
+struct EmbeddingItem {
+    embedding: Vec<f32>,
 }

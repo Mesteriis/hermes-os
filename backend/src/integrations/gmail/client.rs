@@ -129,6 +129,110 @@ impl GmailApiClient {
             messages,
         })
     }
+
+    pub async fn fetch_history_raw_messages(
+        &self,
+        access_token: &ResolvedSecret,
+        options: &GmailHistoryFetchOptions,
+    ) -> Result<EmailSyncBatch, EmailProviderNetworkError> {
+        validate_non_empty("base_url", &self.base_url)?;
+        validate_non_empty("user_id", &self.user_id)?;
+        options.validate()?;
+
+        let history_url = format!("{}/gmail/v1/users/{}/history", self.base_url, self.user_id);
+        let mut query = vec![
+            ("startHistoryId", options.start_history_id.clone()),
+            ("maxResults", options.max_results.to_string()),
+            ("historyTypes", "messageAdded".to_owned()),
+        ];
+        if let Some(page_token) = &options.page_token {
+            query.push(("pageToken", page_token.clone()));
+        }
+
+        let history_response = self
+            .http
+            .get(history_url)
+            .bearer_auth(access_token.expose_for_runtime())
+            .query(&query)
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<GmailHistoryResponse>()
+            .await?;
+
+        let mut message_ids = Vec::new();
+        for history in history_response.history.unwrap_or_default() {
+            for added in history.messages_added.unwrap_or_default() {
+                if !message_ids.contains(&added.message.id) {
+                    message_ids.push(added.message.id);
+                }
+            }
+        }
+
+        let mut messages = Vec::new();
+        let mut latest_history_id = history_response.history_id.clone();
+        for message_id in message_ids.into_iter().take(options.max_results as usize) {
+            let raw_message = self.fetch_raw_message(access_token, &message_id).await?;
+            let provider_record_id = raw_message.id.unwrap_or(message_id);
+            let raw = raw_message
+                .raw
+                .ok_or(EmailProviderNetworkError::MissingProviderField { field: "raw" })?;
+            let occurred_at = parse_gmail_internal_date(raw_message.internal_date.as_deref())?;
+            latest_history_id =
+                select_latest_history_id(latest_history_id, raw_message.history_id.as_deref());
+
+            messages.push(FetchedEmailMessage {
+                source_fingerprint: sha256_fingerprint([
+                    "gmail".as_bytes(),
+                    provider_record_id.as_bytes(),
+                    raw.as_bytes(),
+                ]),
+                provider_record_id: provider_record_id.clone(),
+                occurred_at,
+                payload: json!({
+                    "provider": "gmail",
+                    "id": provider_record_id,
+                    "thread_id": raw_message.thread_id,
+                    "label_ids": raw_message.label_ids,
+                    "history_id": raw_message.history_id,
+                    "internal_date": raw_message.internal_date,
+                    "raw_base64url": raw
+                }),
+            });
+        }
+
+        let checkpoint = gmail_checkpoint(latest_history_id, history_response.next_page_token);
+
+        Ok(EmailSyncBatch {
+            provider_kind: EmailProviderKind::Gmail,
+            stream_id: "gmail:history".to_owned(),
+            checkpoint,
+            messages,
+        })
+    }
+
+    async fn fetch_raw_message(
+        &self,
+        access_token: &ResolvedSecret,
+        message_id: &str,
+    ) -> Result<GmailRawMessage, EmailProviderNetworkError> {
+        validate_non_empty("gmail_message_id", message_id)?;
+        let message_url = format!(
+            "{}/gmail/v1/users/{}/messages/{}",
+            self.base_url, self.user_id, message_id
+        );
+
+        Ok(self
+            .http
+            .get(message_url)
+            .bearer_auth(access_token.expose_for_runtime())
+            .query(&[("format", "raw")])
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<GmailRawMessage>()
+            .await?)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -179,6 +283,43 @@ impl GmailFetchOptions {
         }
         for label_id in &self.label_ids {
             validate_non_empty("label_id", label_id)?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GmailHistoryFetchOptions {
+    start_history_id: String,
+    max_results: u16,
+    page_token: Option<String>,
+}
+
+impl GmailHistoryFetchOptions {
+    pub fn new(start_history_id: impl Into<String>, max_results: u16) -> Self {
+        Self {
+            start_history_id: start_history_id.into(),
+            max_results,
+            page_token: None,
+        }
+    }
+
+    pub fn page_token(mut self, page_token: impl Into<String>) -> Self {
+        self.page_token = Some(page_token.into());
+        self
+    }
+
+    fn validate(&self) -> Result<(), EmailProviderNetworkError> {
+        validate_non_empty("start_history_id", &self.start_history_id)?;
+        if self.max_results == 0 || self.max_results > 500 {
+            return Err(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "max_results",
+                message: "must be between 1 and 500",
+            });
+        }
+        if let Some(page_token) = &self.page_token {
+            validate_non_empty("page_token", page_token)?;
         }
 
         Ok(())
@@ -402,6 +543,32 @@ struct GmailRawMessage {
     history_id: Option<String>,
     internal_date: Option<String>,
     raw: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GmailHistoryResponse {
+    history: Option<Vec<GmailHistoryItem>>,
+    history_id: Option<String>,
+    next_page_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GmailHistoryItem {
+    messages_added: Option<Vec<GmailHistoryMessageAdded>>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GmailHistoryMessageAdded {
+    message: GmailHistoryMessage,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GmailHistoryMessage {
+    id: String,
 }
 
 fn trim_base_url(base_url: String) -> String {

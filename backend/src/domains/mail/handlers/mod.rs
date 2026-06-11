@@ -1,5 +1,10 @@
 // ADR-0073: mail handlers are grouped by bounded context for the first
 // handlers.rs extraction; split by communications, accounts and workflow next.
+mod remote_images;
+mod workflow_actions;
+pub(crate) use remote_images::get_v1_communication_message_remote_image;
+pub(crate) use workflow_actions::post_v1_workflow_action;
+
 use std::collections::HashMap;
 use std::io;
 
@@ -90,12 +95,16 @@ use crate::domains::mail::accounts::{
     EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
+use crate::domains::mail::background_sync::{
+    DEFAULT_MAIL_SYNC_BLOB_ROOT, MailBackgroundSyncService, MailSyncError, MailSyncRunResponse,
+    MailSyncSettings, MailSyncSettingsUpdate, MailSyncStatus, MailSyncStore, MailSyncTrigger,
+};
 use crate::domains::mail::messages::{
-    MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
-    WorkflowState,
+    LocalMessageState, MessageProjectionError, MessageProjectionStore, ProjectedMessage,
+    ProjectedMessageSummary, WorkflowState, parse_raw_email_message_from_blob,
 };
 use crate::domains::mail::storage::{
-    MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob,
+    LocalMailBlobStore, MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob,
 };
 use crate::domains::organizations::api::{
     OrganizationError, OrganizationStore, OrganizationUpdate,
@@ -172,6 +181,64 @@ pub(crate) struct WorkflowStateCountApiItem {
 #[derive(Deserialize)]
 pub(crate) struct WorkflowStateCountsQuery {
     account_id: Option<String>,
+    local_state: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct MailSyncStatusListResponse {
+    items: Vec<MailSyncStatus>,
+}
+
+pub(crate) async fn get_v1_email_account_sync_status(
+    State(state): State<AppState>,
+) -> Result<Json<MailSyncStatusListResponse>, ApiError> {
+    let statuses = mail_sync_store(&state)
+        .map_err(mail_sync_api_error)?
+        .sync_statuses()
+        .await
+        .map_err(mail_sync_api_error)?;
+
+    Ok(Json(MailSyncStatusListResponse { items: statuses }))
+}
+
+pub(crate) async fn get_v1_email_account_sync_settings(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<MailSyncSettings>, ApiError> {
+    Ok(Json(
+        mail_sync_store(&state)
+            .map_err(mail_sync_api_error)?
+            .settings_for_account(&account_id)
+            .await
+            .map_err(mail_sync_api_error)?,
+    ))
+}
+
+pub(crate) async fn put_v1_email_account_sync_settings(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+    Json(request): Json<MailSyncSettingsUpdate>,
+) -> Result<Json<MailSyncSettings>, ApiError> {
+    Ok(Json(
+        mail_sync_store(&state)
+            .map_err(mail_sync_api_error)?
+            .update_settings(&account_id, request)
+            .await
+            .map_err(mail_sync_api_error)?,
+    ))
+}
+
+pub(crate) async fn post_v1_email_account_sync_now(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<MailSyncRunResponse>, ApiError> {
+    Ok(Json(
+        mail_sync_service(&state)
+            .map_err(mail_sync_api_error)?
+            .run_account(&account_id, MailSyncTrigger::Manual)
+            .await
+            .map_err(mail_sync_api_error)?,
+    ))
 }
 
 pub(crate) async fn put_v1_message_workflow_state(
@@ -222,8 +289,14 @@ pub(crate) async fn get_v1_message_workflow_state_counts(
     State(state): State<AppState>,
     Query(query): Query<WorkflowStateCountsQuery>,
 ) -> Result<Json<WorkflowStateCountsApiResponse>, ApiError> {
+    let local_state = query
+        .local_state
+        .as_deref()
+        .unwrap_or("active")
+        .parse::<LocalMessageState>()
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid local_state value"))?;
     let counts = message_store(&state)?
-        .count_messages_by_state(query.account_id.as_deref())
+        .count_messages_by_state_with_local_state(query.account_id.as_deref(), local_state)
         .await?
         .into_iter()
         .map(|c| WorkflowStateCountApiItem {
@@ -243,6 +316,9 @@ pub(crate) struct MessageAnalyzeResponse {
     summary: Option<String>,
     importance_score: Option<i16>,
     workflow_state: String,
+    source: String,
+    confidence: Option<f64>,
+    evidence: Vec<String>,
 }
 
 pub(crate) async fn post_v1_message_analyze(
@@ -280,6 +356,7 @@ pub(crate) async fn post_v1_message_analyze(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let evidence = crate::domains::mail::explain::explain_importance(&updated).reasons;
 
     Ok(Json(MessageAnalyzeResponse {
         message_id: updated.message_id,
@@ -288,6 +365,9 @@ pub(crate) async fn post_v1_message_analyze(
         summary: updated.ai_summary,
         importance_score: updated.importance_score,
         workflow_state: updated.workflow_state.as_str().to_owned(),
+        source: "local_heuristic".to_owned(),
+        confidence: None,
+        evidence,
     }))
 }
 
@@ -1209,10 +1289,41 @@ pub(crate) async fn post_v1_imap_delete(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    store
-        .transition_workflow_state(&message_id, WorkflowState::Archived)
+    let updated = store
+        .move_to_local_trash(&message_id, "imap-delete-alias")
         .await?;
-    Ok(Json(serde_json::json!({"deleted": true})))
+    Ok(Json(serde_json::json!({
+        "deleted": true,
+        "provider_deleted": false,
+        "local_state": updated.local_state.as_str()
+    })))
+}
+
+pub(crate) async fn post_v1_message_trash(
+    State(state): State<AppState>,
+    Path(message_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let updated = message_store(&state)?
+        .move_to_local_trash(&message_id, "user_deleted")
+        .await?;
+    Ok(Json(serde_json::json!({
+        "message_id": updated.message_id,
+        "local_state": updated.local_state.as_str(),
+        "provider_deleted": false
+    })))
+}
+
+pub(crate) async fn post_v1_message_restore(
+    State(state): State<AppState>,
+    Path(message_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let updated = message_store(&state)?
+        .restore_from_local_trash(&message_id)
+        .await?;
+    Ok(Json(serde_json::json!({
+        "message_id": updated.message_id,
+        "local_state": updated.local_state.as_str()
+    })))
 }
 
 #[derive(Deserialize)]
@@ -1404,7 +1515,7 @@ pub(crate) async fn post_v1_translate(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    let service = email_multilingual_service(&state)?;
+    let service = email_multilingual_service(&state).await?;
     match service
         .translate(&msg.body_text, &req.target_language)
         .await?
@@ -1435,7 +1546,7 @@ pub(crate) async fn post_v1_ai_reply(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    let service = email_ai_reply_service(&state)?;
+    let service = email_ai_reply_service(&state).await?;
     let opts = crate::domains::mail::ai_reply::AiReplyOptions {
         tone: req.tone,
         language: req.language,
@@ -1467,7 +1578,7 @@ pub(crate) async fn post_v1_ai_reply_variants(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    let service = email_ai_reply_service(&state)?;
+    let service = email_ai_reply_service(&state).await?;
     let languages = req
         .languages
         .unwrap_or_else(|| vec!["en".into(), "es".into(), "ru".into()]);
@@ -1556,15 +1667,9 @@ pub(crate) async fn post_v1_extract_tasks(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let runtime_settings = ai_runtime_settings(&state).await?;
     let svc = crate::domains::mail::extract::EmailExtractService::new(
-        crate::integrations::ollama::client::OllamaClient::new(
-            crate::integrations::ollama::client::OllamaClientConfig::new(
-                "http://127.0.0.1:11434",
-                "qwen3:4b",
-                "qwen3-embedding:4b",
-            ),
-        )
-        .ok(),
+        ai_runtime_client(&state, &runtime_settings).ok(),
     );
     let tasks = svc.extract_tasks(&msg).await?;
     Ok(Json(serde_json::json!({"tasks": tasks})))
@@ -1696,19 +1801,26 @@ pub(crate) async fn get_v1_communication_messages(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<CommunicationMessagesResponse>, ApiError> {
     let query = parse_communication_messages_query(raw_query.as_deref())?;
-    let limit = query.limit.unwrap_or(50).clamp(1, 100);
+    let limit = query.limit.unwrap_or(1000).clamp(1, 1000);
     let workflow_state = query
         .workflow_state
         .as_deref()
         .map(str::parse::<WorkflowState>)
         .transpose()
         .map_err(|_| ApiError::InvalidCommunicationQuery("invalid workflow state value"))?;
+    let local_state = query
+        .local_state
+        .as_deref()
+        .unwrap_or("active")
+        .parse::<LocalMessageState>()
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid local_state value"))?;
     let items = message_store(&state)?
         .list_messages(
             query.account_id.as_deref(),
             workflow_state,
             query.channel_kind.as_deref(),
             query.q.as_deref(),
+            local_state,
             limit,
         )
         .await?
@@ -1726,6 +1838,11 @@ pub(crate) async fn get_v1_communication_message(
     let Some(message) = message_store(&state)?.message(&message_id).await? else {
         return Err(ApiError::CommunicationMessageNotFound);
     };
+    let rich_detail = rich_email_message_detail_for_message(&state, &message).await?;
+    let message_metadata = message_metadata_with_raw_headers(
+        &message.message_metadata,
+        rich_detail.headers.as_slice(),
+    );
     let attachments = mail_storage_store(&state)?
         .attachments_for_message(&message.message_id)
         .await?
@@ -1734,9 +1851,95 @@ pub(crate) async fn get_v1_communication_message(
         .collect();
 
     Ok(Json(CommunicationMessageDetailResponse {
-        message: CommunicationMessageDetailItem::from(message),
+        message: CommunicationMessageDetailItem::from_message_with_metadata(
+            message,
+            rich_detail.body_html,
+            message_metadata,
+        ),
         attachments,
     }))
+}
+
+async fn rich_body_html_for_message(
+    state: &AppState,
+    message: &ProjectedMessage,
+) -> Result<Option<String>, ApiError> {
+    Ok(rich_email_message_detail_for_message(state, message)
+        .await?
+        .body_html)
+}
+
+#[derive(Default)]
+struct RichEmailMessageDetail {
+    body_html: Option<String>,
+    headers: Vec<(String, String)>,
+}
+
+async fn rich_email_message_detail_for_message(
+    state: &AppState,
+    message: &ProjectedMessage,
+) -> Result<RichEmailMessageDetail, ApiError> {
+    let Some(raw) = communication_ingestion_store(state)?
+        .raw_record(&message.raw_record_id)
+        .await?
+    else {
+        return Ok(RichEmailMessageDetail::default());
+    };
+    if raw.record_kind != "email_message" {
+        return Ok(RichEmailMessageDetail::default());
+    }
+    if raw
+        .payload
+        .get("raw_blob_storage_kind")
+        .and_then(Value::as_str)
+        != Some("local_fs")
+    {
+        return Ok(RichEmailMessageDetail::default());
+    }
+    if raw
+        .payload
+        .get("raw_blob_storage_path")
+        .and_then(Value::as_str)
+        .is_none()
+    {
+        return Ok(RichEmailMessageDetail::default());
+    }
+
+    let blob_store = LocalMailBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    match parse_raw_email_message_from_blob(&blob_store, &raw).await {
+        Ok(parsed) => Ok(RichEmailMessageDetail {
+            body_html: parsed.body_html.filter(|value| !value.trim().is_empty()),
+            headers: parsed.headers,
+        }),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                message_id = %message.message_id,
+                raw_record_id = %message.raw_record_id,
+                "mail detail rich html extraction failed; falling back to projected body_text"
+            );
+            Ok(RichEmailMessageDetail::default())
+        }
+    }
+}
+
+fn message_metadata_with_raw_headers(
+    message_metadata: &Value,
+    headers: &[(String, String)],
+) -> Value {
+    let mut metadata = message_metadata.as_object().cloned().unwrap_or_default();
+    if !headers.is_empty() && !metadata.contains_key("headers") {
+        metadata.insert(
+            "headers".to_owned(),
+            Value::Array(
+                headers
+                    .iter()
+                    .map(|(name, value)| json!({ "name": name, "value": value }))
+                    .collect(),
+            ),
+        );
+    }
+    Value::Object(metadata)
 }
 
 pub(crate) async fn post_gmail_oauth_start(
@@ -1767,6 +1970,55 @@ fn require_unlocked_host_vault(state: &AppState) -> Result<(), ApiError> {
         VaultMode::Unlocked => Ok(()),
         VaultMode::Locked => Err(ApiError::HostVault(HostVaultError::Locked)),
         VaultMode::Uninitialized => Err(ApiError::HostVault(HostVaultError::Uninitialized)),
+    }
+}
+
+fn mail_sync_store(state: &AppState) -> Result<MailSyncStore, MailSyncError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(MailSyncError::InvalidSetting {
+            field: "database",
+            message: "DATABASE_URL is not configured",
+        });
+    };
+
+    Ok(MailSyncStore::new(pool.clone()))
+}
+
+fn mail_sync_service(state: &AppState) -> Result<MailBackgroundSyncService, MailSyncError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(MailSyncError::InvalidSetting {
+            field: "database",
+            message: "DATABASE_URL is not configured",
+        });
+    };
+
+    Ok(MailBackgroundSyncService::new(
+        pool.clone(),
+        state.vault.clone(),
+        DEFAULT_MAIL_SYNC_BLOB_ROOT,
+    ))
+}
+
+fn mail_sync_api_error(error: MailSyncError) -> ApiError {
+    match error {
+        MailSyncError::AccountNotFound => ApiError::NotFound,
+        MailSyncError::RunAlreadyActive | MailSyncError::RunNotFound => {
+            ApiError::InvalidCommunicationQuery("mail sync run is already active")
+        }
+        MailSyncError::InvalidSetting {
+            field: "database", ..
+        } => ApiError::DatabaseNotConfigured,
+        MailSyncError::InvalidSetting { .. } => {
+            ApiError::InvalidCommunicationQuery("invalid mail sync settings")
+        }
+        MailSyncError::Sqlx(error) => {
+            tracing::error!(error = %error, "mail sync database operation failed");
+            ApiError::InvalidCommunicationQuery("mail sync operation failed")
+        }
+        MailSyncError::Communication(error) => {
+            tracing::error!(error = %error, "mail sync communication store failed");
+            ApiError::InvalidCommunicationQuery("mail sync operation failed")
+        }
     }
 }
 

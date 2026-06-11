@@ -7,7 +7,7 @@ use thiserror::Error;
 use crate::domains::mail::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, WorkflowState,
 };
-use crate::integrations::ollama::client::{OllamaClient, OllamaError};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 
 const EMAIL_INTELLIGENCE_PROMPT_VERSION: &str = "v1-email-intelligence-2026-06-07";
 
@@ -83,24 +83,24 @@ impl EmailCategory {
 
 #[derive(Clone)]
 pub struct EmailIntelligenceService {
-    ollama: Option<OllamaClient>,
+    runtime: Option<AiRuntimeClient>,
 }
 
 impl EmailIntelligenceService {
-    pub fn new(ollama: Option<OllamaClient>) -> Self {
-        Self { ollama }
+    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+        Self { runtime }
     }
 
     pub async fn analyze_message(
         &self,
         message: &ProjectedMessage,
     ) -> Result<Option<EmailAnalysis>, EmailIntelligenceError> {
-        let Some(ref ollama) = self.ollama else {
+        let Some(ref runtime) = self.runtime else {
             return Ok(None);
         };
 
         let prompt = build_email_analysis_prompt(message);
-        let result = ollama.chat(&prompt).await?;
+        let result = runtime.chat(&prompt).await?;
 
         let json_text = result
             .content
@@ -301,7 +301,7 @@ Respond with ONLY the JSON object.",
 #[derive(Debug, Error)]
 pub enum EmailIntelligenceError {
     #[error(transparent)]
-    Ollama(#[from] OllamaError),
+    Runtime(#[from] AiRuntimeError),
 
     #[error(transparent)]
     MessageProjection(#[from] MessageProjectionError),
@@ -313,7 +313,7 @@ pub enum EmailIntelligenceError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domains::mail::messages::WorkflowState;
+    use crate::domains::mail::messages::{LocalMessageState, WorkflowState};
     use chrono::Utc;
 
     fn test_message(subject: &str, body: &str) -> ProjectedMessage {
@@ -338,6 +338,9 @@ mod tests {
             ai_category: None,
             ai_summary: None,
             ai_summary_generated_at: None,
+            local_state: LocalMessageState::Active,
+            local_state_changed_at: None,
+            local_state_reason: None,
         }
     }
 

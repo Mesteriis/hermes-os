@@ -86,9 +86,6 @@ impl NewEmailDraft {
         if self.account_id.trim().is_empty() {
             return Err(EmailDraftError::Invalid("account_id empty"));
         }
-        if self.subject.trim().is_empty() {
-            return Err(EmailDraftError::Invalid("subject empty"));
-        }
         Ok(())
     }
 }
@@ -201,4 +198,32 @@ pub enum EmailDraftError {
     Serde(#[from] serde_json::Error),
     #[error("invalid draft: {0}")]
     Invalid(&'static str),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn draft_validation_allows_empty_subject_for_autosave() {
+        let draft = NewEmailDraft {
+            draft_id: "draft-autosave".to_owned(),
+            account_id: "imap-primary".to_owned(),
+            persona_id: None,
+            to_recipients: Vec::new(),
+            cc_recipients: Vec::new(),
+            bcc_recipients: Vec::new(),
+            subject: String::new(),
+            body_text: "body typed before subject".to_owned(),
+            body_html: None,
+            in_reply_to: None,
+            references: Vec::new(),
+            status: DraftStatus::Draft,
+            scheduled_send_at: None,
+            metadata: json!({ "compose_mode": "compose" }),
+        };
+
+        draft.validate().expect("empty subject draft is valid");
+    }
 }

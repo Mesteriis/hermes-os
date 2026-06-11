@@ -91,6 +91,7 @@ impl EmailThreadStore {
             FROM communication_messages m
             WHERE ($1::text IS NULL OR m.account_id = $1)
               AND m.channel_kind = 'email'
+              AND m.local_state = 'active'
             GROUP BY thread_id, m.account_id, normalized_subject
             ORDER BY max(COALESCE(m.occurred_at, m.projected_at)) DESC
             LIMIT $2
@@ -154,6 +155,7 @@ impl EmailThreadStore {
             LEFT JOIN communication_attachments a ON a.message_id = m.message_id
             WHERE m.account_id = $1
               AND m.channel_kind = 'email'
+              AND m.local_state = 'active'
               AND regexp_replace(regexp_replace(regexp_replace(m.subject, '^re:\s*', '', 'i'), '^fwd:\s*', '', 'i'), '^aw:\s*', '', 'i') = $2
             GROUP BY m.message_id, m.account_id, m.subject, m.sender, m.sender_display_name,
                      m.body_text, m.occurred_at, m.projected_at, m.workflow_state,

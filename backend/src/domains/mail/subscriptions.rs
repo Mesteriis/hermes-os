@@ -35,7 +35,9 @@ impl SubscriptionStore {
                 bool_or(lower(body_text) LIKE '%unsubscribe%' OR lower(body_text) LIKE '%opt out%' OR lower(body_text) LIKE '%manage preferences%') AS has_unsubscribe,
                 bool_or(lower(subject) LIKE '%newsletter%' OR lower(subject) LIKE '%digest%' OR lower(body_text) LIKE '%newsletter%') AS is_newsletter
             FROM communication_messages
-            WHERE ($1::text IS NULL OR account_id = $1) AND channel_kind = 'email'
+            WHERE ($1::text IS NULL OR account_id = $1)
+              AND channel_kind = 'email'
+              AND local_state = 'active'
             GROUP BY sender HAVING count(*) > 1
             ORDER BY message_count DESC LIMIT $2"#,
         ).bind(account_id).bind(limit).fetch_all(&self.pool).await?;

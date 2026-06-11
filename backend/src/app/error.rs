@@ -411,9 +411,9 @@ impl axum::response::IntoResponse for ApiError {
                     "AI run was not found".to_owned(),
                     false,
                 ),
-                AiError::Ollama(error) => (
+                AiError::Runtime(error) => (
                     StatusCode::BAD_GATEWAY,
-                    "ollama_runtime_error",
+                    "ai_runtime_error",
                     error.to_string(),
                     false,
                 ),
@@ -881,7 +881,23 @@ impl From<CallError> for ApiError {
 
 impl From<crate::integrations::ollama::client::OllamaError> for ApiError {
     fn from(error: crate::integrations::ollama::client::OllamaError) -> Self {
-        Self::Ai(AiError::Ollama(error))
+        Self::Ai(AiError::Runtime(
+            crate::integrations::ai_runtime::AiRuntimeError::Ollama(error),
+        ))
+    }
+}
+
+impl From<crate::integrations::omniroute::client::OmniRouteError> for ApiError {
+    fn from(error: crate::integrations::omniroute::client::OmniRouteError) -> Self {
+        Self::Ai(AiError::Runtime(
+            crate::integrations::ai_runtime::AiRuntimeError::OmniRoute(error),
+        ))
+    }
+}
+
+impl From<crate::integrations::ai_runtime::AiRuntimeError> for ApiError {
+    fn from(error: crate::integrations::ai_runtime::AiRuntimeError) -> Self {
+        Self::Ai(AiError::Runtime(error))
     }
 }
 

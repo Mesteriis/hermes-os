@@ -82,3 +82,4 @@ ADR status vocabulary:
 - [ADR-0073 Backend Module Organization](ADR-0073-backend-module-organization.md)
 - [ADR-0078 Frontend Component Decomposition — SPA Pages and Widgets](ADR-0078-frontend-component-decomposition.md)
 - [ADR-0079 Script Logic Decomposition — Services, Smart Pages and Config](ADR-0079-script-logic-decomposition.md)
+- [ADR-0081 Opt-In OmniRoute AI Runtime](ADR-0081-opt-in-omniroute-ai-runtime.md)

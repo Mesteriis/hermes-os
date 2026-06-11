@@ -145,29 +145,33 @@ pub(crate) async fn get_ai_status(
     State(state): State<AppState>,
 ) -> Result<Json<AiStatusResponse>, ApiError> {
     let runtime_settings = ai_runtime_settings(&state).await?;
-    let ollama = ollama_client(&runtime_settings)?;
-    let version = ollama.version().await;
-    let tags = ollama.tags().await;
+    let runtime = ai_runtime_client(&state, &runtime_settings)?;
+    let version = runtime.version().await;
+    let models = runtime.models().await;
     let chat_model = runtime_settings.chat_model;
     let embedding_model = runtime_settings.embedding_model;
-    let chat_model_available = tags
+    let chat_model_available = models
         .as_ref()
         .map(|models| models.iter().any(|model| model == &chat_model))
         .unwrap_or(false);
-    let embedding_model_available = tags
+    let embedding_model_available = models
         .as_ref()
         .map(|models| models.iter().any(|model| model == &embedding_model))
         .unwrap_or(false);
 
     Ok(Json(AiStatusResponse {
-        runtime: "ollama".to_owned(),
-        status: if version.is_ok() && chat_model_available && embedding_model_available {
+        runtime: runtime.runtime_name().to_owned(),
+        status: if version.is_ok()
+            && models.is_ok()
+            && chat_model_available
+            && embedding_model_available
+        {
             "ok"
         } else {
             "unavailable"
         }
         .to_owned(),
-        version: version.ok(),
+        version: version.ok().flatten(),
         chat_model,
         embedding_model,
         embedding_dimension: AI_EMBEDDING_DIMENSION,

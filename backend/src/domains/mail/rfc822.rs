@@ -7,7 +7,9 @@ pub struct ParsedEmailMessage {
     pub subject: String,
     pub from: String,
     pub to: Vec<String>,
+    pub headers: Vec<(String, String)>,
     pub body_text: String,
+    pub body_html: Option<String>,
     pub attachments: Vec<ParsedEmailAttachment>,
 }
 
@@ -45,7 +47,9 @@ pub fn parse_rfc822_message(raw: &[u8]) -> Result<ParsedEmailMessage, EmailRfc82
         subject: non_empty_or_default(subject, "(no subject)"),
         from: non_empty_or_default(from, "unknown@example.invalid"),
         to: non_empty_recipients(to),
+        headers,
         body_text: non_empty_or_default(body_text, "(empty body)"),
+        body_html: body_content.body_html,
         attachments: body_content.attachments,
     })
 }
@@ -74,7 +78,7 @@ fn parse_headers(header_block: &str) -> Vec<(String, String)> {
         }
 
         if let Some((name, value)) = line.split_once(':') {
-            headers.push((name.trim().to_ascii_lowercase(), value.trim().to_owned()));
+            headers.push((name.trim().to_owned(), value.trim().to_owned()));
         }
     }
 
@@ -91,6 +95,7 @@ fn header_value(headers: &[(String, String)], name: &str) -> Option<String> {
 #[derive(Default)]
 struct ParsedEmailBodyContent {
     body_text: Option<String>,
+    body_html: Option<String>,
     attachments: Vec<ParsedEmailAttachment>,
     next_attachment_index: usize,
 }
@@ -130,10 +135,6 @@ fn collect_part_content(
         return;
     }
 
-    if content.body_text.is_some() {
-        return;
-    }
-
     let decoded = decode_transfer_body(
         body,
         header_value(headers, "content-transfer-encoding")
@@ -141,10 +142,17 @@ fn collect_part_content(
             .as_str(),
     );
     if content_type_media_type == "text/html" {
-        content.body_text = Some(strip_html_tags(&decoded));
+        if content.body_html.is_none() {
+            content.body_html = non_empty_html_body(&decoded);
+        }
+        if content.body_text.is_none() {
+            content.body_text = Some(strip_html_tags(&decoded));
+        }
         return;
     }
-    if content_type_media_type == "text/plain" || content_type_media_type.is_empty() {
+    if content.body_text.is_none()
+        && (content_type_media_type == "text/plain" || content_type_media_type.is_empty())
+    {
         content.body_text = Some(normalize_body_text(&decoded));
     }
 }
@@ -541,6 +549,11 @@ fn normalize_body_text(input: &str) -> String {
         .join("\n")
         .trim()
         .to_owned()
+}
+
+fn non_empty_html_body(input: &str) -> Option<String> {
+    let value = input.trim().to_owned();
+    if value.is_empty() { None } else { Some(value) }
 }
 
 fn non_empty_or_default(value: String, default: &str) -> String {

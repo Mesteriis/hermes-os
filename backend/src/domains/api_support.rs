@@ -38,7 +38,7 @@ use crate::platform::calls::{
     TelegramCall, TranscriptStatus,
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
-use crate::platform::config::AppConfig;
+use crate::platform::config::{AiRuntimeProvider, AppConfig};
 
 use crate::domains::persons::health::{PersonHealthError, PersonHealthStore};
 
@@ -117,7 +117,11 @@ use crate::domains::tasks::health::{TaskHealthError, TaskWatchtowerService};
 use crate::domains::tasks::intelligence::TaskIntelligenceService;
 use crate::domains::tasks::rules::{TaskRuleError, TaskRuleStore, TaskTemplateStore};
 use crate::domains::tasks::sync::{export_task_json, export_task_md};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
+use crate::integrations::omniroute::client::{
+    OmniRouteClient, OmniRouteClientConfig, OmniRouteError,
+};
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat,
     TelegramError, TelegramMessage, TelegramMessageIngestResult, TelegramStore,
@@ -227,11 +231,11 @@ pub(crate) async fn ai_service(state: &AppState) -> Result<AiService, ApiError> 
         return Err(ApiError::DatabaseNotConfigured);
     };
     let runtime_settings = ai_runtime_settings(state).await?;
-    let ollama = ollama_client(&runtime_settings)?;
+    let runtime = ai_runtime_client(state, &runtime_settings)?;
 
     Ok(AiService::new(
         pool.clone(),
-        ollama,
+        runtime,
         &runtime_settings.chat_model,
         &runtime_settings.embedding_model,
     ))
@@ -287,15 +291,36 @@ pub(crate) async fn ai_runtime_settings(state: &AppState) -> Result<AiRuntimeSet
         .await?)
 }
 
-pub(crate) fn ollama_client(settings: &AiRuntimeSettings) -> Result<OllamaClient, ApiError> {
-    Ok(OllamaClient::new(
-        OllamaClientConfig::new(
-            &settings.base_url,
-            &settings.chat_model,
-            &settings.embedding_model,
-        )
-        .with_timeout_seconds(settings.timeout_seconds),
-    )?)
+pub(crate) fn ai_runtime_client(
+    state: &AppState,
+    settings: &AiRuntimeSettings,
+) -> Result<AiRuntimeClient, ApiError> {
+    match settings.provider {
+        AiRuntimeProvider::Ollama => Ok(AiRuntimeClient::Ollama(OllamaClient::new(
+            OllamaClientConfig::new(
+                &settings.base_url,
+                &settings.chat_model,
+                &settings.embedding_model,
+            )
+            .with_timeout_seconds(settings.timeout_seconds),
+        )?)),
+        AiRuntimeProvider::OmniRoute => {
+            let api_key = state.config.omniroute_api_key().cloned().ok_or_else(|| {
+                ApiError::Ai(AiError::Runtime(AiRuntimeError::OmniRoute(
+                    OmniRouteError::MissingApiKey,
+                )))
+            })?;
+            Ok(AiRuntimeClient::OmniRoute(OmniRouteClient::new(
+                OmniRouteClientConfig::new(
+                    &settings.base_url,
+                    &settings.chat_model,
+                    &settings.embedding_model,
+                    api_key,
+                )
+                .with_timeout_seconds(settings.timeout_seconds),
+            )?))
+        }
+    }
 }
 
 pub(crate) fn document_processing_store(
@@ -316,35 +341,23 @@ pub(crate) fn person_identity_store(state: &AppState) -> Result<PersonIdentitySt
     Ok(PersonIdentityStore::new(pool.clone()))
 }
 
-pub(crate) fn email_multilingual_service(
-    _state: &AppState,
+pub(crate) async fn email_multilingual_service(
+    state: &AppState,
 ) -> Result<crate::domains::mail::multilingual::MultilingualService, ApiError> {
+    let settings = ai_runtime_settings(state).await?;
     Ok(
         crate::domains::mail::multilingual::MultilingualService::new(
-            crate::integrations::ollama::client::OllamaClient::new(
-                crate::integrations::ollama::client::OllamaClientConfig::new(
-                    "http://127.0.0.1:11434",
-                    "qwen3:4b",
-                    "qwen3-embedding:4b",
-                ),
-            )
-            .ok(),
+            ai_runtime_client(state, &settings).ok(),
         ),
     )
 }
 
-pub(crate) fn email_ai_reply_service(
-    _state: &AppState,
+pub(crate) async fn email_ai_reply_service(
+    state: &AppState,
 ) -> Result<crate::domains::mail::ai_reply::AiReplyService, ApiError> {
+    let settings = ai_runtime_settings(state).await?;
     Ok(crate::domains::mail::ai_reply::AiReplyService::new(
-        crate::integrations::ollama::client::OllamaClient::new(
-            crate::integrations::ollama::client::OllamaClientConfig::new(
-                "http://127.0.0.1:11434",
-                "qwen3:4b",
-                "qwen3-embedding:4b",
-            ),
-        )
-        .ok(),
+        ai_runtime_client(state, &settings).ok(),
     ))
 }
 
@@ -500,6 +513,8 @@ pub(crate) struct CommunicationMessageSummaryResponse {
     pub(crate) delivery_state: String,
     pub(crate) message_metadata: Value,
     pub(crate) attachment_count: i64,
+    pub(crate) local_state: String,
+    pub(crate) local_state_changed_at: Option<DateTime<Utc>>,
 }
 
 impl From<ProjectedMessageSummary> for CommunicationMessageSummaryResponse {
@@ -521,6 +536,8 @@ impl From<ProjectedMessageSummary> for CommunicationMessageSummaryResponse {
             delivery_state: summary.message.delivery_state,
             message_metadata: summary.message.message_metadata,
             attachment_count: summary.attachment_count,
+            local_state: summary.message.local_state.as_str().to_owned(),
+            local_state_changed_at: summary.message.local_state_changed_at,
         }
     }
 }
@@ -541,6 +558,7 @@ pub(crate) struct CommunicationMessageDetailItem {
     pub(crate) sender: String,
     pub(crate) recipients: Vec<String>,
     pub(crate) body_text: String,
+    pub(crate) body_html: Option<String>,
     pub(crate) occurred_at: Option<DateTime<Utc>>,
     pub(crate) projected_at: DateTime<Utc>,
     pub(crate) channel_kind: String,
@@ -548,10 +566,22 @@ pub(crate) struct CommunicationMessageDetailItem {
     pub(crate) sender_display_name: Option<String>,
     pub(crate) delivery_state: String,
     pub(crate) message_metadata: Value,
+    pub(crate) local_state: String,
+    pub(crate) local_state_changed_at: Option<DateTime<Utc>>,
+    pub(crate) local_state_reason: Option<String>,
 }
 
-impl From<ProjectedMessage> for CommunicationMessageDetailItem {
-    fn from(message: ProjectedMessage) -> Self {
+impl CommunicationMessageDetailItem {
+    pub(crate) fn from_message(message: ProjectedMessage, body_html: Option<String>) -> Self {
+        let message_metadata = message.message_metadata.clone();
+        Self::from_message_with_metadata(message, body_html, message_metadata)
+    }
+
+    pub(crate) fn from_message_with_metadata(
+        message: ProjectedMessage,
+        body_html: Option<String>,
+        message_metadata: Value,
+    ) -> Self {
         Self {
             message_id: message.message_id,
             raw_record_id: message.raw_record_id,
@@ -561,14 +591,24 @@ impl From<ProjectedMessage> for CommunicationMessageDetailItem {
             sender: message.sender,
             recipients: message.recipients,
             body_text: message.body_text,
+            body_html,
             occurred_at: message.occurred_at,
             projected_at: message.projected_at,
             channel_kind: message.channel_kind,
             conversation_id: message.conversation_id,
             sender_display_name: message.sender_display_name,
             delivery_state: message.delivery_state,
-            message_metadata: message.message_metadata,
+            message_metadata,
+            local_state: message.local_state.as_str().to_owned(),
+            local_state_changed_at: message.local_state_changed_at,
+            local_state_reason: message.local_state_reason,
         }
+    }
+}
+
+impl From<ProjectedMessage> for CommunicationMessageDetailItem {
+    fn from(message: ProjectedMessage) -> Self {
+        Self::from_message(message, None)
     }
 }
 
@@ -1228,6 +1268,7 @@ pub(crate) struct CommunicationMessagesQuery {
     pub(crate) workflow_state: Option<String>,
     pub(crate) channel_kind: Option<String>,
     pub(crate) q: Option<String>,
+    pub(crate) local_state: Option<String>,
     pub(crate) limit: Option<i64>,
 }
 
@@ -1257,6 +1298,7 @@ pub(crate) fn parse_communication_messages_query(
         workflow_state: None,
         channel_kind: None,
         q: None,
+        local_state: None,
         limit: None,
     };
 
@@ -1267,6 +1309,7 @@ pub(crate) fn parse_communication_messages_query(
                 "workflow_state" => query.workflow_state = non_empty_query_value(value.as_ref()),
                 "channel_kind" => query.channel_kind = non_empty_query_value(value.as_ref()),
                 "q" => query.q = non_empty_query_value(value.as_ref()),
+                "local_state" => query.local_state = non_empty_query_value(value.as_ref()),
                 "limit" => {
                     query.limit = Some(value.parse::<i64>().map_err(|_| {
                         ApiError::InvalidCommunicationQuery("limit must be an integer")

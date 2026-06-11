@@ -62,6 +62,11 @@ async fn application_settings_store_lists_seeded_settings_against_postgres() {
     assert!(
         settings
             .iter()
+            .any(|setting| setting.setting_key == "frontend.ui_state")
+    );
+    assert!(
+        settings
+            .iter()
             .any(|setting| setting.setting_key == "ui.theme")
     );
     assert!(
@@ -192,6 +197,44 @@ async fn application_settings_include_frontend_theme_against_postgres() {
     assert_eq!(theme_setting.value["panelOpacity"], json!(70));
     assert_eq!(theme_setting.value["panelBlur"], json!(12));
     assert!(theme_setting.is_editable);
+}
+
+#[tokio::test]
+async fn application_settings_include_frontend_ui_state_against_postgres() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live frontend ui state settings test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let store = ApplicationSettingsStore::new(database.pool().expect("configured pool").clone());
+    store
+        .repair_declared_settings()
+        .await
+        .expect("repair settings");
+
+    let settings = store.list_settings().await.expect("list settings");
+
+    let ui_state_setting = settings
+        .iter()
+        .find(|setting| setting.setting_key == "frontend.ui_state")
+        .expect("frontend ui state setting");
+
+    assert_eq!(ui_state_setting.category, "frontend");
+    assert_eq!(ui_state_setting.value_kind, SettingValueKind::Json);
+    assert_eq!(ui_state_setting.metadata["ui_control"], json!("hidden"));
+    assert_eq!(ui_state_setting.metadata["schema_version"], json!(1));
+    assert_eq!(
+        ui_state_setting.metadata["stores_private_content"],
+        json!(false)
+    );
+    assert_eq!(ui_state_setting.value["schemaVersion"], json!(1));
+    assert!(ui_state_setting.is_editable);
 }
 
 #[tokio::test]
@@ -449,6 +492,54 @@ async fn application_settings_api_rejects_secret_like_setting_keys_against_postg
         .oneshot(json_put_request_with_actor(
             "/api/v1/settings/mail.password",
             json!({ "value": "not-allowed" }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], json!("invalid_application_setting"));
+}
+
+#[tokio::test]
+async fn application_settings_api_rejects_private_ui_state_payload_against_postgres() {
+    let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live application settings ui state validation test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let response = app
+        .oneshot(json_put_request_with_actor(
+            "/api/v1/settings/frontend.ui_state",
+            json!({
+                "value": {
+                    "schemaVersion": 1,
+                    "savedAt": "2026-06-11T12:00:00Z",
+                    "expiresAt": "2026-06-18T12:00:00Z",
+                    "communications": {
+                        "compose": {
+                            "draftId": "draft-1",
+                            "body": "private draft body"
+                        }
+                    }
+                }
+            }),
             LOCAL_API_TOKEN,
         ))
         .await
