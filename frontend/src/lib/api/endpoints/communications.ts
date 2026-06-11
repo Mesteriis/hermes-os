@@ -2,9 +2,15 @@ import { ApiClient } from '../client';
 import type {
 	CommunicationMessagesResponse,
 	CommunicationMessageDetail,
+	LocalMessageState,
 	WorkflowState,
 	WorkflowStateTransitionResponse,
 	WorkflowStateCountsResponse,
+	LocalMessageStateResponse,
+	MailSyncSettings,
+	MailSyncSettingsUpdate,
+	MailSyncStatusListResponse,
+	MailSyncRunResponse,
 	MessageAnalyzeResponse,
 	EmailSearchResponse,
 	MailMessagesResponse,
@@ -36,10 +42,12 @@ import type {
 	EmailPersona,
 	RichTemplateListResponse,
 	RenderTemplateResponse,
-	MailArchitectureBlocker
+	MailArchitectureBlocker,
+	WorkflowActionRequest,
+	WorkflowActionResponse
 } from '../types';
 
-export async function fetchCommunicationMessages(limit = 50): Promise<CommunicationMessagesResponse> {
+export async function fetchCommunicationMessages(limit = 1000): Promise<CommunicationMessagesResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	return ApiClient.instance.get<CommunicationMessagesResponse>(
 		`/api/v1/communications/messages?${params.toString()}`,
@@ -65,9 +73,13 @@ export async function transitionMessageWorkflowState(
 	);
 }
 
-export async function fetchMessageStateCounts(accountId?: string): Promise<WorkflowStateCountsResponse> {
+export async function fetchMessageStateCounts(
+	accountId?: string,
+	localState?: LocalMessageState
+): Promise<WorkflowStateCountsResponse> {
 	const params = new URLSearchParams();
 	if (accountId?.trim()) params.set('account_id', accountId.trim());
+	if (localState?.trim()) params.set('local_state', localState.trim());
 	const qs = params.toString();
 	return ApiClient.instance.get<WorkflowStateCountsResponse>(
 		`/api/v1/communications/messages/states${qs ? '?' + qs : ''}`,
@@ -80,6 +92,16 @@ export async function analyzeMessage(messageId: string): Promise<MessageAnalyzeR
 		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/analyze`,
 		{},
 		'Message analysis failed'
+	);
+}
+
+export async function runWorkflowAction(
+	request: WorkflowActionRequest
+): Promise<WorkflowActionResponse> {
+	return ApiClient.instance.post<WorkflowActionResponse>(
+		'/api/v1/workflow-actions',
+		request,
+		'Workflow action failed'
 	);
 }
 
@@ -96,16 +118,67 @@ export async function fetchMailMessages(
 	workflowState?: WorkflowState,
 	channelKind?: string,
 	query?: string,
-	limit = 50
+	localState?: LocalMessageState,
+	limit = 1000
 ): Promise<MailMessagesResponse> {
 	const params = new URLSearchParams({ limit: String(Math.trunc(limit)) });
 	if (accountId?.trim()) params.set('account_id', accountId.trim());
 	if (workflowState?.trim()) params.set('workflow_state', workflowState.trim());
 	if (channelKind?.trim()) params.set('channel_kind', channelKind.trim());
 	if (query?.trim()) params.set('q', query.trim());
+	if (localState?.trim()) params.set('local_state', localState.trim());
 	return ApiClient.instance.get<MailMessagesResponse>(
 		`/api/v1/communications/messages?${params.toString()}`,
 		'Mail messages request failed'
+	);
+}
+
+export async function trashMessage(messageId: string): Promise<LocalMessageStateResponse> {
+	return ApiClient.instance.post<LocalMessageStateResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/trash`,
+		{},
+		'Move message to trash failed'
+	);
+}
+
+export async function restoreMessage(messageId: string): Promise<LocalMessageStateResponse> {
+	return ApiClient.instance.post<LocalMessageStateResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/restore`,
+		{},
+		'Restore message failed'
+	);
+}
+
+export async function fetchMailSyncStatus(): Promise<MailSyncStatusListResponse> {
+	return ApiClient.instance.get<MailSyncStatusListResponse>(
+		'/api/v1/email-accounts/sync-status',
+		'Mail sync status request failed'
+	);
+}
+
+export async function fetchMailSyncSettings(accountId: string): Promise<MailSyncSettings> {
+	return ApiClient.instance.get<MailSyncSettings>(
+		`/api/v1/email-accounts/${encodeURIComponent(accountId)}/sync-settings`,
+		'Mail sync settings request failed'
+	);
+}
+
+export async function updateMailSyncSettings(
+	accountId: string,
+	settings: MailSyncSettingsUpdate
+): Promise<MailSyncSettings> {
+	return ApiClient.instance.put<MailSyncSettings>(
+		`/api/v1/email-accounts/${encodeURIComponent(accountId)}/sync-settings`,
+		settings,
+		'Mail sync settings update failed'
+	);
+}
+
+export async function runMailSyncNow(accountId: string): Promise<MailSyncRunResponse> {
+	return ApiClient.instance.post<MailSyncRunResponse>(
+		`/api/v1/email-accounts/${encodeURIComponent(accountId)}/sync-now`,
+		{},
+		'Mail sync request failed'
 	);
 }
 

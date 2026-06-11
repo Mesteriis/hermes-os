@@ -5,13 +5,19 @@ import type {
 	CommunicationMessageSummary,
 	EmailDraft,
 	EmailThread,
+	LocalMessageState,
 	MailMessageInsight,
 	MailResourceSnapshot,
 	MailResourceSummary,
+	MailSyncRunResponse,
+	MailSyncSettings,
+	MailSyncStatus,
 	MailboxHealth,
 	MessageAnalyzeResponse,
 	MessageExportResponse,
 	SendEmailResponse,
+	WorkflowActionKind,
+	WorkflowActionResponse,
 	SenderStats,
 	WorkflowState,
 	WorkflowStateCountItem
@@ -38,6 +44,10 @@ export type TaskItem = {
 	due: string;
 };
 
+export type CommunicationsNavigatorMode = 'threads' | 'contacts';
+export type CommunicationsInspectorMode = 'context' | 'contact' | 'organization' | null;
+export type MessageContextTab = 'message' | 'attachments' | 'headers' | 'related' | 'timeline';
+
 const emptyComposeForm: ComposeForm = {
 	draft_id: '',
 	account_id: '',
@@ -56,7 +66,9 @@ export const selectedCommunicationDetail = writable<CommunicationMessageDetail |
 export const communicationsError = writable('');
 export const isCommunicationsLoading = writable(false);
 export const selectedConversationIndex = writable(0);
+export const selectedCommunicationMessageId = writable<string | null>(null);
 export const mailStateFilter = writable<WorkflowState | ''>('');
+export const mailLocalStateFilter = writable<LocalMessageState>('active');
 export const mailStateCounts = writable<WorkflowStateCountItem[]>([]);
 export const isMailStateTransitioning = writable(false);
 export const isAiAnswerSubmitting = writable(false);
@@ -74,10 +86,20 @@ export const isMailActionRunning = writable(false);
 export const mailActionStatus = writable('');
 export const mailActionError = writable('');
 export const lastMessageExport = writable<MessageExportResponse | null>(null);
+export const mailSyncStatuses = writable<MailSyncStatus[]>([]);
+export const selectedMailSyncSettings = writable<MailSyncSettings | null>(null);
+export const lastMailSyncRuns = writable<MailSyncRunResponse[]>([]);
+export const isMailSyncBusy = writable(false);
+export const mailSyncStatusMessage = writable('');
+export const mailSyncError = writable('');
 export const isComposeOpen = writable(false);
 export const composeForm = writable<ComposeForm>({ ...emptyComposeForm });
 export const selectedMailAccountId = writable('');
 export const messageSearchQuery = writable('');
+export const communicationsNavigatorMode = writable<CommunicationsNavigatorMode>('threads');
+export const expandedCommunicationContactKey = writable<string | null>(null);
+export const communicationsInspectorMode = writable<CommunicationsInspectorMode>(null);
+export const activeMessageContextTab = writable<MessageContextTab>('message');
 export const isSendReviewOpen = writable(false);
 export const isSendingMessage = writable(false);
 export const composeSendError = writable('');
@@ -99,9 +121,13 @@ export const selectedMailAccountOption = derived(
 );
 
 export const selectedCommunication = derived(
-	[communicationMessages, selectedConversationIndex],
-	([$communicationMessages, $selectedConversationIndex]) =>
-		$communicationMessages[$selectedConversationIndex] ?? null
+	[communicationMessages, selectedCommunicationMessageId, selectedConversationIndex],
+	([$communicationMessages, $selectedCommunicationMessageId, $selectedConversationIndex]) =>
+		($selectedCommunicationMessageId
+			? $communicationMessages.find((message) => message.message_id === $selectedCommunicationMessageId)
+			: null) ??
+		$communicationMessages[$selectedConversationIndex] ??
+		null
 );
 
 export const conversations = derived(communicationMessages, ($communicationMessages) => {
@@ -132,19 +158,18 @@ export async function loadCommunicationsWorkspace(): Promise<void> {
 		loadDrafts(),
 		loadTopSenders(),
 		loadThreads(),
-		loadMailResources()
+		loadMailResources(),
+		loadMailSyncStatus(),
+		loadSelectedMailSyncSettings()
 	]);
 }
 
 export async function loadCommunications(): Promise<void> {
 	isCommunicationsLoading.set(true);
 	const result = await commsService.loadCommunications(get(selectedConversationIndex));
-	communicationMessages.set(result.messages);
-	selectedCommunicationDetail.set(result.detail);
 	communicationsError.set(result.error);
-	selectedConversationIndex.set(result.selectedIndex);
+	await applyLoadedCommunicationResult(result.messages, result.detail, result.selectedIndex);
 	isCommunicationsLoading.set(result.isLoading);
-	await loadInsightForDetail(result.detail);
 }
 
 export async function loadCommunicationMessagesFiltered(filterState?: WorkflowState): Promise<void> {
@@ -153,22 +178,90 @@ export async function loadCommunicationMessagesFiltered(filterState?: WorkflowSt
 		filterState,
 		get(selectedConversationIndex),
 		get(selectedMailAccountId),
-		get(messageSearchQuery)
+		get(messageSearchQuery),
+		get(mailLocalStateFilter)
 	);
-	communicationMessages.set(result.messages);
-	selectedCommunicationDetail.set(result.detail);
 	communicationsError.set(result.error);
-	selectedConversationIndex.set(result.selectedIndex);
+	await applyLoadedCommunicationResult(result.messages, result.detail, result.selectedIndex);
 	isCommunicationsLoading.set(result.isLoading);
-	await loadInsightForDetail(result.detail);
 }
 
 export async function loadMessageStateCounts(): Promise<void> {
-	const result = await commsService.loadMessageStateCounts(get(selectedMailAccountId));
+	const result = await commsService.loadMessageStateCounts(get(selectedMailAccountId), get(mailLocalStateFilter));
 	mailStateCounts.set(result.counts);
 	if (result.error) {
 		communicationsError.set(result.error);
 	}
+}
+
+export async function loadMailSyncStatus(): Promise<void> {
+	const result = await commsService.loadMailSyncStatuses();
+	mailSyncStatuses.set(result.statuses);
+	if (result.error) {
+		mailSyncError.set(result.error);
+	}
+}
+
+export async function loadSelectedMailSyncSettings(): Promise<void> {
+	const result = await commsService.loadMailSyncSettings(get(selectedMailAccountId));
+	selectedMailSyncSettings.set(result.settings);
+	if (result.error) {
+		mailSyncError.set(result.error);
+	}
+}
+
+export async function updateSelectedMailSyncSettings(
+	patch: Partial<Pick<MailSyncSettings, 'sync_enabled' | 'batch_size' | 'poll_interval_seconds'>>
+): Promise<void> {
+	const accountId = get(selectedMailAccountId);
+	const current = get(selectedMailSyncSettings);
+	if (!accountId || !current) return;
+	isMailSyncBusy.set(true);
+	mailSyncError.set('');
+	const result = await commsService.saveMailSyncSettings(accountId, {
+		sync_enabled: patch.sync_enabled ?? current.sync_enabled,
+		batch_size: patch.batch_size ?? current.batch_size,
+		poll_interval_seconds: patch.poll_interval_seconds ?? current.poll_interval_seconds
+	});
+	isMailSyncBusy.set(false);
+	if (result.error) {
+		mailSyncError.set(result.error);
+		return;
+	}
+	selectedMailSyncSettings.set(result.settings);
+	mailSyncStatusMessage.set('Sync settings saved');
+	await loadMailSyncStatus();
+}
+
+export async function runMailSyncNow(accountId?: string): Promise<void> {
+	const explicitAccountId = accountId?.trim();
+	const selectedAccountId = get(selectedMailAccountId).trim();
+	const targets = explicitAccountId
+		? [explicitAccountId]
+		: selectedAccountId
+			? [selectedAccountId]
+			: get(mailAccountOptions).map((account) => account.accountId);
+	isMailSyncBusy.set(true);
+	mailSyncError.set('');
+	mailSyncStatusMessage.set('Checking mail now');
+	const result = await commsService.triggerMailSyncNow(targets);
+	isMailSyncBusy.set(false);
+	lastMailSyncRuns.set(result.runs);
+	if (result.error) {
+		mailSyncError.set(result.error);
+	} else {
+		mailSyncStatusMessage.set('Mail check finished');
+	}
+	await Promise.all([
+		loadMailSyncStatus(),
+		loadCommunicationMessagesFiltered(get(mailStateFilter) || undefined),
+		loadMessageStateCounts(),
+		loadMailboxHealth(),
+		loadTopSenders(),
+		loadDrafts(),
+		loadThreads(),
+		loadMailResources()
+	]);
 }
 
 export async function handleWorkflowStateTransition(messageId: string, newState: WorkflowState): Promise<void> {
@@ -233,8 +326,40 @@ export async function handleSaveDraft(): Promise<void> {
 	await loadDrafts();
 }
 
+export async function autoSaveOpenComposeDraft(): Promise<void> {
+	if (!get(isComposeOpen)) return;
+	const form = get(composeForm);
+	if (!form.account_id || !form.draft_id || !composeHasDraftContent(form)) return;
+	const result = await commsService.handleSaveDraft(form);
+	if (!result.success) {
+		composeSendError.set(result.error);
+		return;
+	}
+	composeSendError.set('');
+}
+
+export async function restoreComposeDraftById(draftId: string | null | undefined): Promise<boolean> {
+	if (!draftId?.trim()) {
+		isComposeOpen.set(false);
+		return false;
+	}
+	if (!get(drafts).some((draft) => draft.draft_id === draftId)) {
+		await loadDrafts();
+	}
+	const draft = get(drafts).find((candidate) => candidate.draft_id === draftId);
+	if (!draft) {
+		isComposeOpen.set(false);
+		return false;
+	}
+	openComposeForDraft(draft);
+	return true;
+}
+
 export async function loadCommunicationDetail(messageId: string): Promise<void> {
 	const result = await commsService.loadCommunicationDetail(messageId);
+	if (result.detail?.message.message_id) {
+		selectedCommunicationMessageId.set(result.detail.message.message_id);
+	}
 	selectedCommunicationDetail.set(result.detail);
 	if (result.error) {
 		communicationsError.set(result.error);
@@ -242,10 +367,45 @@ export async function loadCommunicationDetail(messageId: string): Promise<void> 
 	await loadInsightForDetail(result.detail);
 }
 
+async function applyLoadedCommunicationResult(
+	messages: CommunicationMessageSummary[],
+	detail: CommunicationMessageDetail | null,
+	fallbackIndex: number
+): Promise<void> {
+	communicationMessages.set(messages);
+	if (!messages.length) {
+		selectedConversationIndex.set(0);
+		selectedCommunicationMessageId.set(null);
+		selectedCommunicationDetail.set(null);
+		await loadInsightForDetail(null);
+		return;
+	}
+
+	const desiredMessageId = get(selectedCommunicationMessageId);
+	const restoredIndex = desiredMessageId
+		? messages.findIndex((message) => message.message_id === desiredMessageId)
+		: -1;
+	const nextIndex =
+		restoredIndex >= 0
+			? restoredIndex
+			: Math.min(Math.max(fallbackIndex, 0), messages.length - 1);
+	const selectedMessage = messages[nextIndex];
+
+	selectedConversationIndex.set(nextIndex);
+	selectedCommunicationMessageId.set(selectedMessage.message_id);
+	if (detail?.message.message_id === selectedMessage.message_id) {
+		selectedCommunicationDetail.set(detail);
+		await loadInsightForDetail(detail);
+		return;
+	}
+	await loadCommunicationDetail(selectedMessage.message_id);
+}
+
 export function selectCommunication(index: number): void {
 	const messages = get(communicationMessages);
 	if (index < 0 || index >= messages.length) return;
 	selectedConversationIndex.set(index);
+	selectedCommunicationMessageId.set(messages[index].message_id);
 	void loadCommunicationDetail(messages[index].message_id);
 }
 
@@ -260,14 +420,29 @@ export async function selectCommunicationSection(sectionId: CommunicationSection
 	navigateToCommunicationSection(sectionId);
 	const workflowState = commsService.communicationSectionWorkflowState(sectionId);
 	if (workflowState !== null) {
+		mailLocalStateFilter.set('active');
 		mailStateFilter.set(workflowState);
+		selectedCommunicationMessageId.set(null);
 		await loadCommunicationMessagesFiltered(workflowState || undefined);
+		await loadMessageStateCounts();
 	}
+}
+
+export async function selectMailLocalState(localState: LocalMessageState): Promise<void> {
+	mailLocalStateFilter.set(localState);
+	selectedConversationIndex.set(0);
+	selectedCommunicationMessageId.set(null);
+	if (localState === 'trash') {
+		mailStateFilter.set('');
+	}
+	await loadCommunicationMessagesFiltered(get(mailStateFilter) || undefined);
+	await loadMessageStateCounts();
 }
 
 export async function selectMailAccount(accountId: string): Promise<void> {
 	selectedMailAccountId.set(accountId);
 	selectedConversationIndex.set(0);
+	selectedCommunicationMessageId.set(null);
 	await loadCommunicationMessagesFiltered(get(mailStateFilter) || undefined);
 	await Promise.all([
 		loadMessageStateCounts(),
@@ -275,13 +450,15 @@ export async function selectMailAccount(accountId: string): Promise<void> {
 		loadTopSenders(),
 		loadDrafts(),
 		loadThreads(),
-		loadMailResources()
+		loadMailResources(),
+		loadSelectedMailSyncSettings()
 	]);
 }
 
 export async function updateMessageSearchQuery(query: string): Promise<void> {
 	messageSearchQuery.set(query);
 	selectedConversationIndex.set(0);
+	selectedCommunicationMessageId.set(null);
 	await loadCommunicationMessagesFiltered(get(mailStateFilter) || undefined);
 }
 
@@ -390,6 +567,14 @@ export async function toggleMuteSelectedMessage(): Promise<void> {
 	await runSelectedMessageAction((messageId) => commsService.handleToggleMute(messageId), true);
 }
 
+export async function trashSelectedMessage(): Promise<void> {
+	await runSelectedLocalStateAction((messageId) => commsService.handleTrashMessage(messageId));
+}
+
+export async function restoreSelectedMessage(): Promise<void> {
+	await runSelectedLocalStateAction((messageId) => commsService.handleRestoreMessage(messageId));
+}
+
 export async function snoozeSelectedMessage(): Promise<void> {
 	await runSelectedMessageAction((messageId) => commsService.handleSnoozeMessage(messageId), true);
 }
@@ -429,6 +614,62 @@ export async function translateSelectedMessage(targetLanguage = 'en'): Promise<v
 	await runSelectedInsightAction((messageId) => commsService.handleTranslateMessage(messageId, targetLanguage));
 }
 
+export async function runSelectedWorkflowAction(action: WorkflowActionKind): Promise<void> {
+	const message = selectedMessageForCompose();
+	if (!message) return;
+	if (action === 'reply') {
+		await runWorkflowAction(commsService.buildWorkflowActionRequest(action, message));
+		openReplyToSelected();
+		return;
+	}
+	const request = commsService.buildWorkflowActionRequest(action, message);
+	if (action === 'create_event') {
+		const start = new Date(Date.now() + 60 * 60 * 1000);
+		const end = new Date(start.getTime() + 60 * 60 * 1000);
+		request.input = {
+			...request.input,
+			title: `Review: ${message.subject}`,
+			starts_at: start.toISOString(),
+			ends_at: end.toISOString()
+		};
+	}
+	await runWorkflowAction(request);
+	if (action === 'archive') {
+		await Promise.all([
+			loadCommunicationMessagesFiltered(get(mailStateFilter) || undefined),
+			loadMessageStateCounts()
+		]);
+		return;
+	}
+	await Promise.all([loadCommunicationDetail(message.message_id), loadMailResources()]);
+}
+
+export async function runNewWorkflowAction(action: Exclude<WorkflowActionKind, 'reply' | 'archive' | 'link_document'>): Promise<void> {
+	const title = newWorkflowTitle(action);
+	if (action === 'create_contact') {
+		const email = promptValue('Email', '');
+		if (!email) return;
+		await runWorkflowAction({
+			...commsService.buildWorkflowActionRequest(action, null),
+			input: { title, email }
+		});
+		return;
+	}
+	if (action === 'create_event') {
+		const start = new Date(Date.now() + 60 * 60 * 1000);
+		const end = new Date(start.getTime() + 60 * 60 * 1000);
+		await runWorkflowAction({
+			...commsService.buildWorkflowActionRequest(action, null),
+			input: { title, starts_at: start.toISOString(), ends_at: end.toISOString() }
+		});
+		return;
+	}
+	await runWorkflowAction({
+		...commsService.buildWorkflowActionRequest(action, null),
+		input: { title, body: title }
+	});
+}
+
 function defaultComposeAccountId(fallbackAccountId = ''): string {
 	const selected = get(selectedMailAccountId);
 	if (selected) return selected;
@@ -442,6 +683,16 @@ function defaultComposeAccountId(fallbackAccountId = ''): string {
 
 function selectedMessageForCompose(): CommunicationMessageSummary | CommunicationMessageDetailItem | null {
 	return get(selectedCommunicationDetail)?.message ?? get(selectedCommunication);
+}
+
+function composeHasDraftContent(form: ComposeForm): boolean {
+	return Boolean(
+		form.to_text.trim() ||
+		form.cc_text.trim() ||
+		form.bcc_text.trim() ||
+		form.subject.trim() ||
+		form.body.trim()
+	);
 }
 
 async function loadInsightForDetail(detail: CommunicationMessageDetail | null): Promise<void> {
@@ -479,6 +730,30 @@ async function runSelectedMessageAction(
 	}
 }
 
+async function runSelectedLocalStateAction(
+	action: (messageId: string) => Promise<{ success: boolean; message: string }>
+): Promise<void> {
+	const messageId = selectedMessageId();
+	if (!messageId) return;
+	isMailActionRunning.set(true);
+	mailActionError.set('');
+	const result = await action(messageId);
+	isMailActionRunning.set(false);
+	if (!result.success) {
+		mailActionError.set(result.message);
+		return;
+	}
+	mailActionStatus.set(result.message);
+	await Promise.all([
+		loadCommunicationMessagesFiltered(get(mailStateFilter) || undefined),
+		loadMessageStateCounts(),
+		loadMailboxHealth(),
+		loadTopSenders(),
+		loadThreads(),
+		loadMailResources()
+	]);
+}
+
 async function runSelectedInsightAction(
 	action: (messageId: string) => Promise<{
 		success: boolean;
@@ -503,8 +778,55 @@ async function runSelectedInsightAction(
 	});
 }
 
+async function runWorkflowAction(request: ReturnType<typeof commsService.buildWorkflowActionRequest>): Promise<void> {
+	isMailActionRunning.set(true);
+	mailActionError.set('');
+	const result = await commsService.handleWorkflowActionRequest(request);
+	isMailActionRunning.set(false);
+	if (!result.success) {
+		mailActionError.set(result.message);
+		return;
+	}
+	mailActionStatus.set(result.message);
+	applyWorkflowActionResult(result.result);
+}
+
+function applyWorkflowActionResult(result: WorkflowActionResponse | null): void {
+	if (!result) return;
+	if (result.action === 'archive') {
+		const targetId = result.target.id;
+		if (!targetId) return;
+		communicationMessages.update((messages) => messages.filter((message) => message.message_id !== targetId));
+	}
+}
+
+function newWorkflowTitle(action: WorkflowActionKind): string {
+	switch (action) {
+		case 'create_note':
+			return 'New Note';
+		case 'create_task':
+			return 'New Task';
+		case 'create_document':
+			return 'New Document';
+		case 'create_contact':
+			return 'New Contact';
+		case 'create_event':
+			return 'New Event';
+		default:
+			return 'New';
+	}
+}
+
+function promptValue(label: string, fallback: string): string {
+	if (typeof window === 'undefined') return fallback;
+	return window.prompt(label, fallback)?.trim() ?? '';
+}
+
 export const communicationChannelIcon = commsService.communicationChannelIcon;
 export const communicationChannelLabel = commsService.communicationChannelLabel;
+export const conversationPreview = commsService.conversationPreview;
+export const messageContentHtml = commsService.renderMessageContent;
+export const messageContentText = commsService.messageContentText;
 export const senderLabel = commsService.senderLabel;
 export const senderEmail = commsService.senderEmail;
 export const messageTime = commsService.messageTime;

@@ -1,6 +1,7 @@
 import { derived, get, writable } from 'svelte/store';
 import {
 	FRONTEND_THEME_SETTING_KEY,
+	FRONTEND_UI_STATE_SETTING_KEY,
 	type ApplicationSetting,
 	type CalendarAccount,
 	type ProviderAccount
@@ -69,7 +70,8 @@ export const settingsByCategory = derived(applicationSettings, ($applicationSett
 		$applicationSettings.filter(
 			(setting) =>
 				setting.setting_key !== 'frontend.sidebar' &&
-				setting.setting_key !== FRONTEND_THEME_SETTING_KEY
+				setting.setting_key !== FRONTEND_THEME_SETTING_KEY &&
+				setting.setting_key !== FRONTEND_UI_STATE_SETTING_KEY
 		)
 	)
 );

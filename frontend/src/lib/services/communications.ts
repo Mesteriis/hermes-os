@@ -4,6 +4,12 @@ import {
 	fetchMailMessages,
 	fetchMessageStateCounts,
 	transitionMessageWorkflowState,
+	trashMessage,
+	restoreMessage,
+	fetchMailSyncStatus,
+	fetchMailSyncSettings,
+	updateMailSyncSettings,
+	runMailSyncNow,
 	fetchDrafts,
 	fetchMailboxHealth,
 	fetchTopSenders,
@@ -36,11 +42,18 @@ import {
 	fetchPersonas,
 	fetchRichTemplates,
 	fetchMailBlockers,
+	runWorkflowAction,
 	type CommunicationMessageSummary,
 	type CommunicationMessageDetail,
+	type CommunicationMessageSummaryV2,
 	type WorkflowState,
+	type LocalMessageState,
 	type WorkflowStateCountItem,
 	type EmailDraft,
+	type MailSyncSettings,
+	type MailSyncSettingsUpdate,
+	type MailSyncStatus,
+	type MailSyncRunResponse,
 	type MailboxHealth,
 	type SenderStats,
 	type EmailThread,
@@ -51,7 +64,10 @@ import {
 	type MailMessageInsight,
 	type MailResourceSnapshot,
 	type MailResourceSummary,
-	type MessageExportResponse
+	type MessageExportResponse,
+	type WorkflowActionKind,
+	type WorkflowActionRequest,
+	type WorkflowActionResponse
 } from '$lib/api';
 import { formatDateTime } from './formatting';
 
@@ -88,6 +104,8 @@ export type SendCapability = {
 
 type DraftCreator = typeof createDraft;
 
+export const COMMUNICATIONS_NAVIGATOR_LIMIT = 1000;
+
 export const emptyMailResourceSnapshot: MailResourceSnapshot = {
 	subscriptions: [],
 	duplicates: [],
@@ -110,7 +128,7 @@ export async function loadCommunications(
 	selectedIndex: number;
 }> {
 	try {
-		const response = await fetchCommunicationMessages(50);
+		const response = await fetchCommunicationMessages(COMMUNICATIONS_NAVIGATOR_LIMIT);
 		const messages = response.items;
 		let nextIndex = selectedConversationIndex;
 		if (nextIndex >= messages.length) {
@@ -140,7 +158,8 @@ export async function loadCommunicationMessagesFiltered(
 	filterState?: WorkflowState,
 	selectedConversationIndex?: number,
 	accountId?: string,
-	query?: string
+	query?: string,
+	localState: LocalMessageState = 'active'
 ): Promise<{
 	messages: CommunicationMessageSummary[];
 	detail: CommunicationMessageDetail | null;
@@ -154,7 +173,8 @@ export async function loadCommunicationMessagesFiltered(
 			filterState || undefined,
 			undefined,
 			query || undefined,
-			50
+			localState,
+			COMMUNICATIONS_NAVIGATOR_LIMIT
 		);
 		const messages = response.items as unknown as CommunicationMessageSummary[];
 		let nextIndex = selectedConversationIndex ?? 0;
@@ -181,12 +201,96 @@ export async function loadCommunicationMessagesFiltered(
 	}
 }
 
-export async function loadMessageStateCounts(accountId?: string): Promise<{ counts: WorkflowStateCountItem[]; error: string }> {
+export async function loadMessageStateCounts(
+	accountId?: string,
+	localState: LocalMessageState = 'active'
+): Promise<{ counts: WorkflowStateCountItem[]; error: string }> {
 	try {
-		const response = await fetchMessageStateCounts(accountId);
+		const response = await fetchMessageStateCounts(accountId, localState);
 		return { counts: response.counts ?? [], error: '' };
 	} catch {
 		return { counts: [], error: '' };
+	}
+}
+
+export async function loadMailSyncStatuses(): Promise<{ statuses: MailSyncStatus[]; error: string }> {
+	try {
+		const response = await fetchMailSyncStatus();
+		return { statuses: response.items ?? [], error: '' };
+	} catch (error) {
+		return {
+			statuses: [],
+			error: error instanceof Error ? error.message : 'Mail sync status failed'
+		};
+	}
+}
+
+export async function loadMailSyncSettings(
+	accountId: string
+): Promise<{ settings: MailSyncSettings | null; error: string }> {
+	if (!accountId.trim()) {
+		return { settings: null, error: '' };
+	}
+	try {
+		return { settings: await fetchMailSyncSettings(accountId), error: '' };
+	} catch (error) {
+		return {
+			settings: null,
+			error: error instanceof Error ? error.message : 'Mail sync settings failed'
+		};
+	}
+}
+
+export async function saveMailSyncSettings(
+	accountId: string,
+	settings: MailSyncSettingsUpdate
+): Promise<{ settings: MailSyncSettings | null; error: string }> {
+	try {
+		return { settings: await updateMailSyncSettings(accountId, settings), error: '' };
+	} catch (error) {
+		return {
+			settings: null,
+			error: error instanceof Error ? error.message : 'Mail sync settings update failed'
+		};
+	}
+}
+
+export async function triggerMailSyncNow(
+	accountIds: string[]
+): Promise<{ runs: MailSyncRunResponse[]; error: string }> {
+	const targets = accountIds.map((accountId) => accountId.trim()).filter(Boolean);
+	if (!targets.length) {
+		return { runs: [], error: '' };
+	}
+	const runs: MailSyncRunResponse[] = [];
+	try {
+		for (const accountId of targets) {
+			runs.push(await runMailSyncNow(accountId));
+		}
+		return { runs, error: '' };
+	} catch (error) {
+		return {
+			runs,
+			error: error instanceof Error ? error.message : 'Mail sync request failed'
+		};
+	}
+}
+
+export async function handleTrashMessage(messageId: string): Promise<{ success: boolean; message: string }> {
+	try {
+		await trashMessage(messageId);
+		return { success: true, message: 'Moved to Trash' };
+	} catch (error) {
+		return { success: false, message: error instanceof Error ? error.message : 'Move message to trash failed' };
+	}
+}
+
+export async function handleRestoreMessage(messageId: string): Promise<{ success: boolean; message: string }> {
+	try {
+		await restoreMessage(messageId);
+		return { success: true, message: 'Restored from Trash' };
+	} catch (error) {
+		return { success: false, message: error instanceof Error ? error.message : 'Restore message failed' };
 	}
 }
 
@@ -513,6 +617,21 @@ export async function handleTranslateMessage(messageId: string, targetLanguage =
 	}
 }
 
+export async function handleWorkflowActionRequest(
+	request: WorkflowActionRequest
+): Promise<{ success: boolean; message: string; result: WorkflowActionResponse | null }> {
+	try {
+		const result = await runWorkflowAction(request);
+		return { success: true, message: workflowActionStatusLabel(result), result };
+	} catch (error) {
+		return {
+			success: false,
+			message: error instanceof Error ? error.message : 'Workflow action failed',
+			result: null
+		};
+	}
+}
+
 export async function loadCommunicationDetail(
 	messageId: string
 ): Promise<{ detail: CommunicationMessageDetail | null; error: string }> {
@@ -632,6 +751,138 @@ export function filterMessagesForWorkbench(
 	});
 }
 
+type CommunicationListMessage = CommunicationMessageSummary | CommunicationMessageSummaryV2;
+
+export type RelatedCommunicationMessage = CommunicationListMessage & {
+	relation: 'same_contact' | 'same_conversation';
+};
+
+export function relatedMessagesForSelection(
+	messages: CommunicationListMessage[],
+	selected: CommunicationListMessage | null,
+	limit = 8
+): RelatedCommunicationMessage[] {
+	if (!selected) return [];
+	const selectedSender = senderEmail(selected.sender).toLowerCase();
+	const selectedConversationId = selected.conversation_id?.trim() ?? '';
+	return messages
+		.filter((message) => message.message_id !== selected.message_id)
+		.map((message) => {
+			const sameConversation =
+				selectedConversationId !== '' && message.conversation_id === selectedConversationId;
+			const sameContact = senderEmail(message.sender).toLowerCase() === selectedSender;
+			if (!sameConversation && !sameContact) return null;
+			return {
+				...message,
+				relation: sameConversation ? 'same_conversation' : 'same_contact'
+			} satisfies RelatedCommunicationMessage;
+		})
+		.filter((message): message is RelatedCommunicationMessage => message !== null)
+		.sort((a, b) => messageSortTimestamp(b) - messageSortTimestamp(a))
+		.slice(0, limit);
+}
+
+function messageSortTimestamp(message: CommunicationListMessage): number {
+	const value = message.occurred_at ?? message.projected_at;
+	const timestamp = Date.parse(value);
+	return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+export function conversationPreview(
+	message:
+		| CommunicationMessageSummary
+		| CommunicationMessageSummaryV2
+		| (CommunicationMessageSummary & { ai_summary?: string | null })
+): string {
+	const aiSummary = 'ai_summary' in message ? cleanPreviewText(message.ai_summary ?? '') : '';
+	if (aiSummary) return truncatePreview(aiSummary);
+
+	const bodyPreview = cleanPreviewText(message.body_text_preview);
+	if (bodyPreview) return truncatePreview(bodyPreview);
+
+	return truncatePreview(cleanPreviewText(message.subject) || message.subject.trim());
+}
+
+export function messageContentText(value: string): string {
+	return cleanPreviewText(value);
+}
+
+export type RenderedMessageContent = {
+	html: string;
+	mode: 'html' | 'text';
+};
+
+export type OriginalMailSrcdocOptions = {
+	messageId?: string | null;
+	apiBaseUrl?: string | null;
+};
+
+export function renderMessageContent(value: string): RenderedMessageContent {
+	const withoutHeaders = stripLeadingMimeHeaderBlock(value);
+	const decodedHtml = looksLikeEscapedHtml(withoutHeaders)
+		? decodeBasicEntities(withoutHeaders)
+		: withoutHeaders;
+
+	if (looksLikeHtml(decodedHtml)) {
+		return {
+			html: sanitizeEmailHtml(decodedHtml),
+			mode: 'html'
+		};
+	}
+
+	return {
+		html: renderPlainMessageText(withoutHeaders),
+		mode: 'text'
+	};
+}
+
+export function originalMailSrcdoc(
+	value: string,
+	options: OriginalMailSrcdocOptions = {}
+): string {
+	const html = rewriteRemoteMailImageSources(value.trim(), options);
+	if (!html) return '';
+	const base = '<base target="_blank">';
+	if (/<html[\s>]/i.test(html)) {
+		if (/<head[\s>]/i.test(html)) {
+			return html.replace(/<head(\s[^>]*)?>/i, (match) => `${match}${base}`);
+		}
+		return html.replace(/<html(\s[^>]*)?>/i, (match) => `${match}<head>${base}</head>`);
+	}
+	return `<!doctype html><html><head>${base}</head><body>${html}</body></html>`;
+}
+
+export function remoteMailImageProxyUrl(
+	messageId: string,
+	imageUrl: string,
+	apiBaseUrl: string
+): string {
+	const proxyUrl = new URL(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/remote-image`,
+		apiBaseUrl.replace(/\/+$/, '') + '/'
+	);
+	proxyUrl.searchParams.set('url', decodeBasicEntities(imageUrl.trim()));
+	return proxyUrl.toString();
+}
+
+export function buildWorkflowActionRequest(
+	action: WorkflowActionKind,
+	message: Pick<CommunicationMessageSummary, 'message_id' | 'subject'> | null,
+	commandId = workflowCommandId(action)
+): WorkflowActionRequest {
+	const request: WorkflowActionRequest = {
+		command_id: commandId,
+		action
+	};
+	if (message) {
+		request.source = { kind: 'communication_message', id: message.message_id };
+	}
+	if (['create_task', 'create_note', 'create_document', 'link_document', 'create_event'].includes(action)) {
+		request.input = { title: message?.subject?.trim() || 'Untitled' };
+	}
+	return request;
+}
+
 export function newComposeForm(accountId: string): ComposeFormModel {
 	return {
 		draft_id: `draft-${Date.now()}`,
@@ -678,6 +929,349 @@ export function buildForwardComposeForm(
 
 function subjectWithPrefix(subject: string, prefix: 'Re:' | 'Fwd:'): string {
 	return subject.toLowerCase().startsWith(prefix.toLowerCase()) ? subject : `${prefix} ${subject}`;
+}
+
+function workflowCommandId(action: WorkflowActionKind): string {
+	const entropy =
+		typeof crypto !== 'undefined' && 'randomUUID' in crypto
+			? crypto.randomUUID()
+			: `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+	return `mail-${action}-${entropy}`;
+}
+
+function workflowActionStatusLabel(result: WorkflowActionResponse): string {
+	switch (result.action) {
+		case 'create_task':
+			return 'Task created';
+		case 'create_note':
+			return 'Note created';
+		case 'create_document':
+		case 'link_document':
+			return 'Document linked';
+		case 'create_event':
+			return 'Event created';
+		case 'create_contact':
+			return 'Contact created';
+		case 'archive':
+			return 'Archived';
+		case 'reply':
+			return 'Reply opened';
+		default:
+			return 'Workflow action completed';
+	}
+}
+
+function rewriteRemoteMailImageSources(
+	html: string,
+	options: OriginalMailSrcdocOptions
+): string {
+	const messageId = options.messageId?.trim();
+	const apiBaseUrl = options.apiBaseUrl?.trim();
+	if (!messageId || !apiBaseUrl) return html;
+
+	return rewriteRemoteMailCssImageUrls(
+		html.replace(/<img\b[^>]*>/gi, (tag) =>
+			rewriteRemoteMailImageAttribute(tag, 'src', messageId, apiBaseUrl)
+		),
+		messageId,
+		apiBaseUrl
+	).replace(/<(?:table|td|th|div|body)\b[^>]*>/gi, (tag) =>
+		rewriteRemoteMailImageAttribute(tag, 'background', messageId, apiBaseUrl)
+	);
+}
+
+function rewriteRemoteMailImageAttribute(
+	tag: string,
+	attributeName: 'background' | 'src',
+	messageId: string,
+	apiBaseUrl: string
+): string {
+	const attributePattern = new RegExp(
+		`(\\s+${attributeName}\\s*=\\s*)(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>` + '`' + `]+))`,
+		'i'
+	);
+	return tag.replace(
+		attributePattern,
+		(match, prefix: string, doubleQuoted?: string, singleQuoted?: string, unquoted?: string) => {
+			const src = doubleQuoted ?? singleQuoted ?? unquoted ?? '';
+			if (!isRemoteMailImageSource(src)) return match;
+			const proxyUrl = remoteMailImageProxyUrl(messageId, src, apiBaseUrl);
+			if (doubleQuoted !== undefined) return `${prefix}"${escapeHtml(proxyUrl)}"`;
+			if (singleQuoted !== undefined) return `${prefix}'${escapeHtml(proxyUrl)}'`;
+			return `${prefix}${escapeHtml(proxyUrl)}`;
+		}
+	);
+}
+
+function rewriteRemoteMailCssImageUrls(
+	html: string,
+	messageId: string,
+	apiBaseUrl: string
+): string {
+	return html.replace(
+		/url\(\s*(?:"([^"]*)"|'([^']*)'|([^'")\s]+))\s*\)/gi,
+		(match, doubleQuoted?: string, singleQuoted?: string, unquoted?: string) => {
+			const src = doubleQuoted ?? singleQuoted ?? unquoted ?? '';
+			if (!isRemoteMailImageSource(src)) return match;
+			const proxyUrl = remoteMailImageProxyUrl(messageId, src, apiBaseUrl);
+			return `url('${escapeHtml(proxyUrl)}')`;
+		}
+	);
+}
+
+function isRemoteMailImageSource(value: string): boolean {
+	const decoded = decodeBasicEntities(value).trim();
+	return /^https?:\/\//i.test(decoded);
+}
+
+function cleanPreviewText(value: string): string {
+	const withoutBlocks = value
+		.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+		.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+		.replace(/<\/?(?:div|p|span|br|table|tbody|tr|td|th|html|body|head)[^>]*>/gi, ' ')
+		.replace(/<[^>]+>/g, ' ');
+	const cleanedLines = withoutBlocks
+		.split(/\r?\n/)
+		.map((line) => decodeBasicEntities(line).trim())
+		.filter((line) => line && !looksLikeMimeHeader(line) && !looksLikeCssDeclaration(line) && !looksLikeCssRule(line));
+	return cleanedLines.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+function renderPlainMessageText(value: string): string {
+	const cleaned = value
+		.split(/\r?\n/)
+		.filter((line) => !looksLikeMimeHeader(line) && !looksLikeCssDeclaration(line) && !looksLikeCssRule(line))
+		.join('\n')
+		.trim();
+	if (!cleaned) return '';
+	return cleaned
+		.split(/\n{2,}/)
+		.map((paragraph) => `<p>${escapeHtml(decodeBasicEntities(paragraph)).replace(/\n/g, '<br>')}</p>`)
+		.join('');
+}
+
+function sanitizeEmailHtml(value: string): string {
+	const withoutUnsafeBlocks = value
+		.replace(/<!doctype[^>]*>/gi, ' ')
+		.replace(/<!--[\s\S]*?-->/g, ' ')
+		.replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+		.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+		.replace(/<head\b[^>]*>[\s\S]*?<\/head>/gi, ' ')
+		.replace(/<title\b[^>]*>[\s\S]*?<\/title>/gi, ' ')
+		.replace(/<meta\b[^>]*>/gi, ' ')
+		.replace(/<link\b[^>]*>/gi, ' ')
+		.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi, ' ')
+		.replace(/<object\b[^>]*>[\s\S]*?<\/object>/gi, ' ')
+		.replace(/<embed\b[^>]*>/gi, ' ')
+		.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, ' ')
+		.replace(/<math\b[^>]*>[\s\S]*?<\/math>/gi, ' ')
+		.replace(/<form\b[^>]*>[\s\S]*?<\/form>/gi, ' ');
+	const output: string[] = [];
+	let lastIndex = 0;
+	const tagPattern = /<[^>]*>/g;
+	let match: RegExpExecArray | null;
+
+	while ((match = tagPattern.exec(withoutUnsafeBlocks)) !== null) {
+		output.push(escapeHtml(decodeBasicEntities(withoutUnsafeBlocks.slice(lastIndex, match.index))));
+		output.push(sanitizeEmailTag(match[0]));
+		lastIndex = match.index + match[0].length;
+	}
+	output.push(escapeHtml(decodeBasicEntities(withoutUnsafeBlocks.slice(lastIndex))));
+
+	const sanitized = cleanupSanitizedEmailHtml(output.join('').replace(/[ \t]{2,}/g, ' ').trim());
+	return sanitized || '<p></p>';
+}
+
+const allowedEmailTags = new Set([
+	'a',
+	'blockquote',
+	'br',
+	'code',
+	'div',
+	'em',
+	'h1',
+	'h2',
+	'h3',
+	'h4',
+	'h5',
+	'h6',
+	'hr',
+	'li',
+	'ol',
+	'p',
+	'pre',
+	'small',
+	'span',
+	'strong',
+	'table',
+	'tbody',
+	'td',
+	'th',
+	'thead',
+	'tr',
+	'u',
+	'ul'
+]);
+
+const voidEmailTags = new Set(['br', 'hr']);
+
+function sanitizeEmailTag(rawTag: string): string {
+	const parsed = rawTag.match(/^<\s*(\/)?\s*([a-zA-Z][a-zA-Z0-9:-]*)([\s\S]*?)(\/?)\s*>$/);
+	if (!parsed) return '';
+	const isClosing = Boolean(parsed[1]);
+	const originalTagName = parsed[2].toLowerCase();
+	const tagName = normalizedEmailTagName(originalTagName);
+	if (!allowedEmailTags.has(tagName)) {
+		if (originalTagName === 'img') {
+			const alt = readHtmlAttribute(rawTag, 'alt');
+			return alt ? `<span class="mail-image-placeholder">${escapeHtml(decodeBasicEntities(alt))}</span>` : '';
+		}
+		return '';
+	}
+	if (voidEmailTags.has(tagName)) {
+		return `<${tagName}>`;
+	}
+	if (isClosing) {
+		return `</${tagName}>`;
+	}
+	return `<${tagName}${sanitizeEmailAttributes(tagName, rawTag)}>`;
+}
+
+function normalizedEmailTagName(tagName: string): string {
+	if (tagName === 'b') return 'strong';
+	if (tagName === 'i') return 'em';
+	if (tagName === 'font') return 'span';
+	return tagName;
+}
+
+function sanitizeEmailAttributes(tagName: string, rawTag: string): string {
+	const attributes: string[] = [];
+	if (tagName === 'a') {
+		const href = readHtmlAttribute(rawTag, 'href');
+		if (href && isSafeEmailHref(href)) {
+			attributes.push(`href="${escapeHtml(decodeBasicEntities(href))}"`);
+			attributes.push('target="_blank"');
+			attributes.push('rel="noopener noreferrer"');
+		}
+	}
+	if (tagName === 'td' || tagName === 'th') {
+		for (const name of ['colspan', 'rowspan']) {
+			const value = readHtmlAttribute(rawTag, name);
+			if (value && /^\d{1,2}$/.test(value) && Number(value) > 0 && Number(value) <= 20) {
+				attributes.push(`${name}="${value}"`);
+			}
+		}
+	}
+	return attributes.length ? ` ${attributes.join(' ')}` : '';
+}
+
+function readHtmlAttribute(rawTag: string, name: string): string | null {
+	const pattern = new RegExp(`${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>` + '`' + `]+))`, 'i');
+	const match = rawTag.match(pattern);
+	return match?.[1] ?? match?.[2] ?? match?.[3] ?? null;
+}
+
+function isSafeEmailHref(value: string): boolean {
+	const decoded = decodeBasicEntities(value).trim();
+	return /^(https?:|mailto:|tel:)/i.test(decoded);
+}
+
+function cleanupSanitizedEmailHtml(value: string): string {
+	let previous = '';
+	let cleaned = value;
+	while (cleaned !== previous) {
+		previous = cleaned;
+		cleaned = cleaned
+			.replace(/<a\b[^>]*>\s*<\/a>/gi, '')
+			.replace(/<(span|strong|em|small)\b[^>]*>\s*<\/\1>/gi, '');
+	}
+	return cleaned.trim();
+}
+
+function looksLikeHtml(value: string): boolean {
+	return /<\/?(?:html|body|div|p|span|table|tr|td|th|br|strong|b|em|i|a|style|head)\b[\s\S]*?>/i.test(value);
+}
+
+function looksLikeEscapedHtml(value: string): boolean {
+	return /&lt;\/?(?:html|body|div|p|span|table|tr|td|th|br|strong|b|em|i|a|style|head)\b[\s\S]*?&gt;/i.test(value);
+}
+
+function stripLeadingMimeHeaderBlock(value: string): string {
+	const lines = value.split(/\r?\n/);
+	let sawHeader = false;
+	let index = 0;
+	while (index < lines.length) {
+		const line = lines[index].trim();
+		if (looksLikeMimeHeader(line)) {
+			sawHeader = true;
+			index += 1;
+			continue;
+		}
+		if (sawHeader && !line) {
+			index += 1;
+			break;
+		}
+		break;
+	}
+	return sawHeader ? lines.slice(index).join('\n') : value;
+}
+
+function escapeHtml(value: string): string {
+	return value
+		.replace(/&/g, '&amp;')
+		.replace(/</g, '&lt;')
+		.replace(/>/g, '&gt;')
+		.replace(/"/g, '&quot;')
+		.replace(/'/g, '&#39;');
+}
+
+function looksLikeMimeHeader(line: string): boolean {
+	return /^(content-type|mime-version|content-transfer-encoding|received|dkim-signature|message-id|from|to|subject|date)\s*:/i.test(line);
+}
+
+function looksLikeCssDeclaration(line: string): boolean {
+	const declarations = line.split(';').map((part) => part.trim()).filter(Boolean);
+	if (!declarations.length) return false;
+	const cssLike = declarations.filter((part) =>
+		/^(margin|padding|font|font-family|font-size|line-height|color|background|border|width|height|display|box-sizing|min-width|max-width|table-layout|border-collapse)\s*:/i.test(part)
+	);
+	return cssLike.length > 0 && cssLike.length === declarations.length;
+}
+
+function looksLikeCssRule(line: string): boolean {
+	return /\{[^}]*\b(margin|padding|font|font-family|font-size|line-height|color|background|border|width|height|display|box-sizing|min-width|max-width|table-layout|border-collapse)\s*:/i.test(line);
+}
+
+function decodeBasicEntities(value: string): string {
+	return value
+		.replace(/&zwnj;|&zwj;/gi, ' ')
+		.replace(/&shy;/gi, '')
+		.replace(/&nbsp;/g, ' ')
+		.replace(/&amp;/g, '&')
+		.replace(/&lt;/g, '<')
+		.replace(/&gt;/g, '>')
+		.replace(/&quot;/g, '"')
+		.replace(/&#39;/g, "'")
+		.replace(/&shy;/gi, '')
+		.replace(/&#x([0-9a-f]+);/gi, (_, code: string) => entityCodeToText(Number.parseInt(code, 16)))
+		.replace(/&#(\d+);/g, (_, code: string) => entityCodeToText(Number.parseInt(code, 10)));
+}
+
+function entityCodeToText(code: number): string {
+	if (!Number.isFinite(code)) return ' ';
+	if (code === 8204 || code === 8205 || code === 65279) return ' ';
+	if (code < 32 || code === 127) return ' ';
+	try {
+		const value = String.fromCodePoint(code);
+		return value.trim() ? value : ' ';
+	} catch {
+		return ' ';
+	}
+}
+
+function truncatePreview(value: string, limit = 140): string {
+	if (value.length <= limit) return value;
+	return `${value.slice(0, Math.max(0, limit - 3)).trimEnd()}...`;
 }
 
 export function messageTime(message: CommunicationMessageSummary | CommunicationMessageDetailItem) {

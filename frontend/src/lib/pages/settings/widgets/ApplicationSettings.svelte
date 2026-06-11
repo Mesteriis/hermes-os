@@ -113,9 +113,11 @@
 			<h2>Runtime Source</h2>
 			<div class="health-row"><span>Backend bind</span><strong>{settingValueTextFn('server.http_addr')}</strong></div>
 			<div class="health-row"><span>Frontend API</span><strong>{settingValueTextFn('frontend.api_base_url')}</strong></div>
-			<div class="health-row"><span>AI URL</span><strong>{settingValueTextFn('ai.ollama_base_url')}</strong></div>
-			<div class="health-row"><span>Chat</span><strong>{settingValueTextFn('ai.chat_model')}</strong></div>
-			<div class="health-row"><span>Embedding</span><strong>{settingValueTextFn('ai.embedding_model')}</strong></div>
+			<div class="health-row"><span>AI Provider</span><strong>{settingValueTextFn('ai.provider')}</strong></div>
+			<div class="health-row"><span>Ollama URL</span><strong>{settingValueTextFn('ai.ollama_base_url')}</strong></div>
+			<div class="health-row"><span>OmniRoute URL</span><strong>{settingValueTextFn('ai.omniroute_base_url')}</strong></div>
+			<div class="health-row"><span>Chat</span><strong>{settingValueTextFn('ai.chat_model')} / {settingValueTextFn('ai.omniroute_chat_model')}</strong></div>
+			<div class="health-row"><span>Embedding</span><strong>{settingValueTextFn('ai.embedding_model')} / {settingValueTextFn('ai.omniroute_embedding_model')}</strong></div>
 		</section>
 		<section class="panel info-card">
 			<h2>Boundaries</h2>

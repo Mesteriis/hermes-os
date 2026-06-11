@@ -64,6 +64,7 @@ export const FRONTEND_LAYOUT_SETTING_KEY = 'frontend.layout';
 export const FRONTEND_SIDEBAR_SETTING_KEY = 'frontend.sidebar';
 export const FRONTEND_LOCALE_SETTING_KEY = 'frontend.locale';
 export const FRONTEND_THEME_SETTING_KEY = 'frontend.theme';
+export const FRONTEND_UI_STATE_SETTING_KEY = 'frontend.ui_state';
 
 export type ProviderAccount = {
 	account_id: string;
@@ -103,6 +104,8 @@ export type CommunicationMessageSummary = {
 	delivery_state: string;
 	message_metadata: Record<string, unknown>;
 	attachment_count: number;
+	local_state: LocalMessageState;
+	local_state_changed_at: string | null;
 };
 
 export type CommunicationMessageDetailItem = {
@@ -114,6 +117,7 @@ export type CommunicationMessageDetailItem = {
 	sender: string;
 	recipients: string[];
 	body_text: string;
+	body_html: string | null;
 	occurred_at: string | null;
 	projected_at: string;
 	channel_kind: string;
@@ -121,6 +125,9 @@ export type CommunicationMessageDetailItem = {
 	sender_display_name: string | null;
 	delivery_state: string;
 	message_metadata: Record<string, unknown>;
+	local_state: LocalMessageState;
+	local_state_changed_at: string | null;
+	local_state_reason: string | null;
 };
 
 export type CommunicationAttachment = {
@@ -150,6 +157,7 @@ export type CommunicationMessagesResponse = {
 };
 
 export type WorkflowState = 'new' | 'reviewed' | 'needs_action' | 'waiting' | 'done' | 'archived' | 'muted' | 'spam';
+export type LocalMessageState = 'active' | 'trash' | 'all';
 
 export type CommunicationMessageSummaryV2 = {
 	message_id: string;
@@ -173,6 +181,8 @@ export type CommunicationMessageSummaryV2 = {
 	ai_summary_generated_at: string | null;
 	message_metadata: Record<string, unknown>;
 	attachment_count: number;
+	local_state: LocalMessageState;
+	local_state_changed_at: string | null;
 };
 
 export type MailMessagesResponse = {
@@ -188,6 +198,7 @@ export type MailMessageDetailItemV2 = {
 	sender: string;
 	recipients: string[];
 	body_text: string;
+	body_html: string | null;
 	occurred_at: string | null;
 	projected_at: string;
 	channel_kind: string;
@@ -200,6 +211,9 @@ export type MailMessageDetailItemV2 = {
 	ai_summary: string | null;
 	ai_summary_generated_at: string | null;
 	message_metadata: Record<string, unknown>;
+	local_state: LocalMessageState;
+	local_state_changed_at: string | null;
+	local_state_reason: string | null;
 };
 
 export type MailMessageDetailResponse = {
@@ -218,6 +232,79 @@ export type WorkflowStateCountsResponse = {
 
 export type WorkflowStateTransitionRequest = {
 	workflow_state: WorkflowState;
+};
+
+export type LocalMessageStateResponse = {
+	message_id: string;
+	local_state: LocalMessageState;
+	provider_deleted?: boolean;
+};
+
+export type MailSyncSettings = {
+	account_id: string;
+	sync_enabled: boolean;
+	batch_size: number;
+	poll_interval_seconds: number;
+	updated_at: string;
+};
+
+export type MailSyncSettingsUpdate = {
+	sync_enabled: boolean;
+	batch_size: number;
+	poll_interval_seconds: number;
+};
+
+export type MailSyncStatus = {
+	account_id: string;
+	status: string;
+	phase: string;
+	progress_mode: 'none' | 'determinate' | 'indeterminate' | string;
+	progress_percent: number | null;
+	processed_messages: number;
+	estimated_total_messages: number | null;
+	current_batch_size: number;
+	last_started_at: string | null;
+	last_completed_at: string | null;
+	next_run_at: string | null;
+	last_error_code: string | null;
+	last_error_message: string | null;
+	last_fetched_messages: number;
+	last_projected_messages: number;
+	last_upserted_persons: number;
+	last_upserted_organizations: number;
+};
+
+export type MailSyncStatusListResponse = {
+	items: MailSyncStatus[];
+};
+
+export type MailSyncFailureReason = {
+	code: string;
+	message: string;
+};
+
+export type MailSyncRunResponse = {
+	run_id: string;
+	account_id: string;
+	trigger: string;
+	status: string;
+	phase: string;
+	progress_mode: 'none' | 'determinate' | 'indeterminate' | string;
+	progress_percent: number | null;
+	processed_messages: number;
+	estimated_total_messages: number | null;
+	current_batch_size: number;
+	fetched_messages: number;
+	projected_messages: number;
+	upserted_persons: number;
+	upserted_organizations: number;
+	checkpoint_before_present: boolean;
+	checkpoint_after_present: boolean;
+	checkpoint_saved: boolean;
+	failure_reason: MailSyncFailureReason | null;
+	started_at: string;
+	completed_at: string | null;
+	next_run_at: string | null;
 };
 
 
@@ -300,6 +387,57 @@ export type MessageAnalyzeResponse = {
 	summary: string | null;
 	importance_score: number | null;
 	workflow_state: string;
+	source: string;
+	confidence: number | null;
+	evidence: string[];
+};
+
+export type WorkflowActionKind =
+	| 'reply'
+	| 'create_task'
+	| 'create_note'
+	| 'create_document'
+	| 'create_event'
+	| 'link_document'
+	| 'create_contact'
+	| 'archive';
+
+export type WorkflowActionSource = {
+	kind: 'communication_message';
+	id: string;
+};
+
+export type WorkflowActionRequest = {
+	command_id: string;
+	action: WorkflowActionKind;
+	source?: WorkflowActionSource;
+	input?: {
+		title?: string;
+		body?: string;
+		email?: string;
+		display_name?: string;
+		starts_at?: string;
+		ends_at?: string;
+		due_at?: string;
+		document_id?: string;
+	};
+};
+
+export type WorkflowActionResponse = {
+	command_id: string;
+	event_id: string;
+	action: WorkflowActionKind;
+	status: 'created' | 'updated' | 'linked' | 'opened' | 'archived' | 'noop';
+	target: {
+		kind: 'compose' | 'message' | 'task' | 'document' | 'calendar_event' | 'person';
+		id: string | null;
+	};
+	provenance: {
+		source_kind?: string;
+		source_id?: string;
+		confidence: number | null;
+		evidence: string[];
+	};
 };
 
 

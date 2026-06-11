@@ -51,6 +51,11 @@
 		selectedSettingsSection,
 		settingsActionMessage
 	} from '$lib/stores/settings';
+	import {
+		initializeUiStatePersistence,
+		restoreComposeFromPersistedUiState,
+		restoreUiStateFromBackendSettings
+	} from '$lib/stores/uiState';
 	import { apiBaseUrl } from '$lib/config';
 	import {
 		isGmailOAuthConnectedSearch,
@@ -85,8 +90,13 @@
 	});
 
 	onMount(() => {
-		void loadCommunicationsWorkspace();
-		void loadSettingsWorkspace();
+		initializeUiStatePersistence();
+		void (async () => {
+			await loadSettingsWorkspace();
+			restoreUiStateFromBackendSettings();
+			await loadCommunicationsWorkspace();
+			await restoreComposeFromPersistedUiState();
+		})();
 
 		function showConnectedAccounts() {
 			navigateTo('settings');

@@ -5,6 +5,13 @@ import {
 	buildForwardComposeForm,
 	buildMailAccountOptions,
 	buildReplyComposeForm,
+	buildWorkflowActionRequest,
+	conversationPreview,
+	messageContentText,
+	originalMailSrcdoc,
+	relatedMessagesForSelection,
+	remoteMailImageProxyUrl,
+	renderMessageContent,
 	summarizeMailResourceSnapshot,
 	filterMessagesForWorkbench,
 	handleSaveDraft,
@@ -28,7 +35,9 @@ function providerAccount(overrides: Partial<ProviderAccount>): ProviderAccount {
 	};
 }
 
-function message(overrides: Partial<CommunicationMessageSummary>): CommunicationMessageSummary {
+function message(
+	overrides: Partial<CommunicationMessageSummary> & Record<string, unknown>
+): CommunicationMessageSummary & Record<string, unknown> {
 	return {
 		message_id: 'message-primary',
 		raw_record_id: 'raw-primary',
@@ -46,6 +55,8 @@ function message(overrides: Partial<CommunicationMessageSummary>): Communication
 		delivery_state: 'delivered',
 		message_metadata: {},
 		attachment_count: 0,
+		local_state: 'active',
+		local_state_changed_at: null,
 		...overrides
 	};
 }
@@ -115,6 +126,215 @@ describe('mail workbench helpers', () => {
 		expect(buildForwardComposeForm(selected, 'imap-primary').body).toContain(
 			'The alpha renewal needs legal review.'
 		);
+	});
+
+	it('builds intelligent previews without HTML, CSS, or raw header noise', () => {
+		const openStyle = '<' + 'style>';
+		const closeStyle = '</' + 'style>';
+		const noisyPreview = [
+			openStyle,
+			'body { margin: 0; font-family: Arial; }',
+			closeStyle,
+			'Content-Type: text/html',
+			'<div>Technical assignment and access keys</div>'
+		].join('\n');
+
+		expect(conversationPreview(message({ body_text_preview: noisyPreview }))).toBe(
+			'Technical assignment and access keys'
+		);
+		expect(
+			conversationPreview(
+				message({
+					ai_summary: 'Спортмастер прислал техническое задание и ключи доступа.',
+					body_text_preview: noisyPreview
+				})
+			)
+		).toBe('Спортмастер прислал техническое задание и ключи доступа.');
+		expect(
+			conversationPreview(
+				message({
+					subject: 'Security alert',
+					body_text_preview: 'margin:0; padding:0; font-family:Arial;'
+				})
+			)
+		).toBe('Security alert');
+		expect(
+			conversationPreview(
+				message({
+					subject: 'CSS newsletter',
+					body_text_preview:
+						'* { margin: 0; padding: 0; font-family: Verdana; } body { width: 100%; }\nUseful newsletter text'
+				})
+			)
+		).toBe('Useful newsletter text');
+		expect(messageContentText('Hello &zwnj; &#8199;world')).toBe('Hello world');
+	});
+
+	it('finds related messages by confirmed contact or conversation identity', () => {
+		const selected = message({
+			message_id: 'message-selected',
+			sender: 'Marta <marta@example.com>',
+			conversation_id: 'thread-1'
+		});
+		const sameContact = message({
+			message_id: 'message-same-contact',
+			sender: 'Marta <marta@example.com>',
+			conversation_id: 'thread-2',
+			occurred_at: '2026-06-10T11:00:00Z'
+		});
+		const sameConversation = message({
+			message_id: 'message-same-thread',
+			sender: 'Other <other@example.com>',
+			conversation_id: 'thread-1',
+			occurred_at: '2026-06-10T12:00:00Z'
+		});
+		const unrelated = message({
+			message_id: 'message-unrelated',
+			sender: 'Other <other@example.com>',
+			conversation_id: 'thread-3'
+		});
+
+		expect(relatedMessagesForSelection([selected, sameContact, sameConversation, unrelated], selected)).toEqual([
+			expect.objectContaining({ message_id: 'message-same-thread', relation: 'same_conversation' }),
+			expect.objectContaining({ message_id: 'message-same-contact', relation: 'same_contact' })
+		]);
+	});
+
+	it('renders message content as sanitized email HTML instead of raw tags', () => {
+		const openStyle = '<' + 'style>';
+		const closeStyle = '</' + 'style>';
+		const openScript = '<' + 'script>';
+		const closeScript = '</' + 'script>';
+		const html = [
+			'Content-Type: text/html',
+			'',
+			`<html><head>${openStyle}body { margin: 0; color: red; }${closeStyle}</head>`,
+			'<body>',
+			'<div onclick="alert(1)">Добрый день!</div>',
+			'<p>Техническое <strong>задание</strong> и <a href="https://example.com/doc">документ</a></p>',
+			'<a href="javascript:alert(1)">bad link</a>',
+			`${openScript}alert(1)${closeScript}`,
+			'</body></html>'
+		].join('\n');
+
+		const rendered = renderMessageContent(html);
+
+		expect(rendered.mode).toBe('html');
+		expect(rendered.html).toContain('<div>Добрый день!</div>');
+		expect(rendered.html).toContain('<strong>задание</strong>');
+		expect(rendered.html).toContain('href="https://example.com/doc"');
+		expect(rendered.html).toContain('bad link</a>');
+		expect(rendered.html).not.toContain('<style');
+		expect(rendered.html).not.toContain('margin: 0');
+		expect(rendered.html).not.toContain('<script');
+		expect(rendered.html).not.toContain('onclick');
+		expect(rendered.html).not.toContain('javascript:');
+	});
+
+	it('renders plain message content as escaped paragraphs', () => {
+		const rendered = renderMessageContent('Hello <script>alert(1)</script>\n\nSecond line &amp; details');
+
+		expect(rendered.mode).toBe('text');
+		expect(rendered.html).toBe(
+			'<p>Hello &lt;script&gt;alert(1)&lt;/script&gt;</p><p>Second line &amp; details</p>'
+		);
+	});
+
+	it('renders escaped html message bodies after decoding entities', () => {
+		const rendered = renderMessageContent('&lt;p&gt;Hello&nbsp;&lt;b&gt;world&lt;/b&gt;&lt;/p&gt;');
+
+		expect(rendered.mode).toBe('html');
+		expect(rendered.html).toBe('<p>Hello <strong>world</strong></p>');
+	});
+
+	it('keeps rich mail link labels instead of visible tracking urls', () => {
+		const rendered = renderMessageContent(
+			'<p>Footer</p><a href="https://click.email.feverup.com/?qs=tracking-token">Privacy policy</a>' +
+				'<a href="https://click.email.feverup.com/unsub_center.aspx?qs=tracking-token">Unsubscribe</a>'
+		);
+
+		expect(rendered.mode).toBe('html');
+		expect(rendered.html).toContain('href="https://click.email.feverup.com/?qs=tracking-token"');
+		expect(rendered.html).toContain('>Privacy policy</a>');
+		expect(rendered.html).toContain('>Unsubscribe</a>');
+		expect(rendered.html).not.toContain('>https://click.email.feverup.com');
+	});
+
+	it('rewrites original remote mail images through the scoped image proxy', () => {
+		const styleAttr = 'st' + 'yle';
+		const html = [
+			'<html><head></head><body>',
+			`<table ${styleAttr}="background-image: url('https://image.email.feverup.com/bg.png')">`,
+			'<td background="https://image.email.feverup.com/bg-attr.png"></td>',
+			'</table>',
+			'<img src="https://image.email.feverup.com/lib/a.png?x=1&amp;y=2" alt="Hero">',
+			'<img src="cid:part-1" alt="Inline">',
+			'<img src="data:image/png;base64,abc" alt="Data">',
+			'</body></html>'
+		].join('');
+
+		const srcdoc = originalMailSrcdoc(html, {
+			messageId: 'message 1',
+			apiBaseUrl: 'http://127.0.0.1:8080'
+		});
+
+		expect(srcdoc).toContain('<base target="_blank">');
+		expect(srcdoc).toContain(
+			'http://127.0.0.1:8080/api/v1/communications/messages/message%201/remote-image?url=https%3A%2F%2Fimage.email.feverup.com%2Flib%2Fa.png%3Fx%3D1%26y%3D2'
+		);
+		expect(srcdoc).toContain(
+			"url('http://127.0.0.1:8080/api/v1/communications/messages/message%201/remote-image?url=https%3A%2F%2Fimage.email.feverup.com%2Fbg.png')"
+		);
+		expect(srcdoc).toContain(
+			'background="http://127.0.0.1:8080/api/v1/communications/messages/message%201/remote-image?url=https%3A%2F%2Fimage.email.feverup.com%2Fbg-attr.png"'
+		);
+		expect(srcdoc).toContain('src="cid:part-1"');
+		expect(srcdoc).toContain('src="data:image/png;base64,abc"');
+	});
+
+	it('builds stable remote mail image proxy URLs', () => {
+		expect(
+			remoteMailImageProxyUrl(
+				'message/1',
+				'https://image.email.feverup.com/lib/a.png?x=1&amp;y=2',
+				'http://127.0.0.1:8080/'
+			)
+		).toBe(
+			'http://127.0.0.1:8080/api/v1/communications/messages/message%2F1/remote-image?url=https%3A%2F%2Fimage.email.feverup.com%2Flib%2Fa.png%3Fx%3D1%26y%3D2'
+		);
+	});
+
+	it('removes invisible email spacer entities and empty image links', () => {
+		const rendered = renderMessageContent(
+			'<p>Let music lead the nights! &shy; &shy; &amp;shy;</p><a href="https://click.example.invalid/spacer"><img src="https://img.example.invalid/spacer.gif"></a>'
+		);
+
+		expect(rendered.mode).toBe('html');
+		expect(rendered.html).toContain('Let music lead the nights!');
+		expect(rendered.html).not.toContain('&shy;');
+		expect(rendered.html).not.toContain('spacer.gif');
+		expect(rendered.html).not.toContain('https://click.example.invalid/spacer');
+	});
+
+	it('builds workflow action payloads with source provenance and stable command ids', () => {
+		const selected = message({
+			message_id: 'message-workflow',
+			subject: 'ТЗ и ключи доступа'
+		});
+
+		expect(buildWorkflowActionRequest('create_task', selected, 'cmd-1')).toEqual({
+			command_id: 'cmd-1',
+			action: 'create_task',
+			source: { kind: 'communication_message', id: 'message-workflow' },
+			input: {
+				title: 'ТЗ и ключи доступа'
+			}
+		});
+		expect(buildWorkflowActionRequest('archive', selected, 'cmd-2')).toMatchObject({
+			command_id: 'cmd-2',
+			action: 'archive',
+			source: { kind: 'communication_message', id: 'message-workflow' }
+		});
 	});
 
 	it('builds draft payload without a hardcoded account fallback', () => {
