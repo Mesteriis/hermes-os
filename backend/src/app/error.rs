@@ -13,6 +13,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 use url::form_urlencoded;
 
+use crate::ai::control_center::AiControlCenterError;
 use crate::ai::core::{
     AI_EMBEDDING_DIMENSION, AiAgentListResponse, AiAgentRun, AiAnswerRequest, AiError,
     AiMeetingPrepRequest, AiService, AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
@@ -168,6 +169,7 @@ pub enum ApiError {
     TaskCandidate(TaskCandidateError),
     AiRunNotFound,
     Ai(AiError),
+    AiControlCenter(AiControlCenterError),
     Telegram(TelegramError),
     WhatsappWeb(WhatsappWebError),
     Automation(AutomationError),
@@ -462,6 +464,64 @@ impl axum::response::IntoResponse for ApiError {
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "ai_runtime_error",
                         "AI runtime operation failed".to_owned(),
+                        false,
+                    )
+                }
+            },
+            Self::AiControlCenter(error) => match error {
+                AiControlCenterError::ProviderNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "ai_provider_not_found",
+                    "AI provider was not found".to_owned(),
+                    false,
+                ),
+                AiControlCenterError::ModelNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "ai_model_not_found",
+                    "AI model was not found".to_owned(),
+                    false,
+                ),
+                AiControlCenterError::PromptNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "ai_prompt_not_found",
+                    "AI prompt was not found".to_owned(),
+                    false,
+                ),
+                AiControlCenterError::PromptVersionNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "ai_prompt_version_not_found",
+                    "AI prompt version was not found".to_owned(),
+                    false,
+                ),
+                AiControlCenterError::InvalidRequest(_)
+                | AiControlCenterError::EmptyField { .. }
+                | AiControlCenterError::SecretLikePayload => (
+                    StatusCode::BAD_REQUEST,
+                    "invalid_ai_control_center_request",
+                    error.to_string(),
+                    false,
+                ),
+                AiControlCenterError::HostVault(error) => (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "host_vault_error",
+                    error.to_string(),
+                    false,
+                ),
+                AiControlCenterError::SecretReference(error) => {
+                    tracing::error!(error = %error, "AI control center secret reference operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ai_secret_reference_error",
+                        "AI provider secret reference operation failed".to_owned(),
+                        false,
+                    )
+                }
+                AiControlCenterError::Sqlx(error) => {
+                    tracing::error!(error = %error, "AI control center store operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ai_control_center_error",
+                        "AI control center operation failed".to_owned(),
                         false,
                     )
                 }
@@ -852,6 +912,12 @@ impl From<AiError> for ApiError {
             AiError::RunNotFound => Self::AiRunNotFound,
             _ => Self::Ai(error),
         }
+    }
+}
+
+impl From<AiControlCenterError> for ApiError {
+    fn from(error: AiControlCenterError) -> Self {
+        Self::AiControlCenter(error)
     }
 }
 

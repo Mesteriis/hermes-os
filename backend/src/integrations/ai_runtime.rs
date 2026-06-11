@@ -53,9 +53,17 @@ impl AiRuntimeClient {
     }
 
     pub async fn chat(&self, prompt: &str) -> Result<AiChatResult, AiRuntimeError> {
+        self.chat_with_model(prompt, self.chat_model()).await
+    }
+
+    pub async fn chat_with_model(
+        &self,
+        prompt: &str,
+        model: &str,
+    ) -> Result<AiChatResult, AiRuntimeError> {
         match self {
             Self::Ollama(client) => {
-                let result = client.chat(prompt).await?;
+                let result = client.chat_with_model(prompt, model).await?;
                 Ok(AiChatResult {
                     model: result.model,
                     content: result.content,
@@ -63,7 +71,7 @@ impl AiRuntimeClient {
                 })
             }
             Self::OmniRoute(client) => {
-                let result = client.chat(prompt).await?;
+                let result = client.chat_with_model(prompt, model).await?;
                 Ok(AiChatResult {
                     model: result.model,
                     content: result.content,
@@ -74,9 +82,17 @@ impl AiRuntimeClient {
     }
 
     pub async fn embed(&self, input: &str) -> Result<AiEmbedResult, AiRuntimeError> {
+        self.embed_with_model(input, self.embedding_model()).await
+    }
+
+    pub async fn embed_with_model(
+        &self,
+        input: &str,
+        model: &str,
+    ) -> Result<AiEmbedResult, AiRuntimeError> {
         match self {
             Self::Ollama(client) => {
-                let result = client.embed(input).await?;
+                let result = client.embed_with_model(input, model).await?;
                 Ok(AiEmbedResult {
                     model: result.model,
                     embedding: result.embedding,
@@ -84,7 +100,7 @@ impl AiRuntimeClient {
                 })
             }
             Self::OmniRoute(client) => {
-                let result = client.embed(input).await?;
+                let result = client.embed_with_model(input, model).await?;
                 Ok(AiEmbedResult {
                     model: result.model,
                     embedding: result.embedding,

@@ -6,7 +6,7 @@ use std::time::Duration;
 use axum::extract::{Path, Query, RawQuery, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::Html;
-use axum::routing::{delete, get, post, put};
+use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -835,6 +835,48 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             put(put_application_setting),
         )
         .route("/api/v1/ai/status", get(get_ai_status))
+        .route(
+            "/api/v1/ai/settings/overview",
+            get(get_ai_settings_overview),
+        )
+        .route(
+            "/api/v1/ai/providers",
+            get(get_ai_providers).post(post_ai_provider),
+        )
+        .route(
+            "/api/v1/ai/providers/{provider_id}",
+            patch(patch_ai_provider),
+        )
+        .route(
+            "/api/v1/ai/providers/{provider_id}/test",
+            post(post_ai_provider_test),
+        )
+        .route(
+            "/api/v1/ai/providers/{provider_id}/sync-models",
+            post(post_ai_provider_sync_models),
+        )
+        .route(
+            "/api/v1/ai/providers/{provider_id}/consent",
+            post(post_ai_provider_consent),
+        )
+        .route("/api/v1/ai/models", get(get_ai_models))
+        .route("/api/v1/ai/model-routes/{slot}", put(put_ai_model_route))
+        .route(
+            "/api/v1/ai/prompts",
+            get(get_ai_prompts).post(post_ai_prompt),
+        )
+        .route(
+            "/api/v1/ai/prompts/{prompt_id}/versions",
+            post(post_ai_prompt_version),
+        )
+        .route(
+            "/api/v1/ai/prompts/{prompt_id}/activate",
+            post(post_ai_prompt_activate),
+        )
+        .route(
+            "/api/v1/ai/prompts/{prompt_id}/test",
+            post(post_ai_prompt_test),
+        )
         .route("/api/v1/ai/agents", get(get_ai_agents))
         .route("/api/v1/ai/runs", get(get_ai_runs))
         .route("/api/v1/ai/runs/{run_id}", get(get_ai_run))

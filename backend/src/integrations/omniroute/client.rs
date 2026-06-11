@@ -118,8 +118,21 @@ impl OmniRouteClient {
     }
 
     pub async fn chat(&self, prompt: &str) -> Result<OmniRouteChatResult, OmniRouteError> {
+        self.chat_with_model(prompt, &self.chat_model).await
+    }
+
+    pub async fn chat_with_model(
+        &self,
+        prompt: &str,
+        model: &str,
+    ) -> Result<OmniRouteChatResult, OmniRouteError> {
+        if model.trim().is_empty() {
+            return Err(OmniRouteError::InvalidConfig(
+                "chat model is empty".to_owned(),
+            ));
+        }
         let body = json!({
-            "model": self.chat_model,
+            "model": model,
             "stream": false,
             "messages": [
                 {
@@ -147,14 +160,27 @@ impl OmniRouteClient {
         }
 
         Ok(OmniRouteChatResult {
-            model: response.model.unwrap_or_else(|| self.chat_model.clone()),
+            model: response.model.unwrap_or_else(|| model.to_owned()),
             content,
         })
     }
 
     pub async fn embed(&self, input: &str) -> Result<OmniRouteEmbedResult, OmniRouteError> {
+        self.embed_with_model(input, &self.embed_model).await
+    }
+
+    pub async fn embed_with_model(
+        &self,
+        input: &str,
+        model: &str,
+    ) -> Result<OmniRouteEmbedResult, OmniRouteError> {
+        if model.trim().is_empty() {
+            return Err(OmniRouteError::InvalidConfig(
+                "embedding model is empty".to_owned(),
+            ));
+        }
         let body = json!({
-            "model": self.embed_model,
+            "model": model,
             "input": input,
         });
         let response: EmbeddingsResponse = self.post_json("embeddings", &body).await?;
@@ -173,7 +199,7 @@ impl OmniRouteClient {
         }
 
         Ok(OmniRouteEmbedResult {
-            model: response.model.unwrap_or_else(|| self.embed_model.clone()),
+            model: response.model.unwrap_or_else(|| model.to_owned()),
             embedding,
         })
     }
