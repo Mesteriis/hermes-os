@@ -110,13 +110,12 @@ Negative:
 
 - Existing meeting outcomes and review decision tables remain compatibility or
   source surfaces until adapters are added.
-- Public routes and desktop UI are still follow-up work.
+- Desktop UI and candidate-to-Decision review flow are still follow-up work.
 - Decision extraction from Communications, Documents and Meetings is outside
   the first persistence slice.
 
 ## Non-Goals
 
-- Public `/decisions` API routes.
 - Desktop review UI.
 - Automatic decision extraction.
 - Automatic project status changes.
@@ -125,9 +124,19 @@ Negative:
 
 ## Required Follow-Up
 
-- Add review API and desktop review UI.
+- Add desktop review UI.
 - Connect meeting, communication and document extraction to Decision
   candidates.
 - Add adapters from meeting outcomes and project review decisions.
 - Project accepted Decisions into graph, timeline and dossier views.
 - Feed conflicting Decisions into the Consistency / Contradiction Engine.
+
+## Implementation Status
+
+The backend now has guarded accepted-Decision list/review routes:
+
+- `GET /api/v1/decisions?entity_kind=&entity_id=&limit=`;
+- `PUT /api/v1/decisions/{decision_id}/review`.
+
+These routes update accepted Decision review state only. They do not create
+Tasks, Projects, Obligations, accepted Decisions from candidates, or desktop UI.

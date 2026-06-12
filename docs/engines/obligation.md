@@ -55,18 +55,26 @@ Current backend state:
 - the Obligations domain has a persistence baseline in
   `backend/migrations/0063_create_obligations.sql` and
   `backend/src/domains/obligations/mod.rs`;
+- `backend/src/domains/obligations/api.rs` exposes guarded backend routes for
+  listing entity-scoped Obligations and changing accepted Obligation review
+  state;
+- message task candidate refresh in
+  `backend/src/domains/tasks/candidates.rs` uses the engine for explicit
+  commitment/request language that the legacy task scanner does not match;
 - related candidate behavior still appears in task candidate, task rule and
   task intelligence modules.
 
-The engine baseline is pure candidate generation. It does not write accepted
-Obligations, create Tasks, run provider ingestion or provide review UI/API.
+The engine baseline remains candidate-first. The message task candidate wiring
+creates reviewable task candidates only. It does not write accepted
+Obligations, create Tasks, run full provider ingestion or provide review
+UI or candidate-to-Obligation review routing.
 
 ## Migration Plan
 
 1. Keep extracted obligations as candidates until reviewed.
 2. Feed reviewed candidates into the ADR-0088 Obligations domain model.
-3. Connect Communication, meeting and document ingestion to
-   `backend/src/engines/obligation.rs`.
+3. Extend the current message task candidate wiring to full Communication,
+   meeting and document ingestion.
 4. Link accepted obligations to tasks, events and communications.
 5. Use Risk Engine for overdue or blocked obligations.
 6. Use Consistency / Contradiction Engine when evidence conflicts with

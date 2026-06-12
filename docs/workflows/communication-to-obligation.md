@@ -51,9 +51,15 @@ source communication
 
 Current related implementation exists through task candidates, task rules, task
 intelligence and communication workflow state. The accepted Obligation
-persistence baseline exists in `backend/src/domains/obligations/mod.rs`, but
-communication-to-obligation extraction and review routing are not implemented
-yet.
+persistence baseline exists in `backend/src/domains/obligations/mod.rs`.
+Message task candidate refresh now uses `backend/src/engines/obligation.rs`
+for explicit commitment/request language when the legacy task scanner does not
+match.
+
+This is still not the full communication-to-obligation workflow. Accepted
+Obligation backend list/review routes exist, but candidate-to-Obligation
+creation, provider-wide extraction, meeting/document adapters and desktop
+review UI routing remain incomplete.
 
 ## Migration Plan
 

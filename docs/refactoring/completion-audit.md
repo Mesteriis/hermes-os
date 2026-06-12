@@ -78,9 +78,13 @@ These are known product/implementation gaps, not hidden documentation failures:
 - Obligations and Decisions now have source-backed persistence baselines in
   migrations `0063` and `0064`, plus `backend/src/domains/obligations/` and
   `backend/src/domains/decisions/`. Obligation candidate detection has a first
-  engine baseline in `backend/src/engines/obligation.rs`. Ingestion wiring,
-  review routes, desktop UI and adapters from person promises, meeting outcomes
-  and project review decisions remain incomplete.
+  engine baseline in `backend/src/engines/obligation.rs`, and message task
+  candidate refresh uses that engine for explicit commitments/requests. Guarded
+  backend routes can list accepted Obligations/Decisions and update accepted
+  review state without creating Tasks, Projects or Obligations. Provider-wide
+  ingestion, candidate-to-Obligation/Decision review, desktop UI and adapters
+  from person promises, meeting outcomes and project review decisions remain
+  incomplete.
 - Consistency / Contradiction Engine now has a structured-claim detection and
   `ContradictionObservation` persistence baseline in migration `0062` and
   `backend/src/engines/consistency.rs`. Polygraph review UI, public routes and

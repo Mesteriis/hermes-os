@@ -47,8 +47,12 @@ event evidence
 ## Current Implementation Evidence
 
 Calendar, calls, documents and communications exist. The accepted Decision
-persistence baseline exists in `backend/src/domains/decisions/mod.rs`, but
-meeting-to-decision extraction, review routing and adapters from
+persistence baseline exists in `backend/src/domains/decisions/mod.rs`, and
+guarded backend routes can list accepted Decisions and update accepted Decision
+review state.
+
+This is still not the full meeting-to-decision workflow. Meeting-to-decision
+extraction, candidate-to-Decision review, desktop UI and adapters from
 `meeting_outcomes` are not implemented yet.
 
 ## Migration Plan

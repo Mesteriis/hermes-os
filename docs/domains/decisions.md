@@ -62,12 +62,24 @@ Current backend baseline:
 
 - `backend/migrations/0064_create_decisions.sql`;
 - `backend/src/domains/decisions/mod.rs`;
+- `backend/src/domains/decisions/api.rs`;
 - `backend/tests/decisions.rs`;
+- `backend/tests/decisions_api.rs`;
 - ADR-0089.
 
 This baseline provides source-backed Decision persistence with evidence,
 rationale, alternatives, review state, confidence and impacted entities. It
 explicitly does not auto-create Tasks, Projects or Obligations.
+
+Backend routes currently expose:
+
+- `GET /api/v1/decisions?entity_kind=&entity_id=&limit=`;
+- `PUT /api/v1/decisions/{decision_id}/review`.
+
+These routes are guarded by the local API secret and support accepted Decision
+review state changes. They do not create Tasks, Projects or Obligations and do
+not convert meeting outcomes or project review decisions into accepted
+Decisions.
 
 Decisions still also appear indirectly through graph links, project context,
 documents, communications and meeting outcomes. Those are source or

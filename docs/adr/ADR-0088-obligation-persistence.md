@@ -109,7 +109,7 @@ Negative:
 
 - Existing person promises, meeting outcomes and task candidates remain
   compatibility or source surfaces until adapters are added.
-- Public routes and desktop UI are still follow-up work.
+- Desktop UI and candidate-to-Obligation review flow are still follow-up work.
 - Obligation extraction from Communications and Documents is not part of the
   first persistence slice.
 
@@ -123,9 +123,19 @@ Negative:
 
 ## Required Follow-Up
 
-- Add review API and desktop review UI.
+- Add desktop review UI.
 - Connect Communication, meeting and document extraction to obligation
   candidates.
 - Add adapters from person promises and meeting outcomes.
 - Link accepted obligations to tasks and events when reviewed.
 - Feed obligation conflicts into the Consistency / Contradiction Engine.
+
+## Implementation Status
+
+The backend now has guarded accepted-Obligation list/review routes:
+
+- `GET /api/v1/obligations?entity_kind=&entity_id=&limit=`;
+- `PUT /api/v1/obligations/{obligation_id}/review`.
+
+These routes update accepted Obligation review state only. They do not create
+Tasks, create accepted Obligations from candidates, or provide desktop UI.

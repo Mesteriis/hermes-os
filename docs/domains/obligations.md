@@ -66,12 +66,23 @@ Current backend baseline:
 
 - `backend/migrations/0063_create_obligations.sql`;
 - `backend/src/domains/obligations/mod.rs`;
+- `backend/src/domains/obligations/api.rs`;
 - `backend/tests/obligations.rs`;
+- `backend/tests/obligations_api.rs`;
 - ADR-0088.
 
 This baseline provides source-backed Obligation persistence with evidence,
 status, review state, risk state, confidence, due date or condition and optional
 Task links. It explicitly does not auto-create Tasks.
+
+Backend routes currently expose:
+
+- `GET /api/v1/obligations?entity_kind=&entity_id=&limit=`;
+- `PUT /api/v1/obligations/{obligation_id}/review`.
+
+These routes are guarded by the local API secret and support accepted
+Obligation review state changes. They do not create Tasks or convert task
+candidates into accepted Obligations.
 
 Related behavior still exists through:
 
@@ -85,7 +96,7 @@ Related behavior still exists through:
 
 1. Keep Obligations distinct from Tasks in all documentation.
 2. Keep the ADR-0088 persistence boundary intact.
-3. Add Obligation Engine extraction and candidate review.
+3. Add full Obligation Engine extraction and candidate-to-Obligation review.
 4. Link accepted obligations to tasks rather than converting every obligation
    into a task.
 5. Use the Consistency / Contradiction Engine when new evidence conflicts with
