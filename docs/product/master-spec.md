@@ -239,6 +239,7 @@ Current migrations include storage for:
 - mail blob and attachment metadata;
 - documents and document processing jobs;
 - graph nodes, edges and evidence;
+- first-class relationships and relationship evidence;
 - projects and project link reviews;
 - task candidates and tasks;
 - persons compatibility tables and person memory tables;
@@ -307,9 +308,9 @@ target product model.
 | Gap | Current evidence | Direction |
 |---|---|---|
 | Persona-native model incomplete | `persons`, `person_id`, `person_roles`, `person_personas`, `person_promises` and `/api/v1/persons/*` still exist. | Keep compatibility short-term. Plan Persona-native schema/API and UI naming under a dedicated migration plan. |
-| Owner Persona missing as enforced concept | Docs define one `is_self = true` Persona, but current migrations do not enforce it as the target root. | Add Owner Persona semantics in a future implementation plan. |
-| First-class Relationships incomplete | Graph edges and relationship events exist, but target Relationship records are not fully separated from roles, fields and timeline events. | Introduce first-class Relationship model with provenance, confidence, trust and validity. |
-| Polygraph engine not implemented | No dedicated Consistency / Contradiction Engine module or schema exists. | Add engine spec first, then implement contradiction observations and review workflow. |
+| Owner Persona partially implemented | Migration `0059` adds `is_self` uniqueness and `person_type` constraints on the compatibility `persons` table. Agents and UI still need to consistently route owner-scoped context through that Owner Persona. | Wire agent attribution and context assembly to the Owner Persona before expanding autonomous actions. |
+| First-class Relationships partially implemented | Migrations `0060` and `0061` plus `backend/src/domains/relationships/` add first-class Relationship persistence with evidence, trust score, strength score, confidence, review state and active Persona-to-Persona graph projection. Review UI/API and compatibility adapters for roles/links remain incomplete. | Expand graph projection beyond active Persona relationships and migrate role/link/read-model semantics behind compatibility boundaries. |
+| Polygraph engine partially implemented | ADR-0087, migration `0062` and `backend/src/engines/consistency.rs` add structured direct-contradiction detection and reviewable `ContradictionObservation` persistence. Public API, desktop review UI and upstream Communication/Document claim extraction remain incomplete. | Connect extraction to structured claims, then add review routes/UI without automatic memory overwrite. |
 | Communications still mail-heavy | Many modules are email-specific under `domains/mail`. | Keep provider-specific modules but document Communications as the product domain and email as one channel. |
 | Engine boundaries are partial | Search and automation engines exist; Memory, Timeline, Trust, Risk, Enrichment and Obligation are partly embedded in domain modules. | Create engine specs and extract/rename implementation only under dedicated plans. |
 | Knowledge model incomplete | Knowledge graph exists, but Knowledge as reviewed understanding is not fully documented or implemented as a lifecycle. | Define Knowledge domain spec and review states before implementation work. |

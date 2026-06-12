@@ -17,6 +17,9 @@ Canonical references:
 - [Workflow Catalog](../workflows/README.md)
 - [ADR-0084 Persona Intelligence System](../adr/ADR-0084-persona-intelligence-system.md)
 - [ADR-0085 Communication Spine and Consistency / Contradiction Engine](../adr/ADR-0085-communication-spine-and-contradiction-engine.md)
+- [ADR-0086 First-Class Relationship Persistence](../adr/ADR-0086-first-class-relationship-persistence.md)
+- [ADR-0087 Contradiction Observation Persistence](../adr/ADR-0087-contradiction-observation-persistence.md)
+- [ADR-0088 Obligation Persistence](../adr/ADR-0088-obligation-persistence.md)
 
 Hermes is a local-first Personal Memory System. Communications are the primary
 ingestion spine. Domains own source-of-truth entities. Engines produce derived
@@ -31,7 +34,7 @@ The current backend has these relevant surfaces:
 - search and automation modules under `backend/src/engines/`;
 - workflow modules under `backend/src/workflows/`;
 - provider integrations under `backend/src/integrations/`;
-- migrations `0001` through `0058`;
+- migrations `0001` through `0062`;
 - frontend pages under `frontend/src/lib/pages/`.
 
 ## Documentation Drift Corrected
@@ -66,6 +69,21 @@ implementation evidence:
   from legacy database-vault compatibility, describe email networking under
   ADR-0055 read/write capability boundaries, and use Persona-compatible identity
   wording instead of target-level Contact terminology.
+- `backend/migrations/0059_persona_owner_type_constraints.sql` and
+  `backend/src/domains/persons/api.rs` now provide the first compatibility-layer
+  implementation of `PersonaType` and single Owner Persona semantics on the
+  existing `persons` table.
+- `backend/migrations/0060_create_relationships.sql` and
+  `backend/src/domains/relationships/mod.rs` now provide the first durable
+  Relationship persistence baseline with evidence, trust score, strength score,
+  confidence and review state.
+- `backend/migrations/0061_relationship_graph_projection.sql` now connects
+  active Persona-to-Persona Relationship records to graph traversal through
+  generic `entity_relationship` graph edges.
+- `backend/migrations/0062_create_contradiction_observations.sql` and
+  `backend/src/engines/consistency.rs` now provide the first
+  Consistency / Contradiction Engine baseline: structured direct-contradiction
+  detection and reviewable `ContradictionObservation` persistence.
 
 ## Alignment Matrix
 
@@ -73,15 +91,15 @@ implementation evidence:
 |---|---|---|---|
 | Communications domain | `/api/v1/communications/*`, `backend/src/domains/mail/*`, Gmail/Telegram/WhatsApp integrations, communication migrations | Public API is communication-shaped, implementation module is still email/mail-shaped. | Communications migration plan before any module rename. |
 | Email channel | `docs/mail/*`, email account routes, mail blob migrations | Email is a channel but still has broad module ownership. | Keep channel docs; do not promote Mail to product domain. |
-| Persona Intelligence | `backend/src/domains/persons/*`, `/api/v1/persons/*`, ADR-0084, person/contact migrations | Target entity is Persona, current compatibility name is Person/Person ID. | Schema/API naming migration ADR before code rename. |
-| Relationships | graph core, person roles, organization contacts, task relations, project link reviews | Relationship semantics are fragmented across domains. | Shared Relationship model plan with provenance and confidence. |
+| Persona Intelligence | `backend/src/domains/persons/*`, `/api/v1/persons/*`, ADR-0084, person/contact migrations, migration `0059` for `is_self` and `person_type` constraints | Target entity is Persona, current compatibility name is Person/Person ID. Owner Persona and PersonaType have a compatibility-layer baseline, but route/schema naming and Dossier/Relationship semantics remain incomplete. | Schema/API naming migration ADR before code rename. |
+| Relationships | `backend/src/domains/relationships/mod.rs`, migrations `0060` and `0061`, graph core, person roles, organization contacts, task relations, project link reviews | First-class Relationship persistence and active Persona-to-Persona graph projection have a baseline, but review routes/UI and compatibility adapters are incomplete. | Expand Relationship graph projection beyond active Persona records, then migrate roles/links/read models behind compatibility boundaries. |
 | Memory Engine | persons memory, organization memory, project memory docs | Memory behavior is domain-local. | Shared Memory Engine implementation plan after domain source boundaries are stable. |
 | Timeline Engine | calendar events, person timeline, organization timeline, project timelines, frontend timeline page | Timeline views exist in multiple places. | Timeline Engine extraction plan; Calendar remains scheduled event domain. |
 | Trust Engine | `persons/trust.rs`, risk/health modules, relationship scores in docs | Trust is partly Persona-local and partly risk/health language. | Normalize trust as source/relationship signal, not generic entity field. |
 | Risk Engine | `health.rs`, `watchtower`, risks routes in persons/orgs/calendar/tasks | Health/watchtower naming hides shared Risk Engine semantics. | Risk terminology migration plan for docs/UI/API compatibility. |
 | Enrichment Engine | persons enrichment, organization enrichment | Enrichment exists per domain. | Shared engine semantics with domain-specific source policies. |
 | Obligation Engine | task candidates, task rules, communication extraction | Obligations are target domain but persistence is absent. | Obligation candidate and persistence ADR before implementation. |
-| Consistency / Contradiction Engine | target docs and ADR-0085 only | No backend module, schema, route or review UI exists. | Polygraph implementation plan: observations first, no automatic overwrite. |
+| Consistency / Contradiction Engine | `backend/src/engines/consistency.rs`, migration `0062`, ADR-0085, ADR-0087 | Structured direct-contradiction detection and observation persistence have a baseline, but public routes, desktop review UI and upstream Communication/Document claim extraction are incomplete. | Connect extraction to structured claims, then add review routes/UI without automatic overwrite. |
 | Decisions domain | target docs only; project/calendar/communication evidence can imply decisions | No dedicated backend module or persistence. | Decision candidate and persistence ADR before implementation. |
 | Agents domain | AI runtime/control center, Ollama/OmniRoute, frontend Agents page | Runtime exists; graph identity and Owner Persona attribution are incomplete. | Agent Persona and capability audit plan. |
 | Notes boundary | frontend Notes page, documents treat notes as artifacts | No backend Notes domain and no ADR promotes one. | Keep Notes as document-like artifacts until ADR changes boundary. |
@@ -121,8 +139,8 @@ Work items:
 - rename development compatibility targets such as `backend-contacts-smoke-dev`
   only after the command surface is reviewed;
 - separate compatibility names from product language in docs and UI labels;
-- design Owner Persona uniqueness;
-- design PersonaType validation;
+- keep the migration `0059` Owner Persona uniqueness and PersonaType validation
+  baseline intact;
 - design first-class Relationship storage before removing role/contact-shaped
   fields.
 
@@ -146,7 +164,9 @@ Work items:
 - require provenance, confidence, source evidence, validity period and review
   state;
 - map `trust_score` and `strength_score` to relationship semantics;
-- define compatibility adapters for existing tables.
+- keep the migration `0060` and `RelationshipStore` source-of-truth baseline
+  intact;
+- define graph projection and compatibility adapters for existing tables.
 
 Validation for future code work:
 

@@ -87,3 +87,6 @@ ADR status vocabulary:
 - [ADR-0083 Telegram Live User Client Runtime](ADR-0083-telegram-live-user-client-runtime.md)
 - [ADR-0084 Persona Intelligence System](ADR-0084-persona-intelligence-system.md)
 - [ADR-0085 Communication Spine and Consistency / Contradiction Engine](ADR-0085-communication-spine-and-contradiction-engine.md)
+- [ADR-0086 First-Class Relationship Persistence](ADR-0086-first-class-relationship-persistence.md)
+- [ADR-0087 Contradiction Observation Persistence](ADR-0087-contradiction-observation-persistence.md)
+- [ADR-0088 Obligation Persistence](ADR-0088-obligation-persistence.md)

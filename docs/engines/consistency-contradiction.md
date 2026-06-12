@@ -84,15 +84,22 @@ memory.
 
 ## Current Implementation Evidence
 
-There is no dedicated backend module, migration, table or review workflow for
-this engine in the current repository. It is a target architecture concept
-approved during product documentation refactoring.
+Current backend baseline:
+
+- `backend/migrations/0062_create_contradiction_observations.sql`;
+- `backend/src/engines/consistency.rs`;
+- `backend/tests/consistency_contradiction.rs`;
+- ADR-0087.
+
+This baseline provides structured direct-contradiction detection and
+reviewable `ContradictionObservation` persistence. It does not yet provide
+public routes, desktop review UI or upstream claim extraction from
+Communications and Documents.
 
 ## Migration Plan
 
 1. Keep this spec as the source for Polygraph terminology.
-2. Add an ADR before introducing persistence or public API behavior.
-3. Start with reviewable contradiction observations, not automatic memory
-   rewrites.
-4. Use communications and documents as the first evidence sources.
+2. Keep reviewable contradiction observations, not automatic memory rewrites.
+3. Connect Communication and Document extraction to structured claims.
+4. Add public routes and desktop review UI for owner review.
 5. Feed reviewed outcomes into Memory, Trust, Risk and Relationship semantics.

@@ -42,7 +42,7 @@ Current implementation was checked against:
 - `backend/src/app/router.rs`;
 - backend domain modules under `backend/src/domains/`;
 - backend engine/workflow/integration modules;
-- migrations `0001` through `0058`;
+- migrations `0001` through `0062`;
 - `Makefile` development targets;
 - frontend API and page surfaces under `frontend/src/lib/`;
 - active root, backend and frontend README files.
@@ -67,24 +67,27 @@ These are known product/implementation gaps, not hidden documentation failures:
 
 - Persona-native naming is not implemented end-to-end. Current code still uses
   `persons`, `person_id`, `person_*` tables and compatibility surfaces.
-- First-class Relationship storage is not implemented. Relationship semantics
-  remain spread across graph edges, roles, organization links and project/task
-  links.
+- First-class Relationship storage now has an initial implementation baseline in
+  migration `0060` and `backend/src/domains/relationships/`, plus active
+  Persona-to-Persona graph projection through migration `0061`. Relationship
+  semantics still need review routes/UI and compatibility adapters for roles,
+  organization links and project/task links.
 - Memory, Timeline, Trust, Risk and Enrichment behavior still appears in
   domain-local modules and routes such as `health`, `watchtower`,
   `intelligence` and `memory`.
 - Decisions and Obligations are documented as target domains, but dedicated
   persistence and review workflows still require implementation ADRs.
-- Consistency / Contradiction Engine and Polygraph review UI are documented but
-  not implemented.
+- Consistency / Contradiction Engine now has a structured-claim detection and
+  `ContradictionObservation` persistence baseline in migration `0062` and
+  `backend/src/engines/consistency.rs`. Polygraph review UI, public routes and
+  Communication/Document claim extraction remain incomplete.
 - Communication is product-facing, but much current implementation still lives
   under `backend/src/domains/mail/` as the email-channel implementation.
 - Notes remain document-like capture artifacts unless a future ADR promotes a
   first-class Notes domain.
-- `AGENTS.md` still contains older policy wording such as personal knowledge
-  system, `HERMES_LOCAL_API_TOKEN` and `X-Hermes-Actor-Id`. It is an agent
-  instruction file, so this pass records the drift instead of changing it
-  silently.
+- `AGENTS.md` has been aligned after this documentation audit to the Personal
+  Memory System model, ADR-0056 local API auth, ADR-0076 host vault and
+  ADR-0084/ADR-0085 Persona/Communication rules.
 
 ## Non-Goals Confirmed
 

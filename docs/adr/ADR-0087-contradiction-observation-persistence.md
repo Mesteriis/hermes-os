@@ -1,0 +1,127 @@
+# ADR-0087 Contradiction Observation Persistence
+
+Status: Proposed
+
+Clarifies:
+
+- ADR-0001 Event Sourcing as System Spine
+- ADR-0008 Knowledge Graph First
+- ADR-0023 Rebuildable Projections
+- ADR-0085 Communication Spine and Consistency / Contradiction Engine
+- ADR-0086 First-Class Relationship Persistence
+
+## Context
+
+Hermes is a Personal Memory System. New Communications, Documents, Events,
+Decisions and Obligations can contradict accepted Memory and Knowledge.
+
+ADR-0085 introduced the Consistency / Contradiction Engine, user-facing alias
+Polygraph. The repository currently has no durable backend representation for
+Polygraph observations. Without persistence, contradictions cannot be reviewed,
+linked to source evidence or fed into Memory, Trust, Risk and Relationship
+semantics.
+
+## Decision
+
+Introduce `ContradictionObservation` persistence as the first implementation
+slice of the Consistency / Contradiction Engine.
+
+The engine stores reviewable observations:
+
+```yaml
+ContradictionObservation:
+  observation_id:
+  old_source_kind:
+  old_source_id:
+  new_source_kind:
+  new_source_id:
+  affected_entities:
+  conflict_type:
+  old_claim:
+  new_claim:
+  confidence:
+  severity:
+  review_state:
+  metadata:
+```
+
+Initial review states are:
+
+```yaml
+ContradictionReviewState:
+  suggested
+  user_confirmed
+  user_rejected
+```
+
+Initial severities are:
+
+```yaml
+ContradictionSeverity:
+  low
+  medium
+  high
+  critical
+```
+
+The first detection path operates on structured claims produced by upstream
+extraction or deterministic tests:
+
+```yaml
+AcceptedClaim:
+  subject_id:
+  claim_type:
+  value:
+  source_kind:
+  source_id:
+
+NewEvidenceClaim:
+  subject_id:
+  claim_type:
+  value:
+  source_kind:
+  source_id:
+```
+
+When a new claim has the same subject and claim type but a different normalized
+value, the engine creates a `direct_contradiction` observation.
+
+The engine must not:
+
+- overwrite accepted Memory or Knowledge;
+- change source records;
+- mark a Persona as dishonest;
+- adjust Relationship trust automatically;
+- resolve the conflict without owner review or an explicit future policy.
+
+## Consequences
+
+Positive:
+
+- Polygraph becomes a concrete backend engine baseline.
+- Contradictions become source-backed and reviewable.
+- Memory and Knowledge remain protected from silent mutation.
+- Future Trust, Risk and Relationship engines can consume reviewed outcomes.
+
+Negative:
+
+- The first detector only handles structured direct contradictions.
+- Public routes and UI are still separate follow-up work.
+- Upstream claim extraction from Communications and Documents remains outside
+  this first slice.
+
+## Non-Goals
+
+- Natural-language contradiction detection.
+- Public API route groups.
+- Review UI.
+- Automatic memory update.
+- Automatic trust, risk or relationship score changes.
+- Punitive judgments about Personas.
+
+## Required Follow-Up
+
+- Add routes and desktop review UI for contradiction observations.
+- Connect Communication and Document extraction to structured claims.
+- Link reviewed outcomes to Memory, Trust, Risk and Relationship semantics.
+- Add event/audit records for review state changes.

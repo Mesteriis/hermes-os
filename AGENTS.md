@@ -69,6 +69,9 @@
 - `ADR-0077` - i18n with Russian and English interface via JSON dictionaries and Svelte stores; English strings serve as translation keys, ru.json provides Russian translations.
 - `ADR-0084` - Persona Intelligence System; supersedes Contact/Person CRM framing.
 - `ADR-0085` - Communication spine and Consistency / Contradiction Engine.
+- `ADR-0086` - first-class Relationship persistence.
+- `ADR-0087` - contradiction observation persistence.
+- `ADR-0088` - obligation persistence.
 
 Superseded ADRs remain historical traceability records. Do not apply their
 obsolete token, actor, Contact or database-vault requirements as current rules
