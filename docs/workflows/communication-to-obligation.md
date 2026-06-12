@@ -43,19 +43,21 @@ source communication
 
 - Communications owns the source evidence.
 - Obligation Engine creates candidates.
-- Obligations domain owns accepted obligations when implemented.
+- Obligations domain owns accepted obligations.
 - Tasks domain owns task lifecycle.
 - Risk Engine detects overdue, blocked or high-impact obligations.
 
 ## Current Implementation Evidence
 
 Current related implementation exists through task candidates, task rules, task
-intelligence and communication workflow state. There is no dedicated
-Obligations persistence model yet.
+intelligence and communication workflow state. The accepted Obligation
+persistence baseline exists in `backend/src/domains/obligations/mod.rs`, but
+communication-to-obligation extraction and review routing are not implemented
+yet.
 
 ## Migration Plan
 
 1. Keep obligations distinct from tasks.
 2. Require review before converting candidates into accepted obligations.
 3. Link accepted obligations to tasks only when action is needed.
-4. Add ADR and implementation plan before introducing persistence changes.
+4. Add extraction and review workflow before automated capture.

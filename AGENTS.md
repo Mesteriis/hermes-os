@@ -72,6 +72,7 @@
 - `ADR-0086` - first-class Relationship persistence.
 - `ADR-0087` - contradiction observation persistence.
 - `ADR-0088` - obligation persistence.
+- `ADR-0089` - decision persistence.
 
 Superseded ADRs remain historical traceability records. Do not apply their
 obsolete token, actor, Contact or database-vault requirements as current rules

@@ -240,6 +240,8 @@ Current migrations include storage for:
 - documents and document processing jobs;
 - graph nodes, edges and evidence;
 - first-class relationships and relationship evidence;
+- first-class decisions, decision evidence and impacted entity links;
+- first-class obligations, obligation evidence and task links;
 - projects and project link reviews;
 - task candidates and tasks;
 - persons compatibility tables and person memory tables;
@@ -312,9 +314,9 @@ target product model.
 | First-class Relationships partially implemented | Migrations `0060` and `0061` plus `backend/src/domains/relationships/` add first-class Relationship persistence with evidence, trust score, strength score, confidence, review state and active Persona-to-Persona graph projection. Review UI/API and compatibility adapters for roles/links remain incomplete. | Expand graph projection beyond active Persona relationships and migrate role/link/read-model semantics behind compatibility boundaries. |
 | Polygraph engine partially implemented | ADR-0087, migration `0062` and `backend/src/engines/consistency.rs` add structured direct-contradiction detection and reviewable `ContradictionObservation` persistence. Public API, desktop review UI and upstream Communication/Document claim extraction remain incomplete. | Connect extraction to structured claims, then add review routes/UI without automatic memory overwrite. |
 | Communications still mail-heavy | Many modules are email-specific under `domains/mail`. | Keep provider-specific modules but document Communications as the product domain and email as one channel. |
-| Engine boundaries are partial | Search and automation engines exist; Memory, Timeline, Trust, Risk, Enrichment and Obligation are partly embedded in domain modules. | Create engine specs and extract/rename implementation only under dedicated plans. |
+| Engine boundaries are partial | Search, automation, Polygraph and Obligation have baseline engine modules. Memory, Timeline, Trust, Risk and Enrichment remain partly embedded in domain modules. | Continue extracting shared engine behavior only behind dedicated plans and review workflows. |
 | Knowledge model incomplete | Knowledge graph exists, but Knowledge as reviewed understanding is not fully documented or implemented as a lifecycle. | Define Knowledge domain spec and review states before implementation work. |
-| Decisions and Obligations incomplete | Tasks, meeting outcomes and promises exist, but Decisions and Obligations are not consistent top-level models yet. | Create domain specs and implementation plans for durable decisions and obligations. |
+| Decisions and Obligations partially implemented | ADR-0088/ADR-0089 plus migrations `0063` and `0064` add source-backed Obligation and Decision persistence with evidence, review state and links. `backend/src/engines/obligation.rs` adds a deterministic Obligation candidate baseline. Communication/meeting ingestion wiring, API/UI review and adapters from task candidates, promises and meeting outcomes remain incomplete. | Connect extraction/review workflows to the domain models without auto-creating Tasks, Projects or Obligations. |
 | Notes are ambiguous | Frontend has Notes page, while foundation says Notes are document-like artifacts unless a future ADR promotes them. | Treat Notes as document-like capture artifacts until a separate ADR changes scope. |
 
 ## Core Workflows

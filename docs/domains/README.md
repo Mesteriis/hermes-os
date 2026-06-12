@@ -30,8 +30,8 @@ needs a projection.
 | Documents | [Documents](documents.md) | implemented, needs clearer Knowledge boundary |
 | Tasks | [Tasks](tasks.md), [Tasks Folder](../tasks/README.md) | implemented, needs stronger Obligation boundary |
 | Calendar/Events | [Calendar And Events](calendar-events.md) | implemented under calendar/calls/meetings surfaces |
-| Decisions | [Decisions](decisions.md) | target domain, not yet a dedicated backend module |
-| Obligations | [Obligations](obligations.md) | target domain, partially represented through task candidates and rules |
+| Decisions | [Decisions](decisions.md) | partially implemented through first-class persistence; extraction/API/UI incomplete |
+| Obligations | [Obligations](obligations.md) | partially implemented through first-class persistence; extraction/API/UI incomplete |
 | Knowledge Graph | [Knowledge Graph](knowledge-graph.md) | implemented as graph domain/projection substrate |
 | Agents | [Agents](agents.md) | partially implemented through AI runtime/control surfaces |
 | Notes | [Notes](notes.md) | not a first-class domain; treated as document-like artifacts |
@@ -53,8 +53,9 @@ The repository still contains historical naming and compatibility boundaries:
   from contact records into Personas.
 - Notes have a frontend surface but no ADR that promotes them to a first-class
   domain.
-- Decisions and Obligations are canonical product domains, but implementation is
-  still incomplete.
+- Decisions and Obligations are canonical product domains. Both have initial
+  persistence baselines, while extraction, review UI/API and adapters remain
+  incomplete.
 
 These caveats are not new terminology. They are migration facts that must be
 resolved by implementation plans and ADRs before code-level renames or schema

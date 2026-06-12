@@ -42,7 +42,7 @@ Current implementation was checked against:
 - `backend/src/app/router.rs`;
 - backend domain modules under `backend/src/domains/`;
 - backend engine/workflow/integration modules;
-- migrations `0001` through `0062`;
+- migrations `0001` through `0064`;
 - `Makefile` development targets;
 - frontend API and page surfaces under `frontend/src/lib/`;
 - active root, backend and frontend README files.
@@ -75,8 +75,12 @@ These are known product/implementation gaps, not hidden documentation failures:
 - Memory, Timeline, Trust, Risk and Enrichment behavior still appears in
   domain-local modules and routes such as `health`, `watchtower`,
   `intelligence` and `memory`.
-- Decisions and Obligations are documented as target domains, but dedicated
-  persistence and review workflows still require implementation ADRs.
+- Obligations and Decisions now have source-backed persistence baselines in
+  migrations `0063` and `0064`, plus `backend/src/domains/obligations/` and
+  `backend/src/domains/decisions/`. Obligation candidate detection has a first
+  engine baseline in `backend/src/engines/obligation.rs`. Ingestion wiring,
+  review routes, desktop UI and adapters from person promises, meeting outcomes
+  and project review decisions remain incomplete.
 - Consistency / Contradiction Engine now has a structured-claim detection and
   `ContradictionObservation` persistence baseline in migration `0062` and
   `backend/src/engines/consistency.rs`. Polygraph review UI, public routes and

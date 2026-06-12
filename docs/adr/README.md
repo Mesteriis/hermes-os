@@ -90,3 +90,4 @@ ADR status vocabulary:
 - [ADR-0086 First-Class Relationship Persistence](ADR-0086-first-class-relationship-persistence.md)
 - [ADR-0087 Contradiction Observation Persistence](ADR-0087-contradiction-observation-persistence.md)
 - [ADR-0088 Obligation Persistence](ADR-0088-obligation-persistence.md)
+- [ADR-0089 Decision Persistence](ADR-0089-decision-persistence.md)

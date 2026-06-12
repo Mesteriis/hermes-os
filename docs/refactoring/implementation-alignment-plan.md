@@ -34,7 +34,7 @@ The current backend has these relevant surfaces:
 - search and automation modules under `backend/src/engines/`;
 - workflow modules under `backend/src/workflows/`;
 - provider integrations under `backend/src/integrations/`;
-- migrations `0001` through `0062`;
+- migrations `0001` through `0064`;
 - frontend pages under `frontend/src/lib/pages/`.
 
 ## Documentation Drift Corrected
@@ -84,6 +84,16 @@ implementation evidence:
   `backend/src/engines/consistency.rs` now provide the first
   Consistency / Contradiction Engine baseline: structured direct-contradiction
   detection and reviewable `ContradictionObservation` persistence.
+- `backend/migrations/0063_create_obligations.sql` and
+  `backend/src/domains/obligations/mod.rs` now provide the first source-backed
+  Obligation persistence baseline with evidence, status, review state, risk
+  state, confidence and task links.
+- `backend/migrations/0064_create_decisions.sql` and
+  `backend/src/domains/decisions/mod.rs` now provide the first source-backed
+  Decision persistence baseline with evidence, rationale, alternatives, review
+  state, confidence and impacted entity links.
+- `backend/src/engines/obligation.rs` now provides the first Obligation Engine
+  candidate detection baseline for explicit commitment and request language.
 
 ## Alignment Matrix
 
@@ -98,9 +108,9 @@ implementation evidence:
 | Trust Engine | `persons/trust.rs`, risk/health modules, relationship scores in docs | Trust is partly Persona-local and partly risk/health language. | Normalize trust as source/relationship signal, not generic entity field. |
 | Risk Engine | `health.rs`, `watchtower`, risks routes in persons/orgs/calendar/tasks | Health/watchtower naming hides shared Risk Engine semantics. | Risk terminology migration plan for docs/UI/API compatibility. |
 | Enrichment Engine | persons enrichment, organization enrichment | Enrichment exists per domain. | Shared engine semantics with domain-specific source policies. |
-| Obligation Engine | task candidates, task rules, communication extraction | Obligations are target domain but persistence is absent. | Obligation candidate and persistence ADR before implementation. |
+| Obligation Engine | `backend/src/engines/obligation.rs`, `backend/src/domains/obligations/mod.rs`, migration `0063`, task candidates, task rules, communication extraction | Candidate detection and accepted Obligation persistence have baselines, but ingestion is not wired to the engine and there is no review API or desktop UI. | Connect Communication/meeting/document ingestion to the engine and feed reviewed candidates to the Obligations domain without auto-creating Tasks. |
 | Consistency / Contradiction Engine | `backend/src/engines/consistency.rs`, migration `0062`, ADR-0085, ADR-0087 | Structured direct-contradiction detection and observation persistence have a baseline, but public routes, desktop review UI and upstream Communication/Document claim extraction are incomplete. | Connect extraction to structured claims, then add review routes/UI without automatic overwrite. |
-| Decisions domain | target docs only; project/calendar/communication evidence can imply decisions | No dedicated backend module or persistence. | Decision candidate and persistence ADR before implementation. |
+| Decisions domain | `backend/src/domains/decisions/mod.rs`, migration `0064`, meeting outcomes, project link review decisions, communication/document evidence | Accepted Decision persistence has a baseline, but candidate extraction, review API/UI and adapters from meeting outcomes/project reviews are incomplete. | Connect meeting/communication/document candidates to the Decisions domain without auto-changing Projects, Tasks or Obligations. |
 | Agents domain | AI runtime/control center, Ollama/OmniRoute, frontend Agents page | Runtime exists; graph identity and Owner Persona attribution are incomplete. | Agent Persona and capability audit plan. |
 | Notes boundary | frontend Notes page, documents treat notes as artifacts | No backend Notes domain and no ADR promotes one. | Keep Notes as document-like artifacts until ADR changes boundary. |
 

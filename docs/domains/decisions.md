@@ -58,15 +58,25 @@ Decision:
 
 ## Current Implementation Evidence
 
-There is no dedicated `backend/src/domains/decisions` module in the current
-repository. Decisions currently appear as product/foundation concepts and may be
-represented indirectly through graph links, project context, documents or
-communications.
+Current backend baseline:
+
+- `backend/migrations/0064_create_decisions.sql`;
+- `backend/src/domains/decisions/mod.rs`;
+- `backend/tests/decisions.rs`;
+- ADR-0089.
+
+This baseline provides source-backed Decision persistence with evidence,
+rationale, alternatives, review state, confidence and impacted entities. It
+explicitly does not auto-create Tasks, Projects or Obligations.
+
+Decisions still also appear indirectly through graph links, project context,
+documents, communications and meeting outcomes. Those are source or
+compatibility surfaces until adapters are added.
 
 ## Migration Plan
 
-1. Keep Decisions as a target domain in documentation.
-2. Add an ADR before introducing a dedicated persistence model or route group.
+1. Keep ADR-0089 as the persistence boundary.
+2. Keep decision capture candidate-first.
 3. Define decision candidates before automatic decision capture.
 4. Require evidence citations and review state.
 5. Link Decisions to Projects, Communications, Documents, Events, Personas,

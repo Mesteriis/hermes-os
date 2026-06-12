@@ -40,18 +40,20 @@ event evidence
 - Calendar/Events owns event records.
 - Communications owns message evidence.
 - Documents owns meeting notes or attachments.
-- Decisions owns accepted decision records when implemented.
+- Decisions owns accepted decision records.
 - Timeline Engine builds the chronological view.
 - Memory Engine assembles meeting memory.
 
 ## Current Implementation Evidence
 
-Calendar, calls, documents and communications exist. There is no dedicated
-Decisions backend module yet.
+Calendar, calls, documents and communications exist. The accepted Decision
+persistence baseline exists in `backend/src/domains/decisions/mod.rs`, but
+meeting-to-decision extraction, review routing and adapters from
+`meeting_outcomes` are not implemented yet.
 
 ## Migration Plan
 
 1. Keep decision capture as candidate-first.
 2. Require evidence citations for every accepted decision.
-3. Add ADR before introducing Decision persistence or routes.
+3. Feed reviewed candidates into the ADR-0089 Decisions domain model.
 4. Link decisions to Projects before deriving project state from them.

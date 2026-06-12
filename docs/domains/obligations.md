@@ -62,8 +62,18 @@ Obligation:
 
 ## Current Implementation Evidence
 
-There is no dedicated `backend/src/domains/obligations` module in the current
-repository. Related behavior appears through:
+Current backend baseline:
+
+- `backend/migrations/0063_create_obligations.sql`;
+- `backend/src/domains/obligations/mod.rs`;
+- `backend/tests/obligations.rs`;
+- ADR-0088.
+
+This baseline provides source-backed Obligation persistence with evidence,
+status, review state, risk state, confidence, due date or condition and optional
+Task links. It explicitly does not auto-create Tasks.
+
+Related behavior still exists through:
 
 - `backend/src/domains/tasks/candidates.rs`;
 - `backend/src/domains/tasks/rules.rs`;
@@ -74,8 +84,8 @@ repository. Related behavior appears through:
 ## Migration Plan
 
 1. Keep Obligations distinct from Tasks in all documentation.
-2. Add an engine spec for obligation extraction and candidate review.
-3. Add an ADR before introducing a dedicated Obligations persistence model.
+2. Keep the ADR-0088 persistence boundary intact.
+3. Add Obligation Engine extraction and candidate review.
 4. Link accepted obligations to tasks rather than converting every obligation
    into a task.
 5. Use the Consistency / Contradiction Engine when new evidence conflicts with

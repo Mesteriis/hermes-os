@@ -1,0 +1,133 @@
+# ADR-0089 Decision Persistence
+
+Status: Proposed
+
+Clarifies:
+
+- ADR-0001 Event Sourcing as System Spine
+- ADR-0008 Knowledge Graph First
+- ADR-0015 Command Query Separation
+- ADR-0085 Communication Spine and Consistency / Contradiction Engine
+- ADR-0087 Contradiction Observation Persistence
+- ADR-0088 Obligation Persistence
+
+## Context
+
+Hermes is a Personal Memory System. It must remember not only what happened,
+but why a direction was chosen.
+
+Current implementation has decision-shaped data in several places:
+
+- meeting outcomes with `outcome_type = 'decision'`;
+- project link review decisions;
+- capability policy decisions;
+- communication and document evidence that can imply decisions.
+
+These are useful source or workflow surfaces, but none is the durable Decisions
+domain described by the product model.
+
+## Decision
+
+Introduce first-class Decision persistence.
+
+The initial implementation creates durable, source-backed Decision records:
+
+```yaml
+Decision:
+  decision_id:
+  title:
+  status:
+  rationale:
+  alternatives:
+  decided_by_entity_kind:
+  decided_by_entity_id:
+  decided_at:
+  review_state:
+  confidence:
+  metadata:
+```
+
+Every durable Decision must have evidence:
+
+```yaml
+DecisionEvidence:
+  decision_id:
+  source_kind:
+  source_id:
+  quote:
+  confidence:
+  metadata:
+```
+
+Decisions also link to impacted entities:
+
+```yaml
+DecisionImpactedEntity:
+  decision_id:
+  entity_kind:
+  entity_id:
+  impact_type:
+  metadata:
+```
+
+Initial statuses:
+
+```yaml
+DecisionStatus:
+  active
+  superseded
+  reversed
+  deprecated
+```
+
+Initial review states:
+
+```yaml
+DecisionReviewState:
+  suggested
+  user_confirmed
+  user_rejected
+```
+
+A meeting outcome, project review or AI extraction may propose a Decision, but
+it is not the Decision source of truth until stored as a source-backed Decision
+record. Decision persistence does not automatically create Tasks, Projects or
+Obligations.
+
+## Consequences
+
+Positive:
+
+- Hermes can answer why a project, communication thread or workflow moved in a
+  particular direction.
+- Decisions become evidence-backed and reviewable instead of being hidden in
+  meeting text, task notes or project state.
+- Polygraph can point to conflicting decisions as reviewable contradictions.
+- Projects, Documents, Communications, Events, Personas, Organizations, Tasks
+  and Obligations can link to Decisions without owning decision truth.
+
+Negative:
+
+- Existing meeting outcomes and review decision tables remain compatibility or
+  source surfaces until adapters are added.
+- Public routes and desktop UI are still follow-up work.
+- Decision extraction from Communications, Documents and Meetings is outside
+  the first persistence slice.
+
+## Non-Goals
+
+- Public `/decisions` API routes.
+- Desktop review UI.
+- Automatic decision extraction.
+- Automatic project status changes.
+- Automatic task or obligation creation.
+- Removing meeting outcomes or project link review decisions.
+
+## Required Follow-Up
+
+- Add review API and desktop review UI.
+- Connect meeting, communication and document extraction to Decision
+  candidates.
+- Add adapters from meeting outcomes and project review decisions.
+- Project accepted Decisions into graph, timeline and dossier views.
+- Feed conflicting Decisions into the Consistency / Contradiction Engine.

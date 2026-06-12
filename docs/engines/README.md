@@ -37,8 +37,13 @@ An engine must not:
 
 ## Current Implementation Evidence
 
-The current repository contains a dedicated `backend/src/engines/search.rs`
-module, while many other engine-like behaviors are still domain-local:
+The current repository contains dedicated baseline modules for:
+
+- `backend/src/engines/search.rs`;
+- `backend/src/engines/consistency.rs`;
+- `backend/src/engines/obligation.rs`.
+
+Many other engine-like behaviors are still domain-local:
 
 - `backend/src/domains/persons/memory.rs`;
 - `backend/src/domains/persons/trust.rs`;

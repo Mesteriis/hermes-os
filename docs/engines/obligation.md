@@ -48,15 +48,26 @@ Every obligation candidate must include:
 
 ## Current Implementation Evidence
 
-Related behavior currently appears in task candidate, task rule and task
-intelligence modules. No dedicated Obligations domain or engine implementation
-exists yet.
+Current backend state:
+
+- `backend/src/engines/obligation.rs` provides a deterministic candidate
+  detection baseline for explicit commitment and request language;
+- the Obligations domain has a persistence baseline in
+  `backend/migrations/0063_create_obligations.sql` and
+  `backend/src/domains/obligations/mod.rs`;
+- related candidate behavior still appears in task candidate, task rule and
+  task intelligence modules.
+
+The engine baseline is pure candidate generation. It does not write accepted
+Obligations, create Tasks, run provider ingestion or provide review UI/API.
 
 ## Migration Plan
 
 1. Keep extracted obligations as candidates until reviewed.
-2. Add a dedicated implementation plan before persistence changes.
-3. Link accepted obligations to tasks, events and communications.
-4. Use Risk Engine for overdue or blocked obligations.
-5. Use Consistency / Contradiction Engine when evidence conflicts with
+2. Feed reviewed candidates into the ADR-0088 Obligations domain model.
+3. Connect Communication, meeting and document ingestion to
+   `backend/src/engines/obligation.rs`.
+4. Link accepted obligations to tasks, events and communications.
+5. Use Risk Engine for overdue or blocked obligations.
+6. Use Consistency / Contradiction Engine when evidence conflicts with
    fulfillment state.
