@@ -69,9 +69,11 @@ These are known product/implementation gaps, not hidden documentation failures:
   `persons`, `person_id`, `person_*` tables and compatibility surfaces.
 - First-class Relationship storage now has an initial implementation baseline in
   migration `0060` and `backend/src/domains/relationships/`, plus active
-  Persona-to-Persona graph projection through migration `0061`. Relationship
-  semantics still need review routes/UI and compatibility adapters for roles,
-  organization links and project/task links.
+  Persona-to-Persona graph projection through migration `0061`. Guarded backend
+  routes can list Relationships by entity and update review state while keeping
+  the graph projection aligned. Relationship semantics still need desktop
+  review UI and compatibility adapters for roles, organization links and
+  project/task links.
 - Memory, Timeline, Trust, Risk and Enrichment behavior still appears in
   domain-local modules and routes such as `health`, `watchtower`,
   `intelligence` and `memory`.
@@ -87,8 +89,10 @@ These are known product/implementation gaps, not hidden documentation failures:
   incomplete.
 - Consistency / Contradiction Engine now has a structured-claim detection and
   `ContradictionObservation` persistence baseline in migration `0062` and
-  `backend/src/engines/consistency.rs`. Polygraph review UI, public routes and
-  Communication/Document claim extraction remain incomplete.
+  `backend/src/engines/consistency.rs`. Guarded backend routes can list open
+  contradiction observations and update review state without overwriting
+  Memory. Polygraph review UI and Communication/Document claim extraction
+  remain incomplete.
 - Communication is product-facing, but much current implementation still lives
   under `backend/src/domains/mail/` as the email-channel implementation.
 - Notes remain document-like capture artifacts unless a future ADR promotes a

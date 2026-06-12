@@ -82,8 +82,7 @@ provenance; they are not silent truth.
 `graph_edges` remain a derived graph traversal surface. The first
 implementation slice projects active Persona-to-Persona Relationship records as
 generic `entity_relationship` graph edges, while preserving the Relationship
-record as source of truth. This ADR does not require immediate public API
-routes or UI.
+record as source of truth. This ADR does not require immediate desktop UI.
 
 ## Consequences
 
@@ -102,7 +101,7 @@ Negative:
   surfaces until migration plans retire them.
 - There is temporary duplication between `relationships`, graph edges and
   timeline events.
-- Public API and UI migration still need explicit follow-up work.
+- Desktop UI migration still needs explicit follow-up work.
 
 ## Non-Goals
 
@@ -110,13 +109,23 @@ Negative:
 - Removing `graph_edges`.
 - Removing `relationship_events`, `person_roles` or organization/project link
   tables.
-- Introducing public `/relationships` routes in the first persistence slice.
 - Automatically deriving trust from contradictions.
+
+## Implementation Status
+
+The backend now includes guarded routes for listing Relationship records by
+entity and changing review state:
+
+- `GET /api/v1/relationships`
+- `PUT /api/v1/relationships/{relationship_id}/review`
+
+Review updates re-project active Persona-to-Persona graph edges so the graph
+projection follows the Relationship source of truth.
 
 ## Required Follow-Up
 
 - Expand graph projection beyond active Persona-to-Persona relationships.
-- Add review APIs and UI for suggested relationships.
+- Add desktop review UI for suggested relationships.
 - Reclassify Persona roles and organization links into Relationship records.
 - Feed reviewed Relationship records into Trust, Risk, Timeline and Dossier
   projections.

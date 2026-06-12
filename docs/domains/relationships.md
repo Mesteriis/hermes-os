@@ -97,12 +97,16 @@ Current backend baseline:
 - `backend/migrations/0060_create_relationships.sql`;
 - `backend/migrations/0061_relationship_graph_projection.sql`;
 - `backend/src/domains/relationships/mod.rs`;
+- `backend/src/domains/relationships/api.rs`;
 - `backend/tests/relationships.rs`;
+- `backend/tests/relationships_api.rs`;
 - ADR-0086.
 
 This baseline provides first-class Relationship persistence, validation and
-active Persona-to-Persona graph projection. It does not yet provide public
-routes, UI, role adapters or timeline projection.
+active Persona-to-Persona graph projection. Guarded backend routes can list
+Relationships by entity and change review state while keeping the graph
+projection aligned. It does not yet provide desktop UI, role adapters or
+timeline projection.
 
 ## Migration Direction
 
@@ -113,5 +117,5 @@ routes, UI, role adapters or timeline projection.
    relations as compatibility or read-model surfaces.
 4. Feed Relationship records into Trust, Risk, Timeline, Memory and Dossier
    projections.
-5. Add review UI and APIs for suggested Relationships only after route and UX
-   boundaries are specified.
+5. Add desktop review UI for suggested Relationships after UX boundaries are
+   specified.

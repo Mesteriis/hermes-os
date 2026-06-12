@@ -106,22 +106,31 @@ Positive:
 Negative:
 
 - The first detector only handles structured direct contradictions.
-- Public routes and UI are still separate follow-up work.
+- Desktop review UI is still separate follow-up work.
 - Upstream claim extraction from Communications and Documents remains outside
   this first slice.
 
 ## Non-Goals
 
 - Natural-language contradiction detection.
-- Public API route groups.
 - Review UI.
 - Automatic memory update.
 - Automatic trust, risk or relationship score changes.
 - Punitive judgments about Personas.
 
+## Implementation Status
+
+The backend now includes guarded routes for listing open contradiction
+observations and changing review state:
+
+- `GET /api/v1/contradictions`
+- `PUT /api/v1/contradictions/{observation_id}/review`
+
+These routes record API audit events and do not automatically overwrite Memory,
+Trust, Risk or Relationship state.
+
 ## Required Follow-Up
 
-- Add routes and desktop review UI for contradiction observations.
+- Add desktop review UI for contradiction observations.
 - Connect Communication and Document extraction to structured claims.
 - Link reviewed outcomes to Memory, Trust, Risk and Relationship semantics.
-- Add event/audit records for review state changes.

@@ -88,18 +88,21 @@ Current backend baseline:
 
 - `backend/migrations/0062_create_contradiction_observations.sql`;
 - `backend/src/engines/consistency.rs`;
+- `backend/src/engines/consistency_api.rs`;
 - `backend/tests/consistency_contradiction.rs`;
+- `backend/tests/contradictions_api.rs`;
 - ADR-0087.
 
 This baseline provides structured direct-contradiction detection and
-reviewable `ContradictionObservation` persistence. It does not yet provide
-public routes, desktop review UI or upstream claim extraction from
-Communications and Documents.
+reviewable `ContradictionObservation` persistence. Guarded backend routes can
+list open contradiction observations and update review state without
+automatically overwriting Memory. It does not yet provide desktop review UI or
+upstream claim extraction from Communications and Documents.
 
 ## Migration Plan
 
 1. Keep this spec as the source for Polygraph terminology.
 2. Keep reviewable contradiction observations, not automatic memory rewrites.
 3. Connect Communication and Document extraction to structured claims.
-4. Add public routes and desktop review UI for owner review.
+4. Add desktop review UI for owner review.
 5. Feed reviewed outcomes into Memory, Trust, Risk and Relationship semantics.
