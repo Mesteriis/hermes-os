@@ -77,6 +77,10 @@ impl OllamaClient {
         &self.chat_model
     }
 
+    pub fn embedding_model(&self) -> &str {
+        &self.embed_model
+    }
+
     pub async fn version(&self) -> Result<String, OllamaError> {
         let response: VersionResponse = self.get_json("/api/version").await?;
         if response.version.trim().is_empty() {
@@ -110,8 +114,19 @@ impl OllamaClient {
     }
 
     pub async fn chat(&self, prompt: &str) -> Result<OllamaChatResult, OllamaError> {
+        self.chat_with_model(prompt, &self.chat_model).await
+    }
+
+    pub async fn chat_with_model(
+        &self,
+        prompt: &str,
+        model: &str,
+    ) -> Result<OllamaChatResult, OllamaError> {
+        if model.trim().is_empty() {
+            return Err(OllamaError::InvalidConfig("chat model is empty".to_owned()));
+        }
         let body = json!({
-            "model": self.chat_model,
+            "model": model,
             "stream": false,
             "think": false,
             "messages": [
@@ -136,15 +151,28 @@ impl OllamaClient {
         }
 
         Ok(OllamaChatResult {
-            model: response.model.unwrap_or_else(|| self.chat_model.clone()),
+            model: response.model.unwrap_or_else(|| model.to_owned()),
             content,
             total_duration_ns: response.total_duration,
         })
     }
 
     pub async fn embed(&self, input: &str) -> Result<OllamaEmbedResult, OllamaError> {
+        self.embed_with_model(input, &self.embed_model).await
+    }
+
+    pub async fn embed_with_model(
+        &self,
+        input: &str,
+        model: &str,
+    ) -> Result<OllamaEmbedResult, OllamaError> {
+        if model.trim().is_empty() {
+            return Err(OllamaError::InvalidConfig(
+                "embedding model is empty".to_owned(),
+            ));
+        }
         let body = json!({
-            "model": self.embed_model,
+            "model": model,
             "input": input,
         });
         let response: EmbedResponse = self.post_json("/api/embed", &body).await?;
@@ -168,7 +196,7 @@ impl OllamaClient {
         }
 
         Ok(OllamaEmbedResult {
-            model: response.model.unwrap_or_else(|| self.embed_model.clone()),
+            model: response.model.unwrap_or_else(|| model.to_owned()),
             embedding,
             total_duration_ns: response.total_duration,
         })

@@ -1,4 +1,4 @@
-use crate::integrations::ollama::client::{OllamaClient, OllamaError};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -23,12 +23,12 @@ pub struct PersonInsight {
 
 #[derive(Clone)]
 pub struct PersonIntelligenceService {
-    ollama: Option<OllamaClient>,
+    runtime: Option<AiRuntimeClient>,
 }
 
 impl PersonIntelligenceService {
-    pub fn new(ollama: Option<OllamaClient>) -> Self {
-        Self { ollama }
+    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+        Self { runtime }
     }
 
     pub fn heuristic_fingerprint(messages: &[PersonMessage]) -> CommunicationFingerprint {
@@ -109,7 +109,7 @@ impl PersonIntelligenceService {
         &self,
         messages: &[PersonMessage],
     ) -> Result<Option<CommunicationFingerprint>, PersonIntelligenceError> {
-        let Some(ref ollama) = self.ollama else {
+        let Some(ref runtime) = self.runtime else {
             return Ok(None);
         };
         let sample: String = messages
@@ -121,7 +121,7 @@ impl PersonIntelligenceService {
         let prompt = format!(
             "Analyze communication patterns from these email samples. Return JSON with: frequent_topics (array of strings), typical_tone (one word), detected_language (code), writing_style (verbose/concise/balanced), preferred_time_of_day (morning/afternoon/evening or null).\n\nSamples:\n{sample}"
         );
-        let result = ollama.chat(&prompt).await?;
+        let result = runtime.chat(&prompt).await?;
         let content = result
             .content
             .trim()
@@ -166,7 +166,7 @@ pub struct PersonMessage {
 #[derive(Debug, Error)]
 pub enum PersonIntelligenceError {
     #[error(transparent)]
-    Ollama(#[from] OllamaError),
+    Runtime(#[from] AiRuntimeError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
 }

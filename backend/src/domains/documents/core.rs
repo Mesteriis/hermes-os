@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 use crate::domains::documents::processing::{DocumentProcessingJob, DocumentProcessingStore};
@@ -112,6 +112,17 @@ impl DocumentImportStore {
         &self,
         document: &NewDocumentImport,
     ) -> Result<ImportedDocument, DocumentImportError> {
+        document.validate()?;
+        let mut transaction = self.pool.begin().await?;
+        let imported = Self::import_document_in_transaction(&mut transaction, document).await?;
+        transaction.commit().await?;
+        Ok(imported)
+    }
+
+    pub(crate) async fn import_document_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        document: &NewDocumentImport,
+    ) -> Result<ImportedDocument, DocumentImportError> {
         let document = document.validate()?;
 
         let row = sqlx::query(
@@ -144,7 +155,7 @@ impl DocumentImportStore {
         .bind(&document.title)
         .bind(&document.source_fingerprint)
         .bind(&document.extracted_text)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut **transaction)
         .await?;
 
         if let Some(row) = row {
@@ -155,7 +166,7 @@ impl DocumentImportStore {
             "SELECT document_kind FROM documents WHERE document_id = $1",
         )
         .bind(&document.document_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut **transaction)
         .await?;
 
         match existing_kind {

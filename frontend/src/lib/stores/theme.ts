@@ -1,6 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import {
 	defaultFrontendThemeSettings,
+	parseFrontendThemeSettings,
 	shellBackgroundClass,
 	shellBrightnessClass,
 	shellAccentClass,
@@ -16,10 +17,15 @@ import {
 import type { PanelOpacity, PanelBlur } from '$lib/layout/types';
 import { saveFrontendThemeSetting } from '$lib/api';
 
+const THEME_AUTOSAVE_DELAY_MS = 400;
+
 export const themeSettings = writable<FrontendThemeSettings>(defaultFrontendThemeSettings());
 export const themeDraft = writable<FrontendThemeSettings | null>(null);
 export const isThemeSettingsSaving = writable(false);
 export const themeError = writable('');
+
+let themeAutosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let themeSaveVersion = 0;
 
 export const effectiveThemeSettings = derived([themeSettings, themeDraft], ([$themeSettings, $themeDraft]) =>
 	$themeDraft ?? $themeSettings
@@ -43,6 +49,11 @@ export function resetThemeDraft(): void {
 }
 
 export function cancelThemeEditing(): void {
+	if (themeAutosaveTimer) {
+		clearTimeout(themeAutosaveTimer);
+		themeAutosaveTimer = null;
+	}
+	themeSaveVersion += 1;
 	themeDraft.set(null);
 	themeError.set('');
 }
@@ -55,51 +66,36 @@ export function updateThemeDraft(patch: Partial<FrontendThemeSettings>): void {
 }
 
 export function selectShellBackground(shellBackground: ShellBackgroundId): void {
-	themeDraft.update((draft) => {
-		const base = draft ?? get(themeSettings);
-		return { ...base, shellBackground };
-	});
+	applyThemePatch({ shellBackground });
 }
 
 export function updateShellBrightness(event: Event): void {
 	const raw = (event.target as HTMLInputElement | null)?.value;
 	const value = Number(raw);
 	if (Number.isNaN(value)) return;
-	themeDraft.update((draft) => {
-		const base = draft ?? get(themeSettings);
-		return { ...base, backgroundBrightness: value as ShellBackgroundBrightness };
-	});
+	applyThemePatch({ backgroundBrightness: value as ShellBackgroundBrightness });
 }
 
 export function updateGlobalPanelOpacity(event: Event): void {
 	const raw = (event.target as HTMLInputElement | null)?.value;
 	const value = Number(raw);
 	if (Number.isNaN(value)) return;
-	themeDraft.update((draft) => {
-		const base = draft ?? get(themeSettings);
-		return { ...base, panelOpacity: value as PanelOpacity };
-	});
+	applyThemePatch({ panelOpacity: value as PanelOpacity });
 }
 
 export function updateGlobalPanelBlur(event: Event): void {
 	const raw = (event.target as HTMLInputElement | null)?.value;
 	const value = Number(raw);
 	if (Number.isNaN(value)) return;
-	themeDraft.update((draft) => {
-		const base = draft ?? get(themeSettings);
-		return { ...base, panelBlur: value as PanelBlur };
-	});
+	applyThemePatch({ panelBlur: value as PanelBlur });
 }
 
 export function selectShellAccent(accentColor: ShellAccentColorId): void {
-	themeDraft.update((draft) => {
-		const base = draft ?? get(themeSettings);
-		return { ...base, accentColor };
-	});
+	applyThemePatch({ accentColor });
 }
 
 export function resetThemeSettingsToDefault(): void {
-	themeDraft.set(defaultFrontendThemeSettings());
+	applyThemeSettings(defaultFrontendThemeSettings());
 }
 
 export async function saveThemeSettings(): Promise<void> {
@@ -107,16 +103,53 @@ export async function saveThemeSettings(): Promise<void> {
 	themeDraft.subscribe((value) => { draft = value; })();
 	if (!draft) return;
 
+	if (themeAutosaveTimer) {
+		clearTimeout(themeAutosaveTimer);
+		themeAutosaveTimer = null;
+	}
+	const version = ++themeSaveVersion;
+	await persistThemeSettings(draft, version);
+}
+
+function applyThemePatch(patch: Partial<FrontendThemeSettings>): void {
+	const base = get(themeDraft) ?? get(themeSettings);
+	applyThemeSettings({ ...base, ...patch });
+}
+
+function applyThemeSettings(settings: FrontendThemeSettings): void {
+	themeDraft.set(settings);
+	themeError.set('');
+	scheduleThemeAutosave(settings);
+}
+
+function scheduleThemeAutosave(settings: FrontendThemeSettings): void {
+	if (themeAutosaveTimer) {
+		clearTimeout(themeAutosaveTimer);
+	}
+	const version = ++themeSaveVersion;
+	themeAutosaveTimer = setTimeout(() => {
+		themeAutosaveTimer = null;
+		void persistThemeSettings(settings, version);
+	}, THEME_AUTOSAVE_DELAY_MS);
+}
+
+async function persistThemeSettings(settings: FrontendThemeSettings, version: number): Promise<void> {
 	isThemeSettingsSaving.set(true);
 	themeError.set('');
 	try {
-		await saveFrontendThemeSetting(draft);
-		themeSettings.set(draft);
+		const updated = await saveFrontendThemeSetting(settings);
+		if (version !== themeSaveVersion) return;
+		const persisted = parseFrontendThemeSettings(updated.value);
+		themeSettings.set(persisted);
 		themeDraft.set(null);
 	} catch (e) {
-		themeError.set(e instanceof Error ? e.message : 'Failed to save theme settings');
+		if (version === themeSaveVersion) {
+			themeError.set(e instanceof Error ? e.message : 'Failed to save theme settings');
+		}
 	} finally {
-		isThemeSettingsSaving.set(false);
+		if (version === themeSaveVersion) {
+			isThemeSettingsSaving.set(false);
+		}
 	}
 }
 
@@ -127,7 +160,7 @@ export function shellBackgroundLabel(id: ShellBackgroundId): string {
 }
 
 export function shellBackgroundPreviewClass(id: ShellBackgroundId): string {
-	return `bg-preview-${id}`;
+	return `background-preview bg-preview-${id}`;
 }
 
 export function shellAccentSwatchClass(id: ShellAccentColorId): string {

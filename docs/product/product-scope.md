@@ -4,98 +4,104 @@
 
 ### Communications
 
-- Email
-- Telegram
-- WhatsApp
-- SMS как опциональный future channel
-- единая коммуникационная лента
-- threading, participants, attachments, delivery metadata
-- spam, marketing и relevance classification
+- Email, Telegram, WhatsApp and calls as communication channels.
+- Provider source preservation.
+- Canonical messages, conversations, participants, attachments and delivery
+  metadata.
+- Relevance, spam, marketing and risk classification as engine output.
 
-### Persons
+### Personas
 
-- люди и организации
-- каналы связи
-- история коммуникаций
-- отношения между контактами
-- связь с документами, проектами, задачами и событиями
-- identity resolution и merge workflow
+- Persona identity traces.
+- Relationship history and graph neighborhood.
+- Communication context.
+- Persona memory and dossier.
+- Identity resolution and reviewed merge/split workflows.
 
-### Knowledge Graph
+### Organizations
 
-- Person
-- Company
-- Project
-- Document
-- Message
-- Event
-- Task
-- Meeting
-- Location
-- Organization
-- отношения как полноценные объекты с provenance
+- Organizations as first-class entities.
+- Organization identities, domains, portals, procedures and playbooks.
+- Relationships to Personas, Projects, Documents, Communications and
+  Obligations.
 
-### Tasks
+### Projects
 
-- извлечение задач из коммуникаций
-- дедлайны, напоминания, исполнители и статусы
-- связь задач с источниками и проектами
-- audit trail изменения статуса
+- Bounded work contexts.
+- Linked communications, documents, decisions, tasks, obligations and Personas.
+- Project context and timeline views through engines.
 
 ### Documents
 
-- PDF
-- Office
-- images
-- Markdown
-- OCR
-- summary
-- entity extraction
-- linking
-- versioning
+- PDF, Office, images and Markdown.
+- Versioning, extraction, OCR, metadata, summaries and entity mentions.
+- Links to other world-model entities.
 
-### Search
+### Tasks And Obligations
 
-- full text search
-- semantic search
-- graph-aware memory queries
-- source-backed answers
+- Task candidates extracted from evidence.
+- Actionable Tasks with lifecycle.
+- Obligations as commitments or duties with evidence.
+- Follow-Ups as prompts that may become Tasks or remain reminders.
 
-### AI Agents
+### Events And Timeline
 
-- HESTIA - главный координатор
-- HERMES - коммуникации
-- MNEMOSYNE - память
-- ATHENA - аналитика
-- HEPHAESTUS - разработка и tool automation
+- Canonical system events.
+- Calendar/meeting events.
+- Timeline Engine views over source-backed events and domain records.
 
-## Out of Scope For Initial Implementation, But Architecturally Supported
+### Knowledge And Graph
 
-- multi-user SaaS
-- enterprise CRM workflows
-- public API marketplace
-- global cloud sync as required dependency
-- end-to-end encrypted multi-device sync
-- autonomous external actions without explicit permission policy
+- First-class relationships with provenance.
+- Evidence-backed facts, decisions and observations.
+- Graph-aware context assembly.
 
-Эти пункты не должны диктовать первую реализацию, но архитектура не должна закрывать дорогу к ним.
+### Engines
+
+- Memory Engine.
+- Timeline Engine.
+- Trust Engine.
+- Search Engine.
+- Enrichment Engine.
+- Obligation Engine.
+- Risk Engine.
+- Consistency / Contradiction Engine, user-facing alias Polygraph.
+
+### Agents
+
+- HESTIA as coordinator.
+- Specialized agents for communications, memory, analysis and tool automation.
+- Typed tools, explicit permissions and source-backed context.
+
+## Out Of Scope For Initial Implementation, But Architecturally Supported
+
+- multi-user SaaS;
+- enterprise CRM workflows;
+- public API marketplace;
+- global cloud sync as a required dependency;
+- end-to-end encrypted multi-device sync;
+- autonomous external actions without explicit permission policy.
+
+These items must not dictate the current implementation, but the architecture
+should not unnecessarily block future work.
 
 ## Non-Goals
 
-- заменить Gmail, Telegram или WhatsApp как network provider
-- обучать персональную LLM на приватных данных
-- хранить только embeddings без исходников
-- скрывать автоматические решения без provenance
-- создавать одну большую универсальную таблицу активности
+- replace Gmail, Telegram, WhatsApp or calendars as network providers;
+- train a personal LLM on private data;
+- store only embeddings without source evidence;
+- hide automatic decisions without provenance;
+- create one universal activity table.
 
 ## Capability Map
 
 | Capability | Core entities | Primary output |
-| --- | --- | --- |
-| Communication ingestion | Message, Event, Person, Attachment | normalized events and messages |
-| Person memory | Person, Company, Relationship | person timeline and graph |
-| Document understanding | Document, Version, EntityMention | indexed and linked documents |
-| Task extraction | Task, Event, Person, Project | actionable task graph |
-| Search and recall | Message, Document, Event, Entity | ranked source-backed results |
-| AI orchestration | Agent, Tool, MemoryQuery | explainable AI workflows |
-| Project memory | Project, Task, Document, Event | project timeline and decisions |
+|---|---|---|
+| Communication ingestion | Communication, Source record, Event, Persona | normalized events and messages |
+| Persona memory | Persona, Relationship, Knowledge item | source-backed Persona context |
+| Organization memory | Organization, Relationship, Document | organization context |
+| Document understanding | Document, Version, Entity mention | indexed and linked evidence |
+| Obligation extraction | Obligation, Task candidate, Source record | reviewed commitments and actions |
+| Search and recall | Source record, Entity, Relationship, Event | ranked source-backed results |
+| Agent orchestration | Agent Persona, Tool, Context | explainable AI workflows |
+| Project memory | Project, Task, Document, Decision, Obligation | project context and timeline |

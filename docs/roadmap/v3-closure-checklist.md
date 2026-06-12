@@ -7,7 +7,7 @@ Version 3.0 is complete when Hermes Hub exposes local, source-backed AI workflow
 ## In Scope
 
 - Local Ollama chat and embedding provider boundary.
-- pgvector `halfvec(2560)` semantic embedding store for messages, documents, projects, tasks and persons.
+- pgvector `halfvec(2560)` semantic embedding store for messages, documents, projects, tasks and Personas.
 - Semantic indexing from existing canonical projections.
 - Retrieval planner combining semantic nearest neighbors and local text match signals.
 - Prompt builder that treats retrieved source text as untrusted context.

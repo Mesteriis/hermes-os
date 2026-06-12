@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
-use chrono::Utc;
+use chrono::{DateTime, TimeZone, Utc};
 use libloading::Library;
 use qrcode::QrCode;
 use qrcode::render::svg;
@@ -19,8 +19,8 @@ use sha2::{Digest, Sha256};
 use tokio::task;
 
 use crate::integrations::telegram::client::{
-    TelegramError, TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest,
-    TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
+    TelegramChatKind, TelegramDeliveryState, TelegramError, TelegramQrLoginPasswordRequest,
+    TelegramQrLoginStartRequest, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
 };
 use crate::platform::config::AppConfig;
 
@@ -71,7 +71,43 @@ pub(crate) fn runtime_available(configured_path: Option<&Path>) -> bool {
     TdJsonLibrary::load(configured_path).is_ok()
 }
 
-struct TdJsonLibrary {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibChatSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) chat_kind: TelegramChatKind,
+    pub(crate) title: String,
+    pub(crate) username: Option<String>,
+    pub(crate) last_message_at: Option<DateTime<Utc>>,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibMessageSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) provider_message_id: String,
+    pub(crate) sender_id: String,
+    pub(crate) sender_display_name: String,
+    pub(crate) text: String,
+    pub(crate) occurred_at: DateTime<Utc>,
+    pub(crate) delivery_state: TelegramDeliveryState,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibFileSnapshot {
+    pub(crate) file_id: i64,
+    pub(crate) size_bytes: Option<i64>,
+    pub(crate) expected_size_bytes: Option<i64>,
+    pub(crate) local_path: Option<String>,
+    pub(crate) is_downloading_active: bool,
+    pub(crate) is_downloading_completed: bool,
+    pub(crate) downloaded_size_bytes: Option<i64>,
+    pub(crate) remote_id: Option<String>,
+    pub(crate) remote_unique_id: Option<String>,
+    pub(crate) raw: Value,
+}
+
+pub(crate) struct TdJsonLibrary {
     create: TdJsonClientCreate,
     send: TdJsonClientSend,
     receive: TdJsonClientReceive,
@@ -81,7 +117,7 @@ struct TdJsonLibrary {
 }
 
 impl TdJsonLibrary {
-    fn load(configured_path: Option<&Path>) -> Result<Self, TelegramError> {
+    pub(crate) fn load(configured_path: Option<&Path>) -> Result<Self, TelegramError> {
         let candidates = tdjson_library_candidates(configured_path);
         let mut load_errors = Vec::new();
 
@@ -126,7 +162,7 @@ impl TdJsonLibrary {
         })
     }
 
-    fn create_client(self) -> Result<TdJsonClient, TelegramError> {
+    pub(crate) fn create_client(self) -> Result<TdJsonClient, TelegramError> {
         let client = {
             // SAFETY: The function pointer was loaded from libtdjson with the documented
             // C ABI and returns an opaque TDLib client pointer owned by the caller.
@@ -145,13 +181,13 @@ impl TdJsonLibrary {
     }
 }
 
-struct TdJsonClient {
+pub(crate) struct TdJsonClient {
     client: *mut c_void,
     library: TdJsonLibrary,
 }
 
 impl TdJsonClient {
-    fn send_json(&self, request: &Value) -> Result<(), TelegramError> {
+    pub(crate) fn send_json(&self, request: &Value) -> Result<(), TelegramError> {
         let request = CString::new(request.to_string()).map_err(|_| {
             TelegramError::TdlibRuntime("TDLib request contained an interior NUL byte".to_owned())
         })?;
@@ -164,7 +200,10 @@ impl TdJsonClient {
         Ok(())
     }
 
-    fn receive_json(&self, timeout_seconds: f64) -> Result<Option<Value>, TelegramError> {
+    pub(crate) fn receive_json(
+        &self,
+        timeout_seconds: f64,
+    ) -> Result<Option<Value>, TelegramError> {
         let response = {
             // SAFETY: TDLib owns the returned pointer until the next receive/execute
             // call on this client. The string is copied into an owned Rust String
@@ -189,7 +228,7 @@ impl TdJsonClient {
             .map_err(|error| TelegramError::TdlibRuntime(format!("invalid TDLib JSON: {error}")))
     }
 
-    fn execute_json(&self, request: &Value) -> Result<Option<Value>, TelegramError> {
+    pub(crate) fn execute_json(&self, request: &Value) -> Result<Option<Value>, TelegramError> {
         let request = CString::new(request.to_string()).map_err(|_| {
             TelegramError::TdlibRuntime("TDLib request contained an interior NUL byte".to_owned())
         })?;
@@ -530,7 +569,7 @@ fn drive_qr_login(
                 send_tdlib_parameters(&client, &request, &database_directory)?;
                 tdlib_parameters_sent = true;
             }
-            "authorizationStateWaitEncryptionKey" if !database_encryption_key_checked => {
+            "authorizationStateWaitEncryptionKey" => {
                 client.send_json(&check_database_encryption_key_request(&request))?;
                 database_encryption_key_checked = true;
             }
@@ -915,7 +954,7 @@ fn tdjson_library_file_name() -> &'static str {
     "libtdjson"
 }
 
-fn set_tdlib_parameters_request(
+pub(crate) fn set_tdlib_parameters_request(
     request: &TelegramQrLoginStartRequest,
     database_directory: &Path,
 ) -> Result<Value, TelegramError> {
@@ -931,6 +970,7 @@ fn set_tdlib_parameters_request(
         "use_test_dc": false,
         "database_directory": database_directory,
         "files_directory": files_directory,
+        "database_encryption_key": tdlib_database_encryption_key(request),
         "use_file_database": true,
         "use_chat_info_database": true,
         "use_message_database": true,
@@ -962,7 +1002,7 @@ fn tdlib_database_encryption_key(request: &TelegramQrLoginStartRequest) -> Strin
         .unwrap_or_default()
 }
 
-fn tdlib_database_directory(request: &TelegramQrLoginStartRequest) -> PathBuf {
+pub(crate) fn tdlib_database_directory(request: &TelegramQrLoginStartRequest) -> PathBuf {
     request
         .tdlib_data_path
         .as_deref()
@@ -974,12 +1014,407 @@ fn tdlib_database_directory(request: &TelegramQrLoginStartRequest) -> PathBuf {
         })
 }
 
-fn check_database_encryption_key_request(request: &TelegramQrLoginStartRequest) -> Value {
+pub(crate) fn check_database_encryption_key_request(
+    request: &TelegramQrLoginStartRequest,
+) -> Value {
     json!({
         "@type": "checkDatabaseEncryptionKey",
         "encryption_key": tdlib_database_encryption_key(request),
         "@extra": "hermes-check-database-encryption-key"
     })
+}
+
+pub(crate) fn tdlib_load_chats_request(limit: i32, extra: &str) -> Value {
+    json!({
+        "@type": "loadChats",
+        "chat_list": null,
+        "limit": tdlib_page_limit(limit),
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_get_chats_request(limit: i32, extra: &str) -> Value {
+    json!({
+        "@type": "getChats",
+        "chat_list": null,
+        "limit": tdlib_page_limit(limit),
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_get_chat_request(chat_id: i64, extra: &str) -> Value {
+    json!({
+        "@type": "getChat",
+        "chat_id": chat_id,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_get_chat_history_request(
+    chat_id: i64,
+    from_message_id: Option<i64>,
+    limit: i32,
+    only_local: bool,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "getChatHistory",
+        "chat_id": chat_id,
+        "from_message_id": from_message_id.unwrap_or(0),
+        "offset": 0,
+        "limit": tdlib_page_limit(limit),
+        "only_local": only_local,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_send_text_message_request(
+    chat_id: i64,
+    text: &str,
+    extra: &str,
+) -> Result<Value, TelegramError> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(TelegramError::InvalidRequest(
+            "text must not be empty".to_owned(),
+        ));
+    }
+
+    Ok(json!({
+        "@type": "sendMessage",
+        "chat_id": chat_id,
+        "input_message_content": {
+            "@type": "inputMessageText",
+            "text": {
+                "@type": "formattedText",
+                "text": text,
+                "entities": []
+            },
+            "clear_draft": true
+        },
+        "@extra": extra.trim()
+    }))
+}
+
+pub(crate) fn tdlib_download_file_request(file_id: i64, priority: i32, extra: &str) -> Value {
+    json!({
+        "@type": "downloadFile",
+        "file_id": file_id,
+        "priority": priority.clamp(1, 32),
+        "offset": 0,
+        "limit": 0,
+        "synchronous": true,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn parse_tdlib_chat_ids(response: &Value) -> Result<Vec<i64>, TelegramError> {
+    let chat_ids = response
+        .get("chat_ids")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            TelegramError::TdlibRuntime(
+                "TDLib getChats response did not include chat_ids".to_owned(),
+            )
+        })?;
+
+    chat_ids
+        .iter()
+        .map(tdlib_i64_value)
+        .collect::<Result<Vec<_>, _>>()
+}
+
+pub(crate) fn parse_tdlib_message_list(
+    response: &Value,
+) -> Result<Vec<TelegramTdlibMessageSnapshot>, TelegramError> {
+    let messages = response
+        .get("messages")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            TelegramError::TdlibRuntime(
+                "TDLib getChatHistory response did not include messages".to_owned(),
+            )
+        })?;
+
+    messages
+        .iter()
+        .map(parse_tdlib_message_snapshot)
+        .collect::<Result<Vec<_>, _>>()
+}
+
+pub(crate) fn parse_tdlib_chat_snapshot(
+    chat: &Value,
+) -> Result<TelegramTdlibChatSnapshot, TelegramError> {
+    if chat.get("@type").and_then(Value::as_str) != Some("chat") {
+        return Err(TelegramError::TdlibRuntime(
+            "TDLib chat snapshot must have @type=chat".to_owned(),
+        ));
+    }
+
+    let provider_chat_id = tdlib_string_id(chat, "id")?;
+    let chat_kind = tdlib_chat_kind(chat)?;
+    let title = chat
+        .get("title")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| format!("Telegram Chat {provider_chat_id}"));
+    let username = tdlib_username(chat);
+    let last_message_at = chat
+        .get("last_message")
+        .and_then(|message| message.get("date"))
+        .map(tdlib_unix_datetime_value)
+        .transpose()?;
+
+    Ok(TelegramTdlibChatSnapshot {
+        provider_chat_id,
+        chat_kind,
+        title,
+        username,
+        last_message_at,
+        raw: chat.clone(),
+    })
+}
+
+pub(crate) fn parse_tdlib_message_snapshot(
+    message: &Value,
+) -> Result<TelegramTdlibMessageSnapshot, TelegramError> {
+    if message.get("@type").and_then(Value::as_str) != Some("message") {
+        return Err(TelegramError::TdlibRuntime(
+            "TDLib message snapshot must have @type=message".to_owned(),
+        ));
+    }
+
+    let provider_chat_id = tdlib_string_id(message, "chat_id")?;
+    let provider_message_id = tdlib_string_id(message, "id")?;
+    let (sender_id, sender_display_name) = tdlib_message_sender(message)?;
+    let text = tdlib_message_text(message)?;
+    let occurred_at = message
+        .get("date")
+        .map(tdlib_unix_datetime_value)
+        .transpose()?
+        .unwrap_or_else(Utc::now);
+    let delivery_state = if message
+        .get("is_outgoing")
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+    {
+        TelegramDeliveryState::Sent
+    } else {
+        TelegramDeliveryState::Received
+    };
+
+    Ok(TelegramTdlibMessageSnapshot {
+        provider_chat_id,
+        provider_message_id,
+        sender_id,
+        sender_display_name,
+        text,
+        occurred_at,
+        delivery_state,
+        raw: message.clone(),
+    })
+}
+
+pub(crate) fn parse_tdlib_file_snapshot(
+    file: &Value,
+) -> Result<TelegramTdlibFileSnapshot, TelegramError> {
+    if file.get("@type").and_then(Value::as_str) != Some("file") {
+        return Err(TelegramError::TdlibRuntime(
+            "TDLib file snapshot must have @type=file".to_owned(),
+        ));
+    }
+
+    let file_id = file
+        .get("id")
+        .map(tdlib_i64_value)
+        .transpose()?
+        .ok_or_else(|| TelegramError::TdlibRuntime("TDLib file id is required".to_owned()))?;
+    let local = file.get("local").and_then(Value::as_object);
+    let remote = file.get("remote").and_then(Value::as_object);
+    let local_path = local
+        .and_then(|value| value.get("path"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let is_downloading_active = local
+        .and_then(|value| value.get("is_downloading_active"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let is_downloading_completed = local
+        .and_then(|value| value.get("is_downloading_completed"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let downloaded_size_bytes = local
+        .and_then(|value| value.get("downloaded_size"))
+        .map(tdlib_i64_value)
+        .transpose()?;
+    let remote_id = remote
+        .and_then(|value| value.get("id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+    let remote_unique_id = remote
+        .and_then(|value| value.get("unique_id"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    Ok(TelegramTdlibFileSnapshot {
+        file_id,
+        size_bytes: file.get("size").map(tdlib_i64_value).transpose()?,
+        expected_size_bytes: file.get("expected_size").map(tdlib_i64_value).transpose()?,
+        local_path,
+        is_downloading_active,
+        is_downloading_completed,
+        downloaded_size_bytes,
+        remote_id,
+        remote_unique_id,
+        raw: file.clone(),
+    })
+}
+
+fn tdlib_page_limit(limit: i32) -> i32 {
+    limit.clamp(1, 100)
+}
+
+fn tdlib_string_id(value: &Value, field: &'static str) -> Result<String, TelegramError> {
+    value
+        .get(field)
+        .map(tdlib_i64_value)
+        .transpose()?
+        .map(|value| value.to_string())
+        .ok_or_else(|| TelegramError::TdlibRuntime(format!("TDLib field `{field}` is required")))
+}
+
+fn tdlib_i64_value(value: &Value) -> Result<i64, TelegramError> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().and_then(|value| i64::try_from(value).ok()))
+        .ok_or_else(|| TelegramError::TdlibRuntime("TDLib id must be an i64".to_owned()))
+}
+
+fn tdlib_unix_datetime_value(value: &Value) -> Result<DateTime<Utc>, TelegramError> {
+    let timestamp = value
+        .as_i64()
+        .ok_or_else(|| TelegramError::TdlibRuntime("TDLib date must be an i64".to_owned()))?;
+    Utc.timestamp_opt(timestamp, 0)
+        .single()
+        .ok_or_else(|| TelegramError::TdlibRuntime(format!("invalid TDLib date `{timestamp}`")))
+}
+
+fn tdlib_chat_kind(chat: &Value) -> Result<TelegramChatKind, TelegramError> {
+    let chat_type = chat
+        .get("type")
+        .and_then(|value| value.get("@type"))
+        .and_then(Value::as_str)
+        .ok_or_else(|| TelegramError::TdlibRuntime("TDLib chat type is required".to_owned()))?;
+    match chat_type {
+        "chatTypePrivate" | "chatTypeSecret" => Ok(TelegramChatKind::Private),
+        "chatTypeBasicGroup" => Ok(TelegramChatKind::Group),
+        "chatTypeSupergroup" => {
+            if chat
+                .get("type")
+                .and_then(|value| value.get("is_channel"))
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+            {
+                Ok(TelegramChatKind::Channel)
+            } else {
+                Ok(TelegramChatKind::Group)
+            }
+        }
+        other => Err(TelegramError::TdlibRuntime(format!(
+            "unsupported TDLib chat type `{other}`"
+        ))),
+    }
+}
+
+fn tdlib_username(value: &Value) -> Option<String> {
+    value
+        .get("username")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            value
+                .get("usernames")
+                .and_then(|usernames| usernames.get("active_usernames"))
+                .and_then(Value::as_array)
+                .and_then(|values| {
+                    values
+                        .iter()
+                        .filter_map(Value::as_str)
+                        .find(|value| !value.trim().is_empty())
+                })
+                .map(str::trim)
+                .map(ToOwned::to_owned)
+        })
+}
+
+fn tdlib_message_sender(message: &Value) -> Result<(String, String), TelegramError> {
+    let sender = message
+        .get("sender_id")
+        .ok_or_else(|| TelegramError::TdlibRuntime("TDLib sender_id is required".to_owned()))?;
+    match sender.get("@type").and_then(Value::as_str) {
+        Some("messageSenderUser") => {
+            let user_id = tdlib_string_id(sender, "user_id")?;
+            Ok((
+                format!("user:{user_id}"),
+                format!("Telegram User {user_id}"),
+            ))
+        }
+        Some("messageSenderChat") => {
+            let chat_id = tdlib_string_id(sender, "chat_id")?;
+            Ok((
+                format!("chat:{chat_id}"),
+                format!("Telegram Chat {chat_id}"),
+            ))
+        }
+        Some(other) => Err(TelegramError::TdlibRuntime(format!(
+            "unsupported TDLib message sender `{other}`"
+        ))),
+        None => Err(TelegramError::TdlibRuntime(
+            "TDLib sender_id @type is required".to_owned(),
+        )),
+    }
+}
+
+fn tdlib_message_text(message: &Value) -> Result<String, TelegramError> {
+    let content = message.get("content").ok_or_else(|| {
+        TelegramError::TdlibRuntime("TDLib message content is required".to_owned())
+    })?;
+    let content_type = content
+        .get("@type")
+        .and_then(Value::as_str)
+        .ok_or_else(|| TelegramError::TdlibRuntime("TDLib content @type is required".to_owned()))?;
+    let formatted_text = match content_type {
+        "messageText" => content.get("text"),
+        "messagePhoto" | "messageVideo" | "messageDocument" | "messageAudio"
+        | "messageVoiceNote" => content.get("caption"),
+        _ => None,
+    };
+
+    let text = formatted_text
+        .and_then(|value| value.get("text"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    match content_type {
+        "messageText" => text.ok_or_else(|| {
+            TelegramError::TdlibRuntime("TDLib text message does not contain text".to_owned())
+        }),
+        "messagePhoto" | "messageVideo" | "messageDocument" | "messageAudio"
+        | "messageVoiceNote" | "messageUnsupported" => Ok(text.unwrap_or_default()),
+        _ => Ok(text.unwrap_or_default()),
+    }
 }
 
 fn qr_waiting_response(
@@ -1264,7 +1699,7 @@ fn password_hint(authorization_state: &Value) -> Option<String> {
         .map(ToOwned::to_owned)
 }
 
-fn authorization_state(event: &Value) -> Option<&Value> {
+pub(crate) fn authorization_state(event: &Value) -> Option<&Value> {
     match event.get("@type").and_then(Value::as_str) {
         Some("updateAuthorizationState") => event.get("authorization_state"),
         Some(value) if value.starts_with("authorizationState") => Some(event),
@@ -1272,13 +1707,13 @@ fn authorization_state(event: &Value) -> Option<&Value> {
     }
 }
 
-fn is_tdlib_parameters_not_specified_error(event: &Value) -> bool {
+pub(crate) fn is_tdlib_parameters_not_specified_error(event: &Value) -> bool {
     event.get("@type").and_then(Value::as_str) == Some("error")
         && event.get("code").and_then(Value::as_i64) == Some(400)
         && event.get("message").and_then(Value::as_str) == Some("Parameters aren't specified")
 }
 
-fn is_tdlib_database_encryption_key_needed_error(event: &Value) -> bool {
+pub(crate) fn is_tdlib_database_encryption_key_needed_error(event: &Value) -> bool {
     event.get("@type").and_then(Value::as_str) == Some("error")
         && event.get("code").and_then(Value::as_i64) == Some(400)
         && event
@@ -1302,7 +1737,7 @@ fn state_allows_qr_request(state_type: &str) -> bool {
     )
 }
 
-fn tdlib_error_message(event: &Value) -> Option<String> {
+pub(crate) fn tdlib_error_message(event: &Value) -> Option<String> {
     if event.get("@type").and_then(Value::as_str) != Some("error") {
         return None;
     }
@@ -1438,11 +1873,11 @@ mod tests {
         assert_eq!(command["parameters"]["api_hash"], "telegram-api-hash");
         assert_eq!(command["parameters"]["enable_storage_optimizer"], true);
         assert_eq!(command["parameters"]["ignore_file_names"], false);
-        assert_eq!(command["database_encryption_key"], serde_json::Value::Null);
         assert_eq!(
             command["parameters"]["database_encryption_key"],
-            serde_json::Value::Null
+            STANDARD.encode("telegram-session-key")
         );
+        assert_eq!(command["database_encryption_key"], serde_json::Value::Null);
     }
 
     #[test]
@@ -1466,6 +1901,202 @@ mod tests {
             STANDARD.encode("telegram-session-key")
         );
         assert_ne!(command["encryption_key"], "telegram-session-key");
+    }
+
+    #[test]
+    fn tdlib_send_text_message_request_uses_formatted_text_content() {
+        let command = super::tdlib_send_text_message_request(
+            123456789,
+            "Hello from Hermes",
+            "hermes-send-message-1",
+        )
+        .expect("send message request");
+
+        assert_eq!(command["@type"], "sendMessage");
+        assert_eq!(command["chat_id"], 123456789);
+        assert_eq!(command["@extra"], "hermes-send-message-1");
+        assert_eq!(
+            command["input_message_content"]["@type"],
+            "inputMessageText"
+        );
+        assert_eq!(
+            command["input_message_content"]["text"]["@type"],
+            "formattedText"
+        );
+        assert_eq!(
+            command["input_message_content"]["text"]["text"],
+            "Hello from Hermes"
+        );
+        assert_eq!(
+            command["input_message_content"]["text"]["entities"],
+            json!([])
+        );
+        assert_eq!(command["input_message_content"]["clear_draft"], true);
+    }
+
+    #[test]
+    fn tdlib_get_chat_history_request_caps_limit_to_tdlib_page_size() {
+        let command = super::tdlib_get_chat_history_request(
+            123456789,
+            Some(98765),
+            500,
+            true,
+            "hermes-history-1",
+        );
+
+        assert_eq!(command["@type"], "getChatHistory");
+        assert_eq!(command["chat_id"], 123456789);
+        assert_eq!(command["from_message_id"], 98765);
+        assert_eq!(command["offset"], 0);
+        assert_eq!(command["limit"], 100);
+        assert_eq!(command["only_local"], true);
+        assert_eq!(command["@extra"], "hermes-history-1");
+    }
+
+    #[test]
+    fn tdlib_download_file_request_uses_synchronous_on_demand_download() {
+        let command = super::tdlib_download_file_request(42, 16, "hermes-download-file-42");
+
+        assert_eq!(command["@type"], "downloadFile");
+        assert_eq!(command["file_id"], 42);
+        assert_eq!(command["priority"], 16);
+        assert_eq!(command["offset"], 0);
+        assert_eq!(command["limit"], 0);
+        assert_eq!(command["synchronous"], true);
+        assert_eq!(command["@extra"], "hermes-download-file-42");
+    }
+
+    #[test]
+    fn parses_tdlib_file_snapshot_from_download_file_response() {
+        let file = super::parse_tdlib_file_snapshot(&json!({
+            "@type": "file",
+            "id": 42,
+            "size": 2048,
+            "expected_size": 4096,
+            "local": {
+                "@type": "localFile",
+                "path": "docker/data/telegram/account/files/document.pdf",
+                "can_be_downloaded": true,
+                "is_downloading_active": false,
+                "is_downloading_completed": true,
+                "downloaded_size": 2048
+            },
+            "remote": {
+                "@type": "remoteFile",
+                "id": "remote-file-id",
+                "unique_id": "remote-unique-id",
+                "is_uploading_active": false,
+                "is_uploading_completed": false,
+                "uploaded_size": 0
+            }
+        }))
+        .expect("file snapshot");
+
+        assert_eq!(file.file_id, 42);
+        assert_eq!(file.size_bytes, Some(2048));
+        assert_eq!(file.expected_size_bytes, Some(4096));
+        assert_eq!(
+            file.local_path.as_deref(),
+            Some("docker/data/telegram/account/files/document.pdf")
+        );
+        assert!(file.is_downloading_completed);
+        assert!(!file.is_downloading_active);
+        assert_eq!(file.remote_unique_id.as_deref(), Some("remote-unique-id"));
+        assert_eq!(file.downloaded_size_bytes, Some(2048));
+    }
+
+    #[test]
+    fn parses_tdlib_chat_snapshot_from_chat_object() {
+        let chat = super::parse_tdlib_chat_snapshot(&json!({
+            "@type": "chat",
+            "id": 123456789,
+            "type": {
+                "@type": "chatTypeSupergroup",
+                "supergroup_id": 555,
+                "is_channel": true
+            },
+            "title": "Release Channel",
+            "last_message": {
+                "@type": "message",
+                "id": 42,
+                "date": 1781352000
+            },
+            "metadata": {"ignored": true}
+        }))
+        .expect("chat snapshot");
+
+        assert_eq!(chat.provider_chat_id, "123456789");
+        assert_eq!(chat.chat_kind.as_str(), "channel");
+        assert_eq!(chat.title, "Release Channel");
+        assert_eq!(chat.username, None);
+        assert_eq!(
+            chat.last_message_at.expect("last message").to_rfc3339(),
+            "2026-06-13T12:00:00+00:00"
+        );
+        assert_eq!(chat.raw["@type"], "chat");
+    }
+
+    #[test]
+    fn parses_tdlib_text_message_snapshot_from_message_object() {
+        let message = super::parse_tdlib_message_snapshot(&json!({
+            "@type": "message",
+            "id": 777,
+            "chat_id": 123456789,
+            "sender_id": {
+                "@type": "messageSenderUser",
+                "user_id": 999
+            },
+            "date": 1781352060,
+            "is_outgoing": false,
+            "content": {
+                "@type": "messageText",
+                "text": {
+                    "@type": "formattedText",
+                    "text": "Incoming TDLib text",
+                    "entities": []
+                }
+            }
+        }))
+        .expect("message snapshot");
+
+        assert_eq!(message.provider_chat_id, "123456789");
+        assert_eq!(message.provider_message_id, "777");
+        assert_eq!(message.sender_id, "user:999");
+        assert_eq!(message.sender_display_name, "Telegram User 999");
+        assert_eq!(message.text, "Incoming TDLib text");
+        assert_eq!(message.delivery_state.as_str(), "received");
+        assert_eq!(
+            message.occurred_at.to_rfc3339(),
+            "2026-06-13T12:01:00+00:00"
+        );
+        assert_eq!(message.raw["@type"], "message");
+    }
+
+    #[test]
+    fn parses_tdlib_media_message_without_caption_as_empty_text() {
+        let message = super::parse_tdlib_message_snapshot(&json!({
+            "@type": "message",
+            "id": 778,
+            "chat_id": 123456789,
+            "sender_id": {
+                "@type": "messageSenderUser",
+                "user_id": 999
+            },
+            "date": 1781352061,
+            "is_outgoing": false,
+            "content": {
+                "@type": "messagePhoto",
+                "photo": {
+                    "@type": "photo",
+                    "sizes": []
+                }
+            }
+        }))
+        .expect("media message snapshot");
+
+        assert_eq!(message.provider_message_id, "778");
+        assert_eq!(message.text, "");
+        assert_eq!(message.raw["content"]["@type"], "messagePhoto");
     }
 
     #[test]

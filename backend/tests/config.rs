@@ -1,7 +1,7 @@
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 
-use hermes_hub_backend::platform::config::{AppConfig, ConfigError};
+use hermes_hub_backend::platform::config::{AiRuntimeProvider, AppConfig, ConfigError};
 
 #[test]
 fn default_config_binds_to_localhost_without_database_url() {
@@ -87,6 +87,45 @@ fn config_from_pairs_accepts_ollama_runtime_overrides() {
 }
 
 #[test]
+fn config_from_pairs_accepts_omniroute_runtime_overrides_without_printing_key() {
+    let config = AppConfig::from_pairs([
+        ("HERMES_AI_PROVIDER", "omniroute"),
+        ("HERMES_OMNIROUTE_BASE_URL", "https://ai.sh-inc.ru/v1/"),
+        ("HERMES_OMNIROUTE_CHAT_MODEL", "codex/gpt-5.5"),
+        (
+            "HERMES_OMNIROUTE_EMBED_MODEL",
+            "openai-compatible-chat-ollama-pve/qwen3-embedding:4b",
+        ),
+        ("HERMES_OMNIROUTE_TIMEOUT_SECONDS", "90"),
+        ("HERMES_OMNIROUTE_API_KEY", "omniroute-test-key"),
+    ])
+    .expect("valid OmniRoute config");
+
+    assert_eq!(config.ai_provider(), AiRuntimeProvider::OmniRoute);
+    assert_eq!(config.omniroute_base_url(), "https://ai.sh-inc.ru/v1");
+    assert_eq!(config.omniroute_chat_model(), "codex/gpt-5.5");
+    assert_eq!(
+        config.omniroute_embed_model(),
+        "openai-compatible-chat-ollama-pve/qwen3-embedding:4b"
+    );
+    assert_eq!(config.omniroute_timeout_seconds(), 90);
+    assert_eq!(
+        config
+            .omniroute_api_key()
+            .expect("OmniRoute API key")
+            .expose_for_runtime(),
+        "omniroute-test-key"
+    );
+    assert_eq!(
+        format!(
+            "{:?}",
+            config.omniroute_api_key().expect("OmniRoute API key")
+        ),
+        "ResolvedSecret { value: \"<redacted>\" }"
+    );
+}
+
+#[test]
 fn config_from_pairs_accepts_tdjson_runtime_path() {
     let config =
         AppConfig::from_pairs([("HERMES_TDJSON_PATH", "/opt/homebrew/lib/libtdjson.dylib")])
@@ -127,10 +166,19 @@ fn config_from_pairs_accepts_telegram_app_credentials() {
 fn default_config_uses_local_ollama_and_qwen_models() {
     let config = AppConfig::default();
 
+    assert_eq!(config.ai_provider(), AiRuntimeProvider::Ollama);
     assert_eq!(config.ollama_base_url(), "http://127.0.0.1:11434");
     assert_eq!(config.ollama_chat_model(), "qwen3:4b");
     assert_eq!(config.ollama_embed_model(), "qwen3-embedding:4b");
     assert_eq!(config.ollama_timeout_seconds(), 120);
+    assert_eq!(config.omniroute_base_url(), "https://ai.sh-inc.ru/v1");
+    assert_eq!(config.omniroute_chat_model(), "codex/gpt-5.5");
+    assert_eq!(
+        config.omniroute_embed_model(),
+        "openai-compatible-chat-ollama-pve/qwen3-embedding:4b"
+    );
+    assert_eq!(config.omniroute_timeout_seconds(), 120);
+    assert_eq!(config.omniroute_api_key(), None);
 }
 
 #[test]
@@ -213,4 +261,31 @@ fn config_from_pairs_rejects_invalid_ollama_values() {
     let error = AppConfig::from_pairs([("HERMES_OLLAMA_TIMEOUT_SECONDS", "0")])
         .expect_err("zero Ollama timeout must fail");
     assert!(matches!(error, ConfigError::InvalidOllamaTimeout { .. }));
+}
+
+#[test]
+fn config_from_pairs_rejects_invalid_omniroute_values() {
+    let error = AppConfig::from_pairs([("HERMES_AI_PROVIDER", "cloudy")])
+        .expect_err("unknown AI provider must fail");
+    assert!(matches!(error, ConfigError::InvalidAiProvider { .. }));
+
+    let error = AppConfig::from_pairs([("HERMES_OMNIROUTE_BASE_URL", "   ")])
+        .expect_err("empty OmniRoute base URL must fail");
+    assert!(matches!(error, ConfigError::EmptyOmniRouteBaseUrl));
+
+    let error = AppConfig::from_pairs([("HERMES_OMNIROUTE_CHAT_MODEL", "   ")])
+        .expect_err("empty OmniRoute chat model must fail");
+    assert!(matches!(error, ConfigError::EmptyOmniRouteChatModel));
+
+    let error = AppConfig::from_pairs([("HERMES_OMNIROUTE_EMBED_MODEL", "   ")])
+        .expect_err("empty OmniRoute embed model must fail");
+    assert!(matches!(error, ConfigError::EmptyOmniRouteEmbedModel));
+
+    let error = AppConfig::from_pairs([("HERMES_OMNIROUTE_TIMEOUT_SECONDS", "0")])
+        .expect_err("zero OmniRoute timeout must fail");
+    assert!(matches!(error, ConfigError::InvalidOmniRouteTimeout { .. }));
+
+    let error = AppConfig::from_pairs([("HERMES_OMNIROUTE_API_KEY", "   ")])
+        .expect_err("empty OmniRoute API key must fail");
+    assert!(matches!(error, ConfigError::EmptyOmniRouteApiKey));
 }

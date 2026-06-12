@@ -41,7 +41,8 @@ async fn gmail_api_client_fetches_raw_messages_with_bearer_token() {
         Some(json!({
             "provider": "gmail",
             "history_id": "12345",
-            "next_page_token": "next-page"
+            "next_page_token": "next-page",
+            "page_kind": "messages"
         }))
     );
     assert_eq!(batch.messages.len(), 1);
@@ -68,6 +69,7 @@ async fn gmail_api_client_fetches_raw_messages_with_bearer_token() {
             .starts_with("GET /gmail/v1/users/me/messages?")
     );
     assert!(requests[0].request_line.contains("maxResults=2"));
+    assert!(requests[0].request_line.contains("includeSpamTrash=true"));
     assert!(requests[0].request_line.contains("q=is%3Aunread"));
     assert_eq!(
         requests[0].authorization.as_deref(),
@@ -137,7 +139,7 @@ async fn imap_network_client_fetches_raw_messages_by_uid_without_mutating_mailbo
     assert!(
         commands
             .iter()
-            .any(|command| command.contains("UID SEARCH 43:*"))
+            .any(|command| command.contains("UID SEARCH UID 43:*"))
     );
     assert!(commands.iter().any(|command| {
         command.contains("UID FETCH 43 (UID BODY.PEEK[] RFC822.SIZE INTERNALDATE)")

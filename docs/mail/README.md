@@ -1,61 +1,50 @@
-# Hermes Mail — Email Intelligence Platform
+# Hermes Communications - Email Channel
 
-Модуль почты Hermes Hub. Полноценная система понимания и автоматизации почты:
-получение, анализ, классификация, workflow, AI-правила, шаблоны, подписи.
+Email is a communication channel inside Hermes, not the product identity.
+Hermes is not an email client. The email surface preserves source evidence and
+projects provider records into the Communications domain.
 
-## Ключевые принципы
+## Principles
 
-- **Personal-first**: система для личного использования владельца
-- **Provider-independent**: провайдер — только транспорт, весь анализ делает Hermes
-- **Email as workflow**: письмо проходит состояния от new до archived
-- **Email as knowledge**: письмо → задачи, заметки, счета, контракты, документы
-- **AI-assisted, user-controlled**: ИИ предлагает, пользователь подтверждает
-- **Local-first**: все данные локальны, никаких облачных зависимостей
+- **Personal-first**: the system serves the local owner.
+- **Provider-independent**: providers are transport and source-record
+  boundaries.
+- **Email as evidence**: email can produce Communications, Events, Documents,
+  Obligations, Tasks, Decisions and Relationships.
+- **AI-assisted, owner-controlled**: AI proposes; the owner or policy confirms.
+- **Local-first**: private memory remains local.
 
-## Состояние
+## Current Implementation Surface
 
-| Метрика | Значение |
-|---|---|
-| Модулей | 36 |
-| API endpoint'ов | 50+ |
-| Миграций БД | 12 |
-| Тестов | 93 |
-| Покрытие спеки | ~85% реализовано, ~15% блокировано |
+The current backend exposes email-related communication routes under:
 
-## Навигация
+```text
+http://127.0.0.1:8080/api/v1/communications/
+```
 
-- [Общая архитектура](architecture.md)
-- [Описание модулей](modules.md)
+Implementation metrics and route details live in the API/status documents. This
+README describes the domain framing.
+
+## Lifecycle
+
+```text
+Email provider record
+  -> raw source preservation
+  -> RFC 2822 parsing
+  -> canonical Communication projection
+  -> event creation
+  -> engine processing
+     - Search Engine indexing
+     - Risk Engine spam/phishing signals
+     - Obligation Engine candidate extraction
+     - Enrichment Engine entity/link candidates
+  -> UI/API context
+```
+
+## Navigation
+
+- [Architecture](architecture.md)
+- [Modules](modules.md)
 - [API Reference](api.md)
-- [Статус реализации](status.md)
-- [Явные блокеры](blockers.md)
-
-## Быстрый старт
-
-```bash
-make dev          # запуск dev-окружения
-make backend-run  # запуск бекенда
-```
-
-API доступно на `http://127.0.0.1:8080/api/v1/communications/`.
-
-## Жизненный цикл письма
-
-```
-Письмо получено (IMAP/Gmail API)
-        ↓
-  RFC 2822 парсинг
-        ↓
-  Проекция в БД
-        ↓
-  АВТО-АНАЛИЗ HERMES:
-  ├── Эвристический скоринг (0-100)
-  ├── Категоризация (finance/legal/work/...)
-  ├── Спам-детекция
-  ├── Фишинг-детекция
-  └── Авто-workflow (spam | needs_action | new)
-        ↓
-  Индексация (Tantivy full-text)
-        ↓
-  Доступно в UI / API
-```
+- [Status](status.md)
+- [Blockers](blockers.md)

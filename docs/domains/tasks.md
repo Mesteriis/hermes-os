@@ -2,16 +2,24 @@
 
 ## Responsibilities
 
-The tasks domain owns actionable commitments, reminders, deadlines, assignees, status lifecycle and links to evidence.
+The Tasks domain owns concrete actionable units with lifecycle, owner, status,
+evidence and links to context.
+
+A Task is not the same as an Obligation or Follow-Up:
+
+- an Obligation is a commitment or duty with evidence;
+- a Follow-Up is a prompt to revisit something;
+- a Task is an actionable unit with status lifecycle.
 
 ## Task Sources
 
-- manual creation
-- message extraction
-- document extraction
-- meeting summary
-- agent suggestion
-- imported task provider in future versions
+- manual creation;
+- Communication extraction;
+- Document extraction;
+- meeting summary;
+- Obligation Engine output;
+- agent suggestion;
+- imported task provider in future versions.
 
 ## Lifecycle
 
@@ -30,20 +38,23 @@ stateDiagram-v2
 
 ## Required Fields
 
-- title
-- source or manual provenance
-- status
-- owner
-- created_at
-- updated_at
-- optional deadline
-- optional reminder policy
-- linked entities
+- title;
+- source or manual provenance;
+- status;
+- owner;
+- created_at;
+- updated_at;
+- optional deadline;
+- optional reminder policy;
+- linked entities.
 
 ## Extraction Rules
 
-AI extraction creates task candidates, not automatically active commitments, unless a user policy explicitly allows auto-activation for a low-risk source.
+AI extraction and engine output create task candidates, not automatically active
+commitments, unless a user policy explicitly allows auto-activation for a
+low-risk source.
 
 ## Audit
 
-Status changes, deadline changes, assignment changes and deletions must emit events.
+Status changes, deadline changes, assignment changes and deletions must emit
+events.

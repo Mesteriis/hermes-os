@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -50,6 +50,16 @@ impl TaskStore {
     }
 
     pub async fn create(&self, req: &NewTask) -> Result<Task, TaskError> {
+        let mut transaction = self.pool.begin().await?;
+        let task = Self::create_in_transaction(&mut transaction, req).await?;
+        transaction.commit().await?;
+        Ok(task)
+    }
+
+    pub(crate) async fn create_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        req: &NewTask,
+    ) -> Result<Task, TaskError> {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -67,7 +77,7 @@ impl TaskStore {
          .bind(req.energy_type.as_deref()).bind(req.confidentiality.as_deref().unwrap_or("private_local"))
          .bind(&req.tags).bind(req.linked_person_id.as_deref()).bind(req.linked_organization_id.as_deref())
          .bind(req.created_from_event_id.as_deref()).bind(req.created_by_actor_id.as_deref())
-         .fetch_one(&self.pool).await?;
+         .fetch_one(&mut **transaction).await?;
         Ok(row_to_task(row)?)
     }
 

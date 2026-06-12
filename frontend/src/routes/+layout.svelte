@@ -3,7 +3,7 @@
 	import '$lib/styles/tokens.css';
 	import '$lib/styles/app.css';
 	import { onMount } from 'svelte';
-	import { currentLocale, t, setLocale } from '$lib/i18n';
+	import { currentLocale, t } from '$lib/i18n';
 	import { activeCommunicationSection, activeSidebarRailGroupId, isSidebarRail, expandedSidebarGroupIds, isUserMenuOpen, navigateTo, navigateToCommunicationSection, toggleUserMenu, closeUserMenu, activeView, shellViewClass } from '$lib/stores/navigation';
 	import { toggleNotificationsDrawer, notificationItems, notificationCount, openNotificationTarget, type NotificationItem } from '$lib/stores/notifications';
 	import { shouldShowVaultOnboarding, vaultStatus as vaultStatusStore, vaultWizardStep, vaultWizardError, vaultWizardMessage, vaultEntropyEventsCount, vaultRecovery, isVaultActionSubmitting, vaultStatusError, continueVaultOnboarding } from '$lib/stores/vault';
@@ -18,7 +18,7 @@
 	import WidgetSettingsDrawer from '$lib/components/shared/WidgetSettingsDrawer.svelte';
 	import AddWidgetDrawer from '$lib/components/shared/AddWidgetDrawer.svelte';
 	import * as vaultService from '$lib/services/vault';
-	import { saveFrontendLocaleSetting } from '$lib/api';
+	import { saveLocaleSetting } from '$lib/stores/settings';
 	import type { SidebarNavGroup, ResolvedSidebarItem } from '$lib/layout';
 	import type { AppViewId } from '$lib/stores/navigation';
 
@@ -164,7 +164,7 @@
 	<span>{_('Increase the Hermes Hub window size to continue.')}</span>
 </div>
 
-<main class={`desktop-shell ${$shellViewClass} ${$shellThemeClass}`} class:sidebar-rail={$isSidebarRail}>
+<main class={`desktop-shell ${$shellViewClass} ${$shellThemeClass}`} class:sidebar-rail={$isSidebarRail} class:vault-gate={$shouldShowVaultOnboarding}>
 	{#if $shouldShowVaultOnboarding}
 		<VaultOnboarding
 			wizardStep={$vaultWizardStep}
@@ -182,82 +182,83 @@
 			onContinue={continueVaultOnboarding}
 			onEntropyMove={handleVaultEntropyMove}
 		/>
+	{:else}
+		<Sidebar
+			sidebarRootEntries={$sidebarRootEntries}
+			expandedSidebarGroupIds={$expandedSidebarGroupIds}
+			onSelectItem={handleSelectItem}
+			onToggleGroup={handleToggleGroup}
+			onToggleRail={toggleSidebarRail}
+			onSettings={() => navigateTo('settings')}
+		/>
+
+		{#if $isSidebarRail && $activeSidebarRailGroupId !== null}
+			<button
+				type="button"
+				class="sidebar-rail-dropdown-backdrop"
+				aria-label={_('Close sidebar menu')}
+				onclick={() => activeSidebarRailGroupId.set(null)}
+			></button>
+		{/if}
+
+		<section class="workspace" class:layout-editing={$isLayoutEditing} 	aria-label={_('{title} workspace').replace('{title}', _($activeView.title))}>
+			<Topbar
+				viewTitle={$activeView.title}
+				viewSubtitle={$activeView.subtitle}
+				notificationCount={$notificationCount}
+				isUserMenuOpen={$isUserMenuOpen}
+				isLayoutEditing={$isLayoutEditing}
+				onToggleNotifications={() => { toggleNotificationsDrawer(); isUserMenuOpen.set(false); }}
+				onToggleUserMenu={toggleUserMenu}
+				onCloseUserMenu={closeUserMenu}
+				onStartLayoutEditing={startLayoutEditing}
+				onToggleLocale={async () => { const loc = $currentLocale === 'en' ? 'ru' : 'en'; await saveLocaleSetting(loc); }}
+				onExit={exitApplication}
+			/>
+
+			<NotificationsDrawer
+				notificationItems={$notificationItems}
+				onOpenTarget={(notification) => openNotificationTarget(notification as NotificationItem)}
+				{formatDateTime}
+			/>
+
+			<LayoutEditControls
+				isLayoutEditing={$isLayoutEditing}
+				isSaving={$isLayoutSettingsSaving}
+				hasChanges={$layoutDraft !== null}
+				onAddWidget={openAddWidgetDrawer}
+				onCancel={cancelLayoutEditing}
+				onReset={resetCurrentViewLayout}
+				onSave={saveLayoutSettings}
+			/>
+
+			{@render children()}
+
+			<WidgetSettingsDrawer
+				isOpen={$isLayoutEditing && $selectedLayoutWidget !== null}
+				widget={$selectedLayoutWidget}
+				onClose={closeWidgetSettingsDrawer}
+				{widgetGridValue}
+				{widgetGridMin}
+				{widgetGridMax}
+				{adjustWidgetGridValue}
+				{handleWidgetGridInput}
+				{widgetPanelSurfaceValue}
+				{widgetPanelSurfaceOverrideValue}
+				{handleWidgetPanelSurfaceInput}
+				{resetWidgetPanelSurface}
+				{resetWidgetGrid}
+				{moveWidgetInZone}
+				{hideWidget}
+				{widgetZoneTitle}
+			/>
+
+			<AddWidgetDrawer
+				isOpen={$isLayoutEditing && $isWidgetDrawerOpen}
+				widgets={$addableWidgetsForCurrentView}
+				onClose={closeAddWidgetDrawer}
+				onShowWidget={showWidget}
+			/>
+		</section>
 	{/if}
-	<Sidebar
-		sidebarRootEntries={$sidebarRootEntries}
-		expandedSidebarGroupIds={$expandedSidebarGroupIds}
-		onSelectItem={handleSelectItem}
-		onToggleGroup={handleToggleGroup}
-		onToggleRail={toggleSidebarRail}
-		onSettings={() => navigateTo('settings')}
-	/>
-
-	{#if $isSidebarRail && $activeSidebarRailGroupId !== null}
-		<button
-			type="button"
-			class="sidebar-rail-dropdown-backdrop"
-			aria-label={_('Close sidebar menu')}
-			onclick={() => activeSidebarRailGroupId.set(null)}
-		></button>
-	{/if}
-
-	<section class="workspace" class:layout-editing={$isLayoutEditing} 	aria-label={_('{title} workspace').replace('{title}', _($activeView.title))}>
-		<Topbar
-			viewTitle={$activeView.title}
-			viewSubtitle={$activeView.subtitle}
-			notificationCount={$notificationCount}
-			isUserMenuOpen={$isUserMenuOpen}
-			isLayoutEditing={$isLayoutEditing}
-			onToggleNotifications={() => { toggleNotificationsDrawer(); isUserMenuOpen.set(false); }}
-			onToggleUserMenu={toggleUserMenu}
-			onCloseUserMenu={closeUserMenu}
-			onStartLayoutEditing={startLayoutEditing}
-			onToggleLocale={async () => { const loc = $currentLocale === 'en' ? 'ru' : 'en'; setLocale(loc); try { await saveFrontendLocaleSetting(loc); } catch (_) {} }}
-			onExit={exitApplication}
-		/>
-
-		<NotificationsDrawer
-			notificationItems={$notificationItems}
-			onOpenTarget={(notification) => openNotificationTarget(notification as NotificationItem)}
-			{formatDateTime}
-		/>
-
-		<LayoutEditControls
-			isLayoutEditing={$isLayoutEditing}
-			isSaving={$isLayoutSettingsSaving}
-			hasChanges={$layoutDraft !== null}
-			onAddWidget={openAddWidgetDrawer}
-			onCancel={cancelLayoutEditing}
-			onReset={resetCurrentViewLayout}
-			onSave={saveLayoutSettings}
-		/>
-
-		{@render children()}
-
-		<WidgetSettingsDrawer
-			isOpen={$isLayoutEditing && $selectedLayoutWidget !== null}
-			widget={$selectedLayoutWidget}
-			onClose={closeWidgetSettingsDrawer}
-			{widgetGridValue}
-			{widgetGridMin}
-			{widgetGridMax}
-			{adjustWidgetGridValue}
-			{handleWidgetGridInput}
-			{widgetPanelSurfaceValue}
-			{widgetPanelSurfaceOverrideValue}
-			{handleWidgetPanelSurfaceInput}
-			{resetWidgetPanelSurface}
-			{resetWidgetGrid}
-			{moveWidgetInZone}
-			{hideWidget}
-			{widgetZoneTitle}
-		/>
-
-		<AddWidgetDrawer
-			isOpen={$isLayoutEditing && $isWidgetDrawerOpen}
-			widgets={$addableWidgetsForCurrentView}
-			onClose={closeAddWidgetDrawer}
-			onShowWidget={showWidget}
-		/>
-	</section>
 </main>

@@ -1,129 +1,76 @@
-# Persons — Статус реализации
+# Persons — Persona Refactoring Status
 
-## Фаза 0: Переименование contact → person ✓
+This status document tracks the documentation and implementation migration from
+the legacy Contact/Person model to the target Persona Intelligence model.
 
-| Артефакт | Статус |
+It intentionally does not preserve the old "implemented sections" scorecard,
+because that scorecard measured a CRM-shaped specification that is no longer the
+domain target.
+
+## Documentation Status
+
+| Area | Status | Notes |
+|---|---|---|
+| Domain vision | Updated | Persona Intelligence replaces Contact/CRM framing. |
+| Architecture | Updated | Persona, Relationship, Memory, Dossier, Self Persona and Timeline Engine use are defined. |
+| Data model | Updated | Target logical model documented with compatibility mapping. |
+| API | Updated | Target `/personas` API shape documented; `/persons` marked legacy compatibility. |
+| Gap analysis | Added | See `refactoring-report.md`. |
+| ADR | Added | ADR-0084 records the domain decision. |
+
+## Current Implementation Compatibility
+
+The backend currently contains implementation pieces that can be reused, but they
+do not yet fully implement the target model.
+
+| Current artifact | Status against target |
 |---|---|
-| Таблица `persons` (бывш. `contacts`) | ✓ |
-| `person_identity_candidates` (бывш. `contact_identity_candidates`) | ✓ |
-| 4 модуля переименованы | ✓ |
-| 40+ бэкенд-файлов обновлены | ✓ |
-| 8 фронтенд-файлов обновлены | ✓ |
-| 20+ doc-файлов обновлены | ✓ |
-| Миграция 0034 | ✓ |
+| `persons` table | Transitional Persona projection, still rooted in email/contact history. |
+| `person_identities` | Useful identity trace table; needs Persona naming and extra trace types. |
+| `person_identity_candidates` | Compatible review workflow; contact/person language must become Persona language. |
+| `person_roles` | Deprecated by first-class Relationships. |
+| `person_personas` | Deprecated; conflicts with Persona as the root entity. |
+| `relationship_events` | Useful timeline projection; not a first-class Relationship model. |
+| `person_facts`, `person_memory_cards`, `person_preferences` | Compatible with Persona Memory after naming/provenance alignment. |
+| `person_expertise` | Compatible as Persona skills/knowledge signals. |
+| `person_promises`, `person_risks` | Must be reframed as cited facts, timeline events or observations. |
+| `health_status`, `watchlist`, `is_favorite`, `notes` | UI/read-model or memory concepts, not Persona root identity. |
+| `/api/v1/persons/*` | Legacy compatibility API. |
 
-## Фаза 1: Мультиканальная идентичность ✓
+## Target Migration Slices
 
-| Функция | Статус | Таблица/Модуль |
+| Slice | Status | Required outcome |
 |---|---|---|
-| §5 Multi-channel Identity | ✓ | `person_identities` |
-| §6 Identity Resolution | ✓ | `person_identity_candidates` |
-| §7 Contact Merge | ✓ | `person_identity.rs` |
-| §8 Contact Roles | ✓ | `person_roles` |
-| §9 Contact Personas | ✓ | `person_personas` |
-| §10 Contact Types | ✓ | `person_type` column |
+| ADR and docs | Complete in this refactoring | New source of truth for domain language. |
+| Self Persona | Not implemented | Exactly one Owner Persona with `is_self = true`. |
+| PersonaType | Not implemented as target enum | Support `human`, `ai_agent`, `organization_proxy`, `system`. |
+| Relationship model | Not implemented | Store source/target Persona relationships with trust and strength. |
+| Identity traces | Partially implemented | Extend beyond handle/email identities to document and message traces. |
+| Memory model | Partially implemented | Preserve facts, knowledge, preferences, memory cards and conflicts with evidence. |
+| Timeline Engine use | Partially implemented | Split dated events from first-class Relationship records. |
+| Dossier read model | Partially implemented | Generate cited dossiers with summary, interests, projects, organizations, skills, communication patterns and AI observations. |
+| Persona Intelligence | Partially implemented | Consolidate fingerprint/profile/trust/analytics/investigator into one concept. |
+| API migration | Not implemented | Introduce target `/personas` routes or a versioned compatibility strategy. |
+| Schema migration | Not implemented | Rename/restructure tables only under a dedicated migration ADR and validation plan. |
 
-## Фаза 2: Память персоны ✓
+## Removed Scorecard
 
-| Функция | Статус | Таблица/Модуль |
-|---|---|---|
-| §20 Memory Cards | ✓ | `person_memory_cards` |
-| §21 Personal Facts | ✓ | `person_facts` |
-| §22 Memory Confidence | ✓ | `confidence` column on facts |
-| §23 Contact Sources | ✓ | `source` column on all tables |
-| §24 Knowledge Conflicts | ✓ | `person_knowledge_conflicts` |
-| §25 Memory Decay | ✓ | `PersonFactStore::decay_unverified()` |
-| §26 Contact Snapshots | ✓ | `person_snapshots` |
-| §13 History Diff | ✓ | `PersonSnapshotStore::history_diff()` |
+The previous status document claimed completion for features such as Contact
+Merge, Contact Roles, Contact Personas, Health & Monitoring, Investigator and
+Analytics. Those labels are no longer accepted as target-domain milestones.
 
-## Фаза 3: Таймлайн отношений ✓
+Replacement milestones:
 
-| Функция | Статус | Таблица/Модуль |
-|---|---|---|
-| §11 Relationship Timeline | ✓ | `relationship_events` |
-| §12 Memory Timeline | ✓ | `relationship_events` |
-| §14 Milestones | ✓ | `event_type` filtering |
+- Identity Resolution over Persona traces.
+- Relationship-first graph model.
+- Persona Memory with provenance.
+- Persona timeline views through the Timeline Engine.
+- Persona Dossier generation.
+- Persona Intelligence observations and communication patterns.
+- Owner Persona integration for agents and user-owned actions.
 
-## Фаза 4: Communication DNA ✓
+## Validation Expectation
 
-| Функция | Статус | Реализация |
-|---|---|---|
-| §15 Contact Inbox | — | `communication_messages` (вне модуля persons) |
-| §16 Communication Profile | ✓ | `EnrichedPerson` поля |
-| §17 Communication DNA | ✓ | DNA columns: `communication_style`, `verbosity`, `technical_depth`, `question_frequency`, `call_preference`, `response_pattern` |
-| §18 Language Profile | ✓ | `language` column + `active_hours`/`active_days` JSONB |
-| §19 Preferences | ✓ | `person_preferences` |
-
-## Фаза 5: Enrichment Engine ✓
-
-| Функция | Статус | Реализация |
-|---|---|---|
-| §67 Enrichment Engine | ✓ | `person_enrichment_engine.rs` |
-| §68 Auto Discovery | ✓ | `EnrichmentResultStore` |
-| §69 GitHub Intelligence | ✓ | через enrichment engine |
-| §70 LinkedIn Intelligence | ✓ | через enrichment engine |
-| §71 Profile Verification | ✓ | confidence scoring |
-
-## Фаза 6: Экспертиза ✓
-
-| Функция | Статус | Реализация |
-|---|---|---|
-| §28 Expertise | ✓ | `person_expertise` |
-| §29 Skill Graph | ✓ | `search_by_skill()` |
-
-## Фаза 7: Доверие ✓
-
-| Функция | Статус | Реализация |
-|---|---|---|
-| §30-35 Trust & Reliability | ✓ | `person_promises` (fulfill/broken/forgiven), `person_risks` (low/medium/high/critical) |
-
-## Фаза 8: Здоровье ✓
-
-| Функция | Статус | Реализация |
-|---|---|---|
-| §36-40 Health & Monitoring | ✓ | `health_status`, `watchlist`, `communication_gap_days` columns + `PersonHealthStore` |
-
-## Фаза 9: AI Investigator ✓
-
-| Функция | Статус | Реализация |
-|---|---|---|
-| §64 Dossier Generator | ✓ | `PersonInvestigator::assemble_dossier()` |
-| §65 AI Brief | ✓ | `PersonInvestigator::meeting_prep()` |
-| §74 Investigator Agent | ✓ | `person_investigator.rs` |
-
-## Фаза 10: Аналитика ✓
-
-| Функция | Статус | Реализация |
-|---|---|---|
-| §27 Relationship Score | ✓ | `person_analytics.rs` |
-| §41-57 Analytics | ✓ | heatmap, communication costs, shared context |
-| §72 Intelligence Score | ✓ | `intelligence_score()` |
-| §73 Knowledge Gaps | ✓ | через intelligence score |
-
-## Фаза 11: Экспорт ✓
-
-| Функция | Статус | Реализация |
-|---|---|---|
-| §60 Documents Hub | — | `documents` module (вне persons) |
-| §61 Tasks | — | `task_candidates` module (вне persons) |
-| §62 Decisions | — | `relationship_events` filtered by type |
-| §63 Notes | ✓ | `notes` column + API |
-| §66 Export | ✓ | Markdown/JSON export |
-
-## Не реализовано (вне скоупа persons)
-
-| Функция | Причина |
-|---|---|
-| Relationship Map (§75) | Зависит от работающей graph projection |
-| Mutual Connections (§76) | Зависит от graph projection |
-| Organization Module (§77) | Отдельный реализованный модуль; `organization_reference` остаётся compatibility/cache field |
-| Digital Twin (§78) | Композитный read-side view, требует UI |
-| Enrichment провайдеры (реальные API-вызовы) | Провайдеры спроектированы как pluggable traits, реализации — следующий шаг |
-
-## Итого
-
-| Метрика | Значение |
-|---|---|
-| Реализовано разделов спеки | 63 из 83 |
-| Не в скоупе persons | 8 |
-| Отложено (зависимости) | 12 |
+For documentation-only refactoring, validation is scoped to repository file
+inspection, Markdown presence checks and scoped diff checks. Backend validation
+is required only when implementation or migration code changes.

@@ -3,6 +3,7 @@ pub mod actions;
 pub mod ai_reply;
 pub mod analytics;
 pub mod attachment_dedup;
+pub mod background_sync;
 pub mod blockers;
 pub mod core;
 pub mod drafts;

@@ -1,75 +1,64 @@
-# Hermes Mail — Архитектура
+# Email Channel Architecture
 
-## Слои
+## Position
 
-```
-┌─────────────────────────────────────────────┐
-│                  UI (SvelteKit)              │
-├─────────────────────────────────────────────┤
-│              HTTP API (lib.rs)               │
-│  50+ endpoint'ов через axum::Router          │
-├─────────────────────────────────────────────┤
-│         Domain Services (36 модулей)         │
-│  intelligence │ threads │ rules │ templates  │
-│  drafts │ finance │ legal │ signatures      │
-│  analytics │ search │ extract │ personas    │
-├─────────────────────────────────────────────┤
-│        Storage Layer                         │
-│  PostgreSQL (metadata) + Tantivy (search)    │
-│  + LocalFS blob storage (docker/data/mail/) │
-├─────────────────────────────────────────────┤
-│        Provider Adapters                     │
-│  Gmail API │ IMAP │ SMTP │ Ollama (LLM)     │
-└─────────────────────────────────────────────┘
+Email belongs to the Communications domain. It is not a separate product or a
+parallel memory model.
+
+## Layers
+
+```text
+UI surface
+  -> Communications API
+  -> Communications domain services
+  -> Email provider adapters
+  -> raw source records
+  -> canonical Communication projections
+  -> shared engines
 ```
 
-## Поток данных
+## Data Flow
 
-### Входящие (ingestion)
-```
-Provider → Raw Records → Message Projection → Auto-Analysis → Graph → Search Index
-```
+### Ingestion
 
-### Исходящие (sending)
-```
-Draft → SMTP Client → Provider
+```text
+Provider -> Raw Records -> Message Projection -> Events -> Graph -> Engines
 ```
 
-### Анализ
-```
-Message → Heuristic Engine → AI Category + Score → Workflow State
-         → LLM (Ollama) → Summary + Classification
-         → SPF/DKIM/DMARC Parser → Auth Risk
-         → Signature Detector → S/MIME + PGP status
+### Sending
+
+```text
+Draft -> explicit owner confirmation/policy -> provider send capability
 ```
 
-## Ключевые ADR
+### Engine Processing
 
-| ADR | Тема |
+```text
+Communication
+  -> Search Engine
+  -> Risk Engine
+  -> Obligation Engine
+  -> Enrichment Engine
+  -> Memory Engine
+```
+
+## Key ADR
+
+| ADR | Topic |
 |---|---|
-| ADR-0001 | Event sourcing — spine системы |
-| ADR-0005 | PostgreSQL — primary store |
-| ADR-0006 | Tantivy — full-text search |
-| ADR-0009 | Ollama — локальный AI |
+| ADR-0001 | Event sourcing as system spine |
+| ADR-0005 | PostgreSQL primary store |
+| ADR-0006 | Tantivy full-text search |
+| ADR-0009 | Local AI through Ollama |
 | ADR-0041 | Email provider ingestion foundation |
-| ADR-0042 | Secret references для credentials |
-| ADR-0044 | Account setup + encrypted vault |
-| ADR-0046 | Blob storage для вложений |
+| ADR-0042 | Secret references for provider credentials |
+| ADR-0044 | Account setup and encrypted vault |
+| ADR-0046 | Blob storage for attachments |
 | ADR-0053 | Database encrypted vault |
-| ADR-0055 | Full read-write email networking |
+| ADR-0055 | Full email provider networking |
 
-## База данных
+## Storage Boundary
 
-12 таблиц для почтового модуля:
-- `communication_messages` — основная таблица писем (workflow_state, ai_category, importance_score, ...)
-- `communication_attachments` — вложения
-- `communication_mail_blobs` — blob-хранилище
-- `email_rules` — правила автоматизации
-- `email_templates` — шаблоны писем
-- `email_personas` — личности отправки
-- `email_drafts` — черновики
-- `email_invoices` — счета
-- `email_legal_documents` — юрдокументы
-- `email_certificates` — сертификаты
-- `communication_provider_accounts` — аккаунты провайдеров
-- `communication_raw_records` — сырые записи (append-only)
+Email-specific tables preserve provider records, messages, drafts, templates,
+attachments and related metadata. They feed canonical Communications, Events and
+shared engines. Search indexes and AI summaries are derived state.

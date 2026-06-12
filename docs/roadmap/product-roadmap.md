@@ -1,5 +1,9 @@
 # Product Roadmap
 
+This roadmap uses current foundation terminology. Older implementation
+milestones that mention person/contact storage should be read as compatibility
+records feeding the Persona model.
+
 ## Version 0.1 - Architectural Foundation
 
 Goals:
@@ -44,7 +48,7 @@ Key functions:
 - event ingestion pipeline
 - fixture and read-only provider email import
 - local account setup for Gmail, iCloud and raw IMAP
-- basic persons
+- basic Persona-compatible identity projection
 - full text search
 - document import for Markdown/PDF
 
@@ -73,15 +77,15 @@ Goals:
 
 - make graph-backed memory central
 - support richer documents and identity resolution
-- connect messages, people, projects and documents
+- connect Communications, Personas, Projects and Documents
 
 Key functions:
 
-- first graph core projection from persons, messages and documents
+- first graph core projection from Persona-compatible identity records, messages and documents
 - graph relationships with provenance
-- person merge/split
+- Persona identity merge/split
 - document OCR and extraction
-- project timelines
+- project timeline views
 - task candidates from messages and documents
 
 Architectural changes:

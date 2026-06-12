@@ -28,8 +28,10 @@ impl AttachmentDedupStore {
         let limit = limit.clamp(1, 50);
         let rows = sqlx::query(
             r#"SELECT sha256, array_agg(DISTINCT filename) AS filenames,
-                array_agg(DISTINCT message_id) AS message_ids, count(*)::BIGINT AS cnt
-            FROM communication_attachments
+                array_agg(DISTINCT a.message_id) AS message_ids, count(*)::BIGINT AS cnt
+            FROM communication_attachments a
+            JOIN communication_messages m ON m.message_id = a.message_id
+            WHERE m.local_state = 'active'
             GROUP BY sha256 HAVING count(*) > 1
             ORDER BY cnt DESC LIMIT $1"#,
         )
@@ -64,8 +66,11 @@ impl AttachmentDedupStore {
             r#"WITH normalized AS (
                 SELECT lower(regexp_replace(regexp_replace(regexp_replace(regexp_replace(filename,
                     '_final', '', 'i'), '_v\d+', '', 'i'), '_copy', '', 'i'), '\s*\(\d+\)', '', 'i')) AS base_name,
-                    filename, message_id, sha256
-                FROM communication_attachments WHERE filename IS NOT NULL
+                    filename, a.message_id, sha256
+                FROM communication_attachments a
+                JOIN communication_messages m ON m.message_id = a.message_id
+                WHERE filename IS NOT NULL
+                  AND m.local_state = 'active'
             )
             SELECT base_name, array_agg(DISTINCT filename) AS filenames,
                 array_agg(DISTINCT message_id) AS message_ids, count(*)::BIGINT AS cnt

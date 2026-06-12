@@ -1,4 +1,4 @@
-use crate::integrations::ollama::client::{OllamaClient, OllamaError};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -19,12 +19,12 @@ pub struct Translation {
 
 #[derive(Clone)]
 pub struct MultilingualService {
-    ollama: Option<OllamaClient>,
+    runtime: Option<AiRuntimeClient>,
 }
 
 impl MultilingualService {
-    pub fn new(ollama: Option<OllamaClient>) -> Self {
-        Self { ollama }
+    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+        Self { runtime }
     }
 
     /// Heuristic language detection based on character sets and common words.
@@ -141,13 +141,13 @@ impl MultilingualService {
         text: &str,
         target_lang: &str,
     ) -> Result<Option<Translation>, MultilingualError> {
-        let Some(ref ollama) = self.ollama else {
+        let Some(ref runtime) = self.runtime else {
             return Ok(None);
         };
         let prompt = format!(
             "Translate the following text to {target_lang}. Return ONLY the translated text, no explanations:\n\n{text}"
         );
-        let result = ollama.chat(&prompt).await?;
+        let result = runtime.chat(&prompt).await?;
         Ok(Some(Translation {
             original_language: "detected".into(),
             target_language: target_lang.into(),
@@ -160,7 +160,7 @@ impl MultilingualService {
 #[derive(Debug, Error)]
 pub enum MultilingualError {
     #[error(transparent)]
-    Ollama(#[from] OllamaError),
+    Runtime(#[from] AiRuntimeError),
 }
 
 #[cfg(test)]

@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 // ── CalendarAccount ────────────────────────────────────────────────────────
@@ -393,6 +393,16 @@ impl CalendarEventStore {
     }
 
     pub async fn create(&self, req: &NewCalendarEvent) -> Result<CalendarEvent, CalendarError> {
+        let mut transaction = self.pool.begin().await?;
+        let event = Self::create_in_transaction(&mut transaction, req).await?;
+        transaction.commit().await?;
+        Ok(event)
+    }
+
+    pub(crate) async fn create_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        req: &NewCalendarEvent,
+    ) -> Result<CalendarEvent, CalendarError> {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -400,7 +410,7 @@ impl CalendarEventStore {
         let event_id = format!("evt:v1:{:x}", ts);
         let row = sqlx::query(
             "INSERT INTO calendar_events (event_id, source_event_id, account_id, source_id, title, description, location, start_at, end_at, timezone, all_day, recurrence_rule, status, visibility, event_type, conference_url, conference_provider, preparation_reminder_minutes, travel_buffer_minutes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING event_id, source_event_id, account_id, source_id, title, description, location, start_at, end_at, timezone, all_day, recurrence_rule, status, visibility, event_type, importance_score, readiness_score, sync_status, conference_url, conference_provider, preparation_reminder_minutes, travel_buffer_minutes, created_at, updated_at"
-        ).bind(&event_id).bind(req.source_event_id.as_deref()).bind(req.account_id.as_deref()).bind(req.source_id.as_deref()).bind(&req.title).bind(req.description.as_deref()).bind(req.location.as_deref()).bind(req.start_at).bind(req.end_at).bind(req.timezone.as_deref()).bind(req.all_day.unwrap_or(false)).bind(req.recurrence_rule.as_deref()).bind(req.status.as_deref().unwrap_or("scheduled")).bind(req.visibility.as_deref().unwrap_or("private")).bind(req.event_type.as_deref()).bind(req.conference_url.as_deref()).bind(req.conference_provider.as_deref()).bind(req.preparation_reminder_minutes).bind(req.travel_buffer_minutes).fetch_one(&self.pool).await?;
+        ).bind(&event_id).bind(req.source_event_id.as_deref()).bind(req.account_id.as_deref()).bind(req.source_id.as_deref()).bind(&req.title).bind(req.description.as_deref()).bind(req.location.as_deref()).bind(req.start_at).bind(req.end_at).bind(req.timezone.as_deref()).bind(req.all_day.unwrap_or(false)).bind(req.recurrence_rule.as_deref()).bind(req.status.as_deref().unwrap_or("scheduled")).bind(req.visibility.as_deref().unwrap_or("private")).bind(req.event_type.as_deref()).bind(req.conference_url.as_deref()).bind(req.conference_provider.as_deref()).bind(req.preparation_reminder_minutes).bind(req.travel_buffer_minutes).fetch_one(&mut **transaction).await?;
         Ok(row_to_event(row)?)
     }
 

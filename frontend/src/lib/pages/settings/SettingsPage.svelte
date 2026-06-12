@@ -59,6 +59,7 @@
 	import ApplicationSettings from './widgets/ApplicationSettings.svelte';
 	import SidebarSettingsWidget from './widgets/SidebarSettings.svelte';
 	import IntegrationsSettings from './widgets/IntegrationsSettings.svelte';
+	import AISettingsControlCenter from './widgets/AISettingsControlCenter.svelte';
 
 	const _ = (key: string) => t($currentLocale, key);
 
@@ -90,6 +91,10 @@
 		{
 			label: 'Sources',
 			items: [{ id: 'integrations', label: 'Integrations', icon: 'tabler:plug-connected' }]
+		},
+		{
+			label: 'AI',
+			items: [{ id: 'ai', label: 'AI Control Center', icon: 'tabler:sparkles' }]
 		}
 	];
 
@@ -100,13 +105,17 @@
 			selectedIntegrationId = null;
 			return;
 		}
-		if (!selectedIntegrationId || !$integrationViewModels.some((item) => item.integrationId === selectedIntegrationId)) {
-			selectedIntegrationId = $integrationViewModels[0].integrationId;
+		if (selectedIntegrationId && !$integrationViewModels.some((item) => item.integrationId === selectedIntegrationId)) {
+			selectedIntegrationId = null;
 		}
 	});
 
 	function selectIntegration(integrationId: string) {
 		selectedIntegrationId = integrationId;
+	}
+
+	function closeIntegrationInspector() {
+		selectedIntegrationId = null;
 	}
 </script>
 
@@ -194,14 +203,17 @@
 				sidebarConfigItemFn={sidebarConfigItem}
 				inputEventValueFn={inputEventValue}
 			/>
-		{:else}
+		{:else if $selectedSettingsSection === 'integrations'}
 			<IntegrationsSettings
 				integrations={$integrationViewModels}
 				{selectedIntegrationId}
 				onSelectIntegration={selectIntegration}
+				onCloseIntegration={closeIntegrationInspector}
 				onOpenAccountDrawer={openAccountWizard}
 				formatDateTimeFn={formatDateTime}
 			/>
+		{:else}
+			<AISettingsControlCenter />
 		{/if}
 	</div>
 </div>

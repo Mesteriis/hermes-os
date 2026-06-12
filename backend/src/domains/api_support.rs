@@ -15,9 +15,11 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 use url::form_urlencoded;
 
+use crate::ai::control_center::{AiControlCenterError, AiControlCenterStore, AiProviderAccount};
 use crate::ai::core::{
     AI_EMBEDDING_DIMENSION, AiAgentListResponse, AiAgentRun, AiAnswerRequest, AiError,
-    AiMeetingPrepRequest, AiService, AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
+    AiMeetingPrepRequest, AiModelRouting, AiService, AiStatusResponse,
+    AiTaskCandidateRefreshRequest, v3_agents,
 };
 use crate::domains::mail::core::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
@@ -38,7 +40,7 @@ use crate::platform::calls::{
     TelegramCall, TranscriptStatus,
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
-use crate::platform::config::AppConfig;
+use crate::platform::config::{AiRuntimeProvider, AppConfig};
 
 use crate::domains::persons::health::{PersonHealthError, PersonHealthStore};
 
@@ -117,7 +119,11 @@ use crate::domains::tasks::health::{TaskHealthError, TaskWatchtowerService};
 use crate::domains::tasks::intelligence::TaskIntelligenceService;
 use crate::domains::tasks::rules::{TaskRuleError, TaskRuleStore, TaskTemplateStore};
 use crate::domains::tasks::sync::{export_task_json, export_task_md};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
+use crate::integrations::omniroute::client::{
+    OmniRouteClient, OmniRouteClientConfig, OmniRouteError,
+};
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat,
     TelegramError, TelegramMessage, TelegramMessageIngestResult, TelegramStore,
@@ -227,13 +233,13 @@ pub(crate) async fn ai_service(state: &AppState) -> Result<AiService, ApiError> 
         return Err(ApiError::DatabaseNotConfigured);
     };
     let runtime_settings = ai_runtime_settings(state).await?;
-    let ollama = ollama_client(&runtime_settings)?;
+    let model_routing = ai_model_routing(state, &runtime_settings).await?;
+    let runtime = ai_runtime_client(state, &runtime_settings)?;
 
-    Ok(AiService::new(
+    Ok(AiService::new_with_routing(
         pool.clone(),
-        ollama,
-        &runtime_settings.chat_model,
-        &runtime_settings.embedding_model,
+        runtime,
+        model_routing,
     ))
 }
 
@@ -287,15 +293,126 @@ pub(crate) async fn ai_runtime_settings(state: &AppState) -> Result<AiRuntimeSet
         .await?)
 }
 
-pub(crate) fn ollama_client(settings: &AiRuntimeSettings) -> Result<OllamaClient, ApiError> {
-    Ok(OllamaClient::new(
-        OllamaClientConfig::new(
-            &settings.base_url,
+pub(crate) fn ai_runtime_client(
+    state: &AppState,
+    settings: &AiRuntimeSettings,
+) -> Result<AiRuntimeClient, ApiError> {
+    match settings.provider {
+        AiRuntimeProvider::Ollama => Ok(AiRuntimeClient::Ollama(OllamaClient::new(
+            OllamaClientConfig::new(
+                &settings.base_url,
+                &settings.chat_model,
+                &settings.embedding_model,
+            )
+            .with_timeout_seconds(settings.timeout_seconds),
+        )?)),
+        AiRuntimeProvider::OmniRoute => {
+            let api_key = state.config.omniroute_api_key().cloned().ok_or_else(|| {
+                ApiError::Ai(AiError::Runtime(AiRuntimeError::OmniRoute(
+                    OmniRouteError::MissingApiKey,
+                )))
+            })?;
+            Ok(AiRuntimeClient::OmniRoute(OmniRouteClient::new(
+                OmniRouteClientConfig::new(
+                    &settings.base_url,
+                    &settings.chat_model,
+                    &settings.embedding_model,
+                    api_key,
+                )
+                .with_timeout_seconds(settings.timeout_seconds),
+            )?))
+        }
+    }
+}
+
+async fn ai_model_routing(
+    state: &AppState,
+    settings: &AiRuntimeSettings,
+) -> Result<AiModelRouting, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Ok(AiModelRouting::fallback(
             &settings.chat_model,
             &settings.embedding_model,
+        ));
+    };
+    let store = AiControlCenterStore::new(pool.clone());
+    match resolve_ai_model_routing(&store, settings).await {
+        Ok(routing) => Ok(routing),
+        Err(error) => {
+            tracing::warn!(error = %error, "AI model routing resolution fell back to legacy ai.* settings");
+            Ok(AiModelRouting::fallback(
+                &settings.chat_model,
+                &settings.embedding_model,
+            ))
+        }
+    }
+}
+
+async fn resolve_ai_model_routing(
+    store: &AiControlCenterStore,
+    settings: &AiRuntimeSettings,
+) -> Result<AiModelRouting, AiControlCenterError> {
+    Ok(AiModelRouting {
+        default_chat: resolve_ai_slot_model(store, settings, "default_chat", &settings.chat_model)
+            .await?,
+        reasoning: resolve_ai_slot_model(store, settings, "reasoning", &settings.chat_model)
+            .await?,
+        summarization: resolve_ai_slot_model(
+            store,
+            settings,
+            "summarization",
+            &settings.chat_model,
         )
-        .with_timeout_seconds(settings.timeout_seconds),
-    )?)
+        .await?,
+        mail_intelligence: resolve_ai_slot_model(
+            store,
+            settings,
+            "mail_intelligence",
+            &settings.chat_model,
+        )
+        .await?,
+        reply_draft: resolve_ai_slot_model(store, settings, "reply_draft", &settings.chat_model)
+            .await?,
+        extraction: resolve_ai_slot_model(store, settings, "extraction", &settings.chat_model)
+            .await?,
+        embeddings: resolve_ai_slot_model(store, settings, "embeddings", &settings.embedding_model)
+            .await?,
+        meeting_prep: resolve_ai_slot_model(store, settings, "meeting_prep", &settings.chat_model)
+            .await?,
+    })
+}
+
+async fn resolve_ai_slot_model(
+    store: &AiControlCenterStore,
+    settings: &AiRuntimeSettings,
+    slot: &str,
+    fallback_model: &str,
+) -> Result<String, AiControlCenterError> {
+    let Some(route) = store.route_for_slot(slot).await? else {
+        return Ok(fallback_model.to_owned());
+    };
+    let Some(provider) = store.provider(&route.provider_id).await? else {
+        return Ok(fallback_model.to_owned());
+    };
+    if ai_provider_matches_runtime(&provider, settings.provider) {
+        Ok(route.model_key)
+    } else {
+        Ok(fallback_model.to_owned())
+    }
+}
+
+fn ai_provider_matches_runtime(
+    provider: &AiProviderAccount,
+    runtime_provider: AiRuntimeProvider,
+) -> bool {
+    match runtime_provider {
+        AiRuntimeProvider::Ollama => {
+            provider.provider_kind == "built_in" && provider.provider_key == "ollama"
+        }
+        AiRuntimeProvider::OmniRoute => {
+            provider.provider_kind == "api" && provider.provider_key == "omniroute"
+        }
+    }
 }
 
 pub(crate) fn document_processing_store(
@@ -316,35 +433,23 @@ pub(crate) fn person_identity_store(state: &AppState) -> Result<PersonIdentitySt
     Ok(PersonIdentityStore::new(pool.clone()))
 }
 
-pub(crate) fn email_multilingual_service(
-    _state: &AppState,
+pub(crate) async fn email_multilingual_service(
+    state: &AppState,
 ) -> Result<crate::domains::mail::multilingual::MultilingualService, ApiError> {
+    let settings = ai_runtime_settings(state).await?;
     Ok(
         crate::domains::mail::multilingual::MultilingualService::new(
-            crate::integrations::ollama::client::OllamaClient::new(
-                crate::integrations::ollama::client::OllamaClientConfig::new(
-                    "http://127.0.0.1:11434",
-                    "qwen3:4b",
-                    "qwen3-embedding:4b",
-                ),
-            )
-            .ok(),
+            ai_runtime_client(state, &settings).ok(),
         ),
     )
 }
 
-pub(crate) fn email_ai_reply_service(
-    _state: &AppState,
+pub(crate) async fn email_ai_reply_service(
+    state: &AppState,
 ) -> Result<crate::domains::mail::ai_reply::AiReplyService, ApiError> {
+    let settings = ai_runtime_settings(state).await?;
     Ok(crate::domains::mail::ai_reply::AiReplyService::new(
-        crate::integrations::ollama::client::OllamaClient::new(
-            crate::integrations::ollama::client::OllamaClientConfig::new(
-                "http://127.0.0.1:11434",
-                "qwen3:4b",
-                "qwen3-embedding:4b",
-            ),
-        )
-        .ok(),
+        ai_runtime_client(state, &settings).ok(),
     ))
 }
 
@@ -500,6 +605,8 @@ pub(crate) struct CommunicationMessageSummaryResponse {
     pub(crate) delivery_state: String,
     pub(crate) message_metadata: Value,
     pub(crate) attachment_count: i64,
+    pub(crate) local_state: String,
+    pub(crate) local_state_changed_at: Option<DateTime<Utc>>,
 }
 
 impl From<ProjectedMessageSummary> for CommunicationMessageSummaryResponse {
@@ -521,6 +628,8 @@ impl From<ProjectedMessageSummary> for CommunicationMessageSummaryResponse {
             delivery_state: summary.message.delivery_state,
             message_metadata: summary.message.message_metadata,
             attachment_count: summary.attachment_count,
+            local_state: summary.message.local_state.as_str().to_owned(),
+            local_state_changed_at: summary.message.local_state_changed_at,
         }
     }
 }
@@ -541,6 +650,7 @@ pub(crate) struct CommunicationMessageDetailItem {
     pub(crate) sender: String,
     pub(crate) recipients: Vec<String>,
     pub(crate) body_text: String,
+    pub(crate) body_html: Option<String>,
     pub(crate) occurred_at: Option<DateTime<Utc>>,
     pub(crate) projected_at: DateTime<Utc>,
     pub(crate) channel_kind: String,
@@ -548,10 +658,22 @@ pub(crate) struct CommunicationMessageDetailItem {
     pub(crate) sender_display_name: Option<String>,
     pub(crate) delivery_state: String,
     pub(crate) message_metadata: Value,
+    pub(crate) local_state: String,
+    pub(crate) local_state_changed_at: Option<DateTime<Utc>>,
+    pub(crate) local_state_reason: Option<String>,
 }
 
-impl From<ProjectedMessage> for CommunicationMessageDetailItem {
-    fn from(message: ProjectedMessage) -> Self {
+impl CommunicationMessageDetailItem {
+    pub(crate) fn from_message(message: ProjectedMessage, body_html: Option<String>) -> Self {
+        let message_metadata = message.message_metadata.clone();
+        Self::from_message_with_metadata(message, body_html, message_metadata)
+    }
+
+    pub(crate) fn from_message_with_metadata(
+        message: ProjectedMessage,
+        body_html: Option<String>,
+        message_metadata: Value,
+    ) -> Self {
         Self {
             message_id: message.message_id,
             raw_record_id: message.raw_record_id,
@@ -561,14 +683,24 @@ impl From<ProjectedMessage> for CommunicationMessageDetailItem {
             sender: message.sender,
             recipients: message.recipients,
             body_text: message.body_text,
+            body_html,
             occurred_at: message.occurred_at,
             projected_at: message.projected_at,
             channel_kind: message.channel_kind,
             conversation_id: message.conversation_id,
             sender_display_name: message.sender_display_name,
             delivery_state: message.delivery_state,
-            message_metadata: message.message_metadata,
+            message_metadata,
+            local_state: message.local_state.as_str().to_owned(),
+            local_state_changed_at: message.local_state_changed_at,
+            local_state_reason: message.local_state_reason,
         }
+    }
+}
+
+impl From<ProjectedMessage> for CommunicationMessageDetailItem {
+    fn from(message: ProjectedMessage) -> Self {
+        Self::from_message(message, None)
     }
 }
 
@@ -1224,6 +1356,11 @@ pub(crate) struct DocumentProcessingJobsQuery {
 }
 
 pub(crate) struct CommunicationMessagesQuery {
+    pub(crate) account_id: Option<String>,
+    pub(crate) workflow_state: Option<String>,
+    pub(crate) channel_kind: Option<String>,
+    pub(crate) q: Option<String>,
+    pub(crate) local_state: Option<String>,
     pub(crate) limit: Option<i64>,
 }
 
@@ -1248,19 +1385,43 @@ pub(crate) struct ProjectsQuery {
 pub(crate) fn parse_communication_messages_query(
     raw_query: Option<&str>,
 ) -> Result<CommunicationMessagesQuery, ApiError> {
-    let mut query = CommunicationMessagesQuery { limit: None };
+    let mut query = CommunicationMessagesQuery {
+        account_id: None,
+        workflow_state: None,
+        channel_kind: None,
+        q: None,
+        local_state: None,
+        limit: None,
+    };
 
     if let Some(raw_query) = raw_query {
         for (key, value) in form_urlencoded::parse(raw_query.as_bytes()) {
-            if key.as_ref() == "limit" {
-                query.limit = Some(value.parse::<i64>().map_err(|_| {
-                    ApiError::InvalidCommunicationQuery("limit must be an integer")
-                })?);
+            match key.as_ref() {
+                "account_id" => query.account_id = non_empty_query_value(value.as_ref()),
+                "workflow_state" => query.workflow_state = non_empty_query_value(value.as_ref()),
+                "channel_kind" => query.channel_kind = non_empty_query_value(value.as_ref()),
+                "q" => query.q = non_empty_query_value(value.as_ref()),
+                "local_state" => query.local_state = non_empty_query_value(value.as_ref()),
+                "limit" => {
+                    query.limit = Some(value.parse::<i64>().map_err(|_| {
+                        ApiError::InvalidCommunicationQuery("limit must be an integer")
+                    })?);
+                }
+                _ => {}
             }
         }
     }
 
     Ok(query)
+}
+
+fn non_empty_query_value(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_owned())
+    }
 }
 
 pub(crate) fn parse_graph_neighborhood_query(

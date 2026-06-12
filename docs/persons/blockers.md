@@ -1,15 +1,37 @@
-# Persons — Архитектурные блокеры
+# Persons — Persona Architecture Blockers
 
-## Блокеры текущего backend/API scope
+## Current Blockers
 
-Блокеров для текущего backend/API scope нет: person projection, identity review, memory, timeline, health, analytics, investigator и export реализованы как локальные PostgreSQL-backed модули с protected API.
+The target Persona Intelligence architecture is not blocked at the documentation
+level, but implementation is blocked by unresolved migration work.
 
-## Deferred / вне текущего scope
+| Blocker | Why it matters | Required decision |
+|---|---|---|
+| Legacy `persons` naming | Domain language now requires Persona, while backend/API still expose person/contact history. | Decide route/schema migration strategy. |
+| Missing Self Persona | Agents and owner-scoped memory need a single `is_self: true` Persona. | Add owner Persona semantics and uniqueness guarantee. |
+| Missing Relationship records | Current model stores relationship-like state as fields and timeline events. | Add first-class Relationship storage and API. |
+| `person_personas` conflict | Nested personas contradict Persona as the root entity. | Deprecate or migrate to interaction context/preferences. |
+| Email-derived `person_id` compatibility | ADR-0074 keeps text IDs for current implementation, but target Persona should not be email-rooted. | Future opaque ID migration ADR if/when implementation changes. |
+| Root trust/health/watchlist fields | These encode CRM-style relationship state on Persona. | Move trust/strength to Relationships and attention state to read models. |
+| Dossier not formalized as read model | Current investigator/export concepts do not fully define cited dossier generation. | Add Dossier read model contract. |
+| PersonaType not enforced | Target requires `human`, `ai_agent`, `organization_proxy`, `system`. | Add typed domain validation in a migration slice. |
 
-Эти пункты не считаются закрытыми и должны оставаться видимыми в roadmap/status:
+## Not Blockers
 
-- Relationship Map (§75) — зависит от graph traversal/UI слоя.
-- Mutual Connections (§76) — зависит от graph traversal/UI слоя.
-- Digital Twin (§78) — композитный read-side view, требует отдельного UI/API контракта.
-- Реальные enrichment provider adapters — GitHub/LinkedIn/web провайдеры спроектированы как pluggable boundary, но live API adapters не реализованы в этом slice.
-- Opaque UUID `person_id` migration — текущий контракт зафиксирован в ADR-0074 как text ID `person:v1:email:{len}:{email}`; UUID migration требует отдельного ADR и миграционного плана.
+- Keeping current `persons` tables temporarily for compatibility.
+- Keeping `/api/v1/persons/*` temporarily as legacy routes.
+- Reusing current memory/fact/preference/timeline tables as migration inputs.
+- Reusing current identity candidate review workflow if terminology and trace
+  semantics are updated.
+
+## Deferred Work
+
+- Backend schema migration from person/contact naming to Persona naming.
+- Target `/personas` API implementation.
+- UI redesign around Persona Intelligence.
+- Dossier cache/read-model implementation with citations.
+- Relationship graph UI and traversal views.
+- AI agent Personas for HESTIA and future agents.
+
+Any implementation work in these areas must be covered by a dedicated plan,
+relevant ADR review and repository validation.

@@ -1,8 +1,9 @@
 # Contributing to Hermes Hub
 
-Hermes Hub is a local-first personal knowledge and communication system. The
-project is early, architecture-heavy, and intentionally conservative about
-privacy, provenance and safety.
+Hermes Hub is a local-first Personal Memory System for communications,
+knowledge, memory, relationships, projects, documents, decisions, obligations
+and context. The project is architecture-heavy and intentionally conservative
+about privacy, provenance and safety.
 
 ## Before Contributing
 

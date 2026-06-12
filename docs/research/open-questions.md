@@ -1,5 +1,11 @@
 # Research and Open Questions
 
+Status: active research backlog.
+
+This file records unresolved technical questions. It is not a canonical product
+model. When terminology conflicts with foundation, domain, engine or workflow
+docs, follow the canonical docs and update this backlog.
+
 ## Provider Integrations
 
 - Which email access mode should be first: IMAP/SMTP, Gmail API or provider-specific OAuth? Answered by ADR-0041 and ADR-0055: initial provider shapes are Gmail API/OAuth, iCloud IMAP and generic IMAP, with SMTP/write operations enabled for user-initiated actions and read-only retained only for automated integration tests.

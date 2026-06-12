@@ -10,9 +10,12 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
-use crate::platform::config::AppConfig;
+use crate::platform::config::{AiRuntimeProvider, AppConfig};
 
 const SECRET_LIKE_MARKERS: [&str; 5] = ["secret", "password", "token", "credential", "private_key"];
+const UI_STATE_FORBIDDEN_KEYS: [&str; 7] =
+    ["body", "html", "raw", "text", "password", "token", "secret"];
+const UI_STATE_MAX_BYTES: u64 = 65_536;
 
 #[derive(Clone)]
 pub struct ApplicationSettingsStore {
@@ -162,16 +165,19 @@ impl ApplicationSettingsStore {
         let settings = self.list_settings().await?;
 
         Ok(AiRuntimeSettings {
-            base_url: string_value(&settings, "ai.ollama_base_url")
-                .unwrap_or_else(|| fallback.ollama_base_url().to_owned()),
-            chat_model: string_value(&settings, "ai.chat_model")
-                .unwrap_or_else(|| fallback.ollama_chat_model().to_owned()),
-            embedding_model: string_value(&settings, "ai.embedding_model")
-                .unwrap_or_else(|| fallback.ollama_embed_model().to_owned()),
+            provider: ai_provider_value(&settings).unwrap_or_else(|| fallback.ai_provider()),
+            base_url: ai_base_url_value(&settings, fallback),
+            chat_model: ai_chat_model_value(&settings, fallback),
+            embedding_model: ai_embedding_model_value(&settings, fallback),
             timeout_seconds: integer_value(&settings, "ai.timeout_seconds")
                 .and_then(|value| u64::try_from(value).ok())
                 .filter(|value| *value > 0)
-                .unwrap_or_else(|| fallback.ollama_timeout_seconds()),
+                .unwrap_or_else(|| {
+                    match ai_provider_value(&settings).unwrap_or_else(|| fallback.ai_provider()) {
+                        AiRuntimeProvider::Ollama => fallback.ollama_timeout_seconds(),
+                        AiRuntimeProvider::OmniRoute => fallback.omniroute_timeout_seconds(),
+                    }
+                }),
         })
     }
 
@@ -415,6 +421,54 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             is_editable: true,
         },
         DeclaredApplicationSetting {
+            setting_key: "frontend.locale",
+            category: "frontend",
+            value_kind: SettingValueKind::String,
+            default_value: json!("en"),
+            label: "Frontend locale",
+            description: "Desktop interface language preference. Stores only the selected locale code.",
+            metadata: json!({
+                "ui_control": "language",
+                "allowed_values": ["en", "ru"],
+                "stores_private_content": false,
+                "restart_required": false
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
+            setting_key: "frontend.ui_state",
+            category: "frontend",
+            value_kind: SettingValueKind::Json,
+            default_value: json!({
+                "schemaVersion": 1
+            }),
+            label: "Frontend UI state",
+            description: "Transient desktop UI state for restoring visible workspace context. Stores non-authoritative UI metadata only, never message bodies, document text or secrets.",
+            metadata: json!({
+                "ui_control": "hidden",
+                "schema_version": 1,
+                "stores_private_content": false,
+                "restart_required": false,
+                "max_bytes": UI_STATE_MAX_BYTES,
+                "forbidden_keys": UI_STATE_FORBIDDEN_KEYS
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
+            setting_key: "ai.provider",
+            category: "ai",
+            value_kind: SettingValueKind::String,
+            default_value: json!("ollama"),
+            label: "AI provider",
+            description: "AI runtime provider. Ollama is local by default; OmniRoute is explicit opt-in and uses an env-backed API key.",
+            metadata: json!({
+                "ui_control": "select",
+                "allowed_values": ["ollama", "omniroute"],
+                "stores_secret": false
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
             setting_key: "ai.ollama_base_url",
             category: "ai",
             value_kind: SettingValueKind::String,
@@ -424,6 +478,21 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             metadata: json!({
                 "ui_control": "text",
                 "placeholder": "http://127.0.0.1:11434"
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
+            setting_key: "ai.omniroute_base_url",
+            category: "ai",
+            value_kind: SettingValueKind::String,
+            default_value: json!("https://ai.sh-inc.ru/v1"),
+            label: "OmniRoute base URL",
+            description: "OpenAI-compatible OmniRoute endpoint. API key is read from HERMES_OMNIROUTE_API_KEY, never from application settings.",
+            metadata: json!({
+                "ui_control": "text",
+                "placeholder": "https://ai.sh-inc.ru/v1",
+                "stores_secret": false,
+                "key_env": "HERMES_OMNIROUTE_API_KEY"
             }),
             is_editable: true,
         },
@@ -441,6 +510,19 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             is_editable: true,
         },
         DeclaredApplicationSetting {
+            setting_key: "ai.omniroute_chat_model",
+            category: "ai",
+            value_kind: SettingValueKind::String,
+            default_value: json!("codex/gpt-5.5"),
+            label: "OmniRoute chat model",
+            description: "OpenAI-compatible OmniRoute model used for chat and source-backed answers when ai.provider is omniroute.",
+            metadata: json!({
+                "ui_control": "text",
+                "placeholder": "codex/gpt-5.5"
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
             setting_key: "ai.embedding_model",
             category: "ai",
             value_kind: SettingValueKind::String,
@@ -450,6 +532,20 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             metadata: json!({
                 "ui_control": "text",
                 "placeholder": "qwen3-embedding:4b"
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
+            setting_key: "ai.omniroute_embedding_model",
+            category: "ai",
+            value_kind: SettingValueKind::String,
+            default_value: json!("openai-compatible-chat-ollama-pve/qwen3-embedding:4b"),
+            label: "OmniRoute embedding model",
+            description: "OpenAI-compatible OmniRoute embedding model. It must return 2560 dimensions until the semantic index shape changes.",
+            metadata: json!({
+                "ui_control": "text",
+                "placeholder": "openai-compatible-chat-ollama-pve/qwen3-embedding:4b",
+                "required_dimension": 2560
             }),
             is_editable: true,
         },
@@ -742,8 +838,69 @@ impl SettingValueKind {
             }
         }
 
+        validate_json_metadata_constraints(value, metadata)?;
+
         Ok(())
     }
+}
+
+fn validate_json_metadata_constraints(
+    value: &Value,
+    metadata: &Value,
+) -> Result<(), SettingsError> {
+    if let Some(max_bytes) = metadata.get("max_bytes").and_then(Value::as_u64)
+        && (value.to_string().len() as u64) > max_bytes
+    {
+        return Err(SettingsError::InvalidValue(
+            "JSON value exceeds maximum size",
+        ));
+    }
+
+    let forbidden_keys = metadata
+        .get("forbidden_keys")
+        .and_then(Value::as_array)
+        .map(|keys| {
+            keys.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_ascii_lowercase)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if !forbidden_keys.is_empty() && json_value_has_forbidden_key(value, &forbidden_keys) {
+        return Err(SettingsError::InvalidValue(
+            "JSON value contains private content keys",
+        ));
+    }
+
+    Ok(())
+}
+
+fn json_value_has_forbidden_key(value: &Value, forbidden_keys: &[String]) -> bool {
+    match value {
+        Value::Object(object) => object.iter().any(|(key, child)| {
+            is_forbidden_json_key(key, forbidden_keys)
+                || json_value_has_forbidden_key(child, forbidden_keys)
+        }),
+        Value::Array(items) => items
+            .iter()
+            .any(|item| json_value_has_forbidden_key(item, forbidden_keys)),
+        _ => false,
+    }
+}
+
+fn is_forbidden_json_key(key: &str, forbidden_keys: &[String]) -> bool {
+    let key = key.to_ascii_lowercase();
+    forbidden_keys.iter().any(|marker| {
+        key == *marker
+            || key.starts_with(marker)
+            || key.contains(&format!("_{marker}"))
+            || key.contains(&format!("{marker}_"))
+            || key.contains(&format!("-{marker}"))
+            || key.contains(&format!("{marker}-"))
+            || key.contains(&format!(".{marker}"))
+            || key.contains(&format!("{marker}."))
+            || (marker != "text" && key.ends_with(marker))
+    })
 }
 
 impl TryFrom<&str> for SettingValueKind {
@@ -762,6 +919,7 @@ impl TryFrom<&str> for SettingValueKind {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AiRuntimeSettings {
+    pub provider: AiRuntimeProvider,
     pub base_url: String,
     pub chat_model: String,
     pub embedding_model: String,
@@ -771,10 +929,23 @@ pub struct AiRuntimeSettings {
 impl AiRuntimeSettings {
     pub fn from_config(config: &AppConfig) -> Self {
         Self {
-            base_url: config.ollama_base_url().to_owned(),
-            chat_model: config.ollama_chat_model().to_owned(),
-            embedding_model: config.ollama_embed_model().to_owned(),
-            timeout_seconds: config.ollama_timeout_seconds(),
+            provider: config.ai_provider(),
+            base_url: match config.ai_provider() {
+                AiRuntimeProvider::Ollama => config.ollama_base_url().to_owned(),
+                AiRuntimeProvider::OmniRoute => config.omniroute_base_url().to_owned(),
+            },
+            chat_model: match config.ai_provider() {
+                AiRuntimeProvider::Ollama => config.ollama_chat_model().to_owned(),
+                AiRuntimeProvider::OmniRoute => config.omniroute_chat_model().to_owned(),
+            },
+            embedding_model: match config.ai_provider() {
+                AiRuntimeProvider::Ollama => config.ollama_embed_model().to_owned(),
+                AiRuntimeProvider::OmniRoute => config.omniroute_embed_model().to_owned(),
+            },
+            timeout_seconds: match config.ai_provider() {
+                AiRuntimeProvider::Ollama => config.ollama_timeout_seconds(),
+                AiRuntimeProvider::OmniRoute => config.omniroute_timeout_seconds(),
+            },
         }
     }
 }
@@ -803,6 +974,39 @@ fn string_value(settings: &[ApplicationSetting], setting_key: &str) -> Option<St
         .find(|setting| setting.setting_key == setting_key)
         .and_then(|setting| setting.value.as_str())
         .map(str::to_owned)
+}
+
+fn ai_provider_value(settings: &[ApplicationSetting]) -> Option<AiRuntimeProvider> {
+    string_value(settings, "ai.provider")
+        .as_deref()
+        .and_then(|value| AiRuntimeProvider::try_from(value).ok())
+}
+
+fn ai_base_url_value(settings: &[ApplicationSetting], fallback: &AppConfig) -> String {
+    match ai_provider_value(settings).unwrap_or_else(|| fallback.ai_provider()) {
+        AiRuntimeProvider::Ollama => string_value(settings, "ai.ollama_base_url")
+            .unwrap_or_else(|| fallback.ollama_base_url().to_owned()),
+        AiRuntimeProvider::OmniRoute => string_value(settings, "ai.omniroute_base_url")
+            .unwrap_or_else(|| fallback.omniroute_base_url().to_owned()),
+    }
+}
+
+fn ai_chat_model_value(settings: &[ApplicationSetting], fallback: &AppConfig) -> String {
+    match ai_provider_value(settings).unwrap_or_else(|| fallback.ai_provider()) {
+        AiRuntimeProvider::Ollama => string_value(settings, "ai.chat_model")
+            .unwrap_or_else(|| fallback.ollama_chat_model().to_owned()),
+        AiRuntimeProvider::OmniRoute => string_value(settings, "ai.omniroute_chat_model")
+            .unwrap_or_else(|| fallback.omniroute_chat_model().to_owned()),
+    }
+}
+
+fn ai_embedding_model_value(settings: &[ApplicationSetting], fallback: &AppConfig) -> String {
+    match ai_provider_value(settings).unwrap_or_else(|| fallback.ai_provider()) {
+        AiRuntimeProvider::Ollama => string_value(settings, "ai.embedding_model")
+            .unwrap_or_else(|| fallback.ollama_embed_model().to_owned()),
+        AiRuntimeProvider::OmniRoute => string_value(settings, "ai.omniroute_embedding_model")
+            .unwrap_or_else(|| fallback.omniroute_embed_model().to_owned()),
+    }
 }
 
 fn integer_value(settings: &[ApplicationSetting], setting_key: &str) -> Option<i64> {
@@ -887,5 +1091,81 @@ impl SettingsError {
                 | Self::InvalidValue(_)
                 | Self::ReadOnlySetting { .. }
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn frontend_locale_setting_is_declared_as_editable_string() {
+        let setting = declared_setting("frontend.locale").expect("frontend locale setting");
+
+        assert_eq!(setting.category, "frontend");
+        assert_eq!(setting.value_kind, SettingValueKind::String);
+        assert!(setting.is_editable);
+        assert_eq!(setting.default_value, json!("en"));
+        assert_eq!(setting.metadata["ui_control"], json!("language"));
+        assert_eq!(setting.metadata["allowed_values"], json!(["en", "ru"]));
+        assert_eq!(setting.metadata["stores_private_content"], json!(false));
+    }
+
+    #[test]
+    fn frontend_ui_state_setting_is_declared_as_hidden_json() {
+        let setting = declared_setting("frontend.ui_state").expect("frontend ui state setting");
+
+        assert_eq!(setting.category, "frontend");
+        assert_eq!(setting.value_kind, SettingValueKind::Json);
+        assert!(setting.is_editable);
+        assert_eq!(setting.metadata["ui_control"], json!("hidden"));
+        assert_eq!(setting.metadata["schema_version"], json!(1));
+        assert_eq!(setting.metadata["stores_private_content"], json!(false));
+        assert_eq!(setting.default_value["schemaVersion"], json!(1));
+    }
+
+    #[test]
+    fn frontend_ui_state_rejects_private_content_keys() {
+        let setting = declared_setting("frontend.ui_state").expect("frontend ui state setting");
+        let value = json!({
+            "schemaVersion": 1,
+            "savedAt": "2026-06-11T12:00:00Z",
+            "expiresAt": "2026-06-18T12:00:00Z",
+            "communications": {
+                "selectedMessageId": "msg-1",
+                "compose": {
+                    "draftId": "draft-1",
+                    "body": "private draft body"
+                }
+            }
+        });
+
+        let error = setting
+            .value_kind
+            .validate_value(&value, &setting.metadata)
+            .expect_err("private body key rejected");
+
+        assert!(matches!(error, SettingsError::InvalidValue(_)));
+    }
+
+    #[test]
+    fn frontend_ui_state_rejects_oversized_snapshots() {
+        let setting = declared_setting("frontend.ui_state").expect("frontend ui state setting");
+        let value = json!({
+            "schemaVersion": 1,
+            "savedAt": "2026-06-11T12:00:00Z",
+            "expiresAt": "2026-06-18T12:00:00Z",
+            "shell": {
+                "expandedSidebarGroupIds": vec!["communications"; 10_000]
+            }
+        });
+
+        let error = setting
+            .value_kind
+            .validate_value(&value, &setting.metadata)
+            .expect_err("oversized snapshot rejected");
+
+        assert!(matches!(error, SettingsError::InvalidValue(_)));
     }
 }

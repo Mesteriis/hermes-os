@@ -27,7 +27,7 @@ Hermes Hub should feel like a serious personal operating environment: fast, calm
 - command palette
 - timeline item
 - message thread
-- contact card
+- persona card
 - graph node panel
 - document viewer
 - task row

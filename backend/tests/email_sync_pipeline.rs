@@ -42,6 +42,15 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
         .await
         .expect("store provider account");
 
+    let raw_rfc822 = concat!(
+        "Subject: Sync Pipeline\r\n",
+        "From: Sender <sender@acme.test>\r\n",
+        "To: Recipient <recipient@client.test>\r\n",
+        "Content-Type: text/plain; charset=utf-8\r\n",
+        "\r\n",
+        "Cached message body.\r\n"
+    );
+    let raw_rfc822_base64 = base64::engine::general_purpose::STANDARD.encode(raw_rfc822);
     let batch = EmailSyncBatch {
         provider_kind: EmailProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
@@ -53,7 +62,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
             payload: json!({
                 "provider": "imap",
                 "uid": 88,
-                "raw_rfc822_base64": "U3ViamVjdDogU3luYyBQaXBlbGluZQ0KRnJvbTogU2VuZGVyIDxzZW5kZXJAZXhhbXBsZS5pbnZhbGlkPg0KVG86IFJlY2lwaWVudCA8cmVjaXBpZW50QGV4YW1wbGUuaW52YWxpZD4NCkNvbnRlbnQtVHlwZTogdGV4dC9wbGFpbjsgY2hhcnNldD11dGYtOA0KDQpDYWNoZWQgbWVzc2FnZSBib2R5Lg=="
+                "raw_rfc822_base64": raw_rfc822_base64
             }),
         }],
     };
@@ -75,6 +84,11 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     assert_eq!(report.attachments_extracted, 0);
     assert_eq!(report.attachments_not_scanned, 0);
     assert_eq!(report.upserted_persons, 2);
+    assert_eq!(report.upserted_person_identities, 2);
+    assert_eq!(report.upserted_message_participants, 2);
+    assert_eq!(report.upserted_relationship_events, 2);
+    assert_eq!(report.upserted_organizations, 2);
+    assert_eq!(report.upserted_organization_contact_links, 2);
 
     let projected = sqlx::query(
         r#"
@@ -94,9 +108,84 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     let recipients: serde_json::Value = projected.try_get("recipients").expect("recipients");
     let body_text: String = projected.try_get("body_text").expect("body_text");
     assert_eq!(subject, "Sync Pipeline");
-    assert_eq!(sender, "Sender <sender@example.invalid>");
+    assert_eq!(sender, "Sender <sender@acme.test>");
     assert_eq!(body_text, "Cached message body.");
-    assert_eq!(recipients, json!(["Recipient <recipient@example.invalid>"]));
+    assert_eq!(recipients, json!(["Recipient <recipient@client.test>"]));
+
+    let identity_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM person_identities
+        WHERE identity_type = 'email'
+          AND identity_value = ANY($1)
+          AND source = 'email_sync'
+          AND status = 'active'
+        "#,
+    )
+    .bind(vec!["sender@acme.test", "recipient@client.test"])
+    .fetch_one(&pool)
+    .await
+    .expect("person email identities");
+    assert_eq!(identity_count, 2);
+
+    let participant_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM communication_message_participants
+        WHERE message_id = (
+            SELECT message_id
+            FROM communication_messages
+            WHERE account_id = $1 AND provider_record_id = $2
+        )
+          AND email_address = ANY($3)
+          AND role = ANY($4)
+        "#,
+    )
+    .bind(&account_id)
+    .bind(&provider_record_id)
+    .bind(vec!["sender@acme.test", "recipient@client.test"])
+    .bind(vec!["sender", "recipient"])
+    .fetch_one(&pool)
+    .await
+    .expect("message participants");
+    assert_eq!(participant_count, 2);
+
+    let relationship_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM relationship_events
+        WHERE related_entity_kind = 'communication_message'
+          AND related_entity_id = (
+            SELECT message_id
+            FROM communication_messages
+            WHERE account_id = $1 AND provider_record_id = $2
+          )
+          AND event_type IN ('email_sent', 'email_received')
+        "#,
+    )
+    .bind(&account_id)
+    .bind(&provider_record_id)
+    .fetch_one(&pool)
+    .await
+    .expect("relationship events");
+    assert_eq!(relationship_count, 2);
+
+    let organization_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM organization_contact_links link
+        JOIN organization_domains domain ON domain.organization_id = link.organization_id
+        JOIN person_identities identity ON identity.person_id = link.person_id
+        WHERE domain.domain = ANY($1)
+          AND identity.identity_value = ANY($2)
+        "#,
+    )
+    .bind(vec!["acme.test", "client.test"])
+    .bind(vec!["sender@acme.test", "recipient@client.test"])
+    .fetch_one(&pool)
+    .await
+    .expect("organization contact links");
+    assert_eq!(organization_link_count, 2);
 }
 
 #[tokio::test]

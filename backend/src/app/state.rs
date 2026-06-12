@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::domains::mail::accounts::GmailOAuthPendingGrant;
+use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::integrations::telegram::tdjson::PendingQrLoginMap;
 use crate::platform::config::AppConfig;
 use crate::platform::storage::Database;
@@ -13,6 +14,7 @@ pub(crate) struct AppState {
     pub(crate) database: Database,
     pub(crate) vault: HostVault,
     pub(crate) account_setup: AccountSetupState,
+    pub(crate) telegram_runtime: TelegramRuntimeManager,
 }
 
 #[derive(Clone, Default)]

@@ -82,3 +82,8 @@ ADR status vocabulary:
 - [ADR-0073 Backend Module Organization](ADR-0073-backend-module-organization.md)
 - [ADR-0078 Frontend Component Decomposition — SPA Pages and Widgets](ADR-0078-frontend-component-decomposition.md)
 - [ADR-0079 Script Logic Decomposition — Services, Smart Pages and Config](ADR-0079-script-logic-decomposition.md)
+- [ADR-0081 Opt-In OmniRoute AI Runtime](ADR-0081-opt-in-omniroute-ai-runtime.md)
+- [ADR-0082 AI Settings Control Center](ADR-0082-ai-settings-control-center.md)
+- [ADR-0083 Telegram Live User Client Runtime](ADR-0083-telegram-live-user-client-runtime.md)
+- [ADR-0084 Persona Intelligence System](ADR-0084-persona-intelligence-system.md)
+- [ADR-0085 Communication Spine and Consistency / Contradiction Engine](ADR-0085-communication-spine-and-contradiction-engine.md)

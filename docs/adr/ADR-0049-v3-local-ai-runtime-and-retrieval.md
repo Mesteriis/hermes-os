@@ -4,6 +4,8 @@ Status: Proposed
 
 ## Context
 
+This ADR is amended by ADR-0081 for opt-in OmniRoute runtime support.
+
 ADR-0009 selects Ollama as the first local AI runtime. ADR-0007 keeps vector search replaceable. ADR-0022 forbids fine-tuning private data. V3 needs source-backed AI workflows over the V1/V2 memory spine without turning model output into source of truth.
 
 Qwen3 embedding output is 2560 dimensions. pgvector `vector` is not suitable for this dimension in the current stack, while `halfvec(2560)` supports the required shape and approximate cosine search.

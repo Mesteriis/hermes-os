@@ -1,30 +1,35 @@
-# Organizations — Модель данных
+# Organizations Data Model
 
-## organizations
+## `organizations`
 
-| Колонка | Тип | Описание |
+| Column | Type | Description |
 |---|---|---|
 | `organization_id` | TEXT PK | `org:v1:{nanos}` |
-| `display_name` | TEXT NOT NULL | Отображаемое имя |
-| `legal_name` | TEXT | Юридическое название |
-| `org_type` | TEXT | 17 типов |
-| `status` | TEXT | active/inactive/archived/watchlist/blocked/unknown |
-| `country`, `city`, `address` | TEXT | |
-| `website`, `industry`, `description` | TEXT | |
-| `primary_language`, `timezone` | TEXT | |
-| `trust_score` | SMALLINT | 0–100 |
-| `health_status` | TEXT | healthy/needs_attention/at_risk/dormant |
-| `priority` | TEXT | low/medium/high/critical |
-| `tags` | JSONB | |
-| `org_metadata` | JSONB | |
-| `registration_number`, `vat`, `cif`, `nif`, `tax_id` | TEXT | Legal |
-| `communication_style`, `verbosity`, `formality` | TEXT | DNA |
-| `secondary_languages` | JSONB | |
-| `watchlist` | BOOL | |
-| `last_interaction_at`, `interaction_count` | | |
+| `display_name` | TEXT NOT NULL | display label |
+| `legal_name` | TEXT | legal name |
+| `org_type` | TEXT | organization type |
+| `status` | TEXT | lifecycle/status value |
+| `country`, `city`, `address` | TEXT | location metadata |
+| `website`, `industry`, `description` | TEXT | descriptive metadata |
+| `primary_language`, `timezone` | TEXT | communication/context metadata |
+| `tags` | JSONB | user/system tags |
+| `org_metadata` | JSONB | structured metadata |
+| `registration_number`, `vat`, `cif`, `nif`, `tax_id` | TEXT | legal identifiers |
+| `communication_style`, `verbosity`, `formality` | TEXT | communication pattern hints |
+| `secondary_languages` | JSONB | additional languages |
+| `last_interaction_at`, `interaction_count` | | derived interaction hints |
 
-## Остальные 26 таблиц
+## Relationship And Trust Boundary
 
-Следуют тому же паттерну Persons: identity/alias/domain/department/contact_link/related, facts/memory_cards/preferences/required_docs/snapshots/conflicts, timeline_events/templates, portals/procedures/playbooks/quick_actions, financial_info/contracts/compliance/services/products, enrichment_results, risks/alerts.
+Trust, risk, watchlist and health-like values are attention or engine outputs.
+They must not be treated as Organization identity. Organization relationships to
+Personas, Projects and other Organizations should be modeled as relationships
+with provenance.
 
-Полная схема в миграциях `0038`–`0043`.
+## Other Tables
+
+The current schema includes identity, alias, domain, department, relationship,
+memory, required document, timeline/workflow, portal, procedure, playbook,
+finance, enrichment and risk/alert tables.
+
+Full implementation schema lives in migrations `0038`-`0043`.

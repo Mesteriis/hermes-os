@@ -1,11 +1,14 @@
 // ADR-0073: route registration remains centralized in app during the hard-v1
 // migration so endpoint paths and shared middleware stay auditable in one place.
+use std::collections::HashSet;
 use std::io;
+use std::sync::{LazyLock, Mutex};
+use std::time::Duration;
 
 use axum::extract::{Path, Query, RawQuery, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode, header};
 use axum::response::Html;
-use axum::routing::{delete, get, post, put};
+use axum::routing::{delete, get, patch, post, put};
 use axum::{Json, Router};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -143,6 +146,7 @@ use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntellig
 
 use crate::ai::api::*;
 use crate::app::guard;
+use crate::app::vault_reconciliation::spawn_host_vault_manifest_reconciliation;
 use crate::app::{AccountSetupState, AppError, AppState};
 use crate::domains::calendar::handlers::*;
 use crate::domains::documents::api::*;
@@ -155,10 +159,14 @@ use crate::domains::settings::api::*;
 use crate::domains::tasks::handlers::*;
 use crate::engines::automation_api::*;
 use crate::integrations::telegram::api::*;
+use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::integrations::whatsapp::api::*;
 use crate::platform::calls_api::*;
 use crate::platform::events_api::*;
 use axum::middleware;
+
+static MAIL_BACKGROUND_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 pub fn build_router(config: AppConfig) -> Router {
     build_router_with_database(config, Database::disabled())
@@ -180,7 +188,10 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         database,
         vault,
         account_setup: AccountSetupState::default(),
+        telegram_runtime: TelegramRuntimeManager::default(),
     };
+    spawn_host_vault_manifest_reconciliation(&state);
+    spawn_mail_background_sync_scheduler(&state);
 
     let api_routes = Router::new()
         .route("/api/v1/status", get(get_v1_status))
@@ -219,6 +230,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/communications/messages/{message_id}/analyze",
             post(post_v1_message_analyze),
         )
+        .route("/api/v1/workflow-actions", post(post_v1_workflow_action))
         .route("/api/v1/communications/threads", get(get_v1_threads))
         .route(
             "/api/v1/communications/threads/messages",
@@ -301,6 +313,14 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route(
             "/api/v1/communications/messages/{message_id}/imap-delete",
             post(post_v1_imap_delete),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/trash",
+            post(post_v1_message_trash),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/restore",
+            post(post_v1_message_restore),
         )
         .route(
             "/api/v1/communications/certificates",
@@ -822,6 +842,48 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             put(put_application_setting),
         )
         .route("/api/v1/ai/status", get(get_ai_status))
+        .route(
+            "/api/v1/ai/settings/overview",
+            get(get_ai_settings_overview),
+        )
+        .route(
+            "/api/v1/ai/providers",
+            get(get_ai_providers).post(post_ai_provider),
+        )
+        .route(
+            "/api/v1/ai/providers/{provider_id}",
+            patch(patch_ai_provider),
+        )
+        .route(
+            "/api/v1/ai/providers/{provider_id}/test",
+            post(post_ai_provider_test),
+        )
+        .route(
+            "/api/v1/ai/providers/{provider_id}/sync-models",
+            post(post_ai_provider_sync_models),
+        )
+        .route(
+            "/api/v1/ai/providers/{provider_id}/consent",
+            post(post_ai_provider_consent),
+        )
+        .route("/api/v1/ai/models", get(get_ai_models))
+        .route("/api/v1/ai/model-routes/{slot}", put(put_ai_model_route))
+        .route(
+            "/api/v1/ai/prompts",
+            get(get_ai_prompts).post(post_ai_prompt),
+        )
+        .route(
+            "/api/v1/ai/prompts/{prompt_id}/versions",
+            post(post_ai_prompt_version),
+        )
+        .route(
+            "/api/v1/ai/prompts/{prompt_id}/activate",
+            post(post_ai_prompt_activate),
+        )
+        .route(
+            "/api/v1/ai/prompts/{prompt_id}/test",
+            post(post_ai_prompt_test),
+        )
         .route("/api/v1/ai/agents", get(get_ai_agents))
         .route("/api/v1/ai/runs", get(get_ai_runs))
         .route("/api/v1/ai/runs/{run_id}", get(get_ai_run))
@@ -845,6 +907,14 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         )
         .route("/api/v1/telegram/accounts", post(post_telegram_account))
         .route(
+            "/api/v1/telegram/runtime/status",
+            get(get_telegram_runtime_status),
+        )
+        .route(
+            "/api/v1/telegram/runtime/start",
+            post(post_telegram_runtime_start),
+        )
+        .route(
             "/api/v1/telegram/login/qr/start",
             post(post_telegram_qr_login_start),
         )
@@ -858,8 +928,24 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         )
         .route("/api/v1/telegram/chats", get(get_telegram_chats))
         .route(
+            "/api/v1/telegram/sync/chats",
+            post(post_telegram_sync_chats),
+        )
+        .route(
+            "/api/v1/telegram/sync/history",
+            post(post_telegram_sync_history),
+        )
+        .route(
             "/api/v1/telegram/messages",
             get(get_telegram_messages).post(post_telegram_fixture_message),
+        )
+        .route(
+            "/api/v1/telegram/messages/send",
+            post(post_telegram_manual_send),
+        )
+        .route(
+            "/api/v1/telegram/media/download",
+            post(post_telegram_media_download),
         )
         .route(
             "/api/v1/policies/templates",
@@ -893,6 +979,22 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             post(post_gmail_oauth_complete),
         )
         .route("/api/v1/email-accounts/imap", post(post_imap_account_setup))
+        .route(
+            "/api/v1/email-accounts/sync-status",
+            get(get_v1_email_account_sync_status),
+        )
+        .route(
+            "/api/v1/email-accounts/{account_id}/sync-settings",
+            get(get_v1_email_account_sync_settings).put(put_v1_email_account_sync_settings),
+        )
+        .route(
+            "/api/v1/email-accounts/{account_id}/sync-now",
+            post(post_v1_email_account_sync_now),
+        )
+        .route(
+            "/api/v1/email-accounts/{account_id}/sync-full-resync",
+            post(post_v1_email_account_sync_full_resync),
+        )
         .route("/api/v1/audit/events", get(get_audit_events))
         .route("/api/v1/events", post(post_event))
         .route("/api/v1/events/{event_id}", get(get_event))
@@ -908,9 +1010,60 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/email-accounts/gmail/oauth/callback",
             get(get_gmail_oauth_callback),
         )
+        .route(
+            "/api/v1/communications/messages/{message_id}/remote-image",
+            get(get_v1_communication_message_remote_image),
+        )
         .merge(api_routes)
         .with_state(state)
         .layer(local_frontend_cors_layer())
+}
+
+fn spawn_mail_background_sync_scheduler(state: &AppState) {
+    let Some(pool) = state.database.pool().cloned() else {
+        return;
+    };
+    let Some(database_url) = state.database.database_url() else {
+        return;
+    };
+    if !register_mail_background_sync_scheduler(database_url) {
+        return;
+    }
+    let vault = state.vault.clone();
+
+    tokio::spawn(async move {
+        let store = crate::domains::mail::background_sync::MailSyncStore::new(pool.clone());
+        let service = crate::domains::mail::background_sync::MailBackgroundSyncService::new(
+            pool,
+            vault,
+            crate::domains::mail::background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+        );
+        if let Err(error) = store.mark_orphaned_active_runs_failed(Utc::now()).await {
+            tracing::warn!(error = %error, "mail background sync startup recovery failed");
+        }
+        let mut tick = tokio::time::interval(Duration::from_secs(30));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if let Err(error) = service.run_due_accounts().await {
+                tracing::warn!(error = %error, "mail background sync scheduler tick failed");
+            }
+        }
+    });
+}
+
+fn register_mail_background_sync_scheduler(database_url: &str) -> bool {
+    match MAIL_BACKGROUND_SYNC_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "mail background sync scheduler registry is unavailable"
+            );
+            false
+        }
+    }
 }
 
 #[derive(Serialize)]

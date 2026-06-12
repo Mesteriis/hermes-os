@@ -2,7 +2,7 @@
 
 Rust backend for Hermes Hub.
 
-Current scope includes an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, encrypted secret vault, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, read-only Gmail API and IMAP provider networking, fixture email import/export, local mail blob/attachment metadata storage, message/contact/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, graph core projection/read APIs, protected workflow APIs for projects, task candidates, contact identity review and document processing, and local AI workflow APIs backed by Ollama plus pgvector semantic retrieval. OS keychain resolver, full MIME parsing, attachment extraction, graph editing, richer graph inference and autonomous agents are not implemented yet.
+Current scope includes an executable backend foundation with configuration parsing, health/readiness endpoints, V1 status API, canonical event append/read API, event log storage, API access audit logging, host vault onboarding/unlock, legacy database-vault compatibility, Gmail/iCloud/IMAP account setup, secret reference metadata, communication ingestion storage, email sync preflight planning, email provider networking with explicit read/write capability boundaries, fixture email import/export, local mail blob/attachment metadata storage, message/Persona-compatible identity/document projection boundaries, Tantivy search boundary, projection cursors, projection runner batch semantics, graph core projection/read APIs, protected workflow APIs for projects, task candidates, Persona identity review and document processing, and local AI workflow APIs backed by Ollama plus pgvector semantic retrieval. Full MIME parsing, attachment extraction, graph editing, richer graph inference, first-class Polygraph observations and autonomous agent action runtime are not implemented yet.
 
 ## Commands
 
@@ -40,6 +40,10 @@ make backend-v1-api-smoke-dev
 make backend-validate
 ```
 
+`backend-contacts-smoke-dev` is a legacy Makefile target name. It currently
+runs the `persons` integration test suite and is kept only for compatibility
+until the development command surface is renamed deliberately.
+
 Graph core smoke:
 
 ```bash
@@ -54,7 +58,7 @@ workflow smoke:
 make backend-workflow-smoke-dev
 ```
 
-This starts the local PostgreSQL container, creates isolated temporary databases on the dev PostgreSQL server, and runs the project, project API, project link review, task candidate, task candidate API, contact identity, contact identity API, document processing and document processing API integration suites serially. The target is included in `make validate`.
+This starts the local PostgreSQL container, creates isolated temporary databases on the dev PostgreSQL server, and runs the project, project API, project link review, task candidate, task candidate API, Persona identity, Persona identity API, document processing and document processing API integration suites serially. The target is included in `make validate`.
 
 AI smoke:
 
@@ -90,7 +94,8 @@ Import a redacted fixture JSON sample into the local development database:
 make backend-email-fixture-import-dev
 ```
 
-Project that fixture through canonical messages, contacts and graph projection:
+Project that fixture through canonical messages, Persona-compatible identity
+records and graph projection:
 
 ```bash
 make backend-email-fixture-project-dev
@@ -108,7 +113,11 @@ HERMES_EMAIL_SYNC_MAX_MESSAGES=25 \
 make backend-email-sync-cache-dev
 ```
 
-The command uses read-only IMAP, writes raw `.eml` blobs under `docker/data/mail/`, stores only metadata and blob references in PostgreSQL, and projects canonical messages plus contacts for the UI. It does not support Gmail OAuth yet; Gmail cache sync should use the same pipeline after account setup exposes refreshed access tokens to the dev command.
+The command uses read-only IMAP, writes raw `.eml` blobs under
+`docker/data/mail/`, stores only metadata and blob references in PostgreSQL, and
+projects canonical messages plus Persona-compatible identity records for the UI.
+It does not support Gmail OAuth yet; Gmail cache sync should use the same
+pipeline after account setup exposes refreshed access tokens to the dev command.
 
 Direct Cargo commands:
 
@@ -130,8 +139,16 @@ Supported environment variables:
 
 - `HERMES_HTTP_ADDR` - backend bind address, defaults to `127.0.0.1:8080`.
 - `DATABASE_URL` - optional PostgreSQL URL. The current health endpoint does not require a database connection.
-- `HERMES_LOCAL_API_SECRET` - temporary local shared secret required for local event API endpoints.
-- `HERMES_SECRET_VAULT_KEY` - database encrypted vault master key; do not commit, log or persist this value in PostgreSQL.
+- `HERMES_LOCAL_API_SECRET` - local shared secret required by the router-level
+  guard for protected local API endpoints.
+- `HERMES_VAULT_HOME` - optional host vault directory; defaults to the local
+  Hermes vault home.
+- `HERMES_DEV_MODE` - enables debug-only host vault development key behavior
+  when set to `true`.
+- `HERMES_DEV_KEY_PATH` - debug-only host vault development key path.
+- `HERMES_SECRET_VAULT_KEY` - legacy database encrypted vault master key kept
+  for migration compatibility only; do not commit, log or persist this value in
+  PostgreSQL.
 - `HERMES_OLLAMA_BASE_URL` - Ollama runtime URL, defaults to `http://127.0.0.1:11434`.
 - `HERMES_OLLAMA_CHAT_MODEL` - Ollama chat model, defaults to `qwen3:4b`.
 - `HERMES_OLLAMA_EMBED_MODEL` - Ollama embedding model, defaults to `qwen3-embedding:4b`.
@@ -142,13 +159,19 @@ Supported environment variables:
 - `GET /healthz` - returns backend health status and service name.
 - `GET /readyz` - returns readiness status; it is `503` when PostgreSQL is not configured, unavailable or missing required SQLx migrations.
 - `GET /api/v1/status` - returns enabled V1 surfaces. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `GET /api/v1/vault/status` - returns host vault initialization/unlock status. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `POST /api/v1/vault/collect-entropy` - records onboarding entropy samples for host vault creation. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `POST /api/v1/vault/create` - creates and unlocks the host vault. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `POST /api/v1/vault/unlock` - unlocks an existing host vault. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `POST /api/v1/vault/recovery/export` - exports recovery material for an unlocked host vault. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
+- `POST /api/v1/vault/recovery/import` - imports recovery material for an existing host vault. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/graph/summary` - returns graph node, edge and evidence summary counts. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/graph/search` - searches graph nodes by `q` with optional `limit`. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/graph/neighborhood` - returns the depth-1 graph neighborhood for `node_id`, including neighboring nodes, edges and evidence. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
-- `POST /api/v1/email-accounts/gmail/oauth/start` - starts Gmail OAuth account setup and returns a PKCE authorization URL. Requires local API headers, PostgreSQL and database encrypted vault key config.
+- `POST /api/v1/email-accounts/gmail/oauth/start` - starts Gmail OAuth account setup and returns a PKCE authorization URL. Requires local API headers, PostgreSQL and an initialized/unlocked host vault.
 - `GET /api/v1/email-accounts/gmail/oauth/callback` - displays OAuth callback code/state for the desktop setup flow.
-- `POST /api/v1/email-accounts/gmail/oauth/complete` - exchanges a Gmail authorization code, stores the encrypted token bundle in PostgreSQL and creates provider account bindings. Requires local API headers, PostgreSQL and database encrypted vault key config.
-- `POST /api/v1/email-accounts/imap` - creates iCloud/raw IMAP account metadata and stores the password/app-password as encrypted PostgreSQL vault ciphertext. Requires local API headers, PostgreSQL and database encrypted vault key config.
+- `POST /api/v1/email-accounts/gmail/oauth/complete` - exchanges a Gmail authorization code, stores credential payloads in the host vault and creates provider account bindings. Requires local API headers, PostgreSQL and an initialized/unlocked host vault.
+- `POST /api/v1/email-accounts/imap` - creates iCloud/raw IMAP account metadata and stores password/app-password payloads in the host vault. Requires local API headers, PostgreSQL and an initialized/unlocked host vault.
 - `POST /api/v1/events` - appends a canonical event through the application/API boundary. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/events/{event_id}` - loads a canonical event by ID. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/audit/events` - returns event API audit records. Supports `target_id`, `actor_id`, `after_audit_id` and `limit` query parameters. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
@@ -166,9 +189,9 @@ Available endpoints below require `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/task-candidates` - lists source-backed task candidates.
 - `PUT /api/v1/task-candidates/{task_candidate_id}/review` - records task candidate review state as a canonical event.
 - `GET /api/v1/tasks` - lists active local tasks created from confirmed candidates.
-- `GET /api/v1/identity-candidates` - lists contact identity candidates.
+- `GET /api/v1/identity-candidates` - lists Persona identity candidates.
 - `PUT /api/v1/identity-candidates/{identity_candidate_id}/review` - records identity candidate review state as a canonical event.
-- `GET /api/v1/contacts/{contact_id}/identity` - returns confirmed identity links for one contact.
+- `GET /api/v1/persons/{person_id}/identity` - returns confirmed identity links for one Persona-compatible person record.
 - `GET /api/v1/documents/{document_id}/processing` - returns processing jobs and artifacts for one document.
 - `GET /api/v1/document-processing/jobs` - lists recent document processing jobs.
 - `POST /api/v1/document-processing/jobs/{job_id}/retry` - requeues a failed processing job through a canonical retry event. The JSON body requires `command_id`; the response returns `job_id`, `status` and `event_id`.
@@ -196,15 +219,18 @@ Current schema:
 - `projection_cursors` - monotonic per-projection replay cursor positions.
 - `api_audit_log` - append-only operational audit records for local event API access attempts, including the constant `hermes-frontend` actor ID.
 - `secret_references` - non-secret metadata pointers to credential stores.
-- `encrypted_secret_vault_entries` - encrypted provider credential payloads keyed by `secret_ref`; plaintext values are never stored in PostgreSQL.
+- `encrypted_secret_vault_entries` - legacy database-vault ciphertext rows kept
+  for migration compatibility; new provider credential payloads use host vault
+  references.
 - `communication_provider_accounts` - non-secret email provider account metadata for `gmail`, `icloud` and `imap`.
 - `communication_raw_records` - append-only raw provider records with idempotent provider identity, source fingerprints, import batches and provenance.
 - `communication_ingestion_checkpoints` - per-account provider stream checkpoints for retryable ingestion.
 - `communication_provider_account_secret_refs` - maps provider accounts to secret references by credential purpose.
 - `communication_messages` - canonical message projection records derived from raw communication records.
-- `contacts` - contact projection records keyed by unique email address.
+- `persons` - Persona-compatible identity projection records; this table was
+  renamed from the historical `contacts` projection by migration `0034`.
 - `documents` - imported document records with source fingerprints and extracted text.
-- `graph_nodes` - rebuildable graph projection nodes derived from contacts, messages and documents.
+- `graph_nodes` - rebuildable graph projection nodes derived from persons, messages and documents.
 - `graph_edges` - rebuildable graph projection relationships with confidence and review state.
 - `graph_evidence` - rebuildable graph projection evidence records that preserve edge provenance.
 - `ai_agent_runs` - persisted local AI run provenance, answer/citation payloads and timings.

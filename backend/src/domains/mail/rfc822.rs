@@ -1,5 +1,6 @@
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use encoding_rs::{Encoding, UTF_8};
 use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -7,7 +8,9 @@ pub struct ParsedEmailMessage {
     pub subject: String,
     pub from: String,
     pub to: Vec<String>,
+    pub headers: Vec<(String, String)>,
     pub body_text: String,
+    pub body_html: Option<String>,
     pub attachments: Vec<ParsedEmailAttachment>,
 }
 
@@ -28,8 +31,7 @@ pub enum ParsedEmailAttachmentDisposition {
 }
 
 pub fn parse_rfc822_message(raw: &[u8]) -> Result<ParsedEmailMessage, EmailRfc822ParseError> {
-    let raw = String::from_utf8_lossy(raw);
-    let (header_block, body) = split_headers_and_body(&raw)?;
+    let (header_block, body) = split_headers_and_body(raw)?;
     let headers = parse_headers(header_block);
 
     let subject = header_value(&headers, "subject").unwrap_or_else(|| "(no subject)".to_owned());
@@ -45,40 +47,102 @@ pub fn parse_rfc822_message(raw: &[u8]) -> Result<ParsedEmailMessage, EmailRfc82
         subject: non_empty_or_default(subject, "(no subject)"),
         from: non_empty_or_default(from, "unknown@example.invalid"),
         to: non_empty_recipients(to),
+        headers,
         body_text: non_empty_or_default(body_text, "(empty body)"),
+        body_html: body_content.body_html,
         attachments: body_content.attachments,
     })
 }
 
-fn split_headers_and_body(raw: &str) -> Result<(&str, &str), EmailRfc822ParseError> {
-    if let Some((headers, body)) = raw.split_once("\r\n\r\n") {
-        return Ok((headers, body));
+fn split_headers_and_body(raw: &[u8]) -> Result<(&[u8], &[u8]), EmailRfc822ParseError> {
+    if let Some(separator_start) = find_subslice(raw, b"\r\n\r\n") {
+        return Ok((
+            &raw[..separator_start],
+            &raw[separator_start + b"\r\n\r\n".len()..],
+        ));
     }
-    if let Some((headers, body)) = raw.split_once("\n\n") {
-        return Ok((headers, body));
+    if let Some(separator_start) = find_subslice(raw, b"\n\n") {
+        return Ok((
+            &raw[..separator_start],
+            &raw[separator_start + b"\n\n".len()..],
+        ));
     }
 
     Err(EmailRfc822ParseError::MalformedRfc822)
 }
 
-fn parse_headers(header_block: &str) -> Vec<(String, String)> {
-    let mut headers: Vec<(String, String)> = Vec::new();
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() {
+        return Some(0);
+    }
 
-    for line in header_block.lines() {
-        if line.starts_with(' ') || line.starts_with('\t') {
-            if let Some((_, value)) = headers.last_mut() {
-                value.push(' ');
-                value.push_str(line.trim());
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+fn next_line_start(bytes: &[u8], start: usize) -> Option<usize> {
+    bytes[start..]
+        .iter()
+        .position(|byte| *byte == b'\n')
+        .map(|line_end| start + line_end + 1)
+}
+
+fn parse_headers(header_block: &[u8]) -> Vec<(String, String)> {
+    let mut raw_headers: Vec<(String, Vec<u8>)> = Vec::new();
+
+    for line in header_block.split(|byte| *byte == b'\n') {
+        let line = strip_trailing_cr(line);
+        if line.starts_with(b" ") || line.starts_with(b"\t") {
+            if let Some((_, value)) = raw_headers.last_mut() {
+                value.push(b' ');
+                value.extend_from_slice(trim_ascii_whitespace(line));
             }
             continue;
         }
 
-        if let Some((name, value)) = line.split_once(':') {
-            headers.push((name.trim().to_ascii_lowercase(), value.trim().to_owned()));
+        if let Some(separator_index) = line.iter().position(|byte| *byte == b':') {
+            let name = decode_ascii_header_name(trim_ascii_whitespace(&line[..separator_index]));
+            let value = trim_ascii_whitespace(&line[separator_index + 1..]).to_vec();
+            headers_push_if_valid(&mut raw_headers, name, value);
         }
     }
 
-    headers
+    raw_headers
+        .into_iter()
+        .map(|(name, value)| (name, decode_header_value_bytes(&value)))
+        .collect()
+}
+
+fn headers_push_if_valid(headers: &mut Vec<(String, Vec<u8>)>, name: String, value: Vec<u8>) {
+    if !name.is_empty() {
+        headers.push((name, value));
+    }
+}
+
+fn strip_trailing_cr(line: &[u8]) -> &[u8] {
+    line.strip_suffix(b"\r").unwrap_or(line)
+}
+
+fn trim_ascii_whitespace(value: &[u8]) -> &[u8] {
+    let start = value
+        .iter()
+        .position(|byte| !byte.is_ascii_whitespace())
+        .unwrap_or(value.len());
+    let end = value
+        .iter()
+        .rposition(|byte| !byte.is_ascii_whitespace())
+        .map(|index| index + 1)
+        .unwrap_or(start);
+    &value[start..end]
+}
+
+fn decode_ascii_header_name(value: &[u8]) -> String {
+    String::from_utf8_lossy(value).trim().to_owned()
+}
+
+fn decode_header_value_bytes(value: &[u8]) -> String {
+    decode_rfc2047_words(decode_text_bytes(value, None).trim())
 }
 
 fn header_value(headers: &[(String, String)], name: &str) -> Option<String> {
@@ -91,11 +155,12 @@ fn header_value(headers: &[(String, String)], name: &str) -> Option<String> {
 #[derive(Default)]
 struct ParsedEmailBodyContent {
     body_text: Option<String>,
+    body_html: Option<String>,
     attachments: Vec<ParsedEmailAttachment>,
     next_attachment_index: usize,
 }
 
-fn body_content_from_part(headers: &[(String, String)], body: &str) -> ParsedEmailBodyContent {
+fn body_content_from_part(headers: &[(String, String)], body: &[u8]) -> ParsedEmailBodyContent {
     let mut content = ParsedEmailBodyContent::default();
     collect_part_content(headers, body, &mut content);
     content
@@ -103,7 +168,7 @@ fn body_content_from_part(headers: &[(String, String)], body: &str) -> ParsedEma
 
 fn collect_part_content(
     headers: &[(String, String)],
-    body: &str,
+    body: &[u8],
     content: &mut ParsedEmailBodyContent,
 ) {
     let content_type = header_value(headers, "content-type").unwrap_or_default();
@@ -130,52 +195,78 @@ fn collect_part_content(
         return;
     }
 
-    if content.body_text.is_some() {
-        return;
-    }
-
+    let charset = header_parameter(&content_type, "charset");
     let decoded = decode_transfer_body(
         body,
         header_value(headers, "content-transfer-encoding")
             .unwrap_or_default()
             .as_str(),
+        charset.as_deref(),
     );
     if content_type_media_type == "text/html" {
-        content.body_text = Some(strip_html_tags(&decoded));
+        if content.body_html.is_none() {
+            content.body_html = non_empty_html_body(&decoded);
+        }
+        if content.body_text.is_none() {
+            content.body_text = Some(strip_html_tags(&decoded));
+        }
         return;
     }
-    if content_type_media_type == "text/plain" || content_type_media_type.is_empty() {
+    if content.body_text.is_none()
+        && (content_type_media_type == "text/plain" || content_type_media_type.is_empty())
+    {
         content.body_text = Some(normalize_body_text(&decoded));
     }
 }
 
-fn multipart_parts<'a>(boundary: &str, body: &'a str) -> Vec<(Vec<(String, String)>, &'a str)> {
+type MimeHeaders = Vec<(String, String)>;
+type MimePart<'a> = (MimeHeaders, &'a [u8]);
+
+fn multipart_parts<'a>(boundary: &str, body: &'a [u8]) -> Vec<MimePart<'a>> {
     let mut parts = Vec::new();
-    let delimiter = format!("--{boundary}");
-    for raw_part in body.split(&delimiter).skip(1) {
-        let part = raw_part.trim_start_matches("\r\n").trim_start_matches('\n');
-        if part.starts_with("--") {
+    let delimiter = format!("--{boundary}").into_bytes();
+    let mut cursor = 0;
+    let mut current_part_start = None;
+
+    while let Some(relative_start) = find_subslice(&body[cursor..], &delimiter) {
+        let boundary_start = cursor + relative_start;
+        if boundary_start > 0 && body[boundary_start - 1] != b'\n' {
+            cursor = boundary_start + delimiter.len();
+            continue;
+        }
+
+        if let Some(part_start) = current_part_start {
+            let raw_part = trim_multipart_part_body(&body[part_start..boundary_start]);
+            if let Ok((headers, nested_body)) = split_headers_and_body(raw_part) {
+                let headers = parse_headers(headers);
+                parts.push((headers, nested_body));
+            }
+        }
+
+        let after_delimiter = boundary_start + delimiter.len();
+        if body.get(after_delimiter..after_delimiter + 2) == Some(b"--") {
             break;
         }
-        let Ok((headers, nested_body)) = split_headers_and_body(part) else {
-            continue;
+
+        let Some(next_line_start) = next_line_start(body, after_delimiter) else {
+            break;
         };
-        let headers = parse_headers(headers);
-        parts.push((headers, trim_multipart_part_body(nested_body)));
+        current_part_start = Some(next_line_start);
+        cursor = next_line_start;
     }
 
     parts
 }
 
-fn trim_multipart_part_body(body: &str) -> &str {
-    body.strip_suffix("\r\n")
-        .or_else(|| body.strip_suffix('\n'))
+fn trim_multipart_part_body(body: &[u8]) -> &[u8] {
+    body.strip_suffix(b"\r\n")
+        .or_else(|| body.strip_suffix(b"\n"))
         .unwrap_or(body)
 }
 
 fn parsed_attachment_from_part(
     headers: &[(String, String)],
-    body: &str,
+    body: &[u8],
     content_type: &str,
     provider_attachment_id: String,
 ) -> ParsedEmailAttachment {
@@ -310,13 +401,16 @@ fn decode_rfc2231_continuation_segments(
     }
 
     let mut output = Vec::new();
+    let mut charset = None;
     for (expected_index, segment) in segments.into_iter().enumerate() {
         if segment.index != expected_index {
             return None;
         }
 
         let value = if expected_index == 0 {
-            rfc2231_continuation_payload(&segment.value)
+            let (segment_charset, payload) = rfc2231_charset_and_payload(&segment.value);
+            charset = segment_charset.map(str::to_owned);
+            payload
         } else {
             segment.value.as_str()
         };
@@ -327,14 +421,23 @@ fn decode_rfc2231_continuation_segments(
         }
     }
 
-    Some(String::from_utf8_lossy(&output).into_owned())
+    Some(decode_text_bytes(&output, charset.as_deref()))
 }
 
-fn rfc2231_continuation_payload(value: &str) -> &str {
-    value
-        .split_once('\'')
-        .and_then(|(_, rest)| rest.split_once('\'').map(|(_, encoded)| encoded))
-        .unwrap_or(value)
+fn rfc2231_charset_and_payload(value: &str) -> (Option<&str>, &str) {
+    let Some((charset, rest)) = value.split_once('\'') else {
+        return (None, value);
+    };
+    let Some((_, encoded)) = rest.split_once('\'') else {
+        return (None, value);
+    };
+    let charset = charset.trim();
+    let charset = if charset.is_empty() {
+        None
+    } else {
+        Some(charset)
+    };
+    (charset, encoded)
 }
 
 fn unquote_header_parameter_value(value: &str) -> String {
@@ -368,12 +471,9 @@ fn unquote_header_parameter_value(value: &str) -> String {
 
 fn decode_rfc2231_parameter_value(value: &str) -> String {
     let value = unquote_header_parameter_value(value);
-    let encoded_value = value
-        .split_once('\'')
-        .and_then(|(_, rest)| rest.split_once('\'').map(|(_, encoded)| encoded))
-        .unwrap_or(&value);
+    let (charset, encoded_value) = rfc2231_charset_and_payload(&value);
 
-    String::from_utf8_lossy(&percent_decode_bytes(encoded_value)).into_owned()
+    decode_text_bytes(&percent_decode_bytes(encoded_value), charset)
 }
 
 fn percent_decode_bytes(value: &str) -> Vec<u8> {
@@ -398,46 +498,46 @@ fn percent_decode_bytes(value: &str) -> Vec<u8> {
     output
 }
 
-fn decode_transfer_body(body: &str, transfer_encoding: &str) -> String {
-    String::from_utf8_lossy(&decode_transfer_bytes(body, transfer_encoding)).into_owned()
+fn decode_transfer_body(body: &[u8], transfer_encoding: &str, charset: Option<&str>) -> String {
+    decode_text_bytes(&decode_transfer_bytes(body, transfer_encoding), charset)
 }
 
-fn decode_transfer_bytes(body: &str, transfer_encoding: &str) -> Vec<u8> {
+fn decode_transfer_bytes(body: &[u8], transfer_encoding: &str) -> Vec<u8> {
     match transfer_encoding.trim().to_ascii_lowercase().as_str() {
         "base64" => {
             let compact = body
-                .chars()
-                .filter(|character| !character.is_whitespace())
-                .collect::<String>();
+                .iter()
+                .copied()
+                .filter(|byte| !byte.is_ascii_whitespace())
+                .collect::<Vec<_>>();
             BASE64_STANDARD
                 .decode(compact)
-                .unwrap_or_else(|_| body.as_bytes().to_vec())
+                .unwrap_or_else(|_| body.to_vec())
         }
         "quoted-printable" => decode_quoted_printable_bytes(body),
-        _ => body.as_bytes().to_vec(),
+        _ => body.to_vec(),
     }
 }
 
-fn decode_quoted_printable(input: &str) -> String {
-    String::from_utf8_lossy(&decode_quoted_printable_bytes(input)).into_owned()
+fn decode_quoted_printable(input: &str, charset: Option<&str>) -> String {
+    decode_text_bytes(&decode_quoted_printable_bytes(input.as_bytes()), charset)
 }
 
-fn decode_quoted_printable_bytes(input: &str) -> Vec<u8> {
-    let bytes = input.as_bytes();
-    let mut output = Vec::with_capacity(bytes.len());
+fn decode_quoted_printable_bytes(input: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(input.len());
     let mut index = 0;
 
-    while index < bytes.len() {
-        if bytes[index] == b'=' {
-            if bytes.get(index + 1) == Some(&b'\r') && bytes.get(index + 2) == Some(&b'\n') {
+    while index < input.len() {
+        if input[index] == b'=' {
+            if input.get(index + 1) == Some(&b'\r') && input.get(index + 2) == Some(&b'\n') {
                 index += 3;
                 continue;
             }
-            if bytes.get(index + 1) == Some(&b'\n') {
+            if input.get(index + 1) == Some(&b'\n') {
                 index += 2;
                 continue;
             }
-            if let (Some(high), Some(low)) = (bytes.get(index + 1), bytes.get(index + 2)) {
+            if let (Some(high), Some(low)) = (input.get(index + 1), input.get(index + 2)) {
                 if let (Some(high), Some(low)) = (hex_value(*high), hex_value(*low)) {
                     output.push((high << 4) | low);
                     index += 3;
@@ -445,11 +545,104 @@ fn decode_quoted_printable_bytes(input: &str) -> Vec<u8> {
                 }
             }
         }
-        output.push(bytes[index]);
+        output.push(input[index]);
         index += 1;
     }
 
     output
+}
+
+fn decode_text_bytes(bytes: &[u8], charset: Option<&str>) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+
+    let primary_encoding = charset
+        .and_then(|label| Encoding::for_label(label.trim().as_bytes()))
+        .unwrap_or(UTF_8);
+    let primary = decode_with_encoding(bytes, primary_encoding);
+    if charset.is_some() && !primary.had_errors {
+        return primary.text;
+    }
+    if charset.is_none() && !primary.had_errors {
+        return primary.text;
+    }
+
+    legacy_text_candidates(bytes, primary)
+        .into_iter()
+        .max_by_key(score_decoded_text)
+        .map(|candidate| candidate.text)
+        .unwrap_or_else(|| String::from_utf8_lossy(bytes).into_owned())
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DecodedTextCandidate {
+    text: String,
+    had_errors: bool,
+    fallback_rank: i64,
+}
+
+fn decode_with_encoding(bytes: &[u8], encoding: &'static Encoding) -> DecodedTextCandidate {
+    let (text, _, had_errors) = encoding.decode(bytes);
+    DecodedTextCandidate {
+        text: text.into_owned(),
+        had_errors,
+        fallback_rank: 0,
+    }
+}
+
+fn legacy_text_candidates(
+    bytes: &[u8],
+    primary: DecodedTextCandidate,
+) -> Vec<DecodedTextCandidate> {
+    let mut candidates = vec![primary];
+    for (fallback_rank, label) in [
+        "windows-1251",
+        "koi8-r",
+        "iso-8859-5",
+        "windows-1252",
+        "iso-8859-1",
+    ]
+    .iter()
+    .enumerate()
+    {
+        let Some(encoding) = Encoding::for_label(label.as_bytes()) else {
+            continue;
+        };
+        let mut candidate = decode_with_encoding(bytes, encoding);
+        candidate.fallback_rank = fallback_rank as i64 + 1;
+        candidates.push(candidate);
+    }
+    candidates
+}
+
+fn score_decoded_text(candidate: &DecodedTextCandidate) -> i64 {
+    let mut replacement_count = 0;
+    let mut disallowed_control_count = 0;
+    let mut cyrillic_count = 0;
+    let mut printable_count = 0;
+
+    for character in candidate.text.chars() {
+        if character == '\u{fffd}' {
+            replacement_count += 1;
+        } else if character.is_control()
+            && character != '\n'
+            && character != '\r'
+            && character != '\t'
+        {
+            disallowed_control_count += 1;
+        } else if ('\u{0400}'..='\u{04ff}').contains(&character) {
+            cyrillic_count += 1;
+            printable_count += 1;
+        } else if !character.is_control() {
+            printable_count += 1;
+        }
+    }
+
+    printable_count + (cyrillic_count * 8)
+        - (replacement_count * 1_000)
+        - (disallowed_control_count * 100)
+        - candidate.fallback_rank
 }
 
 fn hex_value(byte: u8) -> Option<u8> {
@@ -472,6 +665,7 @@ fn decode_rfc2047_words(input: &str) -> String {
             output.push_str(&rest[start..]);
             return output;
         };
+        let charset = &candidate[..charset_end];
         let candidate = &candidate[charset_end + 1..];
         let Some(encoding_end) = candidate.find('?') else {
             output.push_str(&rest[start..]);
@@ -487,9 +681,12 @@ fn decode_rfc2047_words(input: &str) -> String {
         let decoded = match encoding.to_ascii_lowercase().as_str() {
             "b" => BASE64_STANDARD
                 .decode(encoded)
-                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
+                .map(|bytes| decode_text_bytes(&bytes, Some(charset)))
                 .ok(),
-            "q" => Some(decode_quoted_printable(&encoded.replace('_', " "))),
+            "q" => Some(decode_quoted_printable(
+                &encoded.replace('_', " "),
+                Some(charset),
+            )),
             _ => None,
         };
 
@@ -541,6 +738,11 @@ fn normalize_body_text(input: &str) -> String {
         .join("\n")
         .trim()
         .to_owned()
+}
+
+fn non_empty_html_body(input: &str) -> Option<String> {
+    let value = input.trim().to_owned();
+    if value.is_empty() { None } else { Some(value) }
 }
 
 fn non_empty_or_default(value: String, default: &str) -> String {

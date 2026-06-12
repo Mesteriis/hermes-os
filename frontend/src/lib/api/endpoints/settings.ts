@@ -5,12 +5,19 @@ import {
 	FRONTEND_SIDEBAR_SETTING_KEY,
 	FRONTEND_LOCALE_SETTING_KEY,
 	FRONTEND_THEME_SETTING_KEY,
+	FRONTEND_UI_STATE_SETTING_KEY,
 	type ApplicationSetting,
 	type ApplicationSettingsResponse,
 	type ProviderAccountListResponse
 } from '../types';
 
-export { FRONTEND_LAYOUT_SETTING_KEY, FRONTEND_SIDEBAR_SETTING_KEY, FRONTEND_LOCALE_SETTING_KEY, FRONTEND_THEME_SETTING_KEY };
+export {
+	FRONTEND_LAYOUT_SETTING_KEY,
+	FRONTEND_SIDEBAR_SETTING_KEY,
+	FRONTEND_LOCALE_SETTING_KEY,
+	FRONTEND_THEME_SETTING_KEY,
+	FRONTEND_UI_STATE_SETTING_KEY
+};
 
 export async function fetchApplicationSettings(): Promise<ApplicationSettingsResponse> {
 	return ApiClient.instance.get<ApplicationSettingsResponse>('/api/v1/settings', 'Settings request failed');
@@ -43,6 +50,10 @@ export function findFrontendThemeSetting(settings: ApplicationSetting[]): Applic
 	return settings.find((setting) => setting.setting_key === FRONTEND_THEME_SETTING_KEY) ?? null;
 }
 
+export function findFrontendUiStateSetting(settings: ApplicationSetting[]): ApplicationSetting | null {
+	return settings.find((setting) => setting.setting_key === FRONTEND_UI_STATE_SETTING_KEY) ?? null;
+}
+
 export async function saveFrontendLayoutSetting(value: LayoutSettings): Promise<ApplicationSetting> {
 	return saveApplicationSetting(FRONTEND_LAYOUT_SETTING_KEY, value);
 }
@@ -57,6 +68,10 @@ export async function saveFrontendLocaleSetting(value: string): Promise<Applicat
 
 export async function saveFrontendThemeSetting(value: FrontendThemeSettings): Promise<ApplicationSetting> {
 	return saveApplicationSetting(FRONTEND_THEME_SETTING_KEY, value);
+}
+
+export async function saveFrontendUiStateSetting(value: Record<string, unknown>): Promise<ApplicationSetting> {
+	return saveApplicationSetting(FRONTEND_UI_STATE_SETTING_KEY, value);
 }
 
 export async function fetchProviderAccounts(): Promise<ProviderAccountListResponse> {

@@ -13,6 +13,7 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 use tracing_subscriber::EnvFilter;
 use url::form_urlencoded;
 
+use crate::ai::control_center::AiControlCenterError;
 use crate::ai::core::{
     AI_EMBEDDING_DIMENSION, AiAgentListResponse, AiAgentRun, AiAnswerRequest, AiError,
     AiMeetingPrepRequest, AiService, AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
@@ -168,6 +169,7 @@ pub enum ApiError {
     TaskCandidate(TaskCandidateError),
     AiRunNotFound,
     Ai(AiError),
+    AiControlCenter(AiControlCenterError),
     Telegram(TelegramError),
     WhatsappWeb(WhatsappWebError),
     Automation(AutomationError),
@@ -180,6 +182,7 @@ pub enum ApiError {
     CommunicationIngestion(CommunicationIngestionError),
     MailStorage(MailStorageError),
     InvalidCommunicationQuery(&'static str),
+    ProviderWriteConfirmationRequired,
     CommunicationMessageNotFound,
     SecretVaultNotConfigured,
     HostVault(HostVaultError),
@@ -410,9 +413,9 @@ impl axum::response::IntoResponse for ApiError {
                     "AI run was not found".to_owned(),
                     false,
                 ),
-                AiError::Ollama(error) => (
+                AiError::Runtime(error) => (
                     StatusCode::BAD_GATEWAY,
-                    "ollama_runtime_error",
+                    "ai_runtime_error",
                     error.to_string(),
                     false,
                 ),
@@ -461,6 +464,64 @@ impl axum::response::IntoResponse for ApiError {
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "ai_runtime_error",
                         "AI runtime operation failed".to_owned(),
+                        false,
+                    )
+                }
+            },
+            Self::AiControlCenter(error) => match error {
+                AiControlCenterError::ProviderNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "ai_provider_not_found",
+                    "AI provider was not found".to_owned(),
+                    false,
+                ),
+                AiControlCenterError::ModelNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "ai_model_not_found",
+                    "AI model was not found".to_owned(),
+                    false,
+                ),
+                AiControlCenterError::PromptNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "ai_prompt_not_found",
+                    "AI prompt was not found".to_owned(),
+                    false,
+                ),
+                AiControlCenterError::PromptVersionNotFound => (
+                    StatusCode::NOT_FOUND,
+                    "ai_prompt_version_not_found",
+                    "AI prompt version was not found".to_owned(),
+                    false,
+                ),
+                AiControlCenterError::InvalidRequest(_)
+                | AiControlCenterError::EmptyField { .. }
+                | AiControlCenterError::SecretLikePayload => (
+                    StatusCode::BAD_REQUEST,
+                    "invalid_ai_control_center_request",
+                    error.to_string(),
+                    false,
+                ),
+                AiControlCenterError::HostVault(error) => (
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "host_vault_error",
+                    error.to_string(),
+                    false,
+                ),
+                AiControlCenterError::SecretReference(error) => {
+                    tracing::error!(error = %error, "AI control center secret reference operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ai_secret_reference_error",
+                        "AI provider secret reference operation failed".to_owned(),
+                        false,
+                    )
+                }
+                AiControlCenterError::Sqlx(error) => {
+                    tracing::error!(error = %error, "AI control center store operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ai_control_center_error",
+                        "AI control center operation failed".to_owned(),
                         false,
                     )
                 }
@@ -725,6 +786,12 @@ impl axum::response::IntoResponse for ApiError {
                 message.to_owned(),
                 false,
             ),
+            Self::ProviderWriteConfirmationRequired => (
+                StatusCode::BAD_REQUEST,
+                "provider_write_confirmation_required",
+                "explicit provider write confirmation is required".to_owned(),
+                false,
+            ),
             Self::CommunicationMessageNotFound => (
                 StatusCode::NOT_FOUND,
                 "communication_message_not_found",
@@ -848,6 +915,12 @@ impl From<AiError> for ApiError {
     }
 }
 
+impl From<AiControlCenterError> for ApiError {
+    fn from(error: AiControlCenterError) -> Self {
+        Self::AiControlCenter(error)
+    }
+}
+
 impl From<TelegramError> for ApiError {
     fn from(error: TelegramError) -> Self {
         Self::Telegram(error)
@@ -874,7 +947,23 @@ impl From<CallError> for ApiError {
 
 impl From<crate::integrations::ollama::client::OllamaError> for ApiError {
     fn from(error: crate::integrations::ollama::client::OllamaError) -> Self {
-        Self::Ai(AiError::Ollama(error))
+        Self::Ai(AiError::Runtime(
+            crate::integrations::ai_runtime::AiRuntimeError::Ollama(error),
+        ))
+    }
+}
+
+impl From<crate::integrations::omniroute::client::OmniRouteError> for ApiError {
+    fn from(error: crate::integrations::omniroute::client::OmniRouteError) -> Self {
+        Self::Ai(AiError::Runtime(
+            crate::integrations::ai_runtime::AiRuntimeError::OmniRoute(error),
+        ))
+    }
+}
+
+impl From<crate::integrations::ai_runtime::AiRuntimeError> for ApiError {
+    fn from(error: crate::integrations::ai_runtime::AiRuntimeError) -> Self {
+        Self::Ai(AiError::Runtime(error))
     }
 }
 
@@ -1318,7 +1407,10 @@ impl From<OrganizationError> for ApiError {
 
 impl From<EmailAccountSetupError> for ApiError {
     fn from(error: EmailAccountSetupError) -> Self {
-        Self::AccountSetup(error)
+        match error {
+            EmailAccountSetupError::HostVault(error) => Self::HostVault(error),
+            error => Self::AccountSetup(error),
+        }
     }
 }
 

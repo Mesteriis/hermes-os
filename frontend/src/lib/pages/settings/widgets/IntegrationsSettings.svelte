@@ -2,8 +2,10 @@
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import {
+		integrationGroupLabel,
 		integrationStatusLabel,
 		serviceStateLabel,
+		type IntegrationGroupId,
 		type IntegrationService,
 		type IntegrationServiceId,
 		type IntegrationViewModel
@@ -15,6 +17,7 @@
 		integrations: IntegrationViewModel[];
 		selectedIntegrationId: string | null;
 		onSelectIntegration: (integrationId: string) => void;
+		onCloseIntegration: () => void;
 		onOpenAccountDrawer: (target?: string) => void;
 		formatDateTimeFn: (value: string | null) => string;
 	}
@@ -23,17 +26,35 @@
 		integrations,
 		selectedIntegrationId,
 		onSelectIntegration,
+		onCloseIntegration,
 		onOpenAccountDrawer,
 		formatDateTimeFn
 	}: Props = $props();
 
 	const tableServices: IntegrationServiceId[] = ['mail', 'calendar', 'people', 'messages'];
 
+	type IntegrationTableGroup = {
+		id: IntegrationGroupId;
+		integrations: IntegrationViewModel[];
+	};
+
 	let selectedIntegration = $derived(
-		integrations.find((integration) => integration.integrationId === selectedIntegrationId) ??
-			integrations[0] ??
-			null
+		selectedIntegrationId
+			? (integrations.find((integration) => integration.integrationId === selectedIntegrationId) ?? null)
+			: null
 	);
+	let integrationGroups = $derived.by(() => {
+		const groups: IntegrationTableGroup[] = [];
+		for (const integration of integrations) {
+			let group = groups.find((item) => item.id === integration.group);
+			if (!group) {
+				group = { id: integration.group, integrations: [] };
+				groups.push(group);
+			}
+			group.integrations.push(integration);
+		}
+		return groups;
+	});
 
 	function serviceFor(
 		integration: IntegrationViewModel,
@@ -71,7 +92,9 @@
 	function accountCountLabel(integration: IntegrationViewModel): string {
 		const accountCount = integration.accounts.length;
 		const calendarCount = integration.calendarAccounts.length;
-		return `${accountCount} ${_('accounts')} / ${calendarCount} ${_('calendars')}`;
+		const accountUnit = accountCount === 1 ? _('account') : _('accounts');
+		const calendarUnit = calendarCount === 1 ? _('calendar') : _('calendars');
+		return `${accountCount} ${accountUnit} / ${calendarCount} ${calendarUnit}`;
 	}
 </script>
 
@@ -99,44 +122,66 @@
 					<span>{_('Updated')}</span>
 					<span>{_('Status')}</span>
 				</div>
-				{#each integrations as integration}
-					<button
-						type="button"
-						class="integrations-table-row"
-						class:selected={selectedIntegration?.integrationId === integration.integrationId}
-						onclick={() => onSelectIntegration(integration.integrationId)}
-					>
-						<span class="integration-primary-cell">
-							<span class="round-icon cyan">
-								<Icon icon={integration.icon} width="20" height="20" />
+				{#each integrationGroups as group}
+					<div class="integrations-table-group">
+						<span>{_(integrationGroupLabel(group.id))}</span>
+					</div>
+					{#each group.integrations as integration}
+						<button
+							type="button"
+							class="integrations-table-row"
+							class:selected={selectedIntegration?.integrationId === integration.integrationId}
+							aria-expanded={selectedIntegration?.integrationId === integration.integrationId}
+							onclick={() => onSelectIntegration(integration.integrationId)}
+						>
+							<span class="integration-primary-cell">
+								<span class="round-icon cyan">
+									<Icon icon={integration.icon} width="20" height="20" />
+								</span>
+								<span>
+									<strong>{integration.title}</strong>
+									<small>{integration.subtitle}</small>
+								</span>
 							</span>
-							<span>
-								<strong>{integration.title}</strong>
-								<small>{integration.subtitle}</small>
+							{#each tableServices as serviceId}
+								{@const service = serviceFor(integration, serviceId)}
+								<span class={`integration-service-state ${serviceClass(service)}`}>
+									{_(serviceStateLabel(service?.state ?? 'not_applicable'))}
+								</span>
+							{/each}
+							<span class="integration-updated">{integrationUpdatedLabel(integration)}</span>
+							<span class={`integration-status ${statusClass(integration)}`}>
+								{_(integrationStatusLabel(integration.status))}
 							</span>
-						</span>
-						{#each tableServices as serviceId}
-							{@const service = serviceFor(integration, serviceId)}
-							<span class={`integration-service-state ${serviceClass(service)}`}>
-								{_(serviceStateLabel(service?.state ?? 'not_applicable'))}
-							</span>
-						{/each}
-						<span class="integration-updated">{integrationUpdatedLabel(integration)}</span>
-						<span class={`integration-status ${statusClass(integration)}`}>
-							{_(integrationStatusLabel(integration.status))}
-						</span>
-					</button>
+						</button>
+					{/each}
 				{/each}
 			</div>
 		{/if}
 	</section>
 
-	<aside class="settings-integration-inspector">
+	<aside
+		id="settings-integration-inspector"
+		class="settings-integration-inspector"
+		class:open={Boolean(selectedIntegration)}
+		aria-hidden={!selectedIntegration}
+	>
 		{#if selectedIntegration}
-			<header>
-				<h3>{selectedIntegration.title}</h3>
-				<p>{selectedIntegration.subtitle}</p>
-				<small>{accountCountLabel(selectedIntegration)}</small>
+			<header class="integration-inspector-header">
+				<div>
+					<h3>{selectedIntegration.title}</h3>
+					<p>{selectedIntegration.subtitle}</p>
+					<small>{accountCountLabel(selectedIntegration)}</small>
+				</div>
+				<button
+					type="button"
+					class="icon-button integration-inspector-close"
+					aria-label={_('Close integration details')}
+					title={_('Close integration details')}
+					onclick={onCloseIntegration}
+				>
+					<Icon icon="tabler:x" width="18" height="18" />
+				</button>
 			</header>
 
 			<section class="integration-inspector-section">
@@ -179,7 +224,7 @@
 				</ul>
 			</section>
 		{:else}
-			<div class="empty-panel fill">{_('Select an integration.')}</div>
+			<span class="integration-inspector-empty">{_('Select an integration.')}</span>
 		{/if}
 	</aside>
 </div>

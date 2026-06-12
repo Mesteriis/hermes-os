@@ -54,7 +54,9 @@ impl EmailAnalyticsStore {
                 COALESCE(avg(importance_score), 0)::DOUBLE PRECISION AS average_importance,
                 EXTRACT(EPOCH FROM now() - min(occurred_at))::DOUBLE PRECISION / 86400.0::DOUBLE PRECISION AS oldest_message_days
             FROM communication_messages
-            WHERE ($1::text IS NULL OR account_id = $1) AND channel_kind = 'email'"#,
+            WHERE ($1::text IS NULL OR account_id = $1)
+              AND channel_kind = 'email'
+              AND local_state = 'active'"#,
         ).bind(account_id).fetch_one(&self.pool).await?;
 
         Ok(MailboxHealth {
@@ -83,7 +85,9 @@ impl EmailAnalyticsStore {
                 COALESCE(avg(importance_score), 0)::DOUBLE PRECISION AS avg_importance,
                 EXTRACT(EPOCH FROM now() - max(occurred_at))::DOUBLE PRECISION / 86400.0::DOUBLE PRECISION AS last_message_days
             FROM communication_messages
-            WHERE ($1::text IS NULL OR account_id = $1) AND channel_kind = 'email'
+            WHERE ($1::text IS NULL OR account_id = $1)
+              AND channel_kind = 'email'
+              AND local_state = 'active'
             GROUP BY sender ORDER BY message_count DESC LIMIT $2"#,
         )
         .bind(account_id)

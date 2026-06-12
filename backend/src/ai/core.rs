@@ -17,7 +17,7 @@ use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 use crate::domains::graph::core::{GraphNodeKind, node_id};
-use crate::integrations::ollama::client::{OllamaClient, OllamaError};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
 
 pub const AI_EMBEDDING_DIMENSION: usize = 2560;
@@ -183,7 +183,7 @@ impl SemanticEmbeddingStore {
 
     pub async fn index_canonical_sources(
         &self,
-        ollama: &OllamaClient,
+        runtime: &AiRuntimeClient,
         embedding_model: &str,
     ) -> Result<SemanticIndexReport, AiError> {
         let sources = self.canonical_sources().await?;
@@ -205,7 +205,9 @@ impl SemanticEmbeddingStore {
                 continue;
             }
 
-            let embedding = ollama.embed(&source.source_text).await?;
+            let embedding = runtime
+                .embed_with_model(&source.source_text, embedding_model)
+                .await?;
             if embedding.embedding.len() != AI_EMBEDDING_DIMENSION {
                 return Err(AiError::InvalidEmbeddingDimension {
                     expected: AI_EMBEDDING_DIMENSION,
@@ -714,11 +716,41 @@ pub struct AiAgentRun {
 }
 
 #[derive(Clone)]
+pub struct AiModelRouting {
+    pub default_chat: String,
+    pub reasoning: String,
+    pub summarization: String,
+    pub mail_intelligence: String,
+    pub reply_draft: String,
+    pub extraction: String,
+    pub embeddings: String,
+    pub meeting_prep: String,
+}
+
+impl AiModelRouting {
+    pub fn fallback(chat_model: impl Into<String>, embedding_model: impl Into<String>) -> Self {
+        let chat_model = chat_model.into();
+        let embedding_model = embedding_model.into();
+        Self {
+            default_chat: chat_model.clone(),
+            reasoning: chat_model.clone(),
+            summarization: chat_model.clone(),
+            mail_intelligence: chat_model.clone(),
+            reply_draft: chat_model.clone(),
+            extraction: chat_model.clone(),
+            embeddings: embedding_model,
+            meeting_prep: chat_model,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct AiService {
     pool: PgPool,
-    ollama: OllamaClient,
+    runtime: AiRuntimeClient,
     chat_model: String,
     embedding_model: String,
+    model_routing: AiModelRouting,
 }
 
 struct AiRunEvent<'a> {
@@ -735,41 +767,65 @@ struct AiRunEvent<'a> {
 impl AiService {
     pub fn new(
         pool: PgPool,
-        ollama: OllamaClient,
+        runtime: AiRuntimeClient,
         chat_model: impl Into<String>,
         embedding_model: impl Into<String>,
     ) -> Self {
+        let chat_model = chat_model.into();
+        let embedding_model = embedding_model.into();
+        let model_routing = AiModelRouting::fallback(chat_model.clone(), embedding_model.clone());
+        Self::new_with_routing(pool, runtime, model_routing)
+    }
+
+    pub fn new_with_routing(
+        pool: PgPool,
+        runtime: AiRuntimeClient,
+        model_routing: AiModelRouting,
+    ) -> Self {
         Self {
             pool,
-            ollama,
-            chat_model: chat_model.into(),
-            embedding_model: embedding_model.into(),
+            runtime,
+            chat_model: model_routing.default_chat.clone(),
+            embedding_model: model_routing.embeddings.clone(),
+            model_routing,
         }
     }
 
     pub async fn status(&self) -> AiStatusResponse {
-        let version = self.ollama.version().await;
-        let tags = self.ollama.tags().await;
-        let chat_model_available = tags
+        let version = self.runtime.version().await;
+        let models = self.runtime.models().await;
+        let chat_model_available = models
             .as_ref()
-            .map(|models| models.iter().any(|model| model == &self.chat_model))
+            .map(|models| {
+                models
+                    .iter()
+                    .any(|model| model == &self.model_routing.default_chat)
+            })
             .unwrap_or(false);
-        let embedding_model_available = tags
+        let embedding_model_available = models
             .as_ref()
-            .map(|models| models.iter().any(|model| model == &self.embedding_model))
+            .map(|models| {
+                models
+                    .iter()
+                    .any(|model| model == &self.model_routing.embeddings)
+            })
             .unwrap_or(false);
 
         AiStatusResponse {
-            runtime: "ollama".to_owned(),
-            status: if version.is_ok() && chat_model_available && embedding_model_available {
+            runtime: self.runtime.runtime_name().to_owned(),
+            status: if version.is_ok()
+                && models.is_ok()
+                && chat_model_available
+                && embedding_model_available
+            {
                 "ok"
             } else {
                 "unavailable"
             }
             .to_owned(),
-            version: version.ok(),
-            chat_model: self.chat_model.clone(),
-            embedding_model: self.embedding_model.clone(),
+            version: version.ok().flatten(),
+            chat_model: self.model_routing.default_chat.clone(),
+            embedding_model: self.model_routing.embeddings.clone(),
             embedding_dimension: AI_EMBEDDING_DIMENSION,
             chat_model_available,
             embedding_model_available,
@@ -790,13 +846,14 @@ impl AiService {
         let requested_event_id = event_id_from_command("ai.run.requested", &command_id);
         let completed_event_id = event_id_from_command("ai.run.completed", &command_id);
         let run_store = AiRunStore::new(self.pool.clone());
+        let chat_model = self.model_routing.default_chat.clone();
 
         run_store
             .start_run(&NewAiRun {
                 run_id: run_id.clone(),
                 agent_id: agent_id.clone(),
-                chat_model: self.chat_model.clone(),
-                embedding_model: self.embedding_model.clone(),
+                chat_model: chat_model.clone(),
+                embedding_model: self.model_routing.embeddings.clone(),
                 prompt_template_version: AI_PROMPT_TEMPLATE_VERSION.to_owned(),
                 model_config: self.model_config(),
                 query: query.clone(),
@@ -820,7 +877,7 @@ impl AiService {
 
         let citations = self.retrieve_citations(&query).await?;
         let prompt = answer_prompt(&query, &citations);
-        let chat = self.ollama.chat(&prompt).await?;
+        let chat = self.runtime.chat_with_model(&prompt, &chat_model).await?;
         let duration_ms = elapsed_ms(started_at);
         let stored = run_store
             .complete_run(
@@ -853,7 +910,7 @@ impl AiService {
             answer: chat.content,
             citations,
             model: chat.model,
-            embedding_model: self.embedding_model.clone(),
+            embedding_model: self.model_routing.embeddings.clone(),
             created_at: stored.started_at,
             duration_ms,
         })
@@ -874,13 +931,14 @@ impl AiService {
         let extraction_event_id =
             event_id_from_command("ai.task_extraction.completed", &command_id);
         let run_store = AiRunStore::new(self.pool.clone());
+        let chat_model = self.model_routing.extraction.clone();
 
         run_store
             .start_run(&NewAiRun {
                 run_id: run_id.clone(),
                 agent_id: agent_id.clone(),
-                chat_model: self.chat_model.clone(),
-                embedding_model: self.embedding_model.clone(),
+                chat_model: chat_model.clone(),
+                embedding_model: self.model_routing.embeddings.clone(),
                 prompt_template_version: AI_PROMPT_TEMPLATE_VERSION.to_owned(),
                 model_config: self.model_config(),
                 query: query.clone(),
@@ -904,7 +962,7 @@ impl AiService {
 
         let citations = self.retrieve_citations(&query).await?;
         let prompt = task_candidate_prompt(&query, &citations);
-        let chat = self.ollama.chat(&prompt).await?;
+        let chat = self.runtime.chat_with_model(&prompt, &chat_model).await?;
         let drafts = parse_task_candidate_drafts(&chat.content, &citations)?;
         let created_count = self
             .upsert_ai_task_candidates(&run_id, &drafts, &citations)
@@ -957,7 +1015,7 @@ impl AiService {
             created_count,
             citations,
             model: chat.model,
-            embedding_model: self.embedding_model.clone(),
+            embedding_model: self.model_routing.embeddings.clone(),
             created_at: stored.started_at,
             duration_ms,
         })
@@ -976,6 +1034,7 @@ impl AiService {
         let requested_event_id = event_id_from_command("ai.run.requested", &command_id);
         let completed_event_id = event_id_from_command("ai.run.completed", &command_id);
         let run_store = AiRunStore::new(self.pool.clone());
+        let chat_model = self.model_routing.meeting_prep.clone();
         let query = scoped_meeting_query(
             &topic,
             request.project_id.as_deref(),
@@ -986,8 +1045,8 @@ impl AiService {
             .start_run(&NewAiRun {
                 run_id: run_id.clone(),
                 agent_id: agent_id.clone(),
-                chat_model: self.chat_model.clone(),
-                embedding_model: self.embedding_model.clone(),
+                chat_model: chat_model.clone(),
+                embedding_model: self.model_routing.embeddings.clone(),
                 prompt_template_version: AI_PROMPT_TEMPLATE_VERSION.to_owned(),
                 model_config: self.model_config(),
                 query: query.clone(),
@@ -1015,7 +1074,7 @@ impl AiService {
 
         let citations = self.retrieve_citations(&query).await?;
         let prompt = meeting_prep_prompt(&topic, &citations);
-        let chat = self.ollama.chat(&prompt).await?;
+        let chat = self.runtime.chat_with_model(&prompt, &chat_model).await?;
         let duration_ms = elapsed_ms(started_at);
         let stored = run_store
             .complete_run(
@@ -1049,7 +1108,7 @@ impl AiService {
             briefing: chat.content,
             citations,
             model: chat.model,
-            embedding_model: self.embedding_model.clone(),
+            embedding_model: self.model_routing.embeddings.clone(),
             created_at: stored.started_at,
             duration_ms,
         })
@@ -1057,10 +1116,14 @@ impl AiService {
 
     async fn retrieve_citations(&self, query: &str) -> Result<Vec<AiCitation>, AiError> {
         let semantic_store = SemanticEmbeddingStore::new(self.pool.clone());
+        let embedding_model = &self.model_routing.embeddings;
         semantic_store
-            .index_canonical_sources(&self.ollama, &self.embedding_model)
+            .index_canonical_sources(&self.runtime, embedding_model)
             .await?;
-        let query_embedding = self.ollama.embed(query).await?;
+        let query_embedding = self
+            .runtime
+            .embed_with_model(query, embedding_model)
+            .await?;
         if query_embedding.embedding.len() != AI_EMBEDDING_DIMENSION {
             return Err(AiError::InvalidEmbeddingDimension {
                 expected: AI_EMBEDDING_DIMENSION,
@@ -1070,13 +1133,13 @@ impl AiService {
 
         let vector_results = semantic_store
             .search(
-                &self.embedding_model,
+                embedding_model,
                 &query_embedding.embedding,
                 DEFAULT_RETRIEVAL_LIMIT,
             )
             .await?;
         let text_results = semantic_store
-            .text_search(&self.embedding_model, query, DEFAULT_RETRIEVAL_LIMIT)
+            .text_search(embedding_model, query, DEFAULT_RETRIEVAL_LIMIT)
             .await?;
         let merged = merge_retrieval_results(vector_results, text_results);
 
@@ -1195,7 +1258,7 @@ impl AiService {
             "details": event.payload,
         }))
         .provenance(json!({
-            "runtime": "local_ollama",
+            "runtime": self.runtime.runtime_name(),
             "chat_model": self.chat_model,
             "embedding_model": self.embedding_model,
             "prompt_template_version": AI_PROMPT_TEMPLATE_VERSION,
@@ -1213,10 +1276,20 @@ impl AiService {
 
     fn model_config(&self) -> Value {
         json!({
-            "runtime": "ollama",
-            "chat_model": self.chat_model,
-            "embedding_model": self.embedding_model,
+            "runtime": self.runtime.runtime_name(),
+            "chat_model": &self.model_routing.default_chat,
+            "embedding_model": &self.model_routing.embeddings,
             "embedding_dimension": AI_EMBEDDING_DIMENSION,
+            "routes": {
+                "default_chat": &self.model_routing.default_chat,
+                "reasoning": &self.model_routing.reasoning,
+                "summarization": &self.model_routing.summarization,
+                "mail_intelligence": &self.model_routing.mail_intelligence,
+                "reply_draft": &self.model_routing.reply_draft,
+                "extraction": &self.model_routing.extraction,
+                "embeddings": &self.model_routing.embeddings,
+                "meeting_prep": &self.model_routing.meeting_prep,
+            }
         })
     }
 }
@@ -1399,7 +1472,7 @@ pub enum AiError {
     RunNotFound,
 
     #[error(transparent)]
-    Ollama(#[from] OllamaError),
+    Runtime(#[from] AiRuntimeError),
 
     #[error(transparent)]
     EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),

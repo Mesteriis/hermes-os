@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import Icon from '@iconify/svelte';
+	import HermesSelect from '$lib/components/shared/HermesSelect.svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import { accountWizardTarget, type AccountWizardKind } from '$lib/stores/accountWizard';
 	import { apiBaseUrl } from '$lib/config';
@@ -48,6 +49,17 @@
 	type TelegramSetupMode = 'fixture' | 'live';
 	type TelegramAuthMethod = 'fixture' | 'phone' | 'qr' | 'bot_token';
 	type TelegramWizardStep = 'account' | 'auth' | 'details';
+
+	const calendarProviderOptions = $derived(
+		[
+			{ value: 'local', label: 'Local' },
+			{ value: 'google', label: 'Google Calendar' },
+			{ value: 'microsoft', label: 'Microsoft 365' },
+			{ value: 'apple', label: 'Apple Calendar' },
+			{ value: 'caldav', label: 'CalDAV' },
+			{ value: 'ics', label: 'ICS Feed' }
+		].map((provider) => ({ value: provider.value, label: _(provider.label) }))
+	);
 
 	interface Props {
 		isOpen: boolean;
@@ -1048,7 +1060,19 @@
 			{:else}
 				<form class="setup-form" onsubmit={(event) => { event.preventDefault(); void saveCalendarAccount(); }}>
 					<button type="button" class="wizard-back wide" onclick={() => (calendarWizardStep = 'provider' as CalendarWizardStep)}><Icon icon="tabler:arrow-left" width="15" height="15" />{_('Provider')}</button>
-					<label><span>{_('Provider')}</span><select bind:value={calendarAccountForm.provider}><option value="local">{_('Local')}</option><option value="google">{_('Google Calendar')}</option><option value="microsoft">{_('Microsoft 365')}</option><option value="apple">{_('Apple Calendar')}</option><option value="caldav">{_('CalDAV')}</option><option value="ics">{_('ICS Feed')}</option></select></label>
+					<label>
+						<span>{_('Provider')}</span>
+						<HermesSelect
+							value={calendarAccountForm.provider}
+							options={calendarProviderOptions}
+							placeholder={_('Provider')}
+							searchPlaceholder={_('Search providers...')}
+							emptyLabel={_('No options')}
+							ariaLabel={_('Provider')}
+							searchable={false}
+							onChange={(nextValue) => (calendarAccountForm.provider = nextValue as CalendarProvider)}
+						/>
+					</label>
 					<label><span>{_('Account name')}</span><input bind:value={calendarAccountForm.account_name} autocomplete="off" /></label>
 					<label class="wide"><span>{_('Email or owner')}</span><input bind:value={calendarAccountForm.email} autocomplete="email" /></label>
 					<div class="form-actions wide"><button type="submit" disabled={isSetupSubmitting || !calendarAccountForm.account_name.trim()}>{_('Save Calendar')}</button></div>

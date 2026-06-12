@@ -59,6 +59,24 @@ export class ApiClient {
 		return response.json() as T;
 	}
 
+	async patch<T>(path: string, body: unknown, fallbackMessage = 'PATCH request failed'): Promise<T> {
+		const response = await fetch(`${this.baseUrl}${path}`, {
+			method: 'PATCH',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-Hermes-Secret': this.secret
+			},
+			body: JSON.stringify(body)
+		});
+
+		if (!response.ok) {
+			const error = (await response.json().catch(() => null)) as ApiError | null;
+			throw new Error(error?.message ?? `${fallbackMessage}: ${response.status}`);
+		}
+
+		return response.json() as T;
+	}
+
 	async delete<T>(path: string, fallbackMessage = 'DELETE request failed'): Promise<T> {
 		const response = await fetch(`${this.baseUrl}${path}`, {
 			method: 'DELETE',

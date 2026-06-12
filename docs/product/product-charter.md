@@ -1,44 +1,62 @@
 # Product Charter
 
-## Назначение
+## Purpose
 
-Hermes Hub создает персональный operational memory layer вокруг коммуникаций, документов, проектов и решений пользователя. Продукт должен помогать понимать, что произошло, что требует действия, что связано между собой и какие обязательства уже возникли.
+Hermes Hub creates a personal operational memory layer around communications,
+documents, projects, relationships, decisions and obligations. The product helps
+the owner understand what happened, what matters, what requires action and how
+entities connect.
 
-## Пользователь
+See the canonical foundation documents:
 
-Основной пользователь - один технически сильный владелец продукта, который управляет личными и профессиональными коммуникациями, документами, задачами, проектами и знаниями. Продукт проектируется как personal system, но архитектура не должна блокировать будущий multi-profile или family/team режим.
+- [Foundation Vision](../foundation/vision.md)
+- [World Model](../foundation/world-model.md)
+- [Architecture Principles](../foundation/architecture-principles.md)
 
-## Основные сценарии
+## User
 
-- единая коммуникационная лента по всем каналам
-- автоматическое извлечение задач, обещаний и дедлайнов
-- поиск по памяти через текст, семантику и граф
-- просмотр истории отношений с человеком или организацией
-- связывание документов с проектами, людьми, событиями и задачами
-- AI-assisted triage входящих сообщений
-- анализ изменений за период
-- контекстная подготовка к встречам
-- объяснение, почему система сделала вывод
+The primary user is one technically strong owner who manages personal and
+professional communications, documents, projects, relationships, obligations and
+knowledge. Hermes is a personal system first; architecture should not block
+future family/team modes, but those modes are not the current product identity.
 
-## Продуктовые ограничения
+The owner is represented inside the world model by the Owner Persona.
 
-- Система не оптимизируется под быстрый MVP.
-- Реализация может идти поэтапно, но архитектура проектируется как целевая.
-- Облако может использоваться только как опциональная интеграция.
-- Персональные данные не используются для fine-tuning.
-- AI-функции должны деградировать безопасно при недоступности модели.
-- Любой автоматический вывод должен сохранять provenance.
+## Core Scenarios
 
-## Качество продукта
+- unified communication context across channels;
+- extraction and tracking of obligations and task candidates;
+- source-backed search across memory;
+- history of relationships with a Persona or Organization;
+- linking documents to Projects, Personas, Organizations, Events, Tasks,
+  Decisions and Obligations;
+- AI-assisted triage with user control;
+- analysis of changes over time;
+- context preparation before meetings or actions;
+- explanation of why Hermes produced a conclusion.
 
-Hermes Hub должен ощущаться как рабочая среда, а не dashboard ради dashboard. UI должен быть быстрым, плотным, keyboard-first, с современными анимациями и ясной навигацией. Вдохновение: Arc, Raycast, Linear, Notion, Obsidian.
+## Product Constraints
 
-## Основные метрики качества
+- The system is not optimized for a quick MVP.
+- Implementation may be incremental, but documentation should describe the
+  target model.
+- Cloud providers are optional integrations, not the memory layer.
+- Personal data is not used for fine-tuning.
+- AI features must degrade safely when a model is unavailable.
+- Every automatic conclusion must preserve provenance.
 
-- полнота ingestion по подключенным источникам
-- доля объектов с корректной identity resolution
-- latency поиска и открытия thread context
-- точность извлеченных задач и дедлайнов
-- доля AI-ответов с достаточным provenance
-- успешность backup/restore
-- количество ручных действий на типовой workflow
+## Product Quality
+
+Hermes should feel like a serious personal operating environment, not a
+dashboard collection. The UI should be fast, dense, keyboard-first and
+contextual.
+
+## Quality Metrics
+
+- ingestion completeness for connected sources;
+- identity resolution quality for Personas and Organizations;
+- context retrieval latency;
+- accuracy of obligation/task extraction;
+- share of AI answers with sufficient provenance;
+- backup/restore success;
+- manual actions required per common workflow.

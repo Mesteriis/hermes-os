@@ -1,5 +1,5 @@
 use crate::domains::mail::messages::ProjectedMessage;
-use crate::integrations::ollama::client::{OllamaClient, OllamaError};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -20,12 +20,12 @@ pub struct AiReplyOptions {
 
 #[derive(Clone)]
 pub struct AiReplyService {
-    ollama: Option<OllamaClient>,
+    runtime: Option<AiRuntimeClient>,
 }
 
 impl AiReplyService {
-    pub fn new(ollama: Option<OllamaClient>) -> Self {
-        Self { ollama }
+    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+        Self { runtime }
     }
 
     pub async fn generate_reply(
@@ -33,7 +33,7 @@ impl AiReplyService {
         message: &ProjectedMessage,
         options: &AiReplyOptions,
     ) -> Result<Option<AiReplyDraft>, AiReplyError> {
-        let Some(ref ollama) = self.ollama else {
+        let Some(ref runtime) = self.runtime else {
             return Ok(None);
         };
         let tone = options.tone.as_deref().unwrap_or("professional");
@@ -52,7 +52,7 @@ impl AiReplyService {
             },
         );
 
-        let result = ollama.chat(&prompt).await?;
+        let result = runtime.chat(&prompt).await?;
         let body = result.content.trim().to_owned();
 
         let subject = if message.subject.to_lowercase().starts_with("re:") {
@@ -104,7 +104,7 @@ fn truncate(s: &str, max: usize) -> &str {
 #[derive(Debug, Error)]
 pub enum AiReplyError {
     #[error(transparent)]
-    Ollama(#[from] OllamaError),
+    Runtime(#[from] AiRuntimeError),
 }
 
 #[cfg(test)]

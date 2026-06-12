@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApplicationSetting, CalendarAccount, ProviderAccount } from '$lib/api';
+import { currentLocale, setLocale } from '$lib/i18n';
 import { layoutSettings } from './layoutEditor';
 import { sidebarSettings } from './sidebar';
 import { themeSettings } from './theme';
@@ -13,6 +14,19 @@ const workspaceResult = vi.hoisted(() => {
 		value: 'en',
 		label: 'Locale',
 		description: 'Frontend locale',
+		metadata: {},
+		is_editable: true,
+		updated_by_actor_id: null,
+		created_at: '2026-06-10T00:00:00Z',
+		updated_at: '2026-06-10T00:00:00Z'
+	};
+	const legacyAiSetting: ApplicationSetting = {
+		setting_key: 'ai.chat_model',
+		category: 'ai',
+		value_kind: 'string',
+		value: 'qwen3:4b',
+		label: 'AI chat model',
+		description: 'Legacy AI bootstrap fallback',
 		metadata: {},
 		is_editable: true,
 		updated_by_actor_id: null,
@@ -66,7 +80,7 @@ const workspaceResult = vi.hoisted(() => {
 	};
 
 	return {
-		applicationSettings: [frontendLocaleSetting],
+		applicationSettings: [frontendLocaleSetting, legacyAiSetting],
 		layoutSettings: {
 			schemaVersion: 2,
 			views: {
@@ -114,6 +128,32 @@ const workspaceResult = vi.hoisted(() => {
 	};
 });
 
+const apiMocks = vi.hoisted(() => ({
+	saveFrontendLocaleSetting: vi.fn(async (value: string): Promise<ApplicationSetting> => ({
+		setting_key: 'frontend.locale',
+		category: 'frontend',
+		value_kind: 'string',
+		value,
+		label: 'Locale',
+		description: 'Frontend locale',
+		metadata: {
+			allowed_values: ['en', 'ru']
+		},
+		is_editable: true,
+		updated_by_actor_id: 'frontend-test',
+		created_at: '2026-06-10T00:00:00Z',
+		updated_at: '2026-06-10T00:01:00Z'
+	}))
+}));
+
+vi.mock('$lib/api', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/api')>();
+	return {
+		...actual,
+		saveFrontendLocaleSetting: apiMocks.saveFrontendLocaleSetting
+	};
+});
+
 vi.mock('$lib/services/settings', () => ({
 	loadSettingsWorkspace: vi.fn(async () => workspaceResult)
 }));
@@ -121,6 +161,7 @@ vi.mock('$lib/services/settings', () => ({
 describe('settings store', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		setLocale('en');
 	});
 
 	it('loads workspace settings and synchronizes shell stores', async () => {
@@ -129,8 +170,10 @@ describe('settings store', () => {
 		await settingsStore.loadSettingsWorkspace();
 
 		expect(get(settingsStore.applicationSettings).map((setting) => setting.setting_key)).toEqual([
-			'frontend.locale'
+			'frontend.locale',
+			'ai.chat_model'
 		]);
+		expect(get(settingsStore.settingsByCategory).ai).toBeUndefined();
 		expect(get(settingsStore.telegramProviderAccounts)).toHaveLength(1);
 		expect(get(settingsStore.calendarAccounts)).toHaveLength(1);
 		expect(get(settingsStore.contactsProviderAccounts)).toEqual([
@@ -140,7 +183,7 @@ describe('settings store', () => {
 		expect(get(settingsStore.integrationViewModels).map((integration) => integration.integrationId)).toEqual([
 			'gmail:gmail-primary',
 			'icloud:icloud-primary',
-			'telegram',
+			'telegram:telegram-primary',
 			'whatsapp'
 		]);
 		expect(get(settingsStore.integrationViewModels)[0].services.map((service) => service.state)).toEqual([
@@ -153,5 +196,20 @@ describe('settings store', () => {
 		expect(get(sidebarSettings).hiddenItemIds).toEqual(['tasks']);
 		expect(get(themeSettings).shellBackground).toBe('rune-teal');
 		expect(get(settingsStore.settingsError)).toBe('');
+	});
+
+	it('persists locale through the declared frontend locale setting', async () => {
+		const settingsStore = await import('./settings');
+
+		await settingsStore.saveLocaleSetting('ru');
+
+		expect(apiMocks.saveFrontendLocaleSetting).toHaveBeenCalledWith('ru');
+		expect(get(currentLocale)).toBe('ru');
+		expect(get(settingsStore.settingDrafts)['frontend.locale']).toBe('ru');
+		expect(
+			get(settingsStore.applicationSettings).find(
+				(setting) => setting.setting_key === 'frontend.locale'
+			)?.value
+		).toBe('ru');
 	});
 });

@@ -6,8 +6,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 use crate::domains::mail::core::StoredRawCommunicationRecord;
@@ -116,6 +116,45 @@ impl std::str::FromStr for WorkflowState {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalMessageState {
+    Active,
+    Trash,
+    All,
+}
+
+impl LocalMessageState {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            LocalMessageState::Active => "active",
+            LocalMessageState::Trash => "trash",
+            LocalMessageState::All => "all",
+        }
+    }
+
+    fn persisted_filter(&self) -> Option<&'static str> {
+        match self {
+            LocalMessageState::Active => Some("active"),
+            LocalMessageState::Trash => Some("trash"),
+            LocalMessageState::All => None,
+        }
+    }
+}
+
+impl std::str::FromStr for LocalMessageState {
+    type Err = MessageProjectionError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim() {
+            "active" => Ok(LocalMessageState::Active),
+            "trash" => Ok(LocalMessageState::Trash),
+            "all" => Ok(LocalMessageState::All),
+            _ => Err(MessageProjectionError::InvalidLocalState(value.to_owned())),
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct MessageProjectionStore {
     pool: PgPool,
@@ -154,9 +193,13 @@ impl MessageProjectionStore {
                 m.ai_category,
                 m.ai_summary,
                 m.ai_summary_generated_at,
+                m.local_state,
+                m.local_state_changed_at,
+                m.local_state_reason,
                 count(a.attachment_id)::BIGINT AS attachment_count
             FROM communication_messages m
             LEFT JOIN communication_attachments a ON a.message_id = m.message_id
+            WHERE m.local_state = 'active'
             GROUP BY
                 m.message_id,
                 m.raw_record_id,
@@ -177,7 +220,10 @@ impl MessageProjectionStore {
                 m.importance_score,
                 m.ai_category,
                 m.ai_summary,
-                m.ai_summary_generated_at
+                m.ai_summary_generated_at,
+                m.local_state,
+                m.local_state_changed_at,
+                m.local_state_reason
             ORDER BY
                 COALESCE(m.occurred_at, m.projected_at) DESC,
                 m.projected_at DESC,
@@ -222,7 +268,10 @@ impl MessageProjectionStore {
                 importance_score,
                 ai_category,
                 ai_summary,
-                ai_summary_generated_at
+                ai_summary_generated_at,
+                local_state,
+                local_state_changed_at,
+                local_state_reason
             FROM communication_messages
             WHERE message_id = $1
             "#,
@@ -314,7 +363,10 @@ impl MessageProjectionStore {
                 importance_score,
                 ai_category,
                 ai_summary,
-                ai_summary_generated_at
+                ai_summary_generated_at,
+                local_state,
+                local_state_changed_at,
+                local_state_reason
             "#,
         )
         .bind(&canonical_message_id)
@@ -344,7 +396,24 @@ impl MessageProjectionStore {
         &self,
         message: &NewProjectedMessage,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
-        message.validate()?;
+        self.upsert_channel_message_with_body_policy(message, false)
+            .await
+    }
+
+    pub async fn upsert_channel_message_allowing_empty_body_text(
+        &self,
+        message: &NewProjectedMessage,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        self.upsert_channel_message_with_body_policy(message, true)
+            .await
+    }
+
+    async fn upsert_channel_message_with_body_policy(
+        &self,
+        message: &NewProjectedMessage,
+        allow_empty_body_text: bool,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        message.validate_with_body_policy(allow_empty_body_text)?;
 
         let row = sqlx::query(
             r#"
@@ -418,7 +487,10 @@ impl MessageProjectionStore {
                 importance_score,
                 ai_category,
                 ai_summary,
-                ai_summary_generated_at
+                ai_summary_generated_at,
+                local_state,
+                local_state_changed_at,
+                local_state_reason
             "#,
         )
         .bind(&message.message_id)
@@ -454,10 +526,17 @@ impl MessageProjectionStore {
         account_id: Option<&str>,
         workflow_state: Option<WorkflowState>,
         channel_kind: Option<&str>,
+        query: Option<&str>,
+        local_state: LocalMessageState,
         limit: i64,
     ) -> Result<Vec<ProjectedMessageSummary>, MessageProjectionError> {
         let limit = validate_limit(limit)?;
         let workflow_state_str = workflow_state.map(|s| s.as_str().to_owned());
+        let local_state_filter = local_state.persisted_filter();
+        let query = query
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned);
         let rows = sqlx::query(
             r#"
             SELECT
@@ -467,26 +546,49 @@ impl MessageProjectionStore {
                 m.sender_display_name, m.delivery_state, m.message_metadata,
                 m.workflow_state, m.importance_score, m.ai_category,
                 m.ai_summary, m.ai_summary_generated_at,
+                m.local_state, m.local_state_changed_at, m.local_state_reason,
                 count(a.attachment_id)::BIGINT AS attachment_count
             FROM communication_messages m
             LEFT JOIN communication_attachments a ON a.message_id = m.message_id
             WHERE ($1::text IS NULL OR m.account_id = $1)
               AND ($2::text IS NULL OR m.workflow_state = $2)
               AND ($3::text IS NULL OR m.channel_kind = $3)
+              AND ($4::text IS NULL OR m.local_state = $4)
+              AND (
+                $5::text IS NULL
+                OR NOT EXISTS (
+                  SELECT 1
+                  FROM unnest(regexp_split_to_array(lower(trim($5)), '\s+')) AS term
+                  WHERE term <> ''
+                    AND lower(
+                      concat_ws(
+                        ' ',
+                        m.subject,
+                        m.sender,
+                        m.body_text,
+                        m.provider_record_id,
+                        m.sender_display_name
+                      )
+                    ) NOT LIKE '%' || term || '%'
+                )
+              )
             GROUP BY
                 m.message_id, m.raw_record_id, m.account_id, m.provider_record_id,
                 m.subject, m.sender, m.recipients, m.body_text,
                 m.occurred_at, m.projected_at, m.channel_kind, m.conversation_id,
                 m.sender_display_name, m.delivery_state, m.message_metadata,
                 m.workflow_state, m.importance_score, m.ai_category,
-                m.ai_summary, m.ai_summary_generated_at
+                m.ai_summary, m.ai_summary_generated_at,
+                m.local_state, m.local_state_changed_at, m.local_state_reason
             ORDER BY COALESCE(m.occurred_at, m.projected_at) DESC, m.projected_at DESC, m.message_id ASC
-            LIMIT $4
+            LIMIT $6
             "#,
         )
         .bind(account_id)
         .bind(workflow_state_str.as_deref())
         .bind(channel_kind)
+        .bind(local_state_filter)
+        .bind(query.as_deref())
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
@@ -499,13 +601,25 @@ impl MessageProjectionStore {
         &self,
         account_id: Option<&str>,
     ) -> Result<Vec<WorkflowStateCount>, MessageProjectionError> {
+        self.count_messages_by_state_with_local_state(account_id, LocalMessageState::Active)
+            .await
+    }
+
+    pub async fn count_messages_by_state_with_local_state(
+        &self,
+        account_id: Option<&str>,
+        local_state: LocalMessageState,
+    ) -> Result<Vec<WorkflowStateCount>, MessageProjectionError> {
+        let local_state_filter = local_state.persisted_filter();
         let rows = sqlx::query(
             r#"SELECT m.workflow_state, count(*)::BIGINT AS msg_count
             FROM communication_messages m
             WHERE ($1::text IS NULL OR m.account_id = $1)
+              AND ($2::text IS NULL OR m.local_state = $2)
             GROUP BY m.workflow_state ORDER BY m.workflow_state"#,
         )
         .bind(account_id)
+        .bind(local_state_filter)
         .fetch_all(&self.pool)
         .await?;
         let mut counts = Vec::new();
@@ -524,6 +638,19 @@ impl MessageProjectionStore {
         message_id: &str,
         new_state: WorkflowState,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
+        let mut transaction = self.pool.begin().await?;
+        let message =
+            Self::transition_workflow_state_in_transaction(&mut transaction, message_id, new_state)
+                .await?;
+        transaction.commit().await?;
+        Ok(message)
+    }
+
+    pub(crate) async fn transition_workflow_state_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        message_id: &str,
+        new_state: WorkflowState,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
         validate_non_empty("message_id", message_id)?;
         let row = sqlx::query(
             r#"UPDATE communication_messages SET workflow_state = $2, projected_at = now()
@@ -534,10 +661,74 @@ impl MessageProjectionStore {
                 occurred_at, projected_at, channel_kind, conversation_id,
                 sender_display_name, delivery_state, message_metadata,
                 workflow_state, importance_score, ai_category,
-                ai_summary, ai_summary_generated_at"#,
+                ai_summary, ai_summary_generated_at,
+                local_state, local_state_changed_at, local_state_reason"#,
         )
         .bind(message_id.trim())
         .bind(new_state.as_str())
+        .fetch_optional(&mut **transaction)
+        .await?;
+        let Some(row) = row else {
+            return Err(MessageProjectionError::MessageNotFound);
+        };
+        row_to_projected_message(row)
+    }
+
+    pub async fn move_to_local_trash(
+        &self,
+        message_id: &str,
+        reason: &str,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        validate_non_empty("message_id", message_id)?;
+        validate_non_empty("local_state_reason", reason)?;
+        let row = sqlx::query(
+            r#"UPDATE communication_messages
+            SET local_state = 'trash',
+                local_state_changed_at = now(),
+                local_state_reason = $2,
+                projected_at = now()
+            WHERE message_id = $1
+            RETURNING
+                message_id, raw_record_id, account_id, provider_record_id,
+                subject, sender, recipients, body_text,
+                occurred_at, projected_at, channel_kind, conversation_id,
+                sender_display_name, delivery_state, message_metadata,
+                workflow_state, importance_score, ai_category,
+                ai_summary, ai_summary_generated_at,
+                local_state, local_state_changed_at, local_state_reason"#,
+        )
+        .bind(message_id.trim())
+        .bind(reason.trim())
+        .fetch_optional(&self.pool)
+        .await?;
+        let Some(row) = row else {
+            return Err(MessageProjectionError::MessageNotFound);
+        };
+        row_to_projected_message(row)
+    }
+
+    pub async fn restore_from_local_trash(
+        &self,
+        message_id: &str,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        validate_non_empty("message_id", message_id)?;
+        let row = sqlx::query(
+            r#"UPDATE communication_messages
+            SET local_state = 'active',
+                local_state_changed_at = now(),
+                local_state_reason = NULL,
+                projected_at = now()
+            WHERE message_id = $1
+            RETURNING
+                message_id, raw_record_id, account_id, provider_record_id,
+                subject, sender, recipients, body_text,
+                occurred_at, projected_at, channel_kind, conversation_id,
+                sender_display_name, delivery_state, message_metadata,
+                workflow_state, importance_score, ai_category,
+                ai_summary, ai_summary_generated_at,
+                local_state, local_state_changed_at, local_state_reason"#,
+        )
+        .bind(message_id.trim())
         .fetch_optional(&self.pool)
         .await?;
         let Some(row) = row else {
@@ -573,7 +764,8 @@ impl MessageProjectionStore {
                 occurred_at, projected_at, channel_kind, conversation_id,
                 sender_display_name, delivery_state, message_metadata,
                 workflow_state, importance_score, ai_category,
-                ai_summary, ai_summary_generated_at"#,
+                ai_summary, ai_summary_generated_at,
+                local_state, local_state_changed_at, local_state_reason"#,
         )
         .bind(message_id.trim())
         .bind(category)
@@ -604,7 +796,8 @@ impl MessageProjectionStore {
                 occurred_at, projected_at, channel_kind, conversation_id,
                 sender_display_name, delivery_state, message_metadata,
                 workflow_state, importance_score, ai_category,
-                ai_summary, ai_summary_generated_at"#,
+                ai_summary, ai_summary_generated_at,
+                local_state, local_state_changed_at, local_state_reason"#,
         )
         .bind(message_id.trim())
         .bind(metadata)
@@ -637,13 +830,22 @@ pub struct NewProjectedMessage {
 
 impl NewProjectedMessage {
     fn validate(&self) -> Result<(), MessageProjectionError> {
+        self.validate_with_body_policy(false)
+    }
+
+    fn validate_with_body_policy(
+        &self,
+        allow_empty_body_text: bool,
+    ) -> Result<(), MessageProjectionError> {
         validate_non_empty("message_id", &self.message_id)?;
         validate_non_empty("raw_record_id", &self.raw_record_id)?;
         validate_non_empty("account_id", &self.account_id)?;
         validate_non_empty("provider_record_id", &self.provider_record_id)?;
         validate_non_empty("subject", &self.subject)?;
         validate_non_empty("sender", &self.sender)?;
-        validate_non_empty("body_text", &self.body_text)?;
+        if !allow_empty_body_text {
+            validate_non_empty("body_text", &self.body_text)?;
+        }
         validate_non_empty("channel_kind", &self.channel_kind)?;
         validate_non_empty("delivery_state", &self.delivery_state)?;
         if !self.message_metadata.is_object() {
@@ -679,6 +881,9 @@ pub struct ProjectedMessage {
     pub ai_category: Option<String>,
     pub ai_summary: Option<String>,
     pub ai_summary_generated_at: Option<DateTime<Utc>>,
+    pub local_state: LocalMessageState,
+    pub local_state_changed_at: Option<DateTime<Utc>>,
+    pub local_state_reason: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -782,6 +987,7 @@ fn row_to_projected_message_summary(
 
 fn row_to_projected_message(row: PgRow) -> Result<ProjectedMessage, MessageProjectionError> {
     let workflow_state: String = row.try_get("workflow_state")?;
+    let local_state: String = row.try_get("local_state")?;
     Ok(ProjectedMessage {
         message_id: row.try_get("message_id")?,
         raw_record_id: row.try_get("raw_record_id")?,
@@ -805,6 +1011,11 @@ fn row_to_projected_message(row: PgRow) -> Result<ProjectedMessage, MessageProje
         ai_category: row.try_get("ai_category")?,
         ai_summary: row.try_get("ai_summary")?,
         ai_summary_generated_at: row.try_get("ai_summary_generated_at")?,
+        local_state: local_state
+            .parse::<LocalMessageState>()
+            .unwrap_or(LocalMessageState::Active),
+        local_state_changed_at: row.try_get("local_state_changed_at")?,
+        local_state_reason: row.try_get("local_state_reason")?,
     })
 }
 
@@ -878,7 +1089,7 @@ fn validate_non_empty(field_name: &'static str, value: &str) -> Result<(), Messa
 }
 
 fn validate_limit(limit: i64) -> Result<i64, MessageProjectionError> {
-    if !(1..=100).contains(&limit) {
+    if !(1..=5000).contains(&limit) {
         return Err(MessageProjectionError::InvalidLimit(limit));
     }
 
@@ -920,7 +1131,7 @@ pub enum MessageProjectionError {
     #[error("unsupported raw blob storage kind: {0}")]
     UnsupportedRawBlobStorageKind(String),
 
-    #[error("message query limit must be between 1 and 100: {0}")]
+    #[error("message query limit must be between 1 and 5000: {0}")]
     InvalidLimit(i64),
 
     #[error("communication message was not found")]
@@ -928,6 +1139,9 @@ pub enum MessageProjectionError {
 
     #[error("invalid workflow state: {0}")]
     InvalidWorkflowState(String),
+
+    #[error("invalid local message state: {0}")]
+    InvalidLocalState(String),
 
     #[error("invalid importance score: {0}, must be 0-100")]
     InvalidImportanceScore(i16),

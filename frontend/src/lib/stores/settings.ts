@@ -1,6 +1,9 @@
 import { derived, get, writable } from 'svelte/store';
 import {
+	FRONTEND_LOCALE_SETTING_KEY,
 	FRONTEND_THEME_SETTING_KEY,
+	FRONTEND_UI_STATE_SETTING_KEY,
+	saveFrontendLocaleSetting,
 	type ApplicationSetting,
 	type CalendarAccount,
 	type ProviderAccount
@@ -13,6 +16,7 @@ import {
 import { accountProviderIcon, accountProviderLabel, accountUpdatedLabel } from '$lib/services/accounts';
 import { formatDateTime } from '$lib/services/formatting';
 import { buildIntegrationViewModels } from '$lib/services/integrations';
+import { setLocale, type Locale } from '$lib/i18n';
 import * as settingsService from '$lib/services/settings';
 import {
 	isLayoutSettingsSaving,
@@ -52,7 +56,7 @@ import {
 } from './sidebar';
 import { setThemeSettings, themeDraft, themeError, themeSettings } from './theme';
 
-export type SettingsSection = 'appearance' | 'application' | 'sidebar' | 'integrations' | 'language';
+export type SettingsSection = 'appearance' | 'application' | 'sidebar' | 'integrations' | 'language' | 'ai';
 
 export const applicationSettings = writable<ApplicationSetting[]>([]);
 export const providerAccounts = writable<ProviderAccount[]>([]);
@@ -69,7 +73,9 @@ export const settingsByCategory = derived(applicationSettings, ($applicationSett
 		$applicationSettings.filter(
 			(setting) =>
 				setting.setting_key !== 'frontend.sidebar' &&
-				setting.setting_key !== FRONTEND_THEME_SETTING_KEY
+				setting.setting_key !== FRONTEND_THEME_SETTING_KEY &&
+				setting.setting_key !== FRONTEND_UI_STATE_SETTING_KEY &&
+				!setting.setting_key.startsWith('ai.')
 		)
 	)
 );
@@ -152,6 +158,32 @@ export async function loadSettingsWorkspace(): Promise<void> {
 	themeError.set(result.themeError);
 	settingsError.set(result.settingsError);
 	isSettingsLoading.set(result.isLoading);
+}
+
+export async function saveLocaleSetting(locale: Locale): Promise<void> {
+	setLocale(locale);
+	savingSettingKey.set(FRONTEND_LOCALE_SETTING_KEY);
+	settingsError.set('');
+	settingsActionMessage.set('');
+	try {
+		const updated = await saveFrontendLocaleSetting(locale);
+		applicationSettings.update((settings) =>
+			settings.some((setting) => setting.setting_key === updated.setting_key)
+				? settings.map((setting) =>
+						setting.setting_key === updated.setting_key ? updated : setting
+					)
+				: [...settings, updated]
+		);
+		settingDrafts.update((drafts) => ({
+			...drafts,
+			[updated.setting_key]: settingDraftValue(updated)
+		}));
+		settingsActionMessage.set('Language saved');
+	} catch (error) {
+		settingsError.set(error instanceof Error ? error.message : 'Unknown locale update error');
+	} finally {
+		savingSettingKey.set(null);
+	}
 }
 
 export async function saveSetting(setting: ApplicationSetting): Promise<void> {

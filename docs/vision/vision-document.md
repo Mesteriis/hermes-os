@@ -1,62 +1,82 @@
 # Vision Document
 
-## Миссия
+## Mission
 
-Hermes Hub - персональная система коммуникаций, долговременной памяти и управления знаниями. Система должна хранить многолетнюю историю взаимодействия пользователя с людьми, организациями, проектами, документами, задачами и событиями, а затем помогать понимать контекст, находить связи и принимать решения.
+Hermes Hub is a local-first Personal Memory System with a Personal Operating
+System style interface for communications, knowledge, memory, relationships,
+projects, documents, decisions, obligations and context.
 
-Hermes Hub не конкурирует с отдельными почтовыми клиентами, мессенджерами или CRM. Его ценность в том, что он объединяет их данные в локальную, проверяемую и долговечную память.
+Hermes does not compete with email clients, messengers, CRM systems, task
+trackers, calendar apps or note-taking tools. It absorbs evidence from those
+surfaces and turns it into durable, source-backed context.
 
-## Северная звезда
+Canonical vocabulary lives in:
 
-Через несколько лет использования Hermes Hub должен надежно отвечать на вопросы:
+- [Foundation Vision](../foundation/vision.md)
+- [Glossary](../foundation/glossary.md)
+- [World Model](../foundation/world-model.md)
 
-- что изменилось в моей жизни за последние 30 дней
-- что я обещал клиентам, партнерам или друзьям
-- какие проекты активны и почему они в таком состоянии
-- что обсуждалось по проекту X
-- почему было принято определенное решение
-- какие документы связаны с человеком или организацией
-- какая полная история взаимодействия с организацией Y
+## North Star
 
-Ответы должны быть объяснимыми: система обязана показывать источники, события, документы, сообщения и графовые связи, на которых основан вывод.
+After years of use, Hermes should reliably answer:
 
-## Непродуктовые границы
+- what changed in the owner's world over a period;
+- what obligations exist and where they came from;
+- which projects are active and why;
+- what was discussed around a project;
+- why a decision was made;
+- which documents support a claim;
+- what the full history of a Persona or Organization is;
+- what context matters before acting.
 
-Hermes Hub не является:
+Answers must be explainable. Hermes must show source records, events, documents,
+communications and relationships behind each conclusion.
 
-- почтовым клиентом с AI-фильтром
-- мессенджером с unified inbox
-- CRM для продаж
-- облачным SaaS
-- fine-tuned персональной LLM
-- системой, где чат является единственной точкой управления
+## Non-Product Boundaries
 
-## Долгосрочная ценность
+Hermes Hub is not:
 
-Данные пользователя должны переживать:
+- an email client with an AI filter;
+- a messenger with a unified inbox;
+- a CRM;
+- a task tracker;
+- a calendar app;
+- a note-taking app;
+- a cloud SaaS;
+- a fine-tuned personal LLM;
+- a system where chat is the only control surface.
 
-- замену LLM
-- замену UI
-- замену search engine
-- замену messaging provider
-- миграцию между машинами
-- временную недоступность облачных сервисов
+## Long-Term Value
 
-Для этого основой системы являются события, нормализованные сущности, граф знаний, индексы поиска, версии документов и воспроизводимые ingestion pipelines.
+The owner's memory must survive:
 
-## Принципы продукта
+- replacement of an LLM;
+- replacement of the UI;
+- replacement of a search engine;
+- replacement of a messaging provider;
+- migration between machines;
+- temporary unavailability of cloud services.
 
-- Память важнее интерфейса.
-- Источник важнее сгенерированного вывода.
-- Локальное состояние важнее облачной синхронизации.
-- Связи между объектами важнее отдельных списков.
-- Автоматизация не должна скрывать неопределенность.
-- Пользователь должен иметь право удалить, экспортировать и восстановить данные.
+The foundation is source records, canonical events, domain entities,
+relationships, document versions, search indexes and reproducible ingestion
+pipelines.
 
-## Критерии успеха
+## Product Principles
 
-- Пользователь может найти любое значимое взаимодействие за годы использования.
-- Система связывает сообщения, документы, людей, задачи и проекты без ручной классификации всего архива.
-- AI-ответы содержат проверяемые ссылки на источники.
-- Потеря конкретной модели, провайдера или индекса не уничтожает память.
-- Большинство daily workflows выполняется keyboard-first через command palette и контекстные действия.
+- Context is more valuable than CRUD.
+- Memory is more valuable than an interface.
+- Evidence is more valuable than generated output.
+- Local ownership is more valuable than cloud dependency.
+- Relationships are more valuable than isolated lists.
+- Automation must expose uncertainty.
+- The owner must be able to delete, export and restore memory.
+
+## Success Criteria
+
+- The owner can find any meaningful interaction after years of use.
+- Hermes connects communications, documents, Personas, Organizations, Projects,
+  Tasks, Events, Decisions and Obligations without requiring manual
+  classification of everything.
+- AI answers include verifiable source references.
+- Loss of a model, provider or derived index does not destroy memory.
+- Daily workflows remain keyboard-first and context-driven.

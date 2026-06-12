@@ -1,6 +1,6 @@
 // §20-21: Task + Note extraction from email via LLM + heuristics
 use crate::domains::mail::messages::ProjectedMessage;
-use crate::integrations::ollama::client::{OllamaClient, OllamaError};
+use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -23,12 +23,12 @@ pub struct ExtractedNote {
 
 #[derive(Clone)]
 pub struct EmailExtractService {
-    ollama: Option<OllamaClient>,
+    runtime: Option<AiRuntimeClient>,
 }
 
 impl EmailExtractService {
-    pub fn new(ollama: Option<OllamaClient>) -> Self {
-        Self { ollama }
+    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+        Self { runtime }
     }
 
     pub async fn extract_tasks(
@@ -66,13 +66,13 @@ impl EmailExtractService {
         }
 
         // LLM extraction if available
-        if let Some(ref ollama) = self.ollama {
+        if let Some(ref runtime) = self.runtime {
             let prompt = format!(
                 "Extract tasks from this email. Return a JSON array of objects with fields: title, due_date (ISO date or null), assignee (or null), priority (high/medium/low).\n\nEmail:\nSubject: {}\nBody:\n{}",
                 message.subject,
                 truncate(body, 3000)
             );
-            if let Ok(result) = ollama.chat(&prompt).await {
+            if let Ok(result) = runtime.chat(&prompt).await {
                 if let Ok(mut llm_tasks) =
                     serde_json::from_str::<Vec<ExtractedTask>>(result.content.trim())
                 {
@@ -152,7 +152,7 @@ fn truncate(s: &str, max: usize) -> &str {
 #[derive(Debug, Error)]
 pub enum ExtractError {
     #[error(transparent)]
-    Ollama(#[from] OllamaError),
+    Runtime(#[from] AiRuntimeError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
 }

@@ -1,35 +1,40 @@
-# Calendar — Архитектура
+# Calendar And Events Architecture
 
-## Модули
+## Position
 
-| Модуль | Назначение |
+Calendar owns scheduled event records and calendar source identity. It does not
+own the global Timeline Engine.
+
+## Modules
+
+Paths below refer to `backend/src/domains/calendar/`.
+
+| Module | Responsibility |
 |---|---|
-| `calendar.rs` | Ядро: CalendarAccount, CalendarSource, CalendarEvent + stores |
-| `calendar_core.rs` | EventParticipant, EventRelation, EventContextPack, EventAgenda, EventChecklist |
-| `calendar_intelligence.rs` | Эвристики: classify, importance, readiness, risks, fingerprint |
-| `calendar_meetings.rs` | MeetingNote, MeetingOutcome, EventRecording, EventTranscript |
-| `calendar_scheduling.rs` | DeadlineEvent, FocusBlock, SmartSchedulingService |
-| `calendar_health.rs` | CalendarWatchtowerService: preparation gaps, missing outcomes, load analysis |
-| `calendar_brain.rs` | CalendarBrainService: answer, search, meeting brief, agenda generation |
-| `calendar_rules.rs` | CalendarRule + CRUD |
-| `calendar_sync.rs` | ICS/Markdown export, import stub |
+| `core.rs` | CalendarAccount, CalendarSource, CalendarEvent and stores |
+| `events.rs` | participants, relations, context packs, agendas, checklists |
+| `intelligence.rs` | engine-facing classification and readiness helpers |
+| `meetings.rs` | meeting notes, outcomes, recordings and transcripts |
+| `scheduling.rs` | deadlines, focus blocks and scheduling support |
+| `health.rs` | Risk Engine/attention signals for calendar context |
+| `brain.rs` | context answers and briefs over shared engines |
+| `rules.rs` | calendar rules |
+| `sync.rs` | import/export helpers |
+| `reminders.rs` | reminder records and toggles |
 
-## Слои
+## Layers
 
+```text
+API
+  -> Calendar domain services
+  -> Stores
+  -> PostgreSQL
+  -> Shared engines for context, timeline, risk and search
 ```
-API (`app::router` + `domains::calendar::handlers`)
-  ↓
-Domain services (calendar_intelligence, calendar_brain, calendar_health)
-  ↓
-Stores (PgPool-backed, one per entity)
-  ↓
-PostgreSQL (15 tables, 3 migrations)
-```
 
-## Паттерны
+## Patterns
 
-- **Store pattern**: каждый store принимает `PgPool::new(pool)`, все методы возвращают `Result<T, DomainError>`
-- **Error handling**: `#[derive(Error)]` enum → `From<X> for ApiError` в lib.rs
-- **API auth**: router-level `x-hermes-secret`; audit actor is the constant `hermes-frontend`
-- **Heuristic-first intelligence**: все AI-фичи работают без Ollama
-- **No uuid crate**: ID генерируются как `{prefix}:v1:{timestamp_nanos_hex}`
+- Store pattern: stores receive a pool and return domain errors.
+- Event-backed changes.
+- Provider identity remains at the provider/source boundary.
+- Heuristic-first intelligence should work without Ollama.

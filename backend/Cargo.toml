@@ -31,6 +31,10 @@ name = "hermes-email-sync-dev"
 path = "src/bin/hermes_email_sync_dev.rs"
 
 [[bin]]
+name = "hermes-email-reproject-dev"
+path = "src/bin/hermes_email_reproject_dev.rs"
+
+[[bin]]
 name = "hermes-document-process"
 path = "src/bin/hermes_document_process.rs"
 
@@ -43,6 +47,7 @@ axum = "0.8"
 base64 = "0.22"
 chacha20poly1305 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+encoding_rs = "0.8"
 futures = "0.3"
 getrandom = "0.2"
 hkdf = "0.12"
@@ -57,7 +62,7 @@ sha2 = "0.10"
 sqlx = { version = "0.8", default-features = false, features = ["chrono", "json", "macros", "migrate", "postgres", "runtime-tokio-rustls"] }
 tantivy = "0.25.0"
 thiserror = "2"
-tokio = { version = "1", features = ["fs", "macros", "net", "rt-multi-thread"] }
+tokio = { version = "1", features = ["fs", "macros", "net", "rt-multi-thread", "time"] }
 tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }

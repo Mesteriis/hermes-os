@@ -1,4 +1,11 @@
-# Calendar — Статус реализации
+# Calendar/Events — Implementation Status
+
+Этот файл описывает текущую реализацию. Calendar owns scheduled events; global
+timeline, risk, search and obligation behavior belongs to shared engines.
+
+The percentages below describe scheduled-event implementation coverage only.
+They are not product completion scores for Timeline, Risk, Memory, Obligations
+or Decisions.
 
 ## Реализовано (68/75 разделов спеки — 91%)
 
@@ -12,7 +19,7 @@
 | 7 | Event Types | `event_type` + `classify_event()` — 18 типов через keyword heuristic |
 | 8 | Event Intelligence | `analyze` endpoint: classify, importance, readiness, risks |
 | 9 | Context Pack | `event_context_packs` — summary, participants, docs, tasks, questions, risks, agenda, actions |
-| 10 | Relationships | `event_relations` — person, organization, project, document, task, email, note, decision, obligation, recording |
+| 10 | Relationships | `event_relations` — Persona, Organization, Project, Document, Task, Communication, Note, Decision, Obligation, Recording |
 | 11 | Meeting Preparation | UI: клик → prepareEvent() → context pack + brief + agenda |
 | 12 | AI Meeting Brief | `meeting_brief()` — участники, контекст, риски из БД |
 | 13 | Agenda Generator | `generate_agenda()` — template-based: meeting/review/planning |
@@ -21,15 +28,15 @@
 | 16 | Risk Analysis | `detect_risks()` — нет agenda, нет docs, нет participants, нет project, скоро-без-подготовки |
 | 17 | Participants Intelligence | `event_participants` — person_id, email, display_name, role, response_status, org_id, timezone, confidence |
 | 18 | Meeting Notes | `meeting_notes` — CRUD, markdown format |
-| 19 | Meeting Outcomes | `meeting_outcomes` — decision, task, promise, risk, question, document_request, follow_up, agreement, blocker |
-| 20 | Follow-Up Generator | `POST /events/{id}/follow-up` — sets status to needs_follow_up |
-| 21 | Follow-Up Tracking | `GET /events/{id}/follow-up-status` — counts by outcome_type |
+| 19 | Meeting Outcomes | `meeting_outcomes` — decision, task, obligation, risk, question, document_request, follow_up, agreement, blocker |
+| 20 | Follow-Up Generator | `POST /events/{id}/follow-up` — compatibility route for Follow-Up candidates |
+| 21 | Follow-Up Tracking | `GET /events/{id}/follow-up-status` — compatibility route for Follow-Up state |
 | 22 | Event Replay | GET event + все sub-ресурсы доступны |
-| 23 | Calendar Memory | Brain search: `POST /calendar/brain` + `GET /calendar/search?q=` |
+| 23 | Calendar Memory | Compatibility brain/search routes over shared Search and Memory engines |
 | 24 | Search By Memory | ILIKE по title + description, 20 результатов |
 | 25–27 | Smart Scheduling | `find_slots()` — эвристический поиск свободных окон |
 | 28–31 | Deadline Calendar + Focus | `deadline_events` + `focus_blocks` — CRUD + severity/protection |
-| 32–40 | Watchtower + Health | events_needing_preparation, without_outcomes, weekly_brief, meeting_load_analysis, focus_balance, back_to_back, time_distribution |
+| 32–40 | Risk/attention views | events_needing_preparation, without_outcomes, weekly_brief, meeting_load_analysis, focus_balance, back_to_back, time_distribution |
 | 41–49 | Analytics | `/analytics/distribution`, `/analytics/focus-balance`, `/analytics/back-to-back` |
 | 50 | Travel Events | `location` field + `travel_buffer_minutes` |
 | 51 | Location Intelligence | `parse_location()` — online/offline detection, parsed name, travel buffer |

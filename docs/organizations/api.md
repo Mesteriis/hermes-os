@@ -1,5 +1,8 @@
 # Organizations — API Reference
 
+This file documents current compatibility routes. Canonical Organization,
+Relationship and Persona terminology is defined in `../foundation/glossary.md`.
+
 Base: `/api/v1/`
 
 ## Core
@@ -21,13 +24,13 @@ Base: `/api/v1/`
 | GET, POST | `/organizations/{id}/aliases` |
 | GET | `/organizations/{id}/domains` |
 
-## Departments & Contacts
+## Departments & Persona Links
 
-| Метод | Путь |
-|---|---|
-| GET, POST | `/organizations/{id}/departments` |
-| GET, POST | `/organizations/{id}/contacts` |
-| GET | `/organizations/{id}/related` |
+| Метод | Путь | Описание |
+|---|---|---|
+| GET, POST | `/organizations/{id}/departments` | |
+| GET, POST | `/organizations/{id}/contacts` | Compatibility route for Organization-Persona links |
+| GET | `/organizations/{id}/related` | |
 
 ## Timeline & Templates
 
@@ -61,15 +64,15 @@ Base: `/api/v1/`
 | GET | `/organizations/{id}/enrichment` |
 | POST | `/organizations/{id}/enrichment/{rid}/apply` |
 
-## Risks & Health
+## Risk & Attention
 
-| Метод | Путь |
-|---|---|
-| GET | `/organizations/{id}/risks` |
-| GET | `/organizations/{id}/health` |
-| POST | `/organizations/{id}/watchlist` |
+| Метод | Путь | Описание |
+|---|---|---|
+| GET | `/organizations/{id}/risks` | |
+| GET | `/organizations/{id}/health` | Compatibility route for an attention/risk read model |
+| POST | `/organizations/{id}/watchlist` | Compatibility route for attention/read-model state |
 
-## Investigator
+## Dossier & Context
 
 | Метод | Путь |
 |---|---|

@@ -1685,30 +1685,81 @@
 
 .draft-strip {
 	display: flex;
+	position: fixed;
+	top: 58px;
+	right: 14px;
+	bottom: auto;
+	left: calc(var(--hh-shell-sidebar-width) + 16px);
+	z-index: 120;
 	align-items: center;
 	gap: 8px;
 	padding: 6px 16px;
 	border-bottom: 1px solid var(--hh-border-subtle);
+	border-radius: var(--hh-radius-sm);
 	background: var(--hh-status-warning-surface);
 	font-size: 12px;
 	overflow-x: auto;
 }
 
+.sidebar-rail .draft-strip {
+	left: calc(var(--hh-shell-sidebar-width-rail) + 16px);
+}
+
 .draft-chip {
 	display: inline-flex;
 	align-items: center;
-	gap: 4px;
-	padding: 3px 8px;
+	gap: 2px;
+	padding: 2px;
 	border-radius: 4px;
 	border: 1px solid var(--hh-status-warning-text);
 	background: var(--hh-color-surface);
 	color: var(--hh-color-text-soft);
 	font-size: 12px;
+	white-space: nowrap;
+	overflow: hidden;
+}
+
+.draft-open-button,
+.draft-delete-button {
+	border: 0;
+	background: transparent;
+	color: inherit;
 	cursor: pointer;
+}
+
+.draft-open-button {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-width: 0;
+	max-width: 220px;
+	padding: 3px 6px;
+	overflow: hidden;
+	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
+.draft-delete-button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	position: relative;
+	z-index: 1;
+	flex: 0 0 24px;
+	width: 24px;
+	height: 24px;
+	border-radius: 4px;
+	color: var(--hh-status-danger-text);
+}
+
+.draft-open-button svg,
+.draft-delete-button svg {
+	pointer-events: none;
+}
+
 .draft-chip:hover { background: var(--hh-status-warning-surface); }
+
+.draft-delete-button:hover { background: var(--hh-status-danger-surface); }
 
 .chip {
 	font-size: 10px; padding: 1px 6px; border-radius: var(--hh-radius-xs); text-transform: uppercase;

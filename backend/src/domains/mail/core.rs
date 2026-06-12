@@ -199,6 +199,36 @@ impl CommunicationIngestionStore {
         row_to_raw_record(row)
     }
 
+    pub async fn raw_record(
+        &self,
+        raw_record_id: &str,
+    ) -> Result<Option<StoredRawCommunicationRecord>, CommunicationIngestionError> {
+        validate_non_empty("raw_record_id", raw_record_id)?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT
+                raw_record_id,
+                account_id,
+                record_kind,
+                provider_record_id,
+                source_fingerprint,
+                import_batch_id,
+                occurred_at,
+                captured_at,
+                payload,
+                provenance
+            FROM communication_raw_records
+            WHERE raw_record_id = $1
+            "#,
+        )
+        .bind(raw_record_id.trim())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_raw_record).transpose()
+    }
+
     pub async fn save_checkpoint(
         &self,
         checkpoint: &NewIngestionCheckpoint,
@@ -260,6 +290,29 @@ impl CommunicationIngestionStore {
         .await?;
 
         row.map(row_to_checkpoint).transpose()
+    }
+
+    pub async fn delete_checkpoint(
+        &self,
+        account_id: &str,
+        stream_id: &str,
+    ) -> Result<bool, CommunicationIngestionError> {
+        validate_non_empty("account_id", account_id)?;
+        validate_non_empty("stream_id", stream_id)?;
+
+        let result = sqlx::query(
+            r#"
+            DELETE FROM communication_ingestion_checkpoints
+            WHERE account_id = $1
+              AND stream_id = $2
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(stream_id.trim())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn bind_provider_account_secret(

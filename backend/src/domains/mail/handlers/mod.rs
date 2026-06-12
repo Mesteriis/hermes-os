@@ -1,5 +1,10 @@
 // ADR-0073: mail handlers are grouped by bounded context for the first
 // handlers.rs extraction; split by communications, accounts and workflow next.
+mod remote_images;
+mod workflow_actions;
+pub(crate) use remote_images::get_v1_communication_message_remote_image;
+pub(crate) use workflow_actions::post_v1_workflow_action;
+
 use std::collections::HashMap;
 use std::io;
 
@@ -22,6 +27,7 @@ use crate::ai::core::{
 };
 use crate::domains::mail::core::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
+    ProviderAccountSecretPurpose, ProviderCredentialReader,
 };
 use crate::domains::persons::analytics::{AnalyticsError, PersonAnalyticsService};
 use crate::domains::persons::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
@@ -89,12 +95,16 @@ use crate::domains::mail::accounts::{
     EmailAccountSetupError, EmailAccountSetupService, GmailOAuthPendingGrant,
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
+use crate::domains::mail::background_sync::{
+    DEFAULT_MAIL_SYNC_BLOB_ROOT, MailBackgroundSyncService, MailSyncError, MailSyncRunResponse,
+    MailSyncSettings, MailSyncSettingsUpdate, MailSyncStatus, MailSyncStore, MailSyncTrigger,
+};
 use crate::domains::mail::messages::{
-    MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
-    WorkflowState,
+    LocalMessageState, MessageProjectionError, MessageProjectionStore, ProjectedMessage,
+    ProjectedMessageSummary, WorkflowState, parse_raw_email_message_from_blob,
 };
 use crate::domains::mail::storage::{
-    MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob,
+    LocalMailBlobStore, MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob,
 };
 use crate::domains::organizations::api::{
     OrganizationError, OrganizationStore, OrganizationUpdate,
@@ -171,6 +181,77 @@ pub(crate) struct WorkflowStateCountApiItem {
 #[derive(Deserialize)]
 pub(crate) struct WorkflowStateCountsQuery {
     account_id: Option<String>,
+    local_state: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct MailSyncStatusListResponse {
+    items: Vec<MailSyncStatus>,
+}
+
+pub(crate) async fn get_v1_email_account_sync_status(
+    State(state): State<AppState>,
+) -> Result<Json<MailSyncStatusListResponse>, ApiError> {
+    let statuses = mail_sync_store(&state)
+        .map_err(mail_sync_api_error)?
+        .sync_statuses()
+        .await
+        .map_err(mail_sync_api_error)?;
+
+    Ok(Json(MailSyncStatusListResponse { items: statuses }))
+}
+
+pub(crate) async fn get_v1_email_account_sync_settings(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<MailSyncSettings>, ApiError> {
+    Ok(Json(
+        mail_sync_store(&state)
+            .map_err(mail_sync_api_error)?
+            .settings_for_account(&account_id)
+            .await
+            .map_err(mail_sync_api_error)?,
+    ))
+}
+
+pub(crate) async fn put_v1_email_account_sync_settings(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+    Json(request): Json<MailSyncSettingsUpdate>,
+) -> Result<Json<MailSyncSettings>, ApiError> {
+    Ok(Json(
+        mail_sync_store(&state)
+            .map_err(mail_sync_api_error)?
+            .update_settings(&account_id, request)
+            .await
+            .map_err(mail_sync_api_error)?,
+    ))
+}
+
+pub(crate) async fn post_v1_email_account_sync_now(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<MailSyncRunResponse>, ApiError> {
+    Ok(Json(
+        mail_sync_service(&state)
+            .map_err(mail_sync_api_error)?
+            .run_account(&account_id, MailSyncTrigger::Manual)
+            .await
+            .map_err(mail_sync_api_error)?,
+    ))
+}
+
+pub(crate) async fn post_v1_email_account_sync_full_resync(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<MailSyncRunResponse>, ApiError> {
+    Ok(Json(
+        mail_sync_service(&state)
+            .map_err(mail_sync_api_error)?
+            .run_account_full_resync(&account_id)
+            .await
+            .map_err(mail_sync_api_error)?,
+    ))
 }
 
 pub(crate) async fn put_v1_message_workflow_state(
@@ -221,8 +302,14 @@ pub(crate) async fn get_v1_message_workflow_state_counts(
     State(state): State<AppState>,
     Query(query): Query<WorkflowStateCountsQuery>,
 ) -> Result<Json<WorkflowStateCountsApiResponse>, ApiError> {
+    let local_state = query
+        .local_state
+        .as_deref()
+        .unwrap_or("active")
+        .parse::<LocalMessageState>()
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid local_state value"))?;
     let counts = message_store(&state)?
-        .count_messages_by_state(query.account_id.as_deref())
+        .count_messages_by_state_with_local_state(query.account_id.as_deref(), local_state)
         .await?
         .into_iter()
         .map(|c| WorkflowStateCountApiItem {
@@ -242,6 +329,9 @@ pub(crate) struct MessageAnalyzeResponse {
     summary: Option<String>,
     importance_score: Option<i16>,
     workflow_state: String,
+    source: String,
+    confidence: Option<f64>,
+    evidence: Vec<String>,
 }
 
 pub(crate) async fn post_v1_message_analyze(
@@ -279,6 +369,7 @@ pub(crate) async fn post_v1_message_analyze(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let evidence = crate::domains::mail::explain::explain_importance(&updated).reasons;
 
     Ok(Json(MessageAnalyzeResponse {
         message_id: updated.message_id,
@@ -287,6 +378,9 @@ pub(crate) async fn post_v1_message_analyze(
         summary: updated.ai_summary,
         importance_score: updated.importance_score,
         workflow_state: updated.workflow_state.as_str().to_owned(),
+        source: "local_heuristic".to_owned(),
+        confidence: None,
+        evidence,
     }))
 }
 
@@ -988,39 +1082,164 @@ pub(crate) struct SendRequest {
     bcc: Option<Vec<String>>,
     subject: String,
     body_text: String,
+    body_html: Option<String>,
     in_reply_to: Option<String>,
     references: Option<Vec<String>>,
+    confirmed_provider_write: Option<bool>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct SendResponse {
     message_id: String,
     accepted: Vec<String>,
+    accepted_recipients: Vec<String>,
+    transport: String,
+    status: String,
+    failure_reason: Option<String>,
 }
 
 pub(crate) async fn post_v1_send(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<SendRequest>,
 ) -> Result<Json<SendResponse>, ApiError> {
+    if req.confirmed_provider_write != Some(true) {
+        return Err(ApiError::ProviderWriteConfirmationRequired);
+    }
+
+    require_unlocked_host_vault(&state)?;
+
+    let communication_store = communication_ingestion_store(&state)?;
+    let account = communication_store
+        .provider_account(&req.account_id)
+        .await?
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "provider account was not found",
+        ))?;
+    let smtp_config = smtp_config_for_provider_account(&account)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let credential_reader = ProviderCredentialReader::new(
+        communication_store,
+        SecretReferenceStore::new(pool),
+        &state.vault,
+    );
+    let credential = credential_reader
+        .read(
+            &account.account_id,
+            ProviderAccountSecretPurpose::SmtpPassword,
+        )
+        .await
+        .map_err(provider_credential_api_error)?;
     let email = crate::domains::mail::send::OutgoingEmail {
-        from: req.account_id.clone(),
+        from: account.external_account_id.clone(),
         to: req.to,
         cc: req.cc.unwrap_or_default(),
         bcc: req.bcc.unwrap_or_default(),
         subject: req.subject,
         body_text: req.body_text,
-        body_html: None,
+        body_html: req.body_html,
         in_reply_to: req.in_reply_to,
         references: req.references.unwrap_or_default(),
     };
-    // Send is best-effort for now — SMTP config resolved from provider account
+
+    if email
+        .to
+        .iter()
+        .chain(email.cc.iter())
+        .chain(email.bcc.iter())
+        .all(|recipient| recipient.trim().is_empty())
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "at least one recipient is required",
+        ));
+    }
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::communication_email_send(
+            "hermes-frontend",
+            &account.account_id,
+            email.to.len() + email.cc.len() + email.bcc.len(),
+        ))
+        .await?;
+
+    let result = crate::domains::mail::send::SmtpClient::new()
+        .send(&smtp_config, &credential.secret, &email)
+        .await?;
+
     Ok(Json(SendResponse {
-        message_id: format!(
-            "sent-{}",
-            Utc::now().timestamp_nanos_opt().unwrap_or_default()
-        ),
-        accepted: email.to.clone(),
+        message_id: result.message_id,
+        accepted: result.accepted_recipients.clone(),
+        accepted_recipients: result.accepted_recipients,
+        transport: "smtp".to_owned(),
+        status: "sent".to_owned(),
+        failure_reason: None,
     }))
+}
+
+fn smtp_config_for_provider_account(
+    account: &ProviderAccount,
+) -> Result<crate::domains::mail::send::SmtpConfig, ApiError> {
+    match account.provider_kind {
+        EmailProviderKind::Icloud | EmailProviderKind::Imap => {}
+        EmailProviderKind::Gmail => {
+            return Err(ApiError::InvalidCommunicationQuery(
+                "Gmail send is unavailable until OAuth send scopes are configured",
+            ));
+        }
+        _ => {
+            return Err(ApiError::InvalidCommunicationQuery(
+                "provider does not support SMTP send",
+            ));
+        }
+    }
+
+    let config = account
+        .config
+        .as_object()
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "provider account config must be a JSON object",
+        ))?;
+    let host = config
+        .get("smtp_host")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "SMTP config is unavailable for this account",
+        ))?;
+    let port = config
+        .get("smtp_port")
+        .and_then(Value::as_u64)
+        .filter(|value| *value > 0 && *value <= u64::from(u16::MAX))
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "SMTP port is unavailable for this account",
+        ))? as u16;
+    let username = config
+        .get("smtp_username")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(account.external_account_id.as_str());
+    let tls = config
+        .get("smtp_tls")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+    let starttls = config
+        .get("smtp_starttls")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    Ok(crate::domains::mail::send::SmtpConfig::new(host, port, tls, username).starttls(starttls))
+}
+
+fn provider_credential_api_error(
+    error: crate::domains::mail::core::ProviderCredentialError,
+) -> ApiError {
+    tracing::warn!(error = %error, "SMTP credential lookup failed");
+    ApiError::InvalidCommunicationQuery("SMTP credential is unavailable for this account")
 }
 
 pub(crate) async fn post_v1_reply(
@@ -1052,6 +1271,10 @@ pub(crate) async fn post_v1_reply(
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         ),
         accepted: req.to.clone(),
+        accepted_recipients: req.to.clone(),
+        transport: "local".to_owned(),
+        status: "queued".to_owned(),
+        failure_reason: None,
     }))
 }
 
@@ -1079,10 +1302,41 @@ pub(crate) async fn post_v1_imap_delete(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    store
-        .transition_workflow_state(&message_id, WorkflowState::Archived)
+    let updated = store
+        .move_to_local_trash(&message_id, "imap-delete-alias")
         .await?;
-    Ok(Json(serde_json::json!({"deleted": true})))
+    Ok(Json(serde_json::json!({
+        "deleted": true,
+        "provider_deleted": false,
+        "local_state": updated.local_state.as_str()
+    })))
+}
+
+pub(crate) async fn post_v1_message_trash(
+    State(state): State<AppState>,
+    Path(message_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let updated = message_store(&state)?
+        .move_to_local_trash(&message_id, "user_deleted")
+        .await?;
+    Ok(Json(serde_json::json!({
+        "message_id": updated.message_id,
+        "local_state": updated.local_state.as_str(),
+        "provider_deleted": false
+    })))
+}
+
+pub(crate) async fn post_v1_message_restore(
+    State(state): State<AppState>,
+    Path(message_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let updated = message_store(&state)?
+        .restore_from_local_trash(&message_id)
+        .await?;
+    Ok(Json(serde_json::json!({
+        "message_id": updated.message_id,
+        "local_state": updated.local_state.as_str()
+    })))
 }
 
 #[derive(Deserialize)]
@@ -1274,7 +1528,7 @@ pub(crate) async fn post_v1_translate(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    let service = email_multilingual_service(&state)?;
+    let service = email_multilingual_service(&state).await?;
     match service
         .translate(&msg.body_text, &req.target_language)
         .await?
@@ -1305,7 +1559,7 @@ pub(crate) async fn post_v1_ai_reply(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    let service = email_ai_reply_service(&state)?;
+    let service = email_ai_reply_service(&state).await?;
     let opts = crate::domains::mail::ai_reply::AiReplyOptions {
         tone: req.tone,
         language: req.language,
@@ -1337,7 +1591,7 @@ pub(crate) async fn post_v1_ai_reply_variants(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    let service = email_ai_reply_service(&state)?;
+    let service = email_ai_reply_service(&state).await?;
     let languages = req
         .languages
         .unwrap_or_else(|| vec!["en".into(), "es".into(), "ru".into()]);
@@ -1426,15 +1680,9 @@ pub(crate) async fn post_v1_extract_tasks(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let runtime_settings = ai_runtime_settings(&state).await?;
     let svc = crate::domains::mail::extract::EmailExtractService::new(
-        crate::integrations::ollama::client::OllamaClient::new(
-            crate::integrations::ollama::client::OllamaClientConfig::new(
-                "http://127.0.0.1:11434",
-                "qwen3:4b",
-                "qwen3-embedding:4b",
-            ),
-        )
-        .ok(),
+        ai_runtime_client(&state, &runtime_settings).ok(),
     );
     let tasks = svc.extract_tasks(&msg).await?;
     Ok(Json(serde_json::json!({"tasks": tasks})))
@@ -1566,9 +1814,28 @@ pub(crate) async fn get_v1_communication_messages(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<CommunicationMessagesResponse>, ApiError> {
     let query = parse_communication_messages_query(raw_query.as_deref())?;
-    let limit = query.limit.unwrap_or(50).clamp(1, 100);
+    let limit = query.limit.unwrap_or(5000).clamp(1, 5000);
+    let workflow_state = query
+        .workflow_state
+        .as_deref()
+        .map(str::parse::<WorkflowState>)
+        .transpose()
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid workflow state value"))?;
+    let local_state = query
+        .local_state
+        .as_deref()
+        .unwrap_or("active")
+        .parse::<LocalMessageState>()
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid local_state value"))?;
     let items = message_store(&state)?
-        .recent_messages(limit)
+        .list_messages(
+            query.account_id.as_deref(),
+            workflow_state,
+            query.channel_kind.as_deref(),
+            query.q.as_deref(),
+            local_state,
+            limit,
+        )
         .await?
         .into_iter()
         .map(CommunicationMessageSummaryResponse::from)
@@ -1584,6 +1851,11 @@ pub(crate) async fn get_v1_communication_message(
     let Some(message) = message_store(&state)?.message(&message_id).await? else {
         return Err(ApiError::CommunicationMessageNotFound);
     };
+    let rich_detail = rich_email_message_detail_for_message(&state, &message).await?;
+    let message_metadata = message_metadata_with_raw_headers(
+        &message.message_metadata,
+        rich_detail.headers.as_slice(),
+    );
     let attachments = mail_storage_store(&state)?
         .attachments_for_message(&message.message_id)
         .await?
@@ -1592,9 +1864,95 @@ pub(crate) async fn get_v1_communication_message(
         .collect();
 
     Ok(Json(CommunicationMessageDetailResponse {
-        message: CommunicationMessageDetailItem::from(message),
+        message: CommunicationMessageDetailItem::from_message_with_metadata(
+            message,
+            rich_detail.body_html,
+            message_metadata,
+        ),
         attachments,
     }))
+}
+
+async fn rich_body_html_for_message(
+    state: &AppState,
+    message: &ProjectedMessage,
+) -> Result<Option<String>, ApiError> {
+    Ok(rich_email_message_detail_for_message(state, message)
+        .await?
+        .body_html)
+}
+
+#[derive(Default)]
+struct RichEmailMessageDetail {
+    body_html: Option<String>,
+    headers: Vec<(String, String)>,
+}
+
+async fn rich_email_message_detail_for_message(
+    state: &AppState,
+    message: &ProjectedMessage,
+) -> Result<RichEmailMessageDetail, ApiError> {
+    let Some(raw) = communication_ingestion_store(state)?
+        .raw_record(&message.raw_record_id)
+        .await?
+    else {
+        return Ok(RichEmailMessageDetail::default());
+    };
+    if raw.record_kind != "email_message" {
+        return Ok(RichEmailMessageDetail::default());
+    }
+    if raw
+        .payload
+        .get("raw_blob_storage_kind")
+        .and_then(Value::as_str)
+        != Some("local_fs")
+    {
+        return Ok(RichEmailMessageDetail::default());
+    }
+    if raw
+        .payload
+        .get("raw_blob_storage_path")
+        .and_then(Value::as_str)
+        .is_none()
+    {
+        return Ok(RichEmailMessageDetail::default());
+    }
+
+    let blob_store = LocalMailBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    match parse_raw_email_message_from_blob(&blob_store, &raw).await {
+        Ok(parsed) => Ok(RichEmailMessageDetail {
+            body_html: parsed.body_html.filter(|value| !value.trim().is_empty()),
+            headers: parsed.headers,
+        }),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                message_id = %message.message_id,
+                raw_record_id = %message.raw_record_id,
+                "mail detail rich html extraction failed; falling back to projected body_text"
+            );
+            Ok(RichEmailMessageDetail::default())
+        }
+    }
+}
+
+fn message_metadata_with_raw_headers(
+    message_metadata: &Value,
+    headers: &[(String, String)],
+) -> Value {
+    let mut metadata = message_metadata.as_object().cloned().unwrap_or_default();
+    if !headers.is_empty() && !metadata.contains_key("headers") {
+        metadata.insert(
+            "headers".to_owned(),
+            Value::Array(
+                headers
+                    .iter()
+                    .map(|(name, value)| json!({ "name": name, "value": value }))
+                    .collect(),
+            ),
+        );
+    }
+    Value::Object(metadata)
 }
 
 pub(crate) async fn post_gmail_oauth_start(
@@ -1625,6 +1983,55 @@ fn require_unlocked_host_vault(state: &AppState) -> Result<(), ApiError> {
         VaultMode::Unlocked => Ok(()),
         VaultMode::Locked => Err(ApiError::HostVault(HostVaultError::Locked)),
         VaultMode::Uninitialized => Err(ApiError::HostVault(HostVaultError::Uninitialized)),
+    }
+}
+
+fn mail_sync_store(state: &AppState) -> Result<MailSyncStore, MailSyncError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(MailSyncError::InvalidSetting {
+            field: "database",
+            message: "DATABASE_URL is not configured",
+        });
+    };
+
+    Ok(MailSyncStore::new(pool.clone()))
+}
+
+fn mail_sync_service(state: &AppState) -> Result<MailBackgroundSyncService, MailSyncError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(MailSyncError::InvalidSetting {
+            field: "database",
+            message: "DATABASE_URL is not configured",
+        });
+    };
+
+    Ok(MailBackgroundSyncService::new(
+        pool.clone(),
+        state.vault.clone(),
+        DEFAULT_MAIL_SYNC_BLOB_ROOT,
+    ))
+}
+
+fn mail_sync_api_error(error: MailSyncError) -> ApiError {
+    match error {
+        MailSyncError::AccountNotFound => ApiError::NotFound,
+        MailSyncError::RunAlreadyActive | MailSyncError::RunNotFound => {
+            ApiError::InvalidCommunicationQuery("mail sync run is already active")
+        }
+        MailSyncError::InvalidSetting {
+            field: "database", ..
+        } => ApiError::DatabaseNotConfigured,
+        MailSyncError::InvalidSetting { .. } => {
+            ApiError::InvalidCommunicationQuery("invalid mail sync settings")
+        }
+        MailSyncError::Sqlx(error) => {
+            tracing::error!(error = %error, "mail sync database operation failed");
+            ApiError::InvalidCommunicationQuery("mail sync operation failed")
+        }
+        MailSyncError::Communication(error) => {
+            tracing::error!(error = %error, "mail sync communication store failed");
+            ApiError::InvalidCommunicationQuery("mail sync operation failed")
+        }
     }
 }
 
@@ -1940,6 +2347,8 @@ pub(crate) async fn post_imap_account_setup(
     Json(request): Json<ImapAccountSetupApiRequest>,
 ) -> Result<Json<EmailAccountSetupApiResponse>, ApiError> {
     let setup_request = request.into_setup_request()?;
+    let service = account_setup_service(&state)?;
+    require_unlocked_host_vault(&state)?;
     let icloud_calendar_account =
         (setup_request.provider_kind == EmailProviderKind::Icloud).then(|| {
             (
@@ -1948,7 +2357,6 @@ pub(crate) async fn post_imap_account_setup(
                 setup_request.external_account_id.clone(),
             )
         });
-    let service = account_setup_service(&state)?;
     let result = service.setup_imap_account(setup_request).await?;
     if let Some((mail_account_id, display_name, external_account_id)) = icloud_calendar_account {
         upsert_apple_icloud_calendar_account(
@@ -2091,11 +2499,34 @@ pub(crate) struct ImapAccountSetupApiRequest {
     username: String,
     password: String,
     secret_kind: Option<String>,
+    smtp_host: Option<String>,
+    smtp_port: Option<u16>,
+    smtp_tls: Option<bool>,
+    smtp_starttls: Option<bool>,
+    smtp_username: Option<String>,
 }
 
 impl ImapAccountSetupApiRequest {
     fn into_setup_request(self) -> Result<ImapAccountSetupRequest, ApiError> {
-        let provider_kind = match self.provider_kind.trim() {
+        let Self {
+            account_id,
+            provider_kind,
+            display_name,
+            external_account_id,
+            host,
+            port,
+            tls,
+            mailbox,
+            username,
+            password,
+            secret_kind,
+            smtp_host,
+            smtp_port,
+            smtp_tls,
+            smtp_starttls,
+            smtp_username,
+        } = self;
+        let provider_kind = match provider_kind.trim() {
             "icloud" => EmailProviderKind::Icloud,
             "imap" => EmailProviderKind::Imap,
             _ => {
@@ -2106,7 +2537,7 @@ impl ImapAccountSetupApiRequest {
                 .into());
             }
         };
-        let secret_kind = match self.secret_kind.as_deref().unwrap_or("password").trim() {
+        let secret_kind = match secret_kind.as_deref().unwrap_or("password").trim() {
             "app_password" => SecretKind::AppPassword,
             "password" => SecretKind::Password,
             _ => {
@@ -2118,19 +2549,36 @@ impl ImapAccountSetupApiRequest {
             }
         };
 
-        Ok(ImapAccountSetupRequest::new(
-            self.account_id,
+        let mut request = ImapAccountSetupRequest::new(
+            account_id,
             provider_kind,
-            self.display_name,
-            self.external_account_id,
-            self.host,
-            self.port,
-            self.tls,
-            self.mailbox,
-            self.username,
-            self.password,
+            display_name,
+            external_account_id,
+            host,
+            port,
+            tls,
+            mailbox,
+            username,
+            password,
         )
-        .secret_kind(secret_kind))
+        .secret_kind(secret_kind);
+        if let Some(smtp_host) = trimmed_optional(smtp_host) {
+            request = request.smtp_host(smtp_host);
+        }
+        if let Some(smtp_port) = smtp_port {
+            request = request.smtp_port(smtp_port);
+        }
+        if let Some(smtp_tls) = smtp_tls {
+            request = request.smtp_tls(smtp_tls);
+        }
+        if let Some(smtp_starttls) = smtp_starttls {
+            request = request.smtp_starttls(smtp_starttls);
+        }
+        if let Some(smtp_username) = trimmed_optional(smtp_username) {
+            request = request.smtp_username(smtp_username);
+        }
+
+        Ok(request)
     }
 }
 

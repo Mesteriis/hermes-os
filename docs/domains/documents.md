@@ -2,14 +2,25 @@
 
 ## Responsibilities
 
-The documents domain owns imported files, versions, extracted text, OCR artifacts, document summaries, entity mentions and links to other graph objects.
+The documents domain owns imported or created artifacts, immutable versions,
+extracted text, OCR artifacts, metadata, entity mentions and document evidence.
+
+Documents are evidence. Knowledge is the reviewed understanding built from
+documents and other sources.
 
 ## Supported Types
 
-- PDF
-- Office documents
-- images
-- Markdown
+- PDF.
+- Office documents.
+- Images.
+- Markdown.
+- Lightweight Notes as document-like artifacts.
+
+## Notes Boundary
+
+Notes are not a separate domain in the current model. A Note is a lightweight
+document-like capture artifact or memory input. If Notes become a first-class
+domain later, that requires an ADR.
 
 ## Document Lifecycle
 
@@ -26,30 +37,36 @@ stateDiagram-v2
 
 ## Extraction Outputs
 
-- plain text
-- OCR text
-- metadata
-- page structure
-- tables where feasible
-- entity mentions
-- summary
-- document type classification
-- candidate graph links
+- plain text;
+- OCR text;
+- metadata;
+- page structure;
+- tables where feasible;
+- entity mentions;
+- candidate summaries;
+- document type classification;
+- candidate graph links.
+
+Extraction outputs are derived until reviewed or stored as evidence-backed
+knowledge.
 
 ## Versioning
 
-Documents require immutable version records. A later upload or edit must not silently overwrite past evidence used by tasks, decisions or AI summaries.
+Documents require immutable version records. A later upload or edit must not
+silently overwrite past evidence used by Tasks, Decisions, Obligations or AI
+summaries.
 
 ## Linking
 
 Documents can link to:
 
-- people
-- organizations
-- projects
-- tasks
-- meetings
-- messages
-- decisions
+- Personas;
+- Organizations;
+- Projects;
+- Tasks;
+- Events;
+- Communications;
+- Decisions;
+- Obligations.
 
-Links may be user-confirmed or AI-suggested with confidence and provenance.
+Links may be owner-confirmed or AI-suggested with confidence and provenance.
