@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import HermesSelect from '$lib/components/shared/HermesSelect.svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import * as calendarService from '$lib/services/calendar';
 	import type { CalendarAccount, CalendarEvent, CalendarSource } from '$lib/api';
@@ -44,6 +45,11 @@
 		const d2 = new Date(weekStart); d2.setDate(weekStart.getDate() + i);
 		return `${d} ${d2.getDate()}`;
 	});
+	const eventTypeOptions = $derived(
+		['meeting', 'focus', 'deadline', 'personal', 'travel', 'tax', 'review', 'planning'].map(
+			(type) => ({ value: type, label: _(type.charAt(0).toUpperCase() + type.slice(1)) })
+		)
+	);
 
 	let filteredEvents = $derived(calendarEvents.filter(e => {
 		const start = new Date(e.start_at);
@@ -117,12 +123,16 @@
 			<h3>{_('New Event')}</h3>
 			<div class="form-row">
 				<input type="text" placeholder={_('Event title')} bind:value={newEventTitle} />
-				<select bind:value={newEventType}>
-					<option value="meeting">{_('Meeting')}</option><option value="focus">{_('Focus')}</option>
-					<option value="deadline">{_('Deadline')}</option><option value="personal">{_('Personal')}</option>
-					<option value="travel">{_('Travel')}</option><option value="tax">{_('Tax')}</option>
-					<option value="review">{_('Review')}</option><option value="planning">{_('Planning')}</option>
-				</select>
+				<HermesSelect
+					value={newEventType}
+					options={eventTypeOptions}
+					placeholder={_('Event type')}
+					searchPlaceholder={_('Search event types...')}
+					emptyLabel={_('No options')}
+					ariaLabel={_('Event type')}
+					searchable={false}
+					onChange={(nextValue) => (newEventType = nextValue)}
+				/>
 			</div>
 			<div class="form-row"><input type="datetime-local" bind:value={newEventStart} /><span>→</span><input type="datetime-local" bind:value={newEventEnd} /></div>
 			<div class="form-actions"><button type="button" class="primary-button" onclick={handleCreateEvent}>{_('Create')}</button><button type="button" class="ghost-button" onclick={() => (showNewEventForm = false)}>{_('Cancel')}</button></div>

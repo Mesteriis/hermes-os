@@ -1,7 +1,7 @@
 COMPOSE = docker compose --env-file $(shell test -f docker/.env && printf docker/.env || printf docker/.env.example) --project-directory docker -f docker/docker-compose.yml
 BACKEND_MANIFEST := backend/Cargo.toml
 
-.PHONY: help docker-env compose-config validate lint lint-rust lint-frontend lint-architecture pre-commit-install pre-commit-run dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-lint frontend-lint-ts frontend-check frontend-build google-oauth-resource tdlib-macos-resource backend-sidecar-macos frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-workflow-smoke-dev backend-ai-smoke-dev backend-telegram-smoke-dev backend-whatsapp-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-test-unit backend-test-integration backend-test-all backend-validate
+.PHONY: help docker-env compose-config validate lint lint-rust lint-frontend lint-architecture pre-commit-install pre-commit-run dev compose-dev up down restart logs ps shell db-up db-down db-shell clean reset-data frontend-install frontend-dev frontend-lint frontend-lint-ts frontend-check frontend-build google-oauth-resource tdlib-macos-resource backend-sidecar-macos frontend-tauri-dev frontend-tauri-build backend-run backend-run-dev backend-watch-dev backend-smoke-dev backend-storage-smoke-dev backend-secrets-smoke-dev backend-event-log-smoke-dev backend-communication-smoke-dev backend-email-sync-smoke-dev backend-email-provider-network-smoke-dev backend-email-sync-cache-dev backend-email-fixture-export-icloud-dev backend-email-fixture-import-dev backend-email-fixture-project-dev backend-account-setup-smoke-dev backend-email-import-smoke-dev backend-messages-smoke-dev backend-contacts-smoke-dev backend-documents-smoke-dev backend-graph-smoke-dev backend-workflow-smoke-dev backend-ai-smoke-dev backend-telegram-smoke-dev backend-telegram-live-smoke-dev backend-whatsapp-smoke-dev backend-graph-project-dev backend-document-processing-dev backend-search-smoke-dev backend-projection-smoke-dev backend-projection-runner-smoke-dev backend-events-api-smoke-dev backend-v1-api-smoke-dev backend-check backend-fmt backend-fmt-check backend-clippy backend-test backend-test-unit backend-test-integration backend-test-all backend-validate
 
 help:
 	@printf '%s\n' 'Hermes Hub development commands:'
@@ -60,6 +60,7 @@ help:
 	@printf '%s\n' '  make backend-workflow-smoke-dev Run domain workflow smoke tests with dev PostgreSQL'
 	@printf '%s\n' '  make backend-ai-smoke-dev Run live Ollama AI smoke test'
 	@printf '%s\n' '  make backend-telegram-smoke-dev Run Telegram/policy/call fixture smoke test with dev PostgreSQL'
+	@printf '%s\n' '  make backend-telegram-live-smoke-dev Run opt-in live Telegram TDLib smoke test'
 	@printf '%s\n' '  make backend-whatsapp-smoke-dev Run WhatsApp Web fixture smoke test with dev PostgreSQL'
 	@printf '%s\n' '  make backend-graph-project-dev Project current dev V1 data into graph tables'
 	@printf '%s\n' '  make backend-document-processing-dev Run queued document processing jobs with dev PostgreSQL'
@@ -603,14 +604,32 @@ backend-ai-smoke-dev: docker-env
 
 backend-telegram-smoke-dev: docker-env
 	@set -eu; \
+	cleanup() { \
+		if [ -n "$${test_db:-}" ]; then \
+			$(COMPOSE) run --rm --no-deps postgres sh -lc 'PGPASSWORD="$$1" psql -h postgres -U "$$2" -d postgres -c "$$3"' _ "$${HERMES_POSTGRES_PASSWORD}" "$${HERMES_POSTGRES_USER}" "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$${test_db}' AND pid <> pg_backend_pid();" >/dev/null 2>&1 || true; \
+			$(COMPOSE) run --rm --no-deps postgres sh -lc 'PGPASSWORD="$$1" psql -h postgres -U "$$2" -d postgres -c "$$3"' _ "$${HERMES_POSTGRES_PASSWORD}" "$${HERMES_POSTGRES_USER}" "DROP DATABASE IF EXISTS \"$${test_db}\";" >/dev/null 2>&1 || true; \
+		fi; \
+		$(COMPOSE) stop postgres >/dev/null 2>&1 || true; \
+	}; \
+	trap cleanup EXIT; \
+	$(COMPOSE) up -d --wait postgres; \
+	set -a; . docker/.env; set +a; \
+	test_db="hermes_v2_telegram_$$(date +%s%N)"; \
+	$(COMPOSE) run --rm --no-deps postgres sh -lc 'PGPASSWORD="$$1" psql -h postgres -U "$$2" -d postgres -c "$$3"' _ "$${HERMES_POSTGRES_PASSWORD}" "$${HERMES_POSTGRES_USER}" "CREATE DATABASE \"$${test_db}\";" >/dev/null; \
+	HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${test_db}" \
+		cargo test --manifest-path $(BACKEND_MANIFEST) --test telegram -- --nocapture --test-threads=1
+
+backend-telegram-live-smoke-dev: docker-env
+	@set -eu; \
 		cleanup() { \
 			$(MAKE) db-down >/dev/null 2>&1 || true; \
 		}; \
 		trap cleanup EXIT; \
 		$(MAKE) db-up; \
 		set -a; . docker/.env; set +a; \
+		HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET:-$${HERMES_LOCAL_API_TOKEN:-}}" \
 		HERMES_TEST_DATABASE_URL="postgres://$${HERMES_POSTGRES_USER}:$${HERMES_POSTGRES_PASSWORD}@127.0.0.1:$${HERMES_POSTGRES_PORT}/$${HERMES_POSTGRES_DB}" \
-		cargo test --manifest-path $(BACKEND_MANIFEST) --test telegram -- --nocapture --test-threads=1
+		cargo test --manifest-path $(BACKEND_MANIFEST) --test telegram telegram_live_smoke_syncs_configured_account_when_explicitly_enabled -- --nocapture --test-threads=1
 
 backend-whatsapp-smoke-dev: docker-env
 	@set -eu; \

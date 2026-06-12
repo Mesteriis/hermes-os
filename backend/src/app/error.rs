@@ -1407,7 +1407,10 @@ impl From<OrganizationError> for ApiError {
 
 impl From<EmailAccountSetupError> for ApiError {
     fn from(error: EmailAccountSetupError) -> Self {
-        Self::AccountSetup(error)
+        match error {
+            EmailAccountSetupError::HostVault(error) => Self::HostVault(error),
+            error => Self::AccountSetup(error),
+        }
     }
 }
 

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { get } from 'svelte/store';
 	import { currentLocale, t } from '$lib/i18n';
 	import { communicationSections } from '$lib/layout';
 
@@ -33,6 +34,7 @@
 		composeStatusMessage,
 		confirmSendMessage,
 		drafts as communicationDrafts,
+		handleDeleteDraft as deleteCommunicationDraft,
 		handleSaveDraft as saveCommunicationDraft,
 		isComposeOpen as communicationComposeOpen,
 		isSendReviewOpen,
@@ -105,6 +107,25 @@
 			void loadSettingsWorkspace();
 		}
 
+		function handleDraftStripAction(event: MouseEvent) {
+			if (!(event.target instanceof Element)) return;
+			const button = event.target.closest('[data-draft-action]') as HTMLButtonElement | null;
+			if (!button || !button.closest('.draft-strip')) return;
+			const draftId = button.dataset.draftId;
+			if (!draftId) return;
+
+			event.preventDefault();
+			event.stopPropagation();
+
+			if (button.dataset.draftAction === 'delete') {
+				void deleteCommunicationDraft(draftId);
+				return;
+			}
+
+			const draft = get(communicationDrafts).find((candidate) => candidate.draft_id === draftId);
+			if (draft) openComposeForDraft(draft as never);
+		}
+
 		if (isGmailOAuthConnectedSearch(window.location.search)) {
 			showConnectedAccounts();
 			window.history.replaceState(null, '', removeHermesOAuthSearch(new URL(window.location.href)));
@@ -116,8 +137,14 @@
 			}
 		}
 
+		document.addEventListener('pointerdown', handleDraftStripAction);
+		document.addEventListener('click', handleDraftStripAction);
 		window.addEventListener('message', handleOAuthMessage);
-		return () => window.removeEventListener('message', handleOAuthMessage);
+		return () => {
+			document.removeEventListener('pointerdown', handleDraftStripAction);
+			document.removeEventListener('click', handleDraftStripAction);
+			window.removeEventListener('message', handleOAuthMessage);
+		};
 	});
 </script>
 
@@ -125,6 +152,14 @@
 	<title>{_('Hermes Hub')}</title>
 	<meta name="description" content={_('Hermes Hub desktop personal OS dashboard.')} />
 </svelte:head>
+
+{#if isCommunicationMessagesSection}
+	<DraftStrip
+		drafts={$communicationDrafts}
+		onOpenCompose={(draft) => openComposeForDraft(draft as never)}
+		deleteDraft={deleteCommunicationDraft}
+	/>
+{/if}
 
 {#if currentViewId === 'home'}
 	<HomePage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
@@ -186,7 +221,6 @@
 	onCloseSendReview={closeSendReview}
 	onConfirmSend={confirmSendMessage}
 />
-<DraftStrip drafts={$communicationDrafts} onOpenCompose={(draft) => openComposeForDraft(draft as never)} />
 {#if $communicationMailboxHealth}<HealthStrip health={$communicationMailboxHealth} />{/if}
 
 <AccountSetupModal

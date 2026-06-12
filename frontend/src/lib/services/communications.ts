@@ -10,7 +10,9 @@ import {
 	fetchMailSyncSettings,
 	updateMailSyncSettings,
 	runMailSyncNow,
+	runMailFullResync,
 	fetchDrafts,
+	deleteDraft,
 	fetchMailboxHealth,
 	fetchTopSenders,
 	fetchThreads,
@@ -103,8 +105,9 @@ export type SendCapability = {
 };
 
 type DraftCreator = typeof createDraft;
+type DraftDeleter = typeof deleteDraft;
 
-export const COMMUNICATIONS_NAVIGATOR_LIMIT = 1000;
+export const COMMUNICATIONS_NAVIGATOR_LIMIT = 5000;
 
 export const emptyMailResourceSnapshot: MailResourceSnapshot = {
 	subscriptions: [],
@@ -276,6 +279,23 @@ export async function triggerMailSyncNow(
 	}
 }
 
+export async function triggerMailFullResync(
+	accountId: string
+): Promise<{ run: MailSyncRunResponse | null; error: string }> {
+	const target = accountId.trim();
+	if (!target) {
+		return { run: null, error: 'Select one account before full resync' };
+	}
+	try {
+		return { run: await runMailFullResync(target), error: '' };
+	} catch (error) {
+		return {
+			run: null,
+			error: error instanceof Error ? error.message : 'Mail full resync request failed'
+		};
+	}
+}
+
 export async function handleTrashMessage(messageId: string): Promise<{ success: boolean; message: string }> {
 	try {
 		await trashMessage(messageId);
@@ -367,6 +387,26 @@ export async function handleSaveDraft(
 		return {
 			success: false,
 			error: error instanceof Error ? error.message : 'Draft save failed'
+		};
+	}
+}
+
+export async function handleDeleteDraft(
+	draftId: string,
+	draftDeleter: DraftDeleter = deleteDraft
+): Promise<{ success: boolean; error: string; deleted: boolean }> {
+	const normalizedDraftId = draftId.trim();
+	if (!normalizedDraftId) {
+		return { success: false, error: 'Draft id is required', deleted: false };
+	}
+	try {
+		const result = await draftDeleter(normalizedDraftId);
+		return { success: true, error: '', deleted: Boolean(result.deleted) };
+	} catch (error) {
+		return {
+			success: false,
+			error: error instanceof Error ? error.message : 'Draft deletion failed',
+			deleted: false
 		};
 	}
 }

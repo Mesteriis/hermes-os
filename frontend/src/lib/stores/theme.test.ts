@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
 	cancelThemeEditing,
 	setThemeSettings,
+	shellAccentSwatchClass,
+	shellBackgroundPreviewClass,
 	shellThemeClass,
 	themeDraft,
 	updateThemeDraft
@@ -43,5 +45,12 @@ describe('theme store', () => {
 		});
 		expect(get(shellThemeClass)).toContain('shell-bg-rune-teal');
 		expect(get(shellThemeClass)).toContain('theme-accent-cyan');
+	});
+
+	it('keeps appearance preview classes explicit for CSS thumbnails', () => {
+		expect(shellBackgroundPreviewClass('forest-stream')).toBe(
+			'background-preview bg-preview-forest-stream'
+		);
+		expect(shellAccentSwatchClass('violet')).toBe('accent-swatch accent-swatch-violet');
 	});
 });

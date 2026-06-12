@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Icon from '@iconify/svelte';
+	import HermesSelect from '$lib/components/shared/HermesSelect.svelte';
+	import type { AiPromptTemplate, AiProviderPreset } from '$lib/api';
 	import { currentLocale, t } from '$lib/i18n';
 	import {
 		aiCapabilitySlots,
@@ -42,10 +44,26 @@
 		modelSelectValue,
 		providerPrivacyLabel,
 		providerStatusTone,
-		type AiSettingsPanel
+		type AiSettingsPanel,
+		type ModelSelectGroup
 	} from '$lib/services/aiSettings';
 
 	const _ = (key: string) => t($currentLocale, key);
+
+	type HermesSelectOption = {
+		value: string;
+		label: string;
+		eyebrow?: string;
+		description?: string;
+		meta?: string;
+		disabled?: boolean;
+		disabledReason?: string;
+	};
+
+	type HermesSelectGroup = {
+		label: string;
+		options: HermesSelectOption[];
+	};
 
 	let apiPresetKey = $state('omniroute');
 	let apiDisplayName = $state('OmniRoute');
@@ -78,6 +96,36 @@
 		) ?? null
 	);
 	let allModelGroups = $derived(buildModelSelectGroups($aiModels, $aiProviders, $aiRouteSearch));
+	let cliPresetOptions = $derived(
+		$aiProviderPresets
+			.filter((preset) => preset.provider_kind === 'cli')
+			.map((preset) => presetSelectOption(preset))
+	);
+	let apiPresetOptions = $derived(
+		$aiProviderPresets
+			.filter((preset) => preset.provider_kind === 'api')
+			.map((preset) => presetSelectOption(preset))
+	);
+	let promptScopeOptions = $derived(
+		PROMPT_ENTITY_SCOPES.map((scope) => ({
+			value: scope,
+			label: categoryLabel(scope)
+		}))
+	);
+	let promptCapabilityOptions = $derived(
+		$aiCapabilitySlots.map((slot) => ({
+			value: slot.slot,
+			label: _(slot.label),
+			description: _(slot.description),
+			meta: slot.requires_embedding_dimension
+				? `${slot.requires_embedding_dimension} ${_('dimensions required')}`
+				: undefined
+		}))
+	);
+	let customPromptOptions = $derived(
+		$aiPrompts.filter((prompt) => !prompt.is_system).map((prompt) => promptSelectOption(prompt))
+	);
+	let allPromptOptions = $derived($aiPrompts.map((prompt) => promptSelectOption(prompt)));
 
 	onMount(() => {
 		if ($aiProviders.length === 0 && !$isAiSettingsLoading) {
@@ -191,6 +239,39 @@
 		);
 		return model ? `${model.display_name} / ${route.provider_id}` : route.model_key;
 	}
+
+	function presetSelectOption(preset: AiProviderPreset): HermesSelectOption {
+		return {
+			value: preset.provider_key,
+			label: preset.display_name,
+			description: preset.capabilities.map(categoryLabel).join(', '),
+			meta: providerPrivacyLabel(preset)
+		};
+	}
+
+	function promptSelectOption(prompt: AiPromptTemplate): HermesSelectOption {
+		return {
+			value: prompt.prompt_id,
+			label: prompt.name,
+			description: categoryLabel(prompt.entity_scope),
+			meta: prompt.is_system ? _('System') : _('Custom')
+		};
+	}
+
+	function modelGroupsToHermesGroups(groups: ModelSelectGroup[]): HermesSelectGroup[] {
+		return groups.map((group) => ({
+			label: group.label,
+			options: group.options.map((option) => ({
+				value: option.value,
+				label: `${option.providerLabel} / ${option.model.display_name}`,
+				eyebrow: option.privacyLabel,
+				description: option.model.model_key,
+				meta: option.capabilityLabel,
+				disabled: Boolean(option.disabledReason),
+				disabledReason: option.disabledReason
+			}))
+		}));
+	}
 </script>
 
 <div class="ai-settings-layout">
@@ -295,11 +376,15 @@
 					<form class="ai-wizard-row" onsubmit={(event) => { event.preventDefault(); void submitCliProvider(); }}>
 						<label>
 							<span>{_('Preset')}</span>
-							<select value={cliPresetKey} onchange={(event) => (cliPresetKey = (event.currentTarget as HTMLSelectElement).value)}>
-								{#each $aiProviderPresets.filter((preset) => preset.provider_kind === 'cli') as preset}
-									<option value={preset.provider_key}>{preset.display_name}</option>
-								{/each}
-							</select>
+							<HermesSelect
+								value={cliPresetKey}
+								options={cliPresetOptions}
+								placeholder={_('Select preset')}
+								searchPlaceholder={_('Search presets...')}
+								emptyLabel={_('No options')}
+								ariaLabel={_('CLI preset')}
+								onChange={(nextValue) => (cliPresetKey = nextValue)}
+							/>
 						</label>
 						<button type="submit" class="primary-button" disabled={!selectedCliPreset || $isAiSettingsSaving}>{_('Add CLI bridge')}</button>
 					</form>
@@ -324,11 +409,15 @@
 					<form class="ai-provider-form" onsubmit={(event) => { event.preventDefault(); void submitApiProvider(); }}>
 						<label>
 							<span>{_('Preset')}</span>
-							<select value={apiPresetKey} onchange={(event) => selectApiPreset((event.currentTarget as HTMLSelectElement).value)}>
-								{#each $aiProviderPresets.filter((preset) => preset.provider_kind === 'api') as preset}
-									<option value={preset.provider_key}>{preset.display_name}</option>
-								{/each}
-							</select>
+							<HermesSelect
+								value={apiPresetKey}
+								options={apiPresetOptions}
+								placeholder={_('Select preset')}
+								searchPlaceholder={_('Search presets...')}
+								emptyLabel={_('No options')}
+								ariaLabel={_('API preset')}
+								onChange={selectApiPreset}
+							/>
 						</label>
 						<label>
 							<span>{_('Display name')}</span>
@@ -376,7 +465,7 @@
 					</label>
 					<div class="ai-routing-list">
 						{#each $aiCapabilitySlots as slot}
-							{@const groups = buildModelSelectGroups($aiModels, $aiProviders, $aiRouteSearch, slot)}
+							{@const groups = modelGroupsToHermesGroups(buildModelSelectGroups($aiModels, $aiProviders, $aiRouteSearch, slot))}
 							<form class="ai-route-editor" onsubmit={(event) => { event.preventDefault(); void saveAiModelRoute(slot.slot); }}>
 								<div>
 									<strong>{_(slot.label)}</strong>
@@ -385,18 +474,15 @@
 										<em>{slot.requires_embedding_dimension} dims required</em>
 									{/if}
 								</div>
-								<select value={$selectedRouteDrafts[slot.slot] ?? ''} onchange={(event) => updateRouteDraft(slot.slot, (event.currentTarget as HTMLSelectElement).value)}>
-									<option value="">{_('Select model')}</option>
-									{#each groups as group}
-										<optgroup label={group.label}>
-											{#each group.options as option}
-												<option value={option.value} disabled={Boolean(option.disabledReason)}>
-													{option.providerLabel} / {option.model.display_name} · {option.privacyLabel}{option.disabledReason ? ` · ${option.disabledReason}` : ''}
-												</option>
-											{/each}
-										</optgroup>
-									{/each}
-								</select>
+								<HermesSelect
+									value={$selectedRouteDrafts[slot.slot] ?? ''}
+									groups={groups}
+									placeholder={_('Select model')}
+									searchPlaceholder={_('Search models...')}
+									emptyLabel={_('No options')}
+									ariaLabel={_(slot.label)}
+									onChange={(nextValue) => updateRouteDraft(slot.slot, nextValue)}
+								/>
 								<button type="submit" class="primary-button" disabled={!$selectedRouteDrafts[slot.slot] || $isAiSettingsSaving}>{_('Save')}</button>
 							</form>
 						{/each}
@@ -410,19 +496,27 @@
 							<label><span>{_('Name')}</span><input value={promptName} oninput={(event) => (promptName = (event.currentTarget as HTMLInputElement).value)} /></label>
 							<label>
 								<span>{_('Entity')}</span>
-								<select value={promptScope} onchange={(event) => (promptScope = (event.currentTarget as HTMLSelectElement).value)}>
-									{#each PROMPT_ENTITY_SCOPES as scope}
-										<option value={scope}>{categoryLabel(scope)}</option>
-									{/each}
-								</select>
+								<HermesSelect
+									value={promptScope}
+									options={promptScopeOptions}
+									placeholder={_('Entity')}
+									searchPlaceholder={_('Search entities...')}
+									emptyLabel={_('No options')}
+									ariaLabel={_('Entity')}
+									onChange={(nextValue) => (promptScope = nextValue)}
+								/>
 							</label>
 							<label>
 								<span>{_('Capability')}</span>
-								<select value={promptCapability} onchange={(event) => (promptCapability = (event.currentTarget as HTMLSelectElement).value)}>
-									{#each $aiCapabilitySlots as slot}
-										<option value={slot.slot}>{_(slot.label)}</option>
-									{/each}
-								</select>
+								<HermesSelect
+									value={promptCapability}
+									options={promptCapabilityOptions}
+									placeholder={_('Capability')}
+									searchPlaceholder={_('Search capabilities...')}
+									emptyLabel={_('No options')}
+									ariaLabel={_('Capability')}
+									onChange={(nextValue) => (promptCapability = nextValue)}
+								/>
 							</label>
 							<label><span>{_('Description')}</span><input value={promptDescription} oninput={(event) => (promptDescription = (event.currentTarget as HTMLInputElement).value)} /></label>
 							<button type="submit" class="primary-button" disabled={!promptName.trim() || $isAiSettingsSaving}>{_('Create prompt')}</button>
@@ -431,11 +525,15 @@
 						<form class="ai-provider-form" onsubmit={(event) => { event.preventDefault(); void submitPromptVersion(); }}>
 							<label>
 								<span>{_('Prompt')}</span>
-								<select value={promptVersionPromptId} onchange={(event) => (promptVersionPromptId = (event.currentTarget as HTMLSelectElement).value)}>
-									{#each $aiPrompts.filter((prompt) => !prompt.is_system) as prompt}
-										<option value={prompt.prompt_id}>{prompt.name}</option>
-									{/each}
-								</select>
+								<HermesSelect
+									value={promptVersionPromptId}
+									options={customPromptOptions}
+									placeholder={_('Select prompt')}
+									searchPlaceholder={_('Search prompts...')}
+									emptyLabel={_('No options')}
+									ariaLabel={_('Prompt')}
+									onChange={(nextValue) => (promptVersionPromptId = nextValue)}
+								/>
 							</label>
 							<label><span>{_('Version label')}</span><input value={promptVersionLabel} oninput={(event) => (promptVersionLabel = (event.currentTarget as HTMLInputElement).value)} /></label>
 							<label><span>{_('Variables')}</span><input value={promptVersionVariables} placeholder="entity,summary,question" oninput={(event) => (promptVersionVariables = (event.currentTarget as HTMLInputElement).value)} /></label>
@@ -446,24 +544,28 @@
 						<form class="ai-provider-form" onsubmit={(event) => { event.preventDefault(); void submitPromptTest(); }}>
 							<label>
 								<span>{_('Prompt')}</span>
-								<select value={promptTestPromptId} onchange={(event) => (promptTestPromptId = (event.currentTarget as HTMLSelectElement).value)}>
-									{#each $aiPrompts as prompt}
-										<option value={prompt.prompt_id}>{prompt.name}</option>
-									{/each}
-								</select>
+								<HermesSelect
+									value={promptTestPromptId}
+									options={allPromptOptions}
+									placeholder={_('Select prompt')}
+									searchPlaceholder={_('Search prompts...')}
+									emptyLabel={_('No options')}
+									ariaLabel={_('Prompt')}
+									onChange={(nextValue) => (promptTestPromptId = nextValue)}
+								/>
 							</label>
 							<label><span>{_('Version id')}</span><input value={promptTestVersionId} oninput={(event) => (promptTestVersionId = (event.currentTarget as HTMLInputElement).value)} /></label>
 							<label>
 								<span>{_('Model')}</span>
-								<select value={promptTestModelValue} onchange={(event) => (promptTestModelValue = (event.currentTarget as HTMLSelectElement).value)}>
-									{#each allModelGroups as group}
-										<optgroup label={group.label}>
-											{#each group.options as option}
-												<option value={option.value} disabled={Boolean(option.disabledReason)}>{option.providerLabel} / {option.model.display_name}</option>
-											{/each}
-										</optgroup>
-									{/each}
-								</select>
+								<HermesSelect
+									value={promptTestModelValue}
+									groups={modelGroupsToHermesGroups(allModelGroups)}
+									placeholder={_('Select model')}
+									searchPlaceholder={_('Search models...')}
+									emptyLabel={_('No options')}
+									ariaLabel={_('Model')}
+									onChange={(nextValue) => (promptTestModelValue = nextValue)}
+								/>
 							</label>
 							<label class="wide"><span>{_('Variables JSON')}</span><textarea rows="4" value={promptTestVariablesJson} oninput={(event) => (promptTestVariablesJson = (event.currentTarget as HTMLTextAreaElement).value)}></textarea></label>
 							<button type="submit" class="primary-button" disabled={!promptTestPromptId || !promptTestModelValue || $isAiSettingsSaving}>{_('Run test')}</button>

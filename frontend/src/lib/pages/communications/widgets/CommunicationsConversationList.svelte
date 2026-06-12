@@ -30,7 +30,6 @@
 		selectCommunication: (index: number) => void;
 		onNavigatorModeChange: (mode: NavigatorMode) => void;
 		onExpandedContactKeyChange: (key: string | null) => void;
-		communicationChannelIcon: (kind: string) => string;
 		senderLabel: (sender: string) => string;
 		messageTime: (msg: ConversationMessage) => string;
 	}
@@ -48,7 +47,6 @@
 		selectCommunication,
 		onNavigatorModeChange,
 		onExpandedContactKeyChange,
-		communicationChannelIcon,
 		senderLabel,
 		messageTime
 	}: Props = $props();
@@ -112,9 +110,49 @@
 		return Number.isFinite(timestamp) ? timestamp : 0;
 	}
 
+	function compactMessageTime(message: ConversationMessage): string {
+		const value = message.occurred_at ?? message.projected_at;
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return messageTime(message);
+		const now = new Date();
+		if (isSameLocalDay(date, now)) {
+			return new Intl.DateTimeFormat($currentLocale, {
+				hour: '2-digit',
+				minute: '2-digit'
+			}).format(date);
+		}
+		const yesterday = new Date(now);
+		yesterday.setDate(now.getDate() - 1);
+		if (isSameLocalDay(date, yesterday)) {
+			return _('Yesterday');
+		}
+		return new Intl.DateTimeFormat($currentLocale, {
+			month: 'short',
+			day: 'numeric'
+		}).format(date);
+	}
+
+	function isSameLocalDay(left: Date, right: Date): boolean {
+		return (
+			left.getFullYear() === right.getFullYear() &&
+			left.getMonth() === right.getMonth() &&
+			left.getDate() === right.getDate()
+		);
+	}
+
 	function conversationTitle(message: ConversationMessage): string {
 		const subject = message.subject.trim();
 		return subject || conversationPreview(message);
+	}
+
+	function conversationSnippet(message: ConversationMessage): string {
+		const title = conversationTitle(message);
+		const preview = conversationPreview(message);
+		return preview === title ? '' : preview;
+	}
+
+	function isUnreadMessage(message: ConversationMessage): boolean {
+		return 'workflow_state' in message && message.workflow_state === 'new';
 	}
 </script>
 
@@ -141,17 +179,18 @@
 		{:else}
 			{#if navigatorMode === 'threads'}
 				{#each communicationMessages as message, index}
-					<button type="button" class:active={selectedConversationIndex === index} onclick={() => selectCommunication(index)}>
-						<span class="round-icon cyan"><Icon icon={communicationChannelIcon(message.channel_kind)} width="22" height="22" /></span>
+					<button type="button" class="conversation-thread-row" class:active={selectedConversationIndex === index} onclick={() => selectCommunication(index)}>
+						<span class="conversation-unread-dot" class:visible={isUnreadMessage(message)} aria-hidden="true"></span>
 						<span class="conversation-copy">
-							<strong class="conversation-sender">{senderLabel(message.sender)}</strong>
+							<span class="conversation-meta">
+								<strong class="conversation-sender">{senderLabel(message.sender)}</strong>
+								<time class="conversation-time">{compactMessageTime(message)}</time>
+							</span>
 							<small class="conversation-subject">{conversationTitle(message)}</small>
+							{#if conversationSnippet(message)}
+								<span class="conversation-preview">{conversationSnippet(message)}</span>
+							{/if}
 						</span>
-						{#if 'workflow_state' in message && message.workflow_state}
-							<span class="state-badge {message.workflow_state}">{message.workflow_state.replace('_', ' ')}</span>
-						{/if}
-						<time class="conversation-time">{messageTime(message)}</time>
-						{#if message.attachment_count > 0}<b>{message.attachment_count}</b>{/if}
 					</button>
 				{/each}
 			{:else}

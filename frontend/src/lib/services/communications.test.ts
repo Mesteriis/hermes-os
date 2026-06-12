@@ -14,6 +14,7 @@ import {
 	renderMessageContent,
 	summarizeMailResourceSnapshot,
 	filterMessagesForWorkbench,
+	handleDeleteDraft,
 	handleSaveDraft,
 	sendCapabilityForAccount
 } from './communications';
@@ -380,6 +381,15 @@ describe('mail workbench helpers', () => {
 		);
 
 		expect(result).toEqual({ success: false, error: 'backend unavailable' });
+	});
+
+	it('deletes drafts through the local draft endpoint helper', async () => {
+		const deleteDraft = vi.fn(async () => ({ deleted: true }));
+
+		const result = await handleDeleteDraft(' draft-1 ', deleteDraft);
+
+		expect(deleteDraft).toHaveBeenCalledWith('draft-1');
+		expect(result).toEqual({ success: true, error: '', deleted: true });
 	});
 
 	it('summarizes nonblocked mail resource endpoints for the context rail', () => {

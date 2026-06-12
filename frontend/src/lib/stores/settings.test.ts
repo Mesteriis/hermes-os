@@ -1,6 +1,7 @@
 import { get } from 'svelte/store';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ApplicationSetting, CalendarAccount, ProviderAccount } from '$lib/api';
+import { currentLocale, setLocale } from '$lib/i18n';
 import { layoutSettings } from './layoutEditor';
 import { sidebarSettings } from './sidebar';
 import { themeSettings } from './theme';
@@ -127,6 +128,32 @@ const workspaceResult = vi.hoisted(() => {
 	};
 });
 
+const apiMocks = vi.hoisted(() => ({
+	saveFrontendLocaleSetting: vi.fn(async (value: string): Promise<ApplicationSetting> => ({
+		setting_key: 'frontend.locale',
+		category: 'frontend',
+		value_kind: 'string',
+		value,
+		label: 'Locale',
+		description: 'Frontend locale',
+		metadata: {
+			allowed_values: ['en', 'ru']
+		},
+		is_editable: true,
+		updated_by_actor_id: 'frontend-test',
+		created_at: '2026-06-10T00:00:00Z',
+		updated_at: '2026-06-10T00:01:00Z'
+	}))
+}));
+
+vi.mock('$lib/api', async (importOriginal) => {
+	const actual = await importOriginal<typeof import('$lib/api')>();
+	return {
+		...actual,
+		saveFrontendLocaleSetting: apiMocks.saveFrontendLocaleSetting
+	};
+});
+
 vi.mock('$lib/services/settings', () => ({
 	loadSettingsWorkspace: vi.fn(async () => workspaceResult)
 }));
@@ -134,6 +161,7 @@ vi.mock('$lib/services/settings', () => ({
 describe('settings store', () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		setLocale('en');
 	});
 
 	it('loads workspace settings and synchronizes shell stores', async () => {
@@ -168,5 +196,20 @@ describe('settings store', () => {
 		expect(get(sidebarSettings).hiddenItemIds).toEqual(['tasks']);
 		expect(get(themeSettings).shellBackground).toBe('rune-teal');
 		expect(get(settingsStore.settingsError)).toBe('');
+	});
+
+	it('persists locale through the declared frontend locale setting', async () => {
+		const settingsStore = await import('./settings');
+
+		await settingsStore.saveLocaleSetting('ru');
+
+		expect(apiMocks.saveFrontendLocaleSetting).toHaveBeenCalledWith('ru');
+		expect(get(currentLocale)).toBe('ru');
+		expect(get(settingsStore.settingDrafts)['frontend.locale']).toBe('ru');
+		expect(
+			get(settingsStore.applicationSettings).find(
+				(setting) => setting.setting_key === 'frontend.locale'
+			)?.value
+		).toBe('ru');
 	});
 });

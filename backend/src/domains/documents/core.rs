@@ -112,6 +112,7 @@ impl DocumentImportStore {
         &self,
         document: &NewDocumentImport,
     ) -> Result<ImportedDocument, DocumentImportError> {
+        document.validate()?;
         let mut transaction = self.pool.begin().await?;
         let imported = Self::import_document_in_transaction(&mut transaction, document).await?;
         transaction.commit().await?;

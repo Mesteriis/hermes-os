@@ -27,7 +27,7 @@ use crate::workflows::email_sync_pipeline::{
     EmailSyncPipelineError, EmailSyncPipelineReport, project_email_sync_batch_with_mail_blobs,
 };
 
-pub const DEFAULT_MAIL_SYNC_BATCH_SIZE: i32 = 5;
+pub const DEFAULT_MAIL_SYNC_BATCH_SIZE: i32 = 100;
 pub const DEFAULT_MAIL_SYNC_POLL_INTERVAL_SECONDS: i32 = 300;
 pub const DEFAULT_MAIL_SYNC_BLOB_ROOT: &str = "docker/data/mail";
 const MAX_BATCH_SIZE: i32 = 500;
@@ -214,6 +214,24 @@ impl MailBackgroundSyncService {
         }
     }
 
+    pub async fn run_account_full_resync(
+        &self,
+        account_id: &str,
+    ) -> Result<MailSyncRunResponse, MailSyncError> {
+        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
+        let account = communication_store
+            .provider_account(account_id)
+            .await?
+            .ok_or(MailSyncError::AccountNotFound)?;
+        if let Ok(plan) = plan_email_sync(&account) {
+            communication_store
+                .delete_checkpoint(account_id, &plan.stream_id)
+                .await?;
+        }
+
+        self.run_account(account_id, MailSyncTrigger::Manual).await
+    }
+
     async fn fail_without_provider_io(
         &self,
         account_id: &str,
@@ -291,6 +309,29 @@ impl MailBackgroundSyncService {
             .await?;
         let client = GmailApiClient::new(&self.gmail_api_base_url).user_id("me");
         let mut summary = ProviderSyncSummary::default();
+        let checkpoint_next_page_token = context
+            .checkpoint_before
+            .as_ref()
+            .and_then(|checkpoint| checkpoint.get("next_page_token"))
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+        let checkpoint_page_kind = context
+            .checkpoint_before
+            .as_ref()
+            .and_then(|checkpoint| checkpoint.get("page_kind"))
+            .and_then(Value::as_str);
+
+        if checkpoint_next_page_token.is_some() && checkpoint_page_kind != Some("history") {
+            self.sync_gmail_message_list_pages(
+                &client,
+                &access_token,
+                &context,
+                &mut summary,
+                checkpoint_next_page_token,
+            )
+            .await?;
+            return Ok(summary);
+        }
 
         if let Some(history_id) = context
             .checkpoint_before
@@ -299,6 +340,49 @@ impl MailBackgroundSyncService {
             .and_then(Value::as_str)
             .map(str::to_owned)
         {
+            let start_history_id = context
+                .checkpoint_before
+                .as_ref()
+                .and_then(|checkpoint| checkpoint.get("start_history_id"))
+                .and_then(Value::as_str)
+                .unwrap_or(&history_id)
+                .to_owned();
+            let history_page_token = if checkpoint_page_kind == Some("history") {
+                checkpoint_next_page_token
+            } else {
+                None
+            };
+            let history_expired = self
+                .sync_gmail_history_pages(
+                    &client,
+                    &access_token,
+                    &context,
+                    &mut summary,
+                    &start_history_id,
+                    history_page_token,
+                )
+                .await?;
+            if !history_expired {
+                return Ok(summary);
+            }
+        }
+
+        self.sync_gmail_message_list_pages(&client, &access_token, &context, &mut summary, None)
+            .await?;
+
+        Ok(summary)
+    }
+
+    async fn sync_gmail_history_pages(
+        &self,
+        client: &GmailApiClient,
+        access_token: &crate::platform::secrets::ResolvedSecret,
+        context: &ProviderSyncContext<'_>,
+        summary: &mut ProviderSyncSummary,
+        start_history_id: &str,
+        mut page_token: Option<String>,
+    ) -> Result<bool, ProviderSyncError> {
+        loop {
             context
                 .store
                 .update_progress(ProgressUpdate {
@@ -311,41 +395,57 @@ impl MailBackgroundSyncService {
                     current_batch_size: context.settings.batch_size,
                 })
                 .await?;
+            let mut options =
+                GmailHistoryFetchOptions::new(start_history_id, context.settings.batch_size as u16);
+            if let Some(token) = page_token {
+                options = options.page_token(token);
+            }
             let history_batch = client
-                .fetch_history_raw_messages(
-                    &access_token,
-                    &GmailHistoryFetchOptions::new(history_id, context.settings.batch_size as u16),
-                )
+                .fetch_history_raw_messages(access_token, &options)
                 .await;
-            match history_batch {
-                Ok(batch) => {
-                    self.project_batch(
-                        context.store,
-                        context.run_id,
-                        context.settings,
-                        &mut summary,
-                        &context.account.account_id,
-                        batch,
-                    )
-                    .await?;
-                    return Ok(summary);
-                }
+            let batch = match history_batch {
+                Ok(batch) => batch,
                 Err(error) if gmail_history_expired(&error) => {
                     context
                         .store
                         .mark_recoverable_full_resync(context.run_id, "gmail_history_expired")
                         .await?;
+                    return Ok(true);
                 }
                 Err(error) => return Err(error.into()),
+            };
+            page_token = batch
+                .checkpoint
+                .as_ref()
+                .and_then(|checkpoint| checkpoint.get("next_page_token"))
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let fetched_count = batch.messages.len();
+            self.project_batch(
+                context.store,
+                context.run_id,
+                context.settings,
+                summary,
+                &context.account.account_id,
+                batch,
+            )
+            .await?;
+            if page_token.is_none() || fetched_count == 0 {
+                break;
             }
         }
 
-        let mut page_token = context
-            .checkpoint_before
-            .as_ref()
-            .and_then(|checkpoint| checkpoint.get("next_page_token"))
-            .and_then(Value::as_str)
-            .map(str::to_owned);
+        Ok(false)
+    }
+
+    async fn sync_gmail_message_list_pages(
+        &self,
+        client: &GmailApiClient,
+        access_token: &crate::platform::secrets::ResolvedSecret,
+        context: &ProviderSyncContext<'_>,
+        summary: &mut ProviderSyncSummary,
+        mut page_token: Option<String>,
+    ) -> Result<(), ProviderSyncError> {
         loop {
             context
                 .store
@@ -363,7 +463,7 @@ impl MailBackgroundSyncService {
             if let Some(token) = page_token {
                 options = options.page_token(token);
             }
-            let batch = client.fetch_raw_messages(&access_token, &options).await?;
+            let batch = client.fetch_raw_messages(access_token, &options).await?;
             page_token = batch
                 .checkpoint
                 .as_ref()
@@ -375,7 +475,7 @@ impl MailBackgroundSyncService {
                 context.store,
                 context.run_id,
                 context.settings,
-                &mut summary,
+                summary,
                 &context.account.account_id,
                 batch,
             )
@@ -385,7 +485,7 @@ impl MailBackgroundSyncService {
             }
         }
 
-        Ok(summary)
+        Ok(())
     }
 
     async fn sync_imap(
@@ -644,13 +744,15 @@ impl MailSyncStore {
         self.require_account(account_id).await?;
         let row = sqlx::query(
             r#"
-            INSERT INTO communication_account_sync_settings (account_id)
-            VALUES ($1)
+            INSERT INTO communication_account_sync_settings (account_id, batch_size, poll_interval_seconds)
+            VALUES ($1, $2, $3)
             ON CONFLICT (account_id) DO UPDATE SET account_id = EXCLUDED.account_id
             RETURNING account_id, sync_enabled, batch_size, poll_interval_seconds, updated_at
             "#,
         )
         .bind(account_id.trim())
+        .bind(DEFAULT_MAIL_SYNC_BATCH_SIZE)
+        .bind(DEFAULT_MAIL_SYNC_POLL_INTERVAL_SECONDS)
         .fetch_one(&self.pool)
         .await?;
 

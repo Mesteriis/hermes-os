@@ -124,8 +124,90 @@ textarea:focus-visible {
 		gap 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.panel-opacity-40,
+.widget-panel-opacity-40 {
+	--hh-panel-alpha: 0.4;
+	--hh-panel-alpha-low: 0.32;
+}
+
+.panel-opacity-50,
+.widget-panel-opacity-50 {
+	--hh-panel-alpha: 0.5;
+	--hh-panel-alpha-low: 0.4;
+}
+
+.panel-opacity-60,
+.widget-panel-opacity-60 {
+	--hh-panel-alpha: 0.6;
+	--hh-panel-alpha-low: 0.48;
+}
+
+.panel-opacity-70,
+.widget-panel-opacity-70 {
+	--hh-panel-alpha: 0.7;
+	--hh-panel-alpha-low: 0.56;
+}
+
+.panel-opacity-80,
+.widget-panel-opacity-80 {
+	--hh-panel-alpha: 0.8;
+	--hh-panel-alpha-low: 0.64;
+}
+
+.panel-opacity-90,
+.widget-panel-opacity-90 {
+	--hh-panel-alpha: 0.9;
+	--hh-panel-alpha-low: 0.72;
+}
+
+.panel-opacity-100,
+.widget-panel-opacity-100 {
+	--hh-panel-alpha: 1;
+	--hh-panel-alpha-low: 0.9;
+}
+
+.panel-blur-0,
+.widget-panel-blur-0 {
+	--hh-panel-blur: 0px;
+}
+
+.panel-blur-4,
+.widget-panel-blur-4 {
+	--hh-panel-blur: 4px;
+}
+
+.panel-blur-8,
+.widget-panel-blur-8 {
+	--hh-panel-blur: 8px;
+}
+
+.panel-blur-12,
+.widget-panel-blur-12 {
+	--hh-panel-blur: 12px;
+}
+
+.panel-blur-16,
+.widget-panel-blur-16 {
+	--hh-panel-blur: 16px;
+}
+
+.panel-blur-20,
+.widget-panel-blur-20 {
+	--hh-panel-blur: 20px;
+}
+
+.panel-blur-24,
+.widget-panel-blur-24 {
+	--hh-panel-blur: 24px;
+}
+
 .desktop-shell.sidebar-rail {
 	grid-template-columns: var(--hh-shell-sidebar-width-rail) minmax(var(--hh-shell-content-min-width), 1fr);
+}
+
+.desktop-shell.vault-gate {
+	display: block;
+	padding: 0;
 }
 
 .shell-bg-none {

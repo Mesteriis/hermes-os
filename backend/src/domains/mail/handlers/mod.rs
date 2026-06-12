@@ -241,6 +241,19 @@ pub(crate) async fn post_v1_email_account_sync_now(
     ))
 }
 
+pub(crate) async fn post_v1_email_account_sync_full_resync(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<MailSyncRunResponse>, ApiError> {
+    Ok(Json(
+        mail_sync_service(&state)
+            .map_err(mail_sync_api_error)?
+            .run_account_full_resync(&account_id)
+            .await
+            .map_err(mail_sync_api_error)?,
+    ))
+}
+
 pub(crate) async fn put_v1_message_workflow_state(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
@@ -1801,7 +1814,7 @@ pub(crate) async fn get_v1_communication_messages(
     RawQuery(raw_query): RawQuery,
 ) -> Result<Json<CommunicationMessagesResponse>, ApiError> {
     let query = parse_communication_messages_query(raw_query.as_deref())?;
-    let limit = query.limit.unwrap_or(1000).clamp(1, 1000);
+    let limit = query.limit.unwrap_or(5000).clamp(1, 5000);
     let workflow_state = query
         .workflow_state
         .as_deref()
@@ -2334,6 +2347,8 @@ pub(crate) async fn post_imap_account_setup(
     Json(request): Json<ImapAccountSetupApiRequest>,
 ) -> Result<Json<EmailAccountSetupApiResponse>, ApiError> {
     let setup_request = request.into_setup_request()?;
+    let service = account_setup_service(&state)?;
+    require_unlocked_host_vault(&state)?;
     let icloud_calendar_account =
         (setup_request.provider_kind == EmailProviderKind::Icloud).then(|| {
             (
@@ -2342,7 +2357,6 @@ pub(crate) async fn post_imap_account_setup(
                 setup_request.external_account_id.clone(),
             )
         });
-    let service = account_setup_service(&state)?;
     let result = service.setup_imap_account(setup_request).await?;
     if let Some((mail_account_id, display_name, external_account_id)) = icloud_calendar_account {
         upsert_apple_icloud_calendar_account(

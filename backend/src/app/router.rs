@@ -1,6 +1,8 @@
 // ADR-0073: route registration remains centralized in app during the hard-v1
 // migration so endpoint paths and shared middleware stay auditable in one place.
+use std::collections::HashSet;
 use std::io;
+use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
 
 use axum::extract::{Path, Query, RawQuery, State};
@@ -157,10 +159,14 @@ use crate::domains::settings::api::*;
 use crate::domains::tasks::handlers::*;
 use crate::engines::automation_api::*;
 use crate::integrations::telegram::api::*;
+use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::integrations::whatsapp::api::*;
 use crate::platform::calls_api::*;
 use crate::platform::events_api::*;
 use axum::middleware;
+
+static MAIL_BACKGROUND_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 pub fn build_router(config: AppConfig) -> Router {
     build_router_with_database(config, Database::disabled())
@@ -182,6 +188,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         database,
         vault,
         account_setup: AccountSetupState::default(),
+        telegram_runtime: TelegramRuntimeManager::default(),
     };
     spawn_host_vault_manifest_reconciliation(&state);
     spawn_mail_background_sync_scheduler(&state);
@@ -900,6 +907,14 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         )
         .route("/api/v1/telegram/accounts", post(post_telegram_account))
         .route(
+            "/api/v1/telegram/runtime/status",
+            get(get_telegram_runtime_status),
+        )
+        .route(
+            "/api/v1/telegram/runtime/start",
+            post(post_telegram_runtime_start),
+        )
+        .route(
             "/api/v1/telegram/login/qr/start",
             post(post_telegram_qr_login_start),
         )
@@ -913,8 +928,24 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         )
         .route("/api/v1/telegram/chats", get(get_telegram_chats))
         .route(
+            "/api/v1/telegram/sync/chats",
+            post(post_telegram_sync_chats),
+        )
+        .route(
+            "/api/v1/telegram/sync/history",
+            post(post_telegram_sync_history),
+        )
+        .route(
             "/api/v1/telegram/messages",
             get(get_telegram_messages).post(post_telegram_fixture_message),
+        )
+        .route(
+            "/api/v1/telegram/messages/send",
+            post(post_telegram_manual_send),
+        )
+        .route(
+            "/api/v1/telegram/media/download",
+            post(post_telegram_media_download),
         )
         .route(
             "/api/v1/policies/templates",
@@ -960,6 +991,10 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/email-accounts/{account_id}/sync-now",
             post(post_v1_email_account_sync_now),
         )
+        .route(
+            "/api/v1/email-accounts/{account_id}/sync-full-resync",
+            post(post_v1_email_account_sync_full_resync),
+        )
         .route("/api/v1/audit/events", get(get_audit_events))
         .route("/api/v1/events", post(post_event))
         .route("/api/v1/events/{event_id}", get(get_event))
@@ -988,6 +1023,12 @@ fn spawn_mail_background_sync_scheduler(state: &AppState) {
     let Some(pool) = state.database.pool().cloned() else {
         return;
     };
+    let Some(database_url) = state.database.database_url() else {
+        return;
+    };
+    if !register_mail_background_sync_scheduler(database_url) {
+        return;
+    }
     let vault = state.vault.clone();
 
     tokio::spawn(async move {
@@ -1010,6 +1051,19 @@ fn spawn_mail_background_sync_scheduler(state: &AppState) {
             }
         }
     });
+}
+
+fn register_mail_background_sync_scheduler(database_url: &str) -> bool {
+    match MAIL_BACKGROUND_SYNC_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "mail background sync scheduler registry is unavailable"
+            );
+            false
+        }
+    }
 }
 
 #[derive(Serialize)]

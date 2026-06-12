@@ -8,6 +8,7 @@ use crate::platform::settings::{ApplicationSettingsStore, SettingsError};
 #[derive(Clone)]
 pub struct Database {
     pool: Option<PgPool>,
+    database_url: Option<String>,
 }
 
 impl Database {
@@ -33,15 +34,25 @@ impl Database {
             );
         }
 
-        Ok(Self { pool: Some(pool) })
+        Ok(Self {
+            pool: Some(pool),
+            database_url: Some(database_url.to_owned()),
+        })
     }
 
     pub fn disabled() -> Self {
-        Self { pool: None }
+        Self {
+            pool: None,
+            database_url: None,
+        }
     }
 
     pub fn pool(&self) -> Option<&PgPool> {
         self.pool.as_ref()
+    }
+
+    pub(crate) fn database_url(&self) -> Option<&str> {
+        self.database_url.as_deref()
     }
 
     pub async fn readiness(&self) -> DatabaseReadiness {

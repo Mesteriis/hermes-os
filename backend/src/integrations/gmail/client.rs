@@ -15,6 +15,9 @@ use crate::domains::mail::core::EmailProviderKind;
 use crate::domains::mail::sync::{EmailSyncBatch, FetchedEmailMessage, imap_mailbox_stream_id};
 use crate::platform::secrets::ResolvedSecret;
 
+const IMAP_UID_FETCH_CHUNK_SIZE: usize = 10;
+const IMAP_UID_FETCH_TIMEOUT_SECONDS: u64 = 60;
+
 #[derive(Clone)]
 pub struct GmailApiClient {
     http: reqwest::Client,
@@ -51,7 +54,10 @@ impl GmailApiClient {
         options.validate()?;
 
         let list_url = format!("{}/gmail/v1/users/{}/messages", self.base_url, self.user_id);
-        let mut query = vec![("maxResults", options.max_results.to_string())];
+        let mut query = vec![
+            ("maxResults", options.max_results.to_string()),
+            ("includeSpamTrash", options.include_spam_trash.to_string()),
+        ];
         if let Some(page_token) = &options.page_token {
             query.push(("pageToken", page_token.clone()));
         }
@@ -120,7 +126,8 @@ impl GmailApiClient {
             });
         }
 
-        let checkpoint = gmail_checkpoint(latest_history_id, list_response.next_page_token);
+        let checkpoint =
+            gmail_message_list_checkpoint(latest_history_id, list_response.next_page_token);
 
         Ok(EmailSyncBatch {
             provider_kind: EmailProviderKind::Gmail,
@@ -201,7 +208,11 @@ impl GmailApiClient {
             });
         }
 
-        let checkpoint = gmail_checkpoint(latest_history_id, history_response.next_page_token);
+        let checkpoint = gmail_history_checkpoint(
+            &options.start_history_id,
+            latest_history_id,
+            history_response.next_page_token,
+        );
 
         Ok(EmailSyncBatch {
             provider_kind: EmailProviderKind::Gmail,
@@ -241,6 +252,7 @@ pub struct GmailFetchOptions {
     query: Option<String>,
     page_token: Option<String>,
     label_ids: Vec<String>,
+    include_spam_trash: bool,
 }
 
 impl GmailFetchOptions {
@@ -250,6 +262,7 @@ impl GmailFetchOptions {
             query: None,
             page_token: None,
             label_ids: Vec::new(),
+            include_spam_trash: true,
         }
     }
 
@@ -265,6 +278,11 @@ impl GmailFetchOptions {
 
     pub fn label_id(mut self, label_id: impl Into<String>) -> Self {
         self.label_ids.push(label_id.into());
+        self
+    }
+
+    pub fn include_spam_trash(mut self, include_spam_trash: bool) -> Self {
+        self.include_spam_trash = include_spam_trash;
         self
     }
 
@@ -447,26 +465,64 @@ where
         .await
         .map_err(|(error, _client)| EmailProviderNetworkError::Imap(error))?;
     let mailbox = session.examine(&options.mailbox).await?;
-    let first_uid = options
-        .last_seen_uid
-        .and_then(|uid| uid.checked_add(1))
-        .unwrap_or(1);
-    let search_query = format!("{first_uid}:*");
-    let uids: Vec<u32> = session
-        .uid_search(search_query)
-        .await?
-        .into_iter()
-        .collect();
-    let uids = select_uids_for_fetch(uids, options.max_messages, options.latest_messages);
+    let requested_uid_floor = next_imap_uid_floor(options.last_seen_uid);
+    let uids = match requested_uid_floor {
+        Some(first_uid) => {
+            let uids: Vec<u32> = session
+                .uid_search(imap_uid_search_query(first_uid))
+                .await?
+                .into_iter()
+                .collect();
+            let uids = retain_uids_from_floor(uids, first_uid);
+            select_uids_for_fetch(uids, options.max_messages, options.latest_messages)
+        }
+        None => Vec::new(),
+    };
 
+    let messages = fetch_imap_uid_chunks(&mut session, &mailbox, options, &uids).await?;
+    let latest_uid = messages
+        .iter()
+        .filter_map(|message| message.provider_record_id.parse::<u32>().ok())
+        .max()
+        .or(options.last_seen_uid);
+    session.logout().await?;
+
+    Ok(EmailSyncBatch {
+        provider_kind: options.provider_kind,
+        stream_id: imap_mailbox_stream_id(&options.mailbox),
+        checkpoint: Some(imap_checkpoint(
+            &options.mailbox,
+            mailbox.uid_validity,
+            latest_uid,
+        )),
+        messages,
+    })
+}
+
+async fn fetch_imap_uid_chunks<T>(
+    session: &mut async_imap::Session<T>,
+    mailbox: &async_imap::types::Mailbox,
+    options: &ImapFetchOptions,
+    uids: &[u32],
+) -> Result<Vec<FetchedEmailMessage>, EmailProviderNetworkError>
+where
+    T: AsyncRead + AsyncWrite + Unpin + Debug + Send,
+{
     let mut messages = Vec::new();
-    if !uids.is_empty() {
-        let uid_set = uid_set(&uids);
-        let fetched_messages = session
-            .uid_fetch(uid_set, "(UID BODY.PEEK[] RFC822.SIZE INTERNALDATE)")
-            .await?
-            .try_collect::<Vec<_>>()
-            .await?;
+    for chunk in uids.chunks(IMAP_UID_FETCH_CHUNK_SIZE) {
+        let uid_set = uid_set(chunk);
+        let fetched_messages =
+            tokio::time::timeout(Duration::from_secs(IMAP_UID_FETCH_TIMEOUT_SECONDS), async {
+                session
+                    .uid_fetch(uid_set, "(UID BODY.PEEK[] RFC822.SIZE INTERNALDATE)")
+                    .await?
+                    .try_collect::<Vec<_>>()
+                    .await
+            })
+            .await
+            .map_err(|_| EmailProviderNetworkError::ProviderTimeout {
+                operation: "imap_uid_fetch",
+            })??;
 
         for fetched_message in fetched_messages {
             let uid = fetched_message
@@ -501,23 +557,7 @@ where
         }
     }
 
-    let latest_uid = messages
-        .iter()
-        .filter_map(|message| message.provider_record_id.parse::<u32>().ok())
-        .max()
-        .or(options.last_seen_uid);
-    session.logout().await?;
-
-    Ok(EmailSyncBatch {
-        provider_kind: options.provider_kind,
-        stream_id: imap_mailbox_stream_id(&options.mailbox),
-        checkpoint: Some(imap_checkpoint(
-            &options.mailbox,
-            mailbox.uid_validity,
-            latest_uid,
-        )),
-        messages,
-    })
+    Ok(messages)
 }
 
 #[derive(Debug, Deserialize)]
@@ -626,7 +666,32 @@ fn select_latest_history_id(current: Option<String>, candidate: Option<&str>) ->
     }
 }
 
-fn gmail_checkpoint(history_id: Option<String>, next_page_token: Option<String>) -> Option<Value> {
+fn gmail_message_list_checkpoint(
+    history_id: Option<String>,
+    next_page_token: Option<String>,
+) -> Option<Value> {
+    gmail_checkpoint(history_id, next_page_token, Some("messages"), None)
+}
+
+fn gmail_history_checkpoint(
+    start_history_id: &str,
+    history_id: Option<String>,
+    next_page_token: Option<String>,
+) -> Option<Value> {
+    gmail_checkpoint(
+        history_id,
+        next_page_token,
+        Some("history"),
+        Some(start_history_id),
+    )
+}
+
+fn gmail_checkpoint(
+    history_id: Option<String>,
+    next_page_token: Option<String>,
+    page_kind: Option<&'static str>,
+    start_history_id: Option<&str>,
+) -> Option<Value> {
     let history_id = history_id?;
     let mut checkpoint = json!({
         "provider": "gmail",
@@ -635,6 +700,12 @@ fn gmail_checkpoint(history_id: Option<String>, next_page_token: Option<String>)
 
     if let Some(next_page_token) = next_page_token {
         checkpoint["next_page_token"] = json!(next_page_token);
+        if let Some(page_kind) = page_kind {
+            checkpoint["page_kind"] = json!(page_kind);
+        }
+        if let Some(start_history_id) = start_history_id {
+            checkpoint["start_history_id"] = json!(start_history_id);
+        }
     }
 
     Some(checkpoint)
@@ -654,6 +725,21 @@ fn imap_checkpoint(mailbox: &str, uid_validity: Option<u32>, latest_uid: Option<
     }
 
     checkpoint
+}
+
+fn next_imap_uid_floor(last_seen_uid: Option<u32>) -> Option<u32> {
+    match last_seen_uid {
+        Some(uid) => uid.checked_add(1),
+        None => Some(1),
+    }
+}
+
+fn imap_uid_search_query(first_uid: u32) -> String {
+    format!("UID {first_uid}:*")
+}
+
+fn retain_uids_from_floor(uids: Vec<u32>, first_uid: u32) -> Vec<u32> {
+    uids.into_iter().filter(|uid| *uid >= first_uid).collect()
 }
 
 fn uid_set(uids: &[u32]) -> String {
@@ -717,6 +803,9 @@ pub enum EmailProviderNetworkError {
     #[error("unexpected provider response: {message}")]
     UnexpectedProviderResponse { message: &'static str },
 
+    #[error("provider operation timed out: {operation}")]
+    ProviderTimeout { operation: &'static str },
+
     #[error(transparent)]
     Http(#[from] reqwest::Error),
 
@@ -732,7 +821,12 @@ pub enum EmailProviderNetworkError {
 
 #[cfg(test)]
 mod tests {
-    use super::select_uids_for_fetch;
+    use serde_json::json;
+
+    use super::{
+        gmail_history_checkpoint, imap_uid_search_query, next_imap_uid_floor,
+        retain_uids_from_floor, select_uids_for_fetch,
+    };
 
     #[test]
     fn select_uids_for_fetch_keeps_latest_window_when_requested() {
@@ -747,6 +841,57 @@ mod tests {
         assert_eq!(
             select_uids_for_fetch(vec![43, 41, 42], 2, false),
             vec![41, 42]
+        );
+    }
+
+    #[test]
+    fn imap_uid_search_uses_uid_criterion_after_checkpoint() {
+        let first_uid = next_imap_uid_floor(Some(30144)).expect("next UID");
+
+        assert_eq!(first_uid, 30145);
+        assert_eq!(imap_uid_search_query(first_uid), "UID 30145:*");
+    }
+
+    #[test]
+    fn imap_uid_search_starts_at_first_uid_without_checkpoint() {
+        let first_uid = next_imap_uid_floor(None).expect("first UID");
+
+        assert_eq!(first_uid, 1);
+        assert_eq!(imap_uid_search_query(first_uid), "UID 1:*");
+    }
+
+    #[test]
+    fn imap_uid_search_discards_star_wraparound_uid() {
+        assert_eq!(
+            retain_uids_from_floor(vec![30144], 30145),
+            Vec::<u32>::new()
+        );
+        assert_eq!(
+            retain_uids_from_floor(vec![30144, 30145, 30146], 30145),
+            vec![30145, 30146]
+        );
+    }
+
+    #[test]
+    fn imap_uid_floor_stops_at_u32_max() {
+        assert_eq!(next_imap_uid_floor(Some(u32::MAX)), None);
+    }
+
+    #[test]
+    fn gmail_history_checkpoint_preserves_pagination_origin() {
+        assert_eq!(
+            gmail_history_checkpoint(
+                "history-start",
+                Some("history-latest".to_owned()),
+                Some("history-next".to_owned()),
+            ),
+            Some(json!({
+                "provider": "gmail",
+                "history_id": "history-latest",
+                "next_page_token": "history-next",
+                "page_kind": "history",
+                "start_history_id": "history-start"
+            }))
         );
     }
 }

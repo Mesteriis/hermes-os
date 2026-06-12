@@ -53,6 +53,22 @@ pub struct CapabilityDecision {
 }
 
 impl CapabilityDecision {
+    pub fn explicit_user_allowed(
+        action_class: CapabilityActionClass,
+        capability: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
+        Self {
+            action_class,
+            capability: capability.into(),
+            decision: CapabilityDecisionStatus::Allowed,
+            reason: reason.into(),
+            confirmation_required: false,
+            scoped_automation_policy: false,
+            automation_policy_id: None,
+        }
+    }
+
     pub fn scoped_automation_allowed(
         capability: impl Into<String>,
         automation_policy_id: impl Into<String>,

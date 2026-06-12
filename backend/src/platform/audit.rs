@@ -5,7 +5,7 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::platform::capabilities::CapabilityDecision;
+use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
 
 const API_FRONTEND_ACTOR_KIND: &str = "frontend";
 const EVENT_TARGET_KIND: &str = "event";
@@ -362,6 +362,42 @@ impl NewApiAuditRecord {
             path_template: "/api/v1/policies/telegram-send/dry-run".to_owned(),
             target_kind: audit_decision.target_kind.to_owned(),
             target_id: audit_decision.target_id,
+            metadata,
+        }
+    }
+
+    pub fn telegram_message_send(
+        actor_id: impl Into<String>,
+        message_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+        rendered_preview_hash: impl Into<String>,
+    ) -> Self {
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::ProviderWrite,
+            "telegram.message.send",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+        insert_non_empty(
+            metadata_object,
+            "rendered_preview_hash",
+            rendered_preview_hash.into(),
+        );
+
+        Self {
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "telegram.message.send".to_owned(),
+            method: "POST".to_owned(),
+            path_template: "/api/v1/telegram/messages/send".to_owned(),
+            target_kind: "telegram_message".to_owned(),
+            target_id: Some(message_id.into()),
             metadata,
         }
     }

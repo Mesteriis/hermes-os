@@ -264,6 +264,33 @@ export async function runMailSyncNow(accountId?: string): Promise<void> {
 	]);
 }
 
+export async function runMailFullResync(accountId?: string): Promise<void> {
+	const target = accountId?.trim() || get(selectedMailAccountId).trim();
+	isMailSyncBusy.set(true);
+	mailSyncError.set('');
+	mailSyncStatusMessage.set('Full resync started');
+	const result = await commsService.triggerMailFullResync(target);
+	isMailSyncBusy.set(false);
+	if (result.run) {
+		lastMailSyncRuns.set([result.run]);
+	}
+	if (result.error) {
+		mailSyncError.set(result.error);
+	} else {
+		mailSyncStatusMessage.set('Full resync finished');
+	}
+	await Promise.all([
+		loadMailSyncStatus(),
+		loadCommunicationMessagesFiltered(get(mailStateFilter) || undefined),
+		loadMessageStateCounts(),
+		loadMailboxHealth(),
+		loadTopSenders(),
+		loadDrafts(),
+		loadThreads(),
+		loadMailResources()
+	]);
+}
+
 export async function handleWorkflowStateTransition(messageId: string, newState: WorkflowState): Promise<void> {
 	isMailStateTransitioning.set(true);
 	const currentFilter = get(mailStateFilter);
@@ -323,6 +350,26 @@ export async function handleSaveDraft(): Promise<void> {
 	isSendReviewOpen.set(false);
 	composeSendError.set('');
 	composeStatusMessage.set('Draft saved');
+	await loadDrafts();
+}
+
+export async function handleDeleteDraft(draftId: string): Promise<void> {
+	const normalizedDraftId = draftId.trim();
+	if (!normalizedDraftId) return;
+	composeSendError.set('');
+	composeStatusMessage.set('');
+	const result = await commsService.handleDeleteDraft(normalizedDraftId);
+	if (!result.success) {
+		composeSendError.set(result.error);
+		return;
+	}
+	drafts.update((items) => items.filter((draft) => draft.draft_id !== normalizedDraftId));
+	if (get(composeForm).draft_id === normalizedDraftId) {
+		composeForm.set({ ...emptyComposeForm });
+		isComposeOpen.set(false);
+		isSendReviewOpen.set(false);
+	}
+	composeStatusMessage.set(result.deleted ? 'Draft deleted' : 'Draft was already deleted');
 	await loadDrafts();
 }
 
@@ -819,7 +866,11 @@ function newWorkflowTitle(action: WorkflowActionKind): string {
 
 function promptValue(label: string, fallback: string): string {
 	if (typeof window === 'undefined') return fallback;
-	return window.prompt(label, fallback)?.trim() ?? '';
+	try {
+		return window.prompt(label, fallback)?.trim() ?? '';
+	} catch {
+		return fallback.trim();
+	}
 }
 
 export const communicationChannelIcon = commsService.communicationChannelIcon;

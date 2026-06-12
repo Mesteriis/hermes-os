@@ -7,15 +7,12 @@
 		updateGlobalPanelOpacity,
 		updateGlobalPanelBlur,
 		selectShellAccent,
-		cancelThemeEditing,
 		resetThemeSettingsToDefault,
-		saveThemeSettings,
 		shellBackgroundLabel,
 		shellBackgroundPreviewClass,
 		shellAccentSwatchClass,
 		shellAccentLabel,
 		effectiveThemeSettings,
-		hasThemeChanges,
 		themeError,
 		isThemeSettingsSaving
 	} from '$lib/stores/theme';
@@ -38,15 +35,10 @@
 				<p>{_('Choose shell background, brightness and application accent color.')}</p>
 			</div>
 			<div class="appearance-settings-actions">
-				<button type="button" onclick={cancelThemeEditing} disabled={!$hasThemeChanges || $isThemeSettingsSaving}>
-					<Icon icon="tabler:arrow-back-up" width="16" height="16" />{_('Cancel')}
-				</button>
 				<button type="button" onclick={resetThemeSettingsToDefault} disabled={$isThemeSettingsSaving}>
 					<Icon icon="tabler:restore" width="16" height="16" />{_('Default')}
 				</button>
-				<button type="button" class="primary-button" onclick={() => void saveThemeSettings()} disabled={!$hasThemeChanges || $isThemeSettingsSaving}>
-					<Icon icon="tabler:device-floppy" width="16" height="16" />{$isThemeSettingsSaving ? _('Saving') : _('Save')}
-				</button>
+				<span class="appearance-save-state">{$isThemeSettingsSaving ? _('Saving') : _('Auto-save')}</span>
 			</div>
 		</header>
 

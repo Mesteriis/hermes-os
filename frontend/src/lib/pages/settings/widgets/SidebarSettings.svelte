@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import HermesSelect from '$lib/components/shared/HermesSelect.svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import type { SidebarSettings, SidebarNavGroup, SidebarItemId, SidebarRootItemId, ResolvedSidebarItem, ResolvedSidebarRootEntry, PrimaryNavId } from '$lib/layout';
 	import { parseCommunicationSidebarItemId } from '$lib/layout';
@@ -68,6 +69,16 @@
 		sidebarConfigItemFn,
 		inputEventValueFn
 	}: Props = $props();
+
+	function sidebarMoveTargetOptions(includeRoot: boolean) {
+		return [
+			...(includeRoot ? [{ value: 'root', label: _('Root level') }] : []),
+			...effectiveSidebarSettings.groups.map((group, index) => ({
+				value: group.id,
+				label: _(sidebarGroupLabelFn(group, index))
+			}))
+		];
+	}
 </script>
 
 <div class="settings-layout sidebar-settings-layout">
@@ -152,12 +163,15 @@
 										</div>
 									</div>
 									<div class="sidebar-config-item-controls">
-										<select aria-label={_('Move {label} to group').replace('{label}', item.label)} value="root" onchange={(event) => onMoveSidebarItemToGroup(item.id, inputEventValueFn(event))}>
-											<option value="root">{_('Root level')}</option>
-											{#each effectiveSidebarSettings.groups as targetGroup, targetIndex}
-												<option value={targetGroup.id}>{_(sidebarGroupLabelFn(targetGroup, targetIndex))}</option>
-											{/each}
-										</select>
+										<HermesSelect
+											value="root"
+											options={sidebarMoveTargetOptions(true)}
+											placeholder={_('Move to group')}
+											searchPlaceholder={_('Search groups...')}
+											emptyLabel={_('No options')}
+											ariaLabel={_('Move {label} to group').replace('{label}', item.label)}
+											onChange={(nextValue) => onMoveSidebarItemToGroup(item.id, nextValue)}
+										/>
 										<button type="button" aria-label={_('Move {label} up').replace('{label}', item.label)} title={_('Move item up')} onclick={() => onMoveSidebarRootItem(rootId, -1)} disabled={rootIndex === 0}>
 											<Icon icon="tabler:arrow-up" width="16" height="16" />
 										</button>
@@ -212,14 +226,15 @@
 											</div>
 										</div>
 										<div class="sidebar-config-item-controls">
-											<select aria-label={_('Move {label} to group').replace('{label}', item.label)} value={group.id} onchange={(event) => onMoveSidebarItemToGroup(item.id, inputEventValueFn(event))}>
-												{#if !parseCommunicationSidebarItemId(item.id)}
-													<option value="root">{_('Root level')}</option>
-												{/if}
-												{#each effectiveSidebarSettings.groups as targetGroup, targetIndex}
-													<option value={targetGroup.id}>{_(sidebarGroupLabelFn(targetGroup, targetIndex))}</option>
-												{/each}
-											</select>
+											<HermesSelect
+												value={group.id}
+												options={sidebarMoveTargetOptions(!parseCommunicationSidebarItemId(item.id))}
+												placeholder={_('Move to group')}
+												searchPlaceholder={_('Search groups...')}
+												emptyLabel={_('No options')}
+												ariaLabel={_('Move {label} to group').replace('{label}', item.label)}
+												onChange={(nextValue) => onMoveSidebarItemToGroup(item.id, nextValue)}
+											/>
 											<button type="button" aria-label={_('Move {label} up').replace('{label}', item.label)} title={_('Move item up')} onclick={() => onMoveSidebarItem(item.id, -1)}>
 												<Icon icon="tabler:arrow-up" width="16" height="16" />
 											</button>

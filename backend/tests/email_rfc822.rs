@@ -150,3 +150,31 @@ fn rfc822_parser_extracts_rfc2231_continued_attachment_filenames() {
     assert_eq!(attachment.content_type, "application/pdf");
     assert_eq!(attachment.body_bytes, b"%PDF-1.4");
 }
+
+#[test]
+fn rfc822_parser_decodes_legacy_cyrillic_message_bytes() {
+    let mut raw = Vec::new();
+    raw.extend_from_slice(b"Subject: ");
+    raw.extend_from_slice(&[
+        0xd2, 0xe5, 0xf1, 0xf2, 0xee, 0xe2, 0xee, 0xe5, 0x20, 0xef, 0xe8, 0xf1, 0xfc, 0xec, 0xee,
+    ]);
+    raw.extend_from_slice(b"\r\nFrom: ");
+    raw.extend_from_slice(&[
+        0xc8, 0xe2, 0xe0, 0xed, 0x20, 0xcf, 0xe5, 0xf2, 0xf0, 0xee, 0xe2,
+    ]);
+    raw.extend_from_slice(b" <ivan@example.invalid>\r\n");
+    raw.extend_from_slice(b"To: Recipient <recipient@example.invalid>\r\n");
+    raw.extend_from_slice(b"Content-Type: text/plain; charset=windows-1251\r\n");
+    raw.extend_from_slice(b"\r\n");
+    raw.extend_from_slice(&[
+        0xcf, 0xf0, 0xe8, 0xe2, 0xe5, 0xf2, 0x2c, 0x20, 0xfd, 0xf2, 0xee, 0x20, 0xf1, 0xf2, 0xe0,
+        0xf0, 0xee, 0xe5, 0x20, 0xef, 0xe8, 0xf1, 0xfc, 0xec, 0xee, 0x2e,
+    ]);
+
+    let parsed = parse_rfc822_message(&raw).expect("parse legacy cyrillic message");
+
+    assert_eq!(parsed.subject, "Тестовое письмо");
+    assert_eq!(parsed.from, "Иван Петров <ivan@example.invalid>");
+    assert_eq!(parsed.body_text, "Привет, это старое письмо.");
+    assert!(!parsed.body_text.contains('\u{fffd}'));
+}

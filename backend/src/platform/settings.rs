@@ -421,6 +421,21 @@ fn declared_application_settings() -> Vec<DeclaredApplicationSetting> {
             is_editable: true,
         },
         DeclaredApplicationSetting {
+            setting_key: "frontend.locale",
+            category: "frontend",
+            value_kind: SettingValueKind::String,
+            default_value: json!("en"),
+            label: "Frontend locale",
+            description: "Desktop interface language preference. Stores only the selected locale code.",
+            metadata: json!({
+                "ui_control": "language",
+                "allowed_values": ["en", "ru"],
+                "stores_private_content": false,
+                "restart_required": false
+            }),
+            is_editable: true,
+        },
+        DeclaredApplicationSetting {
             setting_key: "frontend.ui_state",
             category: "frontend",
             value_kind: SettingValueKind::Json,
@@ -1083,6 +1098,19 @@ impl SettingsError {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn frontend_locale_setting_is_declared_as_editable_string() {
+        let setting = declared_setting("frontend.locale").expect("frontend locale setting");
+
+        assert_eq!(setting.category, "frontend");
+        assert_eq!(setting.value_kind, SettingValueKind::String);
+        assert!(setting.is_editable);
+        assert_eq!(setting.default_value, json!("en"));
+        assert_eq!(setting.metadata["ui_control"], json!("language"));
+        assert_eq!(setting.metadata["allowed_values"], json!(["en", "ru"]));
+        assert_eq!(setting.metadata["stores_private_content"], json!(false));
+    }
 
     #[test]
     fn frontend_ui_state_setting_is_declared_as_hidden_json() {

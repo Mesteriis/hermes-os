@@ -11,9 +11,19 @@ import type {
 	TelegramAccountSetupRequest,
 	TelegramLiveAccountSetupRequest,
 	TelegramAccountSetupResponse,
+	TelegramRuntimeStartRequest,
+	TelegramRuntimeStatus,
+	TelegramChatSyncRequest,
+	TelegramChatSyncResponse,
+	TelegramHistorySyncRequest,
+	TelegramHistorySyncResponse,
+	TelegramMediaDownloadRequest,
+	TelegramMediaDownloadResponse,
 	TelegramCallRequest,
 	TelegramCall,
 	TelegramFixtureMessageRequest,
+	TelegramManualSendRequest,
+	TelegramManualSendResponse,
 	TelegramMessageIngestResponse,
 	TelegramSendDryRunRequest,
 	TelegramSendDryRunResponse,
@@ -72,6 +82,54 @@ export async function fetchTelegramMessages(
 	return ApiClient.instance.get<TelegramMessageListResponse>(
 		`/api/v1/telegram/messages?${params.toString()}`,
 		'Telegram messages request failed'
+	);
+}
+
+export async function fetchTelegramRuntimeStatus(accountId: string): Promise<TelegramRuntimeStatus> {
+	const params = new URLSearchParams({ account_id: accountId.trim() });
+	return ApiClient.instance.get<TelegramRuntimeStatus>(
+		`/api/v1/telegram/runtime/status?${params.toString()}`,
+		'Telegram runtime status request failed'
+	);
+}
+
+export async function startTelegramRuntime(
+	request: TelegramRuntimeStartRequest
+): Promise<TelegramRuntimeStatus> {
+	return ApiClient.instance.post<TelegramRuntimeStatus>(
+		'/api/v1/telegram/runtime/start',
+		request,
+		'Telegram runtime start failed'
+	);
+}
+
+export async function syncTelegramChats(
+	request: TelegramChatSyncRequest
+): Promise<TelegramChatSyncResponse> {
+	return ApiClient.instance.post<TelegramChatSyncResponse>(
+		'/api/v1/telegram/sync/chats',
+		request,
+		'Telegram chat sync failed'
+	);
+}
+
+export async function syncTelegramHistory(
+	request: TelegramHistorySyncRequest
+): Promise<TelegramHistorySyncResponse> {
+	return ApiClient.instance.post<TelegramHistorySyncResponse>(
+		'/api/v1/telegram/sync/history',
+		request,
+		'Telegram history sync failed'
+	);
+}
+
+export async function downloadTelegramMedia(
+	request: TelegramMediaDownloadRequest
+): Promise<TelegramMediaDownloadResponse> {
+	return ApiClient.instance.post<TelegramMediaDownloadResponse>(
+		'/api/v1/telegram/media/download',
+		request,
+		'Telegram media download failed'
 	);
 }
 
@@ -141,6 +199,16 @@ export async function ingestTelegramFixtureMessage(
 		'/api/v1/telegram/messages',
 		request,
 		'Telegram fixture message request failed'
+	);
+}
+
+export async function sendTelegramManualMessage(
+	request: TelegramManualSendRequest
+): Promise<TelegramManualSendResponse> {
+	return ApiClient.instance.post<TelegramManualSendResponse>(
+		'/api/v1/telegram/messages/send',
+		request,
+		'Telegram manual send failed'
 	);
 }
 

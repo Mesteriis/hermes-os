@@ -396,7 +396,24 @@ impl MessageProjectionStore {
         &self,
         message: &NewProjectedMessage,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
-        message.validate()?;
+        self.upsert_channel_message_with_body_policy(message, false)
+            .await
+    }
+
+    pub async fn upsert_channel_message_allowing_empty_body_text(
+        &self,
+        message: &NewProjectedMessage,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        self.upsert_channel_message_with_body_policy(message, true)
+            .await
+    }
+
+    async fn upsert_channel_message_with_body_policy(
+        &self,
+        message: &NewProjectedMessage,
+        allow_empty_body_text: bool,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
+        message.validate_with_body_policy(allow_empty_body_text)?;
 
         let row = sqlx::query(
             r#"
@@ -813,13 +830,22 @@ pub struct NewProjectedMessage {
 
 impl NewProjectedMessage {
     fn validate(&self) -> Result<(), MessageProjectionError> {
+        self.validate_with_body_policy(false)
+    }
+
+    fn validate_with_body_policy(
+        &self,
+        allow_empty_body_text: bool,
+    ) -> Result<(), MessageProjectionError> {
         validate_non_empty("message_id", &self.message_id)?;
         validate_non_empty("raw_record_id", &self.raw_record_id)?;
         validate_non_empty("account_id", &self.account_id)?;
         validate_non_empty("provider_record_id", &self.provider_record_id)?;
         validate_non_empty("subject", &self.subject)?;
         validate_non_empty("sender", &self.sender)?;
-        validate_non_empty("body_text", &self.body_text)?;
+        if !allow_empty_body_text {
+            validate_non_empty("body_text", &self.body_text)?;
+        }
         validate_non_empty("channel_kind", &self.channel_kind)?;
         validate_non_empty("delivery_state", &self.delivery_state)?;
         if !self.message_metadata.is_object() {
@@ -1063,7 +1089,7 @@ fn validate_non_empty(field_name: &'static str, value: &str) -> Result<(), Messa
 }
 
 fn validate_limit(limit: i64) -> Result<i64, MessageProjectionError> {
-    if !(1..=1000).contains(&limit) {
+    if !(1..=5000).contains(&limit) {
         return Err(MessageProjectionError::InvalidLimit(limit));
     }
 
@@ -1105,7 +1131,7 @@ pub enum MessageProjectionError {
     #[error("unsupported raw blob storage kind: {0}")]
     UnsupportedRawBlobStorageKind(String),
 
-    #[error("message query limit must be between 1 and 100: {0}")]
+    #[error("message query limit must be between 1 and 5000: {0}")]
     InvalidLimit(i64),
 
     #[error("communication message was not found")]

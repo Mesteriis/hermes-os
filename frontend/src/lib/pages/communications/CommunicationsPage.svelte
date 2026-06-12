@@ -13,7 +13,6 @@
 		aiAnalysisResult,
 		askAiAboutSelectedMessage,
 		attachmentIcon,
-		communicationChannelIcon,
 		communicationChannelLabel,
 		communicationMessages,
 		communicationProjects,
@@ -67,6 +66,7 @@
 		senderEmail,
 		senderLabel,
 		snoozeSelectedMessage,
+		runMailFullResync,
 		runMailSyncNow,
 		restoreSelectedMessage,
 		trashSelectedMessage,
@@ -198,6 +198,12 @@
 					<button type="button" onclick={() => { closeMenus(); void runMailSyncNow($selectedMailAccountId || undefined); }}>
 						<span><Icon icon="tabler:refresh" width="15" height="15" />{_('Check now')}</span>
 					</button>
+					{#if $selectedMailAccountId}
+						<button type="button" onclick={() => { closeMenus(); void runMailFullResync($selectedMailAccountId); }}>
+							<span><Icon icon="tabler:database-import" width="15" height="15" />{_('Full resync')}</span>
+							<em>{_('Read mailbox again')}</em>
+						</button>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -257,7 +263,6 @@
 			{selectCommunication}
 				onNavigatorModeChange={(mode) => { communicationsNavigatorMode.set(mode); }}
 				onExpandedContactKeyChange={(key) => { expandedCommunicationContactKey.set(key); }}
-			{communicationChannelIcon}
 			{senderLabel}
 				messageTime={formatMessageTime}
 		/>

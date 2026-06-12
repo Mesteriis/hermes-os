@@ -254,7 +254,7 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     .expect("settings json");
     assert_eq!(body["account_id"], account_id);
     assert_eq!(body["sync_enabled"], true);
-    assert_eq!(body["batch_size"], 5);
+    assert_eq!(body["batch_size"], 100);
     assert_eq!(body["poll_interval_seconds"], 300);
 
     let resp = r
@@ -277,6 +277,7 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     assert_eq!(body["poll_interval_seconds"], 600);
 
     let resp = r
+        .clone()
         .oneshot(pget(
             &format!("/api/v1/email-accounts/{account_id}/sync-now"),
             json!({}),
@@ -294,6 +295,28 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
             .expect("read sync-now"),
     )
     .expect("sync-now json");
+    assert_eq!(body["account_id"], account_id);
+    assert!(body.get("status").is_some());
+    assert!(body.get("phase").is_some());
+
+    let resp = r
+        .oneshot(pget(
+            &format!("/api/v1/email-accounts/{account_id}/sync-full-resync"),
+            json!({}),
+        ))
+        .await
+        .expect("sync full resync");
+    assert!(
+        resp.status() == StatusCode::OK || resp.status() == StatusCode::BAD_REQUEST,
+        "sync-full-resync should return structured result or safe configuration error, got {}",
+        resp.status()
+    );
+    let body: Value = serde_json::from_slice(
+        &to_bytes(resp.into_body(), 1024 * 1024)
+            .await
+            .expect("read sync-full-resync"),
+    )
+    .expect("sync-full-resync json");
     assert_eq!(body["account_id"], account_id);
     assert!(body.get("status").is_some());
     assert!(body.get("phase").is_some());

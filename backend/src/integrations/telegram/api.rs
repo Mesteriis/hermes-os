@@ -118,9 +118,15 @@ use crate::domains::tasks::sync::{export_task_json, export_task_md};
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat,
-    TelegramError, TelegramLiveAccountSetupRequest, TelegramMessage, TelegramMessageIngestResult,
+    TelegramError, TelegramLiveAccountSetupRequest, TelegramManualSendRequest,
+    TelegramManualSendResponse, TelegramMessage, TelegramMessageIngestResult,
     TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatusResponse,
     TelegramStore,
+};
+use crate::integrations::telegram::runtime::{
+    TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,
+    TelegramHistorySyncResponse, TelegramMediaDownloadContext, TelegramMediaDownloadRequest,
+    TelegramMediaDownloadResponse, TelegramRuntimeStartRequest, TelegramRuntimeStatus,
 };
 use crate::integrations::telegram::tdjson;
 use crate::integrations::whatsapp::client::{
@@ -183,6 +189,46 @@ pub(crate) async fn post_telegram_account(
                 &crate::integrations::telegram::client::TelegramSecretVault::host(
                     state.vault.clone(),
                 ),
+                &request,
+            )
+            .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct TelegramRuntimeStatusQuery {
+    pub(crate) account_id: String,
+}
+
+pub(crate) async fn get_telegram_runtime_status(
+    State(state): State<AppState>,
+    Query(query): Query<TelegramRuntimeStatusQuery>,
+) -> Result<Json<TelegramRuntimeStatus>, ApiError> {
+    Ok(Json(
+        state
+            .telegram_runtime
+            .status_for_account(
+                &communication_ingestion_store(&state)?,
+                &state.config,
+                &query.account_id,
+            )
+            .await?,
+    ))
+}
+
+pub(crate) async fn post_telegram_runtime_start(
+    State(state): State<AppState>,
+    Json(request): Json<TelegramRuntimeStartRequest>,
+) -> Result<Json<TelegramRuntimeStatus>, ApiError> {
+    let secret_store = telegram_secret_store(&state)?;
+    Ok(Json(
+        state
+            .telegram_runtime
+            .start_account(
+                &communication_ingestion_store(&state)?,
+                &secret_store,
+                &state.vault,
+                &state.config,
                 &request,
             )
             .await?,
@@ -270,6 +316,46 @@ pub(crate) async fn get_telegram_chats(
     Ok(Json(TelegramChatListResponse { items }))
 }
 
+pub(crate) async fn post_telegram_sync_chats(
+    State(state): State<AppState>,
+    Json(request): Json<TelegramChatSyncRequest>,
+) -> Result<Json<TelegramChatSyncResponse>, ApiError> {
+    let secret_store = telegram_secret_store(&state)?;
+    Ok(Json(
+        state
+            .telegram_runtime
+            .sync_chats(
+                &communication_ingestion_store(&state)?,
+                &telegram_store(&state)?,
+                &secret_store,
+                &state.vault,
+                &state.config,
+                &request,
+            )
+            .await?,
+    ))
+}
+
+pub(crate) async fn post_telegram_sync_history(
+    State(state): State<AppState>,
+    Json(request): Json<TelegramHistorySyncRequest>,
+) -> Result<Json<TelegramHistorySyncResponse>, ApiError> {
+    let secret_store = telegram_secret_store(&state)?;
+    Ok(Json(
+        state
+            .telegram_runtime
+            .sync_history(
+                &communication_ingestion_store(&state)?,
+                &telegram_store(&state)?,
+                &secret_store,
+                &state.vault,
+                &state.config,
+                &request,
+            )
+            .await?,
+    ))
+}
+
 pub(crate) async fn post_telegram_fixture_message(
     State(state): State<AppState>,
     Json(request): Json<NewTelegramMessage>,
@@ -277,6 +363,62 @@ pub(crate) async fn post_telegram_fixture_message(
     Ok(Json(
         telegram_store(&state)?
             .ingest_fixture_message(&request)
+            .await?,
+    ))
+}
+
+pub(crate) async fn post_telegram_manual_send(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(request): Json<TelegramManualSendRequest>,
+) -> Result<Json<TelegramManualSendResponse>, ApiError> {
+    let secret_store = telegram_secret_store(&state)?;
+    let response = state
+        .telegram_runtime
+        .send_manual_message(
+            &communication_ingestion_store(&state)?,
+            &telegram_store(&state)?,
+            &secret_store,
+            &state.vault,
+            &state.config,
+            &request,
+        )
+        .await?;
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::telegram_message_send(
+            actor_id_from_headers(&headers),
+            &response.message_id,
+            &response.account_id,
+            &response.provider_chat_id,
+            &response.rendered_preview_hash,
+        ))
+        .await?;
+
+    Ok(Json(response))
+}
+
+pub(crate) async fn post_telegram_media_download(
+    State(state): State<AppState>,
+    Json(request): Json<TelegramMediaDownloadRequest>,
+) -> Result<Json<TelegramMediaDownloadResponse>, ApiError> {
+    let secret_store = telegram_secret_store(&state)?;
+    let communication_store = communication_ingestion_store(&state)?;
+    let telegram_store = telegram_store(&state)?;
+    let mail_store = mail_storage_store(&state)?;
+    Ok(Json(
+        state
+            .telegram_runtime
+            .download_media(
+                TelegramMediaDownloadContext {
+                    communication_store: &communication_store,
+                    telegram_store: &telegram_store,
+                    mail_store: &mail_store,
+                    secret_store: &secret_store,
+                    secret_resolver: &state.vault,
+                    config: &state.config,
+                },
+                &request,
+            )
             .await?,
     ))
 }
@@ -294,4 +436,21 @@ pub(crate) async fn get_telegram_messages(
         .await?;
 
     Ok(Json(TelegramMessageListResponse { items }))
+}
+
+fn actor_id_from_headers(headers: &HeaderMap) -> String {
+    headers
+        .get("x-hermes-actor-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("hermes-frontend")
+        .to_owned()
+}
+
+fn telegram_secret_store(state: &AppState) -> Result<SecretReferenceStore, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    Ok(SecretReferenceStore::new(pool.clone()))
 }

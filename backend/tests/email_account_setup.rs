@@ -1,5 +1,5 @@
 use std::env;
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -129,6 +129,9 @@ async fn gmail_oauth_start_api_uses_configured_google_desktop_client_against_pos
         );
         return;
     };
+    let vault_dir = tempdir().expect("vault tempdir");
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -136,6 +139,15 @@ async fn gmail_oauth_start_api_uses_configured_google_desktop_client_against_pos
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
             (
                 "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON",
                 r#"{
@@ -152,6 +164,7 @@ async fn gmail_oauth_start_api_uses_configured_google_desktop_client_against_pos
         .expect("config"),
         database.clone(),
     );
+    unlock_test_vault(app.clone()).await;
 
     let response = app
         .oneshot(json_request_with_token_and_actor(
@@ -1443,11 +1456,7 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
         json!(["mail", "calendar", "contacts"])
     );
 
-    let reference = secret_store
-        .secret_reference(secret_ref)
-        .await
-        .expect("load restored secret reference")
-        .expect("restored secret reference");
+    let reference = wait_for_secret_reference(&secret_store, secret_ref).await;
     assert_eq!(reference.store_kind, SecretStoreKind::HostVault);
     assert_eq!(reference.secret_kind, SecretKind::AppPassword);
 
@@ -1515,19 +1524,34 @@ async fn imap_account_setup_api_requires_configured_database() {
 }
 
 #[tokio::test]
-async fn imap_account_setup_api_requires_configured_database_vault_key_against_postgres() {
+async fn imap_account_setup_api_requires_initialized_host_vault_against_postgres() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!(
-            "skipping live account setup missing vault key test: HERMES_TEST_DATABASE_URL is not set"
+            "skipping live account setup missing host vault test: HERMES_TEST_DATABASE_URL is not set"
         );
         return;
     };
+    let vault_dir = tempdir().expect("vault tempdir");
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
 
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+        ])
+        .expect("config"),
         database.clone(),
     );
 
@@ -1554,7 +1578,8 @@ async fn imap_account_setup_api_requires_configured_database_vault_key_against_p
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     let body = json_body(response).await;
-    assert_eq!(body["error"], "secret_vault_not_configured");
+    assert_eq!(body["error"], "host_vault_error");
+    assert_eq!(body["message"], "host vault is not initialized");
 }
 
 #[derive(Clone, Debug)]
@@ -1580,6 +1605,9 @@ impl MockTokenServer {
                     break;
                 };
                 let request = read_http_request(&mut stream);
+                if request.body.is_empty() {
+                    break;
+                }
                 let body = if request.body.contains("grant_type=refresh_token") {
                     json!({
                         "access_token": "gmail-refreshed-access-token",
@@ -1761,13 +1789,19 @@ fn read_http_request(stream: &mut TcpStream) -> TokenRequest {
 }
 
 fn write_http_response(stream: &mut TcpStream, body: &str) {
-    write!(
+    let result = write!(
         stream,
         "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{}",
         body.len(),
         body
-    )
-    .expect("write response");
+    );
+    if let Err(error) = result {
+        assert_eq!(
+            error.kind(),
+            ErrorKind::BrokenPipe,
+            "write response: {error}"
+        );
+    }
 }
 
 async fn live_setup_context(
@@ -1876,6 +1910,24 @@ async fn wait_for_provider_account(
     }
 
     panic!("provider account {account_id} was not reconciled");
+}
+
+async fn wait_for_secret_reference(
+    secret_store: &SecretReferenceStore,
+    secret_ref: &str,
+) -> hermes_hub_backend::platform::secrets::SecretReference {
+    for _ in 0..50 {
+        if let Some(reference) = secret_store
+            .secret_reference(secret_ref)
+            .await
+            .expect("load secret reference")
+        {
+            return reference;
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    panic!("secret reference {secret_ref} was not reconciled");
 }
 
 async fn wait_for_calendar_account(

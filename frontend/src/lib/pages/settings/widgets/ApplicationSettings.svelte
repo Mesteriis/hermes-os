@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import HermesSelect from '$lib/components/shared/HermesSelect.svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import type { ApplicationSetting } from '$lib/api';
 
@@ -46,17 +47,24 @@
 		inputEventValueFn,
 		checkboxEventValueFn
 	}: Props = $props();
+
+	function settingSelectOptions(setting: ApplicationSetting) {
+		return settingAllowedValuesFn(setting).map((value) => ({
+			value,
+			label: settingsCategoryLabelFn(value)
+		}));
+	}
 </script>
 
 <div class="settings-layout">
 	<section class="panel settings-list-panel settings-primary-pane">
 		<header class="panel-title-row">
-			<div><h2>Application Settings</h2><p>All non-secret settings except database connectivity; secret-like keys are rejected.</p></div>
+			<div><h2>{_('Application Settings')}</h2><p>{_('All non-secret settings except database connectivity; secret-like keys are rejected.')}</p></div>
 		</header>
 		{#if isSettingsLoading && applicationSettings.length === 0}
-			<div class="empty-panel fill">Loading settings...</div>
+			<div class="empty-panel fill">{_('Loading settings...')}</div>
 		{:else if Object.entries(settingsByCategory).length === 0}
-			<div class="empty-panel fill">No application settings are declared yet.</div>
+			<div class="empty-panel fill">{_('No application settings are declared yet.')}</div>
 		{:else}
 			<div class="settings-category-list">
 				{#each Object.entries(settingsByCategory) as [category, settings]}
@@ -79,15 +87,20 @@
 								</div>
 								<div class="setting-control">
 									{#if settingAllowedValuesFn(setting).length}
-										<select value={settingDrafts[setting.setting_key] ?? settingDraftValueFn(setting)} disabled={!setting.is_editable} onchange={(event) => onUpdateSettingDraft(setting.setting_key, inputEventValueFn(event))}>
-											{#each settingAllowedValuesFn(setting) as value}
-												<option value={value}>{settingsCategoryLabelFn(value)}</option>
-											{/each}
-										</select>
+										<HermesSelect
+											value={settingDrafts[setting.setting_key] ?? settingDraftValueFn(setting)}
+											options={settingSelectOptions(setting)}
+											placeholder={_('Select value')}
+											searchPlaceholder={_('Search values...')}
+											emptyLabel={_('No options')}
+											ariaLabel={setting.label}
+											disabled={!setting.is_editable}
+											onChange={(nextValue) => onUpdateSettingDraft(setting.setting_key, nextValue)}
+										/>
 									{:else if setting.value_kind === 'boolean'}
 										<label class="setting-toggle">
 											<input type="checkbox" checked={(settingDrafts[setting.setting_key] ?? settingDraftValueFn(setting)) === 'true'} disabled={!setting.is_editable} onchange={(event) => onUpdateSettingDraft(setting.setting_key, checkboxEventValueFn(event))} />
-											<span>{(settingDrafts[setting.setting_key] ?? settingDraftValueFn(setting)) === 'true' ? 'Enabled' : 'Disabled'}</span>
+											<span>{(settingDrafts[setting.setting_key] ?? settingDraftValueFn(setting)) === 'true' ? _('Enabled') : _('Disabled')}</span>
 										</label>
 									{:else if setting.value_kind === 'integer'}
 										<input type="number" value={settingDrafts[setting.setting_key] ?? settingDraftValueFn(setting)} min={String(setting.metadata.min ?? '')} max={String(setting.metadata.max ?? '')} step={String(setting.metadata.step ?? 1)} disabled={!setting.is_editable} oninput={(event) => onUpdateSettingDraft(setting.setting_key, inputEventValueFn(event))} />
@@ -97,7 +110,7 @@
 										<input value={settingDrafts[setting.setting_key] ?? settingDraftValueFn(setting)} placeholder={String(setting.metadata.placeholder ?? '')} disabled={!setting.is_editable} oninput={(event) => onUpdateSettingDraft(setting.setting_key, inputEventValueFn(event))} />
 									{/if}
 									<button type="submit" disabled={!setting.is_editable || savingSettingKey === setting.setting_key || !settingHasChangedFn(setting)}>
-										{savingSettingKey === setting.setting_key ? 'Saving' : 'Save'}
+										{savingSettingKey === setting.setting_key ? _('Saving') : _('Save')}
 									</button>
 								</div>
 							</form>
@@ -110,23 +123,22 @@
 
 	<aside class="settings-rail">
 		<section class="panel info-card">
-			<h2>Runtime Source</h2>
-			<div class="health-row"><span>Backend bind</span><strong>{settingValueTextFn('server.http_addr')}</strong></div>
-			<div class="health-row"><span>Frontend API</span><strong>{settingValueTextFn('frontend.api_base_url')}</strong></div>
-			<div class="health-row"><span>AI Provider</span><strong>{settingValueTextFn('ai.provider')}</strong></div>
-			<div class="health-row"><span>Ollama URL</span><strong>{settingValueTextFn('ai.ollama_base_url')}</strong></div>
-			<div class="health-row"><span>OmniRoute URL</span><strong>{settingValueTextFn('ai.omniroute_base_url')}</strong></div>
-			<div class="health-row"><span>Chat</span><strong>{settingValueTextFn('ai.chat_model')} / {settingValueTextFn('ai.omniroute_chat_model')}</strong></div>
-			<div class="health-row"><span>Embedding</span><strong>{settingValueTextFn('ai.embedding_model')} / {settingValueTextFn('ai.omniroute_embedding_model')}</strong></div>
+			<h2>{_('Runtime Source')}</h2>
+			<div class="health-row"><span>{_('Backend bind')}</span><strong>{settingValueTextFn('server.http_addr')}</strong></div>
+			<div class="health-row"><span>{_('Frontend API')}</span><strong>{settingValueTextFn('frontend.api_base_url')}</strong></div>
+			<div class="health-row"><span>{_('AI configuration')}</span><strong>{_('AI Control Center')}</strong></div>
+			<div class="health-row"><span>{_('Model routing')}</span><strong>{_('Capability slots')}</strong></div>
 		</section>
 		<section class="panel info-card">
-			<h2>Boundaries</h2>
+			<h2>{_('Boundaries')}</h2>
 			<ul class="detail-list">
-				<li>PostgreSQL stores declared setting values<em>JSONB</em></li>
-				<li>Database URL stays outside the panel<em>Bootstrap</em></li>
-				<li>API token and vault key stay outside DB<em>Secret boundary</em></li>
-				<li>Credentials stay in encrypted vault<em>No secret values</em></li>
-				<li>Settings updates are audited<em>No values in audit</em></li>
+				<li>{_('PostgreSQL stores declared setting values')}<em>JSONB</em></li>
+				<li>{_('AI providers, models and routes live in AI Control Center')}<em>{_('Domain tables')}</em></li>
+				<li>{_('Legacy ai.* settings are bootstrap fallback only')}<em>{_('Hidden')}</em></li>
+				<li>{_('Database URL stays outside the panel')}<em>{_('Bootstrap')}</em></li>
+				<li>{_('API token and vault key stay outside DB')}<em>{_('Secret boundary')}</em></li>
+				<li>{_('Credentials stay in encrypted vault')}<em>{_('No secret values')}</em></li>
+				<li>{_('Settings updates are audited')}<em>{_('No values in audit')}</em></li>
 			</ul>
 		</section>
 	</aside>

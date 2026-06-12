@@ -462,6 +462,10 @@ export type EmailDraft = {
 	updated_at: string;
 };
 
+export type DraftDeleteResponse = {
+	deleted: boolean;
+};
+
 export type MailboxHealth = {
 	total_messages: number;
 	unread: number;
@@ -1408,6 +1412,84 @@ export type TelegramCapabilitiesResponse = {
 	unsupported_features: string[];
 };
 
+export type TelegramRuntimeStatus = {
+	account_id: string;
+	provider_kind: TelegramProviderKind;
+	runtime_kind: string;
+	status: 'stopped' | 'running' | 'blocked' | 'degraded' | 'error' | string;
+	fixture_runtime: boolean;
+	tdjson_runtime_available: boolean;
+	telegram_app_credentials_configured: boolean;
+	live_send_available: boolean;
+	last_error: string | null;
+	updated_at: string;
+};
+
+export type TelegramRuntimeStartRequest = {
+	account_id: string;
+};
+
+export type TelegramChatSyncRequest = {
+	account_id: string;
+	limit?: number;
+};
+
+export type TelegramChatSyncResponse = {
+	account_id: string;
+	runtime_kind: string;
+	status: string;
+	synced_count: number;
+	items: TelegramChat[];
+};
+
+export type TelegramHistorySyncRequest = {
+	account_id: string;
+	provider_chat_id: string;
+	from_message_id?: number;
+	mode?: 'latest' | 'older' | 'full';
+	limit?: number;
+};
+
+export type TelegramHistorySyncResponse = {
+	account_id: string;
+	provider_chat_id: string;
+	runtime_kind: string;
+	status: string;
+	synced_count: number;
+	has_more: boolean;
+	next_from_message_id: number | null;
+	items: TelegramMessage[];
+};
+
+export type TelegramMediaDownloadRequest = {
+	account_id: string;
+	provider_chat_id: string;
+	provider_message_id: string;
+	tdlib_file_id: number;
+	provider_attachment_id?: string;
+	filename?: string;
+	content_type?: string;
+	priority?: number;
+};
+
+export type TelegramMediaDownloadResponse = {
+	account_id: string;
+	provider_chat_id: string;
+	provider_message_id: string;
+	runtime_kind: string;
+	status: string;
+	tdlib_file_id: number;
+	local_path: string | null;
+	size_bytes: number | null;
+	expected_size_bytes: number | null;
+	downloaded_size_bytes: number | null;
+	is_downloading_active: boolean;
+	is_downloading_completed: boolean;
+	attachment_id: string | null;
+	blob_id: string | null;
+	scan_status: string | null;
+};
+
 export type WhatsappWebProviderKind = 'whatsapp_web';
 
 export type WhatsappCapabilityStatus = {
@@ -1552,6 +1634,24 @@ export type TelegramFixtureMessageRequest = {
 export type TelegramMessageIngestResponse = {
 	raw_record_id: string;
 	message_id: string;
+};
+
+export type TelegramManualSendRequest = {
+	command_id: string;
+	account_id: string;
+	provider_chat_id: string;
+	text: string;
+};
+
+export type TelegramManualSendResponse = {
+	raw_record_id: string;
+	message_id: string;
+	account_id: string;
+	provider_chat_id: string;
+	delivery_state: string;
+	status: string;
+	runtime_kind: string;
+	rendered_preview_hash: string;
 };
 
 export type AutomationTemplate = {

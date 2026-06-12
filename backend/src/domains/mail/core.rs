@@ -292,6 +292,29 @@ impl CommunicationIngestionStore {
         row.map(row_to_checkpoint).transpose()
     }
 
+    pub async fn delete_checkpoint(
+        &self,
+        account_id: &str,
+        stream_id: &str,
+    ) -> Result<bool, CommunicationIngestionError> {
+        validate_non_empty("account_id", account_id)?;
+        validate_non_empty("stream_id", stream_id)?;
+
+        let result = sqlx::query(
+            r#"
+            DELETE FROM communication_ingestion_checkpoints
+            WHERE account_id = $1
+              AND stream_id = $2
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(stream_id.trim())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected() > 0)
+    }
+
     pub async fn bind_provider_account_secret(
         &self,
         binding: &NewProviderAccountSecretBinding,

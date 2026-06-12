@@ -62,6 +62,11 @@ async fn application_settings_store_lists_seeded_settings_against_postgres() {
     assert!(
         settings
             .iter()
+            .any(|setting| setting.setting_key == "frontend.locale")
+    );
+    assert!(
+        settings
+            .iter()
             .any(|setting| setting.setting_key == "frontend.ui_state")
     );
     assert!(

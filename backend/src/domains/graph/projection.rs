@@ -158,8 +158,6 @@ impl GraphProjectionService {
         message: &MessageRow,
         report: &mut GraphProjectionReport,
     ) -> Result<(), GraphProjectionError> {
-        debug_assert!(!message.body_text.trim().is_empty());
-
         let mut transaction = self.pool.begin().await?;
         let message_node = GraphStore::upsert_node_in_transaction(
             &mut transaction,

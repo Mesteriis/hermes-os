@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
+	import HermesSelect from '$lib/components/shared/HermesSelect.svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import type { MailAccountOption } from '$lib/services/communications';
 
@@ -58,6 +59,14 @@
 	const composeTitle = $derived(
 		form.mode === 'reply' ? _('Reply') : form.mode === 'forward' ? _('Forward') : _('New Message')
 	);
+	const accountSelectOptions = $derived(
+		accountOptions.map((account) => ({
+			value: account.accountId,
+			label: account.label,
+			description: account.email,
+			meta: account.canSend ? _('Send enabled') : (account.sendUnavailableReason ?? undefined)
+		}))
+	);
 </script>
 
 {#if isOpen}
@@ -70,15 +79,16 @@
 		<form class="setup-form" onsubmit={(event) => { event.preventDefault(); onSaveDraft(); }}>
 			<label class="wide">
 				<span>{_('From')}</span>
-				<select bind:value={form.account_id} disabled={accountOptions.length === 0}>
-					{#if accountOptions.length === 0}
-						<option value="">{_('No mail accounts')}</option>
-					{:else}
-						{#each accountOptions as account}
-							<option value={account.accountId}>{account.label} · {account.email}</option>
-						{/each}
-					{/if}
-				</select>
+				<HermesSelect
+					value={form.account_id}
+					options={accountSelectOptions}
+					placeholder={accountOptions.length === 0 ? _('No mail accounts') : _('Select account')}
+					searchPlaceholder={_('Search accounts...')}
+					emptyLabel={_('No mail accounts')}
+					ariaLabel={_('From')}
+					disabled={accountOptions.length === 0}
+					onChange={(nextValue) => (form.account_id = nextValue)}
+				/>
 			</label>
 			<label><span>{_('To')}</span><input bind:value={form.to_text} placeholder={_('recipient@example.com')} autocomplete="off" /></label>
 			<label><span>{_('CC')}</span><input bind:value={form.cc_text} placeholder={_('cc@example.com')} autocomplete="off" /></label>

@@ -17,6 +17,7 @@ import type {
 	MailMessageDetailResponse,
 	DraftListResponse,
 	EmailDraft,
+	DraftDeleteResponse,
 	MailboxHealth,
 	SenderStats,
 	ThreadListResponse,
@@ -182,6 +183,14 @@ export async function runMailSyncNow(accountId: string): Promise<MailSyncRunResp
 	);
 }
 
+export async function runMailFullResync(accountId: string): Promise<MailSyncRunResponse> {
+	return ApiClient.instance.post<MailSyncRunResponse>(
+		`/api/v1/email-accounts/${encodeURIComponent(accountId)}/sync-full-resync`,
+		{},
+		'Mail full resync request failed'
+	);
+}
+
 export async function sendEmail(request: SendEmailRequest): Promise<SendEmailResponse> {
 	return ApiClient.instance.post<SendEmailResponse>(
 		'/api/v1/communications/send',
@@ -210,6 +219,13 @@ export async function fetchDrafts(accountId?: string, status?: string): Promise<
 
 export async function createDraft(draft: Record<string, unknown>): Promise<EmailDraft> {
 	return ApiClient.instance.post<EmailDraft>('/api/v1/communications/drafts', draft, 'Draft creation failed');
+}
+
+export async function deleteDraft(draftId: string): Promise<DraftDeleteResponse> {
+	return ApiClient.instance.delete<DraftDeleteResponse>(
+		`/api/v1/communications/drafts/${encodeURIComponent(draftId)}`,
+		'Draft deletion failed'
+	);
 }
 
 export async function fetchMailboxHealth(accountId?: string): Promise<MailboxHealth> {

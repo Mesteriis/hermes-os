@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
+use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::Row;
 use tempfile::tempdir;
@@ -10,8 +11,11 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::mail::core::{
-    CommunicationProviderKind, ProviderAccountSecretPurpose,
+    CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
+    NewRawCommunicationRecord, ProviderAccountSecretPurpose,
 };
+use hermes_hub_backend::domains::mail::messages::MessageProjectionStore;
+use hermes_hub_backend::integrations::telegram::client::project_raw_telegram_message;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
 use hermes_hub_backend::platform::storage::Database;
@@ -375,6 +379,564 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
             .as_str()
             .expect("transcript text")
             .contains("follow up")
+    );
+}
+
+#[tokio::test]
+async fn telegram_fixture_runtime_status_can_start_account_actor() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-runtime-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let account_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/accounts/fixture",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "telegram_user",
+                "display_name": "Telegram Runtime",
+                "external_account_id": format!("tg-runtime-{suffix}"),
+                "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+                "transcription_enabled": false
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("account response");
+    assert_eq!(account_response.status(), StatusCode::OK);
+
+    let initial_status = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/runtime/status?account_id={account_id}"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("initial runtime status");
+    assert_eq!(initial_status.status(), StatusCode::OK);
+    let initial_body = json_body(initial_status).await;
+    assert_eq!(initial_body["account_id"], json!(account_id));
+    assert_eq!(initial_body["provider_kind"], json!("telegram_user"));
+    assert_eq!(initial_body["runtime_kind"], json!("fixture"));
+    assert_eq!(initial_body["status"], json!("stopped"));
+    assert_eq!(initial_body["live_send_available"], json!(false));
+    assert_eq!(initial_body["fixture_runtime"], json!(true));
+
+    let start_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/runtime/start",
+            json!({ "account_id": account_id }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("runtime start response");
+    assert_eq!(start_response.status(), StatusCode::OK);
+    let start_body = json_body(start_response).await;
+    assert_eq!(start_body["account_id"], json!(account_id));
+    assert_eq!(start_body["status"], json!("running"));
+    assert_eq!(start_body["runtime_kind"], json!("fixture"));
+
+    let running_status = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/runtime/status?account_id={account_id}"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("running runtime status");
+    assert_eq!(running_status.status(), StatusCode::OK);
+    let running_body = json_body(running_status).await;
+    assert_eq!(running_body["status"], json!("running"));
+    assert_eq!(running_body["last_error"], Value::Null);
+}
+
+#[tokio::test]
+async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_audit() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-send-{suffix}");
+    let chat_id = format!("send-chat-{suffix}");
+    let command_id = format!("manual-send-{suffix}");
+    let message_text = "Manual Telegram reply from Hermes.";
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Send",
+            "external_account_id": format!("tg-send-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": chat_id,
+            "provider_message_id": format!("incoming-{suffix}"),
+            "chat_kind": "private",
+            "chat_title": "Manual Send Chat",
+            "sender_id": format!("sender-{suffix}"),
+            "sender_display_name": "Maria Petrova",
+            "text": "Can Hermes reply here?",
+            "import_batch_id": format!("telegram-fixture-{suffix}"),
+            "occurred_at": "2026-06-06T12:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let send_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages/send",
+            json!({
+                "command_id": command_id,
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "text": message_text
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("send response");
+    assert_eq!(send_response.status(), StatusCode::OK);
+    let send_body = json_body(send_response).await;
+    assert_eq!(send_body["account_id"], json!(account_id));
+    assert_eq!(send_body["provider_chat_id"], json!(chat_id));
+    assert_eq!(send_body["delivery_state"], json!("sent"));
+    assert_eq!(send_body["status"], json!("sent"));
+    assert_eq!(send_body["runtime_kind"], json!("fixture"));
+    assert!(
+        send_body["message_id"]
+            .as_str()
+            .expect("message id")
+            .starts_with("message:v4:telegram:")
+    );
+    assert!(
+        send_body["rendered_preview_hash"]
+            .as_str()
+            .expect("preview hash")
+            .starts_with("sha256:")
+    );
+
+    let messages_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!(
+                "/api/v1/telegram/messages?account_id={account_id}&provider_chat_id={chat_id}"
+            ),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("messages response");
+    assert_eq!(messages_response.status(), StatusCode::OK);
+    let messages_body = json_body(messages_response).await;
+    let sent_message = messages_body["items"]
+        .as_array()
+        .expect("messages")
+        .iter()
+        .find(|message| message["delivery_state"] == "sent")
+        .expect("sent message");
+    assert_eq!(sent_message["text"], json!(message_text));
+    assert_eq!(sent_message["sender_display_name"], json!("Hermes"));
+
+    let audit_metadata: Value = sqlx::query_scalar(
+        r#"
+        SELECT metadata
+        FROM api_audit_log
+        WHERE operation = 'telegram.message.send'
+          AND actor_id = $1
+          AND target_id = $2
+        ORDER BY audit_id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind("hermes-frontend")
+    .bind(send_body["message_id"].as_str().expect("message id"))
+    .fetch_one(&pool)
+    .await
+    .expect("manual send audit metadata");
+    assert_eq!(audit_metadata["action_class"], json!("provider_write"));
+    assert_eq!(audit_metadata["capability"], json!("telegram.message.send"));
+    assert_eq!(audit_metadata["decision"], json!("allowed"));
+    assert_eq!(
+        audit_metadata["reason"],
+        json!("explicit_user_confirmation")
+    );
+    assert_eq!(audit_metadata["confirmation_required"], json!(false));
+    assert_eq!(audit_metadata["account_id"], json!(account_id));
+    assert_eq!(audit_metadata["provider_chat_id"], json!(chat_id));
+    assert_eq!(
+        audit_metadata["rendered_preview_hash"],
+        send_body["rendered_preview_hash"]
+    );
+    assert!(audit_metadata.get("text").is_none());
+    assert!(audit_metadata.get("message_text").is_none());
+    assert!(audit_metadata.get("rendered_text").is_none());
+}
+
+#[tokio::test]
+async fn telegram_fixture_sync_chats_returns_account_chat_metadata() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-sync-chats-{suffix}");
+    let chat_id = format!("sync-chat-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Sync",
+            "external_account_id": format!("tg-sync-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": chat_id,
+            "provider_message_id": format!("incoming-{suffix}"),
+            "chat_kind": "private",
+            "chat_title": "Selected Sync Chat",
+            "sender_id": format!("sender-{suffix}"),
+            "sender_display_name": "Maria Petrova",
+            "text": "Fixture chat metadata should sync.",
+            "import_batch_id": format!("telegram-fixture-{suffix}"),
+            "occurred_at": "2026-06-06T12:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let sync_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/sync/chats",
+            json!({
+                "account_id": account_id,
+                "limit": 25
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("chat sync response");
+
+    assert_eq!(sync_response.status(), StatusCode::OK);
+    let sync_body = json_body(sync_response).await;
+    assert_eq!(sync_body["account_id"], json!(account_id));
+    assert_eq!(sync_body["runtime_kind"], json!("fixture"));
+    assert_eq!(sync_body["status"], json!("synced"));
+    assert_eq!(sync_body["synced_count"], json!(1));
+    assert_eq!(sync_body["items"][0]["provider_chat_id"], json!(chat_id));
+    assert_eq!(sync_body["items"][0]["title"], json!("Selected Sync Chat"));
+}
+
+#[tokio::test]
+async fn telegram_fixture_sync_selected_history_returns_projected_messages() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-sync-history-{suffix}");
+    let selected_chat_id = format!("selected-chat-{suffix}");
+    let other_chat_id = format!("other-chat-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram History Sync",
+            "external_account_id": format!("tg-history-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": selected_chat_id,
+            "provider_message_id": format!("selected-incoming-{suffix}"),
+            "chat_kind": "private",
+            "chat_title": "Selected History Chat",
+            "sender_id": format!("sender-{suffix}"),
+            "sender_display_name": "Maria Petrova",
+            "text": "Selected chat history message.",
+            "import_batch_id": format!("telegram-fixture-{suffix}"),
+            "occurred_at": "2026-06-06T12:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": other_chat_id,
+            "provider_message_id": format!("other-incoming-{suffix}"),
+            "chat_kind": "private",
+            "chat_title": "Other History Chat",
+            "sender_id": format!("sender-{suffix}"),
+            "sender_display_name": "Maria Petrova",
+            "text": "This other chat must not be returned.",
+            "import_batch_id": format!("telegram-fixture-{suffix}"),
+            "occurred_at": "2026-06-06T12:01:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let sync_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/sync/history",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": selected_chat_id,
+                "limit": 50
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("history sync response");
+
+    assert_eq!(sync_response.status(), StatusCode::OK);
+    let sync_body = json_body(sync_response).await;
+    assert_eq!(sync_body["account_id"], json!(account_id));
+    assert_eq!(sync_body["provider_chat_id"], json!(selected_chat_id));
+    assert_eq!(sync_body["runtime_kind"], json!("fixture"));
+    assert_eq!(sync_body["status"], json!("synced"));
+    assert_eq!(sync_body["synced_count"], json!(1));
+    assert_eq!(
+        sync_body["items"][0]["provider_chat_id"],
+        json!(selected_chat_id)
+    );
+    assert_eq!(
+        sync_body["items"][0]["text"],
+        json!("Selected chat history message.")
+    );
+}
+
+#[tokio::test]
+async fn telegram_tdlib_projection_accepts_media_message_without_text() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let message_store = MessageProjectionStore::new(pool);
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-empty-media-{suffix}");
+    let provider_chat_id = format!("-100{suffix}");
+    let provider_message_id = format!("{provider_chat_id}:87403003904");
+
+    communication_store
+        .upsert_provider_account(
+            &NewProviderAccount::new(
+                &account_id,
+                CommunicationProviderKind::TelegramUser,
+                "Telegram Empty Media",
+                format!("tg-empty-media-{suffix}"),
+            )
+            .config(json!({"runtime": "tdlib_qr_authorized"})),
+        )
+        .await
+        .expect("provider account");
+    let raw = communication_store
+        .record_raw_source(
+            &NewRawCommunicationRecord::new(
+                format!("raw:telegram-empty-media:{suffix}"),
+                &account_id,
+                "telegram_message",
+                &provider_message_id,
+                format!("sha256:{suffix}"),
+                format!("telegram-tdlib-history:{account_id}:{provider_chat_id}"),
+                json!({
+                    "provider_chat_id": provider_chat_id,
+                    "chat_title": "Media Channel",
+                    "chat_kind": "channel",
+                    "sender_id": format!("chat:{provider_chat_id}"),
+                    "sender_display_name": "Media Channel",
+                    "text": "",
+                    "delivery_state": "received",
+                    "tdlib_raw": {
+                        "@type": "message",
+                        "id": 87403003904_i64,
+                        "chat_id": provider_chat_id,
+                        "content": {"@type": "messagePhoto"}
+                    }
+                }),
+            )
+            .occurred_at(Utc::now())
+            .provenance(json!({
+                "provider": "telegram",
+                "provider_kind": "telegram_user",
+                "runtime": "tdlib",
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+            })),
+        )
+        .await
+        .expect("raw source");
+
+    let projected = project_raw_telegram_message(&message_store, &raw)
+        .await
+        .expect("project empty media message");
+
+    assert_eq!(projected.provider_record_id, provider_message_id);
+    assert_eq!(projected.conversation_id, Some(provider_chat_id));
+    assert_eq!(projected.body_text, "");
+    assert_eq!(
+        projected.message_metadata["tdlib_raw"]["content"]["@type"],
+        json!("messagePhoto")
+    );
+}
+
+#[tokio::test]
+async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-media-{suffix}");
+    let chat_id = format!("media-chat-{suffix}");
+    let provider_message_id = format!("media-message-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Media",
+            "external_account_id": format!("tg-media-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": chat_id,
+            "provider_message_id": provider_message_id,
+            "chat_kind": "private",
+            "chat_title": "Media Chat",
+            "sender_id": format!("sender-{suffix}"),
+            "sender_display_name": "Maria Petrova",
+            "text": "Document metadata only.",
+            "import_batch_id": format!("telegram-fixture-{suffix}"),
+            "occurred_at": "2026-06-06T12:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let download_response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/media/download",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": provider_message_id,
+                "tdlib_file_id": 42,
+                "provider_attachment_id": "tdlib-file:42",
+                "filename": "document.pdf",
+                "content_type": "application/pdf"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("download response");
+
+    assert_eq!(download_response.status(), StatusCode::BAD_REQUEST);
+    let body = json_body(download_response).await;
+    assert_eq!(body["error"], json!("invalid_telegram_request"));
+    assert!(
+        body["message"]
+            .as_str()
+            .expect("message")
+            .contains("Telegram media downloads require an enabled TDLib actor")
     );
 }
 
@@ -812,6 +1374,62 @@ async fn telegram_qr_login_start_uses_configured_app_credentials_when_payload_om
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     let body = json_body(response).await;
     assert_eq!(body["error"], json!("telegram_tdlib_runtime_unavailable"));
+}
+
+#[tokio::test]
+async fn telegram_live_smoke_syncs_configured_account_when_explicitly_enabled() {
+    if env::var("HERMES_TELEGRAM_LIVE_SMOKE").ok().as_deref() != Some("1") {
+        eprintln!("skipping live Telegram TDLib smoke test: HERMES_TELEGRAM_LIVE_SMOKE is not 1");
+        return;
+    }
+
+    let database_url =
+        env::var("HERMES_TEST_DATABASE_URL").expect("HERMES_TEST_DATABASE_URL must be set");
+    let account_id = env::var("HERMES_TELEGRAM_LIVE_ACCOUNT_ID")
+        .expect("HERMES_TELEGRAM_LIVE_ACCOUNT_ID must be set");
+    let provider_chat_id =
+        env::var("HERMES_TELEGRAM_LIVE_CHAT_ID").expect("HERMES_TELEGRAM_LIVE_CHAT_ID must be set");
+    let local_api_secret =
+        env::var("HERMES_LOCAL_API_SECRET").expect("HERMES_LOCAL_API_SECRET must be set");
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let app = build_router_with_database(AppConfig::from_env().expect("config"), database);
+
+    let start_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/runtime/start",
+            json!({ "account_id": account_id }),
+            &local_api_secret,
+        ))
+        .await
+        .expect("runtime start response");
+    assert_eq!(start_response.status(), StatusCode::OK);
+    let start_body = json_body(start_response).await;
+    assert_eq!(start_body["account_id"], json!(account_id));
+    assert_eq!(start_body["runtime_kind"], json!("tdlib_qr_authorized"));
+    assert_eq!(start_body["status"], json!("running"));
+
+    let history_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/sync/history",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+                "limit": 25
+            }),
+            &local_api_secret,
+        ))
+        .await
+        .expect("history sync response");
+    assert_eq!(history_response.status(), StatusCode::OK);
+    let history_body = json_body(history_response).await;
+    assert_eq!(history_body["account_id"], json!(account_id));
+    assert_eq!(history_body["provider_chat_id"], json!(provider_chat_id));
+    assert_eq!(history_body["runtime_kind"], json!("tdlib_qr_authorized"));
+    assert_eq!(history_body["status"], json!("synced"));
 }
 
 #[tokio::test]
