@@ -2,7 +2,13 @@
 
 ## Purpose
 
-The event model is the system spine. It records facts that happened in or around Hermes Hub and lets projections build current state, graph links, indexes and user-facing timelines.
+The event model is the system spine. It records facts that happened in or
+around Hermes Hub and lets projections build current state, graph links,
+indexes and user-facing timelines.
+
+Communications are the primary ingestion spine for external interaction
+evidence. The event model is the canonical internal spine that preserves what
+happened after evidence enters Hermes.
 
 ## Event Categories
 
@@ -10,8 +16,13 @@ The event model is the system spine. It records facts that happened in or around
 - document events
 - task events
 - calendar events
-- person events
+- persona events
+- organization events
 - project events
+- decision events
+- obligation events
+- relationship events
+- contradiction review events
 - agent events
 - system events
 - security and permission events
@@ -32,8 +43,8 @@ The event model is the system spine. It records facts that happened in or around
     "import_batch_id": "01BATCH..."
   },
   "actor": {
-    "kind": "external_contact",
-    "entity_id": "person_..."
+    "kind": "persona",
+    "entity_id": "persona_..."
   },
   "subject": {
     "kind": "message",
@@ -64,15 +75,21 @@ The event model is the system spine. It records facts that happened in or around
 - `message_received`
 - `message_sent`
 - `message_classified`
+- `communication_linked_to_persona`
 - `document_uploaded`
 - `document_version_created`
 - `document_ocr_completed`
 - `entity_extracted`
+- `relationship_created`
 - `task_created`
 - `task_status_changed`
 - `meeting_completed`
-- `person_created`
-- `relationship_created`
+- `persona_created`
+- `organization_created`
+- `decision_recorded`
+- `obligation_accepted`
+- `contradiction_observed`
+- `contradiction_reviewed`
 - `payment_received`
 - `agent_tool_invoked`
 - `permission_granted`
@@ -83,12 +100,14 @@ Events feed projections for:
 
 - message threads
 - unified timeline
-- person profiles
+- Persona dossiers
+- Organization context
 - project timelines
 - task views
 - graph edges
 - full text index
 - semantic index
+- contradiction review queues
 - agent memory traces
 
 Projection failures must be observable and replayable. A broken projection must not corrupt the canonical event log.

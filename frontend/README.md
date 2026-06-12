@@ -2,7 +2,7 @@
 
 SvelteKit desktop UI for Hermes Hub, packaged by Tauri.
 
-Current scope is a desktop/laptop shell for the local backend APIs with provider account setup wizards for Gmail, iCloud and raw IMAP, graph/project/task/contact/document workflow surfaces, and local AI workflow surfaces. Mobile UI is out of scope while ADR-0031 is active.
+Current scope is a desktop/laptop shell for the local backend APIs with provider account setup wizards for Gmail, iCloud and raw IMAP, graph/project/task/Persona identity/document workflow surfaces, and local AI workflow surfaces. Mobile UI is out of scope while ADR-0031 is active.
 
 ## UI Styling Contract
 
@@ -162,7 +162,7 @@ POST http://127.0.0.1:8080/api/v1/ai/task-candidates/refresh
 POST http://127.0.0.1:8080/api/v1/ai/meeting-prep
 ```
 
-Requests use ``X-Hermes-Secret: <secret>``. The graph dashboard reads `/api/v1/graph/summary`; the graph explorer searches non-empty queries through `/api/v1/graph/search` and loads depth-1 neighborhoods through `/api/v1/graph/neighborhood`. The workflow tabs use protected project, task candidate, active task, contact identity and document-processing endpoints. Account setup also requires backend PostgreSQL and `HERMES_SECRET_VAULT_KEY`.
+Requests use ``X-Hermes-Secret: <secret>``. The graph dashboard reads `/api/v1/graph/summary`; the graph explorer searches non-empty queries through `/api/v1/graph/search` and loads depth-1 neighborhoods through `/api/v1/graph/neighborhood`. The workflow tabs use protected project, task candidate, active task, Persona identity and document-processing endpoints. Account setup also requires backend PostgreSQL and an initialized/unlocked host vault; `HERMES_SECRET_VAULT_KEY` is legacy migration compatibility only.
 
 The AI Agents tab reads AI runtime status, registered agents, persisted run history and citation-backed workflow responses. Communications exposes scoped Ask AI for the selected message, Projects exposes scoped Prepare brief for the selected project, and Tasks exposes AI refresh for suggested task candidates. AI refresh writes only suggested candidates; the existing task review queue remains the path to active tasks.
 
@@ -174,7 +174,7 @@ VITE_HERMES_LOCAL_API_SECRET=change-me-local-api-secret \
 pnpm dev
 ```
 
-The placeholder secret is for local development only and must match the backend `HERMES_LOCAL_API_SECRET`.
+The development secret value is for local development only and must match the backend `HERMES_LOCAL_API_SECRET`.
 
 ## Workflow Desktop Surfaces
 
@@ -183,7 +183,7 @@ The desktop shell is intentionally desktop/laptop scoped under ADR-0031. Current
 - Current: Knowledge Graph explorer using graph summary, node picker, search and neighborhood APIs.
 - Current: Projects tab using project records, timelines and project detail APIs.
 - Current: Tasks tab using task candidate, task candidate review and active task APIs.
-- Current: Contacts identity review surface using identity candidate list, review APIs and explicit split review controls.
+- Current: Persona identity review surface using identity candidate list, review APIs and explicit split review controls.
 - Current: Document processing status surface using the document-processing jobs API and failed-job retry controls.
 
 ## AI Desktop Surfaces

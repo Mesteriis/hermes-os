@@ -1,0 +1,96 @@
+# Documentation Refactoring Completion Audit
+
+Date: 2026-06-12
+
+Scope: documentation-only alignment of Hermes Hub around the Personal Memory
+System model. This audit does not authorize or perform code, schema, route or UI
+renames.
+
+## Result
+
+The documentation now has one canonical product model:
+
+```text
+Hermes is a local-first Personal Memory System.
+```
+
+Communication is documented as the primary ingestion spine. Personas,
+Organizations, Projects, Documents, Tasks, Events, Decisions, Obligations,
+Relationships, Knowledge items and Source records are documented as primary
+domain concepts. Memory, Timeline, Trust, Search, Enrichment, Obligation, Risk
+and Consistency / Contradiction are documented as shared engines.
+
+## Requirement Coverage
+
+| Requirement | Evidence |
+|---|---|
+| Create a single foundation model. | `docs/foundation/vision.md`, `world-model.md`, `glossary.md`, `engines.md`, `architecture-principles.md`, `domain-map.md`. |
+| Rework Personas away from CRM/contact thinking. | `docs/persons/README.md`, `architecture.md`, `data-model.md`, `refactoring-report.md`, ADR-0084. |
+| Define Owner/Self Persona. | `docs/foundation/world-model.md`, `docs/persons/data-model.md`, ADR-0084. |
+| Treat Communication as the system spine. | `docs/product/master-spec.md`, `docs/domains/communications.md`, `docs/workflows/communication-to-knowledge.md`, ADR-0085. |
+| Add Polygraph / contradiction detection concept. | `docs/engines/consistency-contradiction.md`, `docs/workflows/contradiction-review.md`, ADR-0085. |
+| Separate domains from engines. | `docs/foundation/engines.md`, `docs/engines/README.md`, `docs/domains/README.md`. |
+| Audit all domains. | Domain catalog plus `communications.md`, `organizations.md`, `projects.md`, `calendar-events.md`, `decisions.md`, `obligations.md`, `agents.md`, `notes.md`, existing `persons.md`, `documents.md`, `tasks.md`, `knowledge-graph.md`. |
+| Prepare implementation-aware refactoring plans. | `docs/refactoring/product-alignment-plan.md`, `docs/refactoring/implementation-alignment-plan.md`, `docs/product/development-roadmap.md`. |
+| Align active implementation docs with current code. | Root `README.md`, `backend/README.md`, `frontend/README.md`, `CONTRIBUTING.md`, `docs/mail/*`, `docs/calendar/*`, `docs/tasks/*`, `docs/organizations/*`, architecture diagrams and security model. |
+| Preserve historical traceability. | `docs/refactoring/documentation-audit.md`, `design-qa.md`, historical ADRs, reviews and roadmap files are treated as history unless a current canonical doc references them. |
+
+## Implementation Evidence Reviewed
+
+Current implementation was checked against:
+
+- `backend/src/app/router.rs`;
+- backend domain modules under `backend/src/domains/`;
+- backend engine/workflow/integration modules;
+- migrations `0001` through `0058`;
+- `Makefile` development targets;
+- frontend API and page surfaces under `frontend/src/lib/`;
+- active root, backend and frontend README files.
+
+Key verified points:
+
+- active identity route is `/api/v1/persons/{person_id}/identity`, not
+  `/api/v1/contacts/{contact_id}/identity`;
+- migration `0034` renamed the historical `contacts` projection to `persons`;
+- `backend-contacts-smoke-dev` is a legacy command name that runs the `persons`
+  integration suite;
+- current protected local API auth uses `HERMES_LOCAL_API_SECRET` and
+  `X-Hermes-Secret` per ADR-0056;
+- current account setup uses host vault behavior per ADR-0076, while
+  `HERMES_SECRET_VAULT_KEY` remains legacy database-vault compatibility;
+- ADR-0055 enables email provider read/write capability boundaries while some
+  tests and dev sync paths intentionally remain read-only.
+
+## Remaining Refactoring Work
+
+These are known product/implementation gaps, not hidden documentation failures:
+
+- Persona-native naming is not implemented end-to-end. Current code still uses
+  `persons`, `person_id`, `person_*` tables and compatibility surfaces.
+- First-class Relationship storage is not implemented. Relationship semantics
+  remain spread across graph edges, roles, organization links and project/task
+  links.
+- Memory, Timeline, Trust, Risk and Enrichment behavior still appears in
+  domain-local modules and routes such as `health`, `watchtower`,
+  `intelligence` and `memory`.
+- Decisions and Obligations are documented as target domains, but dedicated
+  persistence and review workflows still require implementation ADRs.
+- Consistency / Contradiction Engine and Polygraph review UI are documented but
+  not implemented.
+- Communication is product-facing, but much current implementation still lives
+  under `backend/src/domains/mail/` as the email-channel implementation.
+- Notes remain document-like capture artifacts unless a future ADR promotes a
+  first-class Notes domain.
+- `AGENTS.md` still contains older policy wording such as personal knowledge
+  system, `HERMES_LOCAL_API_TOKEN` and `X-Hermes-Actor-Id`. It is an agent
+  instruction file, so this pass records the drift instead of changing it
+  silently.
+
+## Non-Goals Confirmed
+
+- No code changes.
+- No schema migration.
+- No API redesign.
+- No route rename.
+- No generated implementation scaffolding.
+- No rewrite of historical ADRs without explicit supersession.

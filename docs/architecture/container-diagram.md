@@ -15,6 +15,7 @@ flowchart TB
         Queries["Query handlers"]
         Ingestion["Ingestion workers"]
         Projectors["Projection workers"]
+        Engines["Shared engines\nMemory Timeline Trust Search\nEnrichment Obligation Risk Polygraph"]
         AgentRuntime["Agent runtime"]
         PluginHost["Plugin host"]
     end
@@ -41,6 +42,7 @@ flowchart TB
     Commands --> EventLog
     Ingestion --> EventLog
     EventLog --> Projectors
+    EventLog --> Engines
     Projectors --> Postgres
     Projectors --> Graph
     Projectors --> ObjectStore
@@ -50,9 +52,11 @@ flowchart TB
     Queries --> Graph
     Queries --> Tantivy
     Queries --> Vector
+    Queries --> Engines
     AgentRuntime --> Queries
     AgentRuntime --> Commands
     AgentRuntime --> Ollama
+    AgentRuntime --> Engines
     Projectors --> Embeddings
     Projectors --> OCR
     PluginHost --> Commands
@@ -66,8 +70,9 @@ flowchart TB
 | Tauri shell | desktop packaging, OS integration, secure local bridge |
 | SvelteKit UI | user workflows, command palette, graph/search/timeline UX |
 | API server | application boundary, auth/session, commands and queries |
-| Ingestion workers | provider sync, normalization, source preservation |
+| Ingestion workers | provider sync, normalization and source preservation for Communications, Events and Documents |
 | Projection workers | build relational, graph, search and semantic views |
+| Shared engines | build derived memory, timelines, trust, search, enrichment, obligations, risk and contradiction observations |
 | Agent runtime | plan and execute AI workflows with tool permissions |
 | Plugin host | load bounded extensions with explicit capabilities |
 | PostgreSQL | primary relational and event persistence |

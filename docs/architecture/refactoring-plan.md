@@ -1,5 +1,18 @@
 # Refactoring Plan: handlers.rs Decomposition
 
+Status: implementation decomposition note.
+
+This document predates the foundation terminology cleanup and names existing
+handler groups/routes. Treat `persons`, `health`, `watchlist`, `promises`,
+`fingerprint` and similar names below as compatibility labels until the code is
+renamed through an explicit implementation task. The canonical domain model is
+defined in `../foundation/`.
+
+For the product-model migration from current modules and routes to
+Communications, Persona, shared Engines, Decisions, Obligations and Polygraph,
+use `../refactoring/implementation-alignment-plan.md`. This file remains a
+handler decomposition note, not the product-domain migration plan.
+
 ## Goal
 
 Eliminate `app/handlers.rs` (9019 lines). HTTP endpoint → one file under domain `api/`. DTOs in `dto.rs`, one per subdomain. Business logic stays — only HTTP layer moves.
@@ -76,7 +89,7 @@ domains/mail/api/account_setup/
 
 ## Phase 2: Large Domains (~120 files)
 
-### 2.1 Persons (45 handlers)
+### 2.1 Persons compatibility routes (45 handlers)
 ```
 domains/persons/api/
 ├── dto.rs              # shared DTOs
@@ -91,8 +104,10 @@ domains/persons/api/
 ├── analytics/          # 4 handlers + dto.rs
 └── watchlist/          # 2 handlers + dto.rs
 ```
-Plus: fingerprint, favorite, notes, personas, health, risks, promises,
-investigate, dossier, meeting-prep — distribute into subdirs.
+Plus compatibility labels: fingerprint, favorite, notes, personas, health,
+risks, promises, investigate, dossier, meeting-prep. Map these to canonical
+Persona Intelligence, attention/risk read models, Obligations, Dossier and
+context preparation before any implementation rename.
 
 ### 2.2 Calendar (47 handlers)
 ```

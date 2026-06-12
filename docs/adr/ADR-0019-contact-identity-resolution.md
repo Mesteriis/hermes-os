@@ -1,6 +1,10 @@
 # ADR-0019 Contact Identity Resolution
 
-Status: Proposed
+Status: Superseded by ADR-0084
+
+Superseded because ADR-0084 replaces the Contact framing with Persona
+Intelligence. The safety rule remains: ambiguous identity resolution must be
+reviewable and must not silently collapse subjects.
 
 ## Context
 

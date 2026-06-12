@@ -2,45 +2,57 @@
 
 ## Responsibilities
 
-Persons represent people, companies, organizations, communication channels and relationships. The persons domain is the human entry point into long-term memory.
+The persons domain owns Persona Intelligence: digital representations of
+subjects, their identities, relationships, memory anchors and dossier views.
 
-## Person Profile
+Hermes does not treat people as contacts. Personas are durable memory anchors in
+the knowledge graph.
 
-A person profile should show:
+## Persona View
 
-- canonical identity
-- known aliases
-- email addresses
-- phone numbers
-- provider usernames
-- companies and organizations
-- projects
-- related documents
-- related tasks
-- timeline of interactions
-- graph neighborhood
+A Persona view should show:
+
+- canonical display label;
+- known digital traces;
+- identity resolution state;
+- relationship graph neighborhood;
+- relationship trust and strength signals;
+- communication patterns;
+- memory facts;
+- knowledge items;
+- preferences;
+- related organizations;
+- related projects;
+- related documents;
+- related tasks;
+- timeline view from the Timeline Engine;
+- generated dossier with source citations.
 
 ## Relationship Types
 
-- works for
-- owns
-- manages
-- reports to
-- collaborates with
-- mentioned by
-- participated in
-- promised
-- requested
-- introduced
+Relationships are first-class records between Personas. Examples include:
+
+- knows;
+- collaborates with;
+- works with;
+- reports to;
+- represents;
+- assists;
+- owns;
+- member of;
+- introduced.
+
+Relationship records carry provenance, confidence, trust score and strength
+score.
 
 ## Merge and Split
 
 Identity resolution must support:
 
-- candidate duplicate detection
-- manual merge
-- manual split
-- provider-specific identity preservation
-- audit trail
+- digital trace candidate detection;
+- manual merge;
+- manual split;
+- provider-specific identity preservation;
+- audit trail.
 
-Ambiguous persons must not be silently collapsed.
+Ambiguous Personas must not be silently collapsed.

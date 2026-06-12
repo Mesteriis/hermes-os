@@ -1,5 +1,12 @@
 # Tasks — Статус реализации
 
+Этот файл описывает текущую реализацию. Канонические определения Task,
+Obligation и Follow-Up находятся в `docs/foundation/glossary.md`.
+
+The percentages below describe current Tasks implementation coverage only. They
+are not product completion scores for Obligations, Decisions, Memory or
+Polygraph.
+
 ## Реализовано (87/104 разделов спеки — 84%)
 
 | § | Раздел | Доказательство |
@@ -19,15 +26,15 @@
 | 14 | AI Task Extraction | Существующий `task_candidates` pipeline из messages/documents |
 | 15 | NL Task Creation | `POST /tasks` с NLP-ready полями |
 | 17 | Context Pack | `task_context_packs` — summary, source_summary, open_questions, blockers, risks, suggested_next_action |
-| 18 | Task Brain | `POST /tasks/brain` → explain_task() — что, почему, статус, источник, контекст, evidence |
+| 18 | Task context explanation | `POST /tasks/brain` compatibility route → what, why, status, source, context, evidence |
 | 19 | Task Why | `why` поле на `tasks` |
 | 20 | Next Action | `suggest_next_action()` — template per status: "Review and set priority", "Start working", "Follow up: {reason}", "Resolve blockers", "Archive" |
 | 21 | Blocking Intelligence | `hermes_status = 'blocked'` + `waiting_reason` |
 | 22 | Waiting Tasks | `hermes_status = 'waiting'` + waiting_reason + waiting_too_long detector |
-| 23 | Priority Score | `calculate_priority()` — deadline proximity, legal/tax context, contact/org/project presence, blockers |
+| 23 | Priority Score | `calculate_priority()` — deadline proximity, legal/tax context, Persona/Organization/Project presence, blockers |
 | 24 | Risk Analysis | `calculate_risk()` — deadline close, missing docs, no owner, external dependency, legal, urgent keywords |
-| 25 | Readiness Score | `calculate_readiness()` — description, context, docs, deadline, no blockers, contacts resolved |
-| 26 | Missing Context Detector | `detect_missing_context()` — description, context pack, deadline, contact, project |
+| 25 | Readiness Score | `calculate_readiness()` — description, context, docs, deadline, no blockers, Personas resolved |
+| 26 | Missing Context Detector | `detect_missing_context()` — description, context pack, deadline, Persona, Project |
 | 27 | Templates | `task_templates` — 8 pre-seeded: bug, feature, research, contract_review, aeat_response, client_followup, invoice_review, code_review |
 | 28 | Checklists | `task_checklists` — CRUD, items JSONB |
 | 29 | Dependencies | `task_relations` — blocks, blocked_by, depends_on, relates_to, duplicates, caused_by, derived_from, follow_up_for, parent, subtask |

@@ -2,7 +2,7 @@
 
 Правила работы агентов в репозитории Hermes Hub.
 
-Эти правила обязательны для любых изменений в проекте. Репозиторий проектируется как долгосрочный personal knowledge system, а не как MVP.
+Эти правила обязательны для любых изменений в проекте. Репозиторий проектируется как долгосрочная local-first Personal Memory System, а не как MVP, CRM, почтовый клиент, task tracker, calendar app или note-taking app.
 
 ## 1. Роль агента
 
@@ -24,9 +24,13 @@
 1. Текущий запрос пользователя.
 2. Этот `AGENTS.md`.
 3. ADR в `docs/adr/`.
-4. Архитектурная документация в `docs/architecture/`, `docs/domains/`, `docs/agents/`, `docs/ui/`.
-5. Текущие файлы реализации, когда они появятся.
-6. Внешняя документация, только если она нужна и проверена.
+4. Каноническая продуктовая и foundation-документация:
+   `docs/product/master-spec.md`, `docs/foundation/`, `docs/domains/`,
+   `docs/engines/`, `docs/workflows/`.
+5. Архитектурная документация в `docs/architecture/`, `docs/agents/`, `docs/ui/`.
+6. Текущие файлы реализации как источник фактов о том, что уже реально
+   реализовано.
+7. Внешняя документация, только если она нужна и проверена.
 
 Если запрос конфликтует с действующим ADR, нельзя тихо нарушать ADR. Нужно явно указать конфликт и сначала предложить новый ADR, который supersede или уточнит прежнее решение.
 
@@ -56,14 +60,82 @@
 - `ADR-0032` - Docker Compose development environment under `docker/`.
 - `ADR-0041` - email provider ingestion foundation for Gmail, iCloud and generic IMAP.
 - `ADR-0042` - provider credential secret references and resolver boundary.
-- `ADR-0043` - Superseded by ADR-0055. Original read-only Gmail API and IMAP provider networking (temporary).
-- `ADR-0044` - account setup and encrypted secret vault.
+- `ADR-0043` - Superseded by ADR-0055. Historical temporary provider-networking restriction.
 - `ADR-0046` - persistent dev mail cache and blob storage; mail bytes/attachments live under `docker/data/mail/`, PostgreSQL stores metadata, references and attachment scan state.
-- `ADR-0053` - database-backed encrypted secret vault; encrypted credential payloads live in PostgreSQL ciphertext rows, while the vault key remains outside PostgreSQL.
 - `ADR-0054` - application settings store; user-editable runtime/UI settings live in `application_settings`, while provider accounts remain domain records.
 - `ADR-0055` - full email provider networking with read and write operations; supersedes ADR-0043. Read-only restriction retained only for automated integration tests.
-
+- `ADR-0056` - local API simplified auth with router-level `X-Hermes-Secret`.
+- `ADR-0076` - host vault on macOS; supersedes ADR-0044 and ADR-0053.
 - `ADR-0077` - i18n with Russian and English interface via JSON dictionaries and Svelte stores; English strings serve as translation keys, ru.json provides Russian translations.
+- `ADR-0084` - Persona Intelligence System; supersedes Contact/Person CRM framing.
+- `ADR-0085` - Communication spine and Consistency / Contradiction Engine.
+
+Superseded ADRs remain historical traceability records. Do not apply their
+obsolete token, actor, Contact or database-vault requirements as current rules
+when a newer ADR supersedes them.
+
+## 3.1 Canonical Product Model
+
+Hermes is a Personal Memory System for:
+
+- Communications;
+- Knowledge;
+- Memory;
+- Relationships;
+- Projects;
+- Documents;
+- Decisions;
+- Obligations;
+- Context.
+
+The central product value is context, not CRUD.
+
+Communication is the primary ingestion spine:
+
+```text
+Communication -> Source Evidence -> Extracted Knowledge -> Memory -> Context
+```
+
+Tasks, decisions, projects, obligations, dossiers, timelines and search results
+are built from evidence, events, graph links and reviewed memory.
+
+Do not describe Hermes as:
+
+- Email Client;
+- CRM;
+- Address Book;
+- Contact Manager;
+- Task Tracker;
+- Calendar App;
+- Note Taking App;
+- generic Knowledge Base.
+
+People are Personas, not contacts.
+
+Required Persona concepts:
+
+- one Owner Persona with `is_self = true`;
+- `PersonaType`: `human`, `ai_agent`, `organization_proxy`, `system`;
+- Identity, Relationships, Communication, Memory, Timeline, Dossier and Context;
+- first-class Relationship semantics with source persona, target persona,
+  relationship type, trust score and strength score.
+
+Current implementation may still use compatibility names such as `persons`,
+`person_id`, historical `contacts`, `health`, `watchtower` or `follow-up`.
+Treat those as implementation compatibility labels. When docs and code differ,
+record the gap in `docs/refactoring/implementation-alignment-plan.md` or a
+follow-up plan before renaming code, routes or schemas.
+
+Domains own durable entities. Engines are reusable mechanisms that produce
+derived views, scores, candidates, observations and context. Do not duplicate
+engine ownership inside a domain. Shared engines include Memory, Timeline,
+Trust, Search, Enrichment, Obligation, Risk and Consistency / Contradiction
+(Polygraph).
+
+Polygraph is the user-facing alias for the Consistency / Contradiction Engine.
+It detects evidence-backed contradictions and creates reviewable observations.
+It must not automatically overwrite memory or label a person as dishonest.
+
 ## 4. Implementation Phase
 
 The project has entered implementation with the Rust backend foundation. Agents may add scoped implementation code when it follows the current request, relevant ADR and existing architecture.
@@ -87,11 +159,12 @@ Disallowed without an explicit user request and relevant ADR review:
 - provider adapters;
 - AI agent runtime code;
 - domain model expansion;
-- fake placeholder modules.
+- fake stub modules.
 
 For implementation work, prefer TDD: write the failing test first, verify the failure, implement the smallest passing code, then run the configured validation.
 
-After meaningful repository changes, run the relevant validation and create a git commit unless the user explicitly asks not to commit or the work is not yet in a valid state.
+After meaningful repository changes, run the relevant validation. Do not create
+a git commit unless the user explicitly asks for a commit.
 
 ## 5. Required Workflow
 
@@ -217,16 +290,27 @@ Use the repository-configured tool first. If no tool exists, report that validat
 - Agents and plugins must use capability-based permissions.
 - Mobile UI is out of scope until `ADR-0031` is superseded.
 - Docker development infrastructure must stay under `docker/` per `ADR-0032`.
-- Local event API HTTP endpoints must enforce the temporary API capability token from `ADR-0038` until the full capability runtime replaces it.
+- Protected local API endpoints must use the router-level shared secret guard
+  from `ADR-0056`: `HERMES_LOCAL_API_SECRET` plus the `X-Hermes-Secret`
+  request header.
 - Local event API access must be recorded in append-only `api_audit_log` per `ADR-0039`; do not store tokens or secrets in audit records.
-- Protected local event API requests must include the temporary non-secret `X-Hermes-Actor-Id` identity from `ADR-0040`.
+- API audit actor identity is the constant `hermes-frontend` unless a newer ADR
+  changes the local actor model. Do not require `X-Hermes-Actor-Id`.
 - Email ingestion provider accounts must support `gmail`, `icloud` and `imap` per `ADR-0041`; account config must not store OAuth tokens, app passwords or mailbox passwords.
 - Multiple accounts for the same provider kind are required. Credential lookup must use `account_id` plus secret purpose, never provider kind alone.
 - Provider credential bindings must use compatible secret kinds: `oauth_token` -> `oauth_token`, `imap_password`/`smtp_password` -> `app_password` or `password`.
 - Raw communication provider records must remain append-only and preserve source provenance.
-- Secret references per `ADR-0053` store metadata only. Encrypted credential payloads may live only in `encrypted_secret_vault_entries`; never place plaintext secret values in PostgreSQL config, metadata, tests, logs or docs.
-- The database encrypted vault key must remain outside PostgreSQL. Do not derive it from hardware serial numbers; hardware IDs are not secrets.
-- The in-memory secret resolver is allowed only for `test_double` references in tests and local adapter tests. Real provider adapters must use a real resolver for `os_keychain`, `encrypted_vault`, `database_encrypted_vault` or `external_vault`.
+- Secret references store metadata only. Per `ADR-0076`, new secret payloads
+  must live in the host vault, while PostgreSQL stores only non-secret account
+  metadata, `secret_references` and account-to-secret bindings.
+- `encrypted_secret_vault_entries` and `HERMES_SECRET_VAULT_KEY` are legacy
+  database-vault migration compatibility. Do not add new provider credential
+  payloads to PostgreSQL.
+- The in-memory secret resolver is allowed only for `test_double` references in
+  tests and local adapter tests. Real provider adapters must use a real resolver
+  for `host_vault`, `os_keychain`, `encrypted_vault`,
+  `database_encrypted_vault` or `external_vault`, according to the current ADR
+  and implementation boundary.
 - Application settings per `ADR-0054` are allowlisted typed values. Do not store credentials or duplicate provider accounts in `application_settings`; surface account records from their domain tables in the Settings UI.
 - Mail blob and attachment bytes must stay out of PostgreSQL per `ADR-0046`; store only metadata, hashes and local blob paths in database tables.
 - Extracted attachment metadata must pass through the attachment safety scanner boundary from `ADR-0046`. The no-op scanner records `not_scanned`; do not mark attachments as `clean` without a real scanner backend.
@@ -249,7 +333,7 @@ Rules:
 - Persistent development data lives under `docker/data/`.
 - `docker/data/` contents are local state and must not be committed.
 - `docker/.env` is local-only and must not be committed.
-- `docker/.env.example` may contain non-secret development placeholders only.
+- `docker/.env.example` may contain non-secret development example values only.
 - Use the root `Makefile` as the standard entry point.
 
 First-time setup:
@@ -260,7 +344,14 @@ make docker-env
 
 Review `docker/.env` after it is created.
 
-`docker/.env` must define `HERMES_LOCAL_API_TOKEN` for local event API reads and writes. The value in `docker/.env.example` is a non-secret development placeholder only.
+`docker/.env` must define `HERMES_LOCAL_API_SECRET` for protected local API
+requests. The value in `docker/.env.example` is a non-secret development value
+only.
+
+Host vault configuration is the current credential storage model. Use
+`HERMES_VAULT_HOME` when an explicit host vault path is needed. Use
+`HERMES_SECRET_VAULT_KEY` only for legacy database-vault migration
+compatibility.
 
 Validate Compose configuration:
 

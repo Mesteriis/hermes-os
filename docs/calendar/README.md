@@ -1,35 +1,34 @@
-# Hermes Hub — Calendar Module
+# Hermes Calendar And Events
 
-Calendar — интеллектуальный календарный модуль, который объединяет несколько провайдеров и аккаунтов, связывает события с людьми, организациями, проектами, документами и задачами, готовит пользователя к встречам, отслеживает дедлайны, помогает планировать время и превращает календарь в часть долговременной памяти Hermes Hub.
+Calendar is the scheduled-event channel inside Hermes. Hermes is not a calendar
+app. Calendar data becomes Events, Communications, Decisions, Obligations,
+Tasks, Documents and Relationships in the Personal Memory System.
 
-## Ключевые возможности
+## Key Capabilities
 
-- **Multi-provider** — Google, Microsoft, Apple, CalDAV, ICS, local (схема готова, синхронизация — future)
-- **Multiple accounts per provider** — несколько аккаунтов, несколько календарей в аккаунте
-- **Event as knowledge node** — событие связано с persons, organizations, projects, documents, tasks, emails
-- **Context packs** — автоматический контекст: участники, документы, задачи, риски, agenda
-- **Meeting preparation** — brief, agenda, checklist перед встречей
-- **Event intelligence** — классификация, importance, readiness scoring, risk detection
-- **Meeting outcomes** — decisions, tasks, promises, risks, follow-ups
-- **Deadlines & focus blocks** — слой сроков и фокус-блоков
-- **Watchtower** — события без подготовки, встречи без notes, просроченные follow-ups
-- **Calendar Brain** — natural-language вопросы, поиск по смыслу, weekly brief
-- **Smart scheduling** — эвристический поиск свободных слотов
-- **Calendar rules** — правила автоматизации с approval modes
+- multi-provider account/source model;
+- local and provider-backed scheduled events;
+- event relationships to Personas, Organizations, Projects, Documents, Tasks,
+  Communications, Decisions and Obligations;
+- meeting preparation as context assembly;
+- meeting outcomes as source-backed Decisions, Obligations and Task candidates;
+- deadlines and focus blocks as event/context records;
+- scheduling support under explicit policy.
 
-## Состояние
+## Engine Use
 
-| Метрика | Значение |
-|---|---|
-| Модулей | 9 |
-| Таблиц | 15 |
-| API endpoint'ов | 38 |
-| Миграций | 3 |
-| ADR | 3 |
+Calendar uses shared engines:
 
-## Навигация
+- Timeline Engine for chronological views;
+- Memory Engine for meeting context;
+- Obligation Engine for commitments and follow-ups;
+- Risk Engine for preparation gaps and load risks;
+- Search Engine for recall;
+- Enrichment Engine for candidate links.
+
+## Navigation
 
 - [API Reference](api.md)
-- [Модель данных](data-model.md)
-- [Архитектура](architecture.md)
-- [Статус и блокеры](status.md)
+- [Data Model](data-model.md)
+- [Architecture](architecture.md)
+- [Status and Blockers](status.md)

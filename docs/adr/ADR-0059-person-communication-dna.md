@@ -1,6 +1,10 @@
 # ADR-0059 Person Communication DNA and Personas
 
-Status: Proposed
+Status: Superseded by ADR-0084
+
+Superseded because ADR-0084 makes Persona the root domain entity. Communication
+patterns remain part of Persona Intelligence, but `person_personas` as nested
+interaction contexts is no longer the target domain model.
 
 ## Context
 

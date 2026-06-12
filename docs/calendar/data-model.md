@@ -1,4 +1,8 @@
-# Calendar — Модель данных
+# Calendar/Events — Current Data Model
+
+This file documents current scheduled-event storage. It is not the canonical
+global Timeline model. Timeline, Obligation, Risk, Search and Enrichment are
+shared engines that consume calendar event records together with other sources.
 
 ## Таблицы (15)
 
@@ -14,9 +18,9 @@
 
 | Таблица | Назначение |
 |---|---|
-| `event_participants` | Участники с email, role, response_status, person_id |
-| `event_relations` | Связи с entity_type/entity_id (person, organization, project, document, ...) |
-| `event_context_packs` | Материализованный контекст (docs, tasks, risks, agenda, actions) |
+| `event_participants` | Участники с email, role, response_status и совместимым `person_id`, который должен трактоваться как Persona reference |
+| `event_relations` | Связи с entity_type/entity_id (Persona, Organization, Project, Document, ...) |
+| `event_context_packs` | Материализованный контекст (documents, tasks, risks, agenda, actions) |
 | `event_agendas` | Повестки встреч |
 | `event_checklists` | Чеклисты подготовки |
 
@@ -25,7 +29,7 @@
 | Таблица | Назначение |
 |---|---|
 | `meeting_notes` | Заметки встреч |
-| `meeting_outcomes` | Результаты: decisions, tasks, promises, risks, follow-ups |
+| `meeting_outcomes` | Результаты: decisions, tasks, obligations, risks, follow-ups |
 | `event_recordings` | Записи встреч |
 | `event_transcripts` | Расшифровки |
 

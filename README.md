@@ -1,8 +1,15 @@
 # Hermes Hub
 
-Hermes Hub - персональная локальная платформа коммуникаций, долговременной памяти и управления знаниями.
+Hermes Hub - локальная Personal Memory System для коммуникаций, знаний,
+памяти, отношений, проектов, документов, решений, обязательств и контекста.
 
-Проектируемая система объединяет email, Telegram, WhatsApp, документы, контакты, задачи, календарь, заметки, проекты, AI agents и knowledge graph в единую локальную платформу. Это не почтовый клиент, не мессенджер и не CRM. Центральная идея - долговременная, переносимая память пользователя, построенная на событиях, графе знаний, RAG, vector search и структурированных проекциях, без fine-tuning пользовательских данных.
+Проектируемая система объединяет Communications, Personas, Organizations,
+Projects, Documents, Tasks, Events, Knowledge, Decisions и Obligations в одну
+локальную модель памяти. Hermes не является почтовым клиентом, мессенджером,
+CRM, task tracker, calendar app или note-taking app. Центральная идея -
+долговременная, переносимая память владельца, построенная на событиях, графе
+знаний, RAG, vector search и структурированных проекциях, без fine-tuning
+пользовательских данных.
 
 ## Статус
 
@@ -15,12 +22,13 @@ Hermes Hub - персональная локальная платформа ко
 - ADR по ключевым долгосрочным решениям
 - roadmap до версии 5.0
 - Rust backend foundation с конфигурацией и `GET /healthz`
-- local API secret guard for event API reads and writes
+- router-level local API secret guard for protected local APIs
 - append-only audit log for authorized event API access attempts
 - communication ingestion storage foundation for Gmail, iCloud Mail and generic IMAP
 - secret reference metadata boundary for provider credentials
-- encrypted secret vault and account setup for Gmail, iCloud Mail and generic IMAP
-- read-only Gmail API and IMAP provider networking
+- host vault account setup for Gmail, iCloud Mail and generic IMAP
+- email provider networking with read/write capability boundaries; automated
+  provider tests keep read-only paths where required
 - persistent local mail blob/attachment metadata foundation
 - V1 status API for desktop shell bootstrapping
 - desktop-only SvelteKit/Tauri status and account setup shell
@@ -35,6 +43,13 @@ Hermes Hub - персональная локальная платформа ко
 ## Open Source
 
 Hermes Hub is published as an open source repository under the MIT License.
+
+Documentation portal:
+
+- [Hermes Hub Documentation](https://mesteriis.github.io/hermes-os/) - styled
+  GitHub Pages entrypoint for the canonical documentation model.
+- [Repository Documentation Index](docs/README.md) - source documentation in
+  the repository.
 
 Before contributing:
 
@@ -63,6 +78,9 @@ Before contributing:
 
 ## Структура
 
+- [docs/foundation](docs/foundation) - каноническая модель, glossary, engines и domain map.
+- [docs/site](docs/site) - GitHub Pages documentation portal styled with the
+  Hermes shell design language.
 - [docs/vision](docs/vision) - долгосрочное видение.
 - [docs/product](docs/product) - charter, scope и продуктовые границы.
 - [docs/architecture](docs/architecture) - системная архитектура и ключевые технические модели.
@@ -164,13 +182,18 @@ make backend-email-fixture-import-dev
 
 По умолчанию команда читает `tmp/email-fixtures/icloud-inbox-redacted.json`, создает локальный fixture account `dev-icloud-fixture`, импортирует raw records и оставляет PostgreSQL запущенным.
 
-Прогнать fixture до сообщений, контактов и graph projection:
+Прогнать fixture до сообщений, Persona-compatible identity projection и graph projection:
 
 ```sh
 make backend-email-fixture-project-dev
 ```
 
-Команда выполняет import, canonical message projection, contact projection, rebuild graph projection и печатает JSON summary. Путь fixture и account metadata можно переопределить через `HERMES_EMAIL_FIXTURE_PATH`, `HERMES_EMAIL_FIXTURE_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_DISPLAY_NAME`, `HERMES_EMAIL_FIXTURE_EXTERNAL_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_IMPORT_BATCH_ID`, `HERMES_EMAIL_FIXTURE_PROVIDER`.
+Команда выполняет import, canonical message projection, compatibility identity
+projection, rebuild graph projection и печатает JSON summary. Путь fixture и
+account metadata можно переопределить через `HERMES_EMAIL_FIXTURE_PATH`,
+`HERMES_EMAIL_FIXTURE_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_DISPLAY_NAME`,
+`HERMES_EMAIL_FIXTURE_EXTERNAL_ACCOUNT_ID`,
+`HERMES_EMAIL_FIXTURE_IMPORT_BATCH_ID`, `HERMES_EMAIL_FIXTURE_PROVIDER`.
 
 Скачать iCloud/raw IMAP почту в persistent dev cache без mailbox-мутаций:
 
@@ -182,7 +205,11 @@ HERMES_EMAIL_SYNC_MAX_MESSAGES=25 \
 make backend-email-sync-cache-dev
 ```
 
-Команда использует read-only IMAP, сохраняет raw `.eml` blobs под `docker/data/mail/`, кладет в PostgreSQL только metadata/blob references, проецирует canonical messages и contacts. Повторный запуск использует checkpoint, а `make dev` после этого работает с уже скачанными локальными данными.
+Команда использует read-only IMAP, сохраняет raw `.eml` blobs под
+`docker/data/mail/`, кладет в PostgreSQL только metadata/blob references,
+проецирует canonical messages и Persona-compatible identity records. Повторный
+запуск использует checkpoint, а `make dev` после этого работает с уже
+скачанными локальными данными.
 
 `/api/v1/events` и `/api/v1/audit/events` требуют локальный API secret header:
 
@@ -197,7 +224,7 @@ GET /api/v1/status
 X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
 ```
 
-Read-only Communications API for the desktop shell uses the same local API secret and secret header:
+Communication message read endpoints for the desktop shell use the same local API secret and secret header:
 
 ```sh
 GET /api/v1/communications/messages?limit=50
@@ -222,7 +249,10 @@ X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>
 
 AI task extraction writes only `suggested` task candidates. Existing review APIs remain the only path to active tasks.
 
-Account setup endpoints additionally require `HERMES_SECRET_VAULT_KEY`; encrypted credential payloads are stored in PostgreSQL and the vault key must stay outside the database.
+Account setup endpoints require the host vault to be initialized and unlocked.
+New credential payloads are stored in the host vault; PostgreSQL stores
+non-secret account metadata, secret references and account-to-secret bindings.
+`HERMES_SECRET_VAULT_KEY` remains a legacy migration compatibility variable only.
 
 Frontend/Tauri shell commands:
 
@@ -293,6 +323,13 @@ make compose-config
 
 ## Главные документы
 
+- [Documentation Index](docs/README.md)
+- [Product Master Spec](docs/product/master-spec.md)
+- [Product Development Roadmap](docs/product/development-roadmap.md)
+- [Foundation Vision](docs/foundation/vision.md)
+- [Foundation Glossary](docs/foundation/glossary.md)
+- [World Model](docs/foundation/world-model.md)
+- [Engines](docs/foundation/engines.md)
 - [Vision Document](docs/vision/vision-document.md)
 - [Product Charter](docs/product/product-charter.md)
 - [Product Scope](docs/product/product-scope.md)

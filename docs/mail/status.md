@@ -1,4 +1,11 @@
-# Hermes Mail — Статус реализации по спецификации
+# Email Channel — Implementation Status
+
+Этот файл описывает текущую email-channel реализацию. Канонический домен —
+Communications; Email is a channel/source boundary, not the product identity.
+
+The percentages below describe email-channel coverage only. They are not product
+completion scores for Communications, Memory, Knowledge, Obligations,
+Decisions or Polygraph.
 
 Спецификация: 36 разделов. Статус на 2026-06-07.
 
@@ -24,8 +31,8 @@
 | 14 | Compose, AI Reply | ◐ | 80 |
 | 15 | Шаблоны писем | ◐ | 70 |
 | 16 | Доставка и Outbox | ✗ | 0 |
-| 17 | Follow-Up Engine | ✗ | 0 |
-| 18 | Контакты и identity | ✓ | 100 |
+| 17 | Obligation/Follow-Up engine integration | ✗ | 0 |
+| 18 | Persona identity traces | ✓ | 100 |
 | 19 | Проекты и привязка писем | ✓ | 100 |
 | 20 | Задачи из писем | ✓ | 100 |
 | 21 | Заметки и knowledge | ✓ | 100 |
@@ -33,7 +40,7 @@
 | 23 | Поиск | ✓ | 100 |
 | 24 | Треды | ✓ | 100 |
 | 25 | Исходящие и черновики | ✓ | 100 |
-| 26 | Email analytics | ✓ | 100 |
+| 26 | Email attention analytics | ✓ | 100 |
 | 27 | Подписки и рассылки | ✓ | 100 |
 | 28 | Интеграции из почты | ✗ | 0 |
 | 29 | Массовые действия | ✗ | 0 |

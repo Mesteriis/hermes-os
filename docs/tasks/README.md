@@ -1,32 +1,39 @@
-# Hermes Hub — Tasks Module
+# Hermes Tasks
 
-Tasks — интеллектуальный модуль задач, объединяющий локальные задачи и внешние task trackers, извлекающий задачи из коммуникаций и документов, связывающий их с людьми, организациями, проектами, письмами и встречами.
+Tasks are actionable units inside the Personal Memory System. Hermes is not a
+task tracker. External trackers can be providers, but Hermes keeps local
+context, evidence and relationships under owner control.
 
-## Ключевые возможности
+## Domain Boundary
 
-- **Multi-provider** — Jira, YouTrack, GitHub Issues, GitLab, Linear, Todoist, Apple Reminders, MS To Do, Local
-- **Local overlay** — AI summary, private notes, context, risks поверх внешних задач
-- **Context Pack** — автоматический контекст: source, contacts, orgs, emails, docs, blockers, risks, next action
-- **Task Evidence** — provenance для AI-извлечённых задач
-- **Intelligence** — priority, risk, readiness scoring, missing context detection, next action
-- **Task Brain** — объяснение задачи, поиск, daily brief
-- **Watchtower** — overdue, stale, waiting too long, without context
-- **Templates** — bug, feature, research, contract review, AEAT response, client follow-up, invoice review, code review
-- **Rules** — автоматизация с approval modes
+A Task:
 
-## Состояние
+- has a lifecycle;
+- has an owner/status;
+- has source evidence or explicit manual provenance;
+- can link to Personas, Organizations, Projects, Documents, Communications,
+  Events, Decisions and Obligations.
 
-| Метрика | Значение |
-|---|---|
-| Модулей | 7 |
-| Таблиц | 12 |
-| API endpoint'ов | 25 |
-| Миграций | 4 |
-| ADR | 3 |
+A Task is not:
 
-## Навигация
+- every Obligation;
+- every Follow-Up;
+- a Project;
+- an external issue copy without local context.
+
+## Engine Use
+
+- Obligation Engine creates obligation and task candidates from evidence.
+- Risk Engine identifies blockers and attention signals.
+- Search Engine finds task context.
+- Timeline Engine shows task history.
+- Memory Engine assembles task context packs.
+
+## Current Implementation Surface
+
+Implementation details, route counts and status live in:
 
 - [API Reference](api.md)
-- [Модель данных](data-model.md)
-- [Архитектура](architecture.md)
-- [Статус](status.md)
+- [Data Model](data-model.md)
+- [Architecture](architecture.md)
+- [Status](status.md)

@@ -1,13 +1,18 @@
-# Hermes Mail — API Reference
+# Email Channel — API Reference
+
+This file documents current email-channel compatibility routes under the
+Communications domain. Hermes is not an email client; email messages are source
+communications and evidence for Personas, Organizations, Projects, Documents,
+Tasks, Decisions and Obligations.
 
 Base: `/api/v1/communications/`
 
-## Сообщения
+## Communication Messages
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/messages` | Список писем (?account_id, ?workflow_state, ?channel_kind, ?limit) |
-| GET | `/messages/{id}` | Детали письма с вложениями |
+| GET | `/messages` | Список email-backed Communication messages (?account_id, ?workflow_state, ?channel_kind, ?limit) |
+| GET | `/messages/{id}` | Details for an email-backed Communication message with attachments |
 | PUT | `/messages/{id}/workflow-state` | Изменить workflow-состояние |
 | GET | `/messages/states` | Счётчики по состояниям |
 | POST | `/messages/{id}/analyze` | Запустить AI-анализ (эвристики) |
@@ -18,7 +23,7 @@ Base: `/api/v1/communications/`
 | POST | `/messages/{id}/mute` | Переключить mute |
 | POST | `/messages/{id}/labels` | Добавить метку |
 | DELETE | `/messages/{id}/labels` | Удалить метку |
-| GET | `/messages/{id}/export?format=md\|eml\|json` | Экспорт письма |
+| GET | `/messages/{id}/export?format=md\|eml\|json` | Export source message |
 
 ## Отправка
 
@@ -90,7 +95,7 @@ Base: `/api/v1/communications/`
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/analytics/health` | Здоровье ящика |
+| GET | `/analytics/health` | Compatibility route for mailbox attention analytics |
 | GET | `/analytics/senders` | Топ отправителей |
 
 ## Подписки

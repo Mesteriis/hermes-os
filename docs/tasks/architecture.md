@@ -1,25 +1,39 @@
-# Tasks — Архитектура
+# Tasks Architecture
 
-## Модули
+## Position
 
-| Модуль | Назначение |
+The Tasks domain owns actionable work-item lifecycle and evidence links. It uses
+shared engines for priority, readiness, risk, context and obligation extraction.
+
+## Modules
+
+Paths below refer to `backend/src/domains/tasks/`.
+
+| Module | Responsibility |
 |---|---|
-| `tasks.rs` | Ядро: Task + CRUD + status transitions |
-| `task_core.rs` | Providers, external identities, context pack, evidence, relations, checklists, subtasks |
-| `task_intelligence.rs` | Priority, risk, readiness scoring, missing context, next action |
-| `task_brain.rs` | Explain task, search, daily brief |
-| `task_health.rs` | Overdue, stale, waiting too long, without context, cycle time, workload |
-| `task_rules.rs` | Rules + templates |
-| `task_sync.rs` | Markdown/JSON export |
+| `core.rs` | Task core, providers, external identities, evidence, relations, checklists, subtasks and status transitions |
+| `candidates.rs` | task candidates created from Communications, Documents, Events or engines |
+| `intelligence.rs` | engine-facing priority/readiness helpers |
+| `brain.rs` | context answers over Search/Memory engines |
+| `health.rs` | Risk Engine/attention views for stale or blocked work |
+| `rules.rs` | rules and templates |
+| `sync.rs` | export/import helpers |
+| `api.rs` | current route handlers and DTO-facing compatibility surface |
 
-## Слои
+## Layers
 
+```text
+API
+  -> Task domain services
+  -> shared engines for context, risk, obligations and search
+  -> stores
+  -> PostgreSQL
 ```
-API (lib.rs handlers)
-  ↓
-Domain services (task_intelligence, task_brain, task_health)
-  ↓
-Stores (PgPool-backed)
-  ↓
-PostgreSQL (12+ tables)
-```
+
+## Domain Rules
+
+- AI and engine extraction produce candidates.
+- Low-confidence candidates require review.
+- Confirmed candidates can become Tasks.
+- Obligations remain separate commitments even when they generate Tasks.
+- Status changes and destructive operations must be auditable.

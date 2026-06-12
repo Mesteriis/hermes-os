@@ -1,6 +1,10 @@
 # Tasks — API Reference
 
-Base: `/api/v2`
+This file documents current compatibility routes. Canonical Task, Obligation
+and Follow-Up definitions are maintained in `../foundation/glossary.md`; health
+and watchtower routes are read-model names, not separate domains.
+
+Base: `/api/v1`
 
 ## Core
 
@@ -29,7 +33,7 @@ Base: `/api/v2`
 |---|---|
 | POST | `/tasks/{id}/analyze` |
 
-## Brain & Search
+## Context Explanation & Search
 
 | Метод | Путь |
 |---|---|
@@ -52,7 +56,7 @@ Base: `/api/v2`
 | DELETE | `/tasks/rules/{id}` |
 | GET | `/tasks/templates` |
 
-## Health & Analytics
+## Risk, Attention & Analytics
 
 | Метод | Путь |
 |---|---|

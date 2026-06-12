@@ -1,79 +1,74 @@
-# Communication Architecture
+# Communications Architecture
+
+Canonical domain definition: [Communications Domain](communications.md).
+
+This document describes architecture concerns for the Communications domain.
 
 ## Purpose
 
-Communications unify email, Telegram, WhatsApp and optional SMS into a single event-backed memory model. Provider-specific behavior is preserved, but user workflows operate over canonical messages, threads, persons and events.
+Communications unify email, Telegram, WhatsApp, calls and meetings as one
+canonical interaction model. Provider-specific behavior is preserved at adapter
+and source-record boundaries, but user workflows operate over Communications,
+Participants, Conversations, Events, Personas and Context.
+
+Hermes is not an email client or messenger. Communication surfaces are entry
+points into the Personal Memory System.
 
 ## Channel Adapters
 
 Adapters are responsible for:
 
-- authentication through the secret boundary
-- provider sync
-- raw source preservation
-- idempotency
-- pagination and checkpoints
-- attachment ingestion
-- delivery/send capabilities where supported
-- rate limit handling
+- authentication through the secret boundary;
+- provider sync;
+- raw source preservation;
+- idempotency;
+- pagination and checkpoints;
+- attachment ingestion;
+- delivery/send capabilities where supported;
+- rate limit handling.
 
-## Initial Email Providers
+## Provider Accounts
 
-Initial email ingestion must support three provider kinds:
+Initial email ingestion supports:
 
 - `gmail` - Gmail API with OAuth and Gmail history checkpoints.
 - `icloud` - iCloud Mail over IMAP with app-specific credentials and mailbox UID checkpoints.
 - `imap` - generic raw IMAP with host/port/TLS metadata and mailbox UID checkpoints.
 
-Provider account records store non-secret metadata and adapter configuration only. Credentials and tokens belong behind the secret boundary and are linked through secret references.
-
-The account model supports multiple records for the same provider kind, for example several Gmail or iCloud accounts. Adapter credential lookup is account-scoped through `ProviderCredentialReader`: resolve the provider account by `account_id`, load the binding for the required secret purpose, validate that the secret kind matches the purpose, then resolve that `secret_ref` through the secret boundary.
-
-Read-only email sync starts with a provider preflight plan before any network adapter runs. The plan selects the account-scoped credential purpose, validates non-secret adapter config, recursively rejects secret-like config keys, and derives delimiter-safe provider stream IDs such as `gmail:history` and `imap:INBOX`. This keeps Gmail OAuth and IMAP mailbox quirks at the adapter boundary instead of leaking into projections or API handlers.
-
-Provider networking is read-only. Gmail uses OAuth Bearer tokens with the Gmail API `messages.list` and `messages.get?format=raw` flow. iCloud and generic IMAP use app password/password credentials with `EXAMINE`, `UID SEARCH` and `UID FETCH`; adapters must not mutate flags, delete messages or write mailboxes. Both paths emit `EmailSyncBatch` records for raw storage and checkpoint persistence.
-
-Account setup is local API driven. Gmail setup starts an OAuth authorization-code-with-PKCE grant, stores the resulting token bundle as ciphertext in the database encrypted vault, and refreshes access tokens from that vault. iCloud and generic IMAP setup store app-password/password values as ciphertext in the database encrypted vault. Provider account rows and secret reference rows contain only metadata and bindings.
-
-Raw provider records are append-only and idempotent by provider account, record kind and provider record ID. They preserve provider payload and provenance before canonical message projections are built.
+Telegram, WhatsApp and future providers follow the same principle: provider
+accounts store non-secret metadata and adapter configuration only. Credentials
+belong behind the secret boundary and are linked through secret references.
 
 ## Canonical Objects
 
-- ChannelAccount
-- Conversation
-- Message
-- Participant
-- Attachment
-- DeliveryState
-- ThreadLink
-- CommunicationEvent
+- ChannelAccount.
+- Conversation.
+- Communication.
+- Message.
+- Participant.
+- Attachment.
+- DeliveryState.
+- ThreadLink.
+- CommunicationEvent.
 
-## Spam Intelligence
+## Engine Use
 
-The classification model includes:
+Communications use engines rather than owning separate intelligence systems:
 
-- SPF
-- DKIM
-- DMARC
-- AI spam detection
-- AI marketing detection
-- sender reputation
-- personal relevance scoring
-
-Target categories:
-
-- Critical
-- Important
-- Personal
-- Work
-- Information
-- Marketing
-- Spam
+- Search Engine for retrieval.
+- Memory Engine for communication memory.
+- Timeline Engine for interaction history.
+- Obligation Engine for commitments and follow-ups.
+- Risk Engine for spam, phishing and attention signals.
+- Enrichment Engine for candidate links and entity extraction.
 
 ## Outbound Messages
 
-Drafting and sending are separate. AI can draft a response, but sending requires explicit user confirmation unless the user later defines a narrowly scoped automation policy.
+Drafting and sending are separate. AI can draft a response, but sending requires
+explicit owner confirmation unless the owner later defines a narrowly scoped
+automation policy.
 
 ## Threading
 
-Threading must support provider-native threads and cross-provider conversation grouping. Cross-provider grouping is graph-backed and confidence-scored.
+Threading must support provider-native threads and cross-provider conversation
+grouping. Cross-provider grouping is graph-backed and confidence-scored.

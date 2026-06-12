@@ -1,38 +1,168 @@
-# Hermes Hub — Persons Module
+# Hermes Hub — Persona Intelligence
 
-Relationship Intelligence System. Persons — это не адресная книга, а долговременная память о людях и отношениях.
+`persons` is the domain that lets Hermes understand people, remember relationships
+and build context.
 
-## Ключевые возможности
+Hermes no longer treats people as contacts. A Persona is not an address-book
+entry, CRM lead or contact card. A Persona is a durable memory anchor for a
+subject in the local knowledge graph.
 
-- **Multi-Channel Identity** — один человек, много каналов (email, Telegram, GitHub, LinkedIn...)
-- **Identity Resolution** — склейка дублей, merge/split с confidence-скорингом
-- **Person Memory** — факты, карточки памяти, предпочтения с source/confidence
-- **Relationship Timeline** — история отношений, события, milestones
-- **Communication DNA** — стиль общения, язык, тон, verbosity, паттерны ответов
-- **Enrichment Engine** — обогащение из GitHub, LinkedIn, публичного веба
-- **Expertise & Skills** — поиск людей по навыкам и доменам
-- **Trust & Reliability** — обещания, риски, trust score
-- **Relationship Health** — мониторинг активности, watchlist, health status
-- **Person Investigator** — AI-ассистент: досье, подготовка к встречам
-- **Analytics & Export** — relationship score, heatmap, интеллектуальный score, Markdown/JSON export
+```text
+Understand people.
+Remember relationships.
+Build context.
+```
 
-## Состояние
+## Domain Vision
 
-| Метрика | Значение |
-|---|---|
-| Модулей | 13 |
-| Таблиц | 14 |
-| API endpoint'ов | 35 |
-| Миграций | 4 |
-| ADR | 5 |
-| Строк кода | ~4000 |
-| Реализовано разделов спеки | 63 из 83 |
-| Не в scope persons | 8 |
-| Deferred | 12 |
+Hermes is a Personal Memory System. The persons domain provides the Persona
+Intelligence layer for that system:
 
-## Навигация
+- **Identity**: digital traces that can point to the same subject.
+- **Relationships**: explicit edges between Personas with provenance, trust and
+  strength.
+- **Communication**: observed channels, patterns and interaction context.
+- **Memory**: facts, preferences, knowledge and durable notes worth remembering.
+- **Timeline view**: Timeline Engine output that explains how relationships
+  evolved.
+- **Context**: projects, organizations, documents, messages and tasks connected
+  through the graph.
+- **Dossier**: a generated read model built from trusted memory and
+  cited evidence.
 
-- [API Reference](api.md) — все 35 endpoint
-- [Статус реализации](status.md) — детальный статус по разделам спеки
-- [Модель данных](data-model.md) — 14 таблиц со схемой
-- [Архитектура](architecture.md) — модули и потоки данных
+The domain is not:
+
+- CRM
+- Address book
+- Contact manager
+- Sales pipeline
+- Social network profile store
+
+## Core Model
+
+```yaml
+Persona:
+  id:
+  is_self:
+  persona_type:
+
+  identity:
+  communication:
+  memory:
+  timeline_view:
+  relationships:
+  dossier_read_model:
+```
+
+`Persona.id` is the logical identity of the subject inside Hermes. Current
+backend tables may still use `person_id` and `/persons` compatibility APIs until
+an implementation migration is designed, but new domain language must use
+Persona.
+
+## Persona Types
+
+```yaml
+PersonaType:
+  human
+  ai_agent
+  organization_proxy
+  system
+```
+
+`human` represents a person. `ai_agent` allows HESTIA and future agents to exist
+inside the graph. `organization_proxy` represents an organization-like subject
+when it participates as an actor in relationship memory; it does not replace the
+organizations domain. `system` represents local system actors that need explicit
+provenance in the graph.
+
+## Self Persona
+
+There is exactly one owner Persona:
+
+```yaml
+Persona:
+  is_self: true
+```
+
+Hermes does not need a separate `UserProfile` or Self domain. Agents, UI actions,
+capability checks and generated observations must be attributable to the Owner
+Persona when they act for the system owner.
+
+## Relationship First
+
+Relationships are first-class records. They must not be hidden as fields on a
+Persona.
+
+```yaml
+Relationship:
+  source_persona:
+  target_persona:
+  type:
+  trust_score:
+  strength_score:
+```
+
+A relationship can connect the Owner Persona to another human, an AI agent to the
+Owner Persona, two humans, a human to an organization proxy, or any future
+Persona type that is allowed by policy.
+
+## Memory First
+
+Each Persona must have structured memory:
+
+```yaml
+PersonaMemory:
+  facts:
+  knowledge:
+  preferences:
+  memory_cards:
+  conflicts:
+```
+
+Memory is evidence-backed. AI output may suggest facts or observations, but it is
+not source of truth unless it is stored as a reviewed, cited memory record.
+
+## Dossier
+
+Each Persona can have an automatically assembled dossier:
+
+```yaml
+Dossier:
+  summary:
+  interests:
+  projects:
+  organizations:
+  skills:
+  communication_patterns:
+  ai_observations:
+```
+
+The dossier is a read model. It is generated from identity, relationships,
+communication history, memory, Timeline Engine output and graph context. It must
+cite the records it uses.
+
+## Persona Intelligence
+
+The previous vocabulary of `fingerprint`, `communication profile`, `trust`,
+`analytics` and `investigator` is consolidated under Persona Intelligence.
+
+Persona Intelligence includes:
+
+- communication pattern extraction;
+- relationship strength and trust signals;
+- memory gap detection;
+- identity resolution over digital traces;
+- dossier assembly;
+- meeting and conversation preparation;
+- AI observations with provenance and confidence.
+
+## Navigation
+
+- [Refactoring Report](refactoring-report.md) — audit of the old Contact/CRM
+  model and required domain changes.
+- [Architecture](architecture.md) — target Persona Intelligence architecture.
+- [Data Model](data-model.md) — logical model and current persistence
+  compatibility notes.
+- [API Reference](api.md) — target API shape and legacy endpoint caveats.
+- [Status](status.md) — documentation and implementation migration status.
+- [Blockers](blockers.md) — architecture blockers for the Persona model.

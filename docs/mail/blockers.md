@@ -1,7 +1,11 @@
-# Hermes Mail — Архитектурные блокеры
+# Email Channel — Architectural Blockers
 
 Явно задокументированные блокеры с причинами и планом решения.
 API: `GET /api/v1/communications/blockers`
+
+These blockers apply to the current email-channel implementation. Cross-channel
+Communications, Obligations, Decisions and Polygraph work is tracked in
+`../refactoring/implementation-alignment-plan.md`.
 
 ## 1. §8 — Безопасность вложений (sandbox, антивирус)
 

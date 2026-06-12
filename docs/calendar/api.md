@@ -1,4 +1,9 @@
-# Calendar — API Reference
+# Calendar/Events — API Reference
+
+This file documents current compatibility routes for scheduled events. The
+canonical model is `Event` plus shared engines such as Timeline, Obligation,
+Risk and Search; route names such as `follow-up`, `health` and `watchtower`
+are compatibility names, not separate domain concepts.
 
 Base: `/api/v1/calendar`
 
@@ -71,7 +76,7 @@ Base: `/api/v1/calendar`
 | GET, POST | `/focus-blocks` |
 | POST | `/smart-schedule` |
 
-## Health & Analytics
+## Risk, Attention & Analytics
 
 | Метод | Путь |
 |---|---|
@@ -80,7 +85,7 @@ Base: `/api/v1/calendar`
 | GET | `/weekly-brief` |
 | GET | `/analytics` |
 
-## Brain & Search
+## Context Explanation & Search
 
 | Метод | Путь |
 |---|---|

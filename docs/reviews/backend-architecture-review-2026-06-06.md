@@ -1,6 +1,12 @@
 # Backend Architecture Review - 2026-06-06
 
-Status: Review updated
+Status: Historical review.
+
+This review captures backend architecture observations from 2026-06-06. It is
+useful for traceability, but it is not the current implementation map. Current
+product/domain alignment lives in
+`../refactoring/implementation-alignment-plan.md`; current architecture
+principles live in `../foundation/` and `../architecture/`.
 
 ## Scope
 
@@ -480,6 +486,10 @@ Validation:
 - add regression tests for invalid and out-of-range `limit` when gaps exist.
 
 ### PR 4 - Extract `routes/settings.rs`
+
+Historical note: the route paths and auth extraction language below reflect the
+2026-06-06 review state. Current implementation and docs use `/api/v1/settings`
+and ADR-0056 router-level `X-Hermes-Secret` auth.
 
 Goal: prove the route-module pattern on a small, cohesive API surface.
 

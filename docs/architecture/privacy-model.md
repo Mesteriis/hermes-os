@@ -13,8 +13,8 @@
 | Class | Examples | Default handling |
 | --- | --- | --- |
 | Raw source data | provider message, attachment, imported file | preserve with provenance |
-| Canonical entities | Person, Project, Task, Document | local relational storage |
-| Derived data | summaries, extracted entities, embeddings | local and rebuildable where possible |
+| Canonical entities | Persona, Organization, Project, Task, Document, Decision, Obligation | local relational storage |
+| Derived data | summaries, extracted entities, embeddings, contradiction observations | local and rebuildable where possible |
 | Sensitive data | secrets, tokens, credentials | encrypted secret store |
 | Audit data | tool calls, permission events | local append-only audit trail |
 
@@ -25,6 +25,8 @@
 - Remote model use, if added, must be opt-in per workflow or policy.
 - Prompts to external services must be logged as privacy-relevant events without storing secrets.
 - Summaries must link to sources and confidence.
+- Contradiction observations must link to old and new sources and must not
+  silently overwrite accepted memory.
 
 ## Deletion Model
 
@@ -45,9 +47,11 @@ The user must be able to export:
 
 - raw imported records where legal and technically possible
 - normalized messages
-- persons
+- Personas
+- Organizations
 - documents
 - tasks
+- Decisions and Obligations
 - graph edges
 - event history
 

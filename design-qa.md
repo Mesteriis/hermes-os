@@ -1,3 +1,10 @@
+Historical UI QA Note
+
+This file records a past desktop UI stabilization pass. Labels such as
+`Contacts` describe the UI state captured during that QA run and are not
+canonical product terminology. Current domain documentation uses Persona /
+Persona identity language.
+
 **Findings**
 - No actionable P0/P1/P2 findings remain after the sidebar tab implementation pass.
 - No actionable P0/P1/P2 findings remain after the interface stabilization pass.
