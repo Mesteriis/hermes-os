@@ -111,8 +111,8 @@ Negative:
 - Existing meeting outcomes and review decision tables remain compatibility or
   source surfaces until adapters are added.
 - Desktop UI and candidate-to-Decision review flow are still follow-up work.
-- Decision extraction from Communications, Documents and Meetings is outside
-  the first persistence slice.
+- Provider-wide Decision extraction from Communications, Documents and Meetings
+  is outside the first persistence slice.
 
 ## Non-Goals
 
@@ -128,7 +128,8 @@ Negative:
 - Connect meeting, communication and document extraction to Decision
   candidates.
 - Add adapters from meeting outcomes and project review decisions.
-- Project accepted Decisions into graph, timeline and dossier views.
+- Expand accepted Decision graph projection and project reviewed Decisions into
+  timeline and dossier views.
 - Feed conflicting Decisions into the Consistency / Contradiction Engine.
 
 ## Implementation Status
@@ -140,3 +141,14 @@ The backend now has guarded accepted-Decision list/review routes:
 
 These routes update accepted Decision review state only. They do not create
 Tasks, Projects, Obligations, accepted Decisions from candidates, or desktop UI.
+
+`backend/src/engines/decision.rs` adds a deterministic candidate detector for
+explicit Communication and Document evidence, for example
+`Decision: Use local-first storage because private context must work offline`.
+The detector produces reviewable Decision drafts and evidence references; it
+does not persist accepted Decisions or mutate Projects, Tasks or Obligations.
+
+Migration `0065` and `DecisionStore` project accepted Decisions into graph for
+supported impacted entity kinds. The projection creates `decision` graph nodes,
+source-backed `entity_relationship` edges and `decision` graph evidence while
+preserving the Decision domain as the source of truth.

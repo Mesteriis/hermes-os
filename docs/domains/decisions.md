@@ -63,12 +63,21 @@ Current backend baseline:
 - `backend/migrations/0064_create_decisions.sql`;
 - `backend/src/domains/decisions/mod.rs`;
 - `backend/src/domains/decisions/api.rs`;
+- `backend/src/engines/decision.rs`;
+- `backend/migrations/0065_decision_graph_projection.sql`;
 - `backend/tests/decisions.rs`;
 - `backend/tests/decisions_api.rs`;
+- `backend/tests/decision_engine.rs`;
 - ADR-0089.
 
 This baseline provides source-backed Decision persistence with evidence,
 rationale, alternatives, review state, confidence and impacted entities. It
+also includes a deterministic Decision candidate detector for explicit
+Communication and Document evidence such as `Decision: ... because ...`. The
+candidate detector can produce a `NewDecision` draft, source evidence and
+impacted entity links, but it does not persist accepted Decisions by itself. It
+projects accepted Decisions into the graph for supported impacted entity kinds,
+using `decision` graph nodes and source-backed `entity_relationship` edges. It
 explicitly does not auto-create Tasks, Projects or Obligations.
 
 Backend routes currently expose:
@@ -81,15 +90,17 @@ review state changes. They do not create Tasks, Projects or Obligations and do
 not convert meeting outcomes or project review decisions into accepted
 Decisions.
 
-Decisions still also appear indirectly through graph links, project context,
-documents, communications and meeting outcomes. Those are source or
-compatibility surfaces until adapters are added.
+Decisions still also appear indirectly through project context, documents,
+communications and meeting outcomes. Those are source or compatibility surfaces
+until adapters are added.
 
 ## Migration Plan
 
 1. Keep ADR-0089 as the persistence boundary.
 2. Keep decision capture candidate-first.
-3. Define decision candidates before automatic decision capture.
-4. Require evidence citations and review state.
-5. Link Decisions to Projects, Communications, Documents, Events, Personas,
-   Organizations, Tasks and Obligations through the graph.
+3. Wire Communication, Document and Meeting ingestion to the deterministic
+   candidate detector.
+4. Add candidate-to-Decision review before any automatic decision capture.
+5. Require evidence citations and review state.
+6. Expand graph projection beyond the current supported impacted entity kinds.
+7. Project reviewed Decisions into timeline and dossier views.

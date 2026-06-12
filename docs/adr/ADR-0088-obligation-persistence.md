@@ -127,7 +127,8 @@ Negative:
 - Connect Communication, meeting and document extraction to obligation
   candidates.
 - Add adapters from person promises and meeting outcomes.
-- Link accepted obligations to tasks and events when reviewed.
+- Expand accepted Obligation graph projection and link reviewed Obligations to
+  tasks and events when reviewed.
 - Feed obligation conflicts into the Consistency / Contradiction Engine.
 
 ## Implementation Status
@@ -139,3 +140,9 @@ The backend now has guarded accepted-Obligation list/review routes:
 
 These routes update accepted Obligation review state only. They do not create
 Tasks, create accepted Obligations from candidates, or provide desktop UI.
+
+Migration `0066` and `ObligationStore` project accepted Obligations into graph
+for supported obligated and beneficiary entity kinds. The projection creates
+`obligation` graph nodes, source-backed `entity_relationship` edges and
+`obligation` graph evidence while preserving the Obligation domain as the
+source of truth.

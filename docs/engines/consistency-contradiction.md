@@ -94,15 +94,21 @@ Current backend baseline:
 - ADR-0087.
 
 This baseline provides structured direct-contradiction detection and
-reviewable `ContradictionObservation` persistence. Guarded backend routes can
-list open contradiction observations and update review state without
-automatically overwriting Memory. It does not yet provide desktop review UI or
-upstream claim extraction from Communications and Documents.
+reviewable `ContradictionObservation` persistence. It also provides a
+deterministic baseline that extracts simple structured claim lines from
+Communication and Document evidence, for example `status: blocked` or
+`location=Madrid`, and feeds those claims into the contradiction detector.
+Guarded backend routes can list open contradiction observations and update
+review state without automatically overwriting Memory. It does not yet provide
+desktop review UI, provider-wide ingestion wiring or natural-language claim
+extraction from Communications and Documents.
 
 ## Migration Plan
 
 1. Keep this spec as the source for Polygraph terminology.
 2. Keep reviewable contradiction observations, not automatic memory rewrites.
-3. Connect Communication and Document extraction to structured claims.
-4. Add desktop review UI for owner review.
-5. Feed reviewed outcomes into Memory, Trust, Risk and Relationship semantics.
+3. Connect provider-wide Communication and Document ingestion to the structured
+   claim extraction baseline.
+4. Add natural-language claim extraction behind explicit review policy.
+5. Add desktop review UI for owner review.
+6. Feed reviewed outcomes into Memory, Trust, Risk and Relationship semantics.

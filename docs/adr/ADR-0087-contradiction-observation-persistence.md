@@ -107,8 +107,8 @@ Negative:
 
 - The first detector only handles structured direct contradictions.
 - Desktop review UI is still separate follow-up work.
-- Upstream claim extraction from Communications and Documents remains outside
-  this first slice.
+- Provider-wide ingestion and natural-language claim extraction from
+  Communications and Documents remain outside this first slice.
 
 ## Non-Goals
 
@@ -129,8 +129,15 @@ observations and changing review state:
 These routes record API audit events and do not automatically overwrite Memory,
 Trust, Risk or Relationship state.
 
+`backend/src/engines/consistency.rs` also includes a deterministic extraction
+baseline for simple structured Communication and Document evidence lines such
+as `status: blocked` or `location=Madrid`. This converts evidence text into
+`NewEvidenceClaim` values and reuses the same direct-contradiction detector.
+
 ## Required Follow-Up
 
 - Add desktop review UI for contradiction observations.
-- Connect Communication and Document extraction to structured claims.
+- Connect provider-wide Communication and Document ingestion to structured
+  claim extraction.
+- Add natural-language claim extraction behind explicit review policy.
 - Link reviewed outcomes to Memory, Trust, Risk and Relationship semantics.

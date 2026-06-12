@@ -65,6 +65,7 @@ Obligation:
 Current backend baseline:
 
 - `backend/migrations/0063_create_obligations.sql`;
+- `backend/migrations/0066_obligation_graph_projection.sql`;
 - `backend/src/domains/obligations/mod.rs`;
 - `backend/src/domains/obligations/api.rs`;
 - `backend/tests/obligations.rs`;
@@ -73,7 +74,10 @@ Current backend baseline:
 
 This baseline provides source-backed Obligation persistence with evidence,
 status, review state, risk state, confidence, due date or condition and optional
-Task links. It explicitly does not auto-create Tasks.
+Task links. It also projects accepted Obligations into the graph for supported
+obligated and beneficiary entity kinds, using `obligation` graph nodes and
+source-backed `entity_relationship` edges. It explicitly does not auto-create
+Tasks.
 
 Backend routes currently expose:
 
@@ -97,7 +101,8 @@ Related behavior still exists through:
 1. Keep Obligations distinct from Tasks in all documentation.
 2. Keep the ADR-0088 persistence boundary intact.
 3. Add full Obligation Engine extraction and candidate-to-Obligation review.
-4. Link accepted obligations to tasks rather than converting every obligation
-   into a task.
-5. Use the Consistency / Contradiction Engine when new evidence conflicts with
+4. Expand reviewed Obligation links to tasks and events without converting
+   every obligation into a task.
+5. Project reviewed Obligations into timeline and dossier views.
+6. Use the Consistency / Contradiction Engine when new evidence conflicts with
    obligation status or remembered commitments.

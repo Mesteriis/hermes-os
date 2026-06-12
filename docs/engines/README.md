@@ -41,6 +41,7 @@ The current repository contains dedicated baseline modules for:
 
 - `backend/src/engines/search.rs`;
 - `backend/src/engines/consistency.rs`;
+- `backend/src/engines/decision.rs`;
 - `backend/src/engines/obligation.rs`.
 
 Many other engine-like behaviors are still domain-local:

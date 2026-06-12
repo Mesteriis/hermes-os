@@ -42,7 +42,7 @@ Current implementation was checked against:
 - `backend/src/app/router.rs`;
 - backend domain modules under `backend/src/domains/`;
 - backend engine/workflow/integration modules;
-- migrations `0001` through `0064`;
+- migrations `0001` through `0066`;
 - `Makefile` development targets;
 - frontend API and page surfaces under `frontend/src/lib/`;
 - active root, backend and frontend README files.
@@ -79,20 +79,24 @@ These are known product/implementation gaps, not hidden documentation failures:
   `intelligence` and `memory`.
 - Obligations and Decisions now have source-backed persistence baselines in
   migrations `0063` and `0064`, plus `backend/src/domains/obligations/` and
-  `backend/src/domains/decisions/`. Obligation candidate detection has a first
-  engine baseline in `backend/src/engines/obligation.rs`, and message task
-  candidate refresh uses that engine for explicit commitments/requests. Guarded
-  backend routes can list accepted Obligations/Decisions and update accepted
-  review state without creating Tasks, Projects or Obligations. Provider-wide
-  ingestion, candidate-to-Obligation/Decision review, desktop UI and adapters
-  from person promises, meeting outcomes and project review decisions remain
-  incomplete.
+  `backend/src/domains/decisions/`. Migrations `0065` and `0066` add accepted
+  Decision and Obligation graph projection support. Obligation candidate
+  detection has a first engine baseline in `backend/src/engines/obligation.rs`,
+  Decision candidate detection has a first explicit-evidence baseline in
+  `backend/src/engines/decision.rs`, and message task candidate refresh uses
+  the Obligation engine for explicit commitments/requests. Guarded backend
+  routes can list accepted Obligations/Decisions and update accepted review
+  state without creating Tasks, Projects or Obligations. Provider-wide ingestion,
+  candidate-to-Obligation/Decision review, desktop UI and adapters from person
+  promises, meeting outcomes and project review decisions remain incomplete.
 - Consistency / Contradiction Engine now has a structured-claim detection and
   `ContradictionObservation` persistence baseline in migration `0062` and
-  `backend/src/engines/consistency.rs`. Guarded backend routes can list open
-  contradiction observations and update review state without overwriting
-  Memory. Polygraph review UI and Communication/Document claim extraction
-  remain incomplete.
+  `backend/src/engines/consistency.rs`. It can also extract simple structured
+  claim lines from Communication and Document evidence text before comparing
+  them to accepted claims. Guarded backend routes can list open contradiction
+  observations and update review state without overwriting Memory. Polygraph
+  review UI, provider-wide ingestion wiring and natural-language claim
+  extraction remain incomplete.
 - Communication is product-facing, but much current implementation still lives
   under `backend/src/domains/mail/` as the email-channel implementation.
 - Notes remain document-like capture artifacts unless a future ADR promotes a
