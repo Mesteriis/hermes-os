@@ -69,10 +69,36 @@ source-backed Persona memory-card draft:
 `person_memory_cards`. Empty notes remove the compatibility memory-card source
 and do not create a new card.
 
+The shared engine also builds source-backed accepted Persona fact drafts for
+compatibility `person_facts`. These drafts preserve affected entity, fact type,
+value, source citation, confidence, accepted review state and the producing
+process before the compatibility store writes the record.
+
+The shared engine now also assembles bounded source-backed entity context packs
+from accepted fact drafts and memory-card drafts. A context pack preserves the
+affected entity, ordered memory items, deduplicated source citations, aggregate
+confidence and producing process. It is a derived recall input, not a source of
+truth.
+
+The shared engine also detects required fact gaps for an entity. Gap outputs are
+derived review candidates with affected entity, missing fact type, deterministic
+source reference, suggested review state and producing process. They do not
+create facts by themselves.
+
+The shared engine also emits stale-memory candidates for accepted facts whose
+verification timestamp is missing or older than a caller-provided threshold.
+These candidates preserve source citation, confidence and last verification
+time, and only request review. They do not decay confidence or overwrite the
+fact directly.
+
 ## Migration Plan
 
 1. Keep compatibility notes-to-card assembly in the Memory Engine.
-2. Keep domain-specific memory docs focused on owned source records.
-3. Move reusable memory assembly language to this engine spec.
-4. Preserve source citations and review state before expanding automation.
-5. Treat AI summaries as derived observations until reviewed.
+2. Keep source-backed Persona fact normalization in the Memory Engine.
+3. Keep source-backed context pack assembly in the Memory Engine.
+4. Keep required fact gap detection in the Memory Engine.
+5. Keep stale-memory candidate detection in the Memory Engine.
+6. Keep domain-specific memory docs focused on owned source records.
+7. Move reusable memory assembly language to this engine spec.
+8. Preserve source citations and review state before expanding automation.
+9. Treat AI summaries as derived observations until reviewed.

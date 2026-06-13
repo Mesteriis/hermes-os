@@ -209,6 +209,20 @@ implementation evidence:
 - `backend/src/engines/memory.rs` now owns the first shared Memory Engine
   baseline for converting deprecated Persona compatibility notes into
   source-backed memory-card drafts.
+- `backend/src/engines/memory.rs` now also builds source-backed accepted
+  Persona fact drafts, and `backend/src/domains/persons/memory.rs` uses those
+  drafts before writing compatibility `person_facts`.
+- `backend/src/engines/memory.rs` now also assembles bounded source-backed
+  entity context packs from memory-card drafts and accepted fact drafts,
+  preserving ordered items, deduplicated source citations, aggregate confidence
+  and producing process.
+- `backend/src/engines/memory.rs` now also detects required fact gaps for an
+  entity as deterministic source-backed `suggested` review candidates without
+  creating facts automatically.
+- `backend/src/engines/memory.rs` now also emits stale-memory review
+  candidates for accepted facts whose verification timestamp is missing or
+  older than a caller-provided threshold, preserving source citation and
+  confidence without automatically decaying or overwriting the fact.
 - `backend/src/domains/persons/enrichment.rs` now adapts manual/API
   `persons.is_favorite` compatibility writes into sourced `ui:favorite`
   Persona Preferences while keeping the root column as a temporary
@@ -244,9 +258,18 @@ implementation evidence:
   `tasks.task_candidate_id` requirement so standalone manual Tasks match the
   current Tasks domain model.
 - `backend/src/engines/timeline.rs` now owns the first shared Timeline Engine
-  baseline for bounded source-backed entity timeline policy. Persona,
-  Organization and Project timeline producers use it while retaining current
-  compatibility tables.
+  baseline for bounded source-backed entity timeline policy and source-backed
+  period summaries. It also emits source-backed recency signals for individual
+  entities, detects source-backed gaps between adjacent entity events and diffs
+  source-backed entity timeline snapshots by source reference. The engine also
+  assembles bounded cross-domain timelines from source-backed events across
+  entity kinds and maps canonical `StoredEventEnvelope` replay batches into
+  bounded timeline entries while tracking the last replayed position. It now
+  wires that replay mapper into the shared projection runner so canonical events
+  are read through `EventStore::list_after_position`, validated, converted into
+  derived entries and advanced through `ProjectionCursorStore` cursor progress.
+  Persona, Organization and Project timeline producers use the shared policy
+  while retaining current compatibility tables.
 
 ## Alignment Matrix
 
@@ -256,8 +279,8 @@ implementation evidence:
 | Email channel | `docs/mail/*`, email account routes, mail blob migrations | Email is a channel but still has broad module ownership. | Keep channel docs; do not promote Mail to product domain. |
 | Persona Intelligence | `backend/src/domains/persons/*`, `/api/v1/persons/*`, `/api/v1/personas/*`, ADR-0084, ADR-0090, person/contact migrations, migration `0059` for `is_self` and `person_type` constraints | Target entity is Persona, current storage compatibility name is Person/Person ID. Owner Persona storage, GET/PUT owner compatibility route, AI workspace Owner Persona display, Persona-native list/detail/write bridge routes, AI run Owner Persona attribution, PersonaType, role-to-Relationship, interaction-context-to-Preference, trust-to-Relationship, notes-to-memory-card, favorite-to-preference, watchlist-to-preference, risk-to-health-cache, Dossier section adapters, reviewable Dossier snapshots and Persons UI Dossier display have compatibility-layer baselines, but physical Persona-native schema migration and downstream engine projections remain incomplete. | Schema migration ADR before physical code/table rename. |
 | Relationships | `backend/src/domains/relationships/mod.rs`, `backend/src/domains/relationships/api.rs`, migrations `0060`, `0061` and `0068`, graph core, person roles, organization contacts, task relations, project link reviews, Personas workspace review panel, Review workspace | First-class Relationship persistence, graph projection for all current `RelationshipEntityKind` endpoints, guarded entity/global review routes, person role adapters, organization contact link adapters for manual/API and email-sync paths, manual task relation adapters, project link review adapters, Personas workspace global suggested review, cross-domain Review workspace placement and shared Review action dispatch have a baseline, but downstream engine projections are incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and keep review routing in the cross-domain workflow shell. |
-| Memory Engine | `backend/src/engines/memory.rs`, persons memory, organization memory, project memory docs | A shared Memory Engine baseline now converts deprecated Persona compatibility notes into source-backed memory-card drafts, and Person enrichment uses it for the `person_memory_cards` compatibility projection. Broader context packs, memory gaps, review workflow and cross-domain memory assembly remain incomplete. | Expand shared Memory Engine behavior after domain source boundaries are stable. |
-| Timeline Engine | `backend/src/engines/timeline.rs`, calendar events, person timeline, organization timeline, project timelines, frontend timeline page | A shared Timeline Engine baseline now owns bounded entity timeline limits and source-backed event validation for Persona, Organization and Project compatibility timeline producers. Event-log replay, cross-domain timelines, summaries, diffs, recency signals and gap detection remain incomplete. | Expand Timeline Engine from shared policy into derived chronological views while keeping Calendar as the scheduled event domain. |
+| Memory Engine | `backend/src/engines/memory.rs`, persons memory, organization memory, project memory docs | A shared Memory Engine baseline now converts deprecated Persona compatibility notes into source-backed memory-card drafts, normalizes source-backed accepted Persona fact drafts before compatibility `person_facts` writes, assembles bounded source-backed context packs with source citations, detects required fact gaps as `suggested` review candidates and emits stale-memory review candidates for unverified or outdated facts. Broader review workflow and cross-domain context assembly remain incomplete. | Expand shared Memory Engine behavior after domain source boundaries are stable. |
+| Timeline Engine | `backend/src/engines/timeline.rs`, calendar events, person timeline, organization timeline, project timelines, frontend timeline page | A shared Timeline Engine baseline now owns bounded entity timeline limits, source-backed event validation for Persona, Organization and Project compatibility timeline producers, source-backed period summaries, source-backed entity recency signals, source-backed entity gap detection, source-backed entity snapshot diffs, bounded cross-domain timeline assembly, canonical event-log replay mapping and cursor-backed projection-runner wiring from `EventStore::list_after_position` through `ProjectionCursorStore`. Durable read-model storage for projected Timeline views remains incomplete. | Define durable Timeline read-model storage only after a follow-up schema/API decision while keeping Calendar as the scheduled event domain. |
 | Trust Engine | `backend/src/engines/trust.rs`, `persons/trust.rs`, `persons/enrichment.rs`, relationship scores in docs | A shared Trust Engine baseline now converts deprecated Persona compatibility trust scores into Owner Persona -> Persona `trusts` Relationship signals and emits source reliability signals into Relationship evidence metadata. Contradiction input handling, trust review recommendations and cross-domain reconciliation remain incomplete. | Continue normalizing trust as source/relationship signal, not generic entity field. |
 | Risk Engine | `backend/src/engines/risk.rs`, `health.rs`, `watchtower`, risks routes in persons/orgs/calendar/tasks | A shared Risk Engine baseline now builds source-backed Persona risk observation drafts and derives attention status from unresolved risk severities; Person risks use it before writing compatibility `person_risks` and updating the Persona `health_status` cache. Cross-domain risk observation routing, review workflow and health/watchtower terminology normalization remain incomplete. | Extend Risk Engine observations/review across domains, then migrate health/watchtower compatibility language behind it. |
 | Enrichment Engine | `backend/src/engines/enrichment.rs`, persons enrichment, organization enrichment | A shared Enrichment Engine baseline now converts deprecated Persona compatibility favorite state into sourced `ui:favorite` preference drafts and builds source-backed pending Persona observation candidates for compatibility `enrichment_results`. Approved-source policy, conflict routing and broader cross-domain candidate enrichment remain incomplete. | Expand shared enrichment semantics with domain-specific source policies and route conflict candidates to the Consistency / Contradiction Engine. |

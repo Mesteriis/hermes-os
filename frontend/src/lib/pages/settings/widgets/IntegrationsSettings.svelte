@@ -19,6 +19,10 @@
 		onSelectIntegration: (integrationId: string) => void;
 		onCloseIntegration: () => void;
 		onOpenAccountDrawer: (target?: string) => void;
+		onExportMailAccount: (accountId: string) => Promise<void>;
+		onLogoutMailAccount: (accountId: string) => Promise<void>;
+		onDeleteMailAccount: (accountId: string) => Promise<void>;
+		onImportMailSettings: (rawJson: string) => Promise<void>;
 		formatDateTimeFn: (value: string | null) => string;
 	}
 
@@ -28,6 +32,10 @@
 		onSelectIntegration,
 		onCloseIntegration,
 		onOpenAccountDrawer,
+		onExportMailAccount,
+		onLogoutMailAccount,
+		onDeleteMailAccount,
+		onImportMailSettings,
 		formatDateTimeFn
 	}: Props = $props();
 
@@ -43,6 +51,7 @@
 			? (integrations.find((integration) => integration.integrationId === selectedIntegrationId) ?? null)
 			: null
 	);
+	let selectedMailAccountId = $derived(mailAccountId(selectedIntegration));
 	let integrationGroups = $derived.by(() => {
 		const groups: IntegrationTableGroup[] = [];
 		for (const integration of integrations) {
@@ -55,6 +64,9 @@
 		}
 		return groups;
 	});
+	let isImportPanelOpen = $state(false);
+	let mailImportJson = $state('');
+	let activeMailAction = $state<string | null>(null);
 
 	function serviceFor(
 		integration: IntegrationViewModel,
@@ -96,6 +108,55 @@
 		const calendarUnit = calendarCount === 1 ? _('calendar') : _('calendars');
 		return `${accountCount} ${accountUnit} / ${calendarCount} ${calendarUnit}`;
 	}
+
+	function mailAccountId(integration: IntegrationViewModel | null): string | null {
+		const account = integration?.accounts.find((item) =>
+			['gmail', 'icloud', 'imap'].includes(item.provider_kind)
+		);
+		return account?.account_id ?? null;
+	}
+
+	function isMailActionPending(action: string, accountId?: string | null): boolean {
+		const actionKey = accountId ? `${action}:${accountId}` : action;
+		return activeMailAction === actionKey;
+	}
+
+	async function runMailAction(
+		action: 'export' | 'logout' | 'delete',
+		accountId: string,
+		handler: (accountId: string) => Promise<void>
+	) {
+		activeMailAction = `${action}:${accountId}`;
+		try {
+			await handler(accountId);
+			if (action === 'delete') {
+				onCloseIntegration();
+			}
+		} finally {
+			activeMailAction = null;
+		}
+	}
+
+	async function submitMailSettingsImport() {
+		activeMailAction = 'import';
+		try {
+			await onImportMailSettings(mailImportJson);
+			mailImportJson = '';
+			isImportPanelOpen = false;
+		} finally {
+			activeMailAction = null;
+		}
+	}
+
+	function confirmDeleteMailAccount(accountId: string) {
+		if (
+			typeof window !== 'undefined' &&
+			!window.confirm(_('Delete this mail account metadata? Retained messages will remain in Hermes.'))
+		) {
+			return;
+		}
+		void runMailAction('delete', accountId, onDeleteMailAccount);
+	}
 </script>
 
 <div class="settings-integrations-layout">
@@ -105,10 +166,51 @@
 				<h2>{_('Integrations')}</h2>
 				<p>{_('Connected providers, service coverage and account-level actions.')}</p>
 			</div>
-			<button type="button" class="primary-button" onclick={() => onOpenAccountDrawer('mail')}>
-				<Icon icon="tabler:plus" width="16" height="16" />{_('Add integration')}
-			</button>
+			<div class="settings-workbench-header-actions">
+				<button
+					type="button"
+					class="ghost-button"
+					onclick={() => (isImportPanelOpen = !isImportPanelOpen)}
+					disabled={isImportPanelOpen && isMailActionPending('import')}
+				>
+					<Icon icon="tabler:upload" width="16" height="16" />{_('Import settings')}
+				</button>
+				<button type="button" class="primary-button" onclick={() => onOpenAccountDrawer('mail')}>
+					<Icon icon="tabler:plus" width="16" height="16" />{_('Add integration')}
+				</button>
+			</div>
 		</header>
+
+		{#if isImportPanelOpen}
+			<form
+				class="mail-settings-import-panel"
+				onsubmit={(event) => {
+					event.preventDefault();
+					void submitMailSettingsImport();
+				}}
+			>
+				<label>
+					<span>{_('Mail settings JSON')}</span>
+					<textarea
+						bind:value={mailImportJson}
+						rows="5"
+						placeholder={_('Paste sanitized exported mail account settings JSON.')}
+					></textarea>
+				</label>
+				<div class="form-actions">
+					<button
+						type="submit"
+						class="primary-button"
+						disabled={!mailImportJson.trim() || isMailActionPending('import')}
+					>
+						<Icon icon="tabler:upload" width="16" height="16" />{_('Import')}
+					</button>
+					<button type="button" class="ghost-button" onclick={() => (isImportPanelOpen = false)}>
+						{_('Cancel')}
+					</button>
+				</div>
+			</form>
+		{/if}
 
 		{#if integrations.length === 0}
 			<div class="empty-panel fill">{_('No integrations configured.')}</div>
@@ -209,9 +311,41 @@
 					>
 						{_('Reconnect')}
 					</button>
+					{#if selectedMailAccountId}
+						<button
+							type="button"
+							class="ghost-button"
+							disabled={isMailActionPending('export', selectedMailAccountId)}
+							onclick={() =>
+								void runMailAction('export', selectedMailAccountId, onExportMailAccount)}
+						>
+							<Icon icon="tabler:download" width="16" height="16" />{_('Export settings')}
+						</button>
+						<button
+							type="button"
+							class="ghost-button"
+							disabled={isMailActionPending('logout', selectedMailAccountId)}
+							onclick={() =>
+								void runMailAction('logout', selectedMailAccountId, onLogoutMailAccount)}
+						>
+							<Icon icon="tabler:logout" width="16" height="16" />{_('Logout')}
+						</button>
+						<button
+							type="button"
+							class="danger-button"
+							disabled={isMailActionPending('delete', selectedMailAccountId)}
+							title={_('This action removes only unused account metadata. Retained evidence blocks deletion.')}
+							onclick={() => confirmDeleteMailAccount(selectedMailAccountId)}
+						>
+							<Icon icon="tabler:trash" width="16" height="16" />{_('Delete account')}
+						</button>
+					{:else}
+						<button type="button" class="ghost-button" disabled>{_('Export settings')}</button>
+						<button type="button" class="ghost-button" disabled>{_('Logout')}</button>
+						<button type="button" class="danger-button" disabled>{_('Delete account')}</button>
+					{/if}
 					<button type="button" class="ghost-button" disabled>{_('Run sync now')}</button>
 					<button type="button" class="ghost-button" disabled>{_('View vault binding')}</button>
-					<button type="button" class="danger-button" disabled>{_('Remove integration')}</button>
 				</div>
 			</section>
 

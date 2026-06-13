@@ -69,6 +69,8 @@
 		runMailFullResync,
 		runMailSyncNow,
 		restoreSelectedMessage,
+		toggleImportantSelectedMessage,
+		toggleSelectedReadState,
 		trashSelectedMessage,
 		toggleMuteSelectedMessage,
 		togglePinSelectedMessage,
@@ -283,6 +285,7 @@
 				onReply={openReplyToSelected}
 				onForward={openForwardSelected}
 				onPin={() => void togglePinSelectedMessage()}
+				onImportant={() => void toggleImportantSelectedMessage()}
 				onMute={() => void toggleMuteSelectedMessage()}
 				onTrash={() => void trashSelectedMessage()}
 				onRestore={() => void restoreSelectedMessage()}
@@ -294,6 +297,7 @@
 				onExtractNotes={() => void extractNotesForSelectedMessage()}
 				onTranslate={() => void translateSelectedMessage('en')}
 				onWorkflowAction={(action) => void runSelectedWorkflowAction(action)}
+				onToggleReadState={() => void toggleSelectedReadState()}
 				onOpenInspector={(mode) => { communicationsInspectorMode.set(mode); }}
 				onSelectRelatedMessage={selectRelatedCommunication}
 				activeTab={$activeMessageContextTab}

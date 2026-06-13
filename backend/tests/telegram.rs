@@ -595,6 +595,269 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
 }
 
 #[tokio::test]
+async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_evidence() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-lifecycle-{suffix}");
+    let second_account_id = format!("telegram-lifecycle-second-{suffix}");
+    let chat_id = format!("lifecycle-chat-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    for (id, display_name) in [
+        (&account_id, "Telegram Lifecycle"),
+        (&second_account_id, "Telegram Lifecycle Second"),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_post_request_with_actor(
+                "/api/v1/telegram/accounts/fixture",
+                json!({
+                    "account_id": id,
+                    "provider_kind": "telegram_user",
+                    "display_name": display_name,
+                    "external_account_id": format!("tg-{id}"),
+                    "tdlib_data_path": format!("docker/data/telegram/{id}"),
+                    "transcription_enabled": false
+                }),
+                LOCAL_API_TOKEN,
+            ))
+            .await
+            .expect("account response");
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let start_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/runtime/start",
+            json!({ "account_id": account_id }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("runtime start response");
+    assert_eq!(start_response.status(), StatusCode::OK);
+
+    let message_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": format!("lifecycle-message-{suffix}"),
+                "chat_kind": "private",
+                "chat_title": "Telegram Lifecycle",
+                "sender_id": format!("telegram-lifecycle-sender-{suffix}"),
+                "sender_display_name": "Telegram Lifecycle Sender",
+                "text": "Keep this local evidence after account removal.",
+                "import_batch_id": format!("telegram-lifecycle-fixture-{suffix}"),
+                "occurred_at": "2026-06-10T12:30:00Z",
+                "delivery_state": "received"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("message response");
+    assert_eq!(message_response.status(), StatusCode::OK);
+
+    let list_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            "/api/v1/telegram/accounts",
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("account list response");
+    assert_eq!(list_response.status(), StatusCode::OK);
+    let list_body = json_body(list_response).await;
+    let items = list_body["items"].as_array().expect("account list items");
+    let account = account_item(items, &account_id);
+    assert_eq!(account["provider_kind"], json!("telegram_user"));
+    assert_eq!(account["display_name"], json!("Telegram Lifecycle"));
+    assert_eq!(account["runtime"], json!("fixture"));
+    assert_eq!(account["lifecycle_state"], json!("active"));
+    assert_eq!(account["transcription_enabled"], json!(false));
+    assert_eq!(
+        account["tdlib_data_path"],
+        json!(format!("docker/data/telegram/{account_id}"))
+    );
+    assert!(account.get("config").is_none());
+    assert!(account.get("api_hash").is_none());
+    assert!(account.get("bot_token").is_none());
+    account_item(items, &second_account_id);
+
+    let logout_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            &format!("/api/v1/telegram/accounts/{account_id}/logout"),
+            json!({}),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("logout response");
+    assert_eq!(logout_response.status(), StatusCode::OK);
+    let logout_body = json_body(logout_response).await;
+    assert_eq!(logout_body["account"]["account_id"], json!(account_id));
+    assert_eq!(
+        logout_body["account"]["lifecycle_state"],
+        json!("logged_out")
+    );
+    assert_eq!(logout_body["stopped_runtime_actor"], json!(true));
+
+    let logged_out_status = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/runtime/status?account_id={account_id}"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("logged out runtime status");
+    assert_eq!(logged_out_status.status(), StatusCode::OK);
+    let logged_out_status_body = json_body(logged_out_status).await;
+    assert_eq!(logged_out_status_body["status"], json!("stopped"));
+
+    let logged_out_list_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            "/api/v1/telegram/accounts",
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("logged out account list response");
+    assert_eq!(logged_out_list_response.status(), StatusCode::OK);
+    let logged_out_list_body = json_body(logged_out_list_response).await;
+    let logged_out_items = logged_out_list_body["items"]
+        .as_array()
+        .expect("logged out account list items");
+    assert_eq!(
+        account_item(logged_out_items, &account_id)["lifecycle_state"],
+        json!("logged_out")
+    );
+
+    let remove_response = app
+        .clone()
+        .oneshot(delete_request_with_token(
+            &format!("/api/v1/telegram/accounts/{account_id}"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("remove response");
+    assert_eq!(remove_response.status(), StatusCode::OK);
+    let remove_body = json_body(remove_response).await;
+    assert_eq!(remove_body["account"]["account_id"], json!(account_id));
+    assert_eq!(remove_body["account"]["lifecycle_state"], json!("removed"));
+
+    let default_list_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            "/api/v1/telegram/accounts",
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("default account list response");
+    assert_eq!(default_list_response.status(), StatusCode::OK);
+    let default_list_body = json_body(default_list_response).await;
+    let default_items = default_list_body["items"]
+        .as_array()
+        .expect("default account list items");
+    assert!(
+        !default_items
+            .iter()
+            .any(|item| item["account_id"] == json!(account_id))
+    );
+    account_item(default_items, &second_account_id);
+
+    let removed_list_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            "/api/v1/telegram/accounts?include_removed=true",
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("removed account list response");
+    assert_eq!(removed_list_response.status(), StatusCode::OK);
+    let removed_list_body = json_body(removed_list_response).await;
+    let removed_items = removed_list_body["items"]
+        .as_array()
+        .expect("removed account list items");
+    assert_eq!(
+        account_item(removed_items, &account_id)["lifecycle_state"],
+        json!("removed")
+    );
+
+    let raw_record_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM communication_raw_records WHERE account_id = $1")
+            .bind(&account_id)
+            .fetch_one(&pool)
+            .await
+            .expect("raw record count");
+    assert_eq!(raw_record_count, 1);
+    let message_count: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM communication_messages WHERE account_id = $1")
+            .bind(&account_id)
+            .fetch_one(&pool)
+            .await
+            .expect("message count");
+    assert_eq!(message_count, 1);
+
+    let account_config: Value = sqlx::query_scalar(
+        "SELECT config FROM communication_provider_accounts WHERE account_id = $1",
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("removed account config");
+    assert_eq!(account_config["runtime"], json!("fixture"));
+    assert_eq!(account_config["lifecycle_state"], json!("removed"));
+    assert!(account_config.get("removed_at").is_some());
+    assert!(account_config.get("api_hash").is_none());
+    assert!(account_config.get("bot_token").is_none());
+
+    let audit_rows = sqlx::query(
+        r#"
+        SELECT operation, metadata
+        FROM api_audit_log
+        WHERE target_kind = 'communication_provider_account'
+          AND target_id = $1
+        ORDER BY audit_id ASC
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_all(&pool)
+    .await
+    .expect("audit rows");
+    let audit_operations = audit_rows
+        .iter()
+        .map(|row| row.try_get::<String, _>("operation").expect("operation"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        audit_operations,
+        vec!["telegram.account.logout", "telegram.account.remove"]
+    );
+    for row in audit_rows {
+        let metadata: Value = row.try_get("metadata").expect("metadata");
+        assert_eq!(metadata["action_class"], json!("local_write"));
+        assert_eq!(metadata["decision"], json!("allowed"));
+        assert_eq!(metadata["account_id"], json!(account_id));
+        assert!(metadata.get("api_hash").is_none());
+        assert!(metadata.get("bot_token").is_none());
+        assert!(metadata.get("session_encryption_key").is_none());
+    }
+}
+
+#[tokio::test]
 async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_audit() {
     let ctx = TestContext::new().await;
     let database_url = ctx.connection_string();
@@ -1646,6 +1909,13 @@ where
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
+}
+
+fn account_item<'a>(items: &'a [Value], account_id: &str) -> &'a Value {
+    items
+        .iter()
+        .find(|item| item["account_id"] == json!(account_id))
+        .unwrap_or_else(|| panic!("expected account `{account_id}` in account list"))
 }
 
 fn json_post_request_with_actor(path: &str, body: Value, token: &str) -> Request<Body> {

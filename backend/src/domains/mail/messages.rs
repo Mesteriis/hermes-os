@@ -53,6 +53,7 @@ impl WorkflowState {
                 WorkflowState::Spam,
             ],
             WorkflowState::Reviewed => &[
+                WorkflowState::New,
                 WorkflowState::NeedsAction,
                 WorkflowState::Waiting,
                 WorkflowState::Done,

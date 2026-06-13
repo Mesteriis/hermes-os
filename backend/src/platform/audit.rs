@@ -466,6 +466,75 @@ impl NewApiAuditRecord {
         }
     }
 
+    pub fn telegram_account_logout(
+        actor_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_kind: impl Into<String>,
+        lifecycle_state: impl Into<String>,
+    ) -> Self {
+        Self::telegram_account_lifecycle(
+            actor_id,
+            TelegramAccountLifecycleAudit {
+                operation: "telegram.account.logout",
+                method: "POST",
+                path_template: "/api/v1/telegram/accounts/{account_id}/logout",
+                capability: "telegram.account.logout",
+                account_id: account_id.into(),
+                provider_kind: provider_kind.into(),
+                lifecycle_state: lifecycle_state.into(),
+            },
+        )
+    }
+
+    pub fn telegram_account_remove(
+        actor_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_kind: impl Into<String>,
+        lifecycle_state: impl Into<String>,
+    ) -> Self {
+        Self::telegram_account_lifecycle(
+            actor_id,
+            TelegramAccountLifecycleAudit {
+                operation: "telegram.account.remove",
+                method: "DELETE",
+                path_template: "/api/v1/telegram/accounts/{account_id}",
+                capability: "telegram.account.remove",
+                account_id: account_id.into(),
+                provider_kind: provider_kind.into(),
+                lifecycle_state: lifecycle_state.into(),
+            },
+        )
+    }
+
+    fn telegram_account_lifecycle(
+        actor_id: impl Into<String>,
+        audit: TelegramAccountLifecycleAudit,
+    ) -> Self {
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::LocalWrite,
+            audit.capability,
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", audit.account_id.clone());
+        insert_non_empty(metadata_object, "provider_kind", audit.provider_kind);
+        insert_non_empty(metadata_object, "lifecycle_state", audit.lifecycle_state);
+
+        Self {
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: audit.operation.to_owned(),
+            method: audit.method.to_owned(),
+            path_template: audit.path_template.to_owned(),
+            target_kind: "communication_provider_account".to_owned(),
+            target_id: Some(audit.account_id),
+            metadata,
+        }
+    }
+
     pub fn document_processing_job_retry(
         actor_id: impl Into<String>,
         job_id: impl Into<String>,
@@ -493,6 +562,16 @@ struct TelegramSendDryRunAuditDecision<'a> {
     provider_chat_id: String,
     rendered_preview_hash: Option<String>,
     decision: &'a CapabilityDecision,
+}
+
+struct TelegramAccountLifecycleAudit {
+    operation: &'static str,
+    method: &'static str,
+    path_template: &'static str,
+    capability: &'static str,
+    account_id: String,
+    provider_kind: String,
+    lifecycle_state: String,
 }
 
 fn insert_non_empty(

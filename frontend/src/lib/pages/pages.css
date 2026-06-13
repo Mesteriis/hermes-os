@@ -5489,6 +5489,36 @@
 	font-size: 12px;
 }
 
+.settings-workbench-header-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.mail-settings-import-panel {
+	display: grid;
+	gap: 10px;
+	border-bottom: 1px solid var(--hh-border-muted);
+	padding: 12px 14px;
+	background: rgba(3, 16, 18, 0.42);
+}
+
+.mail-settings-import-panel label,
+.mail-settings-import-panel span {
+	display: grid;
+	gap: 6px;
+	min-width: 0;
+	color: var(--hh-color-text-soft);
+	font-size: 12px;
+	font-weight: 680;
+}
+
+.mail-settings-import-panel textarea {
+	min-height: 116px;
+	resize: vertical;
+}
+
 .settings-integration-inspector header small {
 	display: block;
 	margin-top: 8px;

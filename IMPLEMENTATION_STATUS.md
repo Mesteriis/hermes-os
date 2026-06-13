@@ -1,39 +1,44 @@
-# Hermes Implementation Status
+# Статус приведения к документации
 
-Короткий статус по приведению кода к текущей документации.
+Дата последнего обновления: 2026-06-13 16:30
 
-## Сделано
+## Выполнено
 
-- `DONE` PersonaType и единственный Owner Persona в compatibility `persons`.
-- `DONE` AI agents как `ai_agent` Personas, включая `HEPHAESTUS` и `name@sh-inc.ru`.
-- `DONE` AI run attribution через agent Persona и Owner Persona.
-- `DONE` Relationship persistence baseline и graph projection.
-- `DONE` Polygraph / Contradiction Observation baseline.
-- `DONE` Decisions и Obligations persistence baseline.
-- `DONE` Persona identity traces для `document_mention`, `message_participant`, `disputed` и unattached create/list/assign API.
-- `DONE` UI review workflow для unattached identity traces.
-- `DONE` Persona-native `/api/v1/personas` read/write compatibility API bridge baseline.
-- `DONE` AI workspace UI context через Owner Persona.
-- `DONE` Persona Dossier UI read-model wiring.
-- `DONE` Persona Dossier cache/review workflow baseline.
-- `DONE` Cross-domain Review shell для Relationships, Decisions, Obligations и Polygraph suggested queues.
-- `DONE` Cross-domain Review action dispatch policy для confirm/reject routing.
-- `DONE` Risk Engine attention-status baseline for Persona health compatibility cache.
-- `DONE` Risk Engine source-backed Persona observation baseline.
-- `DONE` Trust Engine compatibility score baseline for Owner Persona trust Relationships.
-- `DONE` Trust Engine source reliability signal baseline for reviewable evidence.
-- `DONE` Memory Engine compatibility notes-to-memory-card baseline.
-- `DONE` Enrichment Engine compatibility favorite-to-preference baseline.
-- `DONE` Enrichment Engine source-backed pending Persona candidate baseline.
-- `DONE` Timeline Engine compatibility policy baseline for bounded source-backed timeline views.
+* [x] AI Persona email отображается как `name@sh-inc.ru`.
+* [x] Memory Engine нормализует source-backed Persona facts.
+* [x] Memory Engine собирает entity context pack с source citations.
+* [x] Memory Engine выявляет required fact gaps.
+* [x] Memory Engine выявляет stale-memory review candidates.
+* [x] Memory Engine собирает cross-domain context pack для root entity и связанных сущностей.
+* [x] Timeline Engine выполняет bounded timeline assembly и event-log projection runner.
 
-## Осталось
+## В работе
 
-- `TODO` Physical Persona-native schema migration beyond compatibility storage.
-- `TODO` Broader Timeline Engine event-log replay, cross-domain timelines, summaries and gap detection.
-- `TODO` Broader Enrichment Engine approved-source policy, conflict routing and cross-domain candidates.
-- `TODO` Broader Memory Engine context/review workflow beyond compatibility notes.
-- `TODO` Broader Trust Engine contradiction inputs, review recommendations and cross-domain reconciliation.
-- `TODO` Broader Risk Engine cross-domain observations, review routing and health/watchtower terminology migration.
-- `TODO` Broader live-provider ingestion for Decisions, Obligations and Polygraph.
-- `TODO` Broader review policy beyond current queue aggregation and confirm/reject dispatch.
+* [ ] Приведение реализации к документации без новых compatibility layers.
+* [ ] Аудит существующих compatibility-модулей, legacy API и устаревших полей.
+* [ ] Перевод интеграционных тестов на изолированный Testcontainers-подход.
+
+## Осталось реализовать
+
+* [ ] Удалить compatibility storage вокруг `persons` и перейти на Persona-native schema.
+* [ ] Удалить legacy Contact/Person CRM API и заменить их Persona-domain контрактами.
+* [ ] Подключить Memory Engine к доменным источникам без compatibility cache.
+* [ ] Реализовать durable read-model storage для Timeline Engine projections.
+* [ ] Реализовать Enrichment Engine approved-source policy, conflict routing и cross-domain candidates.
+* [ ] Реализовать Trust Engine contradiction inputs, review recommendations и cross-domain reconciliation.
+* [ ] Реализовать Risk Engine cross-domain observations и review routing без терминов `health`/`watchtower`.
+* [ ] Реализовать live-provider ingestion для Decisions, Obligations и Polygraph.
+* [ ] Удалить или заменить функционал, который отсутствует в актуальной документации.
+* [ ] Актуализировать все тесты под документацию как источник истины.
+* [ ] Прогнать полный форматтер, линтеры, статический анализ и все тесты.
+
+## Архитектурные проблемы
+
+* В коде ещё есть compatibility layers вокруг `persons`, `health`, `watchtower`, legacy Person/Contact терминологии и старых API.
+* Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
+* Некоторые реализованные engine baseline ещё не подключены как полноценные доменные процессы.
+* Репозиторий содержит много параллельных незакоммиченных изменений; их нужно разнести перед финальной проверкой.
+
+## Следующий шаг
+
+Удалить compatibility-мышление из Persona/Person API: выбрать первый legacy surface, заменить его Persona-native контрактом и обновить тесты через Testcontainers.

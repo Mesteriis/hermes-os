@@ -810,6 +810,12 @@ fn workflow_state_valid_transitions() {
         &WorkflowState::Spam
     ));
 
+    // Reviewed can go back to new for an explicit local mark-unread action.
+    assert!(WorkflowState::is_valid_transition(
+        &WorkflowState::Reviewed,
+        &WorkflowState::New
+    ));
+
     // New cannot go to done or waiting directly
     assert!(!WorkflowState::is_valid_transition(
         &WorkflowState::New,

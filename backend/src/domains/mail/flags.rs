@@ -13,6 +13,7 @@ pub struct MessageFlags;
 
 impl MessageFlags {
     const PINNED_KEY: &'static str = "pinned";
+    const IMPORTANT_KEY: &'static str = "important";
     const SNOOZE_UNTIL_KEY: &'static str = "snooze_until";
     const LABELS_KEY: &'static str = "labels";
     const IS_MUTED_KEY: &'static str = "muted";
@@ -21,6 +22,14 @@ impl MessageFlags {
         message
             .message_metadata
             .get(Self::PINNED_KEY)
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    }
+
+    pub fn is_important(message: &ProjectedMessage) -> bool {
+        message
+            .message_metadata
+            .get(Self::IMPORTANT_KEY)
             .and_then(|v| v.as_bool())
             .unwrap_or(false)
     }
@@ -65,6 +74,21 @@ impl MessageFlags {
         let currently = Self::is_pinned(&msg);
         let mut meta = msg.message_metadata.clone();
         meta[Self::PINNED_KEY] = serde_json::Value::Bool(!currently);
+        store.set_message_metadata(message_id, &meta).await?;
+        Ok(!currently)
+    }
+
+    pub async fn toggle_important(
+        store: &MessageProjectionStore,
+        message_id: &str,
+    ) -> Result<bool, MessageFlagsError> {
+        let msg = store
+            .message(message_id)
+            .await?
+            .ok_or(MessageFlagsError::NotFound)?;
+        let currently = Self::is_important(&msg);
+        let mut meta = msg.message_metadata.clone();
+        meta[Self::IMPORTANT_KEY] = serde_json::Value::Bool(!currently);
         store.set_message_metadata(message_id, &meta).await?;
         Ok(!currently)
     }
@@ -186,6 +210,14 @@ mod tests {
         assert!(MessageFlags::is_pinned(&msg));
         let msg2 = test_message(serde_json::json!({}));
         assert!(!MessageFlags::is_pinned(&msg2));
+    }
+
+    #[test]
+    fn is_important_detects_flag() {
+        let msg = test_message(serde_json::json!({"important": true}));
+        assert!(MessageFlags::is_important(&msg));
+        let msg2 = test_message(serde_json::json!({}));
+        assert!(!MessageFlags::is_important(&msg2));
     }
 
     #[test]

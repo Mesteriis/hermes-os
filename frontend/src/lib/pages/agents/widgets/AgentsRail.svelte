@@ -17,6 +17,7 @@
 		formatDuration: (ms: number | null) => string;
 		formatDateTime: (date: string) => string;
 		safeCitations: (citations: unknown) => AiCitation[];
+		formatAgentPersonaName: (agentId: string) => string;
 	}
 
 	let {
@@ -29,7 +30,8 @@
 		runStatusLabel,
 		formatDuration,
 		formatDateTime,
-		safeCitations
+		safeCitations,
+		formatAgentPersonaName
 	}: Props = $props();
 </script>
 
@@ -40,7 +42,7 @@
 	</div>
 	<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="ai-run-history" data-widget-hidden={!isWidgetVisible('ai-run-history')}>
 		<WidgetEditChrome widgetId="ai-run-history" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
-		<section class="panel info-card"><h2>Run History</h2>{#if aiRuns.length}{#each aiRuns.slice(0,6) as run}<div class="deadline"><span>{run.agent_id} · {runStatusLabel(run)}</span><time>{formatDateTime(run.started_at)} · {formatDuration(run.duration_ms)}</time></div>{/each}{:else}<p>No AI runs persisted yet.</p>{/if}</section>
+		<section class="panel info-card"><h2>Run History</h2>{#if aiRuns.length}{#each aiRuns.slice(0,6) as run}<div class="deadline"><span>{formatAgentPersonaName(run.agent_id)} · {runStatusLabel(run)}</span><time>{formatDateTime(run.started_at)} · {formatDuration(run.duration_ms)}</time></div>{/each}{:else}<p>No AI runs persisted yet.</p>{/if}</section>
 	</div>
 	<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="ai-citations" data-widget-hidden={!isWidgetVisible('ai-citations')}>
 		<WidgetEditChrome widgetId="ai-citations" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />

@@ -189,6 +189,263 @@ pub(crate) struct MailSyncStatusListResponse {
     items: Vec<MailSyncStatus>,
 }
 
+#[derive(Serialize)]
+pub(crate) struct EmailAccountListResponse {
+    items: Vec<EmailAccountView>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct EmailAccountView {
+    account: ProviderAccount,
+    capabilities: EmailAccountCapabilities,
+}
+
+#[derive(Serialize)]
+pub(crate) struct EmailAccountCapabilities {
+    read: bool,
+    sync: bool,
+    send: bool,
+    oauth: bool,
+    imap: bool,
+    smtp: bool,
+    mutate_flags: bool,
+    mutate_mailboxes: bool,
+    server_delete: bool,
+    provider_folders: bool,
+    local_trash: bool,
+}
+
+#[derive(Serialize)]
+pub(crate) struct EmailAccountExportResponse {
+    exported_at: DateTime<Utc>,
+    account: ProviderAccount,
+    capabilities: EmailAccountCapabilities,
+    sync_settings: MailSyncSettings,
+}
+
+#[derive(Serialize)]
+pub(crate) struct EmailAccountLogoutResponse {
+    account: ProviderAccount,
+    capabilities: EmailAccountCapabilities,
+    sync_settings: MailSyncSettings,
+}
+
+#[derive(Serialize)]
+pub(crate) struct EmailAccountDeleteResponse {
+    account_id: String,
+    deleted: bool,
+    unbound_secret_refs: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct EmailAccountImportRequest {
+    account: EmailAccountImportAccount,
+    sync_settings: Option<EmailAccountImportSyncSettings>,
+}
+
+#[derive(Deserialize)]
+struct EmailAccountImportAccount {
+    account_id: String,
+    provider_kind: String,
+    display_name: String,
+    external_account_id: String,
+    #[serde(default)]
+    config: Value,
+}
+
+#[derive(Deserialize)]
+struct EmailAccountImportSyncSettings {
+    sync_enabled: Option<bool>,
+    batch_size: Option<i32>,
+    poll_interval_seconds: Option<i32>,
+}
+
+pub(crate) async fn get_v1_email_accounts(
+    State(state): State<AppState>,
+) -> Result<Json<EmailAccountListResponse>, ApiError> {
+    let accounts = communication_ingestion_store(&state)?
+        .list_provider_accounts()
+        .await?
+        .into_iter()
+        .filter(|account| account.provider_kind.is_email())
+        .map(email_account_view)
+        .collect();
+
+    Ok(Json(EmailAccountListResponse { items: accounts }))
+}
+
+pub(crate) async fn get_v1_email_account(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<EmailAccountView>, ApiError> {
+    let account = email_account_or_not_found(&state, &account_id).await?;
+    Ok(Json(email_account_view(account)))
+}
+
+pub(crate) async fn get_v1_email_account_export(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<EmailAccountExportResponse>, ApiError> {
+    let account = email_account_or_not_found(&state, &account_id).await?;
+    let settings = mail_sync_store(&state)
+        .map_err(mail_sync_api_error)?
+        .settings_for_account(&account.account_id)
+        .await
+        .map_err(mail_sync_api_error)?;
+    let sanitized_account = ProviderAccount {
+        config: sanitize_account_config(&account.config),
+        ..account
+    };
+
+    Ok(Json(EmailAccountExportResponse {
+        exported_at: Utc::now(),
+        capabilities: email_account_capabilities(&sanitized_account),
+        account: sanitized_account,
+        sync_settings: settings,
+    }))
+}
+
+pub(crate) async fn post_v1_email_account_import(
+    State(state): State<AppState>,
+    Json(payload): Json<Value>,
+) -> Result<Json<EmailAccountLogoutResponse>, ApiError> {
+    if contains_secret_material(&payload) {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "account import payload must not contain secrets or secret references",
+        ));
+    }
+
+    let request: EmailAccountImportRequest = serde_json::from_value(payload)
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid account import payload"))?;
+    let provider_kind = EmailProviderKind::try_from(request.account.provider_kind.as_str())
+        .map_err(|_| ApiError::InvalidCommunicationQuery("unsupported email provider kind"))?;
+    if !provider_kind.is_email() {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "provider kind is not an email provider",
+        ));
+    }
+    let config = if request.account.config.is_null() {
+        json!({})
+    } else {
+        request.account.config
+    };
+    if !config.is_object() {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "account config must be an object",
+        ));
+    }
+
+    let account = communication_ingestion_store(&state)?
+        .upsert_provider_account(
+            &crate::domains::mail::core::NewProviderAccount::new(
+                request.account.account_id,
+                provider_kind,
+                request.account.display_name,
+                request.account.external_account_id,
+            )
+            .config(config),
+        )
+        .await?;
+
+    let current_settings = mail_sync_store(&state)
+        .map_err(mail_sync_api_error)?
+        .settings_for_account(&account.account_id)
+        .await
+        .map_err(mail_sync_api_error)?;
+    let settings_update = request.sync_settings.map_or(
+        MailSyncSettingsUpdate {
+            sync_enabled: current_settings.sync_enabled,
+            batch_size: current_settings.batch_size,
+            poll_interval_seconds: current_settings.poll_interval_seconds,
+        },
+        |settings| MailSyncSettingsUpdate {
+            sync_enabled: settings
+                .sync_enabled
+                .unwrap_or(current_settings.sync_enabled),
+            batch_size: settings.batch_size.unwrap_or(current_settings.batch_size),
+            poll_interval_seconds: settings
+                .poll_interval_seconds
+                .unwrap_or(current_settings.poll_interval_seconds),
+        },
+    );
+    let sync_settings = mail_sync_store(&state)
+        .map_err(mail_sync_api_error)?
+        .update_settings(&account.account_id, settings_update)
+        .await
+        .map_err(mail_sync_api_error)?;
+
+    Ok(Json(EmailAccountLogoutResponse {
+        capabilities: email_account_capabilities(&account),
+        account,
+        sync_settings,
+    }))
+}
+
+pub(crate) async fn post_v1_email_account_logout(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<EmailAccountLogoutResponse>, ApiError> {
+    let account = email_account_or_not_found(&state, &account_id).await?;
+    let mut config = account.config.clone();
+    let config_object = config
+        .as_object_mut()
+        .ok_or(ApiError::InvalidCommunicationQuery(
+            "account config must be an object",
+        ))?;
+    config_object.insert("auth_state".to_owned(), json!("logged_out"));
+    config_object.insert("logged_out_at".to_owned(), json!(Utc::now()));
+
+    let updated_account = communication_ingestion_store(&state)?
+        .update_provider_account_config(&account.account_id, &config)
+        .await?
+        .ok_or(ApiError::NotFound)?;
+    let current_settings = mail_sync_store(&state)
+        .map_err(mail_sync_api_error)?
+        .settings_for_account(&account.account_id)
+        .await
+        .map_err(mail_sync_api_error)?;
+    let sync_settings = mail_sync_store(&state)
+        .map_err(mail_sync_api_error)?
+        .update_settings(
+            &account.account_id,
+            MailSyncSettingsUpdate {
+                sync_enabled: false,
+                batch_size: current_settings.batch_size,
+                poll_interval_seconds: current_settings.poll_interval_seconds,
+            },
+        )
+        .await
+        .map_err(mail_sync_api_error)?;
+
+    Ok(Json(EmailAccountLogoutResponse {
+        capabilities: email_account_capabilities(&updated_account),
+        account: updated_account,
+        sync_settings,
+    }))
+}
+
+pub(crate) async fn delete_v1_email_account(
+    State(state): State<AppState>,
+    Path(account_id): Path<String>,
+) -> Result<Json<EmailAccountDeleteResponse>, ApiError> {
+    let account = email_account_or_not_found(&state, &account_id).await?;
+    let store = communication_ingestion_store(&state)?;
+    let usage = store.provider_account_usage(&account.account_id).await?;
+    if usage.has_retained_evidence() {
+        return Err(ApiError::EmailAccountDeleteConflict);
+    }
+
+    let deleted = store
+        .delete_provider_account_metadata(&account.account_id)
+        .await?;
+
+    Ok(Json(EmailAccountDeleteResponse {
+        account_id: account.account_id,
+        deleted: deleted.account.is_some(),
+        unbound_secret_refs: deleted.unbound_secret_refs,
+    }))
+}
+
 pub(crate) async fn get_v1_email_account_sync_status(
     State(state): State<AppState>,
 ) -> Result<Json<MailSyncStatusListResponse>, ApiError> {
@@ -844,6 +1101,12 @@ pub(crate) struct PinToggleResponse {
     pinned: bool,
 }
 
+#[derive(Serialize)]
+pub(crate) struct ImportantToggleResponse {
+    message_id: String,
+    important: bool,
+}
+
 pub(crate) async fn post_v1_message_pin(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
@@ -851,6 +1114,19 @@ pub(crate) async fn post_v1_message_pin(
     let store = message_store(&state)?;
     let pinned = crate::domains::mail::flags::MessageFlags::toggle_pin(&store, &message_id).await?;
     Ok(Json(PinToggleResponse { message_id, pinned }))
+}
+
+pub(crate) async fn post_v1_message_important(
+    State(state): State<AppState>,
+    Path(message_id): Path<String>,
+) -> Result<Json<ImportantToggleResponse>, ApiError> {
+    let store = message_store(&state)?;
+    let important =
+        crate::domains::mail::flags::MessageFlags::toggle_important(&store, &message_id).await?;
+    Ok(Json(ImportantToggleResponse {
+        message_id,
+        important,
+    }))
 }
 
 #[derive(Deserialize)]
@@ -1976,6 +2252,126 @@ pub(crate) async fn post_gmail_oauth_start(
     pending_map.insert(pending.setup_id.clone(), pending);
 
     Ok(Json(response))
+}
+
+async fn email_account_or_not_found(
+    state: &AppState,
+    account_id: &str,
+) -> Result<ProviderAccount, ApiError> {
+    let Some(account) = communication_ingestion_store(state)?
+        .provider_account(account_id)
+        .await?
+    else {
+        return Err(ApiError::NotFound);
+    };
+    if !account.provider_kind.is_email() {
+        return Err(ApiError::NotFound);
+    }
+
+    Ok(account)
+}
+
+fn email_account_view(account: ProviderAccount) -> EmailAccountView {
+    EmailAccountView {
+        capabilities: email_account_capabilities(&account),
+        account,
+    }
+}
+
+fn email_account_capabilities(account: &ProviderAccount) -> EmailAccountCapabilities {
+    let logged_out = account
+        .config
+        .get("auth_state")
+        .and_then(Value::as_str)
+        .is_some_and(|state| state == "logged_out");
+    let smtp = smtp_configured(&account.config);
+    let imap = matches!(
+        account.provider_kind,
+        EmailProviderKind::Icloud | EmailProviderKind::Imap
+    );
+    let oauth = matches!(account.provider_kind, EmailProviderKind::Gmail)
+        || account
+            .config
+            .get("auth")
+            .and_then(Value::as_str)
+            .is_some_and(|auth| auth == "oauth");
+    let gmail_send_enabled = account
+        .config
+        .get("gmail_send_enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    EmailAccountCapabilities {
+        read: !logged_out,
+        sync: !logged_out,
+        send: !logged_out && (smtp || gmail_send_enabled),
+        oauth,
+        imap,
+        smtp,
+        mutate_flags: !logged_out && imap,
+        mutate_mailboxes: false,
+        server_delete: false,
+        provider_folders: false,
+        local_trash: true,
+    }
+}
+
+fn smtp_configured(config: &Value) -> bool {
+    let Some(object) = config.as_object() else {
+        return false;
+    };
+    object
+        .get("smtp_host")
+        .and_then(Value::as_str)
+        .is_some_and(|host| !host.trim().is_empty())
+        && object.get("smtp_port").and_then(Value::as_i64).is_some()
+}
+
+fn sanitize_account_config(value: &Value) -> Value {
+    match value {
+        Value::Object(object) => Value::Object(
+            object
+                .iter()
+                .filter_map(|(key, value)| {
+                    if is_secret_config_key(key) {
+                        None
+                    } else {
+                        Some((key.clone(), sanitize_account_config(value)))
+                    }
+                })
+                .collect(),
+        ),
+        Value::Array(items) => Value::Array(items.iter().map(sanitize_account_config).collect()),
+        other => other.clone(),
+    }
+}
+
+fn contains_secret_material(value: &Value) -> bool {
+    match value {
+        Value::Object(object) => object
+            .iter()
+            .any(|(key, value)| is_secret_config_key(key) || contains_secret_material(value)),
+        Value::Array(items) => items.iter().any(contains_secret_material),
+        _ => false,
+    }
+}
+
+fn is_secret_config_key(key: &str) -> bool {
+    let key = key.to_ascii_lowercase();
+    [
+        "password",
+        "secret",
+        "secret_ref",
+        "token",
+        "credential",
+        "api_key",
+        "private_key",
+        "client_secret",
+        "refresh_token",
+        "access_token",
+    ]
+    .iter()
+    .any(|marker| key.contains(marker))
 }
 
 fn require_unlocked_host_vault(state: &AppState) -> Result<(), ApiError> {

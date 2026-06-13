@@ -501,6 +501,7 @@ impl From<PersonMemoryError> for InvestigatorError {
         match e {
             PersonMemoryError::NotFound => InvestigatorError::PersonNotFound,
             PersonMemoryError::Sqlx(e) => InvestigatorError::Sqlx(e),
+            PersonMemoryError::Memory(e) => InvestigatorError::Memory(e),
             PersonMemoryError::Timeline(e) => InvestigatorError::Timeline(e),
         }
     }
@@ -514,6 +515,8 @@ pub enum InvestigatorError {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     Relationship(#[from] RelationshipStoreError),
+    #[error(transparent)]
+    Memory(#[from] crate::engines::memory::MemoryEngineError),
     #[error(transparent)]
     Timeline(#[from] crate::engines::timeline::TimelineEngineError),
     #[error(transparent)]

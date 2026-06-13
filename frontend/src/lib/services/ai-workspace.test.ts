@@ -71,4 +71,18 @@ describe('AI agent Persona identity', () => {
 
 		expect(card.name).toBe('hestia@sh-inc.ru');
 	});
+
+	it('derives the visible Persona email from the agent id when the API has not materialized one', () => {
+		const agent = {
+			agent_id: 'HESTIA',
+			display_name: 'Hestia',
+			role: 'meeting prep',
+			default_model: 'llama',
+			status: 'available'
+		} satisfies AiAgent;
+
+		const card = agentCardView(agent, [] satisfies AiRun[]);
+
+		expect(card.name).toBe('hestia@sh-inc.ru');
+	});
 });

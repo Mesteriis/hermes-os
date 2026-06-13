@@ -7,11 +7,14 @@ import {
 	buildReplyComposeForm,
 	buildWorkflowActionRequest,
 	conversationPreview,
+	downloadMessageExport,
 	messageContentText,
+	nextReadWorkflowState,
 	originalMailSrcdoc,
 	relatedMessagesForSelection,
 	remoteMailImageProxyUrl,
 	renderMessageContent,
+	safeMessageExportFilename,
 	summarizeMailResourceSnapshot,
 	filterMessagesForWorkbench,
 	handleDeleteDraft,
@@ -111,6 +114,26 @@ describe('mail workbench helpers', () => {
 			expect.objectContaining({ accountId: 'imap-primary', label: 'Work IMAP', canSend: true }),
 			expect.objectContaining({ accountId: 'gmail-primary', label: 'Gmail', canSend: false })
 		]);
+	});
+
+	it('maps explicit read and unread actions onto workflow states without erasing action states', () => {
+		expect(nextReadWorkflowState('new')).toBe('reviewed');
+		expect(nextReadWorkflowState('reviewed')).toBe('new');
+		expect(nextReadWorkflowState('needs_action')).toBe('reviewed');
+		expect(nextReadWorkflowState('waiting')).toBe('reviewed');
+		expect(nextReadWorkflowState(null)).toBe('reviewed');
+	});
+
+	it('sanitizes exported message filenames before browser download', () => {
+		expect(safeMessageExportFilename('message:../invoice?.eml')).toBe('message_.._invoice_.eml');
+		expect(safeMessageExportFilename('')).toBe('message-export.eml');
+		expect(
+			downloadMessageExport({
+				content_type: 'message/rfc822',
+				content: 'Subject: Test\r\n\r\nBody',
+				filename: 'message.eml'
+			})
+		).toBe(false);
 	});
 
 	it('prepares reply and forward compose state from a selected message', () => {

@@ -835,7 +835,7 @@ async fn person_fact_upsert_uses_memory_engine_source_backed_draft_against_postg
     assert_eq!(fact.fact_type, "interest");
     assert_eq!(fact.value, "local-first systems");
     assert_eq!(fact.source, "communication_messages:message-1");
-    assert_eq!(fact.confidence, 0.84);
+    assert!((fact.confidence - 0.84).abs() < 0.0001);
     assert!(fact.is_active);
 
     let stored_fact: (String, String, String, f64) = sqlx::query_as(
@@ -852,7 +852,7 @@ async fn person_fact_upsert_uses_memory_engine_source_backed_draft_against_postg
     assert_eq!(stored_fact.0, "interest");
     assert_eq!(stored_fact.1, "local-first systems");
     assert_eq!(stored_fact.2, "communication_messages:message-1");
-    assert_eq!(stored_fact.3, 0.84);
+    assert!((stored_fact.3 - 0.84).abs() < 0.0001);
 }
 
 #[tokio::test]

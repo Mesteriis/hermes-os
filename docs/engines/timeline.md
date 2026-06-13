@@ -52,10 +52,23 @@ UI surfaces. Calendar owns scheduled events. The Timeline Engine owns derived
 chronological views across those records.
 
 The first backend baseline lives in `backend/src/engines/timeline.rs`. It owns
-shared timeline policy for bounded entity timeline queries and source-backed
-timeline event validation. Persona relationship events, Organization timeline
-events and Project detail timelines now use this shared policy while retaining
-their current compatibility storage and API shapes.
+shared timeline policy for bounded entity timeline queries, source-backed
+timeline event validation and period summaries over source-backed dated event
+drafts. It also emits source-backed recency signals for a specific entity by
+selecting the latest non-future event relative to an `as_of` time and preserving
+the source reference, and detects source-backed gaps between adjacent entity
+events when the interval exceeds a caller-provided threshold. It can also diff
+two source-backed entity timeline snapshots by source reference to report added
+and removed events, and assemble a bounded cross-domain timeline from
+source-backed events across entity kinds. It also maps canonical
+`StoredEventEnvelope` replay batches into bounded timeline entries while
+tracking the last replayed event-log position. A cursor-backed projection
+runner baseline now reads canonical events through `EventStore::list_after_position`,
+validates them through the Timeline replay mapper, advances
+`ProjectionCursorStore` progress and returns derived timeline entries. Persona
+relationship events, Organization timeline events and Project detail timelines
+now use this shared policy while retaining their current compatibility storage
+and API shapes.
 
 ## Migration Plan
 
@@ -64,6 +77,5 @@ their current compatibility storage and API shapes.
 3. Keep Calendar/Events separate from Timeline Engine.
 4. Keep compatibility tables as inputs until a schema migration ADR explicitly
    changes persisted event or timeline schemas.
-5. Expand the shared engine from policy validation into event-log replay,
-   cross-domain timelines, period summaries, diffs, recency signals and gap
-   detection.
+5. Add durable Timeline read-model storage only after a follow-up schema/API
+   decision defines which projected views must be persisted instead of rebuilt.

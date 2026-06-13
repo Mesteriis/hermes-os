@@ -87,6 +87,63 @@ export type ProviderAccountListResponse = {
 	items: ProviderAccount[];
 };
 
+export type EmailAccountCapabilities = {
+	read: boolean;
+	sync: boolean;
+	send: boolean;
+	oauth: boolean;
+	imap: boolean;
+	smtp: boolean;
+	mutate_flags: boolean;
+	mutate_mailboxes: boolean;
+	server_delete: boolean;
+	provider_folders: boolean;
+	local_trash: boolean;
+};
+
+export type EmailAccountView = {
+	account: ProviderAccount;
+	capabilities: EmailAccountCapabilities;
+};
+
+export type EmailAccountListResponse = {
+	items: EmailAccountView[];
+};
+
+export type EmailAccountExportResponse = {
+	exported_at: string;
+	account: ProviderAccount;
+	capabilities: EmailAccountCapabilities;
+	sync_settings: MailSyncSettings;
+};
+
+export type EmailAccountLogoutResponse = {
+	account: ProviderAccount;
+	capabilities: EmailAccountCapabilities;
+	sync_settings: MailSyncSettings;
+};
+
+export type EmailAccountDeleteResponse = {
+	account_id: string;
+	deleted: boolean;
+	unbound_secret_refs: string[];
+};
+
+export type EmailAccountImportRequest = {
+	account: {
+		account_id: string;
+		provider_kind: 'gmail' | 'icloud' | 'imap';
+		display_name: string;
+		external_account_id: string;
+		config?: Record<string, unknown>;
+	};
+	sync_settings?: {
+		sync_enabled?: boolean;
+		batch_size?: number;
+		poll_interval_seconds?: number;
+	};
+};
+
 export type CommunicationMessageSummary = {
 	message_id: string;
 	raw_record_id: string;
@@ -530,6 +587,11 @@ export type SmartCcResponse = {
 export type MessagePinToggleResponse = {
 	message_id: string;
 	pinned: boolean;
+};
+
+export type MessageImportantToggleResponse = {
+	message_id: string;
+	important: boolean;
 };
 
 export type MessageExportResponse = {
@@ -1619,6 +1681,8 @@ export type AiMeetingPrepResponse = {
 
 export type TelegramProviderKind = 'telegram_user' | 'telegram_bot';
 
+export type TelegramAccountLifecycleState = 'active' | 'logged_out' | 'removed' | string;
+
 export type TelegramAccountSetupRequest = {
 	account_id: string;
 	provider_kind: TelegramProviderKind;
@@ -1699,6 +1763,28 @@ export type TelegramAccountSetupResponse = {
 	runtime: string;
 	transcription_enabled: boolean;
 	credential_bindings: TelegramCredentialBinding[];
+};
+
+export type TelegramAccount = {
+	account_id: string;
+	provider_kind: TelegramProviderKind;
+	display_name: string;
+	external_account_id: string;
+	runtime: string;
+	lifecycle_state: TelegramAccountLifecycleState;
+	transcription_enabled: boolean;
+	tdlib_data_path: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type TelegramAccountListResponse = {
+	items: TelegramAccount[];
+};
+
+export type TelegramAccountLifecycleResponse = {
+	account: TelegramAccount;
+	stopped_runtime_actor: boolean;
 };
 
 export type TelegramCapabilityStatus = {
@@ -2153,6 +2239,11 @@ export type ImapAccountSetupRequest = {
 	username: string;
 	password: string;
 	secret_kind: 'app_password' | 'password';
+	smtp_host?: string;
+	smtp_port?: number;
+	smtp_tls?: boolean;
+	smtp_starttls?: boolean;
+	smtp_username?: string;
 };
 
 export type EnrichedPerson = {

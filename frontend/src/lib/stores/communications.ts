@@ -308,6 +308,16 @@ export async function handleWorkflowStateTransition(messageId: string, newState:
 	isMailStateTransitioning.set(false);
 }
 
+export async function toggleSelectedReadState(): Promise<void> {
+	const message = selectedMessageForCompose();
+	if (!message) return;
+	const currentState =
+		'workflow_state' in message ? (message.workflow_state as WorkflowState | null) : null;
+	const nextState = commsService.nextReadWorkflowState(currentState);
+	await handleWorkflowStateTransition(message.message_id, nextState);
+	mailActionStatus.set(nextState === 'new' ? 'Marked unread' : 'Marked read');
+}
+
 export async function loadDrafts(): Promise<void> {
 	const result = await commsService.loadDrafts(get(selectedMailAccountId));
 	drafts.set(result.drafts);
@@ -610,6 +620,10 @@ export async function togglePinSelectedMessage(): Promise<void> {
 	await runSelectedMessageAction((messageId) => commsService.handleTogglePin(messageId), true);
 }
 
+export async function toggleImportantSelectedMessage(): Promise<void> {
+	await runSelectedMessageAction((messageId) => commsService.handleToggleImportant(messageId), true);
+}
+
 export async function toggleMuteSelectedMessage(): Promise<void> {
 	await runSelectedMessageAction((messageId) => commsService.handleToggleMute(messageId), true);
 }
@@ -642,7 +656,8 @@ export async function exportSelectedMessage(format: 'md' | 'eml' | 'json'): Prom
 		return;
 	}
 	lastMessageExport.set(result.result);
-	mailActionStatus.set('Export ready');
+	const downloaded = result.result ? commsService.downloadMessageExport(result.result) : false;
+	mailActionStatus.set(downloaded ? 'Export downloaded' : 'Export ready');
 }
 
 export async function generateReplyForSelectedMessage(): Promise<void> {

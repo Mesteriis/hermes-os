@@ -136,7 +136,7 @@ export function agentCardView(agent: AiAgent, aiRuns: AiRun[]) {
 
 	return {
 		agentId: agent.agent_id,
-		name: agent.persona_email ?? agent.display_name,
+		name: agent.persona_email ?? aiAgentPersonaEmail(agent.agent_id),
 		summary: agent.role,
 		icon: visual.icon,
 		tasks: runs.length,
@@ -145,6 +145,10 @@ export function agentCardView(agent: AiAgent, aiRuns: AiRun[]) {
 		tone: visual.tone,
 		model: agent.default_model
 	};
+}
+
+export function aiAgentPersonaEmail(agentId: string): string {
+	return `${agentId.trim().toLowerCase()}@sh-inc.ru`;
 }
 
 export function agentVisual(agentId: string): { icon: string; tone: string } {

@@ -27,6 +27,9 @@ use crate::vault::{HostVault, HostVaultError, SecretEntryContext};
 
 const TELEGRAM_MESSAGE_RECORD_KIND: &str = "telegram_message";
 const TELEGRAM_CHAT_RECORD_KIND: &str = "telegram_chat";
+const TELEGRAM_ACCOUNT_ACTIVE: &str = "active";
+const TELEGRAM_ACCOUNT_LOGGED_OUT: &str = "logged_out";
+const TELEGRAM_ACCOUNT_REMOVED: &str = "removed";
 
 struct TelegramCredentialWrite<'a> {
     account_id: &'a str,
@@ -130,6 +133,34 @@ impl TelegramStore {
             transcription_enabled: request.transcription_enabled,
             credential_bindings: vec![],
         })
+    }
+
+    pub async fn list_accounts(
+        &self,
+        include_removed: bool,
+    ) -> Result<Vec<TelegramAccount>, TelegramError> {
+        let accounts = CommunicationIngestionStore::new(self.pool.clone())
+            .list_provider_accounts()
+            .await?;
+
+        Ok(accounts
+            .into_iter()
+            .filter(|account| account.provider_kind.is_telegram())
+            .map(telegram_account_from_provider_account)
+            .filter(|account| {
+                include_removed || account.lifecycle_state != TELEGRAM_ACCOUNT_REMOVED
+            })
+            .collect())
+    }
+
+    pub async fn logout_account(&self, account_id: &str) -> Result<TelegramAccount, TelegramError> {
+        self.update_account_lifecycle(account_id, TELEGRAM_ACCOUNT_LOGGED_OUT)
+            .await
+    }
+
+    pub async fn remove_account(&self, account_id: &str) -> Result<TelegramAccount, TelegramError> {
+        self.update_account_lifecycle(account_id, TELEGRAM_ACCOUNT_REMOVED)
+            .await
     }
 
     pub async fn setup_live_blocked_account(
@@ -285,6 +316,57 @@ impl TelegramStore {
             transcription_enabled: request.transcription_enabled,
             credential_bindings,
         })
+    }
+
+    async fn update_account_lifecycle(
+        &self,
+        account_id: &str,
+        lifecycle_state: &'static str,
+    ) -> Result<TelegramAccount, TelegramError> {
+        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
+        let account = self
+            .telegram_provider_account(&communication_store, account_id)
+            .await?;
+        let current_state = telegram_account_lifecycle_state(&account);
+        if current_state == TELEGRAM_ACCOUNT_REMOVED && lifecycle_state != TELEGRAM_ACCOUNT_REMOVED
+        {
+            return Err(TelegramError::InvalidRequest(format!(
+                "Telegram account `{}` is removed",
+                account.account_id
+            )));
+        }
+
+        let mut config = account.config.clone();
+        validate_object("config", &config)?;
+        let Some(config_object) = config.as_object_mut() else {
+            return Err(TelegramError::InvalidRequest(
+                "config must be a JSON object".to_owned(),
+            ));
+        };
+        let now = Utc::now();
+        config_object.insert("lifecycle_state".to_owned(), json!(lifecycle_state));
+        config_object.insert("lifecycle_updated_at".to_owned(), json!(now));
+        match lifecycle_state {
+            TELEGRAM_ACCOUNT_LOGGED_OUT => {
+                config_object.insert("logged_out_at".to_owned(), json!(now));
+            }
+            TELEGRAM_ACCOUNT_REMOVED => {
+                config_object.insert("removed_at".to_owned(), json!(now));
+            }
+            _ => {}
+        }
+
+        let updated = communication_store
+            .update_provider_account_config(&account.account_id, &config)
+            .await?
+            .ok_or_else(|| {
+                TelegramError::InvalidRequest(format!(
+                    "Telegram account `{}` is not configured",
+                    account.account_id
+                ))
+            })?;
+
+        Ok(telegram_account_from_provider_account(updated))
     }
 
     async fn store_account_credential(
@@ -1104,6 +1186,31 @@ pub struct TelegramAccountSetupResponse {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TelegramAccount {
+    pub account_id: String,
+    pub provider_kind: String,
+    pub display_name: String,
+    pub external_account_id: String,
+    pub runtime: String,
+    pub lifecycle_state: String,
+    pub transcription_enabled: bool,
+    pub tdlib_data_path: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TelegramAccountListResponse {
+    pub items: Vec<TelegramAccount>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TelegramAccountLifecycleResponse {
+    pub account: TelegramAccount,
+    pub stopped_runtime_actor: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TelegramCredentialBinding {
     pub secret_purpose: String,
     pub secret_ref: String,
@@ -1496,6 +1603,61 @@ fn telegram_account_runtime(account: &ProviderAccount) -> String {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or("unknown")
+        .to_owned()
+}
+
+pub(crate) fn ensure_telegram_account_active(
+    account: &ProviderAccount,
+) -> Result<(), TelegramError> {
+    let lifecycle_state = telegram_account_lifecycle_state(account);
+    if lifecycle_state != TELEGRAM_ACCOUNT_ACTIVE {
+        return Err(TelegramError::InvalidRequest(format!(
+            "Telegram account `{}` is `{}` and cannot run provider operations",
+            account.account_id, lifecycle_state
+        )));
+    }
+
+    Ok(())
+}
+
+fn telegram_account_from_provider_account(account: ProviderAccount) -> TelegramAccount {
+    let runtime = telegram_account_runtime(&account);
+    let lifecycle_state = telegram_account_lifecycle_state(&account);
+    let transcription_enabled = account
+        .config
+        .get("transcription_enabled")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    let tdlib_data_path = account
+        .config
+        .get("tdlib_data_path")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    TelegramAccount {
+        account_id: account.account_id,
+        provider_kind: account.provider_kind.as_str().to_owned(),
+        display_name: account.display_name,
+        external_account_id: account.external_account_id,
+        runtime,
+        lifecycle_state,
+        transcription_enabled,
+        tdlib_data_path,
+        created_at: account.created_at,
+        updated_at: account.updated_at,
+    }
+}
+
+fn telegram_account_lifecycle_state(account: &ProviderAccount) -> String {
+    account
+        .config
+        .get("lifecycle_state")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(TELEGRAM_ACCOUNT_ACTIVE)
         .to_owned()
 }
 

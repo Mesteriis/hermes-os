@@ -56,7 +56,8 @@ impl PersonFactStore {
         source: &str,
         confidence: f64,
     ) -> Result<PersonFact, PersonMemoryError> {
-        let fact = MemoryEngine::persona_fact_memory(person_id, fact_type, value, source, confidence)?;
+        let fact =
+            MemoryEngine::persona_fact_memory(person_id, fact_type, value, source, confidence)?;
         let row = sqlx::query(
             "INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
              VALUES ($1, $2, $3, $4, $5)

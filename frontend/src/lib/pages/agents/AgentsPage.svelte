@@ -164,7 +164,17 @@
 		<button type="button" class="primary-button" onclick={() => void loadAiWorkspace()} disabled={isAiLoading}><Icon icon="tabler:refresh" width="16" height="16" />Refresh</button>
 	</div>
 
-	<AgentsRuntimeMetrics {aiStatus} {aiAgents} {aiRuns} suggestedTaskCandidates={[]} {isLayoutEditing} {isWidgetVisible} {aiRuntimeSummary} {formatDuration} />
+	<AgentsRuntimeMetrics
+		{aiStatus}
+		{aiAgents}
+		{aiRuns}
+		suggestedTaskCandidates={[]}
+		{isLayoutEditing}
+		{isWidgetVisible}
+		{aiRuntimeSummary}
+		{formatDuration}
+		formatAgentPersonaName={aiService.aiAgentPersonaEmail}
+	/>
 
 	{#if aiError}
 		<p class="inline-error">{aiError}</p>
@@ -195,7 +205,19 @@
 			/>
 		</section>
 
-		<AgentsRail {aiRuns} {aiStatus} {ownerPersona} {isLayoutEditing} {isWidgetVisible} {aiRuntimeSummary} {runStatusLabel} {formatDuration} {formatDateTime} {safeCitations} />
+		<AgentsRail
+			{aiRuns}
+			{aiStatus}
+			{ownerPersona}
+			{isLayoutEditing}
+			{isWidgetVisible}
+			{aiRuntimeSummary}
+			{runStatusLabel}
+			{formatDuration}
+			{formatDateTime}
+			{safeCitations}
+			formatAgentPersonaName={aiService.aiAgentPersonaEmail}
+		/>
 	</div>
 
 </section>

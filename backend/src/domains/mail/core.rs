@@ -120,6 +120,122 @@ impl CommunicationIngestionStore {
         rows.into_iter().map(row_to_provider_account).collect()
     }
 
+    pub async fn update_provider_account_config(
+        &self,
+        account_id: &str,
+        config: &Value,
+    ) -> Result<Option<ProviderAccount>, CommunicationIngestionError> {
+        validate_non_empty("account_id", account_id)?;
+        validate_object("config", config)?;
+
+        let row = sqlx::query(
+            r#"
+            UPDATE communication_provider_accounts
+            SET config = $2,
+                updated_at = now()
+            WHERE account_id = $1
+            RETURNING
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(config)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_provider_account).transpose()
+    }
+
+    pub async fn provider_account_usage(
+        &self,
+        account_id: &str,
+    ) -> Result<ProviderAccountUsage, CommunicationIngestionError> {
+        validate_non_empty("account_id", account_id)?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT
+                (SELECT count(*) FROM communication_raw_records WHERE account_id = $1) AS raw_record_count,
+                (SELECT count(*) FROM communication_messages WHERE account_id = $1) AS message_count,
+                (SELECT count(*) FROM communication_ingestion_checkpoints WHERE account_id = $1) AS checkpoint_count
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(ProviderAccountUsage {
+            raw_record_count: row.try_get("raw_record_count")?,
+            message_count: row.try_get("message_count")?,
+            checkpoint_count: row.try_get("checkpoint_count")?,
+        })
+    }
+
+    pub async fn delete_provider_account_metadata(
+        &self,
+        account_id: &str,
+    ) -> Result<DeletedProviderAccount, CommunicationIngestionError> {
+        validate_non_empty("account_id", account_id)?;
+
+        let mut transaction = self.pool.begin().await?;
+
+        let binding_rows = sqlx::query(
+            r#"
+            DELETE FROM communication_provider_account_secret_refs
+            WHERE account_id = $1
+            RETURNING secret_ref
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_all(&mut *transaction)
+        .await?;
+        let unbound_secret_refs = binding_rows
+            .into_iter()
+            .map(|row| row.try_get("secret_ref"))
+            .collect::<Result<Vec<String>, sqlx::Error>>()?;
+
+        sqlx::query(
+            r#"
+            DELETE FROM communication_ingestion_checkpoints
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(account_id.trim())
+        .execute(&mut *transaction)
+        .await?;
+
+        let account_row = sqlx::query(
+            r#"
+            DELETE FROM communication_provider_accounts
+            WHERE account_id = $1
+            RETURNING
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        transaction.commit().await?;
+
+        Ok(DeletedProviderAccount {
+            account: account_row.map(row_to_provider_account).transpose()?,
+            unbound_secret_refs,
+        })
+    }
+
     pub async fn record_raw_source(
         &self,
         record: &NewRawCommunicationRecord,
@@ -540,6 +656,25 @@ pub struct ProviderAccount {
     pub config: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ProviderAccountUsage {
+    pub raw_record_count: i64,
+    pub message_count: i64,
+    pub checkpoint_count: i64,
+}
+
+impl ProviderAccountUsage {
+    pub fn has_retained_evidence(&self) -> bool {
+        self.raw_record_count > 0 || self.message_count > 0
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct DeletedProviderAccount {
+    pub account: Option<ProviderAccount>,
+    pub unbound_secret_refs: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

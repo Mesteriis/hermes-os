@@ -22,7 +22,8 @@ use crate::domains::mail::storage::{
 };
 use crate::integrations::telegram::client::{
     TelegramChat, TelegramError, TelegramManualSendRequest, TelegramManualSendResponse,
-    TelegramMessage, TelegramQrLoginStartRequest, TelegramStore, telegram_text_preview_hash,
+    TelegramMessage, TelegramQrLoginStartRequest, TelegramStore, ensure_telegram_account_active,
+    telegram_text_preview_hash,
 };
 use crate::integrations::telegram::tdjson::{
     self, TdJsonClient, TelegramTdlibChatSnapshot, TelegramTdlibFileSnapshot,
@@ -72,6 +73,7 @@ impl TelegramRuntimeManager {
     ) -> Result<TelegramRuntimeStatus, TelegramError> {
         request.validate()?;
         let account = load_telegram_account(communication_store, &request.account_id).await?;
+        ensure_telegram_account_active(&account)?;
         let session_encryption_key = optional_telegram_session_key(
             communication_store,
             secret_store,
@@ -142,6 +144,7 @@ impl TelegramRuntimeManager {
     ) -> Result<TelegramChatSyncResponse, TelegramError> {
         request.validate()?;
         let account = load_telegram_account(communication_store, &request.account_id).await?;
+        ensure_telegram_account_active(&account)?;
         let runtime_kind = account_runtime_kind(&account);
         match runtime_kind.as_str() {
             "fixture" => {
@@ -204,6 +207,7 @@ impl TelegramRuntimeManager {
     ) -> Result<TelegramHistorySyncResponse, TelegramError> {
         request.validate()?;
         let account = load_telegram_account(communication_store, &request.account_id).await?;
+        ensure_telegram_account_active(&account)?;
         let runtime_kind = account_runtime_kind(&account);
         match runtime_kind.as_str() {
             "fixture" => {
@@ -318,6 +322,7 @@ impl TelegramRuntimeManager {
     ) -> Result<TelegramManualSendResponse, TelegramError> {
         request.validate()?;
         let account = load_telegram_account(communication_store, &request.account_id).await?;
+        ensure_telegram_account_active(&account)?;
         let runtime_kind = account_runtime_kind(&account);
         match runtime_kind.as_str() {
             "fixture" => telegram_store.manual_send_message(request).await,
@@ -368,6 +373,7 @@ impl TelegramRuntimeManager {
         request.validate()?;
         let account =
             load_telegram_account(context.communication_store, &request.account_id).await?;
+        ensure_telegram_account_active(&account)?;
         let runtime_kind = account_runtime_kind(&account);
         match runtime_kind.as_str() {
             "fixture" => Err(TelegramError::InvalidRequest(
@@ -417,6 +423,14 @@ impl TelegramRuntimeManager {
             TelegramError::TdlibRuntime("Telegram runtime state lock poisoned".into())
         })?;
         Ok(actors.get(account_id).map(|handle| handle.state.clone()))
+    }
+
+    pub fn stop_account(&self, account_id: &str) -> Result<bool, TelegramError> {
+        let account_id = validate_non_empty("account_id", account_id)?;
+        let mut actors = self.actors.lock().map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram runtime state lock poisoned".into())
+        })?;
+        Ok(actors.remove(&account_id).is_some())
     }
 
     fn set_actor_handle(

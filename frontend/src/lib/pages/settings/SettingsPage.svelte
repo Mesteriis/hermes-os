@@ -1,7 +1,16 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
+	import type { EmailAccountImportRequest } from '$lib/api';
 	import { openAccountDrawer } from '$lib/stores/accountWizard';
+	import {
+		deleteMailAccount,
+		emailAccountExportFilename,
+		exportMailAccountSettings,
+		importMailAccountSettings,
+		logoutMailAccount,
+		parseEmailAccountImportJson
+	} from '$lib/services/accounts';
 	import {
 		addSidebarGroup,
 		applicationSettings,
@@ -11,10 +20,11 @@
 		formatDateTime,
 		hasSidebarChanges,
 		integrationViewModels,
-		inputEventValue,
-		isSettingsLoading,
-		isSidebarSettingsSaving,
-		moveSidebarGroup,
+			inputEventValue,
+			isSettingsLoading,
+			isSidebarSettingsSaving,
+			loadSettingsWorkspace,
+			moveSidebarGroup,
 		moveSidebarItem,
 		moveSidebarItemToGroup,
 		moveSidebarRootItem,
@@ -117,6 +127,78 @@
 	function closeIntegrationInspector() {
 		selectedIntegrationId = null;
 	}
+
+	function downloadJsonFile(filename: string, content: string) {
+		if (typeof document === 'undefined') return;
+		const blob = new Blob([content], { type: 'application/json' });
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = filename;
+		document.body.appendChild(link);
+		link.click();
+		link.remove();
+		URL.revokeObjectURL(url);
+	}
+
+	function failMailSettingsAction(message: string): never {
+		settingsError.set(message);
+		settingsActionMessage.set('');
+		throw new Error(message);
+	}
+
+	async function handleExportMailAccount(accountId: string): Promise<void> {
+		settingsError.set('');
+		settingsActionMessage.set('');
+		const result = await exportMailAccountSettings(accountId);
+		if (result.error || !result.result) {
+			failMailSettingsAction(result.error || 'Mail account export failed');
+		}
+		downloadJsonFile(
+			emailAccountExportFilename(accountId, result.result.exported_at),
+			JSON.stringify(result.result, null, 2)
+		);
+		settingsActionMessage.set('Mail account settings exported');
+	}
+
+	async function handleLogoutMailAccount(accountId: string): Promise<void> {
+		settingsError.set('');
+		settingsActionMessage.set('');
+		const result = await logoutMailAccount(accountId);
+		if (result.error || !result.result) {
+			failMailSettingsAction(result.error || 'Mail account logout failed');
+		}
+		settingsActionMessage.set('Mail account logged out');
+		await loadSettingsWorkspace();
+	}
+
+	async function handleDeleteMailAccount(accountId: string): Promise<void> {
+		settingsError.set('');
+		settingsActionMessage.set('');
+		const result = await deleteMailAccount(accountId);
+		if (result.error || !result.result) {
+			failMailSettingsAction(result.error || 'Mail account delete failed');
+		}
+		settingsActionMessage.set('Mail account deleted');
+		await loadSettingsWorkspace();
+	}
+
+	async function handleImportMailSettings(rawJson: string): Promise<void> {
+		settingsError.set('');
+		settingsActionMessage.set('');
+		let request: EmailAccountImportRequest;
+		try {
+			request = parseEmailAccountImportJson(rawJson);
+		} catch (error) {
+			failMailSettingsAction(error instanceof Error ? error.message : 'Mail account import failed');
+		}
+		const result = await importMailAccountSettings(request);
+		if (result.error || !result.result) {
+			failMailSettingsAction(result.error || 'Mail account import failed');
+		}
+		settingsActionMessage.set('Imported mail settings');
+		await loadSettingsWorkspace();
+	}
 </script>
 
 {#if $settingsActionMessage}
@@ -210,6 +292,10 @@
 				onSelectIntegration={selectIntegration}
 				onCloseIntegration={closeIntegrationInspector}
 				onOpenAccountDrawer={openAccountWizard}
+				onExportMailAccount={handleExportMailAccount}
+				onLogoutMailAccount={handleLogoutMailAccount}
+				onDeleteMailAccount={handleDeleteMailAccount}
+				onImportMailSettings={handleImportMailSettings}
 				formatDateTimeFn={formatDateTime}
 			/>
 		{:else}

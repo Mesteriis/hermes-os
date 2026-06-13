@@ -31,10 +31,11 @@
 		isWidgetVisible: (id: string) => boolean;
 		handleWorkflowStateTransition: (msgId: string, state: WorkflowState) => void;
 		askAiAboutSelectedMessage: () => void;
-		onReply: () => void;
-		onForward: () => void;
-		onPin: () => void;
-		onMute: () => void;
+			onReply: () => void;
+			onForward: () => void;
+			onPin: () => void;
+			onImportant: () => void;
+			onMute: () => void;
 		onTrash: () => void;
 		onRestore: () => void;
 		onSnooze: () => void;
@@ -45,6 +46,7 @@
 		onExtractNotes: () => void;
 		onTranslate: () => void;
 		onWorkflowAction: (action: WorkflowActionKind) => void;
+		onToggleReadState: () => void;
 		onOpenInspector: (mode: 'context' | 'contact' | 'organization') => void;
 		onSelectRelatedMessage: (messageId: string) => void;
 		activeTab: MessageContextTab;
@@ -72,10 +74,11 @@
 		isWidgetVisible,
 		handleWorkflowStateTransition,
 		askAiAboutSelectedMessage,
-		onReply,
-		onForward,
-		onPin,
-		onMute,
+			onReply,
+			onForward,
+			onPin,
+			onImportant,
+			onMute,
 		onTrash,
 		onRestore,
 		onSnooze,
@@ -86,6 +89,7 @@
 		onExtractNotes,
 		onTranslate,
 		onWorkflowAction,
+		onToggleReadState,
 		onOpenInspector,
 		onSelectRelatedMessage,
 		activeTab,
@@ -135,8 +139,13 @@
 	const selectedAttachments = $derived(selectedCommunicationDetail?.attachments ?? []);
 	const messageMetadata = $derived((selectedMessage?.message_metadata ?? {}) as Record<string, unknown>);
 	const labels = $derived(Array.isArray(messageMetadata.labels) ? (messageMetadata.labels as string[]) : []);
+	const isImportant = $derived(messageMetadata.important === true);
+	const importantActionLabel = $derived(isImportant ? 'Remove important' : 'Mark important');
+	const importantActionIcon = $derived(isImportant ? 'tabler:star-off' : 'tabler:star');
 	const headers = $derived.by(() => headersFromMetadata(messageMetadata));
 	const workflowState = $derived(selectedMessage && 'workflow_state' in selectedMessage ? selectedMessage.workflow_state : null);
+	const readActionLabel = $derived(workflowState === 'reviewed' ? 'Mark unread' : 'Mark read');
+	const readActionIcon = $derived(workflowState === 'reviewed' ? 'tabler:mail-opened' : 'tabler:mail-check');
 	const selectedAnalysis = $derived(
 		aiAnalysisResult && aiAnalysisResult.message_id === selectedMessage?.message_id ? aiAnalysisResult : null
 	);
@@ -444,6 +453,7 @@
 							<button type="button" onclick={() => onWorkflowAction('create_event')} disabled={isMailActionRunning}><Icon icon="tabler:calendar-plus" width="16" height="16" />{_('Create Event')}</button>
 							<button type="button" onclick={() => onWorkflowAction('link_document')} disabled={isMailActionRunning}><Icon icon="tabler:file-symlink" width="16" height="16" />{_('Link Document')}</button>
 							<button type="button" onclick={() => onWorkflowAction('archive')} disabled={isMailActionRunning}><Icon icon="tabler:archive" width="16" height="16" />{_('Archive')}</button>
+							<button type="button" onclick={onToggleReadState} disabled={isMailStateTransitioning}><Icon icon={readActionIcon} width="16" height="16" />{_(readActionLabel)}</button>
 						</div>
 						{#if mailMessageInsight?.messageId === selectedMessage.message_id}
 							<div class="mail-action-grid compact">
@@ -500,6 +510,7 @@
 					{/if}
 					<div class="related-workspace">
 						<button type="button" onclick={onPin} disabled={isMailActionRunning}><Icon icon="tabler:pin" width="16" height="16" />{_('Pin')}</button>
+						<button type="button" onclick={onImportant} disabled={isMailActionRunning}><Icon icon={importantActionIcon} width="16" height="16" />{_(importantActionLabel)}</button>
 						<button type="button" onclick={onMute} disabled={isMailActionRunning}><Icon icon="tabler:volume-off" width="16" height="16" />{_('Mute')}</button>
 						{#if selectedMessage.local_state === 'trash'}
 							<button type="button" onclick={onRestore} disabled={isMailActionRunning}><Icon icon="tabler:restore" width="16" height="16" />{_('Restore')}</button>

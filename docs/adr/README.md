@@ -93,3 +93,4 @@ ADR status vocabulary:
 - [ADR-0089 Decision Persistence](ADR-0089-decision-persistence.md)
 - [ADR-0090 Persona-Native Compatibility API Bridge](ADR-0090-persona-native-compatibility-api-bridge.md)
 - [ADR-0091 Telegram Production Client Capability Model](ADR-0091-telegram-production-client-capability-model.md)
+- [ADR-0092 Mail Provider Capability Tiers](ADR-0092-mail-provider-capability-tiers.md)

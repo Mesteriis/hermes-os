@@ -27,6 +27,7 @@ import type {
 	MessageExplainResponse,
 	SmartCcResponse,
 	MessagePinToggleResponse,
+	MessageImportantToggleResponse,
 	MessageExportResponse,
 	MessageAuthCheckResponse,
 	SignatureDetection,
@@ -287,6 +288,16 @@ export async function toggleMessagePin(messageId: string): Promise<MessagePinTog
 		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/pin`,
 		{},
 		'Pin message failed'
+	);
+}
+
+export async function toggleMessageImportant(
+	messageId: string
+): Promise<MessageImportantToggleResponse> {
+	return ApiClient.instance.post<MessageImportantToggleResponse>(
+		`/api/v1/communications/messages/${encodeURIComponent(messageId)}/important`,
+		{},
+		'Important message toggle failed'
 	);
 }
 

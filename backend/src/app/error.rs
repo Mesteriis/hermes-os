@@ -205,6 +205,7 @@ pub enum ApiError {
     CommunicationIngestion(CommunicationIngestionError),
     MailStorage(MailStorageError),
     InvalidCommunicationQuery(&'static str),
+    EmailAccountDeleteConflict,
     ProviderWriteConfirmationRequired,
     CommunicationMessageNotFound,
     SecretVaultNotConfigured,
@@ -1003,6 +1004,13 @@ impl axum::response::IntoResponse for ApiError {
                 StatusCode::BAD_REQUEST,
                 "invalid_communication_query",
                 message.to_owned(),
+                false,
+            ),
+            Self::EmailAccountDeleteConflict => (
+                StatusCode::CONFLICT,
+                "email_account_delete_conflict",
+                "email account has retained communication evidence and cannot be deleted"
+                    .to_owned(),
                 false,
             ),
             Self::ProviderWriteConfirmationRequired => (

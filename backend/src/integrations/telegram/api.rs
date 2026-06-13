@@ -117,11 +117,11 @@ use crate::domains::tasks::rules::{TaskRuleError, TaskRuleStore, TaskTemplateSto
 use crate::domains::tasks::sync::{export_task_json, export_task_md};
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
 use crate::integrations::telegram::client::{
-    NewTelegramMessage, TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat,
-    TelegramError, TelegramLiveAccountSetupRequest, TelegramManualSendRequest,
-    TelegramManualSendResponse, TelegramMessage, TelegramMessageIngestResult,
-    TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatusResponse,
-    TelegramStore,
+    NewTelegramMessage, TelegramAccountLifecycleResponse, TelegramAccountListResponse,
+    TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat, TelegramError,
+    TelegramLiveAccountSetupRequest, TelegramManualSendRequest, TelegramManualSendResponse,
+    TelegramMessage, TelegramMessageIngestResult, TelegramQrLoginPasswordRequest,
+    TelegramQrLoginStartRequest, TelegramQrLoginStatusResponse, TelegramStore,
 };
 use crate::integrations::telegram::runtime::{
     TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,
@@ -193,6 +193,67 @@ pub(crate) async fn post_telegram_account(
             )
             .await?,
     ))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct TelegramAccountsQuery {
+    #[serde(default)]
+    pub(crate) include_removed: bool,
+}
+
+pub(crate) async fn get_telegram_accounts(
+    State(state): State<AppState>,
+    Query(query): Query<TelegramAccountsQuery>,
+) -> Result<Json<TelegramAccountListResponse>, ApiError> {
+    let items = telegram_store(&state)?
+        .list_accounts(query.include_removed)
+        .await?;
+
+    Ok(Json(TelegramAccountListResponse { items }))
+}
+
+pub(crate) async fn post_telegram_account_logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(account_id): Path<String>,
+) -> Result<Json<TelegramAccountLifecycleResponse>, ApiError> {
+    let account = telegram_store(&state)?.logout_account(&account_id).await?;
+    let stopped_runtime_actor = state.telegram_runtime.stop_account(&account.account_id)?;
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::telegram_account_logout(
+            actor_id_from_headers(&headers),
+            &account.account_id,
+            &account.provider_kind,
+            &account.lifecycle_state,
+        ))
+        .await?;
+
+    Ok(Json(TelegramAccountLifecycleResponse {
+        account,
+        stopped_runtime_actor,
+    }))
+}
+
+pub(crate) async fn delete_telegram_account(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(account_id): Path<String>,
+) -> Result<Json<TelegramAccountLifecycleResponse>, ApiError> {
+    let account = telegram_store(&state)?.remove_account(&account_id).await?;
+    let stopped_runtime_actor = state.telegram_runtime.stop_account(&account.account_id)?;
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::telegram_account_remove(
+            actor_id_from_headers(&headers),
+            &account.account_id,
+            &account.provider_kind,
+            &account.lifecycle_state,
+        ))
+        .await?;
+
+    Ok(Json(TelegramAccountLifecycleResponse {
+        account,
+        stopped_runtime_actor,
+    }))
 }
 
 #[derive(Deserialize)]

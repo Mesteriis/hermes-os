@@ -11,6 +11,8 @@ import type {
 	TelegramAccountSetupRequest,
 	TelegramLiveAccountSetupRequest,
 	TelegramAccountSetupResponse,
+	TelegramAccountListResponse,
+	TelegramAccountLifecycleResponse,
 	TelegramRuntimeStartRequest,
 	TelegramRuntimeStatus,
 	TelegramChatSyncRequest,
@@ -185,6 +187,33 @@ export async function setupTelegramFixtureAccount(
 		'/api/v1/telegram/accounts/fixture',
 		request,
 		'Telegram account setup request failed'
+	);
+}
+
+export async function fetchTelegramAccounts(includeRemoved = false): Promise<TelegramAccountListResponse> {
+	const params = new URLSearchParams();
+	if (includeRemoved) {
+		params.set('include_removed', 'true');
+	}
+	const query = params.toString();
+	return ApiClient.instance.get<TelegramAccountListResponse>(
+		`/api/v1/telegram/accounts${query ? `?${query}` : ''}`,
+		'Telegram account list request failed'
+	);
+}
+
+export async function logoutTelegramAccount(accountId: string): Promise<TelegramAccountLifecycleResponse> {
+	return ApiClient.instance.post<TelegramAccountLifecycleResponse>(
+		`/api/v1/telegram/accounts/${encodeURIComponent(accountId)}/logout`,
+		{},
+		'Telegram account logout request failed'
+	);
+}
+
+export async function removeTelegramAccount(accountId: string): Promise<TelegramAccountLifecycleResponse> {
+	return ApiClient.instance.delete<TelegramAccountLifecycleResponse>(
+		`/api/v1/telegram/accounts/${encodeURIComponent(accountId)}`,
+		'Telegram account remove request failed'
 	);
 }
 

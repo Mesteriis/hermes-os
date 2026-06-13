@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('$lib/api', () => ({
 	fetchTelegramCapabilities: vi.fn(),
+	fetchTelegramAccounts: vi.fn(),
 	fetchTelegramChats: vi.fn(),
 	fetchTelegramMessages: vi.fn(),
 	fetchTelegramRuntimeStatus: vi.fn(),
@@ -33,6 +34,7 @@ import {
 	fetchCallTranscript,
 	fetchTelegramCalls,
 	fetchTelegramCapabilities,
+	fetchTelegramAccounts,
 	fetchTelegramChats,
 	fetchTelegramMessages,
 	fetchTelegramRuntimeStatus,
@@ -215,6 +217,22 @@ describe('Telegram service live workbench state', () => {
 
 	it('loads account-scoped runtime status for Telegram chat accounts', async () => {
 		vi.mocked(fetchTelegramCapabilities).mockResolvedValue(qrReadyCapabilities);
+		vi.mocked(fetchTelegramAccounts).mockResolvedValue({
+			items: [
+				{
+					account_id: 'telegram-primary',
+					provider_kind: 'telegram_user',
+					display_name: 'Primary Telegram',
+					external_account_id: 'telegram:primary',
+					runtime: 'fixture',
+					lifecycle_state: 'active',
+					transcription_enabled: false,
+					tdlib_data_path: 'docker/data/telegram/telegram-primary',
+					created_at: '2026-06-06T12:00:00Z',
+					updated_at: '2026-06-06T12:00:00Z'
+				}
+			]
+		});
 		vi.mocked(fetchTelegramChats).mockResolvedValue({
 			items: [
 				{
@@ -252,6 +270,8 @@ describe('Telegram service live workbench state', () => {
 		const result = await loadTelegramWorkspace('', '');
 
 		expect(result.error).toBe('');
+		expect(result.accounts).toHaveLength(1);
+		expect(fetchTelegramAccounts).toHaveBeenCalledWith();
 		expect(fetchTelegramChats).toHaveBeenCalledWith(undefined, 5000);
 		expect(fetchTelegramRuntimeStatus).toHaveBeenCalledWith('telegram-primary');
 		expect(fetchTelegramMessages).toHaveBeenNthCalledWith(1);

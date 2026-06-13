@@ -31,6 +31,7 @@ import {
 	extractMessageTasks,
 	extractMessageNotes,
 	toggleMessagePin,
+	toggleMessageImportant,
 	toggleMessageMute,
 	snoozeMessage,
 	addMessageLabel,
@@ -543,6 +544,18 @@ export async function handleTogglePin(messageId: string): Promise<{ success: boo
 	}
 }
 
+export async function handleToggleImportant(messageId: string): Promise<{ success: boolean; message: string }> {
+	try {
+		const result = await toggleMessageImportant(messageId);
+		return {
+			success: true,
+			message: result.important ? 'Marked important' : 'Removed important'
+		};
+	} catch (error) {
+		return { success: false, message: error instanceof Error ? error.message : 'Important action failed' };
+	}
+}
+
 export async function handleToggleMute(messageId: string): Promise<{ success: boolean; message: string }> {
 	try {
 		const result = await toggleMessageMute(messageId);
@@ -587,6 +600,30 @@ export async function handleExportMessage(
 			result: null
 		};
 	}
+}
+
+export function safeMessageExportFilename(filename: string | null | undefined): string {
+	const fallback = 'message-export.eml';
+	const candidate = filename?.trim() || fallback;
+	return candidate.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').slice(0, 180) || fallback;
+}
+
+export function downloadMessageExport(exported: MessageExportResponse): boolean {
+	if (typeof document === 'undefined' || typeof URL === 'undefined') {
+		return false;
+	}
+
+	const blob = new Blob([exported.content], { type: exported.content_type || 'application/octet-stream' });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement('a');
+	link.href = url;
+	link.download = safeMessageExportFilename(exported.filename);
+	link.style.display = 'none';
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	URL.revokeObjectURL(url);
+	return true;
 }
 
 export async function handleGenerateAiReply(messageId: string): Promise<{
@@ -743,6 +780,10 @@ export function sendCapabilityForAccount(account: ProviderAccount | null | undef
 		};
 	}
 	return { canSend: true, transport: 'smtp', reason: null };
+}
+
+export function nextReadWorkflowState(currentState: WorkflowState | null | undefined): WorkflowState {
+	return currentState === 'reviewed' ? 'new' : 'reviewed';
 }
 
 export function buildMailAccountOptions(accounts: ProviderAccount[]): MailAccountOption[] {

@@ -1,5 +1,6 @@
 import {
 	fetchTelegramCapabilities,
+	fetchTelegramAccounts,
 	fetchTelegramChats,
 	fetchTelegramMessages,
 	fetchTelegramRuntimeStatus,
@@ -21,9 +22,12 @@ import {
 	saveCallTranscriptFixture,
 	setupTelegramAccount,
 	setupTelegramFixtureAccount,
+	logoutTelegramAccount,
+	removeTelegramAccount,
 	startTelegramQrLogin,
 	submitTelegramQrLoginPassword,
 	type TelegramCapabilitiesResponse,
+	type TelegramAccount,
 	type TelegramChat,
 	type TelegramMessage,
 	type TelegramRuntimeStatus,
@@ -32,6 +36,7 @@ import {
 	type TelegramCall,
 	type CallTranscript,
 	type TelegramAccountSetupResponse,
+	type TelegramAccountLifecycleResponse,
 	type TelegramLiveAccountSetupRequest,
 	type TelegramProviderKind,
 	type TelegramQrLoginStatusResponse,
@@ -50,6 +55,7 @@ export async function loadTelegramWorkspace(
 	selectedTelegramCallId: string
 ): Promise<{
 	capabilities: TelegramCapabilitiesResponse | null;
+	accounts: TelegramAccount[];
 	chats: TelegramChat[];
 	messages: TelegramMessage[];
 	templates: AutomationTemplate[];
@@ -64,6 +70,7 @@ export async function loadTelegramWorkspace(
 	try {
 		const [
 			capabilityResponse,
+			accountResponse,
 			chatResponse,
 			messageResponse,
 			templateResponse,
@@ -71,6 +78,7 @@ export async function loadTelegramWorkspace(
 			callResponse
 		] = await Promise.all([
 			fetchTelegramCapabilities(),
+			fetchTelegramAccounts(),
 			fetchTelegramChats(undefined, TELEGRAM_CHAT_METADATA_LIMIT),
 			fetchTelegramMessages(),
 			fetchAutomationTemplates(),
@@ -78,6 +86,7 @@ export async function loadTelegramWorkspace(
 			fetchTelegramCalls()
 		]);
 
+		const accounts = accountResponse.items;
 		const chats = chatResponse.items;
 		const calls = callResponse.items;
 		let nextChatId = selectedTelegramChatId;
@@ -109,10 +118,11 @@ export async function loadTelegramWorkspace(
 				transcript = response.transcript;
 			} catch { /* transcript optional */ }
 		}
-		const runtimeStatuses = await loadTelegramRuntimeStatuses(chats);
+		const runtimeStatuses = await loadTelegramRuntimeStatuses(accounts, chats);
 
 		return {
 			capabilities: capabilityResponse,
+			accounts,
 			chats,
 			messages,
 			templates: templateResponse.items,
@@ -127,6 +137,7 @@ export async function loadTelegramWorkspace(
 	} catch (error) {
 		return {
 			capabilities: null,
+			accounts: [],
 			chats: [],
 			messages: [],
 			templates: [],
@@ -163,8 +174,16 @@ function telegramWorkspaceErrorMessage(error: unknown): string {
 	return error.message;
 }
 
-async function loadTelegramRuntimeStatuses(chats: TelegramChat[]): Promise<Record<string, TelegramRuntimeStatus>> {
-	const accountIds = Array.from(new Set(chats.map((chat) => chat.account_id).filter(Boolean)));
+async function loadTelegramRuntimeStatuses(
+	accounts: TelegramAccount[],
+	chats: TelegramChat[]
+): Promise<Record<string, TelegramRuntimeStatus>> {
+	const accountIds = Array.from(
+		new Set([
+			...accounts.map((account) => account.account_id),
+			...chats.map((chat) => chat.account_id)
+		].filter(Boolean))
+	);
 	const entries = await Promise.all(
 		accountIds.map(async (accountId) => {
 			try {
@@ -177,6 +196,48 @@ async function loadTelegramRuntimeStatuses(chats: TelegramChat[]): Promise<Recor
 	);
 
 	return Object.fromEntries(entries.filter((entry): entry is [string, TelegramRuntimeStatus] => entry !== null));
+}
+
+export async function logoutTelegramAccountFromUi(accountId: string): Promise<{
+	result: TelegramAccountLifecycleResponse | null;
+	message: string;
+	error: string;
+}> {
+	try {
+		const result = await logoutTelegramAccount(accountId);
+		return {
+			result,
+			message: `Telegram account ${result.account.account_id} logged out`,
+			error: ''
+		};
+	} catch (error) {
+		return {
+			result: null,
+			message: '',
+			error: error instanceof Error ? error.message : 'Telegram account logout failed'
+		};
+	}
+}
+
+export async function removeTelegramAccountFromUi(accountId: string): Promise<{
+	result: TelegramAccountLifecycleResponse | null;
+	message: string;
+	error: string;
+}> {
+	try {
+		const result = await removeTelegramAccount(accountId);
+		return {
+			result,
+			message: `Telegram account ${result.account.account_id} removed from active accounts`,
+			error: ''
+		};
+	} catch (error) {
+		return {
+			result: null,
+			message: '',
+			error: error instanceof Error ? error.message : 'Telegram account remove failed'
+		};
+	}
 }
 
 export async function startTelegramRuntimeFromUi(accountId: string): Promise<{

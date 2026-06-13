@@ -2,8 +2,18 @@ import {
 	startGmailOAuthSetup,
 	completeGmailOAuthSetup,
 	setupImapAccount,
+	fetchEmailAccounts,
+	exportEmailAccount,
+	importEmailAccount,
+	logoutEmailAccount,
+	deleteEmailAccount,
 	createCalendarAccount,
 	type ProviderAccount,
+	type EmailAccountView,
+	type EmailAccountExportResponse,
+	type EmailAccountLogoutResponse,
+	type EmailAccountDeleteResponse,
+	type EmailAccountImportRequest,
 	type GmailOAuthStartRequest,
 	type GmailOAuthStartResponse,
 	type TelegramProviderKind
@@ -13,7 +23,16 @@ import { formatDateTime } from './formatting';
 type Provider = 'gmail' | 'icloud' | 'imap';
 type AccountWizardKind = 'mail' | 'calendar' | 'telegram' | 'whatsapp';
 type AccountWizardTarget = AccountWizardKind | Provider;
-type MailService = Provider | 'microsoft' | 'yahoo' | 'aol';
+type MailService =
+	| Provider
+	| 'microsoft'
+	| 'exchange'
+	| 'fastmail'
+	| 'mailru'
+	| 'yandex'
+	| 'proton'
+	| 'yahoo'
+	| 'aol';
 type MailWizardStep = 'provider' | 'details';
 type CalendarProvider = 'local' | 'google' | 'microsoft' | 'apple' | 'caldav' | 'ics';
 type CalendarWizardStep = 'provider' | 'details';
@@ -24,6 +43,16 @@ export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
 	'https://www.googleapis.com/auth/calendar.readonly',
 	'https://www.googleapis.com/auth/contacts.readonly'
 ];
+
+type EmailAccountListFetcher = typeof fetchEmailAccounts;
+type EmailAccountExporter = typeof exportEmailAccount;
+type EmailAccountImporter = typeof importEmailAccount;
+type EmailAccountLogout = typeof logoutEmailAccount;
+type EmailAccountDelete = typeof deleteEmailAccount;
+type ImapAccountSetup = typeof setupImapAccount;
+type EmailImportProviderKind = EmailAccountImportRequest['account']['provider_kind'];
+
+const EMAIL_IMPORT_PROVIDER_KINDS = new Set<EmailImportProviderKind>(['gmail', 'icloud', 'imap']);
 
 export type TelegramAccountDraft = {
 	account_id: string;
@@ -137,6 +166,168 @@ export function createGoogleWorkspaceOAuthStartRequest(gmailForm: {
 	return request;
 }
 
+export async function loadEmailAccountViews(
+	fetcher: EmailAccountListFetcher = fetchEmailAccounts
+): Promise<{ accounts: EmailAccountView[]; error: string }> {
+	try {
+		const response = await fetcher();
+		return { accounts: response.items ?? [], error: '' };
+	} catch (error) {
+		return {
+			accounts: [],
+			error: error instanceof Error ? error.message : 'Mail account list failed'
+		};
+	}
+}
+
+export async function exportMailAccountSettings(
+	accountId: string,
+	exporter: EmailAccountExporter = exportEmailAccount
+): Promise<{ result: EmailAccountExportResponse | null; error: string }> {
+	const normalizedAccountId = accountId.trim();
+	if (!normalizedAccountId) {
+		return { result: null, error: 'Account id is required' };
+	}
+	try {
+		return { result: await exporter(normalizedAccountId), error: '' };
+	} catch (error) {
+		return {
+			result: null,
+			error: error instanceof Error ? error.message : 'Mail account export failed'
+		};
+	}
+}
+
+export async function importMailAccountSettings(
+	request: EmailAccountImportRequest,
+	importer: EmailAccountImporter = importEmailAccount
+): Promise<{ result: EmailAccountLogoutResponse | null; error: string }> {
+	if (!request.account.account_id.trim()) {
+		return { result: null, error: 'Account id is required' };
+	}
+	try {
+		return { result: await importer(request), error: '' };
+	} catch (error) {
+		return {
+			result: null,
+			error: error instanceof Error ? error.message : 'Mail account import failed'
+		};
+	}
+}
+
+export function parseEmailAccountImportJson(payload: string): EmailAccountImportRequest {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(payload);
+	} catch {
+		throw new Error('Import settings must be valid JSON');
+	}
+
+	if (!isRecord(parsed) || !isRecord(parsed.account)) {
+		throw new Error('Import settings must contain an account object');
+	}
+
+	const account = parsed.account;
+	const providerKind = requiredImportString(account, 'provider_kind');
+	if (!isEmailImportProviderKind(providerKind)) {
+		throw new Error('Import settings provider_kind must be gmail, icloud or imap');
+	}
+
+	const request: EmailAccountImportRequest = {
+		account: {
+			account_id: requiredImportString(account, 'account_id'),
+			provider_kind: providerKind,
+			display_name: requiredImportString(account, 'display_name'),
+			external_account_id: requiredImportString(account, 'external_account_id')
+		}
+	};
+
+	if (account.config !== undefined) {
+		if (!isRecord(account.config)) {
+			throw new Error('Import settings account.config must be an object');
+		}
+		request.account.config = account.config;
+	}
+
+	if (parsed.sync_settings !== undefined) {
+		if (!isRecord(parsed.sync_settings)) {
+			throw new Error('Import settings sync_settings must be an object');
+		}
+		request.sync_settings = {};
+		if (typeof parsed.sync_settings.sync_enabled === 'boolean') {
+			request.sync_settings.sync_enabled = parsed.sync_settings.sync_enabled;
+		}
+		if (typeof parsed.sync_settings.batch_size === 'number') {
+			request.sync_settings.batch_size = parsed.sync_settings.batch_size;
+		}
+		if (typeof parsed.sync_settings.poll_interval_seconds === 'number') {
+			request.sync_settings.poll_interval_seconds = parsed.sync_settings.poll_interval_seconds;
+		}
+	}
+
+	return request;
+}
+
+export function emailAccountExportFilename(accountId: string, exportedAt?: string): string {
+	const accountSegment = safeAccountIdSegment(accountId) || 'account';
+	const timestampSegment = exportedAt?.trim().replace(/[:.]/g, '-');
+	return timestampSegment
+		? `hermes-mail-account-${accountSegment}-${timestampSegment}.json`
+		: `hermes-mail-account-${accountSegment}.json`;
+}
+
+export async function logoutMailAccount(
+	accountId: string,
+	logout: EmailAccountLogout = logoutEmailAccount
+): Promise<{ result: EmailAccountLogoutResponse | null; error: string }> {
+	const normalizedAccountId = accountId.trim();
+	if (!normalizedAccountId) {
+		return { result: null, error: 'Account id is required' };
+	}
+	try {
+		return { result: await logout(normalizedAccountId), error: '' };
+	} catch (error) {
+		return {
+			result: null,
+			error: error instanceof Error ? error.message : 'Mail account logout failed'
+		};
+	}
+}
+
+export async function deleteMailAccount(
+	accountId: string,
+	deleteAccount: EmailAccountDelete = deleteEmailAccount
+): Promise<{ result: EmailAccountDeleteResponse | null; error: string }> {
+	const normalizedAccountId = accountId.trim();
+	if (!normalizedAccountId) {
+		return { result: null, error: 'Account id is required' };
+	}
+	try {
+		return { result: await deleteAccount(normalizedAccountId), error: '' };
+	} catch (error) {
+		return {
+			result: null,
+			error: error instanceof Error ? error.message : 'Mail account delete failed'
+		};
+	}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isEmailImportProviderKind(value: string): value is EmailImportProviderKind {
+	return EMAIL_IMPORT_PROVIDER_KINDS.has(value as EmailImportProviderKind);
+}
+
+function requiredImportString(record: Record<string, unknown>, field: string): string {
+	const value = record[field];
+	if (typeof value !== 'string' || value.trim() === '') {
+		throw new Error(`Import settings account.${field} must be a non-empty string`);
+	}
+	return value.trim();
+}
+
 export function selectMailService(
 	service: MailService,
 	gmailForm: Record<string, string>,
@@ -173,7 +364,11 @@ export function selectMailService(
 			port: preset.port,
 			tls: true,
 			mailbox: (imapForm.mailbox as string) || 'INBOX',
-			secret_kind: preset.secretKind
+			secret_kind: preset.secretKind,
+			smtp_host: preset.smtpHost,
+			smtp_port: preset.smtpPort,
+			smtp_tls: preset.smtpTls,
+			smtp_starttls: preset.smtpStarttls
 		}
 	};
 }
@@ -358,6 +553,10 @@ export function mailServicePreset(service: MailService, imapForm: Record<string,
 	displayName: string;
 	host: string;
 	port: number;
+	smtpHost: string;
+	smtpPort: number;
+	smtpTls: boolean;
+	smtpStarttls: boolean;
 	secretKind: 'app_password' | 'password';
 } {
 	switch (service) {
@@ -368,15 +567,75 @@ export function mailServicePreset(service: MailService, imapForm: Record<string,
 				displayName: 'Primary iCloud',
 				host: 'imap.mail.me.com',
 				port: 993,
+				smtpHost: 'smtp.mail.me.com',
+				smtpPort: 587,
+				smtpTls: true,
+				smtpStarttls: true,
 				secretKind: 'app_password'
 			};
 		case 'microsoft':
 			return {
 				provider: 'imap',
 				accountId: 'microsoft-primary',
-				displayName: 'Microsoft Mail',
+				displayName: 'Microsoft 365 / Exchange Online',
 				host: 'outlook.office365.com',
 				port: 993,
+				smtpHost: 'smtp.office365.com',
+				smtpPort: 587,
+				smtpTls: true,
+				smtpStarttls: true,
+				secretKind: 'password'
+			};
+		case 'fastmail':
+			return {
+				provider: 'imap',
+				accountId: 'fastmail-primary',
+				displayName: 'Fastmail',
+				host: 'imap.fastmail.com',
+				port: 993,
+				smtpHost: 'smtp.fastmail.com',
+				smtpPort: 587,
+				smtpTls: true,
+				smtpStarttls: true,
+				secretKind: 'app_password'
+			};
+		case 'mailru':
+			return {
+				provider: 'imap',
+				accountId: 'mailru-primary',
+				displayName: 'Mail.ru',
+				host: 'imap.mail.ru',
+				port: 993,
+				smtpHost: 'smtp.mail.ru',
+				smtpPort: 465,
+				smtpTls: true,
+				smtpStarttls: false,
+				secretKind: 'app_password'
+			};
+		case 'yandex':
+			return {
+				provider: 'imap',
+				accountId: 'yandex-primary',
+				displayName: 'Yandex Mail',
+				host: 'imap.yandex.com',
+				port: 993,
+				smtpHost: 'smtp.yandex.com',
+				smtpPort: 465,
+				smtpTls: true,
+				smtpStarttls: false,
+				secretKind: 'app_password'
+			};
+		case 'proton':
+			return {
+				provider: 'imap',
+				accountId: 'proton-bridge',
+				displayName: 'Proton Bridge',
+				host: '127.0.0.1',
+				port: 1143,
+				smtpHost: '127.0.0.1',
+				smtpPort: 1025,
+				smtpTls: false,
+				smtpStarttls: false,
 				secretKind: 'password'
 			};
 		case 'yahoo':
@@ -386,6 +645,10 @@ export function mailServicePreset(service: MailService, imapForm: Record<string,
 				displayName: 'Yahoo Mail',
 				host: 'imap.mail.yahoo.com',
 				port: 993,
+				smtpHost: 'smtp.mail.yahoo.com',
+				smtpPort: 587,
+				smtpTls: true,
+				smtpStarttls: true,
 				secretKind: 'app_password'
 			};
 		case 'aol':
@@ -395,22 +658,37 @@ export function mailServicePreset(service: MailService, imapForm: Record<string,
 				displayName: 'AOL Mail',
 				host: 'imap.aol.com',
 				port: 993,
+				smtpHost: 'smtp.aol.com',
+				smtpPort: 587,
+				smtpTls: true,
+				smtpStarttls: true,
 				secretKind: 'app_password'
 			};
 		default:
-			return {
-				provider: 'imap',
-				accountId: 'imap-primary',
-				displayName: 'IMAP Mail',
-				host: (imapForm.host as string) === 'imap.mail.me.com' ? '' : (imapForm.host as string),
-				port: Number(imapForm.port) || 993,
-				secretKind: 'password'
-			};
+			{
+				const host =
+					(imapForm.host as string) === 'imap.mail.me.com' ? '' : ((imapForm.host as string) ?? '');
+				return {
+					provider: 'imap',
+					accountId: service === 'exchange' ? 'exchange-primary' : 'imap-primary',
+					displayName: service === 'exchange' ? 'Exchange IMAP' : 'IMAP Mail',
+					host,
+					port: Number(imapForm.port) || 993,
+					smtpHost: (imapForm.smtp_host as string) ?? '',
+					smtpPort: Number(imapForm.smtp_port) || 587,
+					smtpTls: typeof imapForm.smtp_tls === 'boolean' ? (imapForm.smtp_tls as boolean) : true,
+					smtpStarttls:
+						typeof imapForm.smtp_starttls === 'boolean'
+							? (imapForm.smtp_starttls as boolean)
+							: true,
+					secretKind: 'password'
+				};
+			}
 	}
 }
 
 export function hasFixedMailServerPreset(service: MailService) {
-	return service !== 'imap';
+	return service !== 'imap' && service !== 'exchange';
 }
 
 export function mailServiceDisplayName(service: MailService) {
@@ -420,7 +698,17 @@ export function mailServiceDisplayName(service: MailService) {
 		case 'icloud':
 			return 'iCloud';
 		case 'microsoft':
-			return 'Microsoft Exchange';
+			return 'Microsoft 365 / Exchange Online';
+		case 'exchange':
+			return 'Exchange IMAP';
+		case 'fastmail':
+			return 'Fastmail';
+		case 'mailru':
+			return 'Mail.ru';
+		case 'yandex':
+			return 'Yandex Mail';
+		case 'proton':
+			return 'Proton Bridge';
 		case 'yahoo':
 			return 'Yahoo';
 		case 'aol':
@@ -438,6 +726,16 @@ export function mailServiceIcon(service: MailService) {
 			return 'tabler:cloud';
 		case 'microsoft':
 			return 'tabler:brand-office';
+		case 'exchange':
+			return 'tabler:server-cog';
+		case 'fastmail':
+			return 'tabler:mail-fast';
+		case 'mailru':
+			return 'tabler:mail';
+		case 'yandex':
+			return 'tabler:letter-y';
+		case 'proton':
+			return 'tabler:shield-lock';
 		case 'yahoo':
 			return 'tabler:mail';
 		case 'aol':
@@ -453,6 +751,16 @@ export function mailServiceAccountPrefix(service: MailService) {
 			return 'icloud';
 		case 'microsoft':
 			return 'microsoft';
+		case 'exchange':
+			return 'exchange';
+		case 'fastmail':
+			return 'fastmail';
+		case 'mailru':
+			return 'mailru';
+		case 'yandex':
+			return 'yandex';
+		case 'proton':
+			return 'proton';
 		case 'yahoo':
 			return 'yahoo';
 		case 'aol':
@@ -469,6 +777,10 @@ export function inferMailService(email: string): MailService | null {
 	if (['gmail.com', 'googlemail.com'].includes(domain)) return 'gmail';
 	if (['icloud.com', 'me.com', 'mac.com'].includes(domain)) return 'icloud';
 	if (['outlook.com', 'hotmail.com', 'live.com', 'office365.com'].includes(domain)) return 'microsoft';
+	if (['fastmail.com', 'fastmail.fm'].includes(domain)) return 'fastmail';
+	if (['mail.ru', 'inbox.ru', 'list.ru', 'bk.ru'].includes(domain)) return 'mailru';
+	if (['yandex.com', 'yandex.ru', 'ya.ru'].includes(domain)) return 'yandex';
+	if (['proton.me', 'protonmail.com', 'pm.me'].includes(domain)) return 'proton';
 	if (domain.endsWith('yahoo.com')) return 'yahoo';
 	if (domain === 'aol.com') return 'aol';
 	return null;
@@ -559,22 +871,30 @@ function optionalTrimmed(value: string): string | undefined {
 	return trimmed ? trimmed : undefined;
 }
 
-export async function saveImapAccount(params: {
-	selectedProvider: Provider;
-	selectedMailService: MailService;
-	imapForm: {
-		account_id: string;
-		display_name: string;
-		external_account_id: string;
-		host: string;
-		port: number;
-		tls: boolean;
-		mailbox: string;
-		username: string;
-		password: string;
-		secret_kind: 'app_password' | 'password';
-	};
-}): Promise<{
+export async function saveImapAccount(
+	params: {
+		selectedProvider: Provider;
+		selectedMailService: MailService;
+		imapForm: {
+			account_id: string;
+			display_name: string;
+			external_account_id: string;
+			host: string;
+			port: number;
+			tls: boolean;
+			mailbox: string;
+			username: string;
+			password: string;
+			secret_kind: 'app_password' | 'password';
+			smtp_host?: string;
+			smtp_port?: number;
+			smtp_tls?: boolean;
+			smtp_starttls?: boolean;
+			smtp_username?: string;
+		};
+	},
+	setupAccount: ImapAccountSetup = setupImapAccount
+): Promise<{
 	message: string;
 	error: string;
 	success: boolean;
@@ -596,7 +916,7 @@ export async function saveImapAccount(params: {
 		const host = imapForm.host.trim();
 		const mailbox = imapForm.mailbox.trim() || 'INBOX';
 
-		const result = await setupImapAccount({
+		const result = await setupAccount({
 			account_id: accountId,
 			provider_kind: selectedProvider === 'icloud' ? 'icloud' : 'imap',
 			display_name: displayName,
@@ -607,7 +927,12 @@ export async function saveImapAccount(params: {
 			mailbox,
 			username,
 			password: imapForm.password,
-			secret_kind: imapForm.secret_kind
+			secret_kind: imapForm.secret_kind,
+			smtp_host: imapForm.smtp_host?.trim(),
+			smtp_port: imapForm.smtp_port,
+			smtp_tls: imapForm.smtp_tls,
+			smtp_starttls: imapForm.smtp_starttls,
+			smtp_username: imapForm.smtp_username?.trim() || username
 		});
 		return {
 			message: `Mail account ${result.account_id} saved`,

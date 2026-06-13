@@ -15,6 +15,7 @@
 		isWidgetVisible: (id: string) => boolean;
 		aiRuntimeSummary: () => string;
 		formatDuration: (ms: number | null) => string;
+		formatAgentPersonaName: (agentId: string) => string;
 	}
 
 	let {
@@ -25,7 +26,8 @@
 		isLayoutEditing,
 		isWidgetVisible,
 		aiRuntimeSummary,
-		formatDuration
+		formatDuration,
+		formatAgentPersonaName
 	}: Props = $props();
 </script>
 
@@ -37,6 +39,6 @@
 		<article class="metric-card"><span>Run History</span><strong>{aiRuns.length}</strong><small>Persisted runs</small></article>
 		<article class="metric-card"><span>Embedding</span><strong>{aiStatus?.embedding_dimension ?? 0}</strong><small>{aiStatus?.embedding_model ?? 'No model'}</small></article>
 		<article class="metric-card"><span>Suggested Tasks</span><strong>{suggestedTaskCandidates.length}</strong><small>Review queue</small></article>
-		<article class="metric-card"><span>Latest Duration</span><strong>{formatDuration(aiRuns[0]?.duration_ms)}</strong><small>{aiRuns[0]?.agent_id ?? 'No runs'}</small></article>
+		<article class="metric-card"><span>Latest Duration</span><strong>{formatDuration(aiRuns[0]?.duration_ms)}</strong><small>{aiRuns[0] ? formatAgentPersonaName(aiRuns[0].agent_id) : 'No runs'}</small></article>
 	</div>
 </div>

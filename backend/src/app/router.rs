@@ -278,6 +278,10 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             post(post_v1_message_pin),
         )
         .route(
+            "/api/v1/communications/messages/{message_id}/important",
+            post(post_v1_message_important),
+        )
+        .route(
             "/api/v1/communications/messages/{message_id}/snooze",
             post(post_v1_message_snooze),
         )
@@ -950,7 +954,18 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/telegram/accounts/fixture",
             post(post_telegram_fixture_account),
         )
-        .route("/api/v1/telegram/accounts", post(post_telegram_account))
+        .route(
+            "/api/v1/telegram/accounts",
+            get(get_telegram_accounts).post(post_telegram_account),
+        )
+        .route(
+            "/api/v1/telegram/accounts/{account_id}",
+            delete(delete_telegram_account),
+        )
+        .route(
+            "/api/v1/telegram/accounts/{account_id}/logout",
+            post(post_telegram_account_logout),
+        )
         .route(
             "/api/v1/telegram/runtime/status",
             get(get_telegram_runtime_status),
@@ -1023,7 +1038,24 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             "/api/v1/email-accounts/gmail/oauth/complete",
             post(post_gmail_oauth_complete),
         )
+        .route("/api/v1/email-accounts", get(get_v1_email_accounts))
+        .route(
+            "/api/v1/email-accounts/import",
+            post(post_v1_email_account_import),
+        )
         .route("/api/v1/email-accounts/imap", post(post_imap_account_setup))
+        .route(
+            "/api/v1/email-accounts/{account_id}",
+            get(get_v1_email_account).delete(delete_v1_email_account),
+        )
+        .route(
+            "/api/v1/email-accounts/{account_id}/export",
+            get(get_v1_email_account_export),
+        )
+        .route(
+            "/api/v1/email-accounts/{account_id}/logout",
+            post(post_v1_email_account_logout),
+        )
         .route(
             "/api/v1/email-accounts/sync-status",
             get(get_v1_email_account_sync_status),
@@ -1156,7 +1188,13 @@ pub(crate) fn local_frontend_cors_layer() -> CorsLayer {
                 .map(is_allowed_local_frontend_origin)
                 .unwrap_or(false)
         }))
-        .allow_methods([Method::GET, Method::POST, Method::PUT, Method::OPTIONS])
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
         .allow_headers([
             header::CONTENT_TYPE,
             HeaderName::from_static("x-hermes-secret"),
