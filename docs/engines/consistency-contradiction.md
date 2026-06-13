@@ -97,28 +97,33 @@ This baseline provides structured direct-contradiction detection and
 reviewable `ContradictionObservation` persistence. It also provides a
 deterministic baseline that extracts simple structured claim lines from
 Communication and Document evidence, for example `status: blocked` or
-`location=Madrid`, and feeds those claims into the contradiction detector.
+`location=Madrid`, and limited natural-language `location` / `status` patterns,
+for example `I am now in Madrid` or `status is blocked`. It feeds those claims
+into the contradiction detector.
 `ContradictionObservationStore::refresh_deterministic_observations` now adds the
 first backend refresh paths from projected Communication messages, imported
 Documents, meeting notes and call transcripts to Polygraph: active
 `person_facts` are treated as accepted Memory claims, matched through the
-compatibility `persons.email_address` field, `event_participants.person_id` or
-active `person_identities.telegram` identity, and compared with structured
-claims extracted from message subject/body evidence, Document
-title/extracted-text evidence that references the Persona email, meeting-note
-content for linked event participants or successful call transcript text for
-linked Telegram identities.
+compatibility `persons.email_address` field, active Telegram/WhatsApp
+`person_identities`, `event_participants.person_id` or active Telegram call
+identity, and compared with structured claims extracted from projected email
+message subject/body evidence, projected Telegram/WhatsApp message evidence
+matched by provider `sender_id`, Document title/extracted-text evidence that
+references the Persona email, meeting-note content for linked event
+participants or successful call transcript text for linked Telegram identities.
 Guarded backend routes can list open contradiction observations and update
-review state without automatically overwriting Memory. It does not yet provide
-desktop review UI, non-email message-channel wiring or natural-language claim
-extraction from Communications and Documents.
+review state without automatically overwriting Memory. The Knowledge workspace
+now includes a Polygraph review panel for listing open observations and
+confirming or rejecting them. It does not yet provide broad natural-language
+claim extraction from Communications and Documents.
 
 ## Migration Plan
 
 1. Keep this spec as the source for Polygraph terminology.
 2. Keep reviewable contradiction observations, not automatic memory rewrites.
-3. Expand refresh wiring beyond projected email messages, imported Documents,
-   meeting notes and call transcripts to other Communication channels.
-4. Add natural-language claim extraction behind explicit review policy.
-5. Add desktop review UI for owner review.
-6. Feed reviewed outcomes into Memory, Trust, Risk and Relationship semantics.
+3. Expand refresh wiring beyond projected email/Telegram/WhatsApp messages,
+   imported Documents, meeting notes and call transcripts to broader provider
+   evidence.
+4. Expand natural-language claim extraction beyond deterministic `location` and
+   `status` patterns behind explicit review policy.
+5. Feed reviewed outcomes into Memory, Trust, Risk and Relationship semantics.

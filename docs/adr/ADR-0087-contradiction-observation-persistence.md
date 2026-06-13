@@ -105,10 +105,10 @@ Positive:
 
 Negative:
 
-- The first detector only handles structured direct contradictions.
-- Desktop review UI is still separate follow-up work.
-- Provider-wide ingestion and natural-language claim extraction from
-  Communications and Documents remain outside this first slice.
+- The detector still handles only direct contradictions and a small deterministic
+  extraction baseline.
+- Provider-wide ingestion and broader natural-language extraction from
+  Communications and Documents remain outside this slice.
 
 ## Non-Goals
 
@@ -131,26 +131,35 @@ Trust, Risk or Relationship state.
 
 `backend/src/engines/consistency.rs` also includes a deterministic extraction
 baseline for simple structured Communication and Document evidence lines such
-as `status: blocked` or `location=Madrid`. This converts evidence text into
-`NewEvidenceClaim` values and reuses the same direct-contradiction detector.
+as `status: blocked` or `location=Madrid`, plus limited natural-language
+patterns for `location` and `status` claims, such as `I am now in Madrid` or
+`status is blocked`. This converts evidence text into `NewEvidenceClaim` values
+and reuses the same direct-contradiction detector.
 
 `ContradictionObservationStore::refresh_deterministic_observations` now
 provides the first backend ingestion bridge for projected Communication
 messages, imported Documents, meeting notes and call transcripts. It treats
 active `person_facts` as accepted Memory claims, matches a Persona through the
-compatibility `persons.email_address` field, `event_participants.person_id` or
-active `person_identities.telegram` identity, compares message subject/body
-evidence by message sender, compares Document title/extracted-text evidence
-when the Document text references the Persona email, compares meeting-note
-content for linked event participants and compares successful call transcript
-text for linked Telegram identities. It stores reviewable contradiction
-observations and does not overwrite `person_facts`, Trust, Risk or
-Relationships.
+compatibility `persons.email_address` field, active Telegram/WhatsApp
+`person_identities`, `event_participants.person_id` or active Telegram call
+identity, compares projected email message subject/body evidence by sender,
+compares projected Telegram and WhatsApp message evidence by provider
+`sender_id`, compares Document title/extracted-text evidence when the Document
+text references the Persona email, compares meeting-note content for linked
+event participants and compares successful call transcript text for linked
+Telegram identities. It stores reviewable contradiction observations and does
+not overwrite `person_facts`, Trust, Risk or Relationships.
+
+The desktop frontend now includes a Knowledge workspace Polygraph review panel
+that lists open contradiction observations through `GET /api/v1/contradictions`
+and submits explicit owner review state through
+`PUT /api/v1/contradictions/{observation_id}/review`.
 
 ## Required Follow-Up
 
-- Add desktop review UI for contradiction observations.
-- Expand ingestion wiring beyond projected email messages, imported Documents,
-  meeting notes and call transcripts to non-email message channels.
-- Add natural-language claim extraction behind explicit review policy.
+- Expand ingestion wiring beyond projected email/Telegram/WhatsApp messages,
+  imported Documents, meeting notes and call transcripts to broader provider
+  evidence.
+- Expand natural-language claim extraction beyond deterministic `location` and
+  `status` patterns behind explicit review policy.
 - Link reviewed outcomes to Memory, Trust, Risk and Relationship semantics.
