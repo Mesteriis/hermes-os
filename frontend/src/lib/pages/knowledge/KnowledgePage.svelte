@@ -1,11 +1,15 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
+	import * as contradictionsService from '$lib/services/contradictions';
 	import * as graphService from '$lib/services/graph';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
 	import KnowledgeGraphCanvas from './widgets/KnowledgeGraphCanvas.svelte';
 	import KnowledgeNodeInspector from './widgets/KnowledgeNodeInspector.svelte';
+	import KnowledgePolygraphReview from './widgets/KnowledgePolygraphReview.svelte';
 	import type {
+		ContradictionObservation,
+		ContradictionReviewState,
 		GraphNode,
 		GraphNodeKind,
 		GraphSummary,
@@ -75,6 +79,10 @@
 	let graphNeighborhood = $state<GraphNeighborhood | null>(null);
 	let graphNeighborhoodError = $state('');
 	let isGraphNeighborhoodLoading = $state(false);
+	let contradictionObservations = $state<ContradictionObservation[]>([]);
+	let contradictionsError = $state('');
+	let isContradictionsLoading = $state(false);
+	let reviewingContradictionObservationId = $state<string | null>(null);
 	let graphNodeChoicesRequestSequence = 0;
 	let graphSearchRequestSequence = 0;
 	let graphNeighborhoodRequestSequence = 0;
@@ -103,6 +111,12 @@
 			case 'message': return 'tabler:message';
 			case 'document': return 'tabler:file-text';
 			case 'project': return 'tabler:cube';
+			case 'organization': return 'tabler:building';
+			case 'task': return 'tabler:checkbox';
+			case 'event': return 'tabler:calendar-event';
+			case 'decision': return 'tabler:git-branch';
+			case 'obligation': return 'tabler:clipboard-check';
+			case 'knowledge': return 'tabler:brain';
 			default: return 'tabler:circle-dot';
 		}
 	}
@@ -140,7 +154,13 @@
 			{ id: 'email_address', label: _('Email Addresses') },
 			{ id: 'message', label: _('Messages') },
 			{ id: 'document', label: _('Documents') },
-			{ id: 'project', label: _('Projects') }
+			{ id: 'project', label: _('Projects') },
+			{ id: 'organization', label: _('Organizations') },
+			{ id: 'task', label: _('Tasks') },
+			{ id: 'event', label: _('Events') },
+			{ id: 'decision', label: _('Decisions') },
+			{ id: 'obligation', label: _('Obligations') },
+			{ id: 'knowledge', label: _('Knowledge') }
 		];
 		return [
 			{ id: 'all', label: _('All'), count: summary?.node_counts.reduce((total, item) => total + item.count, 0) ?? 0, enabled: true },
@@ -253,9 +273,35 @@
 		graphNeighborhoodRequestSequence = result.sequence;
 	}
 
+	async function loadContradictionReviewState() {
+		isContradictionsLoading = true;
+		const result = await contradictionsService.loadContradictionReviewState();
+		contradictionObservations = result.observations;
+		contradictionsError = result.error;
+		isContradictionsLoading = false;
+	}
+
+	async function reviewContradictionObservation(
+		observation: ContradictionObservation,
+		reviewState: Exclude<ContradictionReviewState, 'suggested'>
+	) {
+		reviewingContradictionObservationId = observation.observation_id;
+		const result = await contradictionsService.reviewContradictionObservation(
+			observation,
+			reviewState
+		);
+		if (result.error) {
+			contradictionsError = result.error;
+		} else {
+			await loadContradictionReviewState();
+		}
+		reviewingContradictionObservationId = null;
+	}
+
 	$effect(() => {
 		loadGraphSummary();
 		loadGraphNodeChoices();
+		loadContradictionReviewState();
 	});
 </script>
 
@@ -405,26 +451,38 @@
 			</footer>
 		</section>
 
-		<KnowledgeNodeInspector
-			{selectedGraphNode}
-			{selectedGraphProperties}
-			{graphNeighborhood}
-			{graphNeighborhoodError}
-			{graphNeighborCounts}
-			{isLayoutEditing}
-			{isWidgetVisible}
-			{isGraphNeighborhoodLoading}
-			{graphError}
-			{graphNodeKindIcon}
-			{formatGraphKind}
-			{formatGraphTimestamp}
-			{formatNumber}
-			{graphNodeTotal}
-			{graphRelationshipTotal}
-			{graphEvidenceTotal}
-			{graphNodeKindCount}
-			{graphEvidenceLabel}
-		/>
+		<aside class="knowledge-side-rail">
+			<KnowledgePolygraphReview
+				observations={contradictionObservations}
+				isLoading={isContradictionsLoading}
+				error={contradictionsError}
+				reviewingObservationId={reviewingContradictionObservationId}
+				{isLayoutEditing}
+				{isWidgetVisible}
+				onReload={loadContradictionReviewState}
+				onReview={reviewContradictionObservation}
+			/>
+			<KnowledgeNodeInspector
+				{selectedGraphNode}
+				{selectedGraphProperties}
+				{graphNeighborhood}
+				{graphNeighborhoodError}
+				{graphNeighborCounts}
+				{isLayoutEditing}
+				{isWidgetVisible}
+				{isGraphNeighborhoodLoading}
+				{graphError}
+				{graphNodeKindIcon}
+				{formatGraphKind}
+				{formatGraphTimestamp}
+				{formatNumber}
+				{graphNodeTotal}
+				{graphRelationshipTotal}
+				{graphEvidenceTotal}
+				{graphNodeKindCount}
+				{graphEvidenceLabel}
+			/>
+		</aside>
 	</div>
 
 </section>

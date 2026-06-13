@@ -1,9 +1,15 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use sqlx::Row;
+use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
+
+use crate::domains::relationships::{
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
+    RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
+    RelationshipStoreError,
+};
 
 // ── OrganizationIdentity ────────────────────────────────────────────────────
 
@@ -286,7 +292,7 @@ impl OrgContactLinkStore {
         Self { pool }
     }
     pub async fn list_by_org(&self, org_id: &str) -> Result<Vec<OrgContactLink>, OrgCoreError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, person_id, role, department, source, confidence, valid_from, valid_to, is_primary, created_at, updated_at FROM organization_contact_links WHERE organization_id=$1 ORDER BY is_primary DESC, role")
+        let rows = sqlx::query("SELECT id::text, organization_id, person_id, role, department, source, confidence::float8 AS confidence, valid_from, valid_to, is_primary, created_at, updated_at FROM organization_contact_links WHERE organization_id=$1 ORDER BY is_primary DESC, role")
             .bind(org_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
@@ -314,9 +320,10 @@ impl OrgContactLinkStore {
         role: Option<&str>,
         dept: Option<&str>,
     ) -> Result<OrgContactLink, OrgCoreError> {
-        let row = sqlx::query("INSERT INTO organization_contact_links (organization_id, person_id, role, department) VALUES ($1,$2,$3,$4) ON CONFLICT (organization_id, person_id, role) DO UPDATE SET department=EXCLUDED.department, updated_at=now() RETURNING id::text, organization_id, person_id, role, department, source, confidence, valid_from, valid_to, is_primary, created_at, updated_at")
-            .bind(org_id).bind(person_id).bind(role).bind(dept).fetch_one(&self.pool).await?;
-        Ok(OrgContactLink {
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query("INSERT INTO organization_contact_links (organization_id, person_id, role, department) VALUES ($1,$2,$3,$4) ON CONFLICT (organization_id, person_id, role) DO UPDATE SET department=EXCLUDED.department, updated_at=now() RETURNING id::text, organization_id, person_id, role, department, source, confidence::float8 AS confidence, valid_from, valid_to, is_primary, created_at, updated_at")
+            .bind(org_id).bind(person_id).bind(role).bind(dept).fetch_one(&mut *transaction).await?;
+        let link = OrgContactLink {
             id: row.try_get("id")?,
             organization_id: row.try_get("organization_id")?,
             person_id: row.try_get("person_id")?,
@@ -329,7 +336,63 @@ impl OrgContactLinkStore {
             is_primary: row.try_get("is_primary")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
-        })
+        };
+
+        Self::materialize_relationship_in_transaction(&mut transaction, &link).await?;
+        transaction.commit().await?;
+
+        Ok(link)
+    }
+
+    async fn materialize_relationship_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        link: &OrgContactLink,
+    ) -> Result<(), OrgCoreError> {
+        let relationship = NewRelationship {
+            source_entity_kind: RelationshipEntityKind::Persona,
+            source_entity_id: link.person_id.clone(),
+            target_entity_kind: RelationshipEntityKind::Organization,
+            target_entity_id: link.organization_id.clone(),
+            relationship_type: "member_of".to_owned(),
+            trust_score: 0.5,
+            strength_score: if link.is_primary { 0.85 } else { 0.65 },
+            confidence: link.confidence,
+            review_state: RelationshipReviewState::UserConfirmed,
+            valid_from: link.valid_from,
+            valid_to: link.valid_to,
+            metadata: json!({
+                "compatibility_table": "organization_contact_links",
+                "compatibility_record_id": link.id,
+                "role": link.role,
+                "department": link.department,
+                "source": link.source,
+                "is_primary": link.is_primary
+            }),
+        };
+        let evidence = NewRelationshipEvidence::new(
+            RelationshipEvidenceSourceKind::RawRecord,
+            link.id.clone(),
+        )
+        .excerpt(
+            "Persona is linked to organization through compatibility organization contact data.",
+        )
+        .metadata(json!({
+            "compatibility_table": "organization_contact_links",
+            "organization_id": link.organization_id,
+            "person_id": link.person_id,
+            "role": link.role,
+            "department": link.department,
+            "source": link.source
+        }));
+
+        RelationshipStore::upsert_with_evidence_in_transaction(
+            transaction,
+            &relationship,
+            &[evidence],
+        )
+        .await?;
+
+        Ok(())
     }
     pub async fn set_primary(&self, org_id: &str, person_id: &str) -> Result<(), OrgCoreError> {
         sqlx::query(
@@ -405,6 +468,8 @@ impl RelatedOrgStore {
 pub enum OrgCoreError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Relationship(#[from] RelationshipStoreError),
     #[error("not found")]
     NotFound,
 }

@@ -56,7 +56,7 @@ impl TaskRuleStore {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let rule_id = format!("taskrule:v1:{:x}", ts);
+        let rule_id = format!("taskrule:v1:{ts:x}");
         let row = sqlx::query("INSERT INTO task_rules (rule_id, name, natural_language_description, compiled_dsl, approval_mode) VALUES ($1,$2,$3,$4,$5) RETURNING rule_id, name, natural_language_description, compiled_dsl, enabled, approval_mode, last_run_at, created_at, updated_at")
             .bind(&rule_id).bind(name).bind(desc).bind(&dsl).bind(approval.unwrap_or("suggest_only")).fetch_one(&self.pool).await?;
         Ok(TaskRule {

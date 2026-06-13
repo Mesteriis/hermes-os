@@ -206,6 +206,70 @@ impl NewApiAuditRecord {
         }
     }
 
+    pub fn obligation_review_set(
+        actor_id: impl Into<String>,
+        obligation_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "obligation.review.set".to_owned(),
+            method: "PUT".to_owned(),
+            path_template: "/api/v1/obligations/{obligation_id}/review".to_owned(),
+            target_kind: "obligation".to_owned(),
+            target_id: Some(obligation_id.into()),
+            metadata: json!({}),
+        }
+    }
+
+    pub fn decision_review_set(
+        actor_id: impl Into<String>,
+        decision_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "decision.review.set".to_owned(),
+            method: "PUT".to_owned(),
+            path_template: "/api/v1/decisions/{decision_id}/review".to_owned(),
+            target_kind: "decision".to_owned(),
+            target_id: Some(decision_id.into()),
+            metadata: json!({}),
+        }
+    }
+
+    pub fn relationship_review_set(
+        actor_id: impl Into<String>,
+        relationship_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "relationship.review.set".to_owned(),
+            method: "PUT".to_owned(),
+            path_template: "/api/v1/relationships/{relationship_id}/review".to_owned(),
+            target_kind: "relationship".to_owned(),
+            target_id: Some(relationship_id.into()),
+            metadata: json!({}),
+        }
+    }
+
+    pub fn contradiction_review_set(
+        actor_id: impl Into<String>,
+        observation_id: impl Into<String>,
+    ) -> Self {
+        Self {
+            actor_kind: API_FRONTEND_ACTOR_KIND.to_owned(),
+            actor_id: actor_id.into(),
+            operation: "contradiction.review.set".to_owned(),
+            method: "PUT".to_owned(),
+            path_template: "/api/v1/contradictions/{observation_id}/review".to_owned(),
+            target_kind: "contradiction_observation".to_owned(),
+            target_id: Some(observation_id.into()),
+            metadata: json!({}),
+        }
+    }
+
     pub fn message_workflow_state_set(
         actor_id: impl Into<String>,
         message_id: impl Into<String>,

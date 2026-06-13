@@ -18,6 +18,7 @@ const expectedViews: LayoutViewId[] = [
 	'documents',
 	'notes',
 	'knowledge-graph',
+	'review',
 	'telegram',
 	'whatsapp',
 	'ai-agents',
@@ -195,6 +196,7 @@ describe('app shell layout view aliases', () => {
 	it('maps current app shell view ids to layout domain view ids', () => {
 		expect(layoutViewIdForAppView('knowledge')).toBe('knowledge-graph');
 		expect(layoutViewIdForAppView('agents')).toBe('ai-agents');
+		expect(layoutViewIdForAppView('review')).toBe('review');
 		expect(layoutViewIdForAppView('settings')).toBeNull();
 		expect(layoutViewIdForAppView('unknown')).toBeNull();
 	});
@@ -202,6 +204,7 @@ describe('app shell layout view aliases', () => {
 	it('finds layout presets from app shell aliases', () => {
 		expect(findPresetForView('knowledge')?.viewId).toBe('knowledge-graph');
 		expect(findPresetForView('agents')?.viewId).toBe('ai-agents');
+		expect(findPresetForView('review')?.viewId).toBe('review');
 		expect(findPresetForView('settings')).toBeNull();
 	});
 });

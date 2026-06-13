@@ -41,7 +41,7 @@ impl CalendarBrainService {
     }
 
     pub async fn search_events(pool: &PgPool, query: &str) -> Result<Value, CalendarBrainError> {
-        let pattern = format!("%{}%", query);
+        let pattern = format!("%{query}%");
         let rows = sqlx::query(
             "SELECT event_id, title, description, start_at, event_type FROM calendar_events WHERE title ILIKE $1 OR description ILIKE $1 ORDER BY start_at DESC LIMIT 20"
         ).bind(&pattern).fetch_all(pool).await?;

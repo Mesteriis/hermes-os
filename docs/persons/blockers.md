@@ -8,13 +8,13 @@ level, but implementation is blocked by unresolved migration work.
 | Blocker | Why it matters | Required decision |
 |---|---|---|
 | Legacy `persons` naming | Domain language now requires Persona, while backend/API still expose person/contact history. | Decide route/schema migration strategy. |
-| Missing Self Persona | Agents and owner-scoped memory need a single `is_self: true` Persona. | Add owner Persona semantics and uniqueness guarantee. |
+| Owner Persona integration incomplete | Storage and compatibility API now support a single `is_self: true` Persona, but agents, UI context assembly and owner-scoped workflows do not consistently use it yet. | Route owner-scoped actions and context assembly through the Owner Persona. |
 | Missing Relationship records | Current model stores relationship-like state as fields and timeline events. | Add first-class Relationship storage and API. |
 | `person_personas` conflict | Nested personas contradict Persona as the root entity. | Compatibility writes now migrate interaction-context values into Persona Preferences; route/schema deprecation remains a future migration decision. |
 | Email-derived `person_id` compatibility | ADR-0074 keeps text IDs for current implementation, but target Persona should not be email-rooted. | Future opaque ID migration ADR if/when implementation changes. |
 | Root compatibility caches | Legacy Persona columns still exist for API/schema compatibility. | Root `trust_score`, `watchlist` and `health_status` now have target-aligned write adapters, but route/schema deprecation remains a future migration decision. |
 | Dossier workflow not formalized | Backend investigator now emits target Dossier sections with source refs, but cache/workflow/UI semantics remain incomplete. | Define Dossier cache, review and workflow placement. |
-| PersonaType not enforced | Target requires `human`, `ai_agent`, `organization_proxy`, `system`. | Add typed domain validation in a migration slice. |
+| PersonaType adoption incomplete | Compatibility storage and projection support `human`, `ai_agent`, `organization_proxy`, `system`, and current AI registry agents materialize as `ai_agent` Personas; broader UI/agent workflows do not use those types consistently yet. | Route AI agents, organization proxies and system actors through PersonaType-aware graph semantics. |
 
 ## Not Blockers
 
@@ -31,7 +31,7 @@ level, but implementation is blocked by unresolved migration work.
 - UI redesign around Persona Intelligence.
 - Dossier cache/workflow implementation beyond the backend read-model baseline.
 - Relationship graph UI and traversal views.
-- AI agent Personas for HESTIA and future agents.
+- Broader Agent Persona attribution for future agents beyond the current AI registry baseline.
 
 Any implementation work in these areas must be covered by a dedicated plan,
 relevant ADR review and repository validation.

@@ -4,6 +4,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use serde_json::json;
 
+use hermes_hub_backend::domains::decisions::{
+    DecisionEntityKind, DecisionReviewState, DecisionStore,
+};
 use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
@@ -14,6 +17,10 @@ use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
 use hermes_hub_backend::domains::projects::link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewCommandResult, ProjectLinkReviewState,
     ProjectLinkReviewStore, ProjectLinkTargetKind,
+};
+use hermes_hub_backend::domains::relationships::{
+    RelationshipEntityKind, RelationshipEvidenceSourceKind, RelationshipReviewState,
+    RelationshipStore,
 };
 use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
 use hermes_hub_backend::platform::storage::Database;
@@ -90,7 +97,202 @@ async fn project_link_review_command_appends_event_and_updates_review_against_po
 }
 
 #[tokio::test]
-async fn project_link_review_reset_removes_explicit_decision_against_postgres() {
+async fn project_link_review_confirm_materializes_user_confirmed_decision_against_postgres() {
+    let Some(context) = live_review_context("project link review decision adapter").await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let keyword = format!("ProjectDecisionAdapter{suffix}");
+    let project_id = format!("project:v1:review-decision:{suffix}");
+    context
+        .project_store
+        .upsert_project(
+            &NewProject::active(
+                &project_id,
+                format!("Project Review Decision {suffix}"),
+                "Product Development",
+                "Project link review decision adapter test",
+                "Alex Morgan",
+                vec![keyword.clone()],
+            )
+            .progress(64),
+        )
+        .await
+        .expect("upsert review decision project");
+    let message_id = seed_message(
+        &context,
+        suffix,
+        &format!("decision-reviewer-{suffix}@example.com"),
+        &[format!("owner-{suffix}@example.com")],
+        &format!("provider-link-review-decision-{suffix}"),
+        &format!("{keyword} proposal"),
+        "Review decision adapter body",
+    )
+    .await;
+    let command_id = format!("link-review-decision-confirm-{suffix}");
+    let result = context
+        .review_store
+        .set_review_state(&ProjectLinkReviewCommand {
+            command_id: command_id.clone(),
+            project_id: project_id.clone(),
+            target_kind: ProjectLinkTargetKind::Message,
+            target_id: message_id.clone(),
+            review_state: ProjectLinkReviewState::UserConfirmed,
+            actor_id: "reviewer".to_owned(),
+        })
+        .await
+        .expect("confirm project link review");
+
+    let decisions = context
+        .decision_store
+        .list_for_entity(DecisionEntityKind::Project, &project_id, 20)
+        .await
+        .expect("project decisions");
+    let decision = decisions
+        .iter()
+        .find(|item| item.metadata["project_link_review_event_id"] == json!(result.event_id))
+        .expect("confirmed project link review should create a durable Decision");
+
+    assert_eq!(decision.review_state, DecisionReviewState::UserConfirmed);
+    assert_eq!(
+        decision.rationale,
+        "User confirmed a message link candidate for this project."
+    );
+    assert_eq!(decision.metadata["project_id"], json!(project_id));
+    assert_eq!(decision.metadata["target_kind"], json!("message"));
+    assert_eq!(decision.metadata["target_id"], json!(message_id));
+
+    let impacted_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)
+        FROM decision_impacted_entities
+        WHERE decision_id = $1
+          AND (
+            (entity_kind = 'project' AND entity_id = $2)
+            OR (entity_kind = 'communication' AND entity_id = $3)
+          )
+        "#,
+    )
+    .bind(&decision.decision_id)
+    .bind(&project_id)
+    .bind(&message_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("decision impacted entities");
+    assert_eq!(impacted_count, 2);
+
+    let evidence: (String, String, Option<String>) = sqlx::query_as(
+        "SELECT source_kind, source_id, quote FROM decision_evidence WHERE decision_id = $1",
+    )
+    .bind(&decision.decision_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("decision evidence");
+    assert_eq!(evidence.0, "raw_record");
+    assert_eq!(evidence.1, result.event_id);
+    assert_eq!(
+        evidence.2.as_deref(),
+        Some("User confirmed message link to project.")
+    );
+}
+
+#[tokio::test]
+async fn project_link_review_confirm_materializes_relationship_against_postgres() {
+    let Some(context) = live_review_context("project link review relationship adapter").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let keyword = format!("ProjectRelationshipAdapter{suffix}");
+    let project_id = format!("project:v1:review-relationship:{suffix}");
+    context
+        .project_store
+        .upsert_project(
+            &NewProject::active(
+                &project_id,
+                format!("Project Review Relationship {suffix}"),
+                "Product Development",
+                "Project link review relationship adapter test",
+                "Alex Morgan",
+                vec![keyword.clone()],
+            )
+            .progress(64),
+        )
+        .await
+        .expect("upsert review relationship project");
+    let message_id = seed_message(
+        &context,
+        suffix,
+        &format!("relationship-reviewer-{suffix}@example.com"),
+        &[format!("owner-{suffix}@example.com")],
+        &format!("provider-link-review-relationship-{suffix}"),
+        &format!("{keyword} proposal"),
+        "Review relationship adapter body",
+    )
+    .await;
+    let command_id = format!("link-review-relationship-confirm-{suffix}");
+    let result = context
+        .review_store
+        .set_review_state(&ProjectLinkReviewCommand {
+            command_id: command_id.clone(),
+            project_id: project_id.clone(),
+            target_kind: ProjectLinkTargetKind::Message,
+            target_id: message_id.clone(),
+            review_state: ProjectLinkReviewState::UserConfirmed,
+            actor_id: "reviewer".to_owned(),
+        })
+        .await
+        .expect("confirm project link review");
+
+    let relationships = context
+        .relationship_store
+        .list_for_entity(RelationshipEntityKind::Project, &project_id, 20)
+        .await
+        .expect("project relationships");
+    let relationship = relationships
+        .iter()
+        .find(|item| {
+            item.source_entity_kind == RelationshipEntityKind::Project
+                && item.source_entity_id == project_id
+                && item.target_entity_kind == RelationshipEntityKind::Communication
+                && item.target_entity_id == message_id
+                && item.relationship_type == "project_has_message"
+        })
+        .expect("confirmed project link review should create a durable Relationship");
+
+    assert_eq!(
+        relationship.review_state,
+        RelationshipReviewState::UserConfirmed
+    );
+    assert_eq!(relationship.confidence, 1.0);
+    assert_eq!(
+        relationship.metadata["compatibility_table"],
+        json!("project_link_reviews")
+    );
+    assert_eq!(relationship.metadata["project_id"], json!(project_id));
+    assert_eq!(relationship.metadata["target_kind"], json!("message"));
+    assert_eq!(relationship.metadata["target_id"], json!(message_id));
+
+    let evidence: (String, String, Option<String>) = sqlx::query_as(
+        "SELECT source_kind, source_id, excerpt FROM relationship_evidence WHERE relationship_id = $1",
+    )
+    .bind(&relationship.relationship_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("relationship evidence");
+    assert_eq!(
+        evidence.0,
+        RelationshipEvidenceSourceKind::RawRecord.as_str()
+    );
+    assert_eq!(evidence.1, result.event_id);
+    assert_eq!(
+        evidence.2.as_deref(),
+        Some("User confirmed message link to project.")
+    );
+}
+
+#[tokio::test]
+async fn project_link_review_reset_clears_review_and_demotes_relationship_against_postgres() {
     let Some(context) = live_review_context("project link review reset").await else {
         return;
     };
@@ -155,6 +357,52 @@ async fn project_link_review_reset_removes_explicit_decision_against_postgres() 
         .await
         .expect("load review after reset");
     assert_eq!(review, None);
+
+    let relationships = context
+        .relationship_store
+        .list_for_entity(RelationshipEntityKind::Project, &project_id, 20)
+        .await
+        .expect("project relationships after reset");
+    let relationship = relationships
+        .iter()
+        .find(|item| {
+            item.source_entity_kind == RelationshipEntityKind::Project
+                && item.source_entity_id == project_id
+                && item.target_entity_kind == RelationshipEntityKind::Communication
+                && item.target_entity_id == message_id
+                && item.relationship_type == "project_has_message"
+        })
+        .expect("reset project link review should retain a suggested Relationship candidate");
+    assert_eq!(
+        relationship.review_state,
+        RelationshipReviewState::Suggested
+    );
+    assert_eq!(
+        relationship.metadata["project_link_review_event_id"],
+        json!(result.event_id)
+    );
+
+    let reset_evidence: (String, String, Option<String>) = sqlx::query_as(
+        r#"
+        SELECT source_kind, source_id, excerpt
+        FROM relationship_evidence
+        WHERE relationship_id = $1 AND source_id = $2
+        "#,
+    )
+    .bind(&relationship.relationship_id)
+    .bind(&result.event_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("reset relationship evidence");
+    assert_eq!(
+        reset_evidence.0,
+        RelationshipEvidenceSourceKind::RawRecord.as_str()
+    );
+    assert_eq!(reset_evidence.1, result.event_id);
+    assert_eq!(
+        reset_evidence.2.as_deref(),
+        Some("User reset message link review for project.")
+    );
 }
 
 #[tokio::test]
@@ -253,10 +501,13 @@ async fn project_link_review_projection_rebuilds_review_state_from_event_against
 }
 
 struct LiveReviewContext {
+    pool: sqlx::PgPool,
     project_store: ProjectStore,
     communication_store: CommunicationIngestionStore,
     message_store: MessageProjectionStore,
     review_store: ProjectLinkReviewStore,
+    decision_store: DecisionStore,
+    relationship_store: RelationshipStore,
     event_store: EventStore,
 }
 
@@ -272,10 +523,13 @@ async fn live_review_context(_test_name: &str) -> Option<LiveReviewContext> {
     let _ = database_url;
 
     Some(LiveReviewContext {
+        pool: pool.clone(),
         project_store: ProjectStore::new(pool.clone()),
         communication_store: CommunicationIngestionStore::new(pool.clone()),
         message_store: MessageProjectionStore::new(pool.clone()),
         review_store: ProjectLinkReviewStore::new(pool.clone()),
+        decision_store: DecisionStore::new(pool.clone()),
+        relationship_store: RelationshipStore::new(pool.clone()),
         event_store: EventStore::new(pool),
     })
 }

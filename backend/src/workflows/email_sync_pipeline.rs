@@ -1,10 +1,12 @@
 use std::collections::BTreeSet;
 
 use serde::Serialize;
+use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::domains::decisions::{DecisionStore, DecisionStoreError};
 use crate::domains::mail::core::{CommunicationIngestionStore, StoredRawCommunicationRecord};
 use crate::domains::mail::ingestion::analyze_ingested_message;
 use crate::domains::mail::messages::{
@@ -21,6 +23,12 @@ use crate::domains::mail::sync::{
     EmailSyncBatch, EmailSyncRecordError, record_email_sync_batch_with_mail_blobs,
 };
 use crate::domains::persons::api::{PersonProjectionError, PersonProjectionStore};
+use crate::domains::relationships::{
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
+    RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
+    RelationshipStoreError,
+};
+use crate::domains::tasks::candidates::{TaskCandidateError, TaskCandidateStore};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct EmailSyncPipelineReport {
@@ -36,6 +44,8 @@ pub struct EmailSyncPipelineReport {
     pub upserted_relationship_events: usize,
     pub upserted_organizations: usize,
     pub upserted_organization_contact_links: usize,
+    pub refreshed_decision_candidates: usize,
+    pub refreshed_task_candidates: usize,
     pub checkpoint_saved: bool,
 }
 
@@ -72,6 +82,8 @@ pub async fn project_email_sync_batch_with_mail_blobs(
     let knowledge_report =
         project_message_knowledge(&pool, &person_store, &projection_report.projected_messages)
             .await?;
+    let candidate_report =
+        refresh_message_context_candidates(&pool, &projection_report.projected_messages).await?;
 
     Ok(EmailSyncPipelineReport {
         imported_records: import_report.inserted_or_existing_records,
@@ -86,6 +98,8 @@ pub async fn project_email_sync_batch_with_mail_blobs(
         upserted_relationship_events: knowledge_report.upserted_relationship_events,
         upserted_organizations: knowledge_report.upserted_organizations,
         upserted_organization_contact_links: knowledge_report.upserted_organization_contact_links,
+        refreshed_decision_candidates: candidate_report.refreshed_decision_candidates,
+        refreshed_task_candidates: candidate_report.refreshed_task_candidates,
         checkpoint_saved: import_report.checkpoint_saved,
     })
 }
@@ -105,6 +119,37 @@ struct EmailParticipant {
     email_address: String,
     display_name: Option<String>,
     role: &'static str,
+}
+
+#[derive(Default)]
+struct MessageCandidateRefreshReport {
+    refreshed_decision_candidates: usize,
+    refreshed_task_candidates: usize,
+}
+
+async fn refresh_message_context_candidates(
+    pool: &PgPool,
+    messages: &[ProjectedMessage],
+) -> Result<MessageCandidateRefreshReport, EmailSyncPipelineError> {
+    let message_ids = messages
+        .iter()
+        .map(|message| message.message_id.clone())
+        .collect::<Vec<_>>();
+    if message_ids.is_empty() {
+        return Ok(MessageCandidateRefreshReport::default());
+    }
+
+    let decision_store = DecisionStore::new(pool.clone());
+    let task_candidate_store = TaskCandidateStore::new(pool.clone());
+
+    Ok(MessageCandidateRefreshReport {
+        refreshed_decision_candidates: decision_store
+            .refresh_message_candidates_for_ids(&message_ids)
+            .await?,
+        refreshed_task_candidates: task_candidate_store
+            .refresh_message_candidates_for_ids(&message_ids)
+            .await?,
+    })
 }
 
 async fn project_message_knowledge(
@@ -144,8 +189,14 @@ async fn project_message_knowledge(
                 let organization_id =
                     organization_id.unwrap_or_else(|| organization_id_for_domain(&domain));
                 let _ = upsert_organization_domain(pool, &organization_id, &domain).await?;
-                if upsert_organization_contact_link(pool, &organization_id, &person.person_id)
-                    .await?
+                if upsert_organization_contact_link(
+                    pool,
+                    &organization_id,
+                    &person.person_id,
+                    message,
+                    &participant,
+                )
+                .await?
                 {
                     report.upserted_organization_contact_links += 1;
                 }
@@ -371,7 +422,10 @@ async fn upsert_organization_contact_link(
     pool: &PgPool,
     organization_id: &str,
     person_id: &str,
-) -> Result<bool, sqlx::Error> {
+    message: &ProjectedMessage,
+    participant: &EmailParticipant,
+) -> Result<bool, EmailSyncPipelineError> {
+    let mut transaction = pool.begin().await?;
     let row = sqlx::query(
         r#"
         INSERT INTO organization_contact_links (organization_id, person_id, role, source, confidence)
@@ -381,14 +435,77 @@ async fn upsert_organization_contact_link(
             source = EXCLUDED.source,
             confidence = EXCLUDED.confidence,
             updated_at = now()
-        RETURNING (xmax = 0) AS inserted
+        RETURNING
+            id::text,
+            organization_id,
+            person_id,
+            role,
+            source,
+            confidence::float8 AS confidence,
+            valid_from,
+            valid_to,
+            (xmax = 0) AS inserted
         "#,
     )
     .bind(organization_id)
     .bind(person_id)
-    .fetch_one(pool)
+    .fetch_one(&mut *transaction)
     .await?;
-    row.try_get::<bool, _>("inserted")
+    let link_id: String = row.try_get("id")?;
+    let source: String = row.try_get("source")?;
+    let role: Option<String> = row.try_get("role")?;
+    let confidence: f64 = row.try_get("confidence")?;
+    let valid_from = row.try_get("valid_from")?;
+    let valid_to = row.try_get("valid_to")?;
+    let inserted: bool = row.try_get("inserted")?;
+
+    let relationship = NewRelationship {
+        source_entity_kind: RelationshipEntityKind::Persona,
+        source_entity_id: person_id.to_owned(),
+        target_entity_kind: RelationshipEntityKind::Organization,
+        target_entity_id: organization_id.to_owned(),
+        relationship_type: "member_of".to_owned(),
+        trust_score: 0.5,
+        strength_score: 0.55,
+        confidence,
+        review_state: RelationshipReviewState::SystemAccepted,
+        valid_from,
+        valid_to,
+        metadata: json!({
+            "compatibility_table": "organization_contact_links",
+            "compatibility_record_id": link_id,
+            "source": source,
+            "role": role,
+            "participant_role": participant.role,
+            "participant_email": participant.email_address
+        }),
+    };
+    let evidence = NewRelationshipEvidence::new(
+        RelationshipEvidenceSourceKind::Communication,
+        message.message_id.clone(),
+    )
+    .excerpt(format!(
+        "Email participant {} was associated with an organization domain.",
+        participant.email_address
+    ))
+    .metadata(json!({
+        "compatibility_table": "organization_contact_links",
+        "compatibility_record_id": link_id,
+        "organization_id": organization_id,
+        "person_id": person_id,
+        "participant_role": participant.role,
+        "participant_email": participant.email_address
+    }));
+
+    RelationshipStore::upsert_with_evidence_in_transaction(
+        &mut transaction,
+        &relationship,
+        &[evidence],
+    )
+    .await?;
+    transaction.commit().await?;
+
+    Ok(inserted)
 }
 
 #[derive(Default)]
@@ -519,6 +636,15 @@ pub enum EmailSyncPipelineError {
 
     #[error(transparent)]
     AttachmentScan(#[from] AttachmentSafetyScanError),
+
+    #[error(transparent)]
+    Relationship(#[from] RelationshipStoreError),
+
+    #[error(transparent)]
+    Decision(#[from] DecisionStoreError),
+
+    #[error(transparent)]
+    TaskCandidate(#[from] TaskCandidateError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

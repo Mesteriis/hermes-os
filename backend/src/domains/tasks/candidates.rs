@@ -10,6 +10,10 @@ use sqlx::postgres::{PgPool, Postgres};
 use sqlx::{Row, Transaction};
 use thiserror::Error;
 
+use crate::domains::obligations::{ObligationEntityKind, ObligationReviewState, ObligationStore};
+use crate::engines::obligation::{
+    ObligationCandidate, ObligationEngine, ObligationEngineError, ObligationExtractionInput,
+};
 use crate::platform::events::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };
@@ -20,6 +24,10 @@ const TASK_CANDIDATE_REVIEW_SOURCE_PROVIDER: &str = "local_api";
 const TASK_CANDIDATE_ID_PREFIX: &str = "task_candidate:v1:";
 const TASK_ID_PREFIX: &str = "task:v1:";
 const TASK_CANDIDATE_EVENT_PREFIX: &str = "task_candidate_review:";
+const TASK_CANDIDATE_KIND_TASK: &str = "task";
+const TASK_CANDIDATE_KIND_OBLIGATION_TASK: &str = "obligation_task";
+const OBLIGATION_TASK_LINK_KIND: &str = "fulfillment_task";
+const OBLIGATION_CANDIDATE_METADATA_KEY: &str = "obligation_candidate";
 const FNV_OFFSET_BASIS: u64 = 0xcbf29ce484222325;
 const FNV_PRIME: u64 = 0x100000001b3;
 const DEFAULT_LIMIT: i64 = 50;
@@ -27,6 +35,7 @@ const MAX_LIMIT: i64 = 100;
 const MIN_LIMIT: i64 = 1;
 const REVIEW_TEXT_SNIPPET_CHARS: usize = 180;
 const TITLE_PREVIEW_CHARS: usize = 120;
+const OWNER_PERSONA_EXTRACTION_CONTEXT_ID: &str = "persona:owner";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TaskCandidateSourceKind {
@@ -39,6 +48,21 @@ impl TaskCandidateSourceKind {
         match self {
             Self::Message => "message",
             Self::Document => "document",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TaskCandidateKind {
+    Task,
+    ObligationTask,
+}
+
+impl TaskCandidateKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Task => TASK_CANDIDATE_KIND_TASK,
+            Self::ObligationTask => TASK_CANDIDATE_KIND_OBLIGATION_TASK,
         }
     }
 }
@@ -257,26 +281,104 @@ impl TaskCandidateStore {
                 row.try_get::<String, _>("body_text")?,
             );
 
-            if let Some(fragment) = extract_candidate_fragment(&source_text) {
-                let payload = CandidatePayload {
-                    source_kind: TaskCandidateSourceKind::Message,
-                    source_id,
-                    project_id: None,
-                    title: title_from_fragment(&fragment.text),
-                    due_text: fragment.due_text,
-                    assignee_label: fragment.assignee_label,
-                    confidence: 0.8,
-                    evidence_excerpt: evidence_excerpt(&fragment.text),
-                };
-                upsert_task_candidate(
-                    &self.pool,
-                    &payload,
-                    payload.task_candidate_id(),
-                    TaskCandidateReviewState::Suggested,
-                )
+            count += self
+                .refresh_message_candidate_from_text(&source_id, &source_text)
                 .await?;
-                count += 1;
-            }
+        }
+
+        Ok(count)
+    }
+
+    pub async fn refresh_message_candidates_for_ids(
+        &self,
+        message_ids: &[String],
+    ) -> Result<usize, TaskCandidateError> {
+        if message_ids.is_empty() {
+            return Ok(0);
+        }
+
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                message_id,
+                subject,
+                body_text
+            FROM communication_messages
+            WHERE message_id = ANY($1)
+            ORDER BY COALESCE(occurred_at, projected_at) DESC, message_id
+            "#,
+        )
+        .bind(message_ids.to_vec())
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut count = 0usize;
+        for row in rows {
+            let source_id = row.try_get::<String, _>("message_id")?;
+            let source_text = format!(
+                "{}\n{}",
+                row.try_get::<String, _>("subject")?,
+                row.try_get::<String, _>("body_text")?,
+            );
+            count += self
+                .refresh_message_candidate_from_text(&source_id, &source_text)
+                .await?;
+        }
+
+        Ok(count)
+    }
+
+    async fn refresh_message_candidate_from_text(
+        &self,
+        source_id: &str,
+        source_text: &str,
+    ) -> Result<usize, TaskCandidateError> {
+        if let Some(fragment) = extract_candidate_fragment(source_text) {
+            let payload = CandidatePayload {
+                source_kind: TaskCandidateSourceKind::Message,
+                source_id: source_id.to_owned(),
+                candidate_kind: TaskCandidateKind::Task,
+                candidate_metadata: json!({}),
+                project_id: None,
+                title: title_from_fragment(&fragment.text),
+                due_text: fragment.due_text,
+                assignee_label: fragment.assignee_label,
+                confidence: 0.8,
+                evidence_excerpt: evidence_excerpt(&fragment.text),
+            };
+            upsert_task_candidate(
+                &self.pool,
+                &payload,
+                payload.task_candidate_id(),
+                TaskCandidateReviewState::Suggested,
+            )
+            .await?;
+            return Ok(1);
+        }
+
+        let input = ObligationExtractionInput::communication(
+            source_id,
+            source_text,
+            ObligationEntityKind::Persona,
+            OWNER_PERSONA_EXTRACTION_CONTEXT_ID,
+        );
+        let extraction = ObligationEngine::detect_candidates(&input)?;
+
+        let mut count = 0usize;
+        for obligation_candidate in extraction.obligations {
+            let payload = task_candidate_payload_from_obligation(
+                TaskCandidateSourceKind::Message,
+                source_id,
+                &obligation_candidate,
+            );
+            upsert_task_candidate(
+                &self.pool,
+                &payload,
+                payload.task_candidate_id(),
+                TaskCandidateReviewState::Suggested,
+            )
+            .await?;
+            count += 1;
         }
 
         Ok(count)
@@ -311,6 +413,8 @@ impl TaskCandidateStore {
                 let payload = CandidatePayload {
                     source_kind: TaskCandidateSourceKind::Document,
                     source_id,
+                    candidate_kind: TaskCandidateKind::Task,
+                    candidate_metadata: json!({}),
                     project_id: None,
                     title: title_from_fragment(&fragment.text),
                     due_text: fragment.due_text,
@@ -326,6 +430,30 @@ impl TaskCandidateStore {
                 )
                 .await?;
                 count += 1;
+            } else {
+                let input = ObligationExtractionInput::document(
+                    &source_id,
+                    &source_text,
+                    ObligationEntityKind::Persona,
+                    OWNER_PERSONA_EXTRACTION_CONTEXT_ID,
+                );
+                let extraction = ObligationEngine::detect_candidates(&input)?;
+
+                for obligation_candidate in extraction.obligations {
+                    let payload = task_candidate_payload_from_obligation(
+                        TaskCandidateSourceKind::Document,
+                        &source_id,
+                        &obligation_candidate,
+                    );
+                    upsert_task_candidate(
+                        &self.pool,
+                        &payload,
+                        payload.task_candidate_id(),
+                        TaskCandidateReviewState::Suggested,
+                    )
+                    .await?;
+                    count += 1;
+                }
             }
         }
 
@@ -352,6 +480,13 @@ impl TaskCandidateStore {
                     event_id,
                     actor_id,
                     reviewed_at,
+                )
+                .await?;
+                self.sync_obligation_candidate_review_state_in_transaction(
+                    transaction,
+                    task_candidate_id,
+                    &candidate,
+                    review_state,
                 )
                 .await?;
 
@@ -400,8 +535,62 @@ impl TaskCandidateStore {
                     .bind(task_candidate_id)
                     .execute(&mut **transaction)
                     .await?;
+
+                self.sync_obligation_candidate_review_state_in_transaction(
+                    transaction,
+                    task_candidate_id,
+                    &candidate,
+                    review_state,
+                )
+                .await?;
             }
         }
+
+        Ok(())
+    }
+
+    async fn sync_obligation_candidate_review_state_in_transaction(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        task_candidate_id: &str,
+        candidate: &StoredCandidateRow,
+        review_state: TaskCandidateReviewState,
+    ) -> Result<(), TaskCandidateError> {
+        if candidate.candidate_kind != TASK_CANDIDATE_KIND_OBLIGATION_TASK {
+            return Ok(());
+        }
+
+        let mut obligation_candidate = obligation_candidate_from_metadata(candidate)?;
+        obligation_candidate.review_state =
+            obligation_review_state_from_task_candidate(review_state);
+        let (obligation, evidence) = obligation_candidate.to_obligation_draft();
+        let stored_obligation = ObligationStore::upsert_with_evidence_in_transaction(
+            transaction,
+            &obligation,
+            &[evidence],
+        )
+        .await?;
+
+        if review_state != TaskCandidateReviewState::UserConfirmed {
+            return Ok(());
+        }
+
+        sqlx::query(
+            r#"
+            INSERT INTO obligation_task_links (
+                obligation_id,
+                task_id,
+                link_kind
+            )
+            VALUES ($1, $2, $3)
+            ON CONFLICT (obligation_id, task_id, link_kind) DO NOTHING
+            "#,
+        )
+        .bind(&stored_obligation.obligation_id)
+        .bind(task_id_from_candidate(task_candidate_id))
+        .bind(OBLIGATION_TASK_LINK_KIND)
+        .execute(&mut **transaction)
+        .await?;
 
         Ok(())
     }
@@ -460,6 +649,8 @@ impl TaskCandidateStore {
 struct CandidatePayload {
     source_kind: TaskCandidateSourceKind,
     source_id: String,
+    candidate_kind: TaskCandidateKind,
+    candidate_metadata: Value,
     project_id: Option<String>,
     title: String,
     due_text: Option<String>,
@@ -478,6 +669,8 @@ impl CandidatePayload {
 struct StoredCandidateRow {
     source_kind: String,
     source_id: String,
+    candidate_kind: String,
+    candidate_metadata: Value,
     project_id: Option<String>,
     title: String,
 }
@@ -610,18 +803,126 @@ fn evidence_excerpt(value: &str) -> String {
     text_preview(value, REVIEW_TEXT_SNIPPET_CHARS)
 }
 
+fn task_candidate_payload_from_obligation(
+    source_kind: TaskCandidateSourceKind,
+    source_id: &str,
+    candidate: &ObligationCandidate,
+) -> CandidatePayload {
+    CandidatePayload {
+        source_kind,
+        source_id: source_id.to_owned(),
+        candidate_kind: TaskCandidateKind::ObligationTask,
+        candidate_metadata: json!({
+            "engine": "obligation",
+            OBLIGATION_CANDIDATE_METADATA_KEY: candidate,
+        }),
+        project_id: None,
+        title: title_from_fragment(&candidate.statement),
+        due_text: candidate.due_text.clone(),
+        assignee_label: None,
+        confidence: (candidate.confidence - 0.08).max(0.0),
+        evidence_excerpt: evidence_excerpt(&candidate.quote),
+    }
+}
+
+fn obligation_candidate_from_metadata(
+    candidate: &StoredCandidateRow,
+) -> Result<ObligationCandidate, TaskCandidateError> {
+    let value = candidate
+        .candidate_metadata
+        .get(OBLIGATION_CANDIDATE_METADATA_KEY)
+        .cloned()
+        .ok_or_else(|| {
+            TaskCandidateError::InvalidCandidateMetadata(
+                OBLIGATION_CANDIDATE_METADATA_KEY.to_owned(),
+            )
+        })?;
+
+    Ok(serde_json::from_value(value)?)
+}
+
+fn obligation_review_state_from_task_candidate(
+    review_state: TaskCandidateReviewState,
+) -> ObligationReviewState {
+    match review_state {
+        TaskCandidateReviewState::Suggested => ObligationReviewState::Suggested,
+        TaskCandidateReviewState::UserConfirmed => ObligationReviewState::UserConfirmed,
+        TaskCandidateReviewState::UserRejected => ObligationReviewState::UserRejected,
+    }
+}
+
 async fn upsert_task_candidate(
     pool: &PgPool,
     payload: &CandidatePayload,
     task_candidate_id: String,
     review_state: TaskCandidateReviewState,
 ) -> Result<(), TaskCandidateError> {
+    let update_result = sqlx::query(
+        r#"
+        UPDATE task_candidates
+        SET
+            source_kind = $2,
+            source_id = $3,
+            candidate_kind = $4,
+            candidate_metadata = $5,
+            project_id = COALESCE($6, project_id),
+            title = $7,
+            due_text = COALESCE($8, due_text),
+            assignee_label = COALESCE($9, assignee_label),
+            confidence = $10,
+            review_state = CASE
+                WHEN review_state IN ('user_confirmed', 'user_rejected')
+                    THEN review_state
+                ELSE $11
+            END,
+            evidence_excerpt = $12,
+            event_id = CASE
+                WHEN review_state IN ('user_confirmed', 'user_rejected')
+                    THEN event_id
+                ELSE NULL
+            END,
+            actor_id = CASE
+                WHEN review_state IN ('user_confirmed', 'user_rejected')
+                    THEN actor_id
+                ELSE NULL
+            END,
+            reviewed_at = CASE
+                WHEN review_state IN ('user_confirmed', 'user_rejected')
+                    THEN reviewed_at
+                ELSE NULL
+            END,
+            updated_at = now()
+        WHERE task_candidate_id = $1
+           OR (source_kind = $2 AND source_id = $3 AND lower(title) = lower($7))
+        "#,
+    )
+    .bind(&task_candidate_id)
+    .bind(payload.source_kind.as_str())
+    .bind(&payload.source_id)
+    .bind(payload.candidate_kind.as_str())
+    .bind(&payload.candidate_metadata)
+    .bind(&payload.project_id)
+    .bind(&payload.title)
+    .bind(&payload.due_text)
+    .bind(&payload.assignee_label)
+    .bind(payload.confidence)
+    .bind(review_state.as_str())
+    .bind(&payload.evidence_excerpt)
+    .execute(pool)
+    .await?;
+
+    if update_result.rows_affected() > 0 {
+        return Ok(());
+    }
+
     sqlx::query(
         r#"
         INSERT INTO task_candidates (
             task_candidate_id,
             source_kind,
             source_id,
+            candidate_kind,
+            candidate_metadata,
             project_id,
             title,
             due_text,
@@ -633,11 +934,13 @@ async fn upsert_task_candidate(
             actor_id,
             reviewed_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NULL, NULL, NULL)
-        ON CONFLICT (task_candidate_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL, NULL, NULL)
+        ON CONFLICT (source_kind, source_id, lower(title))
         DO UPDATE SET
             source_kind = EXCLUDED.source_kind,
             source_id = EXCLUDED.source_id,
+            candidate_kind = EXCLUDED.candidate_kind,
+            candidate_metadata = EXCLUDED.candidate_metadata,
             project_id = COALESCE(EXCLUDED.project_id, task_candidates.project_id),
             title = EXCLUDED.title,
             due_text = COALESCE(EXCLUDED.due_text, task_candidates.due_text),
@@ -670,6 +973,8 @@ async fn upsert_task_candidate(
     .bind(task_candidate_id)
     .bind(payload.source_kind.as_str())
     .bind(&payload.source_id)
+    .bind(payload.candidate_kind.as_str())
+    .bind(&payload.candidate_metadata)
     .bind(&payload.project_id)
     .bind(&payload.title)
     .bind(&payload.due_text)
@@ -692,6 +997,8 @@ async fn row_task_candidate(
         SELECT
             source_kind,
             source_id,
+            candidate_kind,
+            candidate_metadata,
             project_id,
             title
         FROM task_candidates
@@ -707,6 +1014,8 @@ async fn row_task_candidate(
     Ok(StoredCandidateRow {
         source_kind: row.try_get("source_kind")?,
         source_id: row.try_get("source_id")?,
+        candidate_kind: row.try_get("candidate_kind")?,
+        candidate_metadata: row.try_get("candidate_metadata")?,
         project_id: row.try_get("project_id")?,
         title: row.try_get("title")?,
     })
@@ -765,7 +1074,7 @@ fn fnv1a64_hex(value: &str) -> String {
         hash = hash.wrapping_mul(FNV_PRIME);
     }
 
-    format!("{:016x}", hash)
+    format!("{hash:016x}")
 }
 
 fn validate_non_empty(field: &str, value: &str) -> Result<String, TaskCandidateError> {
@@ -818,6 +1127,9 @@ pub enum TaskCandidateError {
     #[error("payload field was missing: {0}")]
     MissingPayloadField(String),
 
+    #[error("candidate metadata is missing or invalid: {0}")]
+    InvalidCandidateMetadata(String),
+
     #[error("actor_id is missing from event")]
     MissingActorId,
 
@@ -829,6 +1141,15 @@ pub enum TaskCandidateError {
 
     #[error(transparent)]
     EventEnvelope(#[from] EventEnvelopeError),
+
+    #[error(transparent)]
+    ObligationEngine(#[from] ObligationEngineError),
+
+    #[error(transparent)]
+    ObligationStore(#[from] crate::domains::obligations::ObligationStoreError),
+
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

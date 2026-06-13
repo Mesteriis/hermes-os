@@ -14,6 +14,7 @@ use crate::domains::graph::core::{GraphNodeKind, node_id};
 use crate::domains::projects::link_reviews::{
     ProjectLinkReviewState, ProjectLinkReviewStore, ProjectReviewedTarget,
 };
+use crate::engines::timeline::TimelineEngine;
 
 const DEFAULT_PROJECT_LIMIT: i64 = 25;
 const MAX_PROJECT_LIMIT: i64 = 100;
@@ -544,6 +545,7 @@ impl ProjectStore {
         project_id: &str,
         limit: i64,
     ) -> Result<Vec<ProjectTimelineItem>, ProjectStoreError> {
+        let limit = TimelineEngine::bounded_entity_limit(limit);
         let message_ids = reviewed_target_ids(&self.active_project_messages(project_id).await?);
         let document_ids = reviewed_target_ids(&self.active_project_documents(project_id).await?);
 

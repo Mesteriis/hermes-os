@@ -1,10 +1,13 @@
 pub(crate) mod api_support;
 pub mod calendar;
+pub mod decisions;
 pub mod documents;
 pub mod graph;
 pub mod mail;
+pub mod obligations;
 pub mod organizations;
 pub mod persons;
 pub mod projects;
+pub mod relationships;
 pub mod settings;
 pub mod tasks;

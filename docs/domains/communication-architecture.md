@@ -39,6 +39,11 @@ Telegram, WhatsApp and future providers follow the same principle: provider
 accounts store non-secret metadata and adapter configuration only. Credentials
 belong behind the secret boundary and are linked through secret references.
 
+Telegram production capability behavior is specified in
+[Telegram Channel Capability Spec](telegram-channel.md). It remains a
+Communications channel and does not own durable truth outside Communications,
+Personas, Relationships, Documents, Decisions, Obligations, Tasks and Events.
+
 ## Canonical Objects
 
 - ChannelAccount.

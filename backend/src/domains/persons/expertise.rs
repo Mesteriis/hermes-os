@@ -34,7 +34,7 @@ impl PersonExpertiseStore {
         person_id: &str,
     ) -> Result<Vec<PersonExpertise>, PersonExpertiseError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, skill, domain, evidence, source, confidence,
+            "SELECT id::text, person_id, skill, domain, evidence, source, confidence::float8 AS confidence,
              last_verified_at, endorsed_by_person_id, created_at, updated_at
              FROM person_expertise WHERE person_id = $1 ORDER BY confidence DESC",
         )
@@ -51,7 +51,7 @@ impl PersonExpertiseStore {
     ) -> Result<Vec<PersonExpertise>, PersonExpertiseError> {
         let pattern = format!("%{}%", skill.trim().to_lowercase());
         let rows = sqlx::query(
-            "SELECT id::text, person_id, skill, domain, evidence, source, confidence,
+            "SELECT id::text, person_id, skill, domain, evidence, source, confidence::float8 AS confidence,
              last_verified_at, endorsed_by_person_id, created_at, updated_at
              FROM person_expertise WHERE lower(skill) LIKE $1 ORDER BY confidence DESC LIMIT $2",
         )
@@ -74,7 +74,7 @@ impl PersonExpertiseStore {
             "INSERT INTO person_expertise (person_id, skill, domain, source, confidence)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT DO NOTHING
-             RETURNING id::text, person_id, skill, domain, evidence, source, confidence,
+             RETURNING id::text, person_id, skill, domain, evidence, source, confidence::float8 AS confidence,
                        last_verified_at, endorsed_by_person_id, created_at, updated_at",
         )
         .bind(person_id)

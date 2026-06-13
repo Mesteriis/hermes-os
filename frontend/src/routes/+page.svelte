@@ -20,6 +20,7 @@
 	import OrganizationsPage from '$lib/pages/organizations/OrganizationsPage.svelte';
 	import PersonsPage from '$lib/pages/persons/PersonsPage.svelte';
 	import ProjectsPage from '$lib/pages/projects/ProjectsPage.svelte';
+	import ReviewPage from '$lib/pages/review/ReviewPage.svelte';
 	import SettingsPage from '$lib/pages/settings/SettingsPage.svelte';
 	import TasksPage from '$lib/pages/tasks/TasksPage.svelte';
 	import TelegramPage from '$lib/pages/telegram/TelegramPage.svelte';
@@ -181,6 +182,8 @@
 	<NotesPage {notes} isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
 {:else if currentViewId === 'knowledge'}
 	<KnowledgePage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
+{:else if currentViewId === 'review'}
+	<ReviewPage isLayoutEditing={$isLayoutEditing} {isWidgetVisible} />
 {:else if currentViewId === 'communications' && activeCommunicationSectionId === 'telegram'}
 	<TelegramPage
 		isLayoutEditing={$isLayoutEditing}

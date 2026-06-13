@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
@@ -64,25 +64,26 @@ impl TaskStore {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let task_id = format!("task:v1:{:x}", ts);
+        let task_id = format!("task:v1:{ts:x}");
+        let tags = req.tags.clone().unwrap_or_else(|| json!([]));
         let row = sqlx::query(
             "INSERT INTO tasks (task_id, title, description, source_kind, source_id, source_type, project_id, hermes_status, priority_score, area, why, due_at, energy_type, confidentiality, tags, linked_person_id, linked_organization_id, created_from_event_id, created_by_actor_id)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
-             RETURNING task_id, task_candidate_id, title, description, source_kind, source_id, source_type, project_id, status, hermes_status, priority_score, risk_score, readiness_score, area, why, outcome, due_at, completed_at, archived_at, waiting_reason, energy_type, confidentiality, tags, task_metadata, linked_person_id, linked_organization_id, created_from_event_id, created_by_actor_id, created_at, updated_at"
+             RETURNING task_id, task_candidate_id, title, description, source_kind, source_id, source_type, project_id, status, hermes_status, priority_score::float8 AS priority_score, risk_score::float8 AS risk_score, readiness_score::float8 AS readiness_score, area, why, outcome, due_at, completed_at, archived_at, waiting_reason, energy_type, confidentiality, tags, task_metadata, linked_person_id, linked_organization_id, created_from_event_id, created_by_actor_id, created_at, updated_at"
         ).bind(&task_id).bind(&req.title).bind(req.description.as_deref())
          .bind(req.source_kind.as_deref().unwrap_or("manual")).bind(req.source_id.as_deref().unwrap_or("manual"))
          .bind(req.source_type.as_deref().unwrap_or("manual")).bind(req.project_id.as_deref())
          .bind(req.hermes_status.as_deref().unwrap_or("new")).bind(req.priority_score)
          .bind(req.area.as_deref()).bind(req.why.as_deref()).bind(req.due_at)
          .bind(req.energy_type.as_deref()).bind(req.confidentiality.as_deref().unwrap_or("private_local"))
-         .bind(&req.tags).bind(req.linked_person_id.as_deref()).bind(req.linked_organization_id.as_deref())
+         .bind(&tags).bind(req.linked_person_id.as_deref()).bind(req.linked_organization_id.as_deref())
          .bind(req.created_from_event_id.as_deref()).bind(req.created_by_actor_id.as_deref())
          .fetch_one(&mut **transaction).await?;
         Ok(row_to_task(row)?)
     }
 
     pub async fn get(&self, task_id: &str) -> Result<Option<Task>, TaskError> {
-        let row = sqlx::query("SELECT task_id, task_candidate_id, title, description, source_kind, source_id, source_type, project_id, status, hermes_status, priority_score, risk_score, readiness_score, area, why, outcome, due_at, completed_at, archived_at, waiting_reason, energy_type, confidentiality, tags, task_metadata, linked_person_id, linked_organization_id, created_from_event_id, created_by_actor_id, created_at, updated_at FROM tasks WHERE task_id=$1")
+        let row = sqlx::query("SELECT task_id, task_candidate_id, title, description, source_kind, source_id, source_type, project_id, status, hermes_status, priority_score::float8 AS priority_score, risk_score::float8 AS risk_score, readiness_score::float8 AS readiness_score, area, why, outcome, due_at, completed_at, archived_at, waiting_reason, energy_type, confidentiality, tags, task_metadata, linked_person_id, linked_organization_id, created_from_event_id, created_by_actor_id, created_at, updated_at FROM tasks WHERE task_id=$1")
             .bind(task_id).fetch_optional(&self.pool).await?;
         row.map(|r| row_to_task(r).map_err(TaskError::from))
             .transpose()
@@ -91,7 +92,7 @@ impl TaskStore {
     pub async fn list(&self, query: &TaskListQuery) -> Result<Vec<Task>, TaskError> {
         let limit = query.limit.unwrap_or(100).clamp(1, 500);
         let rows = sqlx::query(
-            "SELECT task_id, task_candidate_id, title, description, source_kind, source_id, source_type, project_id, status, hermes_status, priority_score, risk_score, readiness_score, area, why, outcome, due_at, completed_at, archived_at, waiting_reason, energy_type, confidentiality, tags, task_metadata, linked_person_id, linked_organization_id, created_from_event_id, created_by_actor_id, created_at, updated_at FROM tasks WHERE ($1::text IS NULL OR hermes_status=$1) AND ($2::text IS NULL OR project_id=$2) AND ($3::text IS NULL OR source_type=$3) ORDER BY COALESCE(priority_score,0) DESC, due_at ASC NULLS LAST, created_at DESC LIMIT $4"
+            "SELECT task_id, task_candidate_id, title, description, source_kind, source_id, source_type, project_id, status, hermes_status, priority_score::float8 AS priority_score, risk_score::float8 AS risk_score, readiness_score::float8 AS readiness_score, area, why, outcome, due_at, completed_at, archived_at, waiting_reason, energy_type, confidentiality, tags, task_metadata, linked_person_id, linked_organization_id, created_from_event_id, created_by_actor_id, created_at, updated_at FROM tasks WHERE ($1::text IS NULL OR hermes_status=$1) AND ($2::text IS NULL OR project_id=$2) AND ($3::text IS NULL OR source_type=$3) ORDER BY COALESCE(priority_score,0) DESC, due_at ASC NULLS LAST, created_at DESC LIMIT $4"
         ).bind(query.status.as_deref()).bind(query.project_id.as_deref()).bind(query.source_type.as_deref()).bind(limit)
          .fetch_all(&self.pool).await?;
         rows.into_iter()
@@ -102,7 +103,7 @@ impl TaskStore {
 
     pub async fn update(&self, task_id: &str, update: &TaskUpdate) -> Result<Task, TaskError> {
         let row = sqlx::query(
-            "UPDATE tasks SET title=COALESCE($2,title), description=COALESCE($3,description), hermes_status=COALESCE($4,hermes_status), priority_score=COALESCE($5,priority_score), risk_score=COALESCE($6,risk_score), readiness_score=COALESCE($7,readiness_score), area=COALESCE($8,area), why=COALESCE($9,why), outcome=COALESCE($10,outcome), due_at=COALESCE($11,due_at), waiting_reason=COALESCE($12,waiting_reason), energy_type=COALESCE($13,energy_type), confidentiality=COALESCE($14,confidentiality), tags=COALESCE($15,tags), task_metadata=COALESCE($16,task_metadata), linked_person_id=COALESCE($17,linked_person_id), linked_organization_id=COALESCE($18,linked_organization_id), completed_at=COALESCE($19,completed_at), updated_at=now() WHERE task_id=$1 RETURNING task_id, task_candidate_id, title, description, source_kind, source_id, source_type, project_id, status, hermes_status, priority_score, risk_score, readiness_score, area, why, outcome, due_at, completed_at, archived_at, waiting_reason, energy_type, confidentiality, tags, task_metadata, linked_person_id, linked_organization_id, created_from_event_id, created_by_actor_id, created_at, updated_at"
+            "UPDATE tasks SET title=COALESCE($2,title), description=COALESCE($3,description), hermes_status=COALESCE($4,hermes_status), priority_score=COALESCE($5,priority_score), risk_score=COALESCE($6,risk_score), readiness_score=COALESCE($7,readiness_score), area=COALESCE($8,area), why=COALESCE($9,why), outcome=COALESCE($10,outcome), due_at=COALESCE($11,due_at), waiting_reason=COALESCE($12,waiting_reason), energy_type=COALESCE($13,energy_type), confidentiality=COALESCE($14,confidentiality), tags=COALESCE($15,tags), task_metadata=COALESCE($16,task_metadata), linked_person_id=COALESCE($17,linked_person_id), linked_organization_id=COALESCE($18,linked_organization_id), completed_at=COALESCE($19,completed_at), updated_at=now() WHERE task_id=$1 RETURNING task_id, task_candidate_id, title, description, source_kind, source_id, source_type, project_id, status, hermes_status, priority_score::float8 AS priority_score, risk_score::float8 AS risk_score, readiness_score::float8 AS readiness_score, area, why, outcome, due_at, completed_at, archived_at, waiting_reason, energy_type, confidentiality, tags, task_metadata, linked_person_id, linked_organization_id, created_from_event_id, created_by_actor_id, created_at, updated_at"
         ).bind(task_id).bind(update.title.as_deref()).bind(update.description.as_deref())
          .bind(update.hermes_status.as_deref()).bind(update.priority_score).bind(update.risk_score).bind(update.readiness_score)
          .bind(update.area.as_deref()).bind(update.why.as_deref()).bind(update.outcome.as_deref())
@@ -115,18 +116,26 @@ impl TaskStore {
     }
 
     pub async fn set_status(&self, task_id: &str, status: &str) -> Result<(), TaskError> {
+        let stored_status = if status == "completed" {
+            "done"
+        } else {
+            status
+        };
         let mut q =
             sqlx::query("UPDATE tasks SET hermes_status=$2, updated_at=now() WHERE task_id=$1");
-        if status == "done" || status == "completed" {
+        if stored_status == "done" {
             q = sqlx::query(
                 "UPDATE tasks SET hermes_status=$2, completed_at=now(), updated_at=now() WHERE task_id=$1",
             );
-        } else if status == "archived" {
+        } else if stored_status == "archived" {
             q = sqlx::query(
                 "UPDATE tasks SET hermes_status=$2, archived_at=now(), updated_at=now() WHERE task_id=$1",
             );
         }
-        q.bind(task_id).bind(status).execute(&self.pool).await?;
+        q.bind(task_id)
+            .bind(stored_status)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 

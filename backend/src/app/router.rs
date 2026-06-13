@@ -149,15 +149,19 @@ use crate::app::guard;
 use crate::app::vault_reconciliation::spawn_host_vault_manifest_reconciliation;
 use crate::app::{AccountSetupState, AppError, AppState};
 use crate::domains::calendar::handlers::*;
+use crate::domains::decisions::api::*;
 use crate::domains::documents::api::*;
 use crate::domains::graph::api::*;
 use crate::domains::mail::handlers::*;
+use crate::domains::obligations::api::*;
 use crate::domains::organizations::handlers::*;
 use crate::domains::persons::handlers::*;
 use crate::domains::projects::api::*;
+use crate::domains::relationships::api::*;
 use crate::domains::settings::api::*;
 use crate::domains::tasks::handlers::*;
 use crate::engines::automation_api::*;
+use crate::engines::consistency_api::*;
 use crate::integrations::telegram::api::*;
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::integrations::whatsapp::api::*;
@@ -410,6 +414,15 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
             post(post_document_processing_job_retry),
         )
         .route("/api/v1/persons", get(get_persons))
+        .route("/api/v1/personas", get(get_personas))
+        .route(
+            "/api/v1/personas/{persona_id}",
+            get(get_persona).put(put_persona),
+        )
+        .route(
+            "/api/v1/persons/owner",
+            get(get_owner_persona).put(put_owner_persona),
+        )
         .route("/api/v1/persons/{person_id}", get(get_person))
         .route(
             "/api/v1/persons/{person_id}/fingerprint",
@@ -422,6 +435,14 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route("/api/v1/persons/{person_id}/notes", put(put_person_notes))
         .route("/api/v1/persons/search", get(get_person_search))
         .route("/api/v1/identity-candidates", get(get_identity_candidates))
+        .route(
+            "/api/v1/identity-traces",
+            get(get_identity_traces).post(post_identity_trace),
+        )
+        .route(
+            "/api/v1/identity-traces/{identity_id}/assignment",
+            put(put_identity_trace_assignment),
+        )
         .route(
             "/api/v1/identity-candidates/{identity_candidate_id}/review",
             put(put_identity_candidate_review),
@@ -516,6 +537,10 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route(
             "/api/v1/persons/{person_id}/dossier",
             get(get_person_dossier),
+        )
+        .route(
+            "/api/v1/persons/{person_id}/dossier/review",
+            put(put_person_dossier_review),
         )
         .route(
             "/api/v1/persons/{person_id}/meeting-prep",
@@ -831,6 +856,26 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         .route(
             "/api/v1/task-candidates/{task_candidate_id}/review",
             put(put_task_candidate_review),
+        )
+        .route("/api/v1/obligations", get(get_v1_obligations))
+        .route(
+            "/api/v1/obligations/{obligation_id}/review",
+            put(put_v1_obligation_review),
+        )
+        .route("/api/v1/decisions", get(get_v1_decisions))
+        .route(
+            "/api/v1/decisions/{decision_id}/review",
+            put(put_v1_decision_review),
+        )
+        .route("/api/v1/relationships", get(get_v1_relationships))
+        .route(
+            "/api/v1/relationships/{relationship_id}/review",
+            put(put_v1_relationship_review),
+        )
+        .route("/api/v1/contradictions", get(get_v1_contradictions))
+        .route(
+            "/api/v1/contradictions/{observation_id}/review",
+            put(put_v1_contradiction_review),
         )
         .route("/api/v1/settings", get(get_application_settings))
         .route(

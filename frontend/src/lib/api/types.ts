@@ -778,7 +778,18 @@ export type CommunicationMessageDetail = {
 	attachments: CommunicationAttachment[];
 };
 
-export type GraphNodeKind = 'person' | 'email_address' | 'message' | 'document' | 'project';
+export type GraphNodeKind =
+	| 'person'
+	| 'email_address'
+	| 'message'
+	| 'document'
+	| 'project'
+	| 'organization'
+	| 'task'
+	| 'event'
+	| 'decision'
+	| 'obligation'
+	| 'knowledge';
 
 export type GraphRelationshipType =
 	| 'person_has_email_address'
@@ -789,7 +800,8 @@ export type GraphRelationshipType =
 	| 'project_has_message'
 	| 'project_has_document'
 	| 'project_involves_person'
-	| 'project_involves_email_address';
+	| 'project_involves_email_address'
+	| 'entity_relationship';
 
 export type GraphReviewState =
 	| 'system_accepted'
@@ -797,7 +809,14 @@ export type GraphReviewState =
 	| 'user_confirmed'
 	| 'user_rejected';
 
-export type GraphEvidenceSourceKind = 'person' | 'message' | 'document' | 'raw_record';
+export type GraphEvidenceSourceKind =
+	| 'person'
+	| 'message'
+	| 'document'
+	| 'raw_record'
+	| 'relationship'
+	| 'decision'
+	| 'obligation';
 
 export type GraphNode = {
 	node_id: string;
@@ -842,6 +861,180 @@ export type GraphEvidenceSummary = {
 	source_id: string;
 	excerpt: string | null;
 	metadata: Record<string, unknown>;
+};
+
+export type ContradictionSourceKind =
+	| 'communication'
+	| 'document'
+	| 'event'
+	| 'memory'
+	| 'knowledge'
+	| 'decision'
+	| 'obligation'
+	| 'task'
+	| 'relationship'
+	| 'raw_record';
+
+export type ContradictionSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export type ContradictionReviewState = 'suggested' | 'user_confirmed' | 'user_rejected';
+
+export type ContradictionObservation = {
+	observation_id: string;
+	old_source_kind: ContradictionSourceKind;
+	old_source_id: string;
+	new_source_kind: ContradictionSourceKind;
+	new_source_id: string;
+	affected_entities: unknown;
+	conflict_type: string;
+	old_claim: string;
+	new_claim: string;
+	confidence: number;
+	severity: ContradictionSeverity;
+	review_state: ContradictionReviewState;
+	metadata: Record<string, unknown>;
+	reviewed_by: string | null;
+	reviewed_at: string | null;
+	resolution: string | null;
+	created_at: string;
+	updated_at: string;
+};
+
+export type ContradictionListResponse = {
+	items: ContradictionObservation[];
+};
+
+export type ContradictionReviewRequest = {
+	review_state: Exclude<ContradictionReviewState, 'suggested'>;
+	resolution?: string;
+};
+
+export type DecisionEntityKind =
+	| 'persona'
+	| 'organization'
+	| 'project'
+	| 'communication'
+	| 'document'
+	| 'task'
+	| 'event'
+	| 'decision'
+	| 'obligation'
+	| 'knowledge';
+
+export type DecisionStatus = 'active' | 'superseded' | 'reversed' | 'deprecated';
+
+export type DecisionReviewState = 'suggested' | 'user_confirmed' | 'user_rejected';
+
+export type Decision = {
+	decision_id: string;
+	title: string;
+	status: DecisionStatus;
+	rationale: string;
+	alternatives: unknown;
+	decided_by_entity_kind: DecisionEntityKind | null;
+	decided_by_entity_id: string | null;
+	decided_at: string | null;
+	review_state: DecisionReviewState;
+	confidence: number;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type DecisionListResponse = {
+	items: Decision[];
+};
+
+export type DecisionReviewRequest = {
+	review_state: Exclude<DecisionReviewState, 'suggested'>;
+};
+
+export type ObligationEntityKind =
+	| 'persona'
+	| 'organization'
+	| 'project'
+	| 'communication'
+	| 'document'
+	| 'task'
+	| 'event'
+	| 'decision'
+	| 'obligation'
+	| 'knowledge';
+
+export type ObligationStatus = 'open' | 'fulfilled' | 'waived' | 'disputed' | 'canceled';
+
+export type ObligationReviewState = 'suggested' | 'user_confirmed' | 'user_rejected';
+
+export type ObligationRiskState = 'none' | 'watch' | 'at_risk' | 'breached';
+
+export type Obligation = {
+	obligation_id: string;
+	obligated_entity_kind: ObligationEntityKind;
+	obligated_entity_id: string;
+	beneficiary_entity_kind: ObligationEntityKind | null;
+	beneficiary_entity_id: string | null;
+	statement: string;
+	status: ObligationStatus;
+	review_state: ObligationReviewState;
+	due_at: string | null;
+	condition: string | null;
+	risk_state: ObligationRiskState;
+	confidence: number;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type ObligationListResponse = {
+	items: Obligation[];
+};
+
+export type ObligationReviewRequest = {
+	review_state: Exclude<ObligationReviewState, 'suggested'>;
+};
+
+export type RelationshipEntityKind =
+	| 'persona'
+	| 'organization'
+	| 'project'
+	| 'communication'
+	| 'document'
+	| 'task'
+	| 'event'
+	| 'decision'
+	| 'obligation'
+	| 'knowledge';
+
+export type RelationshipReviewState =
+	| 'suggested'
+	| 'system_accepted'
+	| 'user_confirmed'
+	| 'user_rejected';
+
+export type Relationship = {
+	relationship_id: string;
+	source_entity_kind: RelationshipEntityKind;
+	source_entity_id: string;
+	target_entity_kind: RelationshipEntityKind;
+	target_entity_id: string;
+	relationship_type: string;
+	trust_score: number;
+	strength_score: number;
+	confidence: number;
+	review_state: RelationshipReviewState;
+	valid_from: string | null;
+	valid_to: string | null;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type RelationshipListResponse = {
+	items: Relationship[];
+};
+
+export type RelationshipReviewRequest = {
+	review_state: Exclude<RelationshipReviewState, 'suggested' | 'system_accepted'>;
 };
 
 export type GraphNeighborhood = {
@@ -933,6 +1126,116 @@ export type PersonIdentityCandidate = {
 
 export type PersonIdentityCandidateListResponse = {
 	items: PersonIdentityCandidate[];
+};
+
+export type PersonaType = 'human' | 'ai_agent' | 'organization_proxy' | 'system';
+
+export type PersonaReadModel = {
+	persona_id: string;
+	persona_type: PersonaType;
+	is_self: boolean;
+	identity: {
+		display_name: string;
+		email_address: string;
+	};
+	communication: {
+		primary_email: string;
+	};
+	compatibility: {
+		legacy_person_id: string;
+		legacy_route: string;
+	};
+	created_at: string;
+	updated_at: string;
+};
+
+export type PersonaListResponse = {
+	items: PersonaReadModel[];
+};
+
+export type PersonaUpdateRequest = {
+	identity?: {
+		display_name?: string;
+	};
+	is_self?: boolean;
+};
+
+export type OwnerPersona = {
+	person_id: string;
+	display_name: string;
+	email_address: string;
+	persona_type: PersonaType;
+	is_self: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type OwnerPersonaResponse = {
+	owner_persona: OwnerPersona | null;
+};
+
+export type DossierSectionItem = {
+	label: string;
+	value: string;
+	source_refs: string[];
+	confidence: number | null;
+};
+
+export type PersonDossierPerson = {
+	person_id: string;
+	display_name: string;
+	email_address: string;
+	[key: string]: unknown;
+};
+
+export type PersonDossier = {
+	person: PersonDossierPerson;
+	facts?: unknown[];
+	memory_cards?: unknown[];
+	timeline?: unknown[];
+	identities?: unknown[];
+	expertise?: unknown[];
+	promises?: unknown[];
+	risks?: unknown[];
+	summary: string;
+	interests: DossierSectionItem[];
+	projects: DossierSectionItem[];
+	organizations: DossierSectionItem[];
+	skills: DossierSectionItem[];
+	communication_patterns: DossierSectionItem[];
+	ai_observations: DossierSectionItem[];
+	source_refs: string[];
+	generated_at: string;
+};
+
+export type PersonIdentity = {
+	id: string;
+	person_id: string | null;
+	identity_type: string;
+	identity_value: string;
+	source: string;
+	confidence: number;
+	last_verified_at: string | null;
+	status: string;
+	metadata: Record<string, unknown>;
+	created_at: string;
+	updated_at: string;
+};
+
+export type PersonIdentityTraceListResponse = {
+	items: PersonIdentity[];
+};
+
+export type IdentityTraceListStatus = 'unattached';
+
+export type NewIdentityTraceRequest = {
+	identity_type: string;
+	identity_value: string;
+	source?: string;
+};
+
+export type IdentityTraceAssignmentRequest = {
+	person_id: string;
 };
 
 export type TaskCandidateReviewState =
@@ -1031,6 +1334,9 @@ export type AiAgent = {
 	role: string;
 	default_model: string;
 	status: string;
+	persona_id?: string;
+	persona_type?: PersonaType;
+	persona_email?: string;
 };
 
 export type AiAgentListResponse = {

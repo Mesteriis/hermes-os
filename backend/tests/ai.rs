@@ -1,5 +1,6 @@
 use std::env;
 use std::net::SocketAddr;
+use std::sync::LazyLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
@@ -23,12 +24,15 @@ use hermes_hub_backend::domains::mail::core::{
 use hermes_hub_backend::domains::mail::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
+use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
 use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::settings::ApplicationSettingsStore;
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "ai-api-test-token";
+static AI_RUNTIME_TEST_LOCK: LazyLock<tokio::sync::Mutex<()>> =
+    LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 #[tokio::test]
 async fn pgvector_semantic_store_indexes_and_searches_sources_against_postgres() {
@@ -110,6 +114,7 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
         eprintln!("skipping live AI answer API test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
+    let _guard = AI_RUNTIME_TEST_LOCK.lock().await;
     let ollama_base_url = spawn_fake_ollama().await;
     let database = Database::connect(Some(&database_url))
         .await
@@ -117,6 +122,15 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
     let pool = database.pool().expect("configured pool").clone();
     configure_fake_ollama_setting(&pool, &ollama_base_url).await;
     let suffix = unique_suffix();
+    let person_store = PersonProjectionStore::new(pool.clone());
+    let owner = person_store
+        .upsert_email_person(&format!("ai-owner-{suffix}@example.com"))
+        .await
+        .expect("owner persona candidate");
+    let owner = person_store
+        .set_owner_persona(&owner.person_id)
+        .await
+        .expect("set owner persona");
     let retrieval_token = format!("V3AIAnswer{suffix}");
     let message_id = seed_message(
         &pool,
@@ -158,6 +172,11 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
     let body = json_body(response).await;
     assert_eq!(status, StatusCode::OK, "body={body}");
     assert_eq!(body["agent_id"], json!("MNEMOSYNE"));
+    assert_eq!(
+        body["agent_persona_id"],
+        json!("persona:v1:ai_agent:MNEMOSYNE")
+    );
+    assert_eq!(body["owner_persona_id"], json!(owner.person_id));
     assert_eq!(body["status"], json!("completed"));
     assert_eq!(body["model"], json!("qwen3:4b"));
     assert_eq!(body["embedding_model"], json!("qwen3-embedding:4b"));
@@ -181,6 +200,32 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
         Some("Hermes Hub V3 is source-backed.")
     );
     assert_eq!(stored.status, "completed");
+
+    let run_attribution = sqlx::query(
+        r#"
+        SELECT agent_persona_id, owner_persona_id
+        FROM ai_agent_runs
+        WHERE run_id = $1
+        "#,
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .expect("run attribution");
+    assert_eq!(
+        run_attribution
+            .try_get::<Option<String>, _>("agent_persona_id")
+            .unwrap()
+            .as_deref(),
+        Some("persona:v1:ai_agent:MNEMOSYNE")
+    );
+    assert_eq!(
+        run_attribution
+            .try_get::<Option<String>, _>("owner_persona_id")
+            .unwrap()
+            .as_deref(),
+        Some(owner.person_id.as_str())
+    );
 }
 
 #[tokio::test]
@@ -189,6 +234,7 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
         eprintln!("skipping live AI task refresh API test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
+    let _guard = AI_RUNTIME_TEST_LOCK.lock().await;
     let ollama_base_url = spawn_fake_ollama().await;
     let database = Database::connect(Some(&database_url))
         .await
@@ -260,6 +306,7 @@ async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
         eprintln!("skipping live AI meeting prep API test: HERMES_TEST_DATABASE_URL is not set");
         return;
     };
+    let _guard = AI_RUNTIME_TEST_LOCK.lock().await;
     let ollama_base_url = spawn_fake_ollama().await;
     let database = Database::connect(Some(&database_url))
         .await
@@ -343,8 +390,171 @@ async fn ai_status_and_agents_are_protected() {
     assert_eq!(agents.status(), StatusCode::OK);
     let body = json_body(agents).await;
     let items = body["items"].as_array().expect("agents");
-    assert_eq!(items.len(), 4);
+    assert_eq!(items.len(), 5);
     assert_eq!(items[0]["agent_id"], json!("HESTIA"));
+    assert_eq!(items[0]["display_name"], json!("hestia@sh-inc.ru"));
+    assert!(
+        items
+            .iter()
+            .any(|item| item["agent_id"] == json!("HEPHAESTUS")),
+        "HEPHAESTUS must be part of the initial AI agent registry"
+    );
+}
+
+#[tokio::test]
+async fn ai_agents_api_materializes_agent_personas_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skipping live AI agent Persona test: HERMES_TEST_DATABASE_URL is not set");
+        return;
+    };
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let response = app
+        .oneshot(get_request_with_token("/api/v1/ai/agents", LOCAL_API_TOKEN))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    let items = body["items"].as_array().expect("agents");
+    let hestia = items
+        .iter()
+        .find(|item| item["agent_id"] == "HESTIA")
+        .expect("HESTIA descriptor");
+    assert_eq!(hestia["persona_id"], "persona:v1:ai_agent:HESTIA");
+    assert_eq!(hestia["persona_type"], "ai_agent");
+    assert_eq!(hestia["persona_email"], "hestia@sh-inc.ru");
+    let hephaestus = items
+        .iter()
+        .find(|item| item["agent_id"] == "HEPHAESTUS")
+        .expect("HEPHAESTUS descriptor");
+    assert_eq!(hephaestus["persona_id"], "persona:v1:ai_agent:HEPHAESTUS");
+    assert_eq!(hephaestus["persona_type"], "ai_agent");
+    assert_eq!(hephaestus["persona_email"], "hephaestus@sh-inc.ru");
+
+    let row = sqlx::query(
+        r#"
+        SELECT display_name, person_type, email_address, is_self
+        FROM persons
+        WHERE person_id = 'persona:v1:ai_agent:HESTIA'
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("HESTIA Persona row");
+    assert_eq!(
+        row.try_get::<String, _>("display_name").unwrap(),
+        "hestia@sh-inc.ru"
+    );
+    assert_eq!(row.try_get::<String, _>("person_type").unwrap(), "ai_agent");
+    assert_eq!(
+        row.try_get::<String, _>("email_address").unwrap(),
+        "hestia@sh-inc.ru"
+    );
+    assert!(!row.try_get::<bool, _>("is_self").unwrap());
+
+    let identity_value: String = sqlx::query_scalar(
+        r#"
+        SELECT identity_value
+        FROM person_identities
+        WHERE person_id = 'persona:v1:ai_agent:HESTIA'
+          AND identity_type = 'email'
+          AND source = 'ai_agent_registry'
+          AND status = 'active'
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("HESTIA email identity");
+    assert_eq!(identity_value, "hestia@sh-inc.ru");
+
+    let graph_row = sqlx::query(
+        r#"
+        SELECT label, properties
+        FROM graph_nodes
+        WHERE node_kind = 'person'
+          AND stable_key = 'persona:v1:ai_agent:HESTIA'
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("HESTIA graph node");
+    assert_eq!(
+        graph_row.try_get::<String, _>("label").unwrap(),
+        "hestia@sh-inc.ru"
+    );
+    let properties = graph_row
+        .try_get::<serde_json::Value, _>("properties")
+        .unwrap();
+    assert_eq!(properties["persona_type"], "ai_agent");
+    assert_eq!(properties["agent_id"], "HESTIA");
+
+    let row = sqlx::query(
+        r#"
+        SELECT display_name, person_type, email_address, is_self
+        FROM persons
+        WHERE person_id = 'persona:v1:ai_agent:HEPHAESTUS'
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("HEPHAESTUS Persona row");
+    assert_eq!(
+        row.try_get::<String, _>("display_name").unwrap(),
+        "hephaestus@sh-inc.ru"
+    );
+    assert_eq!(row.try_get::<String, _>("person_type").unwrap(), "ai_agent");
+    assert_eq!(
+        row.try_get::<String, _>("email_address").unwrap(),
+        "hephaestus@sh-inc.ru"
+    );
+    assert!(!row.try_get::<bool, _>("is_self").unwrap());
+
+    let identity_value: String = sqlx::query_scalar(
+        r#"
+        SELECT identity_value
+        FROM person_identities
+        WHERE person_id = 'persona:v1:ai_agent:HEPHAESTUS'
+          AND identity_type = 'email'
+          AND source = 'ai_agent_registry'
+          AND status = 'active'
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("HEPHAESTUS email identity");
+    assert_eq!(identity_value, "hephaestus@sh-inc.ru");
+
+    let graph_row = sqlx::query(
+        r#"
+        SELECT label, properties
+        FROM graph_nodes
+        WHERE node_kind = 'person'
+          AND stable_key = 'persona:v1:ai_agent:HEPHAESTUS'
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("HEPHAESTUS graph node");
+    assert_eq!(
+        graph_row.try_get::<String, _>("label").unwrap(),
+        "hephaestus@sh-inc.ru"
+    );
+    let properties = graph_row
+        .try_get::<serde_json::Value, _>("properties")
+        .unwrap();
+    assert_eq!(properties["persona_type"], "ai_agent");
+    assert_eq!(properties["agent_id"], "HEPHAESTUS");
 }
 
 async fn spawn_fake_ollama() -> String {

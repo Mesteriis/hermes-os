@@ -23,10 +23,13 @@ use crate::domains::mail::core::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
 };
 use crate::domains::persons::analytics::{AnalyticsError, PersonAnalyticsService};
+use crate::domains::persons::api::{Person, PersonProjectionStore};
 use crate::domains::persons::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
 use crate::domains::persons::expertise::{PersonExpertiseError, PersonExpertiseStore};
 use crate::domains::persons::export::{ExportError, ExportFormat, PersonExportService};
-use crate::domains::persons::investigator::{InvestigatorError, PersonInvestigator};
+use crate::domains::persons::investigator::{
+    DossierReviewState, DossierSnapshot, InvestigatorError, PersonDossier, PersonInvestigator,
+};
 use crate::engines::automation::{
     AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
     NewAutomationTemplate, TelegramSendDryRunRequest, TelegramSendDryRunResponse,
@@ -148,10 +151,60 @@ pub(crate) struct PersonListResponse {
     items: Vec<crate::domains::persons::enrichment::EnrichedPerson>,
 }
 
+#[derive(Serialize)]
+pub(crate) struct PersonaListResponse {
+    items: Vec<PersonaReadModel>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct PersonaReadModel {
+    persona_id: String,
+    persona_type: crate::domains::persons::api::PersonaType,
+    is_self: bool,
+    identity: PersonaIdentityReadModel,
+    communication: PersonaCommunicationReadModel,
+    compatibility: PersonaCompatibilityReadModel,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct PersonaIdentityReadModel {
+    display_name: String,
+    email_address: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct PersonaCommunicationReadModel {
+    primary_email: String,
+}
+
+#[derive(Serialize)]
+pub(crate) struct PersonaCompatibilityReadModel {
+    legacy_person_id: String,
+    legacy_route: &'static str,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct PersonListQuery {
     favorites_only: Option<bool>,
     limit: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PersonaListQuery {
+    limit: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PersonaUpdateRequest {
+    identity: Option<PersonaIdentityUpdateRequest>,
+    is_self: Option<bool>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct PersonaIdentityUpdateRequest {
+    display_name: Option<String>,
 }
 
 pub(crate) async fn get_persons(
@@ -173,6 +226,88 @@ pub(crate) async fn get_persons(
     Ok(Json(PersonListResponse { items }))
 }
 
+pub(crate) async fn get_personas(
+    State(state): State<AppState>,
+    Query(query): Query<PersonaListQuery>,
+) -> Result<Json<PersonaListResponse>, ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = PersonProjectionStore::new(pool);
+    let items = store
+        .list_personas(query.limit.unwrap_or(50))
+        .await?
+        .into_iter()
+        .map(persona_read_model)
+        .collect();
+    Ok(Json(PersonaListResponse { items }))
+}
+
+pub(crate) async fn get_persona(
+    State(state): State<AppState>,
+    Path(persona_id): Path<String>,
+) -> Result<Json<PersonaReadModel>, ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = PersonProjectionStore::new(pool);
+    match store.get_persona(&persona_id).await? {
+        Some(persona) => Ok(Json(persona_read_model(persona))),
+        None => Err(ApiError::PersonIdentityNotFound),
+    }
+}
+
+pub(crate) async fn put_persona(
+    State(state): State<AppState>,
+    Path(persona_id): Path<String>,
+    Json(req): Json<PersonaUpdateRequest>,
+) -> Result<Json<PersonaReadModel>, ApiError> {
+    if req.is_self == Some(false) {
+        return Err(ApiError::InvalidPersonaQuery(
+            "is_self=false is not supported; set another Persona as owner instead",
+        ));
+    }
+
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let display_name = req
+        .identity
+        .as_ref()
+        .and_then(|identity| identity.display_name.as_deref());
+    let persona = PersonProjectionStore::new(pool)
+        .update_persona(&persona_id, display_name, req.is_self == Some(true))
+        .await?;
+    Ok(Json(persona_read_model(persona)))
+}
+
+fn persona_read_model(person: Person) -> PersonaReadModel {
+    PersonaReadModel {
+        persona_id: person.person_id.clone(),
+        persona_type: person.persona_type,
+        is_self: person.is_self,
+        identity: PersonaIdentityReadModel {
+            display_name: person.display_name,
+            email_address: person.email_address.clone(),
+        },
+        communication: PersonaCommunicationReadModel {
+            primary_email: person.email_address,
+        },
+        compatibility: PersonaCompatibilityReadModel {
+            legacy_person_id: person.person_id,
+            legacy_route: "/api/v1/persons",
+        },
+        created_at: person.created_at,
+        updated_at: person.updated_at,
+    }
+}
+
 pub(crate) async fn get_person(
     State(state): State<AppState>,
     Path(person_id): Path<String>,
@@ -187,6 +322,45 @@ pub(crate) async fn get_person(
         Some(person) => Ok(Json(person)),
         None => Err(ApiError::PersonIdentityNotFound),
     }
+}
+
+#[derive(Serialize)]
+pub(crate) struct OwnerPersonaResponse {
+    owner_persona: Option<crate::domains::persons::api::Person>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SetOwnerPersonaRequest {
+    person_id: String,
+}
+
+pub(crate) async fn get_owner_persona(
+    State(state): State<AppState>,
+) -> Result<Json<OwnerPersonaResponse>, ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let owner_persona = PersonProjectionStore::new(pool).owner_persona().await?;
+    Ok(Json(OwnerPersonaResponse { owner_persona }))
+}
+
+pub(crate) async fn put_owner_persona(
+    State(state): State<AppState>,
+    Json(req): Json<SetOwnerPersonaRequest>,
+) -> Result<Json<OwnerPersonaResponse>, ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let owner_persona = PersonProjectionStore::new(pool)
+        .set_owner_persona(&req.person_id)
+        .await?;
+    Ok(Json(OwnerPersonaResponse {
+        owner_persona: Some(owner_persona),
+    }))
 }
 
 pub(crate) async fn post_person_fingerprint(
@@ -286,6 +460,11 @@ pub(crate) struct PersonIdentitiesResponse {
     items: Vec<PersonIdentity>,
 }
 
+#[derive(Serialize)]
+pub(crate) struct IdentityTracesResponse {
+    items: Vec<PersonIdentity>,
+}
+
 pub(crate) async fn get_person_identities(
     State(state): State<AppState>,
     Path(person_id): Path<String>,
@@ -304,10 +483,90 @@ pub(crate) async fn get_person_identities(
 }
 
 #[derive(Deserialize)]
+pub(crate) struct IdentityTracesQuery {
+    status: Option<String>,
+    limit: Option<i64>,
+}
+
+pub(crate) async fn get_identity_traces(
+    State(state): State<AppState>,
+    Query(query): Query<IdentityTracesQuery>,
+) -> Result<Json<IdentityTracesResponse>, ApiError> {
+    if query.status.as_deref().unwrap_or("unattached") != "unattached" {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "identity trace status must be unattached",
+        ));
+    }
+
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = PersonsIdentityStore::new(pool);
+    let items = store
+        .list_unattached(query.limit.unwrap_or(50))
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(IdentityTracesResponse { items }))
+}
+
+#[derive(Deserialize)]
 pub(crate) struct NewPersonIdentityRequest {
     identity_type: String,
     identity_value: String,
     source: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct NewIdentityTraceRequest {
+    identity_type: String,
+    identity_value: String,
+    source: Option<String>,
+}
+
+pub(crate) async fn post_identity_trace(
+    State(state): State<AppState>,
+    Json(req): Json<NewIdentityTraceRequest>,
+) -> Result<Json<PersonIdentity>, ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = PersonsIdentityStore::new(pool);
+    let identity = store
+        .create_unattached(
+            &req.identity_type,
+            &req.identity_value,
+            req.source.as_deref().unwrap_or("manual"),
+        )
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(identity))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct IdentityTraceAssignmentRequest {
+    person_id: String,
+}
+
+pub(crate) async fn put_identity_trace_assignment(
+    State(state): State<AppState>,
+    Path(identity_id): Path<String>,
+    Json(req): Json<IdentityTraceAssignmentRequest>,
+) -> Result<Json<PersonIdentity>, ApiError> {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = PersonsIdentityStore::new(pool);
+    let identity = store
+        .attach_to_persona(&identity_id, &req.person_id)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(identity))
 }
 
 pub(crate) async fn post_person_identity(
@@ -920,7 +1179,12 @@ pub(crate) async fn post_person_watchlist_toggle(
 impl From<InvestigatorError> for ApiError {
     fn from(error: InvestigatorError) -> Self {
         match error {
-            InvestigatorError::PersonNotFound => ApiError::PersonIdentityNotFound,
+            InvestigatorError::PersonNotFound | InvestigatorError::DossierSnapshotNotFound => {
+                ApiError::PersonIdentityNotFound
+            }
+            InvestigatorError::InvalidDossierReviewState => ApiError::InvalidCommunicationQuery(
+                "review_state must be suggested, user_confirmed, or user_rejected",
+            ),
             _ => {
                 tracing::error!(error = %error, "investigator operation failed");
                 ApiError::InvalidCommunicationQuery("investigator operation failed")
@@ -954,11 +1218,11 @@ pub(crate) async fn post_person_investigate(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let dossier = PersonInvestigator::new(pool)
-        .assemble_dossier(&person_id)
+    let (dossier, snapshot) = PersonInvestigator::new(pool)
+        .assemble_and_cache_dossier(&person_id)
         .await
         .map_err(ApiError::from)?;
-    Ok(Json(serde_json::to_value(&dossier).unwrap_or_default()))
+    Ok(Json(dossier_snapshot_response(&dossier, &snapshot)))
 }
 
 pub(crate) async fn get_person_dossier(
@@ -970,11 +1234,60 @@ pub(crate) async fn get_person_dossier(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let dossier = PersonInvestigator::new(pool)
-        .assemble_dossier(&person_id)
+    let (dossier, snapshot) = PersonInvestigator::new(pool)
+        .assemble_and_cache_dossier(&person_id)
         .await
         .map_err(ApiError::from)?;
-    Ok(Json(serde_json::to_value(&dossier).unwrap_or_default()))
+    Ok(Json(dossier_snapshot_response(&dossier, &snapshot)))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct DossierReviewRequest {
+    review_state: String,
+}
+
+pub(crate) async fn put_person_dossier_review(
+    State(state): State<AppState>,
+    Path(person_id): Path<String>,
+    Json(req): Json<DossierReviewRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let review_state = DossierReviewState::parse(&req.review_state).map_err(ApiError::from)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let snapshot = PersonInvestigator::new(pool)
+        .review_dossier_snapshot(&person_id, review_state)
+        .await
+        .map_err(ApiError::from)?;
+    Ok(Json(dossier_snapshot_only_response(&snapshot)))
+}
+
+fn dossier_snapshot_response(dossier: &PersonDossier, snapshot: &DossierSnapshot) -> Value {
+    let mut value = serde_json::to_value(dossier).unwrap_or_default();
+    if let Some(object) = value.as_object_mut() {
+        object.insert(
+            "dossier_snapshot_id".to_owned(),
+            json!(snapshot.dossier_snapshot_id),
+        );
+        object.insert("review_state".to_owned(), json!(snapshot.review_state));
+        object.insert("reviewed_by".to_owned(), json!(snapshot.reviewed_by));
+        object.insert("reviewed_at".to_owned(), json!(snapshot.reviewed_at));
+    }
+    value
+}
+
+fn dossier_snapshot_only_response(snapshot: &DossierSnapshot) -> Value {
+    json!({
+        "dossier_snapshot_id": snapshot.dossier_snapshot_id,
+        "persona_id": snapshot.persona_id,
+        "review_state": snapshot.review_state,
+        "reviewed_by": snapshot.reviewed_by,
+        "reviewed_at": snapshot.reviewed_at,
+        "generated_at": snapshot.generated_at,
+        "updated_at": snapshot.updated_at
+    })
 }
 
 pub(crate) async fn get_person_meeting_prep(

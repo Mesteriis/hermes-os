@@ -5,6 +5,9 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
+use crate::engines::memory::{MemoryEngine, MemoryEngineError};
+use crate::engines::timeline::{TimelineEngine, TimelineEventDraft};
+
 // ── PersonFact ──────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -35,7 +38,7 @@ impl PersonFactStore {
 
     pub async fn list(&self, person_id: &str) -> Result<Vec<PersonFact>, PersonMemoryError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, fact_type, value, source, confidence, last_verified_at,
+            "SELECT id::text, person_id, fact_type, value, source, confidence::float8 AS confidence, last_verified_at,
              valid_from, valid_to, is_active, created_at, updated_at
              FROM person_facts WHERE person_id = $1 ORDER BY created_at DESC",
         )
@@ -53,18 +56,19 @@ impl PersonFactStore {
         source: &str,
         confidence: f64,
     ) -> Result<PersonFact, PersonMemoryError> {
+        let fact = MemoryEngine::persona_fact_memory(person_id, fact_type, value, source, confidence)?;
         let row = sqlx::query(
             "INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT DO NOTHING
-             RETURNING id::text, person_id, fact_type, value, source, confidence,
+             RETURNING id::text, person_id, fact_type, value, source, confidence::float8 AS confidence,
                        last_verified_at, valid_from, valid_to, is_active, created_at, updated_at",
         )
-        .bind(person_id)
-        .bind(fact_type)
-        .bind(value)
-        .bind(source)
-        .bind(confidence)
+        .bind(&fact.affected_entity_id)
+        .bind(&fact.fact_type)
+        .bind(&fact.value)
+        .bind(&fact.source)
+        .bind(fact.confidence)
         .fetch_one(&self.pool)
         .await?;
         row_to_fact(row)
@@ -125,7 +129,7 @@ impl PersonMemoryCardStore {
 
     pub async fn list(&self, person_id: &str) -> Result<Vec<PersonMemoryCard>, PersonMemoryError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, title, description, source, confidence, importance,
+            "SELECT id::text, person_id, title, description, source, confidence::float8 AS confidence, importance,
              created_at, last_verified_at FROM person_memory_cards
              WHERE person_id = $1 ORDER BY importance DESC, created_at DESC",
         )
@@ -147,7 +151,7 @@ impl PersonMemoryCardStore {
             "INSERT INTO person_memory_cards (person_id, title, description, source, importance)
              VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT DO NOTHING
-             RETURNING id::text, person_id, title, description, source, confidence, importance,
+             RETURNING id::text, person_id, title, description, source, confidence::float8 AS confidence, importance,
                        created_at, last_verified_at",
         )
         .bind(person_id)
@@ -202,7 +206,7 @@ impl PersonPreferenceStore {
 
     pub async fn list(&self, person_id: &str) -> Result<Vec<PersonPreference>, PersonMemoryError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, preference_type, value, source, confidence,
+            "SELECT id::text, person_id, preference_type, value, source, confidence::float8 AS confidence,
              last_verified_at, created_at, updated_at FROM person_preferences
              WHERE person_id = $1 ORDER BY preference_type",
         )
@@ -223,7 +227,7 @@ impl PersonPreferenceStore {
             "INSERT INTO person_preferences (person_id, preference_type, value, source)
              VALUES ($1, $2, $3, $4)
              ON CONFLICT (person_id, preference_type) DO UPDATE SET value = $3, source = $4, updated_at = now()
-             RETURNING id::text, person_id, preference_type, value, source, confidence,
+             RETURNING id::text, person_id, preference_type, value, source, confidence::float8 AS confidence,
                        last_verified_at, created_at, updated_at"
         ).bind(person_id).bind(preference_type).bind(value).bind(source).fetch_one(&self.pool).await?;
         row_to_preference(row)
@@ -277,14 +281,15 @@ impl RelationshipEventStore {
         person_id: &str,
         limit: i64,
     ) -> Result<Vec<RelationshipEvent>, PersonMemoryError> {
+        let limit = TimelineEngine::bounded_entity_limit(limit);
         let rows = sqlx::query(
             "SELECT id::text, person_id, event_type, title, description, occurred_at, source,
-             related_entity_id, related_entity_kind, confidence, metadata, created_at
+             related_entity_id, related_entity_kind, confidence::float8 AS confidence, metadata, created_at
              FROM relationship_events WHERE person_id = $1
              ORDER BY occurred_at DESC LIMIT $2",
         )
         .bind(person_id)
-        .bind(limit.clamp(1, 100))
+        .bind(limit)
         .fetch_all(&self.pool)
         .await?;
         rows.into_iter().map(row_to_event).collect()
@@ -294,12 +299,21 @@ impl RelationshipEventStore {
         &self,
         event: &NewRelationshipEvent,
     ) -> Result<RelationshipEvent, PersonMemoryError> {
+        TimelineEngine::validate_event(&TimelineEventDraft {
+            entity_kind: "persona",
+            entity_id: &event.person_id,
+            event_type: &event.event_type,
+            title: &event.title,
+            occurred_at: event.occurred_at,
+            source: &event.source,
+        })?;
+
         let row = sqlx::query(
             "INSERT INTO relationship_events (person_id, event_type, title, description,
              occurred_at, source, related_entity_id, related_entity_kind)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING id::text, person_id, event_type, title, description, occurred_at, source,
-                       related_entity_id, related_entity_kind, confidence, metadata, created_at",
+                       related_entity_id, related_entity_kind, confidence::float8 AS confidence, metadata, created_at",
         )
         .bind(&event.person_id)
         .bind(&event.event_type)
@@ -350,6 +364,10 @@ fn row_to_event(row: PgRow) -> Result<RelationshipEvent, PersonMemoryError> {
 pub enum PersonMemoryError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Memory(#[from] MemoryEngineError),
+    #[error(transparent)]
+    Timeline(#[from] crate::engines::timeline::TimelineEngineError),
     #[error("fact not found")]
     NotFound,
 }

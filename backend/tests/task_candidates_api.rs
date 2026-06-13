@@ -112,6 +112,10 @@ async fn task_candidates_returns_safe_candidate_payload() {
     assert_eq!(document_payload["source_kind"], "document");
     assert!(message_payload["evidence_excerpt"].is_string());
     assert!(document_payload["evidence_excerpt"].is_string());
+    assert!(message_payload.get("candidate_kind").is_none());
+    assert!(message_payload.get("candidate_metadata").is_none());
+    assert!(document_payload.get("candidate_kind").is_none());
+    assert!(document_payload.get("candidate_metadata").is_none());
 }
 
 #[tokio::test]

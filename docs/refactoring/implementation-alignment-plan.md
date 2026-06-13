@@ -73,6 +73,28 @@ implementation evidence:
   `backend/src/domains/persons/api.rs` now provide the first compatibility-layer
   implementation of `PersonaType` and single Owner Persona semantics on the
   existing `persons` table.
+- `backend/src/domains/persons/handlers/mod.rs` and `backend/src/app/router.rs`
+  expose GET/PUT `/api/v1/persons/owner` as the compatibility route for reading
+  and assigning the current Owner Persona.
+- `/api/v1/ai/agents` now materializes registry-backed AI agents (`HESTIA`,
+  `HERMES`, `MNEMOSYNE`, `ATHENA`, `HEPHAESTUS`) as `persona_type = ai_agent`
+  Personas and graph nodes. Compatibility email identities use lowercase agent
+  IDs at `sh-inc.ru`, such as `hestia@sh-inc.ru`.
+- `ai_agent_runs` now stores `agent_persona_id` and `owner_persona_id`
+  attribution for service-created AI runs when an Owner Persona exists.
+- `backend/migrations/0071_person_identity_trace_types.sql` extends
+  compatibility `person_identities` to accept `document_mention` and
+  `message_participant` Persona identity traces.
+- `backend/migrations/0072_person_identity_disputed_status.sql` extends
+  compatibility `person_identities` to accept `disputed` identity trace status.
+- `backend/migrations/0073_person_identity_unattached_traces.sql` and
+  `PersonsIdentityStore::create_unattached` / `attach_to_persona` provide the
+  first backend workflow for identity traces that exist before Persona
+  assignment.
+- `/api/v1/identity-traces` now exposes guarded compatibility create/list
+  routes for unattached identity traces, and
+  `/api/v1/identity-traces/{identity_id}/assignment` attaches a trace to a
+  Persona.
 - `backend/migrations/0060_create_relationships.sql` and
   `backend/src/domains/relationships/mod.rs` now provide the first durable
   Relationship persistence baseline with evidence, trust score, strength score,
@@ -175,13 +197,29 @@ implementation evidence:
   `persons.trust_score` compatibility writes into suggested Owner Persona ->
   Persona `trusts` Relationships while keeping the root column as a temporary
   compatibility cache.
+- `backend/src/engines/trust.rs` now owns the first shared Trust Engine
+  baseline for converting deprecated Persona compatibility trust scores into
+  source-backed Relationship trust signals.
+- `backend/src/engines/trust.rs` now also builds source reliability signals,
+  and `backend/src/domains/persons/enrichment.rs` stores those signals in
+  Relationship evidence metadata for review.
 - `backend/src/domains/persons/enrichment.rs` now adapts manual/API
   `persons.notes` compatibility writes into sourced Persona Memory Cards while
   keeping the root column as a temporary compatibility cache.
+- `backend/src/engines/memory.rs` now owns the first shared Memory Engine
+  baseline for converting deprecated Persona compatibility notes into
+  source-backed memory-card drafts.
 - `backend/src/domains/persons/enrichment.rs` now adapts manual/API
   `persons.is_favorite` compatibility writes into sourced `ui:favorite`
   Persona Preferences while keeping the root column as a temporary
   compatibility cache.
+- `backend/src/engines/enrichment.rs` now owns the first shared Enrichment
+  Engine baseline for converting deprecated Persona compatibility favorite
+  state into source-backed preference drafts.
+- `backend/src/engines/enrichment.rs` now also builds source-backed pending
+  Persona observation candidates, and `backend/src/domains/persons/enrichment_engine.rs`
+  uses those drafts when writing compatibility `enrichment_results` with
+  `_enrichment` metadata.
 - `backend/src/domains/persons/health.rs` now adapts manual/API
   `persons.watchlist` compatibility writes into sourced `ui:watchlist`
   Persona Preferences while keeping the root column as a temporary
@@ -189,6 +227,13 @@ implementation evidence:
 - `backend/src/domains/persons/trust.rs` now adapts `person_risks`
   report/resolve writes into the root `persons.health_status` compatibility
   cache derived from unresolved risk observations.
+- `backend/src/engines/risk.rs` now owns the first shared Risk Engine baseline
+  for deriving attention status from unresolved risk severities. The Persona
+  `health_status` cache uses this engine while remaining a compatibility
+  read-model field.
+- `backend/src/engines/risk.rs` now also builds source-backed Persona risk
+  observation drafts, and `backend/src/domains/persons/trust.rs` uses those
+  drafts before writing compatibility `person_risks` records.
 - `backend/src/domains/persons/investigator.rs` now emits target Persona
   Dossier read-model sections for summary, interests, projects,
   organizations, skills, communication patterns, AI observations, source refs
@@ -198,6 +243,10 @@ implementation evidence:
   target entity kinds. Migration `0069` also relaxes the old
   `tasks.task_candidate_id` requirement so standalone manual Tasks match the
   current Tasks domain model.
+- `backend/src/engines/timeline.rs` now owns the first shared Timeline Engine
+  baseline for bounded source-backed entity timeline policy. Persona,
+  Organization and Project timeline producers use it while retaining current
+  compatibility tables.
 
 ## Alignment Matrix
 
@@ -205,17 +254,17 @@ implementation evidence:
 |---|---|---|---|
 | Communications domain | `/api/v1/communications/*`, `backend/src/domains/mail/*`, Gmail/Telegram/WhatsApp integrations, communication migrations | Public API is communication-shaped, implementation module is still email/mail-shaped. | Communications migration plan before any module rename. |
 | Email channel | `docs/mail/*`, email account routes, mail blob migrations | Email is a channel but still has broad module ownership. | Keep channel docs; do not promote Mail to product domain. |
-| Persona Intelligence | `backend/src/domains/persons/*`, `/api/v1/persons/*`, ADR-0084, person/contact migrations, migration `0059` for `is_self` and `person_type` constraints | Target entity is Persona, current compatibility name is Person/Person ID. Owner Persona, PersonaType, role-to-Relationship, interaction-context-to-Preference, trust-to-Relationship, notes-to-memory-card, favorite-to-preference, watchlist-to-preference, risk-to-health-cache and Dossier section adapters have compatibility-layer baselines, but route/schema naming, Dossier cache/workflow semantics and downstream engine projections remain incomplete. | Schema/API naming migration ADR before code rename. |
-| Relationships | `backend/src/domains/relationships/mod.rs`, `backend/src/domains/relationships/api.rs`, migrations `0060`, `0061` and `0068`, graph core, person roles, organization contacts, task relations, project link reviews, Personas workspace review panel | First-class Relationship persistence, graph projection for all current `RelationshipEntityKind` endpoints, guarded entity/global review routes, person role adapters, organization contact link adapters for manual/API and email-sync paths, manual task relation adapters, project link review adapters and a Personas workspace global suggested review panel have a baseline, but broader cross-domain workflow placement and downstream engine projections are incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and move or duplicate review into the cross-domain workflow shell when defined. |
-| Memory Engine | persons memory, organization memory, project memory docs | Memory behavior is domain-local. | Shared Memory Engine implementation plan after domain source boundaries are stable. |
-| Timeline Engine | calendar events, person timeline, organization timeline, project timelines, frontend timeline page | Timeline views exist in multiple places. | Timeline Engine extraction plan; Calendar remains scheduled event domain. |
-| Trust Engine | `persons/trust.rs`, `persons/enrichment.rs`, risk/health modules, relationship scores in docs | Enrichment trust scores now materialize suggested Owner Persona trust Relationships, but Trust is still partly Persona-local and partly risk/health language. | Continue normalizing trust as source/relationship signal, not generic entity field. |
-| Risk Engine | `health.rs`, `watchtower`, risks routes in persons/orgs/calendar/tasks | Person risks now derive the Persona `health_status` compatibility cache, but health/watchtower naming still hides shared Risk Engine semantics in multiple domains. | Risk terminology migration plan for docs/UI/API compatibility. |
-| Enrichment Engine | persons enrichment, organization enrichment | Enrichment exists per domain. | Shared engine semantics with domain-specific source policies. |
-| Obligation Engine | `backend/src/engines/obligation.rs`, `backend/src/domains/obligations/mod.rs`, `backend/src/domains/obligations/api.rs`, migrations `0063`, `0066` and `0067`, task candidates, task rules, email sync and Telegram/WhatsApp fixture communication extraction, document candidate extraction, meeting outcomes, person promises, Tasks workspace review panel | Candidate detection, accepted Obligation persistence, accepted Obligation graph projection, guarded accepted-Obligation backend entity/global review routes, global Tasks workspace review, obligation-derived task-candidate review-state synchronization, email-sync, document and Telegram/WhatsApp fixture candidate refresh, person promise adapters and meeting `promise`/`task`/`follow_up` outcome adapters have baselines. Live-provider ingestion and broader candidate-to-Obligation review workflow coverage are incomplete. | Extend remaining Communication/document ingestion to the engine and feed reviewed candidates to the Obligations domain without auto-creating Tasks outside explicit task-candidate review. |
-| Consistency / Contradiction Engine | `backend/src/engines/consistency.rs`, `backend/src/engines/consistency_api.rs`, migration `0062`, ADR-0085, ADR-0087 | Structured direct-contradiction detection, deterministic structured and limited natural-language `location` / `status` claim extraction from Communication/Document/Event evidence text, observation persistence, guarded backend review routes, Knowledge workspace review panel and projected email/Telegram/WhatsApp message, imported Document, meeting-note and call-transcript refresh against active `person_facts` have baselines. Broad natural-language extraction and broader provider evidence are incomplete. | Expand ingestion refresh to broader provider evidence, then add reviewed-outcome semantics without automatic overwrite. |
-| Decisions domain | `backend/src/domains/decisions/mod.rs`, `backend/src/domains/decisions/api.rs`, `backend/src/engines/decision.rs`, migrations `0064` and `0065`, email sync and Telegram/WhatsApp fixture candidate refresh, meeting outcomes, project link review decisions, communication/document evidence, Tasks workspace review panel | Accepted Decision persistence, deterministic explicit-Decision candidate extraction, explicit message/imported-document candidate persistence as `suggested` Decisions, email-sync and Telegram/WhatsApp fixture candidate refresh for projected Communication messages, accepted Decision graph projection, guarded accepted-Decision backend entity/global review routes, global Tasks workspace review, meeting `decision` outcome adapters and project link review adapters have baselines. Live-provider ingestion and broader candidate-to-Decision review routing are incomplete. | Connect remaining communication/document candidates to the Decisions domain without auto-changing Projects, Tasks or Obligations. |
-| Agents domain | AI runtime/control center, Ollama/OmniRoute, frontend Agents page | Runtime exists; graph identity and Owner Persona attribution are incomplete. | Agent Persona and capability audit plan. |
+| Persona Intelligence | `backend/src/domains/persons/*`, `/api/v1/persons/*`, `/api/v1/personas/*`, ADR-0084, ADR-0090, person/contact migrations, migration `0059` for `is_self` and `person_type` constraints | Target entity is Persona, current storage compatibility name is Person/Person ID. Owner Persona storage, GET/PUT owner compatibility route, AI workspace Owner Persona display, Persona-native list/detail/write bridge routes, AI run Owner Persona attribution, PersonaType, role-to-Relationship, interaction-context-to-Preference, trust-to-Relationship, notes-to-memory-card, favorite-to-preference, watchlist-to-preference, risk-to-health-cache, Dossier section adapters, reviewable Dossier snapshots and Persons UI Dossier display have compatibility-layer baselines, but physical Persona-native schema migration and downstream engine projections remain incomplete. | Schema migration ADR before physical code/table rename. |
+| Relationships | `backend/src/domains/relationships/mod.rs`, `backend/src/domains/relationships/api.rs`, migrations `0060`, `0061` and `0068`, graph core, person roles, organization contacts, task relations, project link reviews, Personas workspace review panel, Review workspace | First-class Relationship persistence, graph projection for all current `RelationshipEntityKind` endpoints, guarded entity/global review routes, person role adapters, organization contact link adapters for manual/API and email-sync paths, manual task relation adapters, project link review adapters, Personas workspace global suggested review, cross-domain Review workspace placement and shared Review action dispatch have a baseline, but downstream engine projections are incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and keep review routing in the cross-domain workflow shell. |
+| Memory Engine | `backend/src/engines/memory.rs`, persons memory, organization memory, project memory docs | A shared Memory Engine baseline now converts deprecated Persona compatibility notes into source-backed memory-card drafts, and Person enrichment uses it for the `person_memory_cards` compatibility projection. Broader context packs, memory gaps, review workflow and cross-domain memory assembly remain incomplete. | Expand shared Memory Engine behavior after domain source boundaries are stable. |
+| Timeline Engine | `backend/src/engines/timeline.rs`, calendar events, person timeline, organization timeline, project timelines, frontend timeline page | A shared Timeline Engine baseline now owns bounded entity timeline limits and source-backed event validation for Persona, Organization and Project compatibility timeline producers. Event-log replay, cross-domain timelines, summaries, diffs, recency signals and gap detection remain incomplete. | Expand Timeline Engine from shared policy into derived chronological views while keeping Calendar as the scheduled event domain. |
+| Trust Engine | `backend/src/engines/trust.rs`, `persons/trust.rs`, `persons/enrichment.rs`, relationship scores in docs | A shared Trust Engine baseline now converts deprecated Persona compatibility trust scores into Owner Persona -> Persona `trusts` Relationship signals and emits source reliability signals into Relationship evidence metadata. Contradiction input handling, trust review recommendations and cross-domain reconciliation remain incomplete. | Continue normalizing trust as source/relationship signal, not generic entity field. |
+| Risk Engine | `backend/src/engines/risk.rs`, `health.rs`, `watchtower`, risks routes in persons/orgs/calendar/tasks | A shared Risk Engine baseline now builds source-backed Persona risk observation drafts and derives attention status from unresolved risk severities; Person risks use it before writing compatibility `person_risks` and updating the Persona `health_status` cache. Cross-domain risk observation routing, review workflow and health/watchtower terminology normalization remain incomplete. | Extend Risk Engine observations/review across domains, then migrate health/watchtower compatibility language behind it. |
+| Enrichment Engine | `backend/src/engines/enrichment.rs`, persons enrichment, organization enrichment | A shared Enrichment Engine baseline now converts deprecated Persona compatibility favorite state into sourced `ui:favorite` preference drafts and builds source-backed pending Persona observation candidates for compatibility `enrichment_results`. Approved-source policy, conflict routing and broader cross-domain candidate enrichment remain incomplete. | Expand shared enrichment semantics with domain-specific source policies and route conflict candidates to the Consistency / Contradiction Engine. |
+| Obligation Engine | `backend/src/engines/obligation.rs`, `backend/src/domains/obligations/mod.rs`, `backend/src/domains/obligations/api.rs`, migrations `0063`, `0066` and `0067`, task candidates, task rules, email sync and Telegram/WhatsApp fixture communication extraction, document candidate extraction, meeting outcomes, person promises, Tasks workspace review panel, Review workspace | Candidate detection, accepted Obligation persistence, accepted Obligation graph projection, guarded accepted-Obligation backend entity/global review routes, global Tasks workspace review, Review workspace aggregation and action dispatch, obligation-derived task-candidate review-state synchronization, email-sync, document and Telegram/WhatsApp fixture candidate refresh, person promise adapters and meeting `promise`/`task`/`follow_up` outcome adapters have baselines. Live-provider ingestion and broader candidate-to-Obligation review workflow coverage are incomplete. | Extend remaining Communication/document ingestion to the engine and feed reviewed candidates to the Obligations domain without auto-creating Tasks outside explicit task-candidate review. |
+| Consistency / Contradiction Engine | `backend/src/engines/consistency.rs`, `backend/src/engines/consistency_api.rs`, migration `0062`, ADR-0085, ADR-0087, Review workspace | Structured direct-contradiction detection, deterministic structured and limited natural-language `location` / `status` claim extraction from Communication/Document/Event evidence text, observation persistence, guarded backend review routes, Knowledge workspace review panel, Review workspace aggregation/action dispatch and projected email/Telegram/WhatsApp message, imported Document, meeting-note and call-transcript refresh against active `person_facts` have baselines. Broad natural-language extraction and broader provider evidence are incomplete. | Expand ingestion refresh to broader provider evidence, then add reviewed-outcome semantics without automatic overwrite. |
+| Decisions domain | `backend/src/domains/decisions/mod.rs`, `backend/src/domains/decisions/api.rs`, `backend/src/engines/decision.rs`, migrations `0064` and `0065`, email sync and Telegram/WhatsApp fixture candidate refresh, meeting outcomes, project link review decisions, communication/document evidence, Tasks workspace review panel, Review workspace | Accepted Decision persistence, deterministic explicit-Decision candidate extraction, explicit message/imported-document candidate persistence as `suggested` Decisions, email-sync and Telegram/WhatsApp fixture candidate refresh for projected Communication messages, accepted Decision graph projection, guarded accepted-Decision backend entity/global review routes, global Tasks workspace review, Review workspace aggregation/action dispatch, meeting `decision` outcome adapters and project link review adapters have baselines. Live-provider ingestion and broader candidate-to-Decision review routing are incomplete. | Connect remaining communication/document candidates to the Decisions domain without auto-changing Projects, Tasks or Obligations. |
+| Agents domain | AI runtime/control center, Ollama/OmniRoute, frontend Agents page | Runtime exists, AI registry agents now materialize as `ai_agent` Personas and graph nodes, and AI run records store agent/Owner Persona attribution. Capability policy, UI context assembly and broader agent workflow context remain incomplete. | Agent capability audit and UI/context attribution plan. |
 | Notes boundary | frontend Notes page, documents treat notes as artifacts | No backend Notes domain and no ADR promotes one. | Keep Notes as document-like artifacts until ADR changes boundary. |
 
 ## Refactoring Slices

@@ -36,6 +36,15 @@ needs a projection.
 | Agents | [Agents](agents.md) | partially implemented through AI runtime/control surfaces |
 | Notes | [Notes](notes.md) | not a first-class domain; treated as document-like artifacts |
 
+## Channel Capability Specs
+
+Channel capability specs document provider-specific behavior without promoting a
+provider into a standalone Hermes domain.
+
+| Channel | Spec | Status |
+|---|---|---|
+| Telegram | [Telegram Channel Capability Spec](telegram-channel.md) | target production capability matrix with current implementation baseline |
+
 ## Engine Documents
 
 Engines are not domains. Engine ownership lives in

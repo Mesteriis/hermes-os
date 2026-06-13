@@ -739,7 +739,9 @@ pub(crate) async fn get_task_rules(
 pub(crate) struct NewTaskRuleReq {
     name: String,
     description: Option<String>,
-    dsl: Value,
+    dsl: Option<Value>,
+    config: Option<Value>,
+    rule_type: Option<String>,
     approval_mode: Option<String>,
 }
 pub(crate) async fn post_task_rule(
@@ -751,11 +753,13 @@ pub(crate) async fn post_task_rule(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
+    let dsl = req.dsl.or(req.config).unwrap_or_else(|| json!({}));
+    let description = req.description.or(req.rule_type);
     let rule = TaskRuleStore::new(pool)
         .create(
             &req.name,
-            req.description.as_deref(),
-            req.dsl,
+            description.as_deref(),
+            dsl,
             req.approval_mode.as_deref(),
         )
         .await

@@ -59,6 +59,10 @@ Provider-specific details remain at adapter and source-record boundaries.
 Product workflows operate over Communication, Conversation, Participant,
 Attachment, Event and Context.
 
+Telegram provider-specific production behavior is documented in
+[Telegram Channel Capability Spec](telegram-channel.md). That document is a
+channel capability spec, not a separate domain.
+
 ## Source Evidence
 
 Each imported communication must preserve source provenance:

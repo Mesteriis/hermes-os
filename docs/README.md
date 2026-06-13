@@ -71,6 +71,7 @@ versioned implementation milestones and may use compatibility terminology.
 Canonical domain specs live under [Domain Catalog](domains/README.md).
 
 - [Communications](domains/communications.md)
+- [Telegram Channel Capability Spec](domains/telegram-channel.md)
 - [Personas / Persona Intelligence](persons/README.md)
 - [Organizations](domains/organizations.md)
 - [Projects](domains/projects.md)
@@ -136,6 +137,7 @@ Important current examples:
 - ADR-0077 - Russian and English interface.
 - ADR-0084 - Persona Intelligence System.
 - ADR-0085 - Communication spine and Consistency / Contradiction Engine.
+- ADR-0091 - Telegram production client capability model.
 
 ## Implementation Status Documents
 

@@ -40,7 +40,7 @@ impl CalendarAccountStore {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let account_id = format!("cal:v1:{:x}", ts);
+        let account_id = format!("cal:v1:{ts:x}");
         let row = sqlx::query(
             "INSERT INTO calendar_accounts (account_id, provider, account_name, email) VALUES ($1,$2,$3,$4) RETURNING account_id, provider, account_name, email, credentials_reference, sync_status, capabilities, created_at, updated_at"
         ).bind(&account_id).bind(provider).bind(account_name).bind(email).fetch_one(&self.pool).await?;
@@ -283,7 +283,7 @@ impl CalendarSourceStore {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let source_id = format!("src:v1:{:x}", ts);
+        let source_id = format!("src:v1:{ts:x}");
         let row = sqlx::query(
             "INSERT INTO calendar_sources (source_id, account_id, provider_calendar_id, name, color, timezone) VALUES ($1,$2,$3,$4,$5,$6) RETURNING source_id, account_id, provider_calendar_id, name, color, timezone, visibility, read_only, sync_enabled, capabilities, created_at, updated_at"
         ).bind(&source_id).bind(account_id).bind(provider_calendar_id).bind(name).bind(color).bind(timezone).fetch_one(&self.pool).await?;
@@ -407,7 +407,7 @@ impl CalendarEventStore {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let event_id = format!("evt:v1:{:x}", ts);
+        let event_id = format!("evt:v1:{ts:x}");
         let row = sqlx::query(
             "INSERT INTO calendar_events (event_id, source_event_id, account_id, source_id, title, description, location, start_at, end_at, timezone, all_day, recurrence_rule, status, visibility, event_type, conference_url, conference_provider, preparation_reminder_minutes, travel_buffer_minutes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19) RETURNING event_id, source_event_id, account_id, source_id, title, description, location, start_at, end_at, timezone, all_day, recurrence_rule, status, visibility, event_type, importance_score, readiness_score, sync_status, conference_url, conference_provider, preparation_reminder_minutes, travel_buffer_minutes, created_at, updated_at"
         ).bind(&event_id).bind(req.source_event_id.as_deref()).bind(req.account_id.as_deref()).bind(req.source_id.as_deref()).bind(&req.title).bind(req.description.as_deref()).bind(req.location.as_deref()).bind(req.start_at).bind(req.end_at).bind(req.timezone.as_deref()).bind(req.all_day.unwrap_or(false)).bind(req.recurrence_rule.as_deref()).bind(req.status.as_deref().unwrap_or("scheduled")).bind(req.visibility.as_deref().unwrap_or("private")).bind(req.event_type.as_deref()).bind(req.conference_url.as_deref()).bind(req.conference_provider.as_deref()).bind(req.preparation_reminder_minutes).bind(req.travel_buffer_minutes).fetch_one(&mut **transaction).await?;
@@ -471,7 +471,7 @@ impl CalendarEventStore {
         start_at: DateTime<Utc>,
         end_at: DateTime<Utc>,
     ) -> Result<CalendarEvent, CalendarError> {
-        let row = sqlx::query("UPDATE calendar_events SET start_at=$2, end_at=$3, status='rescheduled', updated_at=now() WHERE event_id=$1 RETURNING event_id, source_event_id, account_id, source_id, title, description, location, start_at, end_at, timezone, all_day, recurrence_rule, status, visibility, event_type, importance_score, readiness_score, sync_status, created_at, updated_at")
+        let row = sqlx::query("UPDATE calendar_events SET start_at=$2, end_at=$3, status='rescheduled', updated_at=now() WHERE event_id=$1 RETURNING event_id, source_event_id, account_id, source_id, title, description, location, start_at, end_at, timezone, all_day, recurrence_rule, status, visibility, event_type, importance_score, readiness_score, sync_status, conference_url, conference_provider, preparation_reminder_minutes, travel_buffer_minutes, created_at, updated_at")
             .bind(event_id).bind(start_at).bind(end_at).fetch_one(&self.pool).await?;
         Ok(row_to_event(row)?)
     }

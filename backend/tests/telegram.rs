@@ -49,6 +49,136 @@ fn telegram_provider_and_secret_kinds_are_account_scoped() {
 }
 
 #[tokio::test]
+async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_candidates_against_postgres()
+ {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live Telegram candidate refresh test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-candidate-{suffix}");
+    let chat_id = format!("tg-candidate-chat-{suffix}");
+    let decision_title = format!("Use Telegram evidence for shared memory {suffix}");
+    let decision_rationale = "channel context must feed the same domain model";
+    let obligation_statement = format!("send the Telegram alignment note {suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let account_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/accounts/fixture",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "telegram_user",
+                "display_name": "Telegram Candidate Source",
+                "external_account_id": format!("tg-candidate-{suffix}"),
+                "tdlib_data_path": format!("docker/data/telegram/candidate-{suffix}"),
+                "transcription_enabled": false
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("account response");
+    assert_eq!(account_response.status(), StatusCode::OK);
+
+    let message_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": format!("tg-candidate-message-{suffix}"),
+                "chat_kind": "private",
+                "chat_title": "Telegram Candidate Review",
+                "sender_id": format!("telegram-candidate-sender-{suffix}"),
+                "sender_display_name": "Telegram Candidate Sender",
+                "text": format!(
+                    "Decision: {decision_title} because {decision_rationale}. I will {obligation_statement} by Friday 5pm."
+                ),
+                "import_batch_id": format!("telegram-candidate-fixture-{suffix}"),
+                "occurred_at": "2026-06-06T12:30:00Z",
+                "delivery_state": "received"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("message response");
+    assert_eq!(message_response.status(), StatusCode::OK);
+    let message_body = json_body(message_response).await;
+    let message_id = message_body["message_id"]
+        .as_str()
+        .expect("message id")
+        .to_owned();
+
+    let decision_row: (String, String, String, String, String) = sqlx::query_as(
+        r#"
+        SELECT d.title, d.rationale, d.review_state, e.source_kind, e.source_id
+        FROM decisions d
+        JOIN decision_evidence e ON e.decision_id = d.decision_id
+        WHERE e.source_kind = 'communication'
+          AND e.source_id = $1
+          AND d.title = $2
+        "#,
+    )
+    .bind(&message_id)
+    .bind(&decision_title)
+    .fetch_one(&pool)
+    .await
+    .expect("Telegram message should create a suggested Decision candidate");
+    assert_eq!(decision_row.1, decision_rationale);
+    assert_eq!(decision_row.2, "suggested");
+    assert_eq!(decision_row.3, "communication");
+    assert_eq!(decision_row.4, message_id);
+
+    let task_candidate_row: (String, String, String, Option<String>) = sqlx::query_as(
+        r#"
+        SELECT title, review_state, candidate_kind, due_text
+        FROM task_candidates
+        WHERE source_kind = 'message'
+          AND source_id = $1
+          AND candidate_kind = 'obligation_task'
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("Telegram message should create an obligation-derived task candidate");
+    assert_eq!(task_candidate_row.0, obligation_statement);
+    assert_eq!(task_candidate_row.1, "suggested");
+    assert_eq!(task_candidate_row.2, "obligation_task");
+    assert_eq!(task_candidate_row.3.as_deref(), Some("Friday 5pm"));
+
+    let task_count =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tasks WHERE source_id = $1")
+            .bind(&message_id)
+            .fetch_one(&pool)
+            .await
+            .expect("task count");
+    let obligation_count =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM obligations WHERE statement = $1")
+            .bind(&obligation_statement)
+            .fetch_one(&pool)
+            .await
+            .expect("accepted obligation count");
+    assert_eq!(task_count, 0);
+    assert_eq!(obligation_count, 0);
+}
+
+#[tokio::test]
 async fn telegram_api_exercises_policy_and_call_foundation() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!("skipping live Telegram API smoke test: HERMES_TEST_DATABASE_URL is not set");

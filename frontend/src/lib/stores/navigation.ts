@@ -97,6 +97,12 @@ const viewCopy: ViewCopy = {
 		search: 'Search anything in your knowledge graph...',
 		icon: 'tabler:share'
 	},
+	review: {
+		title: 'Review',
+		subtitle: 'Source-backed suggested changes across relationships, decisions, obligations and contradictions.',
+		search: 'Search review queue...',
+		icon: 'tabler:clipboard-check'
+	},
 	telegram: {
 		title: 'Telegram Client',
 		subtitle: 'Telegram messaging, policy automation and call intelligence.',

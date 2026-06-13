@@ -5,6 +5,10 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
+use crate::engines::enrichment::{
+    EnrichmentEngine, EnrichmentEngineError as SharedEnrichmentEngineError,
+};
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichmentResult {
     pub id: String,
@@ -34,7 +38,7 @@ impl EnrichmentResultStore {
         person_id: &str,
     ) -> Result<Vec<EnrichmentResult>, EnrichmentEngineError> {
         let rows = sqlx::query(
-            "SELECT id::text, person_id, source, url, data, confidence, status, last_checked_at, applied_at, created_at
+            "SELECT id::text, person_id, source, url, data, confidence::float8 AS confidence, status, last_checked_at, applied_at, created_at
              FROM enrichment_results WHERE person_id = $1 ORDER BY created_at DESC"
         ).bind(person_id).fetch_all(&self.pool).await?;
         rows.into_iter().map(row_to_enrichment).collect()
@@ -47,12 +51,23 @@ impl EnrichmentResultStore {
         data: Value,
         confidence: f64,
     ) -> Result<EnrichmentResult, EnrichmentEngineError> {
+        let extracted_claim = extracted_claim_from_data(&data)
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| source.to_owned());
+        let candidate = EnrichmentEngine::persona_observation_candidate(
+            person_id,
+            source,
+            &extracted_claim,
+            data,
+            confidence,
+        )?;
+
         let row = sqlx::query(
-            "INSERT INTO enrichment_results (person_id, source, data, confidence)
-             VALUES ($1, $2, $3, $4)
+            "INSERT INTO enrichment_results (person_id, source, data, confidence, status)
+             VALUES ($1, $2, $3, $4, $5)
              ON CONFLICT DO NOTHING
-             RETURNING id::text, person_id, source, url, data, confidence, status, last_checked_at, applied_at, created_at"
-        ).bind(person_id).bind(source).bind(&data).bind(confidence).fetch_one(&self.pool).await?;
+             RETURNING id::text, person_id, source, url, data, confidence::float8 AS confidence, status, last_checked_at, applied_at, created_at"
+        ).bind(person_id).bind(&candidate.source).bind(&candidate.data).bind(candidate.confidence).bind(&candidate.review_state).fetch_one(&self.pool).await?;
         row_to_enrichment(row)
     }
 
@@ -69,6 +84,15 @@ impl EnrichmentResultStore {
             .await?;
         Ok(())
     }
+}
+
+fn extracted_claim_from_data(data: &Value) -> Option<&str> {
+    data.get("extracted_claim")
+        .or_else(|| data.get("claim"))
+        .or_else(|| data.get("value"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|claim| !claim.is_empty())
 }
 
 fn row_to_enrichment(row: PgRow) -> Result<EnrichmentResult, EnrichmentEngineError> {
@@ -90,6 +114,8 @@ fn row_to_enrichment(row: PgRow) -> Result<EnrichmentResult, EnrichmentEngineErr
 pub enum EnrichmentEngineError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Shared(#[from] SharedEnrichmentEngineError),
     #[error("enrichment not found")]
     NotFound,
 }

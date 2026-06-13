@@ -3,7 +3,7 @@ name = "hermes-hub-backend"
 publish = false
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 default-run = "hermes-hub-backend"
 
 [lib]

@@ -1,9 +1,18 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use sqlx::Row;
-use sqlx::postgres::PgPool;
+use serde_json::{Value, json};
+use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
+
+use crate::domains::decisions::{
+    DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState, DecisionStore,
+    DecisionStoreError, NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
+};
+use crate::domains::obligations::{
+    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationEvidenceSourceKind,
+    ObligationReviewState, ObligationStore, ObligationStoreError,
+};
 
 // ── MeetingNote ────────────────────────────────────────────────────────────
 
@@ -101,24 +110,7 @@ impl MeetingOutcomeStore {
     pub async fn list(&self, event_id: &str) -> Result<Vec<MeetingOutcome>, MeetingsError> {
         let rows = sqlx::query("SELECT id::text, event_id, outcome_type, title, description, owner_person_id, due_date, source, confidence, linked_entity_id, created_at, updated_at FROM meeting_outcomes WHERE event_id=$1 ORDER BY outcome_type, title")
             .bind(event_id).fetch_all(&self.pool).await?;
-        rows.into_iter()
-            .map(|r| {
-                Ok(MeetingOutcome {
-                    id: r.try_get("id")?,
-                    event_id: r.try_get("event_id")?,
-                    outcome_type: r.try_get("outcome_type")?,
-                    title: r.try_get("title")?,
-                    description: r.try_get("description")?,
-                    owner_person_id: r.try_get("owner_person_id")?,
-                    due_date: r.try_get("due_date")?,
-                    source: r.try_get("source")?,
-                    confidence: r.try_get("confidence")?,
-                    linked_entity_id: r.try_get("linked_entity_id")?,
-                    created_at: r.try_get("created_at")?,
-                    updated_at: r.try_get("updated_at")?,
-                })
-            })
-            .collect()
+        rows.into_iter().map(row_to_meeting_outcome).collect()
     }
 
     pub async fn add(
@@ -130,22 +122,26 @@ impl MeetingOutcomeStore {
         owner_id: Option<&str>,
         due_date: Option<DateTime<Utc>>,
     ) -> Result<MeetingOutcome, MeetingsError> {
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query("INSERT INTO meeting_outcomes (event_id, outcome_type, title, description, owner_person_id, due_date) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id::text, event_id, outcome_type, title, description, owner_person_id, due_date, source, confidence, linked_entity_id, created_at, updated_at")
-            .bind(event_id).bind(outcome_type).bind(title).bind(description).bind(owner_id).bind(due_date).fetch_one(&self.pool).await?;
-        Ok(MeetingOutcome {
-            id: row.try_get("id")?,
-            event_id: row.try_get("event_id")?,
-            outcome_type: row.try_get("outcome_type")?,
-            title: row.try_get("title")?,
-            description: row.try_get("description")?,
-            owner_person_id: row.try_get("owner_person_id")?,
-            due_date: row.try_get("due_date")?,
-            source: row.try_get("source")?,
-            confidence: row.try_get("confidence")?,
-            linked_entity_id: row.try_get("linked_entity_id")?,
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
-        })
+            .bind(event_id).bind(outcome_type).bind(title).bind(description).bind(owner_id).bind(due_date).fetch_one(&mut *transaction).await?;
+        let mut outcome = row_to_meeting_outcome(row)?;
+
+        if let Some(linked_entity_id) =
+            Self::project_outcome_domain_record(&mut transaction, &outcome).await?
+        {
+            let row = sqlx::query(
+                "UPDATE meeting_outcomes SET linked_entity_id = $1, updated_at = now() WHERE id::text = $2 RETURNING id::text, event_id, outcome_type, title, description, owner_person_id, due_date, source, confidence, linked_entity_id, created_at, updated_at",
+            )
+            .bind(linked_entity_id)
+            .bind(&outcome.id)
+            .fetch_one(&mut *transaction)
+            .await?;
+            outcome = row_to_meeting_outcome(row)?;
+        }
+
+        transaction.commit().await?;
+        Ok(outcome)
     }
 
     pub async fn follow_up_status(&self, event_id: &str) -> Result<Value, MeetingsError> {
@@ -159,6 +155,108 @@ impl MeetingOutcomeStore {
         }
         Ok(Value::Object(status))
     }
+
+    async fn project_outcome_domain_record(
+        transaction: &mut Transaction<'_, Postgres>,
+        outcome: &MeetingOutcome,
+    ) -> Result<Option<String>, MeetingsError> {
+        match outcome.outcome_type.as_str() {
+            "decision" => {
+                let description = outcome.description.as_deref().unwrap_or(&outcome.title);
+                let decision = NewDecision::new(
+                    outcome.title.clone(),
+                    description,
+                    outcome.confidence,
+                    DecisionReviewState::Suggested,
+                )
+                .metadata(meeting_outcome_metadata(outcome));
+                let evidence = NewDecisionEvidence::new(
+                    DecisionEvidenceSourceKind::Event,
+                    outcome.event_id.clone(),
+                )
+                .quote(description)
+                .confidence(outcome.confidence)
+                .metadata(meeting_outcome_metadata(outcome));
+                let impact =
+                    NewDecisionImpactedEntity::new(DecisionEntityKind::Event, &outcome.event_id)
+                        .impact_type("meeting_outcome")
+                        .metadata(meeting_outcome_metadata(outcome));
+                let stored = DecisionStore::upsert_with_evidence_in_transaction(
+                    transaction,
+                    &decision,
+                    &[evidence],
+                    &[impact],
+                )
+                .await?;
+
+                Ok(Some(stored.decision_id))
+            }
+            "task" | "promise" | "follow_up" => {
+                let description = outcome.description.as_deref().unwrap_or(&outcome.title);
+                let (obligated_entity_kind, obligated_entity_id) = outcome
+                    .owner_person_id
+                    .as_deref()
+                    .filter(|value| !value.trim().is_empty())
+                    .map(|owner_person_id| {
+                        (ObligationEntityKind::Persona, owner_person_id.to_owned())
+                    })
+                    .unwrap_or_else(|| (ObligationEntityKind::Event, outcome.event_id.clone()));
+                let mut obligation = NewObligation::new(
+                    obligated_entity_kind,
+                    obligated_entity_id,
+                    outcome.title.clone(),
+                    outcome.confidence,
+                    ObligationReviewState::Suggested,
+                )
+                .metadata(meeting_outcome_metadata(outcome));
+                if let Some(due_date) = outcome.due_date {
+                    obligation = obligation.due_at(due_date);
+                }
+                let evidence = NewObligationEvidence::new(
+                    ObligationEvidenceSourceKind::Event,
+                    outcome.event_id.clone(),
+                )
+                .quote(description)
+                .confidence(outcome.confidence)
+                .metadata(meeting_outcome_metadata(outcome));
+                let stored = ObligationStore::upsert_with_evidence_in_transaction(
+                    transaction,
+                    &obligation,
+                    &[evidence],
+                )
+                .await?;
+
+                Ok(Some(stored.obligation_id))
+            }
+            _ => Ok(None),
+        }
+    }
+}
+
+fn row_to_meeting_outcome(row: PgRow) -> Result<MeetingOutcome, MeetingsError> {
+    Ok(MeetingOutcome {
+        id: row.try_get("id")?,
+        event_id: row.try_get("event_id")?,
+        outcome_type: row.try_get("outcome_type")?,
+        title: row.try_get("title")?,
+        description: row.try_get("description")?,
+        owner_person_id: row.try_get("owner_person_id")?,
+        due_date: row.try_get("due_date")?,
+        source: row.try_get("source")?,
+        confidence: f64::from(row.try_get::<f32, _>("confidence")?),
+        linked_entity_id: row.try_get("linked_entity_id")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn meeting_outcome_metadata(outcome: &MeetingOutcome) -> Value {
+    json!({
+        "source": "meeting_outcome_adapter",
+        "meeting_outcome_id": outcome.id,
+        "event_id": outcome.event_id,
+        "outcome_type": outcome.outcome_type,
+    })
 }
 
 // ── EventRecording ─────────────────────────────────────────────────────────
@@ -274,6 +372,10 @@ impl EventTranscriptStore {
 pub enum MeetingsError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Decision(#[from] DecisionStoreError),
+    #[error(transparent)]
+    Obligation(#[from] ObligationStoreError),
     #[error("not found")]
     NotFound,
 }

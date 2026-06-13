@@ -55,9 +55,24 @@ Memory behavior currently exists inside domain modules such as
 memory plans. This is acceptable during migration but should not be documented
 as separate engines per domain.
 
+The first backend Memory Engine baseline lives in `backend/src/engines/memory.rs`.
+It converts deprecated Persona compatibility `persons.notes` text into a
+source-backed Persona memory-card draft:
+
+- title: `Compatibility notes`;
+- description: trimmed notes text;
+- source: `persons.notes:<persona_id>`;
+- confidence: `1.0`;
+- importance: `5`.
+
+`PersonEnrichmentStore` uses this draft when materializing compatibility
+`person_memory_cards`. Empty notes remove the compatibility memory-card source
+and do not create a new card.
+
 ## Migration Plan
 
-1. Keep domain-specific memory docs focused on owned source records.
-2. Move reusable memory assembly language to this engine spec.
-3. Preserve source citations and review state before expanding automation.
-4. Treat AI summaries as derived observations until reviewed.
+1. Keep compatibility notes-to-card assembly in the Memory Engine.
+2. Keep domain-specific memory docs focused on owned source records.
+3. Move reusable memory assembly language to this engine spec.
+4. Preserve source citations and review state before expanding automation.
+5. Treat AI summaries as derived observations until reviewed.

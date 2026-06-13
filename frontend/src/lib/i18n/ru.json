@@ -844,5 +844,13 @@
 	"Telegram backend is unreachable at the configured API URL.": "Backend Telegram недоступен по настроенному API URL.",
 	"Capability State": "Состояние возможностей",
 	"Automation Dry-run": "Dry-run автоматизации",
-	"Call Fixtures": "Фикстуры звонков"
+	"Call Fixtures": "Фикстуры звонков",
+	"Identity Resolution": "Разрешение идентичности",
+	"Unattached Traces": "Непривязанные следы",
+	"Reload identity traces": "Обновить следы идентичности",
+	"Loading identity traces": "Загрузка следов идентичности",
+	"No unattached identity traces": "Нет непривязанных следов идентичности",
+	"Source": "Источник",
+	"Target Persona": "Целевая персона",
+	"Assign": "Назначить"
 }

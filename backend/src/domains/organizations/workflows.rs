@@ -5,6 +5,8 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::engines::timeline::{TimelineEngine, TimelineEventDraft};
+
 // ── TimelineEvent ──────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -36,8 +38,9 @@ impl OrgTimelineStore {
         org_id: &str,
         limit: i64,
     ) -> Result<Vec<OrgTimelineEvent>, OrgWorkflowError> {
+        let limit = TimelineEngine::bounded_entity_limit(limit);
         let rows = sqlx::query("SELECT id::text, organization_id, event_type, title, description, occurred_at, source, related_entity_id, related_entity_kind, confidence, metadata, created_at FROM organization_timeline_events WHERE organization_id=$1 ORDER BY occurred_at DESC LIMIT $2")
-            .bind(org_id).bind(limit.clamp(1,100)).fetch_all(&self.pool).await?;
+            .bind(org_id).bind(limit).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
                 Ok(OrgTimelineEvent {
@@ -65,6 +68,15 @@ impl OrgTimelineStore {
         occurred_at: DateTime<Utc>,
         source: &str,
     ) -> Result<OrgTimelineEvent, OrgWorkflowError> {
+        TimelineEngine::validate_event(&TimelineEventDraft {
+            entity_kind: "organization",
+            entity_id: org_id,
+            event_type,
+            title,
+            occurred_at,
+            source,
+        })?;
+
         let row = sqlx::query("INSERT INTO organization_timeline_events (organization_id, event_type, title, occurred_at, source) VALUES ($1,$2,$3,$4,$5) RETURNING id::text, organization_id, event_type, title, description, occurred_at, source, related_entity_id, related_entity_kind, confidence, metadata, created_at")
             .bind(org_id).bind(event_type).bind(title).bind(occurred_at).bind(source).fetch_one(&self.pool).await?;
         Ok(OrgTimelineEvent {
@@ -296,4 +308,6 @@ impl OrgPlaybookStore {
 pub enum OrgWorkflowError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Timeline(#[from] crate::engines::timeline::TimelineEngineError),
 }

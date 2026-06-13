@@ -22,6 +22,7 @@ use crate::domains::mail::core::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, ProviderAccount,
 };
 use crate::domains::persons::analytics::{AnalyticsError, PersonAnalyticsService};
+use crate::domains::persons::api::PersonProjectionError;
 use crate::domains::persons::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
 use crate::domains::persons::expertise::{PersonExpertiseError, PersonExpertiseStore};
 use crate::domains::persons::export::{ExportError, ExportFormat, PersonExportService};
@@ -77,6 +78,7 @@ use crate::domains::calendar::scheduling::{
     DeadlineStore, FocusBlockStore, SchedulingError, SmartSchedulingService,
 };
 use crate::domains::calendar::sync::{export_event_ics, export_event_md};
+use crate::domains::decisions::DecisionStoreError;
 use crate::domains::documents::processing::{
     DocumentProcessingError, DocumentProcessingJob, DocumentProcessingRecord,
     DocumentProcessingRetryCommand, DocumentProcessingRetryCommandResult, DocumentProcessingStatus,
@@ -94,6 +96,7 @@ use crate::domains::mail::messages::{
 use crate::domains::mail::storage::{
     MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob,
 };
+use crate::domains::obligations::ObligationStoreError;
 use crate::domains::organizations::api::{
     OrganizationError, OrganizationStore, OrganizationUpdate,
 };
@@ -102,6 +105,7 @@ use crate::domains::projects::link_reviews::{
     ProjectLinkReviewCommand, ProjectLinkReviewError, ProjectLinkReviewState,
     ProjectLinkReviewStore, ProjectLinkTargetKind,
 };
+use crate::domains::relationships::RelationshipStoreError;
 use crate::domains::tasks::api::{NewTask, TaskError, TaskListQuery, TaskStore, TaskUpdate};
 use crate::domains::tasks::brain::{TaskBrainError, TaskBrainService};
 use crate::domains::tasks::candidates::{
@@ -116,6 +120,7 @@ use crate::domains::tasks::health::{TaskHealthError, TaskWatchtowerService};
 use crate::domains::tasks::intelligence::TaskIntelligenceService;
 use crate::domains::tasks::rules::{TaskRuleError, TaskRuleStore, TaskTemplateStore};
 use crate::domains::tasks::sync::{export_task_json, export_task_md};
+use crate::engines::consistency::ConsistencyError;
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat,
@@ -155,11 +160,20 @@ pub enum ApiError {
     Store(EventStoreError),
     Graph(crate::domains::graph::core::GraphStoreError),
     InvalidGraphQuery(&'static str),
+    InvalidPersonaQuery(&'static str),
     Projects(ProjectStoreError),
     InvalidProjectQuery(&'static str),
     InvalidProjectLinkReview(&'static str),
     InvalidTaskCandidateQuery(&'static str),
     InvalidTaskCandidateReview(&'static str),
+    InvalidObligationQuery(&'static str),
+    InvalidObligationReview(&'static str),
+    InvalidDecisionQuery(&'static str),
+    InvalidDecisionReview(&'static str),
+    InvalidRelationshipQuery(&'static str),
+    InvalidRelationshipReview(&'static str),
+    InvalidContradictionQuery(&'static str),
+    InvalidContradictionReview(&'static str),
     InvalidPersonIdentityReview(&'static str),
     InvalidDocumentProcessingQuery(&'static str),
     Settings(SettingsError),
@@ -167,6 +181,14 @@ pub enum ApiError {
     DocumentProcessing(DocumentProcessingError),
     TaskCandidateNotFound,
     TaskCandidate(TaskCandidateError),
+    ObligationNotFound,
+    Obligation(ObligationStoreError),
+    DecisionNotFound,
+    Decision(DecisionStoreError),
+    RelationshipNotFound,
+    Relationship(RelationshipStoreError),
+    ContradictionObservationNotFound,
+    Consistency(ConsistencyError),
     AiRunNotFound,
     Ai(AiError),
     AiControlCenter(AiControlCenterError),
@@ -177,6 +199,7 @@ pub enum ApiError {
     ProjectLinkTargetNotFound,
     ProjectLinkReview(ProjectLinkReviewError),
     PersonIdentityNotFound,
+    PersonProjection(PersonProjectionError),
     PersonIdentity(PersonIdentityError),
     Messages(MessageProjectionError),
     CommunicationIngestion(CommunicationIngestionError),
@@ -261,6 +284,12 @@ impl axum::response::IntoResponse for ApiError {
                 message.to_owned(),
                 false,
             ),
+            Self::InvalidPersonaQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_persona_query",
+                message.to_owned(),
+                false,
+            ),
             Self::Projects(error) => {
                 tracing::error!(error = %error, "project API store operation failed");
                 (
@@ -291,6 +320,54 @@ impl axum::response::IntoResponse for ApiError {
             Self::InvalidTaskCandidateReview(message) => (
                 StatusCode::BAD_REQUEST,
                 "invalid_task_candidate_review",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidObligationQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_obligation_query",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidObligationReview(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_obligation_review",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidDecisionQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_decision_query",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidDecisionReview(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_decision_review",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidRelationshipQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_relationship_query",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidRelationshipReview(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_relationship_review",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidContradictionQuery(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_contradiction_query",
+                message.to_owned(),
+                false,
+            ),
+            Self::InvalidContradictionReview(message) => (
+                StatusCode::BAD_REQUEST,
+                "invalid_contradiction_review",
                 message.to_owned(),
                 false,
             ),
@@ -388,6 +465,66 @@ impl axum::response::IntoResponse for ApiError {
                     false,
                 )
             }
+            Self::ObligationNotFound => (
+                StatusCode::NOT_FOUND,
+                "obligation_not_found",
+                "obligation was not found".to_owned(),
+                false,
+            ),
+            Self::Obligation(error) => {
+                tracing::error!(error = %error, "obligation store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "obligation_store_error",
+                    "obligation store operation failed".to_owned(),
+                    false,
+                )
+            }
+            Self::DecisionNotFound => (
+                StatusCode::NOT_FOUND,
+                "decision_not_found",
+                "decision was not found".to_owned(),
+                false,
+            ),
+            Self::Decision(error) => {
+                tracing::error!(error = %error, "decision store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "decision_store_error",
+                    "decision store operation failed".to_owned(),
+                    false,
+                )
+            }
+            Self::RelationshipNotFound => (
+                StatusCode::NOT_FOUND,
+                "relationship_not_found",
+                "relationship was not found".to_owned(),
+                false,
+            ),
+            Self::Relationship(error) => {
+                tracing::error!(error = %error, "relationship store operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "relationship_store_error",
+                    "relationship store operation failed".to_owned(),
+                    false,
+                )
+            }
+            Self::ContradictionObservationNotFound => (
+                StatusCode::NOT_FOUND,
+                "contradiction_observation_not_found",
+                "contradiction observation was not found".to_owned(),
+                false,
+            ),
+            Self::Consistency(error) => {
+                tracing::error!(error = %error, "consistency engine operation failed");
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "consistency_engine_error",
+                    "consistency engine operation failed".to_owned(),
+                    false,
+                )
+            }
             Self::AiRunNotFound => (
                 StatusCode::NOT_FOUND,
                 "ai_run_not_found",
@@ -451,6 +588,15 @@ impl axum::response::IntoResponse for ApiError {
                 }
                 AiError::EventStore(error) => {
                     tracing::error!(error = %error, "AI event store operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "ai_runtime_error",
+                        "AI runtime operation failed".to_owned(),
+                        false,
+                    )
+                }
+                AiError::PersonProjection(error) => {
+                    tracing::error!(error = %error, "AI persona attribution operation failed");
                     (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "ai_runtime_error",
@@ -611,6 +757,24 @@ impl axum::response::IntoResponse for ApiError {
                         false,
                     )
                 }
+                TelegramError::Decision(error) => {
+                    tracing::error!(error = %error, "Telegram decision candidate refresh failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "telegram_decision_refresh_error",
+                        "Telegram decision candidate refresh failed".to_owned(),
+                        false,
+                    )
+                }
+                TelegramError::TaskCandidate(error) => {
+                    tracing::error!(error = %error, "Telegram task candidate refresh failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "telegram_task_candidate_refresh_error",
+                        "Telegram task candidate refresh failed".to_owned(),
+                        false,
+                    )
+                }
                 TelegramError::Sqlx(error) => {
                     tracing::error!(error = %error, "Telegram database operation failed");
                     (
@@ -643,6 +807,24 @@ impl axum::response::IntoResponse for ApiError {
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "whatsapp_web_projection_error",
                         "WhatsApp Web message projection failed".to_owned(),
+                        false,
+                    )
+                }
+                WhatsappWebError::Decision(error) => {
+                    tracing::error!(error = %error, "WhatsApp Web decision candidate refresh failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "whatsapp_web_decision_refresh_error",
+                        "WhatsApp Web decision candidate refresh failed".to_owned(),
+                        false,
+                    )
+                }
+                WhatsappWebError::TaskCandidate(error) => {
+                    tracing::error!(error = %error, "WhatsApp Web task candidate refresh failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "whatsapp_web_task_candidate_refresh_error",
+                        "WhatsApp Web task candidate refresh failed".to_owned(),
                         false,
                     )
                 }
@@ -741,6 +923,43 @@ impl axum::response::IntoResponse for ApiError {
                 "person identity candidate was not found".to_owned(),
                 false,
             ),
+            Self::PersonProjection(error) => match error {
+                PersonProjectionError::PersonNotFound(_) => (
+                    StatusCode::NOT_FOUND,
+                    "person_not_found",
+                    "person was not found".to_owned(),
+                    false,
+                ),
+                PersonProjectionError::EmptyEmailAddress
+                | PersonProjectionError::InvalidEmailAddress(_)
+                | PersonProjectionError::EmptyAiAgentId
+                | PersonProjectionError::InvalidAiAgentId(_)
+                | PersonProjectionError::EmptyDisplayName
+                | PersonProjectionError::InvalidPersonaType(_) => (
+                    StatusCode::BAD_REQUEST,
+                    "invalid_person_projection",
+                    error.to_string(),
+                    false,
+                ),
+                PersonProjectionError::Graph(error) => {
+                    tracing::error!(error = %error, "person graph projection operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "person_projection_error",
+                        "person projection operation failed".to_owned(),
+                        false,
+                    )
+                }
+                PersonProjectionError::Sqlx(error) => {
+                    tracing::error!(error = %error, "person projection operation failed");
+                    (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "person_projection_error",
+                        "person projection operation failed".to_owned(),
+                        false,
+                    )
+                }
+            },
             Self::PersonIdentity(error) => {
                 tracing::error!(
                     error = %error,
@@ -906,6 +1125,63 @@ impl From<TaskCandidateError> for ApiError {
     }
 }
 
+impl From<ObligationStoreError> for ApiError {
+    fn from(error: ObligationStoreError) -> Self {
+        match error {
+            ObligationStoreError::ObligationNotFound => Self::ObligationNotFound,
+            ObligationStoreError::UnknownEntityKind(_) => Self::InvalidObligationQuery(
+                "entity_kind must be persona, organization, project, communication, document, task, event, decision, obligation, or knowledge",
+            ),
+            ObligationStoreError::UnknownReviewState(_) => Self::InvalidObligationReview(
+                "review_state must be suggested, user_confirmed, or user_rejected",
+            ),
+            _ => Self::Obligation(error),
+        }
+    }
+}
+
+impl From<DecisionStoreError> for ApiError {
+    fn from(error: DecisionStoreError) -> Self {
+        match error {
+            DecisionStoreError::DecisionNotFound => Self::DecisionNotFound,
+            DecisionStoreError::UnknownEntityKind(_) => Self::InvalidDecisionQuery(
+                "entity_kind must be persona, organization, project, communication, document, task, event, decision, obligation, or knowledge",
+            ),
+            DecisionStoreError::UnknownReviewState(_) => Self::InvalidDecisionReview(
+                "review_state must be suggested, user_confirmed, or user_rejected",
+            ),
+            _ => Self::Decision(error),
+        }
+    }
+}
+
+impl From<RelationshipStoreError> for ApiError {
+    fn from(error: RelationshipStoreError) -> Self {
+        match error {
+            RelationshipStoreError::RelationshipNotFound => Self::RelationshipNotFound,
+            RelationshipStoreError::UnknownEntityKind(_) => Self::InvalidRelationshipQuery(
+                "entity_kind must be persona, organization, project, communication, document, task, event, decision, obligation, or knowledge",
+            ),
+            RelationshipStoreError::UnknownReviewState(_) => Self::InvalidRelationshipReview(
+                "review_state must be suggested, system_accepted, user_confirmed, or user_rejected",
+            ),
+            _ => Self::Relationship(error),
+        }
+    }
+}
+
+impl From<ConsistencyError> for ApiError {
+    fn from(error: ConsistencyError) -> Self {
+        match error {
+            ConsistencyError::ObservationNotFound(_) => Self::ContradictionObservationNotFound,
+            ConsistencyError::UnknownReviewState(_) => Self::InvalidContradictionReview(
+                "review_state must be suggested, user_confirmed, or user_rejected",
+            ),
+            _ => Self::Consistency(error),
+        }
+    }
+}
+
 impl From<AiError> for ApiError {
     fn from(error: AiError) -> Self {
         match error {
@@ -983,6 +1259,12 @@ impl From<PersonIdentityError> for ApiError {
             }
             _ => Self::PersonIdentity(error),
         }
+    }
+}
+
+impl From<PersonProjectionError> for ApiError {
+    fn from(error: PersonProjectionError) -> Self {
+        Self::PersonProjection(error)
     }
 }
 

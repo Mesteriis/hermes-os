@@ -164,6 +164,13 @@ export const layoutPresets: LayoutPreset[] = [
 		instance('knowledge-search-results', 'inspector', 40),
 		instance('knowledge-evidence-context', 'inspector', 50)
 	]),
+	preset('review', 'operational_board', boardZones, [
+		instance('review-overview', 'metrics', 10),
+		instance('review-relationships', 'main', 10),
+		instance('review-decisions', 'main', 20),
+		instance('review-obligations', 'rail', 10),
+		instance('review-polygraph', 'rail', 20)
+	]),
 	preset('telegram', 'master_detail_workbench', workbenchZones, [
 		instance('telegram-chat-list', 'list', 10),
 		instance('telegram-message-thread', 'detail', 10),

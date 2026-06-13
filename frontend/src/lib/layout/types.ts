@@ -44,6 +44,7 @@ export const layoutViewIds = [
 	'documents',
 	'notes',
 	'knowledge-graph',
+	'review',
 	'telegram',
 	'whatsapp',
 	'ai-agents',

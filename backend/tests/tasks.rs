@@ -2,6 +2,10 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{Duration, Utc};
+use hermes_hub_backend::domains::relationships::{
+    RelationshipEntityKind, RelationshipEvidenceSourceKind, RelationshipReviewState,
+    RelationshipStore,
+};
 use hermes_hub_backend::domains::tasks::api::{NewTask, TaskListQuery, TaskStore, TaskUpdate};
 use hermes_hub_backend::domains::tasks::brain::TaskBrainService;
 use hermes_hub_backend::domains::tasks::core::{
@@ -13,8 +17,8 @@ use hermes_hub_backend::domains::tasks::intelligence::TaskIntelligenceService;
 use hermes_hub_backend::domains::tasks::rules::{TaskRuleStore, TaskTemplateStore};
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
-use sqlx::PgPool;
 use sqlx::postgres::PgPoolOptions;
+use sqlx::{PgPool, Row};
 
 fn unique_suffix() -> u128 {
     SystemTime::now()
@@ -36,6 +40,13 @@ fn disconnected_pool() -> PgPool {
     PgPoolOptions::new()
         .connect_lazy("postgres://x:x@127.0.0.1:1/db")
         .expect("lazy")
+}
+
+fn assert_float_eq(actual: f64, expected: f64) {
+    assert!(
+        (actual - expected).abs() < 0.0001,
+        "expected {expected}, got {actual}"
+    );
 }
 
 // ── Task CRUD ─────────────────────────────────────────────────────────────
@@ -66,7 +77,7 @@ async fn task_crud_against_postgres() {
         .await
         .expect("get")
         .expect("exists");
-    assert_eq!(fetched.priority_score, Some(0.8));
+    assert_float_eq(fetched.priority_score.expect("priority score"), 0.8);
 
     let updated = store
         .update(
@@ -80,6 +91,7 @@ async fn task_crud_against_postgres() {
         .await
         .expect("update");
     assert_eq!(updated.hermes_status, "in_progress");
+    assert_float_eq(updated.priority_score.expect("updated priority score"), 0.9);
 
     store
         .set_status(&task.task_id, "done")
@@ -219,7 +231,7 @@ async fn task_evidence_against_postgres() {
         .await
         .expect("add");
     assert_eq!(evidence.source_type, "email");
-    assert_eq!(evidence.confidence, 0.9);
+    assert_float_eq(evidence.confidence, 0.9);
 
     let list = ev.list(&task.task_id).await.expect("list");
     assert_eq!(list.len(), 1);
@@ -250,6 +262,90 @@ async fn task_relations_against_postgres() {
     let list = rel.list(&task.task_id).await.expect("list");
     assert_eq!(list.len(), 1);
     assert_eq!(list[0].relation_type, "blocks");
+}
+
+#[tokio::test]
+async fn task_relation_materializes_first_class_relationship_against_postgres() {
+    let Some(pool) = live_pool().await else {
+        return;
+    };
+    let store = TaskStore::new(pool.clone());
+    let rel = TaskRelationStore::new(pool.clone());
+    let relationship_store = RelationshipStore::new(pool.clone());
+    let suffix = unique_suffix();
+    let task = store
+        .create(&NewTask {
+            title: format!("Relationship task {suffix}"),
+            source_type: Some("manual".into()),
+            ..Default::default()
+        })
+        .await
+        .expect("create");
+    let project_id = format!("project:v1:task-relation:{suffix}");
+
+    let relation = rel
+        .link(&task.task_id, "project", &project_id, "depends_on")
+        .await
+        .expect("link");
+
+    let relationships = relationship_store
+        .list_for_entity(RelationshipEntityKind::Task, &task.task_id, 20)
+        .await
+        .expect("task relationships");
+    let relationship = relationships
+        .iter()
+        .find(|item| {
+            item.source_entity_kind == RelationshipEntityKind::Task
+                && item.source_entity_id == task.task_id
+                && item.target_entity_kind == RelationshipEntityKind::Project
+                && item.target_entity_id == project_id
+                && item.relationship_type == "depends_on"
+        })
+        .expect("task relation should create first-class Relationship");
+
+    assert_eq!(
+        relationship.review_state,
+        RelationshipReviewState::UserConfirmed
+    );
+    assert_eq!(relationship.confidence, relation.confidence);
+    assert_eq!(
+        relationship.metadata["compatibility_table"],
+        json!("task_relations")
+    );
+    assert_eq!(
+        relationship.metadata["compatibility_record_id"],
+        json!(relation.id)
+    );
+    assert_eq!(relationship.metadata["source"], json!("manual"));
+
+    let evidence = sqlx::query(
+        r#"
+        SELECT source_kind, source_id, excerpt, metadata
+        FROM relationship_evidence
+        WHERE relationship_id = $1
+        "#,
+    )
+    .bind(&relationship.relationship_id)
+    .fetch_one(&pool)
+    .await
+    .expect("relationship evidence");
+    let source_kind: String = evidence.try_get("source_kind").expect("source kind");
+    let source_id: String = evidence.try_get("source_id").expect("source id");
+    let excerpt: Option<String> = evidence.try_get("excerpt").expect("excerpt");
+    let metadata: serde_json::Value = evidence.try_get("metadata").expect("metadata");
+
+    assert_eq!(
+        source_kind,
+        RelationshipEvidenceSourceKind::RawRecord.as_str()
+    );
+    assert_eq!(source_id, relation.id);
+    assert_eq!(
+        excerpt.as_deref(),
+        Some("Task relation was recorded through compatibility task relation data.")
+    );
+    assert_eq!(metadata["task_id"], json!(task.task_id));
+    assert_eq!(metadata["entity_type"], json!("project"));
+    assert_eq!(metadata["entity_id"], json!(project_id));
 }
 
 // ── Checklist ─────────────────────────────────────────────────────────────

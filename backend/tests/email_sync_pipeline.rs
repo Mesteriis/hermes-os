@@ -29,6 +29,10 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     let suffix = unique_suffix();
     let account_id = format!("acct_sync_pipeline_{suffix}");
     let provider_record_id = format!("sync-pipeline-message-{suffix}");
+    let sender_domain = format!("acme-{suffix}.test");
+    let recipient_domain = format!("client-{suffix}.test");
+    let sender_email = format!("sender-{suffix}@{sender_domain}");
+    let recipient_email = format!("recipient-{suffix}@{recipient_domain}");
     let blob_root = tempfile::tempdir().expect("mail blob root");
     let blob_store = LocalMailBlobStore::new(blob_root.path());
 
@@ -42,13 +46,13 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
         .await
         .expect("store provider account");
 
-    let raw_rfc822 = concat!(
-        "Subject: Sync Pipeline\r\n",
-        "From: Sender <sender@acme.test>\r\n",
-        "To: Recipient <recipient@client.test>\r\n",
-        "Content-Type: text/plain; charset=utf-8\r\n",
-        "\r\n",
-        "Cached message body.\r\n"
+    let raw_rfc822 = format!(
+        "Subject: Sync Pipeline\r\n\
+         From: Sender <{sender_email}>\r\n\
+         To: Recipient <{recipient_email}>\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\
+         \r\n\
+         Cached message body.\r\n"
     );
     let raw_rfc822_base64 = base64::engine::general_purpose::STANDARD.encode(raw_rfc822);
     let batch = EmailSyncBatch {
@@ -92,7 +96,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
 
     let projected = sqlx::query(
         r#"
-        SELECT subject, sender, recipients, body_text
+        SELECT message_id, subject, sender, recipients, body_text
         FROM communication_messages
         WHERE account_id = $1
           AND provider_record_id = $2
@@ -103,14 +107,18 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .fetch_one(&pool)
     .await
     .expect("projected message");
+    let message_id: String = projected.try_get("message_id").expect("message id");
     let subject: String = projected.try_get("subject").expect("subject");
     let sender: String = projected.try_get("sender").expect("sender");
     let recipients: serde_json::Value = projected.try_get("recipients").expect("recipients");
     let body_text: String = projected.try_get("body_text").expect("body_text");
     assert_eq!(subject, "Sync Pipeline");
-    assert_eq!(sender, "Sender <sender@acme.test>");
+    assert_eq!(sender, format!("Sender <{sender_email}>"));
     assert_eq!(body_text, "Cached message body.");
-    assert_eq!(recipients, json!(["Recipient <recipient@client.test>"]));
+    assert_eq!(
+        recipients,
+        json!([format!("Recipient <{recipient_email}>")])
+    );
 
     let identity_count: i64 = sqlx::query_scalar(
         r#"
@@ -122,7 +130,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
           AND status = 'active'
         "#,
     )
-    .bind(vec!["sender@acme.test", "recipient@client.test"])
+    .bind(vec![sender_email.as_str(), recipient_email.as_str()])
     .fetch_one(&pool)
     .await
     .expect("person email identities");
@@ -143,7 +151,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     )
     .bind(&account_id)
     .bind(&provider_record_id)
-    .bind(vec!["sender@acme.test", "recipient@client.test"])
+    .bind(vec![sender_email.as_str(), recipient_email.as_str()])
     .bind(vec!["sender", "recipient"])
     .fetch_one(&pool)
     .await
@@ -180,12 +188,180 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
           AND identity.identity_value = ANY($2)
         "#,
     )
-    .bind(vec!["acme.test", "client.test"])
-    .bind(vec!["sender@acme.test", "recipient@client.test"])
+    .bind(vec![sender_domain.as_str(), recipient_domain.as_str()])
+    .bind(vec![sender_email.as_str(), recipient_email.as_str()])
     .fetch_one(&pool)
     .await
     .expect("organization contact links");
     assert_eq!(organization_link_count, 2);
+
+    let organization_relationship_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM relationships relationship
+        JOIN relationship_evidence evidence
+          ON evidence.relationship_id = relationship.relationship_id
+        JOIN organization_domains domain
+          ON domain.organization_id = relationship.target_entity_id
+        JOIN person_identities identity
+          ON identity.person_id = relationship.source_entity_id
+        WHERE relationship.source_entity_kind = 'persona'
+          AND relationship.target_entity_kind = 'organization'
+          AND relationship.relationship_type = 'member_of'
+          AND relationship.review_state = 'system_accepted'
+          AND relationship.metadata->>'compatibility_table' = 'organization_contact_links'
+          AND relationship.metadata->>'source' = 'email_sync'
+          AND evidence.source_kind = 'communication'
+          AND evidence.source_id = $1
+          AND domain.domain = ANY($2)
+          AND identity.identity_value = ANY($3)
+        "#,
+    )
+    .bind(&message_id)
+    .bind(vec![sender_domain.as_str(), recipient_domain.as_str()])
+    .bind(vec![sender_email.as_str(), recipient_email.as_str()])
+    .fetch_one(&pool)
+    .await
+    .expect("organization relationships");
+    assert_eq!(organization_relationship_count, 2);
+}
+
+#[tokio::test]
+async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skipping live email sync pipeline test: HERMES_TEST_DATABASE_URL is not set");
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let suffix = unique_suffix();
+    let account_id = format!("acct_sync_candidates_{suffix}");
+    let provider_record_id = format!("sync-candidates-message-{suffix}");
+    let sender_email = format!("candidate-sender-{suffix}@example.net");
+    let recipient_email = format!("candidate-recipient-{suffix}@example.net");
+    let decision_title = format!("Use candidate refresh {suffix}");
+    let decision_rationale = "communication ingestion must build context";
+    let obligation_statement = format!("send the candidate refresh summary {suffix}");
+    let blob_root = tempfile::tempdir().expect("mail blob root");
+    let blob_store = LocalMailBlobStore::new(blob_root.path());
+
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &account_id,
+            EmailProviderKind::Imap,
+            "Sync candidate IMAP",
+            format!("sync-candidates-{suffix}@example.net"),
+        ))
+        .await
+        .expect("store provider account");
+
+    let raw_rfc822 = format!(
+        "Subject: Candidate Pipeline\r\n\
+         From: Sender <{sender_email}>\r\n\
+         To: Recipient <{recipient_email}>\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\
+         \r\n\
+         Decision: {decision_title} because {decision_rationale}.\r\n\
+         I will {obligation_statement} by Friday 5pm.\r\n"
+    );
+    let raw_rfc822_base64 = base64::engine::general_purpose::STANDARD.encode(raw_rfc822);
+    let batch = EmailSyncBatch {
+        provider_kind: EmailProviderKind::Imap,
+        stream_id: "imap:INBOX".to_owned(),
+        checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 90})),
+        messages: vec![FetchedEmailMessage {
+            provider_record_id: provider_record_id.clone(),
+            source_fingerprint: format!("sha256:sync-candidates-{suffix}"),
+            occurred_at: Utc.timestamp_millis_opt(1_770_000_200_000).single(),
+            payload: json!({
+                "provider": "imap",
+                "uid": 90,
+                "raw_rfc822_base64": raw_rfc822_base64
+            }),
+        }],
+    };
+
+    let report = project_email_sync_batch_with_mail_blobs(
+        pool.clone(),
+        &blob_store,
+        &account_id,
+        format!("sync-candidates-batch-{suffix}"),
+        &batch,
+    )
+    .await
+    .expect("project email sync batch");
+
+    assert_eq!(report.projected_messages, 1);
+    assert_eq!(report.refreshed_decision_candidates, 1);
+    assert_eq!(report.refreshed_task_candidates, 1);
+
+    let message_id: String = sqlx::query_scalar(
+        r#"
+        SELECT message_id
+        FROM communication_messages
+        WHERE account_id = $1
+          AND provider_record_id = $2
+        "#,
+    )
+    .bind(&account_id)
+    .bind(&provider_record_id)
+    .fetch_one(&pool)
+    .await
+    .expect("projected message id");
+
+    let decision_row: (String, String, String, String) = sqlx::query_as(
+        r#"
+        SELECT decision.decision_id, decision.title, decision.rationale, decision.review_state
+        FROM decisions decision
+        JOIN decision_impacted_entities impacted
+          ON impacted.decision_id = decision.decision_id
+        WHERE impacted.entity_kind = 'communication'
+          AND impacted.entity_id = $1
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("decision candidate");
+    assert_eq!(decision_row.1, decision_title);
+    assert_eq!(decision_row.2, decision_rationale);
+    assert_eq!(decision_row.3, "suggested");
+
+    let task_candidate_row: (String, String, String, Option<String>) = sqlx::query_as(
+        r#"
+        SELECT title, candidate_kind, review_state, due_text
+        FROM task_candidates
+        WHERE source_kind = 'message'
+          AND source_id = $1
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("obligation task candidate");
+    assert_eq!(task_candidate_row.0, obligation_statement);
+    assert_eq!(task_candidate_row.1, "obligation_task");
+    assert_eq!(task_candidate_row.2, "suggested");
+    assert_eq!(task_candidate_row.3.as_deref(), Some("Friday 5pm"));
+
+    let task_count =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tasks WHERE source_id = $1")
+            .bind(&message_id)
+            .fetch_one(&pool)
+            .await
+            .expect("task count");
+    let obligation_count =
+        sqlx::query_scalar::<_, i64>("SELECT count(*) FROM obligations WHERE statement = $1")
+            .bind(&obligation_statement)
+            .fetch_one(&pool)
+            .await
+            .expect("obligation count");
+    assert_eq!(task_count, 0);
+    assert_eq!(obligation_count, 0);
 }
 
 #[tokio::test]

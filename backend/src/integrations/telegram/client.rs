@@ -6,6 +6,7 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
+use crate::domains::decisions::{DecisionStore, DecisionStoreError};
 use crate::domains::mail::core::{
     CommunicationIngestionError, CommunicationIngestionStore, CommunicationProviderKind,
     NewProviderAccount, NewProviderAccountSecretBinding, NewRawCommunicationRecord,
@@ -14,6 +15,7 @@ use crate::domains::mail::core::{
 use crate::domains::mail::messages::{
     MessageProjectionError, MessageProjectionStore, NewProjectedMessage,
 };
+use crate::domains::tasks::candidates::{TaskCandidateError, TaskCandidateStore};
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatSnapshot, TelegramTdlibMessageSnapshot,
 };
@@ -588,11 +590,27 @@ impl TelegramStore {
         let projected =
             project_raw_telegram_message(&MessageProjectionStore::new(self.pool.clone()), &raw)
                 .await?;
+        self.refresh_message_intelligence_candidates(&projected.message_id)
+            .await?;
 
         Ok(TelegramMessageIngestResult {
             raw_record_id: raw.raw_record_id,
             message_id: projected.message_id,
         })
+    }
+
+    async fn refresh_message_intelligence_candidates(
+        &self,
+        message_id: &str,
+    ) -> Result<(), TelegramError> {
+        let message_ids = vec![message_id.to_owned()];
+        DecisionStore::new(self.pool.clone())
+            .refresh_message_candidates_for_ids(&message_ids)
+            .await?;
+        TaskCandidateStore::new(self.pool.clone())
+            .refresh_message_candidates_for_ids(&message_ids)
+            .await?;
+        Ok(())
     }
 
     async fn telegram_provider_account(
@@ -1370,6 +1388,12 @@ pub enum TelegramError {
 
     #[error(transparent)]
     MessageProjection(#[from] MessageProjectionError),
+
+    #[error(transparent)]
+    Decision(#[from] DecisionStoreError),
+
+    #[error(transparent)]
+    TaskCandidate(#[from] TaskCandidateError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

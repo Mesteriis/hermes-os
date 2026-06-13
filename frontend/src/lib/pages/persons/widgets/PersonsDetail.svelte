@@ -1,7 +1,9 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
+	import * as personsService from '$lib/services/persons';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+	import type { PersonDossier } from '$lib/api';
 
 	const _ = (key: string) => t($currentLocale, key);
 
@@ -32,13 +34,27 @@
 
 	interface Props {
 		selectedPerson: PersonItem | null;
+		personDossier: PersonDossier | null;
+		isPersonDossierLoading: boolean;
+		personDossierError: string;
 		whatsNew: FeedItem[];
 		projects: ProjectItem[];
 		isLayoutEditing: boolean;
 		isWidgetVisible: (id: string) => boolean;
 	}
 
-	let { selectedPerson, whatsNew, projects, isLayoutEditing, isWidgetVisible }: Props = $props();
+	let {
+		selectedPerson,
+		personDossier,
+		isPersonDossierLoading,
+		personDossierError,
+		whatsNew,
+		projects,
+		isLayoutEditing,
+		isWidgetVisible
+	}: Props = $props();
+
+	let dossierPreview = $derived(personDossier ? personsService.dossierSectionPreview(personDossier) : []);
 </script>
 
 <section class="person-detail">
@@ -79,7 +95,26 @@
 		</div>
 		<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-about" data-widget-hidden={!isWidgetVisible('persons-about')}>
 			<WidgetEditChrome widgetId="persons-about" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />
-			<section class="panel info-card"><h2>About</h2><p>John is a strategic consulting partner. We have been working together since 2021 on multiple projects including Hermes Hub and IRIS platform development.</p><div class="tag-cloud"><span>Decision Maker</span><span>Executive</span><span>Strategic</span><span>Tech Enthusiast</span></div></section>
+			<section class="panel info-card">
+				<h2>Persona Dossier</h2>
+				{#if isPersonDossierLoading}
+					<p>Loading dossier...</p>
+				{:else if personDossierError}
+					<p class="inline-error">{personDossierError}</p>
+				{:else if personDossier}
+					<p>{personDossier.summary || 'No dossier summary yet.'}</p>
+					{#if dossierPreview.length}
+						<div class="tag-cloud">
+							{#each dossierPreview as item}
+								<span>{item}</span>
+							{/each}
+						</div>
+					{/if}
+					<small>{personDossier.source_refs.length} source refs · generated {new Date(personDossier.generated_at).toLocaleString()}</small>
+				{:else}
+					<p>No dossier generated yet.</p>
+				{/if}
+			</section>
 		</div>
 		<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-relationship-strength" data-widget-hidden={!isWidgetVisible('persons-relationship-strength')}>
 			<WidgetEditChrome widgetId="persons-relationship-strength" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />

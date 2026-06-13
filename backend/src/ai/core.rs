@@ -17,6 +17,7 @@ use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 use crate::domains::graph::core::{GraphNodeKind, node_id};
+use crate::domains::persons::api::{PersonProjectionError, PersonProjectionStore};
 use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
 use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope};
 
@@ -503,6 +504,8 @@ impl AiRunStore {
                 model_config,
                 query,
                 actor_id,
+                agent_persona_id,
+                owner_persona_id,
                 causation_id,
                 correlation_id,
                 requested_event_id,
@@ -510,7 +513,7 @@ impl AiRunStore {
                 updated_at
             )
             VALUES (
-                $1, $2, 'requested', $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now()
+                $1, $2, 'requested', $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, now(), now()
             )
             ON CONFLICT (run_id)
             DO UPDATE SET
@@ -525,6 +528,8 @@ impl AiRunStore {
                 citations = '[]'::jsonb,
                 error_summary = NULL,
                 actor_id = EXCLUDED.actor_id,
+                agent_persona_id = EXCLUDED.agent_persona_id,
+                owner_persona_id = EXCLUDED.owner_persona_id,
                 causation_id = EXCLUDED.causation_id,
                 correlation_id = EXCLUDED.correlation_id,
                 requested_event_id = EXCLUDED.requested_event_id,
@@ -545,6 +550,8 @@ impl AiRunStore {
         .bind(&run.model_config)
         .bind(&run.query)
         .bind(&run.actor_id)
+        .bind(&run.agent_persona_id)
+        .bind(&run.owner_persona_id)
         .bind(&run.causation_id)
         .bind(&run.correlation_id)
         .bind(&run.requested_event_id)
@@ -665,6 +672,8 @@ pub struct NewAiRun {
     pub model_config: Value,
     pub query: String,
     pub actor_id: String,
+    pub agent_persona_id: Option<String>,
+    pub owner_persona_id: Option<String>,
     pub causation_id: Option<String>,
     pub correlation_id: Option<String>,
     pub requested_event_id: String,
@@ -679,6 +688,12 @@ impl NewAiRun {
         validate_non_empty("prompt_template_version", &self.prompt_template_version)?;
         validate_non_empty("query", &self.query)?;
         validate_non_empty("actor_id", &self.actor_id)?;
+        if let Some(agent_persona_id) = &self.agent_persona_id {
+            validate_non_empty("agent_persona_id", agent_persona_id)?;
+        }
+        if let Some(owner_persona_id) = &self.owner_persona_id {
+            validate_non_empty("owner_persona_id", owner_persona_id)?;
+        }
         validate_non_empty("requested_event_id", &self.requested_event_id)?;
         if !self.model_config.is_object() {
             return Err(AiError::InvalidRequest(
@@ -703,6 +718,8 @@ pub struct AiAgentRun {
     pub citations: Value,
     pub error_summary: Option<String>,
     pub actor_id: String,
+    pub agent_persona_id: Option<String>,
+    pub owner_persona_id: Option<String>,
     pub causation_id: Option<String>,
     pub correlation_id: Option<String>,
     pub requested_event_id: Option<String>,
@@ -762,6 +779,11 @@ struct AiRunEvent<'a> {
     query: &'a str,
     payload: Value,
     correlation_id: Option<&'a str>,
+}
+
+struct AiRunAttribution {
+    agent_persona_id: String,
+    owner_persona_id: Option<String>,
 }
 
 impl AiService {
@@ -847,6 +869,7 @@ impl AiService {
         let completed_event_id = event_id_from_command("ai.run.completed", &command_id);
         let run_store = AiRunStore::new(self.pool.clone());
         let chat_model = self.model_routing.default_chat.clone();
+        let attribution = self.run_attribution(&agent_id).await?;
 
         run_store
             .start_run(&NewAiRun {
@@ -858,6 +881,8 @@ impl AiService {
                 model_config: self.model_config(),
                 query: query.clone(),
                 actor_id: actor_id.to_owned(),
+                agent_persona_id: Some(attribution.agent_persona_id.clone()),
+                owner_persona_id: attribution.owner_persona_id.clone(),
                 causation_id: request.causation_id.clone(),
                 correlation_id: request.correlation_id.clone(),
                 requested_event_id: requested_event_id.clone(),
@@ -906,6 +931,8 @@ impl AiService {
         Ok(AiAnswerResponse {
             run_id,
             agent_id,
+            agent_persona_id: attribution.agent_persona_id,
+            owner_persona_id: attribution.owner_persona_id,
             status: stored.status,
             answer: chat.content,
             citations,
@@ -932,6 +959,7 @@ impl AiService {
             event_id_from_command("ai.task_extraction.completed", &command_id);
         let run_store = AiRunStore::new(self.pool.clone());
         let chat_model = self.model_routing.extraction.clone();
+        let attribution = self.run_attribution(&agent_id).await?;
 
         run_store
             .start_run(&NewAiRun {
@@ -943,6 +971,8 @@ impl AiService {
                 model_config: self.model_config(),
                 query: query.clone(),
                 actor_id: actor_id.to_owned(),
+                agent_persona_id: Some(attribution.agent_persona_id.clone()),
+                owner_persona_id: attribution.owner_persona_id.clone(),
                 causation_id: request.causation_id.clone(),
                 correlation_id: request.correlation_id.clone(),
                 requested_event_id: requested_event_id.clone(),
@@ -1011,6 +1041,8 @@ impl AiService {
         Ok(AiTaskCandidateRefreshResponse {
             run_id,
             agent_id,
+            agent_persona_id: attribution.agent_persona_id,
+            owner_persona_id: attribution.owner_persona_id,
             status: stored.status,
             created_count,
             citations,
@@ -1040,6 +1072,7 @@ impl AiService {
             request.project_id.as_deref(),
             request.person_id.as_deref(),
         );
+        let attribution = self.run_attribution(&agent_id).await?;
 
         run_store
             .start_run(&NewAiRun {
@@ -1051,6 +1084,8 @@ impl AiService {
                 model_config: self.model_config(),
                 query: query.clone(),
                 actor_id: actor_id.to_owned(),
+                agent_persona_id: Some(attribution.agent_persona_id.clone()),
+                owner_persona_id: attribution.owner_persona_id.clone(),
                 causation_id: request.causation_id.clone(),
                 correlation_id: request.correlation_id.clone(),
                 requested_event_id: requested_event_id.clone(),
@@ -1104,6 +1139,8 @@ impl AiService {
         Ok(AiMeetingPrepResponse {
             run_id,
             agent_id,
+            agent_persona_id: attribution.agent_persona_id,
+            owner_persona_id: attribution.owner_persona_id,
             status: stored.status,
             briefing: chat.content,
             citations,
@@ -1111,6 +1148,22 @@ impl AiService {
             embedding_model: self.model_routing.embeddings.clone(),
             created_at: stored.started_at,
             duration_ms,
+        })
+    }
+
+    async fn run_attribution(&self, agent_id: &str) -> Result<AiRunAttribution, AiError> {
+        let person_store = PersonProjectionStore::new(self.pool.clone());
+        let agent_persona = person_store
+            .upsert_ai_agent_persona(agent_id, ai_agent_display_name(agent_id)?)
+            .await?;
+        let owner_persona_id = person_store
+            .owner_persona()
+            .await?
+            .map(|owner| owner.person_id);
+
+        Ok(AiRunAttribution {
+            agent_persona_id: agent_persona.person_id,
+            owner_persona_id,
         })
     }
 
@@ -1349,6 +1402,9 @@ impl From<SemanticSearchResult> for AiCitation {
 pub struct AiAnswerResponse {
     pub run_id: String,
     pub agent_id: String,
+    pub agent_persona_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_persona_id: Option<String>,
     pub status: String,
     pub answer: String,
     pub citations: Vec<AiCitation>,
@@ -1362,6 +1418,9 @@ pub struct AiAnswerResponse {
 pub struct AiTaskCandidateRefreshResponse {
     pub run_id: String,
     pub agent_id: String,
+    pub agent_persona_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_persona_id: Option<String>,
     pub status: String,
     pub created_count: i64,
     pub citations: Vec<AiCitation>,
@@ -1375,6 +1434,9 @@ pub struct AiTaskCandidateRefreshResponse {
 pub struct AiMeetingPrepResponse {
     pub run_id: String,
     pub agent_id: String,
+    pub agent_persona_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner_persona_id: Option<String>,
     pub status: String,
     pub briefing: String,
     pub citations: Vec<AiCitation>,
@@ -1408,37 +1470,65 @@ pub struct AiAgentDescriptor {
     pub role: &'static str,
     pub default_model: String,
     pub status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persona_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persona_type: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub persona_email: Option<String>,
 }
 
 pub fn v3_agents(chat_model: &str) -> Vec<AiAgentDescriptor> {
     vec![
         AiAgentDescriptor {
             agent_id: "HESTIA",
-            display_name: "Hestia",
+            display_name: "hestia@sh-inc.ru",
             role: "meeting prep and home context briefing",
             default_model: chat_model.to_owned(),
             status: "available",
+            persona_id: None,
+            persona_type: None,
+            persona_email: None,
         },
         AiAgentDescriptor {
             agent_id: "HERMES",
-            display_name: "Hermes",
+            display_name: "hermes@sh-inc.ru",
             role: "workflow coordination and task candidate extraction",
             default_model: chat_model.to_owned(),
             status: "available",
+            persona_id: None,
+            persona_type: None,
+            persona_email: None,
         },
         AiAgentDescriptor {
             agent_id: "MNEMOSYNE",
-            display_name: "Mnemosyne",
+            display_name: "mnemosyne@sh-inc.ru",
             role: "source-backed memory answers",
             default_model: chat_model.to_owned(),
             status: "available",
+            persona_id: None,
+            persona_type: None,
+            persona_email: None,
         },
         AiAgentDescriptor {
             agent_id: "ATHENA",
-            display_name: "Athena",
+            display_name: "athena@sh-inc.ru",
             role: "planning review and decision support",
             default_model: chat_model.to_owned(),
             status: "available",
+            persona_id: None,
+            persona_type: None,
+            persona_email: None,
+        },
+        AiAgentDescriptor {
+            agent_id: "HEPHAESTUS",
+            display_name: "hephaestus@sh-inc.ru",
+            role: "development, maintenance and tool automation",
+            default_model: chat_model.to_owned(),
+            status: "available",
+            persona_id: None,
+            persona_type: None,
+            persona_email: None,
         },
     ]
 }
@@ -1479,6 +1569,9 @@ pub enum AiError {
 
     #[error(transparent)]
     EventStore(#[from] EventStoreError),
+
+    #[error(transparent)]
+    PersonProjection(#[from] PersonProjectionError),
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),
@@ -1608,7 +1701,18 @@ fn scoped_meeting_query(topic: &str, project_id: Option<&str>, person_id: Option
 
 fn validate_agent(agent_id: &str) -> Result<(), AiError> {
     match agent_id {
-        "HESTIA" | "HERMES" | "MNEMOSYNE" | "ATHENA" => Ok(()),
+        "HESTIA" | "HERMES" | "MNEMOSYNE" | "ATHENA" | "HEPHAESTUS" => Ok(()),
+        _ => Err(AiError::UnknownAgent(agent_id.to_owned())),
+    }
+}
+
+fn ai_agent_display_name(agent_id: &str) -> Result<&'static str, AiError> {
+    match agent_id {
+        "HESTIA" => Ok("hestia@sh-inc.ru"),
+        "HERMES" => Ok("hermes@sh-inc.ru"),
+        "MNEMOSYNE" => Ok("mnemosyne@sh-inc.ru"),
+        "ATHENA" => Ok("athena@sh-inc.ru"),
+        "HEPHAESTUS" => Ok("hephaestus@sh-inc.ru"),
         _ => Err(AiError::UnknownAgent(agent_id.to_owned())),
     }
 }
@@ -1658,6 +1762,8 @@ fn row_to_ai_agent_run(row: PgRow) -> Result<AiAgentRun, AiError> {
         citations: row.try_get("citations")?,
         error_summary: row.try_get("error_summary")?,
         actor_id: row.try_get("actor_id")?,
+        agent_persona_id: row.try_get("agent_persona_id")?,
+        owner_persona_id: row.try_get("owner_persona_id")?,
         causation_id: row.try_get("causation_id")?,
         correlation_id: row.try_get("correlation_id")?,
         requested_event_id: row.try_get("requested_event_id")?,

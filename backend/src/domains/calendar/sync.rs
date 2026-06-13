@@ -13,13 +13,7 @@ pub fn export_event_ics(
     let desc = description.unwrap_or("");
     let loc = location.unwrap_or("");
     format!(
-        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Hermes Hub//Calendar//EN\r\nBEGIN:VEVENT\r\nDTSTART;TZID={tz}:{start}\r\nDTEND;TZID={tz}:{end}\r\nSUMMARY:{summary}\r\nDESCRIPTION:{desc}\r\nLOCATION:{loc}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
-        tz = tz,
-        start = start_at,
-        end = end_at,
-        summary = title,
-        desc = desc,
-        loc = loc,
+        "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Hermes Hub//Calendar//EN\r\nBEGIN:VEVENT\r\nDTSTART;TZID={tz}:{start_at}\r\nDTEND;TZID={tz}:{end_at}\r\nSUMMARY:{title}\r\nDESCRIPTION:{desc}\r\nLOCATION:{loc}\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
     )
 }
 
@@ -32,21 +26,21 @@ pub fn export_event_md(
     end_at: &str,
     participants: &[String],
 ) -> String {
-    let mut md = format!("# {}\n\n**When:** {} - {}\n\n", title, start_at, end_at);
+    let mut md = format!("# {title}\n\n**When:** {start_at} - {end_at}\n\n");
     if let Some(loc) = location {
         if !loc.is_empty() {
-            md.push_str(&format!("**Where:** {}\n\n", loc));
+            md.push_str(&format!("**Where:** {loc}\n\n"));
         }
     }
     if let Some(desc) = description {
         if !desc.is_empty() {
-            md.push_str(&format!("{}\n\n", desc));
+            md.push_str(&format!("{desc}\n\n"));
         }
     }
     if !participants.is_empty() {
         md.push_str("## Participants\n\n");
         for p in participants {
-            md.push_str(&format!("- {}\n", p));
+            md.push_str(&format!("- {p}\n"));
         }
     }
     md

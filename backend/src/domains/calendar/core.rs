@@ -47,7 +47,7 @@ impl EventParticipantStore {
                     response_status: r.try_get("response_status")?,
                     organization_id: r.try_get("organization_id")?,
                     timezone: r.try_get("timezone")?,
-                    confidence: r.try_get("confidence")?,
+                    confidence: f64::from(r.try_get::<f32, _>("confidence")?),
                     created_at: r.try_get("created_at")?,
                 })
             })
@@ -75,7 +75,7 @@ impl EventParticipantStore {
             response_status: row.try_get("response_status")?,
             organization_id: row.try_get("organization_id")?,
             timezone: row.try_get("timezone")?,
-            confidence: row.try_get("confidence")?,
+            confidence: f64::from(row.try_get::<f32, _>("confidence")?),
             created_at: row.try_get("created_at")?,
         })
     }
@@ -117,7 +117,7 @@ impl EventRelationStore {
                     entity_id: r.try_get("entity_id")?,
                     relation_type: r.try_get("relation_type")?,
                     source: r.try_get("source")?,
-                    confidence: r.try_get("confidence")?,
+                    confidence: f64::from(r.try_get::<f32, _>("confidence")?),
                     created_at: r.try_get("created_at")?,
                 })
             })
@@ -140,7 +140,7 @@ impl EventRelationStore {
             entity_id: row.try_get("entity_id")?,
             relation_type: row.try_get("relation_type")?,
             source: row.try_get("source")?,
-            confidence: row.try_get("confidence")?,
+            confidence: f64::from(row.try_get::<f32, _>("confidence")?),
             created_at: row.try_get("created_at")?,
         })
     }

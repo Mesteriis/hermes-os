@@ -9,6 +9,7 @@ export type PrimaryNavId =
 	| 'documents'
 	| 'notes'
 	| 'knowledge'
+	| 'review'
 	| 'agents';
 
 export type CommunicationSectionId =
@@ -101,6 +102,7 @@ export const primaryWorkspaceNav: PrimaryWorkspaceNavItem[] = [
 	{ id: 'documents', label: 'Documents', icon: 'tabler:file-text' },
 	{ id: 'notes', label: 'Notes', icon: 'tabler:notes' },
 	{ id: 'knowledge', label: 'Knowledge Graph', icon: 'tabler:share' },
+	{ id: 'review', label: 'Review', icon: 'tabler:clipboard-check' },
 	{ id: 'agents', label: 'AI Agents', icon: 'tabler:sparkles' }
 ];
 

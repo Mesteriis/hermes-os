@@ -24,6 +24,7 @@ describe('sidebar navigation architecture', () => {
 			'documents',
 			'notes',
 			'knowledge',
+			'review',
 			'agents'
 		]);
 
@@ -74,6 +75,7 @@ describe('sidebar navigation architecture', () => {
 			'documents',
 			'notes',
 			'knowledge',
+			'review',
 			'agents'
 		]);
 		expect(settings.groups).toEqual([
@@ -102,6 +104,7 @@ describe('sidebar navigation architecture', () => {
 			'documents',
 			'notes',
 			'knowledge',
+			'review',
 			'agents',
 			'communications.mail',
 			'communications.telegram',
@@ -228,6 +231,7 @@ describe('sidebar navigation architecture', () => {
 			{ kind: 'item', id: 'documents' },
 			{ kind: 'item', id: 'notes' },
 			{ kind: 'item', id: 'knowledge' },
+			{ kind: 'item', id: 'review' },
 			{ kind: 'item', id: 'agents' }
 		]);
 	});

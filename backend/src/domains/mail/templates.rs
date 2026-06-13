@@ -80,7 +80,7 @@ impl EmailTemplateStore {
         let mut subject = template.subject_template.clone();
         let mut body = template.body_template.clone();
         for (key, value) in vars {
-            let placeholder = format!("{{{{{}}}}}", key);
+            let placeholder = format!("{{{{{key}}}}}");
             subject = subject.replace(&placeholder, value);
             body = body.replace(&placeholder, value);
         }
@@ -173,8 +173,8 @@ mod tests {
         let mut subject = tpl.subject_template.clone();
         let mut body = tpl.body_template.clone();
         for (key, value) in &vars {
-            subject = subject.replace(&format!("{{{{{}}}}}", key), value);
-            body = body.replace(&format!("{{{{{}}}}}", key), value);
+            subject = subject.replace(&format!("{{{{{key}}}}}"), value);
+            body = body.replace(&format!("{{{{{key}}}}}"), value);
         }
         assert_eq!(subject, "Hello Alice");
         assert_eq!(body, "Hi Alice,\n\nHow are you?");

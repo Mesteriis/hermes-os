@@ -2,6 +2,7 @@ import {
 	fetchAiAgents,
 	fetchAiRuns,
 	fetchAiStatus,
+	fetchOwnerPersona,
 	requestAiAnswer,
 	requestAiMeetingPrep,
 	refreshAiTaskCandidates,
@@ -11,22 +12,26 @@ import {
 	type AiMeetingPrepResponse,
 	type AiRun,
 	type AiStatus,
-	type AiTaskCandidateRefreshResponse
+	type AiTaskCandidateRefreshResponse,
+	type OwnerPersona
 } from '$lib/api';
 
 export async function loadAiWorkspace(): Promise<{
 	agents: AiAgent[];
 	runs: AiRun[];
 	status: AiStatus | null;
+	ownerPersona: OwnerPersona | null;
 	error: string;
 }> {
 	try {
-		const [agentResponse, runResponse] = await Promise.all([
+		const [agentResponse, runResponse, ownerResponse] = await Promise.all([
 			fetchAiAgents(),
-			fetchAiRuns(25)
+			fetchAiRuns(25),
+			fetchOwnerPersona()
 		]);
 		const agents = agentResponse.items;
 		const runs = runResponse.items;
+		const ownerPersona = ownerResponse.owner_persona;
 		let aiStatus: AiStatus | null = null;
 		let error = '';
 		try {
@@ -34,12 +39,13 @@ export async function loadAiWorkspace(): Promise<{
 		} catch (statusError) {
 			error = statusError instanceof Error ? statusError.message : 'Unknown AI status error';
 		}
-		return { agents, runs, status: aiStatus, error };
+		return { agents, runs, status: aiStatus, ownerPersona, error };
 	} catch (error) {
 		return {
 			agents: [],
 			runs: [],
 			status: null,
+			ownerPersona: null,
 			error: error instanceof Error ? error.message : 'Unknown AI runtime error'
 		};
 	}
@@ -130,7 +136,7 @@ export function agentCardView(agent: AiAgent, aiRuns: AiRun[]) {
 
 	return {
 		agentId: agent.agent_id,
-		name: agent.display_name,
+		name: agent.persona_email ?? agent.display_name,
 		summary: agent.role,
 		icon: visual.icon,
 		tasks: runs.length,

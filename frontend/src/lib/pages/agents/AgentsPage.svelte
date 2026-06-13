@@ -9,7 +9,8 @@
 		AiAnswerResponse,
 		AiMeetingPrepResponse,
 		AiTaskCandidateRefreshResponse,
-		AiCitation
+		AiCitation,
+		OwnerPersona
 	} from '$lib/api';
 	import AgentsRuntimeMetrics from './widgets/AgentsRuntimeMetrics.svelte';
 	import AgentsGrid from './widgets/AgentsGrid.svelte';
@@ -41,6 +42,7 @@
 	let aiStatus = $state<AiStatus | null>(null);
 	let aiAgents = $state<AiAgent[]>([]);
 	let aiRuns = $state<AiRun[]>([]);
+	let ownerPersona = $state<OwnerPersona | null>(null);
 	let aiError = $state('');
 	let isAiLoading = $state(false);
 	let isAiAnswerSubmitting = $state(false);
@@ -54,36 +56,8 @@
 	let aiMeetingPrepResult = $state<AiMeetingPrepResponse | null>(null);
 	let aiTaskRefreshResult = $state<AiTaskCandidateRefreshResponse | null>(null);
 
-	let agentCards = $derived(aiAgents.map(agentCardView));
+	let agentCards = $derived(aiAgents.map((agent) => aiService.agentCardView(agent, aiRuns)));
 	let selectedAgent = $derived(agentCards[selectedAgentIndex] ?? agentCards[0] ?? null);
-
-	function agentCardView(agent: AiAgent): AgentCard {
-		const visual = agentVisual(agent.agent_id);
-		const runs = aiRuns.filter((run) => run.agent_id === agent.agent_id);
-		const completed = runs.filter((run) => run.status === 'completed').length;
-		const success = runs.length > 0 ? Math.round((completed / runs.length) * 100) : 0;
-		return {
-			agentId: agent.agent_id,
-			name: agent.display_name,
-			summary: agent.role,
-			icon: visual.icon,
-			tasks: runs.length,
-			success,
-			status: agent.status,
-			tone: visual.tone,
-			model: agent.default_model
-		};
-	}
-
-	function agentVisual(agentId: string): { icon: string; tone: string } {
-		switch (agentId) {
-			case 'HESTIA': return { icon: 'tabler:calendar-stats', tone: 'mint' };
-			case 'HERMES': return { icon: 'tabler:route', tone: 'blue' };
-			case 'MNEMOSYNE': return { icon: 'tabler:database-search', tone: 'purple' };
-			case 'ATHENA': return { icon: 'tabler:target-arrow', tone: 'amber' };
-			default: return { icon: 'tabler:sparkles', tone: 'cyan' };
-		}
-	}
 
 	function runStatusLabel(run: AiRun) {
 		if (run.status === 'completed') return 'Completed';
@@ -134,6 +108,7 @@
 		aiAgents = result.agents;
 		aiRuns = result.runs;
 		aiStatus = result.status;
+		ownerPersona = result.ownerPersona;
 		aiError = result.error;
 		if (selectedAgentIndex >= aiAgents.length) selectedAgentIndex = 0;
 		isAiLoading = false;
@@ -220,7 +195,7 @@
 			/>
 		</section>
 
-		<AgentsRail {aiRuns} {aiStatus} {isLayoutEditing} {isWidgetVisible} {aiRuntimeSummary} {runStatusLabel} {formatDuration} {formatDateTime} {safeCitations} />
+		<AgentsRail {aiRuns} {aiStatus} {ownerPersona} {isLayoutEditing} {isWidgetVisible} {aiRuntimeSummary} {runStatusLabel} {formatDuration} {formatDateTime} {safeCitations} />
 	</div>
 
 </section>

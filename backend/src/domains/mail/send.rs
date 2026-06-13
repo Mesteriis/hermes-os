@@ -148,7 +148,7 @@ async fn send_smtp_after_greeting<T: AsyncRead + AsyncWrite + Unpin>(
         .chain(email.cc.iter())
         .chain(email.bcc.iter())
     {
-        write_cmd(&mut reader, &format!("RCPT TO:<{}>\r\n", r)).await?;
+        write_cmd(&mut reader, &format!("RCPT TO:<{r}>\r\n")).await?;
         if read_line(&mut reader, &mut buf).await?.starts_with("250") {
             accepted.push(r.clone());
         }

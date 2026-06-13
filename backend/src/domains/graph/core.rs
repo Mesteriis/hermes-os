@@ -446,6 +446,12 @@ pub enum GraphNodeKind {
     Message,
     Document,
     Project,
+    Organization,
+    Task,
+    Event,
+    Decision,
+    Obligation,
+    Knowledge,
 }
 
 impl GraphNodeKind {
@@ -456,6 +462,12 @@ impl GraphNodeKind {
             Self::Message => "message",
             Self::Document => "document",
             Self::Project => "project",
+            Self::Organization => "organization",
+            Self::Task => "task",
+            Self::Event => "event",
+            Self::Decision => "decision",
+            Self::Obligation => "obligation",
+            Self::Knowledge => "knowledge",
         }
     }
 }
@@ -472,6 +484,7 @@ pub enum RelationshipType {
     ProjectHasDocument,
     ProjectInvolvesPerson,
     ProjectInvolvesEmailAddress,
+    EntityRelationship,
 }
 
 impl RelationshipType {
@@ -486,6 +499,7 @@ impl RelationshipType {
             Self::ProjectHasDocument => "project_has_document",
             Self::ProjectInvolvesPerson => "project_involves_person",
             Self::ProjectInvolvesEmailAddress => "project_involves_email_address",
+            Self::EntityRelationship => "entity_relationship",
         }
     }
 }
@@ -517,6 +531,9 @@ pub enum GraphEvidenceSourceKind {
     Message,
     Document,
     RawRecord,
+    Relationship,
+    Decision,
+    Obligation,
 }
 
 impl GraphEvidenceSourceKind {
@@ -526,6 +543,9 @@ impl GraphEvidenceSourceKind {
             Self::Message => "message",
             Self::Document => "document",
             Self::RawRecord => "raw_record",
+            Self::Relationship => "relationship",
+            Self::Decision => "decision",
+            Self::Obligation => "obligation",
         }
     }
 }
@@ -827,6 +847,12 @@ fn parse_node_kind(value: String) -> Result<GraphNodeKind, GraphStoreError> {
         "message" => Ok(GraphNodeKind::Message),
         "document" => Ok(GraphNodeKind::Document),
         "project" => Ok(GraphNodeKind::Project),
+        "organization" => Ok(GraphNodeKind::Organization),
+        "task" => Ok(GraphNodeKind::Task),
+        "event" => Ok(GraphNodeKind::Event),
+        "decision" => Ok(GraphNodeKind::Decision),
+        "obligation" => Ok(GraphNodeKind::Obligation),
+        "knowledge" => Ok(GraphNodeKind::Knowledge),
         _ => Err(GraphStoreError::UnknownNodeKind(value)),
     }
 }
@@ -842,6 +868,7 @@ fn parse_relationship_type(value: String) -> Result<RelationshipType, GraphStore
         "project_has_document" => Ok(RelationshipType::ProjectHasDocument),
         "project_involves_person" => Ok(RelationshipType::ProjectInvolvesPerson),
         "project_involves_email_address" => Ok(RelationshipType::ProjectInvolvesEmailAddress),
+        "entity_relationship" => Ok(RelationshipType::EntityRelationship),
         _ => Err(GraphStoreError::UnknownRelationshipType(value)),
     }
 }
@@ -862,6 +889,9 @@ fn parse_evidence_source_kind(value: String) -> Result<GraphEvidenceSourceKind, 
         "message" => Ok(GraphEvidenceSourceKind::Message),
         "document" => Ok(GraphEvidenceSourceKind::Document),
         "raw_record" => Ok(GraphEvidenceSourceKind::RawRecord),
+        "relationship" => Ok(GraphEvidenceSourceKind::Relationship),
+        "decision" => Ok(GraphEvidenceSourceKind::Decision),
+        "obligation" => Ok(GraphEvidenceSourceKind::Obligation),
         _ => Err(GraphStoreError::UnknownEvidenceSourceKind(value)),
     }
 }

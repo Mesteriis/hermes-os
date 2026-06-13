@@ -148,6 +148,7 @@ use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntellig
 
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::*;
+use crate::domains::persons::api::PersonProjectionStore;
 
 pub(crate) async fn get_ai_status(
     State(state): State<AppState>,
@@ -192,10 +193,21 @@ pub(crate) async fn get_ai_agents(
     State(state): State<AppState>,
 ) -> Result<Json<AiAgentListResponse>, ApiError> {
     let runtime_settings = ai_runtime_settings(&state).await?;
+    let mut items = v3_agents(&runtime_settings.chat_model);
 
-    Ok(Json(AiAgentListResponse {
-        items: v3_agents(&runtime_settings.chat_model),
-    }))
+    if let Some(pool) = state.database.pool() {
+        let store = PersonProjectionStore::new(pool.clone());
+        for item in &mut items {
+            let persona = store
+                .upsert_ai_agent_persona(item.agent_id, item.display_name)
+                .await?;
+            item.persona_id = Some(persona.person_id);
+            item.persona_type = Some(persona.persona_type.as_str());
+            item.persona_email = Some(persona.email_address);
+        }
+    }
+
+    Ok(Json(AiAgentListResponse { items }))
 }
 
 pub(crate) async fn get_ai_runs(

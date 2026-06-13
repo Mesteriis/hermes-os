@@ -43,7 +43,7 @@ impl TaskBrainService {
     }
 
     pub async fn search_tasks(pool: &PgPool, query: &str) -> Result<Value, TaskBrainError> {
-        let pattern = format!("%{}%", query);
+        let pattern = format!("%{query}%");
         let rows = sqlx::query("SELECT task_id, title, hermes_status, priority_score, due_at FROM tasks WHERE title ILIKE $1 OR description ILIKE $1 ORDER BY COALESCE(priority_score,0) DESC LIMIT 20")
             .bind(&pattern).fetch_all(pool).await?;
         let items: Vec<Value> = rows

@@ -31,6 +31,10 @@ const scrollableWidgetIds = new Set<string>([
 	'notes-detail',
 	'knowledge-graph-canvas',
 	'knowledge-search-results',
+	'review-relationships',
+	'review-decisions',
+	'review-obligations',
+	'review-polygraph',
 	'telegram-chat-list',
 	'telegram-message-thread',
 	'telegram-sync-controls',
@@ -250,6 +254,11 @@ export const widgetRegistry: WidgetDefinition[] = [
 		['inspector'],
 		'api_backed'
 	),
+	widget('review-overview', 'Review Overview', ['review'], 'metrics', ['metrics'], 'api_backed'),
+	widget('review-relationships', 'Relationship Review', ['review'], 'main', ['main', 'rail'], 'api_backed'),
+	widget('review-decisions', 'Decision Review', ['review'], 'main', ['main', 'rail'], 'api_backed'),
+	widget('review-obligations', 'Obligation Review', ['review'], 'rail', ['rail', 'main'], 'api_backed'),
+	widget('review-polygraph', 'Polygraph Review', ['review'], 'rail', ['rail', 'main'], 'api_backed'),
 	widget('telegram-chat-list', 'Telegram Chats', ['telegram'], 'list', ['list'], 'api_backed'),
 	widget(
 		'telegram-message-thread',

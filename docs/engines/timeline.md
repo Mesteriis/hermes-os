@@ -51,9 +51,19 @@ Timeline-like concepts appear in Personas, Organizations, Calendar and product
 UI surfaces. Calendar owns scheduled events. The Timeline Engine owns derived
 chronological views across those records.
 
+The first backend baseline lives in `backend/src/engines/timeline.rs`. It owns
+shared timeline policy for bounded entity timeline queries and source-backed
+timeline event validation. Persona relationship events, Organization timeline
+events and Project detail timelines now use this shared policy while retaining
+their current compatibility storage and API shapes.
+
 ## Migration Plan
 
 1. Avoid new domain-specific timeline ownership.
 2. Link all timeline views to source events or dated records.
 3. Keep Calendar/Events separate from Timeline Engine.
-4. Add implementation plans before changing persisted event/timeline schemas.
+4. Keep compatibility tables as inputs until a schema migration ADR explicitly
+   changes persisted event or timeline schemas.
+5. Expand the shared engine from policy validation into event-log replay,
+   cross-domain timelines, period summaries, diffs, recency signals and gap
+   detection.

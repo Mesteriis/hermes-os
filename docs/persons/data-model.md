@@ -70,7 +70,7 @@ Rules:
 | Value | Meaning |
 |---|---|
 | `human` | A real person represented in memory. |
-| `ai_agent` | HESTIA or another local/future AI agent represented in the graph. |
+| `ai_agent` | HESTIA or another local/future AI agent represented in the graph. Registry-backed AI agent Personas use stable Persona IDs and compatibility email/display identities such as `hestia@sh-inc.ru`. |
 | `organization_proxy` | An organization-like actor when it must participate as a Persona in relationships. |
 | `system` | Local system actor used for provenance and automation attribution. |
 
@@ -81,7 +81,7 @@ Identity Resolution works over traces:
 ```yaml
 PersonaIdentity:
   identity_id: string
-  persona_id: string
+  persona_id: string | null
   trace_type:
     - email
     - phone
@@ -108,7 +108,8 @@ Rules:
 - Active exact traces should be unique per trace type and normalized value.
 - Ambiguous traces create identity resolution candidates.
 - Provider-specific identity must be preserved for replay and audit.
-- A trace may exist before it is attached to a Persona.
+- A trace may exist before it is attached to a Persona; compatibility storage
+  now supports unattached traces and explicit later assignment.
 
 ## IdentityResolutionCandidate
 
@@ -346,7 +347,7 @@ model.
 | `persons.notes` | `PersonaMemoryCard` | Compatibility cache only. Writes now materialize a sourced memory card. |
 | `persons.health_status` | Risk/attention compatibility cache | Not source of truth. `PersonRisk` writes now derive it from unresolved risks. |
 | `persons.watchlist` | `PersonaPreference(ui:watchlist)` compatibility cache | Not domain identity. Writes now materialize a sourced UI preference. |
-| `person_identities` | `PersonaIdentity` | Extend to document/message traces and disputed status. |
+| `person_identities` | `PersonaIdentity` | Compatibility schema supports account handles, `document_mention`, `message_participant`, `disputed` status and unattached trace assignment; Persona-native naming and review UI/API remain future work. |
 | `person_identity_candidates` | `IdentityResolutionCandidate` | Rename semantics from person/contact to Persona. |
 | `person_roles` | `Relationship` | Deprecated in target model. |
 | `person_personas` | `PersonaPreference` interaction context compatibility | Deprecated as a nested Persona concept. Compatibility writes now materialize `interaction_context:*` preferences with source references. |

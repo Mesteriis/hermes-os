@@ -91,3 +91,5 @@ ADR status vocabulary:
 - [ADR-0087 Contradiction Observation Persistence](ADR-0087-contradiction-observation-persistence.md)
 - [ADR-0088 Obligation Persistence](ADR-0088-obligation-persistence.md)
 - [ADR-0089 Decision Persistence](ADR-0089-decision-persistence.md)
+- [ADR-0090 Persona-Native Compatibility API Bridge](ADR-0090-persona-native-compatibility-api-bridge.md)
+- [ADR-0091 Telegram Production Client Capability Model](ADR-0091-telegram-production-client-capability-model.md)

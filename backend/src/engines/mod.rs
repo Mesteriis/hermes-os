@@ -1,3 +1,12 @@
 pub mod automation;
 pub mod automation_api;
+pub mod consistency;
+pub mod consistency_api;
+pub mod decision;
+pub mod enrichment;
+pub mod memory;
+pub mod obligation;
+pub mod risk;
 pub mod search;
+pub mod timeline;
+pub mod trust;

@@ -63,7 +63,7 @@ impl RichTemplateEngine {
     fn render_text(text: &str, vars: &HashMap<String, String>) -> String {
         let mut result = text.to_owned();
         for (key, value) in vars {
-            result = result.replace(&format!("{{{{{}}}}}", key), value);
+            result = result.replace(&format!("{{{{{key}}}}}"), value);
         }
         result
     }

@@ -2,10 +2,13 @@
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import * as personsService from '$lib/services/persons';
-	import type { PersonIdentityCandidate } from '$lib/api';
+	import * as relationshipsService from '$lib/services/relationships';
+	import type { PersonDossier, PersonIdentity, PersonIdentityCandidate, Relationship, RelationshipReviewState } from '$lib/api';
 	import PersonsList from './widgets/PersonsList.svelte';
 	import PersonsDetail from './widgets/PersonsDetail.svelte';
 	import PersonsIdentityReview from './widgets/PersonsIdentityReview.svelte';
+	import PersonsIdentityTraceReview from './widgets/PersonsIdentityTraceReview.svelte';
+	import PersonsRelationshipReview from './widgets/PersonsRelationshipReview.svelte';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
 
 	const _ = (key: string) => t($currentLocale, key);
@@ -35,6 +38,7 @@
 	};
 
 	type PersonItem = {
+		person_id: string;
 		name: string;
 		role: string;
 		company: string;
@@ -52,9 +56,21 @@
 	let persons = $state<PersonItem[]>([]);
 	let personList = $state<PersonItem[]>([]);
 	let selectedPersonIndex = $state(0);
+	let personDossier = $state<PersonDossier | null>(null);
 	let identityCandidates = $state<PersonIdentityCandidate[]>([]);
+	let identityTraces = $state<PersonIdentity[]>([]);
+	let relationships = $state<Relationship[]>([]);
 	let isIdentityCandidatesLoading = $state(false);
 	let identityCandidatesError = $state('');
+	let isIdentityTracesLoading = $state(false);
+	let identityTracesError = $state('');
+	let assigningIdentityTraceId = $state<string | null>(null);
+	let isPersonDossierLoading = $state(false);
+	let personDossierError = $state('');
+	let loadedDossierPersonId = $state<string | null>(null);
+	let isRelationshipsLoading = $state(false);
+	let relationshipsError = $state('');
+	let reviewingRelationshipId = $state<string | null>(null);
 
 	let selectedPerson = $derived(personList[selectedPersonIndex] ?? personList[0]);
 
@@ -133,6 +149,7 @@
 	async function loadPersons() {
 		const result = await personsService.loadPersons();
 		persons = result.persons.map((p) => ({
+			person_id: p.person_id,
 			name: p.display_name,
 			role: p.preferred_channel || _('Contact'),
 			company: p.email_address,
@@ -140,6 +157,28 @@
 			channel: p.preferred_channel ?? undefined
 		}));
 		personList = [...persons];
+	}
+
+	async function loadRelationshipReviewItems() {
+		isRelationshipsLoading = true;
+		const result = await relationshipsService.loadGlobalRelationshipReviewState();
+		relationships = result.relationships;
+		relationshipsError = result.error;
+		isRelationshipsLoading = false;
+	}
+
+	async function setRelationshipReview(
+		relationship: Relationship,
+		reviewState: Exclude<RelationshipReviewState, 'suggested' | 'system_accepted'>
+	) {
+		reviewingRelationshipId = relationship.relationship_id;
+		const result = await relationshipsService.reviewRelationshipItem(relationship, reviewState);
+		if (result.error) {
+			relationshipsError = result.error;
+		} else {
+			await loadRelationshipReviewItems();
+		}
+		reviewingRelationshipId = null;
 	}
 
 	async function loadIdentityCandidates() {
@@ -150,9 +189,57 @@
 		isIdentityCandidatesLoading = false;
 	}
 
+	async function loadSelectedPersonDossier(personId: string) {
+		loadedDossierPersonId = personId;
+		isPersonDossierLoading = true;
+		const result = await personsService.loadPersonDossier(personId);
+		if (loadedDossierPersonId === personId) {
+			personDossier = result.dossier;
+			personDossierError = result.error;
+			isPersonDossierLoading = false;
+		}
+	}
+
+	async function loadIdentityTraces() {
+		isIdentityTracesLoading = true;
+		const result = await personsService.loadIdentityTraces();
+		identityTraces = result.identityTraces;
+		identityTracesError = result.error;
+		isIdentityTracesLoading = false;
+	}
+
+	async function assignIdentityTraceToPersona(trace: PersonIdentity, personId: string) {
+		assigningIdentityTraceId = trace.id;
+		const result = await personsService.assignIdentityTraceToPersona(trace, personId);
+		if (result.error) {
+			identityTracesError = result.error;
+		} else {
+			await loadIdentityTraces();
+		}
+		assigningIdentityTraceId = null;
+	}
+
 	$effect(() => {
 		loadPersons();
 		loadIdentityCandidates();
+		loadIdentityTraces();
+	});
+
+	$effect(() => {
+		const personId = selectedPerson?.person_id ?? null;
+		if (!personId) {
+			loadedDossierPersonId = null;
+			personDossier = null;
+			personDossierError = '';
+			return;
+		}
+		if (personId !== loadedDossierPersonId) {
+			void loadSelectedPersonDossier(personId);
+		}
+	});
+
+	$effect(() => {
+		loadRelationshipReviewItems();
 	});
 </script>
 
@@ -167,6 +254,9 @@
 		/>
 		<PersonsDetail
 			{selectedPerson}
+			{personDossier}
+			{isPersonDossierLoading}
+			{personDossierError}
 			whatsNew={[]}
 			projects={[]}
 			{isLayoutEditing}
@@ -188,6 +278,29 @@
 				{setIdentityCandidateReview}
 				{splitConfirmedIdentityMerge}
 				{splitCandidateForConfirmedMerge}
+			/>
+			<PersonsIdentityTraceReview
+				{identityTraces}
+				persons={personList}
+				selectedPersonaId={selectedPerson?.person_id ?? null}
+				isLoading={isIdentityTracesLoading}
+				error={identityTracesError}
+				{assigningIdentityTraceId}
+				{isLayoutEditing}
+				{isWidgetVisible}
+				onReload={loadIdentityTraces}
+				onAssign={assignIdentityTraceToPersona}
+			/>
+			<PersonsRelationshipReview
+				{relationships}
+				selectedPersonaId={selectedPerson?.person_id ?? null}
+				isLoading={isRelationshipsLoading}
+				error={relationshipsError}
+				{reviewingRelationshipId}
+				{isLayoutEditing}
+				{isWidgetVisible}
+				onReload={loadRelationshipReviewItems}
+				onReview={setRelationshipReview}
 			/>
 			<div class="widget-frame" class:editing={isLayoutEditing} data-widget-id="persons-related-documents" data-widget-hidden={!isWidgetVisible('persons-related-documents')}>
 				<WidgetEditChrome widgetId="persons-related-documents" {isLayoutEditing} isSelected={false} onConfigure={() => {}} />

@@ -1,8 +1,10 @@
-FROM rust:1-bookworm
+FROM rust:1.88-bookworm
 
 ARG NODE_MAJOR=22
 
 ENV DEBIAN_FRONTEND=noninteractive
+
+RUN rustup component add rustfmt clippy
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \

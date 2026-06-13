@@ -68,7 +68,7 @@ impl OrganizationStore {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let org_id = format!("org:v1:{:x}", ts);
+        let org_id = format!("org:v1:{ts:x}");
         let row = sqlx::query(
             "INSERT INTO organizations (organization_id, display_name, org_type)
              VALUES ($1, $2, $3)

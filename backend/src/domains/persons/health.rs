@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
-use sqlx::Row;
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 #[derive(Clone, Debug, Serialize)]
@@ -108,16 +108,53 @@ impl PersonHealthStore {
     }
 
     pub async fn toggle_watchlist(&self, person_id: &str) -> Result<bool, PersonHealthError> {
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             "UPDATE persons SET watchlist = NOT watchlist WHERE person_id = $1 RETURNING watchlist",
         )
         .bind(person_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
-        Ok(row
-            .map(|r: sqlx::postgres::PgRow| r.try_get("watchlist").unwrap_or(false))
-            .unwrap_or(false))
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let watchlist = row.try_get("watchlist").unwrap_or(false);
+        sync_watchlist_preference_in_transaction(&mut transaction, person_id, watchlist).await?;
+        transaction.commit().await?;
+        Ok(watchlist)
     }
+}
+
+async fn sync_watchlist_preference_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    person_id: &str,
+    watchlist: bool,
+) -> Result<(), PersonHealthError> {
+    if watchlist {
+        sqlx::query(
+            "INSERT INTO person_preferences (person_id, preference_type, value, source, confidence)
+             VALUES ($1, 'ui:watchlist', 'true', $2, 1.0)
+             ON CONFLICT (person_id, preference_type)
+             DO UPDATE SET value = 'true', source = $2, confidence = 1.0, updated_at = now()",
+        )
+        .bind(person_id)
+        .bind(person_watchlist_source(person_id))
+        .execute(&mut **transaction)
+        .await?;
+        return Ok(());
+    }
+
+    sqlx::query(
+        "DELETE FROM person_preferences WHERE person_id = $1 AND preference_type = 'ui:watchlist'",
+    )
+    .bind(person_id)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(())
+}
+
+fn person_watchlist_source(person_id: &str) -> String {
+    format!("persons.watchlist:{person_id}")
 }
 
 #[derive(Debug, Error)]

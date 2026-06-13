@@ -6,6 +6,7 @@ use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
+use crate::domains::decisions::{DecisionStore, DecisionStoreError};
 use crate::domains::mail::core::{
     CommunicationIngestionError, CommunicationIngestionStore, CommunicationProviderKind,
     NewProviderAccount, NewRawCommunicationRecord,
@@ -13,6 +14,7 @@ use crate::domains::mail::core::{
 use crate::domains::mail::messages::{
     MessageProjectionError, MessageProjectionStore, NewProjectedMessage,
 };
+use crate::domains::tasks::candidates::{TaskCandidateError, TaskCandidateStore};
 
 const WHATSAPP_WEB_MESSAGE_RECORD_KIND: &str = "whatsapp_web_message";
 
@@ -234,6 +236,8 @@ impl WhatsappWebStore {
         let projected =
             project_raw_whatsapp_web_message(&MessageProjectionStore::new(self.pool.clone()), &raw)
                 .await?;
+        self.refresh_message_intelligence_candidates(&projected.message_id)
+            .await?;
 
         self.update_session_last_sync(&message.account_id, message.occurred_at)
             .await?;
@@ -242,6 +246,20 @@ impl WhatsappWebStore {
             raw_record_id: raw.raw_record_id,
             message_id: projected.message_id,
         })
+    }
+
+    async fn refresh_message_intelligence_candidates(
+        &self,
+        message_id: &str,
+    ) -> Result<(), WhatsappWebError> {
+        let message_ids = vec![message_id.to_owned()];
+        DecisionStore::new(self.pool.clone())
+            .refresh_message_candidates_for_ids(&message_ids)
+            .await?;
+        TaskCandidateStore::new(self.pool.clone())
+            .refresh_message_candidates_for_ids(&message_ids)
+            .await?;
+        Ok(())
     }
 
     pub async fn recent_messages(
@@ -567,6 +585,12 @@ pub enum WhatsappWebError {
 
     #[error(transparent)]
     MessageProjection(#[from] MessageProjectionError),
+
+    #[error(transparent)]
+    Decision(#[from] DecisionStoreError),
+
+    #[error(transparent)]
+    TaskCandidate(#[from] TaskCandidateError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

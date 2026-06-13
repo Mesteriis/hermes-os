@@ -1,9 +1,16 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, Transaction};
 use thiserror::Error;
+
+use crate::domains::relationships::{
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
+    RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
+    RelationshipStoreError,
+};
 
 // ── TaskProviderAccount ───────────────────────────────────────────────────
 
@@ -54,7 +61,7 @@ impl TaskProviderStore {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        let account_id = format!("tprov:v1:{:x}", ts);
+        let account_id = format!("tprov:v1:{ts:x}");
         let row = sqlx::query("INSERT INTO task_provider_accounts (account_id, provider, account_name) VALUES ($1,$2,$3) RETURNING account_id, provider, account_name, credentials_reference, sync_mode, capabilities, created_at, updated_at")
             .bind(&account_id).bind(provider).bind(account_name).fetch_one(&self.pool).await?;
         Ok(TaskProviderAccount {
@@ -218,7 +225,7 @@ impl TaskEvidenceStore {
         Self { pool }
     }
     pub async fn list(&self, task_id: &str) -> Result<Vec<TaskEvidence>, TaskCoreError> {
-        let rows = sqlx::query("SELECT id::text, task_id, source_type, source_id, quote, confidence, created_at FROM task_evidence WHERE task_id=$1 ORDER BY created_at DESC")
+        let rows = sqlx::query("SELECT id::text, task_id, source_type, source_id, quote, confidence::float8 AS confidence, created_at FROM task_evidence WHERE task_id=$1 ORDER BY created_at DESC")
             .bind(task_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
@@ -242,7 +249,7 @@ impl TaskEvidenceStore {
         quote: Option<&str>,
         confidence: Option<f64>,
     ) -> Result<TaskEvidence, TaskCoreError> {
-        let row = sqlx::query("INSERT INTO task_evidence (task_id, source_type, source_id, quote, confidence) VALUES ($1,$2,$3,$4,$5) RETURNING id::text, task_id, source_type, source_id, quote, confidence, created_at")
+        let row = sqlx::query("INSERT INTO task_evidence (task_id, source_type, source_id, quote, confidence) VALUES ($1,$2,$3,$4,$5) RETURNING id::text, task_id, source_type, source_id, quote, confidence::float8 AS confidence, created_at")
             .bind(task_id).bind(source_type).bind(source_id).bind(quote).bind(confidence.unwrap_or(1.0)).fetch_one(&self.pool).await?;
         Ok(TaskEvidence {
             id: row.try_get("id")?,
@@ -279,7 +286,7 @@ impl TaskRelationStore {
         Self { pool }
     }
     pub async fn list(&self, task_id: &str) -> Result<Vec<TaskRelation>, TaskCoreError> {
-        let rows = sqlx::query("SELECT id::text, task_id, entity_type, entity_id, relation_type, source, confidence, created_at FROM task_relations WHERE task_id=$1 ORDER BY relation_type")
+        let rows = sqlx::query("SELECT id::text, task_id, entity_type, entity_id, relation_type, source, confidence::float8 AS confidence, created_at FROM task_relations WHERE task_id=$1 ORDER BY relation_type")
             .bind(task_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
@@ -303,9 +310,10 @@ impl TaskRelationStore {
         entity_id: &str,
         relation_type: &str,
     ) -> Result<TaskRelation, TaskCoreError> {
-        let row = sqlx::query("INSERT INTO task_relations (task_id, entity_type, entity_id, relation_type) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id::text, task_id, entity_type, entity_id, relation_type, source, confidence, created_at")
-            .bind(task_id).bind(entity_type).bind(entity_id).bind(relation_type).fetch_one(&self.pool).await?;
-        Ok(TaskRelation {
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query("INSERT INTO task_relations (task_id, entity_type, entity_id, relation_type) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id::text, task_id, entity_type, entity_id, relation_type, source, confidence::float8 AS confidence, created_at")
+            .bind(task_id).bind(entity_type).bind(entity_id).bind(relation_type).fetch_one(&mut *transaction).await?;
+        let relation = TaskRelation {
             id: row.try_get("id")?,
             task_id: row.try_get("task_id")?,
             entity_type: row.try_get("entity_type")?,
@@ -314,7 +322,62 @@ impl TaskRelationStore {
             source: row.try_get("source")?,
             confidence: row.try_get("confidence")?,
             created_at: row.try_get("created_at")?,
-        })
+        };
+
+        Self::materialize_relationship_in_transaction(&mut transaction, &relation).await?;
+        transaction.commit().await?;
+
+        Ok(relation)
+    }
+
+    async fn materialize_relationship_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        relation: &TaskRelation,
+    ) -> Result<(), TaskCoreError> {
+        let Some(target_entity_kind) = task_relation_entity_kind(&relation.entity_type) else {
+            return Ok(());
+        };
+        let relationship = NewRelationship {
+            source_entity_kind: RelationshipEntityKind::Task,
+            source_entity_id: relation.task_id.clone(),
+            target_entity_kind,
+            target_entity_id: relation.entity_id.clone(),
+            relationship_type: relation.relation_type.clone(),
+            trust_score: 0.5,
+            strength_score: 0.6,
+            confidence: relation.confidence,
+            review_state: RelationshipReviewState::UserConfirmed,
+            valid_from: None,
+            valid_to: None,
+            metadata: json!({
+                "compatibility_table": "task_relations",
+                "compatibility_record_id": relation.id,
+                "source": relation.source,
+                "entity_type": relation.entity_type
+            }),
+        };
+        let evidence = NewRelationshipEvidence::new(
+            RelationshipEvidenceSourceKind::RawRecord,
+            relation.id.clone(),
+        )
+        .excerpt("Task relation was recorded through compatibility task relation data.")
+        .metadata(json!({
+            "compatibility_table": "task_relations",
+            "task_id": relation.task_id,
+            "entity_type": relation.entity_type,
+            "entity_id": relation.entity_id,
+            "relation_type": relation.relation_type,
+            "source": relation.source
+        }));
+
+        RelationshipStore::upsert_with_evidence_in_transaction(
+            transaction,
+            &relationship,
+            &[evidence],
+        )
+        .await?;
+
+        Ok(())
     }
 }
 
@@ -428,6 +491,26 @@ impl TaskSubtaskStore {
 pub enum TaskCoreError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Relationship(#[from] RelationshipStoreError),
     #[error("not found")]
     NotFound,
+}
+
+fn task_relation_entity_kind(entity_type: &str) -> Option<RelationshipEntityKind> {
+    match entity_type.trim() {
+        "person" | "persona" | "contact" => Some(RelationshipEntityKind::Persona),
+        "organization" | "org" => Some(RelationshipEntityKind::Organization),
+        "project" => Some(RelationshipEntityKind::Project),
+        "communication" | "communication_message" | "message" | "email" => {
+            Some(RelationshipEntityKind::Communication)
+        }
+        "document" | "doc" => Some(RelationshipEntityKind::Document),
+        "task" => Some(RelationshipEntityKind::Task),
+        "event" | "calendar_event" => Some(RelationshipEntityKind::Event),
+        "decision" => Some(RelationshipEntityKind::Decision),
+        "obligation" => Some(RelationshipEntityKind::Obligation),
+        "knowledge" | "knowledge_item" => Some(RelationshipEntityKind::Knowledge),
+        _ => None,
+    }
 }
