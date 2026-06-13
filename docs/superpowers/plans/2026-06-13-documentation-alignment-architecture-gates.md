@@ -435,7 +435,39 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 11: Continue Backend God File Elimination
+### Task 11: Calendar CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/pages/calendar/CalendarPage.svelte`
+- Create: `frontend/src/lib/pages/calendar/calendar.css`
+
+- [x] **Step 1: Verify calendar CSS ownership failure**
+
+Run:
+
+```sh
+! rg "^(\.(calendar-layout|week-board|week-header|time-grid|event-block|now-line|event-list|event-row|new-event-form|brief-section|brief-participants))" frontend/src/lib/pages/pages.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns Calendar layout, week board, event rows, new event form and event brief selectors.
+
+- [x] **Step 2: Extract calendar CSS chunk**
+
+Move Calendar page layout, week board, event list, new event form and event detail selectors into `frontend/src/lib/pages/calendar/calendar.css` and import it from `CalendarPage.svelte`. Keep shared `.calendar-page` page-shell rules in root for the later common page-shell split.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg "^(\.(calendar-layout|week-board|week-header|time-grid|event-block|now-line|event-list|event-row|new-event-form|brief-section|brief-participants))" frontend/src/lib/pages/pages.css
+test "$(wc -l < frontend/src/lib/pages/calendar/calendar.css | tr -d ' ')" -le 700
+make lint-frontend
+make lint-architecture
+```
+
+### Task 12: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

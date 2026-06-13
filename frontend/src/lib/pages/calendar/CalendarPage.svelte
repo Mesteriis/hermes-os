@@ -8,6 +8,7 @@
 	import CalendarWeekGrid from './widgets/CalendarWeekGrid.svelte';
 	import CalendarUpcoming from './widgets/CalendarUpcoming.svelte';
 	import CalendarSourceStatus from './widgets/CalendarSourceStatus.svelte';
+	import './calendar.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

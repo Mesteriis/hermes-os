@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 18:49 CEST
+Дата последнего обновления: 2026-06-13 18:56 CEST
 
 ## Выполнено
 
@@ -25,6 +25,7 @@
 * [x] Account setup, shared setup controls, account modal и compose review CSS вынесены из `frontend/src/lib/pages/pages.css` в `frontend/src/lib/components/account-setup/accountSetup.css` и `frontend/src/lib/components/shared/*`; root `pages.css` сокращен до 4259 строк, новые CSS chunks меньше 700 строк.
 * [x] Settings, appearance, integrations, AI settings и shared `HermesSelect` CSS вынесены из `frontend/src/lib/pages/pages.css` в owner-файлы `frontend/src/lib/pages/settings/*.css` и `frontend/src/lib/components/shared/hermesSelect.css`; root `pages.css` сокращен до 2540 строк, новые CSS chunks меньше 700 строк.
 * [x] Agents-owned CSS вынесен из `frontend/src/lib/pages/pages.css` в `frontend/src/lib/pages/agents/agents.css`; root `pages.css` сокращен до 2324 строк, новый CSS chunk меньше 700 строк.
+* [x] Calendar-owned CSS вынесен из `frontend/src/lib/pages/pages.css` в `frontend/src/lib/pages/calendar/calendar.css`; root `pages.css` сокращен до 2042 строк, новый CSS chunk меньше 700 строк.
 
 ## В работе
 
@@ -55,7 +56,7 @@
 * В backend остаются source files больше 700 строк за пределами уже разделенного `mail/handlers`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
 * Во frontend остаются крупные service/source files больше 700 строк, включая `frontend/src/lib/services/accounts.ts`; их нельзя расширять новыми возможностями без предварительной декомпозиции.
-* Во frontend остаются крупные shared CSS files (`pages.css` — 2324 строки, `panels.css` — 1780 строк, `app.css` — 1021 строк, `sidebar.css` — 841 строк), которые блокируют ownership-based компонентную декомпозицию.
+* Во frontend остаются крупные shared CSS files (`pages.css` — 2042 строки, `panels.css` — 1780 строк, `app.css` — 1021 строк, `sidebar.css` — 841 строк), которые блокируют ownership-based компонентную декомпозицию.
 * Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
 * Некоторые реализованные engine baseline ещё не подключены как полноценные доменные процессы.
 
