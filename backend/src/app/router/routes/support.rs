@@ -1,0 +1,24 @@
+pub(super) use axum::routing::{delete, get, patch, post, put};
+pub(super) use axum::{Router, middleware};
+
+pub(super) use crate::ai::api::*;
+pub(super) use crate::app::AppState;
+pub(super) use crate::app::guard;
+pub(super) use crate::domains::calendar::handlers::*;
+pub(super) use crate::domains::decisions::api::*;
+pub(super) use crate::domains::documents::api::*;
+pub(super) use crate::domains::graph::api::*;
+pub(super) use crate::domains::mail::handlers::*;
+pub(super) use crate::domains::obligations::api::*;
+pub(super) use crate::domains::organizations::handlers::*;
+pub(super) use crate::domains::persons::handlers::*;
+pub(super) use crate::domains::projects::api::*;
+pub(super) use crate::domains::relationships::api::*;
+pub(super) use crate::domains::settings::api::*;
+pub(super) use crate::domains::tasks::handlers::*;
+pub(super) use crate::engines::automation_api::*;
+pub(super) use crate::engines::consistency_api::*;
+pub(super) use crate::integrations::telegram::api::*;
+pub(super) use crate::integrations::whatsapp::api::*;
+pub(super) use crate::platform::calls_api::*;
+pub(super) use crate::platform::events_api::*;
