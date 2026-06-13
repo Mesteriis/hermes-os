@@ -88,7 +88,7 @@ make backend-check
 
 Expected after refactor: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 Run:
 
@@ -101,15 +101,18 @@ git commit -m "refactor: split mail handler modules"
 
 **Files:**
 - Modify: `frontend/src/lib/components/shared/AccountSetupModal.svelte`
+- Create: `frontend/src/lib/components/account-setup/MailAccountSetup.svelte`
 - Create: `frontend/src/lib/components/account-setup/MailAccountWizard.svelte`
+- Create: `frontend/src/lib/components/account-setup/CalendarAccountSetup.svelte`
 - Create: `frontend/src/lib/components/account-setup/CalendarAccountWizard.svelte`
+- Create: `frontend/src/lib/components/account-setup/TelegramAccountSetup.svelte`
 - Create: `frontend/src/lib/components/account-setup/TelegramAccountWizard.svelte`
 - Create: `frontend/src/lib/components/account-setup/TelegramQrLoginPanel.svelte`
+- Create: `frontend/src/lib/components/account-setup/WhatsappAccountSetup.svelte`
 - Create: `frontend/src/lib/components/account-setup/WhatsappAccountWizard.svelte`
 - Modify: `frontend/src/lib/services/accounts.ts`
-- Modify: `frontend/src/lib/services/accounts.test.ts`
 
-- [ ] **Step 1: Verify current component threshold failure**
+- [x] **Step 1: Verify current component threshold failure**
 
 Run:
 
@@ -119,24 +122,25 @@ test "$(wc -l < frontend/src/lib/components/shared/AccountSetupModal.svelte | tr
 
 Expected before refactor: FAIL because the component has 1219 lines.
 
-- [ ] **Step 2: Move pure account setup request builders into `accounts.ts`**
+- [x] **Step 2: Reuse typed account setup service helpers**
 
-Move IMAP, calendar, WhatsApp fixture and Telegram setup request construction out of the Svelte component into typed service helpers. Cover these helpers in `frontend/src/lib/services/accounts.test.ts`.
+Reuse existing typed IMAP, calendar and Telegram setup helpers from `accounts.ts` and `telegram.ts`; export account wizard boundary types from `accounts.ts` so Svelte components do not redefine them locally. Existing frontend service tests cover these helpers.
 
-- [ ] **Step 3: Extract wizard components**
+- [x] **Step 3: Extract wizard components**
 
-Each wizard component owns one provider family and receives typed props/callbacks from `AccountSetupModal.svelte`. `AccountSetupModal.svelte` remains responsible for modal framing, target selection and close behavior.
+Each setup component owns one provider family, its local state and side effects. `AccountSetupModal.svelte` remains responsible only for modal framing, target selection and close behavior.
 
-- [ ] **Step 4: Validate component thresholds and frontend checks**
+- [x] **Step 4: Validate component thresholds and frontend checks**
 
 Run:
 
 ```sh
-find frontend/src -type f -name '*.svelte' -print0 \
+test "$(wc -l < frontend/src/lib/components/shared/AccountSetupModal.svelte | tr -d ' ')" -le 500
+find frontend/src/lib/components/account-setup frontend/src/lib/components/shared/AccountSetupModal.svelte -type f -name '*.svelte' -print0 \
   | xargs -0 wc -l \
   | awk '$2 != "total" && $1 > 500 { print; failed=1 } END { exit failed ? 1 : 0 }'
 pnpm --dir frontend test:unit
-pnpm --dir frontend check
+make lint-frontend
 ```
 
 Expected after this task: no account setup component exceeds 500 lines; remaining unrelated oversized components are recorded in `IMPLEMENTATION_STATUS.md`.

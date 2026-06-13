@@ -20,10 +20,10 @@ import {
 } from '$lib/api';
 import { formatDateTime } from './formatting';
 
-type Provider = 'gmail' | 'icloud' | 'imap';
-type AccountWizardKind = 'mail' | 'calendar' | 'telegram' | 'whatsapp';
-type AccountWizardTarget = AccountWizardKind | Provider;
-type MailService =
+export type Provider = 'gmail' | 'icloud' | 'imap';
+export type AccountWizardKind = 'mail' | 'calendar' | 'telegram' | 'whatsapp';
+export type AccountWizardTarget = AccountWizardKind | Provider;
+export type MailService =
 	| Provider
 	| 'microsoft'
 	| 'exchange'
@@ -33,10 +33,12 @@ type MailService =
 	| 'proton'
 	| 'yahoo'
 	| 'aol';
-type MailWizardStep = 'provider' | 'details';
-type CalendarProvider = 'local' | 'google' | 'microsoft' | 'apple' | 'caldav' | 'ics';
-type CalendarWizardStep = 'provider' | 'details';
-type TelegramWizardStep = 'account' | 'auth' | 'details';
+export type MailWizardStep = 'provider' | 'details';
+export type CalendarProvider = 'local' | 'google' | 'microsoft' | 'apple' | 'caldav' | 'ics';
+export type CalendarWizardStep = 'provider' | 'details';
+export type TelegramSetupMode = 'fixture' | 'live';
+export type TelegramAuthMethod = 'fixture' | 'phone' | 'qr' | 'bot_token';
+export type TelegramWizardStep = 'account' | 'auth' | 'details';
 
 export const GOOGLE_WORKSPACE_OAUTH_SCOPES = [
 	'https://www.googleapis.com/auth/gmail.readonly',

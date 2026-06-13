@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 17:04 CEST
+Дата последнего обновления: 2026-06-13 17:37 CEST
 
 ## Выполнено
 
@@ -15,6 +15,8 @@
 * [x] `backend/src/domains/mail/handlers/mod.rs` разделен на bounded handler modules; все файлы в `backend/src/domains/mail/handlers/` меньше 700 строк.
 * [x] Создан план architecture-gate работ: `docs/superpowers/plans/2026-06-13-documentation-alignment-architecture-gates.md`.
 * [x] Восстановлены текущие architecture/code boundary guards и backend lint gate, выявленные pre-commit hook.
+* [x] `frontend/src/lib/components/shared/AccountSetupModal.svelte` сокращен с 1219 до 97 строк и оставлен как modal shell/router.
+* [x] Mail, Calendar, Telegram и WhatsApp setup flows вынесены в `frontend/src/lib/components/account-setup/`; все новые account setup компоненты меньше 500 строк.
 
 ## В работе
 
@@ -25,7 +27,6 @@
 
 ## Осталось реализовать
 
-* [ ] Декомпозировать `frontend/src/lib/components/shared/AccountSetupModal.svelte` на доменные wizard-компоненты и оставить modal shell тонким.
 * [ ] Декомпозировать `frontend/src/lib/pages/telegram/TelegramPage.svelte` перед расширением Telegram parity.
 * [ ] Декомпозировать `frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte`.
 * [ ] Декомпозировать `frontend/src/lib/pages/communications/widgets/CommunicationsMessageDetail.svelte`.
@@ -47,11 +48,12 @@
 
 * В коде ещё есть compatibility layers вокруг `persons`, `health`, `watchtower`, legacy Person/Contact терминологии и старых API.
 * В backend остаются source files больше 700 строк за пределами уже разделенного `mail/handlers`.
-* Во frontend остаются компоненты больше 500 строк: `AccountSetupModal.svelte`, `TelegramPage.svelte`, `AISettingsControlCenter.svelte`, `CommunicationsMessageDetail.svelte`.
+* Во frontend остаются компоненты больше 500 строк: `TelegramPage.svelte`, `AISettingsControlCenter.svelte`, `CommunicationsMessageDetail.svelte`.
+* Во frontend остаются крупные service/source files больше 700 строк, включая `frontend/src/lib/services/accounts.ts`; их нельзя расширять новыми возможностями без предварительной декомпозиции.
 * Во frontend остаются крупные shared CSS files, которые блокируют ownership-based компонентную декомпозицию.
 * Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
 * Некоторые реализованные engine baseline ещё не подключены как полноценные доменные процессы.
 
 ## Следующий шаг
 
-Декомпозировать `frontend/src/lib/components/shared/AccountSetupModal.svelte`: вынести mail, calendar, Telegram и WhatsApp setup flows в отдельные компоненты и покрыть чистые account setup helpers frontend unit-тестами.
+Декомпозировать `frontend/src/lib/pages/telegram/TelegramPage.svelte` перед расширением Telegram parity: вынести runtime status, capability panels и account action panels в focused components.
