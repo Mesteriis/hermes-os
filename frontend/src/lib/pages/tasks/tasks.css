@@ -42,6 +42,145 @@
 	grid-template-columns: 2fr 1fr 0.9fr 1fr 0.7fr;
 }
 
+.inline-metrics {
+	flex: 1;
+	grid-template-columns: repeat(5, minmax(92px, 1fr));
+}
+
+.inline-metrics.tiny {
+	max-width: 460px;
+	grid-template-columns: repeat(3, 1fr);
+}
+
+.table-head,
+.task-row {
+	display: grid;
+	align-items: center;
+	min-height: 46px;
+	border-bottom: 1px solid rgba(102, 189, 180, 0.08);
+	padding: 0 16px;
+}
+
+.table-head {
+	grid-template-columns: 2fr 0.9fr 1.2fr 1.2fr 0.9fr 0.8fr 0.9fr;
+	color: #9fb6b5;
+	font-size: 11px;
+}
+
+.task-row {
+	grid-template-columns: 22px 2fr 0.9fr 1.2fr 1.2fr 0.9fr 0.8fr 0.9fr;
+	color: var(--hh-color-text-soft);
+	font-size: 12px;
+}
+
+.task-row strong {
+	color: var(--hh-color-text-bright);
+	font-weight: 500;
+}
+
+.task-row span {
+	color: #c7d9d8;
+}
+
+.task-row time {
+	color: #a6bbbb;
+	font-size: 11px;
+	font-style: normal;
+}
+
+.task-row-actions {
+	grid-template-columns: 2fr 1.1fr 1fr 0.7fr auto;
+	gap: 10px;
+}
+
+.task-actions {
+	display: inline-flex;
+	gap: 7px;
+}
+
+.task-actions button {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	height: auto;
+	padding: 4px 8px;
+	font-size: 11px;
+}
+
+.task-row em,
+.task-row b {
+	justify-self: start;
+}
+
+.chart-panel {
+	display: grid;
+	gap: 10px;
+	padding: 14px;
+}
+
+.chart-panel h2 {
+	color: #f6fffe;
+	font-size: 16px;
+	font-weight: 500;
+}
+
+.donut {
+	display: grid;
+	place-items: center;
+	border: 4px solid rgba(45, 235, 204, 0.82);
+	border-right-color: rgba(42, 139, 167, 0.8);
+	border-bottom-color: rgba(236, 183, 70, 0.8);
+	border-radius: var(--hh-radius-round);
+}
+
+.chart-panel .donut {
+	width: 114px;
+	height: 114px;
+	margin: 6px auto;
+}
+
+.donut strong {
+	color: var(--hh-color-text-bright);
+	font-size: 24px;
+	font-weight: 500;
+}
+
+.donut span {
+	margin-top: -28px;
+	font-size: 11px;
+}
+
+.donut.small {
+	width: 70px;
+	height: 70px;
+}
+
+.bar-row {
+	display: grid;
+	grid-template-columns: 1fr 120px;
+	align-items: center;
+	gap: 8px;
+}
+
+.bar-row span {
+	color: var(--hh-color-text-soft);
+	font-size: 12px;
+}
+
+.bar-row div {
+	height: 5px;
+	border-radius: var(--hh-radius-pill);
+	background: rgba(66, 130, 126, 0.22);
+	overflow: hidden;
+}
+
+.bar-row i {
+	display: block;
+	width: 72%;
+	height: 100%;
+	background: var(--hh-color-accent);
+}
+
 .task-context-review-panel {
 	display: grid;
 	gap: 10px;

@@ -1,0 +1,40 @@
+.health-strip {
+	display: flex;
+	gap: 8px;
+	padding: 8px 16px;
+	flex-wrap: wrap;
+	border-bottom: 1px solid var(--hh-border-subtle);
+	background: var(--hh-color-surface);
+}
+
+.health-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 10px;
+	border-radius: 6px;
+	font-size: 12px;
+	font-weight: 500;
+	background: var(--hh-status-neutral-surface);
+	color: var(--hh-color-text-muted);
+}
+
+.health-chip.needs_action {
+	background: var(--hh-status-warning-surface);
+	color: var(--hh-status-warning-text);
+}
+
+.health-chip.waiting {
+	background: var(--hh-status-info-surface);
+	color: var(--hh-status-info-text);
+}
+
+.health-chip.done {
+	background: var(--hh-status-success-surface);
+	color: var(--hh-status-success-text);
+}
+
+.health-chip.important {
+	background: var(--hh-status-danger-surface);
+	color: var(--hh-status-danger-text);
+}

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
+	import './healthStrip.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

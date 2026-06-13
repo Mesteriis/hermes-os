@@ -2,6 +2,7 @@
 	import '$lib/pages/pages.css';
 	import '$lib/styles/tokens.css';
 	import '$lib/styles/app.css';
+	import '$lib/components/shared/panels.css';
 	import { onMount } from 'svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import { activeCommunicationSection, activeSidebarRailGroupId, isSidebarRail, expandedSidebarGroupIds, isUserMenuOpen, navigateTo, navigateToCommunicationSection, toggleUserMenu, closeUserMenu, activeView, shellViewClass } from '$lib/stores/navigation';

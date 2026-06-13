@@ -1,8 +1,8 @@
 <script lang="ts">
-	import './panels.css';
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import { openWidgetSettingsDrawer, selectedLayoutWidgetId } from '$lib/stores/layoutEditor';
+	import './widgetEditChrome.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

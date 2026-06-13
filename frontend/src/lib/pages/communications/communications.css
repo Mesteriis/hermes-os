@@ -43,6 +43,12 @@
 	overflow: hidden;
 }
 
+.communication-empty-page {
+	display: grid;
+	align-content: start;
+	gap: 16px;
+}
+
 .communications-command-header {
 	position: relative;
 	z-index: 4;

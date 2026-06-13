@@ -64,6 +64,61 @@
 	gap: 12px;
 }
 
+.persons-list-panel {
+	padding: 12px;
+}
+
+.persons-list-panel header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	margin-bottom: 12px;
+}
+
+.persons-list-panel .person-row {
+	position: relative;
+	display: grid;
+	grid-template-columns: 44px 1fr auto;
+	gap: 10px;
+	align-items: center;
+	width: 100%;
+	min-height: var(--hh-widget-card-compact);
+	border: 1px solid transparent;
+	border-radius: var(--hh-radius-md);
+	background: transparent;
+	color: #e6f7f5;
+	padding: 9px 10px;
+	text-align: left;
+}
+
+.persons-list-panel .person-row.active {
+	border-color: rgba(45, 240, 206, 0.24);
+	background: rgba(25, 109, 100, 0.24);
+}
+
+.persons-list-panel img {
+	width: 44px;
+	height: 44px;
+}
+
+.persons-list-panel strong {
+	display: block;
+	color: var(--hh-color-text-bright);
+	font-size: 14px;
+	font-weight: 560;
+}
+
+.persons-list-panel small,
+.persons-list-panel em {
+	display: block;
+	margin-top: 5px;
+	overflow: hidden;
+	font-size: 11px;
+	font-style: normal;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .identity-note {
 	margin: 0 0 8px;
 	color: var(--hh-color-text-muted);

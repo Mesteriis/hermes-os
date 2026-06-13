@@ -29,8 +29,8 @@
 ## Current Stop-Factors
 
 - Backend source files over 700 lines still exist outside the first completed slice.
-- Frontend Svelte components over 500 lines still exist: `AccountSetupModal.svelte`, `TelegramPage.svelte`, `AISettingsControlCenter.svelte`, `CommunicationsMessageDetail.svelte`.
-- Large shared CSS files still exist: `panels.css`, `app.css`.
+- Frontend Svelte God Components have been decomposed by completed tasks; do not reintroduce components over 500 lines.
+- Large shared CSS file still exists: `app.css`.
 - Feature parity work for mail and Telegram must not add code to these files until the relevant file/component is decomposed.
 
 ### Task 1: Mail Handler God File Decomposition
@@ -763,7 +763,63 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 20: Continue Backend God File Elimination
+### Task 20: Shared Panels CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/components/shared/panels.css`
+- Modify: `frontend/src/routes/+layout.svelte`
+- Modify: `frontend/src/lib/components/shared/LayoutEditControls.svelte`
+- Modify: `frontend/src/lib/components/shared/WidgetEditChrome.svelte`
+- Modify: `frontend/src/lib/components/shared/WidgetSettingsDrawer.svelte`
+- Modify: `frontend/src/lib/components/shared/AddWidgetDrawer.svelte`
+- Modify: `frontend/src/lib/components/shared/HealthStrip.svelte`
+- Modify: `frontend/src/lib/components/shared/DraftStrip.svelte`
+- Modify: `frontend/src/lib/pages/home/HomePage.svelte`
+- Modify: `frontend/src/lib/pages/projects/projects.css`
+- Modify: `frontend/src/lib/pages/documents/documents.css`
+- Modify: `frontend/src/lib/pages/tasks/tasks.css`
+- Modify: `frontend/src/lib/pages/calendar/calendar.css`
+- Modify: `frontend/src/lib/pages/persons/persons.css`
+- Modify: `frontend/src/lib/pages/communications/communications.css`
+- Create: `frontend/src/lib/components/shared/layoutEditControls.css`
+- Create: `frontend/src/lib/components/shared/widgetEditChrome.css`
+- Create: `frontend/src/lib/components/shared/widgetSettingsDrawer.css`
+- Create: `frontend/src/lib/components/shared/addWidgetDrawer.css`
+- Create: `frontend/src/lib/components/shared/healthStrip.css`
+- Create: `frontend/src/lib/components/shared/draftStrip.css`
+- Create: `frontend/src/lib/pages/home/home.css`
+
+- [x] **Step 1: Verify shared panel CSS ownership failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/components/shared/panels.css | tr -d ' ')" -le 1400
+! rg -n '(^|[,{[:space:]])\.(layout-edit-controls|widget-edit-chrome|widget-config-button|widget-grid-|widget-drawer|widget-drawer-list|layout-widget-|widget-surface-slider|health-strip|health-chip|draft-strip|draft-chip|draft-open-button|draft-delete-button)' frontend/src/lib/components/shared/panels.css
+! rg -n '(^|[,{[:space:]])\.(panel-opacity-|widget-panel-opacity-|panel-blur-|widget-panel-blur-)' frontend/src/lib/components/shared/panels.css
+```
+
+Expected before refactor: FAIL because `panels.css` has 1780 lines and owns shared component/editor selectors plus duplicate theme class selectors.
+
+- [x] **Step 2: Extract component-owned and page-owned CSS**
+
+Move layout edit controls, widget edit chrome, widget settings drawer, add widget drawer, health strip and draft strip selectors into component-owned CSS files imported by their Svelte owners. Move Home, Projects, Documents, Tasks, Calendar, Persons and Communications page-owned selectors into page CSS. Keep only shared panel/widget primitives in `panels.css`, and load it from the root layout instead of indirectly through `WidgetEditChrome`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/components/shared/panels.css | tr -d ' ')" -le 700
+find frontend/src/lib/components/shared frontend/src/lib/pages -type f -name '*.css' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+! rg -n '(^|[,{[:space:]])\.(layout-edit-controls|widget-edit-chrome|widget-config-button|widget-grid-|widget-drawer|widget-drawer-list|layout-widget-|widget-surface-slider|health-strip|health-chip|draft-strip|draft-chip|draft-open-button|draft-delete-button)' frontend/src/lib/components/shared/panels.css
+! rg -n '(^|[,{[:space:]])\.(hero-row|home-metrics|score-ring|feed-list|task-stack|schedule-list|person-list|status-list|full-band|project-card-row|compact-project|new-tile|communication-empty-page|radial-graph|graph-chip|timeline-mini|person-compact|persons-list-panel|inline-metrics|table-head|task-row|task-actions|chart-panel|donut|bar-row|source-footer|source-badge|source-strip|source-card|doc-row|chip|search-hint)' frontend/src/lib/components/shared/panels.css
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 21: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

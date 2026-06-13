@@ -10,6 +10,7 @@
 	import { communicationMessages, mailboxHealth, communicationProjects, communicationTasks } from '$lib/stores/communications';
 	import { vaultStatusError } from '$lib/stores/vault';
 	import { navigateTo } from '$lib/stores/navigation';
+	import './home.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

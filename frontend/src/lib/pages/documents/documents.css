@@ -28,3 +28,36 @@
 .documents-layout .stacked-rail {
 	grid-auto-rows: minmax(0, 1fr);
 }
+
+.document-source-cards {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.source-card {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: var(--hh-widget-card-compact);
+	border: 1px solid rgba(82, 204, 190, 0.16);
+	border-radius: var(--hh-radius-md);
+	background:
+		linear-gradient(
+			180deg,
+			rgba(8, 29, 33, var(--hh-panel-alpha)),
+			rgba(5, 22, 25, var(--hh-panel-alpha-low))
+		),
+		var(--hh-color-surface);
+	backdrop-filter: blur(var(--hh-panel-blur));
+	-webkit-backdrop-filter: blur(var(--hh-panel-blur));
+	box-shadow: var(--hh-shadow-panel);
+	color: var(--hh-color-text);
+	padding: 0 14px;
+}
+
+.source-card.add {
+	justify-content: center;
+	color: var(--hh-color-accent);
+}

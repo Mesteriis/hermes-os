@@ -2,6 +2,7 @@
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import type { ResolvedWidget } from '$lib/layout';
+	import './widgetSettingsDrawer.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 
