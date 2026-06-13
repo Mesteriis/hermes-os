@@ -4,6 +4,7 @@
 	import ProjectsHero from './widgets/ProjectsHero.svelte';
 	import ProjectsDashboard from './widgets/ProjectsDashboard.svelte';
 	import ProjectsRail from './widgets/ProjectsRail.svelte';
+	import './projects.css';
 	import type {
 		ProjectRecord,
 		ProjectStats,

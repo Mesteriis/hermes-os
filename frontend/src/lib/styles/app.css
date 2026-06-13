@@ -534,8 +534,6 @@ h1 {
 
 .greeting p,
 .view-header p,
-.project-hero p,
-.project-hero small,
 .info-card p,
 .chart-panel span,
 .feed-row p,
@@ -579,7 +577,6 @@ h1 {
 .task-stack em,
 .task-row em,
 .task-row b,
-.project-hero em,
 .agent-card em {
 	display: inline-block;
 	border-radius: 5px;
@@ -806,7 +803,6 @@ input[type='checkbox'] {
 	grid-column: span 2;
 }
 
-.project-empty-state p,
 .muted-copy {
 	margin: 0;
 	color: var(--hh-color-text-muted);
@@ -838,7 +834,6 @@ input[type='checkbox'] {
 .dashboard-grid,
 .three-pane,
 .persons-layout,
-.project-dashboard-grid,
 .tasks-layout,
 .calendar-layout,
 .knowledge-layout,
@@ -864,8 +859,6 @@ input[type='checkbox'] {
 .view-header,
 .filter-tabs,
 .settings-tabs,
-.project-meta-strip,
-.project-switcher,
 .source-card-row {
 	min-height: 0;
 	max-height: var(--hh-layout-summary-height);
@@ -874,7 +867,6 @@ input[type='checkbox'] {
 
 .stacked-rail,
 .context-rail,
-.project-side,
 .telegram-rail,
 .whatsapp-rail {
 	display: grid;
@@ -911,7 +903,6 @@ input[type='checkbox'] {
 	.dashboard-grid,
 	.three-pane,
 	.persons-layout,
-	.project-dashboard-grid,
 	.tasks-layout,
 		.calendar-layout,
 		.knowledge-layout,
@@ -946,7 +937,6 @@ h1 {
 	.dashboard-grid,
 	.three-pane,
 	.persons-layout,
-	.project-dashboard-grid,
 	.tasks-layout,
 		.calendar-layout,
 		.knowledge-layout,

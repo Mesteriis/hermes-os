@@ -505,7 +505,42 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 13: Continue Backend God File Elimination
+### Task 13: Projects CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/styles/app.css`
+- Modify: `frontend/src/lib/pages/projects/ProjectsPage.svelte`
+- Create: `frontend/src/lib/pages/projects/projects.css`
+
+- [x] **Step 1: Verify Projects CSS ownership failure**
+
+Run:
+
+```sh
+! rg "^(\.(project-meta-strip|project-hero|project-logo|project-empty-state|project-switcher|project-dashboard-grid|graph-card-large))" frontend/src/lib/pages/pages.css
+! rg "\b(project-hero|project-empty-state|project-dashboard-grid|project-meta-strip|project-switcher|project-side)\b" frontend/src/lib/styles/app.css
+```
+
+Expected before refactor: FAIL because root `pages.css` and app-level `app.css` own Projects page layout, hero, switcher, dashboard and project rail selectors.
+
+- [x] **Step 2: Extract Projects CSS chunk**
+
+Move Projects page layout, hero, metadata strip, switcher, dashboard and `graph-card-large` selectors into `frontend/src/lib/pages/projects/projects.css` and import it from `ProjectsPage.svelte`. Keep shared cross-page `doc-mini` and `graph-center` rules in shared/global files because they are used by both Projects and Knowledge.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg "^(\.(project-meta-strip|project-hero|project-logo|project-empty-state|project-switcher|project-dashboard-grid|graph-card-large))" frontend/src/lib/pages/pages.css
+! rg "\b(project-hero|project-empty-state|project-dashboard-grid|project-meta-strip|project-switcher|project-side)\b" frontend/src/lib/styles/app.css
+test "$(wc -l < frontend/src/lib/pages/projects/projects.css | tr -d ' ')" -le 700
+make lint-frontend
+make lint-architecture
+```
+
+### Task 14: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
