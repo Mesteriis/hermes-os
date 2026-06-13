@@ -1,6 +1,8 @@
 <script lang="ts">
 	import '$lib/pages/pages.css';
 	import '$lib/styles/tokens.css';
+	import '$lib/styles/shell.css';
+	import '$lib/styles/shellTheme.css';
 	import '$lib/styles/app.css';
 	import '$lib/components/shared/panels.css';
 	import { onMount } from 'svelte';

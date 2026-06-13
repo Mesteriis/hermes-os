@@ -30,7 +30,8 @@
 
 - Backend source files over 700 lines still exist outside the first completed slice.
 - Frontend Svelte God Components have been decomposed by completed tasks; do not reintroduce components over 500 lines.
-- Large shared CSS file still exists: `app.css`.
+- Frontend CSS God Files have been decomposed by completed tasks; do not reintroduce CSS files over 700 lines.
+- Frontend TypeScript service/store files over 700 lines still exist and must not receive new feature work before decomposition.
 - Feature parity work for mail and Telegram must not add code to these files until the relevant file/component is decomposed.
 
 ### Task 1: Mail Handler God File Decomposition
@@ -819,7 +820,44 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 21: Continue Backend God File Elimination
+### Task 21: App Global CSS Shell/Theme Split
+
+**Files:**
+- Modify: `frontend/src/lib/styles/app.css`
+- Modify: `frontend/src/routes/+layout.svelte`
+- Create: `frontend/src/lib/styles/shell.css`
+- Create: `frontend/src/lib/styles/shellTheme.css`
+
+- [x] **Step 1: Verify app CSS ownership failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/styles/app.css | tr -d ' ')" -le 700
+! rg -n '(^|[,{[:space:]])\.(desktop-shell|viewport-guard|shell-bg-|theme-accent-|panel-opacity-|widget-panel-opacity-|panel-blur-|widget-panel-blur-)' frontend/src/lib/styles/app.css
+```
+
+Expected before refactor: FAIL because `app.css` has 973 lines and owns shell layout, viewport guard, shell background, accent and panel theme selectors.
+
+- [x] **Step 2: Extract shell and theme global CSS chunks**
+
+Move shell layout, viewport guard and shell responsive rules into `frontend/src/lib/styles/shell.css`. Move shell background, brightness, accent and panel surface variable classes into `frontend/src/lib/styles/shellTheme.css`. Import both from `+layout.svelte` before `app.css`, with `shellTheme.css` loaded after `shell.css` so selected theme classes override shell defaults.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/styles/app.css | tr -d ' ')" -le 700
+test "$(wc -l < frontend/src/lib/styles/shell.css | tr -d ' ')" -le 700
+test "$(wc -l < frontend/src/lib/styles/shellTheme.css | tr -d ' ')" -le 700
+! rg -n '(^|[,{[:space:]])\.(desktop-shell|viewport-guard|shell-bg-|theme-accent-|panel-opacity-|widget-panel-opacity-|panel-blur-|widget-panel-blur-)' frontend/src/lib/styles/app.css
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 22: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
