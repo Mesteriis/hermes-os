@@ -403,7 +403,39 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 10: Continue Backend God File Elimination
+### Task 10: Agents CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/pages/agents/AgentsPage.svelte`
+- Create: `frontend/src/lib/pages/agents/agents.css`
+
+- [x] **Step 1: Verify agents CSS ownership failure**
+
+Run:
+
+```sh
+! rg "^(\.(agent-main|agents-layout|agent-metrics|agent-grid|agent-card|agent-detail|agent-detail-grid|ai-workflow-|ai-result-|citation-|spark-chart))" frontend/src/lib/pages/pages.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns Agents page layout, agent cards/detail, AI workflow and citation selectors.
+
+- [x] **Step 2: Extract agents CSS chunk**
+
+Move Agents page layout and widget selectors into `frontend/src/lib/pages/agents/agents.css` and import it from `AgentsPage.svelte`. Keep shared `.agents-page` grid shell rules in root for the later common page-shell split.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg "^(\.(agent-main|agents-layout|agent-metrics|agent-grid|agent-card|agent-detail|agent-detail-grid|ai-workflow-|ai-result-|citation-|spark-chart))" frontend/src/lib/pages/pages.css
+test "$(wc -l < frontend/src/lib/pages/agents/agents.css | tr -d ' ')" -le 700
+make lint-frontend
+make lint-architecture
+```
+
+### Task 11: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
