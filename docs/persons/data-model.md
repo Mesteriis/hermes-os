@@ -342,10 +342,10 @@ model.
 | `persons.trust_score` | `Relationship.trust_score` | Compatibility cache only. Enrichment writes now materialize suggested Owner Persona -> Persona trust Relationships. |
 | `persons.primary_role` | `Relationship.relationship_type` or memory fact | Do not model as Persona field. |
 | `persons.organization_reference` | Relationship to organization proxy or organizations domain | Keep only as cached compatibility. |
-| `persons.is_favorite` | UI preference/read model | Not domain identity. |
+| `persons.is_favorite` | `PersonaPreference(ui:favorite)` compatibility cache | Not domain identity. Writes now materialize a sourced UI preference. |
 | `persons.notes` | `PersonaMemoryCard` | Compatibility cache only. Writes now materialize a sourced memory card. |
-| `persons.health_status` | Relationship attention read model | Not source of truth. |
-| `persons.watchlist` | UI/read model | Not source of truth. |
+| `persons.health_status` | Risk/attention compatibility cache | Not source of truth. `PersonRisk` writes now derive it from unresolved risks. |
+| `persons.watchlist` | `PersonaPreference(ui:watchlist)` compatibility cache | Not domain identity. Writes now materialize a sourced UI preference. |
 | `person_identities` | `PersonaIdentity` | Extend to document/message traces and disputed status. |
 | `person_identity_candidates` | `IdentityResolutionCandidate` | Rename semantics from person/contact to Persona. |
 | `person_roles` | `Relationship` | Deprecated in target model. |

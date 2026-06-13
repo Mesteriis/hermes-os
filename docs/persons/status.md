@@ -36,7 +36,9 @@ do not yet fully implement the target model.
 | `person_promises`, `person_risks` | Must be reframed as cited facts, timeline events or observations. |
 | `trust_score` | Compatibility cache; enrichment now materializes suggested Owner Persona trust Relationships. |
 | `notes` | Compatibility cache; writes now materialize sourced Persona Memory Cards. |
-| `health_status`, `watchlist`, `is_favorite` | UI/read-model concepts, not Persona root identity. |
+| `is_favorite` | Compatibility cache; writes now materialize sourced `ui:favorite` Persona Preferences. |
+| `watchlist` | Compatibility cache; writes now materialize sourced `ui:watchlist` Persona Preferences. |
+| `health_status` | Compatibility cache; `PersonRisk` report/resolve now derives it from unresolved risk observations. |
 | `/api/v1/persons/*` | Legacy compatibility API. |
 
 ## Target Migration Slices
@@ -50,7 +52,7 @@ do not yet fully implement the target model.
 | Identity traces | Partially implemented | Extend beyond handle/email identities to document and message traces. |
 | Memory model | Partially implemented | Preserve facts, knowledge, preferences, memory cards and conflicts with evidence. |
 | Timeline Engine use | Partially implemented | Split dated events from first-class Relationship records. |
-| Dossier read model | Partially implemented | Generate cited dossiers with summary, interests, projects, organizations, skills, communication patterns and AI observations. |
+| Dossier read model | Backend baseline | `PersonInvestigator` now emits generated dossier sections for summary, interests, projects, organizations, skills, communication patterns, AI observations, source refs and `generated_at`; broader cache/workflow/UI semantics remain open. |
 | Persona Intelligence | Partially implemented | Consolidate fingerprint/profile/trust/analytics/investigator into one concept. |
 | API migration | Not implemented | Introduce target `/personas` routes or a versioned compatibility strategy. |
 | Schema migration | Not implemented | Rename/restructure tables only under a dedicated migration ADR and validation plan. |

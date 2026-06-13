@@ -72,8 +72,16 @@ These are known product/implementation gaps, not hidden documentation failures:
   `trust_score` writes now also materialize suggested Owner Persona trust
   Relationships while keeping the root column as a temporary compatibility
   cache. `persons.notes` writes now materialize sourced Persona Memory Cards
-  while keeping the root column as a temporary compatibility cache. Route/schema
-  names remain compatibility names.
+  while keeping the root column as a temporary compatibility cache.
+  `persons.is_favorite` writes now materialize sourced `ui:favorite` Persona
+  Preferences while keeping the root column as a temporary compatibility cache.
+  `persons.watchlist` writes now materialize sourced `ui:watchlist` Persona
+  Preferences while keeping the root column as a temporary compatibility cache.
+  `person_risks` report/resolve writes now derive the root `health_status`
+  compatibility cache from unresolved risk observations.
+  The backend investigator now emits target Dossier sections and source refs
+  while preserving the legacy dossier payload.
+  Route/schema names remain compatibility names.
 - First-class Relationship storage now has an initial implementation baseline in
   migration `0060` and `backend/src/domains/relationships/`, plus active
   graph projection for supported endpoints through migrations `0061` and

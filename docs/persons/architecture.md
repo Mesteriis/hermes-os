@@ -119,10 +119,10 @@ Relationship examples:
 - AI agent Persona assists the Owner Persona.
 - System Persona produced an automated observation.
 
-Do not model relationships as `primary_role`, `organization_reference`,
-`watchlist`, `health_status` or other Persona-root fields. Those can exist only
-as temporary compatibility projections until the relationship model is
-implemented.
+Do not model relationships as `primary_role`, `organization_reference` or other
+Persona-root fields. `watchlist` and `health_status` may exist only as
+temporary UI/risk compatibility projections until the schema/API migration
+retires those names.
 
 ## Memory First
 
@@ -193,7 +193,8 @@ Persona Intelligence replaces the fragmented legacy terms:
 | communication fingerprint | communication patterns |
 | communication profile | Persona communication intelligence |
 | trust analytics | relationship intelligence |
-| health/watchlist | relationship attention signals |
+| health status | relationship attention or Risk Engine signal |
+| watchlist | UI attention preference |
 | investigator | dossier and context assembly |
 | analytics | Persona Intelligence read models |
 
@@ -230,7 +231,8 @@ carry legacy names and CRM-shaped fields.
 | `person_expertise` | Persona skills and knowledge signals |
 | `person_promises` | Commitment facts or timeline events |
 | `person_risks` | Persona/relationship observations requiring evidence |
-| `health_status`, `watchlist` | Deprecated relationship attention projections |
+| `health_status` | Deprecated Risk/attention cache; risk writes materialize this projection |
+| `watchlist` | Deprecated UI/read-model cache; writes materialize Persona Preferences |
 | `/api/v1/persons` | Legacy compatibility API until a Persona API migration |
 
 Any implementation migration must preserve event sourcing, graph provenance and

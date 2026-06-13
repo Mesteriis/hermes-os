@@ -94,8 +94,8 @@ Refactoring plan topics:
 
 - introduce Owner Persona semantics;
 - decide `/persons` compatibility strategy before any `/personas` route work;
-- migrate remaining root health/watchlist/favorite fields into read-model
-  concepts;
+- retire remaining Persona root compatibility caches only through a
+  schema/API migration plan;
 - preserve existing identity candidate review behavior while changing language.
 
 ## Slice 3: Knowledge And Polygraph

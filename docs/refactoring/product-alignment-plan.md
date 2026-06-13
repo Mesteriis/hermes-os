@@ -71,8 +71,7 @@ Required scope:
 - `PersonaType` values: `human`, `ai_agent`, `organization_proxy`, `system`;
 - target identity trace model;
 - `/persons` compatibility strategy;
-- treatment of remaining compatibility fields such as `health_status`,
-  `watchlist` and `is_favorite`;
+- route/schema compatibility for remaining Persona root cache columns;
 - migration safety and graph impact.
 
 ### 3. Relationship Model Plan
