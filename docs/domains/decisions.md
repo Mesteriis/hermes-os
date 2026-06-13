@@ -68,6 +68,8 @@ Current backend baseline:
 - `backend/tests/decisions.rs`;
 - `backend/tests/decisions_api.rs`;
 - `backend/tests/decision_engine.rs`;
+- `backend/tests/calendar.rs`;
+- `backend/tests/project_link_reviews.rs`;
 - ADR-0089.
 
 This baseline provides source-backed Decision persistence with evidence,
@@ -84,6 +86,15 @@ The existing review route can then confirm or reject the suggested Decision. The
 store projects accepted Decisions into the graph for supported impacted entity
 kinds, using `decision` graph nodes and source-backed `entity_relationship`
 edges. It explicitly does not auto-create Tasks, Projects or Obligations.
+Meeting outcomes with `outcome_type = decision` now adapt into source-backed
+`suggested` Decisions impacted by the meeting Event. The meeting outcome keeps
+the created Decision id in `linked_entity_id` so the calendar compatibility
+surface points at the durable Decision record.
+
+Project link review commands with explicit `user_confirmed` or `user_rejected`
+state now adapt into source-backed `user_confirmed` Decisions impacted by the
+Project and the reviewed Communication or Document. This keeps the existing
+project review workflow but records the owner decision in the Decisions domain.
 
 Backend routes currently expose:
 
@@ -101,16 +112,16 @@ suggested Decisions and Obligations, with optional entity-scoped filtering. It
 lists Decisions through the guarded Decision route and submits explicit owner
 confirm/reject review state without creating Tasks, Projects or Obligations.
 
-Decisions still also appear indirectly through project context, documents,
-communications and meeting outcomes. Those are source or compatibility surfaces
-until adapters are added.
+Decisions still also appear indirectly through project context, documents and
+communications. Those are source or compatibility surfaces until remaining
+candidate routing is complete.
 
 ## Migration Plan
 
 1. Keep ADR-0089 as the persistence boundary.
 2. Keep decision capture candidate-first.
 3. Expand Communication and Meeting ingestion beyond the initial explicit
-   message/imported-document refresh path.
+   message/imported-document refresh path and meeting outcome adapter.
 4. Add candidate-to-Decision review before any automatic decision capture.
 5. Require evidence citations and review state.
 6. Expand graph projection beyond the current supported impacted entity kinds.

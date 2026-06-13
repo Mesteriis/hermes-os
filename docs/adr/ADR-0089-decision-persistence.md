@@ -109,7 +109,8 @@ Positive:
 Negative:
 
 - Existing meeting outcomes and review decision tables remain compatibility or
-  source surfaces until adapters are added.
+  source surfaces. Initial adapters exist for meeting outcomes and project link
+  review decisions, while broader routing remains follow-up work.
 - The first desktop UI is scoped to the Tasks workspace; meeting/provider-wide
   candidate-to-Decision review flows are still follow-up work.
 - Provider-wide Decision extraction from Communications and Meetings remains
@@ -128,7 +129,8 @@ Negative:
 - Add candidate-to-Decision review routing.
 - Connect meeting and provider-wide communication extraction to Decision
   candidates.
-- Add adapters from meeting outcomes and project review decisions.
+- Expand adapters beyond the initial meeting outcome and project link review
+  baselines.
 - Expand accepted Decision graph projection and project reviewed Decisions into
   timeline and dossier views.
 - Feed conflicting Decisions into the Consistency / Contradiction Engine.
@@ -168,3 +170,15 @@ Decisions impacted by the source Communication or Document, preserves
 `user_confirmed` and `user_rejected` review state across repeat refreshes, and
 relies on the existing guarded Decision review route for confirmation. It does
 not create Tasks, Projects or Obligations.
+
+`MeetingOutcomeStore::add` now materializes meeting `decision` outcomes into
+source-backed `suggested` Decisions impacted by the meeting Event and stores the
+created Decision id in `meeting_outcomes.linked_entity_id`. It does not create
+Tasks, Projects or Obligations.
+
+`ProjectLinkReviewStore::set_review_state` and projection replay now
+materialize explicit `user_confirmed` / `user_rejected` project link review
+events into source-backed `user_confirmed` Decisions impacted by the Project and
+the reviewed Communication or Document. This records the owner decision behind
+the compatibility project-link surface without changing Project, Task or
+Obligation state.

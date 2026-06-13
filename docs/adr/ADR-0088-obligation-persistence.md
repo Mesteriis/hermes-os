@@ -108,7 +108,9 @@ Positive:
 Negative:
 
 - Existing person promises, meeting outcomes and task candidates remain
-  compatibility or source surfaces until adapters are added.
+  compatibility or source surfaces. Initial adapters exist for person promises,
+  selected meeting outcomes and obligation-derived task candidates, while
+  broader routing remains follow-up work.
 - The first desktop UI is scoped to the Tasks workspace; non-task-candidate
   Obligation review routing beyond accepted Obligations remains follow-up work.
 - Obligation extraction from Communications and Documents is not part of the
@@ -127,8 +129,9 @@ Negative:
 - Add candidate-to-Obligation review routing.
 - Connect Communication, meeting and document extraction to obligation
   candidates beyond the initial explicit message task-candidate path.
-- Add adapters from person promises and meeting outcomes.
-- Expand reviewed Obligation links to events and compatibility sources.
+- Expand adapters beyond the initial person promise and meeting outcome
+  compatibility baselines.
+- Expand reviewed Obligation links to additional compatibility sources.
 - Feed obligation conflicts into the Consistency / Contradiction Engine.
 
 ## Implementation Status
@@ -160,3 +163,12 @@ Obligation Engine when the candidate is user-confirmed: it creates or updates a
 source-backed `user_confirmed` Obligation, preserves Communication evidence and
 links the created Task through `obligation_task_links.link_kind =
 fulfillment_task`. Generic task candidates remain task-only.
+
+`PersonPromiseStore::create` now materializes compatibility `person_promises`
+records into source-backed `user_confirmed` Obligations with `raw_record`
+evidence. It does not create Tasks.
+
+`MeetingOutcomeStore::add` now materializes meeting `promise`, `task` and
+`follow_up` outcomes into source-backed `suggested` Obligations and stores the
+created Obligation id in `meeting_outcomes.linked_entity_id`. It does not create
+Tasks.

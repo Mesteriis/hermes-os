@@ -69,10 +69,12 @@ Current backend baseline:
 - `backend/migrations/0067_task_candidate_kind_metadata.sql`;
 - `backend/src/domains/obligations/mod.rs`;
 - `backend/src/domains/obligations/api.rs`;
+- `backend/src/domains/persons/trust.rs`;
 - `backend/src/domains/tasks/candidates.rs`;
 - `backend/tests/obligations.rs`;
 - `backend/tests/obligations_api.rs`;
 - `backend/tests/task_candidates.rs`;
+- `backend/tests/calendar.rs`;
 - ADR-0088.
 
 This baseline provides source-backed Obligation persistence with evidence,
@@ -88,6 +90,17 @@ message candidates produced by the Obligation Engine are stored as
 metadata and, when user-confirmed, create or update a `user_confirmed`
 Obligation with Communication evidence and a `fulfillment_task` link to the
 created Task. Generic task candidates remain task-only.
+
+Meeting outcomes with `outcome_type = promise`, `task` or `follow_up` now adapt
+into source-backed `suggested` Obligations without creating Tasks. If the
+meeting outcome has an `owner_person_id`, the Obligation is owed by that
+Persona; otherwise the meeting Event remains the obligated compatibility anchor.
+The meeting outcome keeps the created Obligation id in `linked_entity_id`.
+
+Compatibility `person_promises` created through `PersonPromiseStore::create`
+now adapt into source-backed `user_confirmed` Obligations with `raw_record`
+evidence. This preserves the old `persons` compatibility surface while making
+Obligation the durable commitment record. It does not create Tasks.
 
 Backend routes currently expose:
 
@@ -110,6 +123,8 @@ Related behavior still exists through:
 - `backend/src/domains/tasks/candidates.rs`;
 - `backend/src/domains/tasks/rules.rs`;
 - `backend/src/domains/tasks/intelligence.rs`;
+- `backend/src/domains/persons/trust.rs`;
+- meeting outcomes;
 - communication extraction and workflow state;
 - task candidate migrations.
 
@@ -117,7 +132,8 @@ Related behavior still exists through:
 
 1. Keep Obligations distinct from Tasks in all documentation.
 2. Keep the ADR-0088 persistence boundary intact.
-3. Expand Obligation Engine extraction beyond explicit message task candidates.
+3. Expand Obligation Engine extraction beyond explicit message task candidates
+   and the current meeting outcome adapter.
 4. Add candidate-to-Obligation review routing and expand reviewed Obligation
    links to events and compatibility sources without converting every
    obligation into a task.

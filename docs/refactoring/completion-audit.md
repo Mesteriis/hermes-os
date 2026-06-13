@@ -95,13 +95,19 @@ These are known product/implementation gaps, not hidden documentation failures:
   `user_confirmed` Obligation and links it to the created Task as a
   `fulfillment_task`. Explicit message/imported-document Decision candidates
   can now refresh into source-backed `suggested` Decisions while preserving
-  confirmed/rejected review state across repeat refreshes. Guarded backend
-  routes can list accepted Obligations/Decisions by entity or review state and
-  update accepted review state without creating Tasks, Projects or
+  confirmed/rejected review state across repeat refreshes. Meeting `decision`
+  outcomes now create source-backed `suggested` Decisions impacted by the
+  meeting Event, and meeting `promise`, `task` and `follow_up` outcomes now
+  create source-backed `suggested` Obligations without creating Tasks.
+  Compatibility `person_promises` now create source-backed `user_confirmed`
+  Obligations with `raw_record` evidence and without creating Tasks. Guarded
+  project link review decisions now create source-backed `user_confirmed`
+  Decisions impacted by the Project and reviewed Communication or Document.
+  backend routes can list accepted Obligations/Decisions by entity or review
+  state and update accepted review state without creating Tasks, Projects or
   Obligations. The Tasks workspace includes a global suggested review panel for
   persisted Decisions and Obligations, with optional entity-scoped filtering.
-  Provider-wide ingestion, candidate-to-domain review routing and adapters from
-  person promises, meeting outcomes and project review decisions remain
+  Provider-wide ingestion and candidate-to-domain review routing remain
   incomplete.
 - Consistency / Contradiction Engine now has a structured-claim detection and
   `ContradictionObservation` persistence baseline in migration `0062` and
