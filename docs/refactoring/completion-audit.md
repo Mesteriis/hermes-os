@@ -76,9 +76,15 @@ These are known product/implementation gaps, not hidden documentation failures:
   Guarded backend routes can list Relationships by entity or review state and
   update review state while keeping the graph projection aligned. The Personas
   workspace includes a global suggested Relationship review panel with
-  selected-Persona compact formatting. Relationship semantics still need
-  compatibility adapters for roles, organization links and project/task links,
-  plus broader cross-domain workflow placement.
+  selected-Persona compact formatting. Manual/API organization contact links
+  and email-sync organization contact links now materialize source-backed
+  `member_of` Relationships from Persona to Organization. Manual task
+  relations now materialize source-backed Relationships from Task to the
+  related target entity. Explicit project link reviews now materialize
+  source-backed Relationships from Project to reviewed Communication or
+  Document and reset those candidates back to `suggested` when explicit review
+  is cleared. Relationship semantics still need compatibility adapters for
+  person roles plus broader cross-domain workflow placement.
 - Memory, Timeline, Trust, Risk and Enrichment behavior still appears in
   domain-local modules and routes such as `health`, `watchtower`,
   `intelligence` and `memory`.
@@ -93,12 +99,18 @@ These are known product/implementation gaps, not hidden documentation failures:
   classifies obligation-derived task candidates; confirming an
   `obligation_task` candidate now creates or updates a source-backed
   `user_confirmed` Obligation and links it to the created Task as a
-  `fulfillment_task`. Explicit message/imported-document Decision candidates
-  can now refresh into source-backed `suggested` Decisions while preserving
-  confirmed/rejected review state across repeat refreshes. Meeting `decision`
-  outcomes now create source-backed `suggested` Decisions impacted by the
-  meeting Event, and meeting `promise`, `task` and `follow_up` outcomes now
-  create source-backed `suggested` Obligations without creating Tasks.
+  `fulfillment_task`; resetting or rejecting that task candidate now
+  synchronizes the durable Obligation review state instead of leaving stale
+  confirmed Obligations behind. Task candidate refresh is idempotent against
+  the source/title uniqueness boundary. Email sync now refreshes explicit
+  Decision candidates and obligation-derived task candidates for projected
+  email Communication messages in the current sync batch without auto-creating
+  Tasks or accepted Obligations. Explicit message/imported-document Decision
+  candidates can now refresh into source-backed `suggested` Decisions while
+  preserving confirmed/rejected review state across repeat refreshes. Meeting
+  `decision` outcomes now create source-backed `suggested` Decisions impacted
+  by the meeting Event, and meeting `promise`, `task` and `follow_up` outcomes
+  now create source-backed `suggested` Obligations without creating Tasks.
   Compatibility `person_promises` now create source-backed `user_confirmed`
   Obligations with `raw_record` evidence and without creating Tasks. Guarded
   project link review decisions now create source-backed `user_confirmed`
@@ -107,8 +119,8 @@ These are known product/implementation gaps, not hidden documentation failures:
   state and update accepted review state without creating Tasks, Projects or
   Obligations. The Tasks workspace includes a global suggested review panel for
   persisted Decisions and Obligations, with optional entity-scoped filtering.
-  Provider-wide ingestion and candidate-to-domain review routing remain
-  incomplete.
+  Non-email provider ingestion and broader candidate-to-domain review workflow
+  coverage remain incomplete.
 - Consistency / Contradiction Engine now has a structured-claim detection and
   `ContradictionObservation` persistence baseline in migration `0062` and
   `backend/src/engines/consistency.rs`. It can also extract simple structured

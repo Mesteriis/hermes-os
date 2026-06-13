@@ -111,14 +111,20 @@ entity or by review state and change review state while keeping the graph
 projection aligned. The Personas workspace includes a desktop review panel for
 global suggested Relationships, while still formatting selected-Persona
 relationships compactly when a Persona is selected. It does not yet provide
-role adapters, organization/project/task link adapters, cross-domain workflow
-placement or timeline projection.
+person-role adapters, cross-domain workflow placement or timeline projection.
+Manual/API and email-sync `organization_contact_links` now have a compatibility
+adapter that materializes source-backed `member_of` Relationships from Persona
+to Organization. Manual `task_relations` now have a compatibility adapter that
+materializes source-backed Relationships from Task to known target entity kinds.
+Explicit project link reviews now materialize source-backed Relationships from
+Project to the reviewed Communication or Document and demote the relationship
+candidate back to `suggested` when the explicit review is reset.
 
 ## Migration Direction
 
 1. Keep `relationships` as the durable source-of-truth table.
-2. Reclassify `person_roles`, organization links, project links and task
-   relations as compatibility or read-model surfaces.
+2. Reclassify `person_roles` and other remaining relationship-shaped
+   compatibility/read-model surfaces behind Relationship records.
 3. Feed Relationship records into Trust, Risk, Timeline, Memory and Dossier
    projections.
 4. Move or duplicate Relationship review into a broader cross-domain workflow

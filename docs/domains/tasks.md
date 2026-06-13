@@ -54,6 +54,14 @@ AI extraction and engine output create task candidates, not automatically active
 commitments, unless a user policy explicitly allows auto-activation for a
 low-risk source.
 
+Manual owner-created Tasks may exist without a `task_candidate_id`. Task
+candidates are review surfaces, not the universal source of truth for every
+Task.
+
+Task candidate refresh must be idempotent by source evidence and candidate
+title. Repeated extraction should update the same review surface instead of
+creating duplicate candidates or overwriting an explicit owner review.
+
 ## Audit
 
 Status changes, deadline changes, assignment changes and deletions must emit

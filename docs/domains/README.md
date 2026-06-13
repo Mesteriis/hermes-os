@@ -24,14 +24,14 @@ needs a projection.
 |---|---|---|
 | Communications | [Communications](communications.md) | implemented with email-heavy naming and Telegram/WhatsApp surfaces |
 | Personas | [Personas](persons.md), [Persona Intelligence](../persons/README.md) | partially implemented through `persons` and compatibility migrations |
-| Relationships | [Relationships](relationships.md) | partially implemented through first-class persistence, graph projection for all current Relationship entity kinds, guarded global suggested review and Personas workspace review; adapters/cross-domain inbox incomplete |
+| Relationships | [Relationships](relationships.md) | partially implemented through first-class persistence, graph projection for all current Relationship entity kinds, guarded global suggested review, organization contact link adapters, task relation adapters, project link review adapters and Personas workspace review; remaining person-role/cross-domain inbox work incomplete |
 | Organizations | [Organizations](organizations.md), [Organizations Folder](../organizations/README.md) | implemented as a memory anchor domain |
 | Projects | [Projects](projects.md) | implemented, needs stronger domain documentation |
 | Documents | [Documents](documents.md) | implemented, needs clearer Knowledge boundary |
 | Tasks | [Tasks](tasks.md), [Tasks Folder](../tasks/README.md) | implemented, needs stronger Obligation boundary |
 | Calendar/Events | [Calendar And Events](calendar-events.md) | implemented under calendar/calls/meetings surfaces |
 | Decisions | [Decisions](decisions.md) | partially implemented through first-class persistence, accepted graph projection, guarded entity/global API, explicit message/imported-document candidate refresh, meeting outcome adapter, project link review adapter and Tasks workspace review; adapters incomplete |
-| Obligations | [Obligations](obligations.md) | partially implemented through first-class persistence, accepted graph projection, guarded entity/global API, obligation-derived task-candidate review, person promise adapter, meeting outcome adapter and Tasks workspace review; adapters incomplete |
+| Obligations | [Obligations](obligations.md) | partially implemented through first-class persistence, accepted graph projection, guarded entity/global API, obligation-derived task-candidate review-state synchronization, person promise adapter, meeting outcome adapter and Tasks workspace review; adapters incomplete |
 | Knowledge Graph | [Knowledge Graph](knowledge-graph.md) | implemented as graph domain/projection substrate |
 | Agents | [Agents](agents.md) | partially implemented through AI runtime/control surfaces |
 | Notes | [Notes](notes.md) | not a first-class domain; treated as document-like artifacts |
@@ -57,10 +57,12 @@ The repository still contains historical naming and compatibility boundaries:
   persistence baselines, accepted graph projection and guarded backend APIs.
   Decisions have explicit message/imported-document candidate refresh, a
   meeting `decision` outcome adapter and a project link review adapter.
-  Obligations have a backend review baseline for obligation-derived task
-  candidates, a person promise adapter and a meeting
-  `promise`/`task`/`follow_up` outcome adapter. Desktop UI, provider-wide
-  ingestion and remaining compatibility adapters remain incomplete.
+  Relationships have organization contact link, task relation and project link
+  review adapters.
+  Obligations have review-state synchronization for obligation-derived task
+  candidates, email-sync candidate refresh, a person promise adapter and a
+  meeting `promise`/`task`/`follow_up` outcome adapter. Desktop UI, non-email
+  provider ingestion and remaining compatibility adapters remain incomplete.
 
 These caveats are not new terminology. They are migration facts that must be
 resolved by implementation plans and ADRs before code-level renames or schema
