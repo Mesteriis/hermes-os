@@ -149,10 +149,11 @@ Expected after this task: no account setup component exceeds 500 lines; remainin
 
 **Files:**
 - Modify: `frontend/src/lib/pages/telegram/TelegramPage.svelte`
-- Create focused components under `frontend/src/lib/pages/telegram/widgets/`
-- Modify focused Telegram service tests only when behavior changes.
+- Create: `frontend/src/lib/pages/telegram/widgets/TelegramCommandHeader.svelte`
+- Create: `frontend/src/lib/pages/telegram/widgets/TelegramActionRail.svelte`
+- Create: `frontend/src/lib/pages/telegram/widgets/TelegramStatusMessages.svelte`
 
-- [ ] **Step 1: Verify current component threshold failure**
+- [x] **Step 1: Verify current component threshold failure**
 
 Run:
 
@@ -162,17 +163,21 @@ test "$(wc -l < frontend/src/lib/pages/telegram/TelegramPage.svelte | tr -d ' ')
 
 Expected before refactor: FAIL because the component has 842 lines.
 
-- [ ] **Step 2: Extract runtime status, capability panel and account action panels**
+- [x] **Step 2: Extract runtime status, capability panel and account action panels**
 
 Keep Telegram actions capability-gated per ADR-0091 and `docs/domains/telegram-channel.md`.
 
-- [ ] **Step 3: Validate**
+- [x] **Step 3: Validate**
 
 Run:
 
 ```sh
+test "$(wc -l < frontend/src/lib/pages/telegram/TelegramPage.svelte | tr -d ' ')" -le 500
+find frontend/src/lib/pages/telegram -type f -name '*.svelte' -print0 \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 500 { print; failed=1 } END { exit failed ? 1 : 0 }'
 pnpm --dir frontend test:unit
-pnpm --dir frontend check
+make lint-frontend
 ```
 
 ### Task 4: Continue Backend God File Elimination
