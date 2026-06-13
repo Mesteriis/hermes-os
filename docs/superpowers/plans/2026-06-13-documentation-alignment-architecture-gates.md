@@ -20,6 +20,7 @@
 - `docs/adr/ADR-0055-full-email-provider-networking.md`
 - `docs/adr/ADR-0078-frontend-component-decomposition.md`
 - `docs/adr/ADR-0079-script-logic-decomposition.md`
+- `docs/adr/ADR-0080-mail-background-sync-progress-local-trash.md`
 - `docs/adr/ADR-0083-telegram-live-user-client-runtime.md`
 - `docs/adr/ADR-0091-telegram-production-client-capability-model.md`
 - `docs/adr/ADR-0092-mail-provider-capability-tiers.md`
@@ -1217,7 +1218,48 @@ make backend-validate
 make lint-architecture
 ```
 
-### Task 30: Continue Backend God File Elimination
+### Task 30: Mail Background Sync Boundary Decomposition
+
+**Files:**
+- Modify: `backend/src/domains/mail/background_sync.rs`
+- Create: `backend/src/domains/mail/background_sync/errors.rs`
+- Create: `backend/src/domains/mail/background_sync/models.rs`
+- Create: `backend/src/domains/mail/background_sync/provider.rs`
+- Create: `backend/src/domains/mail/background_sync/rows.rs`
+- Create: `backend/src/domains/mail/background_sync/service.rs`
+- Create: `backend/src/domains/mail/background_sync/store.rs`
+- Create: `backend/src/domains/mail/background_sync/validation.rs`
+
+- [x] **Step 1: Verify mail background sync boundary failure**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/domains/mail/background_sync.rs | tr -d ' ')" -le 700
+test -d backend/src/domains/mail/background_sync
+```
+
+Expected before refactor: FAIL because `background_sync.rs` had 1684 lines and mixed run orchestration, provider network sync, SQL persistence, row mapping, DTOs, errors and validation helpers.
+
+- [x] **Step 2: Extract bounded background sync modules**
+
+Keep `crate::domains::mail::background_sync` as the public import path by replacing `background_sync.rs` with a facade. Move lifecycle orchestration into `service.rs`, provider network/projection loops into `provider.rs`, SQL persistence into `store.rs`, public DTOs and internal run models into `models.rs`, error enums into `errors.rs`, SQL row mapping into `rows.rs`, and validation/helper functions into `validation.rs`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/domains/mail/background_sync.rs | tr -d ' ')" -le 700
+find backend/src/domains/mail/background_sync -type f -name '*.rs' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+cargo fmt --manifest-path backend/Cargo.toml --check
+cargo check --manifest-path backend/Cargo.toml
+cargo test --manifest-path backend/Cargo.toml mail_sync
+make backend-validate
+make lint-architecture
+```
+
+### Task 31: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
