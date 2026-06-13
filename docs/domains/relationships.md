@@ -96,6 +96,7 @@ Current backend baseline:
 
 - `backend/migrations/0060_create_relationships.sql`;
 - `backend/migrations/0061_relationship_graph_projection.sql`;
+- `backend/migrations/0068_expand_relationship_graph_node_kinds.sql`;
 - `backend/src/domains/relationships/mod.rs`;
 - `backend/src/domains/relationships/api.rs`;
 - `backend/tests/relationships.rs`;
@@ -103,21 +104,22 @@ Current backend baseline:
 - ADR-0086.
 
 This baseline provides first-class Relationship persistence, validation and
-graph projection for Relationship endpoints that already have graph node kinds:
-Persona, Communication, Document, Project, Decision and Obligation. Guarded
-backend routes can list Relationships by entity and change review state while
-keeping the graph projection aligned. The Personas workspace includes a scoped
-desktop review panel for suggested Relationships attached to the selected
-Persona. It does not yet provide role adapters, organization/project/task link
-adapters or timeline projection.
+graph projection for the current `RelationshipEntityKind` set: Persona,
+Organization, Project, Communication, Document, Task, Event, Decision,
+Obligation and Knowledge. Guarded backend routes can list Relationships by
+entity or by review state and change review state while keeping the graph
+projection aligned. The Personas workspace includes a desktop review panel for
+global suggested Relationships, while still formatting selected-Persona
+relationships compactly when a Persona is selected. It does not yet provide
+role adapters, organization/project/task link adapters, cross-domain workflow
+placement or timeline projection.
 
 ## Migration Direction
 
 1. Keep `relationships` as the durable source-of-truth table.
-2. Add graph node kinds for Organization, Task, Event and Knowledge before
-   projecting those Relationship endpoints.
-3. Reclassify `person_roles`, organization links, project links and task
+2. Reclassify `person_roles`, organization links, project links and task
    relations as compatibility or read-model surfaces.
-4. Feed Relationship records into Trust, Risk, Timeline, Memory and Dossier
+3. Feed Relationship records into Trust, Risk, Timeline, Memory and Dossier
    projections.
-5. Expand desktop review beyond selected-Persona scoped review.
+4. Move or duplicate Relationship review into a broader cross-domain workflow
+   inbox after that shell exists.

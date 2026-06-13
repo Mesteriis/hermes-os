@@ -88,6 +88,7 @@ edges. It explicitly does not auto-create Tasks, Projects or Obligations.
 Backend routes currently expose:
 
 - `GET /api/v1/decisions?entity_kind=&entity_id=&limit=`;
+- `GET /api/v1/decisions?review_state=&limit=`;
 - `PUT /api/v1/decisions/{decision_id}/review`.
 
 These routes are guarded by the local API secret and support accepted Decision
@@ -95,10 +96,10 @@ review state changes. They do not create Tasks, Projects or Obligations and do
 not convert meeting outcomes or project review decisions into accepted
 Decisions.
 
-The Tasks workspace includes the first scoped desktop review panel for
-entity-scoped Decisions and Obligations. It lists Decisions through the guarded
-Decision route and submits explicit owner confirm/reject review state without
-creating Tasks, Projects or Obligations.
+The Tasks workspace includes the first desktop review panel for global
+suggested Decisions and Obligations, with optional entity-scoped filtering. It
+lists Decisions through the guarded Decision route and submits explicit owner
+confirm/reject review state without creating Tasks, Projects or Obligations.
 
 Decisions still also appear indirectly through project context, documents,
 communications and meeting outcomes. Those are source or compatibility surfaces
@@ -110,8 +111,7 @@ until adapters are added.
 2. Keep decision capture candidate-first.
 3. Expand Communication and Meeting ingestion beyond the initial explicit
    message/imported-document refresh path.
-4. Expand desktop review beyond the scoped entity panel into candidate-to-
-   Decision review before any automatic decision capture.
+4. Add candidate-to-Decision review before any automatic decision capture.
 5. Require evidence citations and review state.
 6. Expand graph projection beyond the current supported impacted entity kinds.
 7. Project reviewed Decisions into timeline and dossier views.

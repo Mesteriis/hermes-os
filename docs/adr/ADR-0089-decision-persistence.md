@@ -110,14 +110,14 @@ Negative:
 
 - Existing meeting outcomes and review decision tables remain compatibility or
   source surfaces until adapters are added.
-- The first desktop UI is scoped to entity review; meeting/provider-wide
+- The first desktop UI is scoped to the Tasks workspace; meeting/provider-wide
   candidate-to-Decision review flows are still follow-up work.
 - Provider-wide Decision extraction from Communications and Meetings remains
   outside the first persistence slice.
 
 ## Non-Goals
 
-- Global desktop review inbox.
+- Cross-domain workflow placement outside the Tasks workspace.
 - Automatic decision extraction.
 - Automatic project status changes.
 - Automatic task or obligation creation.
@@ -125,8 +125,7 @@ Negative:
 
 ## Required Follow-Up
 
-- Expand desktop review UI beyond scoped entity review and add
-  candidate-to-Decision review routing.
+- Add candidate-to-Decision review routing.
 - Connect meeting and provider-wide communication extraction to Decision
   candidates.
 - Add adapters from meeting outcomes and project review decisions.
@@ -139,15 +138,17 @@ Negative:
 The backend now has guarded accepted-Decision list/review routes:
 
 - `GET /api/v1/decisions?entity_kind=&entity_id=&limit=`;
+- `GET /api/v1/decisions?review_state=&limit=`;
 - `PUT /api/v1/decisions/{decision_id}/review`.
 
 These routes update accepted Decision review state only. They do not create
 Tasks, Projects, Obligations or accepted Decisions from candidates.
 
-The desktop frontend now includes a scoped Tasks workspace review panel for
-entity-scoped Decisions and Obligations. It uses the guarded list/review routes
-and sends only explicit owner `user_confirmed` / `user_rejected` review state.
-It does not create Tasks, Projects or Obligations.
+The desktop frontend now includes a Tasks workspace review panel for global
+suggested Decisions and Obligations, with optional entity-scoped filtering. It
+uses the guarded list/review routes and sends only explicit owner
+`user_confirmed` / `user_rejected` review state. It does not create Tasks,
+Projects or Obligations.
 
 `backend/src/engines/decision.rs` adds a deterministic candidate detector for
 explicit Communication and Document evidence, for example

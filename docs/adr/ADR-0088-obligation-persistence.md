@@ -109,23 +109,22 @@ Negative:
 
 - Existing person promises, meeting outcomes and task candidates remain
   compatibility or source surfaces until adapters are added.
-- The first desktop UI is scoped to entity review; global inbox and
-  non-task-candidate Obligation review flows are still follow-up work.
+- The first desktop UI is scoped to the Tasks workspace; non-task-candidate
+  Obligation review routing beyond accepted Obligations remains follow-up work.
 - Obligation extraction from Communications and Documents is not part of the
   first persistence slice.
 
 ## Non-Goals
 
 - Public `/obligations` API routes.
-- Global desktop review inbox.
+- Cross-domain workflow placement outside the Tasks workspace.
 - Automatic task creation.
 - Automatic obligation extraction from every message.
 - Removing task candidates, meeting outcomes or person promises.
 
 ## Required Follow-Up
 
-- Expand desktop review UI beyond scoped entity review and add
-  candidate-to-Obligation review routing.
+- Add candidate-to-Obligation review routing.
 - Connect Communication, meeting and document extraction to obligation
   candidates beyond the initial explicit message task-candidate path.
 - Add adapters from person promises and meeting outcomes.
@@ -137,15 +136,17 @@ Negative:
 The backend now has guarded accepted-Obligation list/review routes:
 
 - `GET /api/v1/obligations?entity_kind=&entity_id=&limit=`;
+- `GET /api/v1/obligations?review_state=&limit=`;
 - `PUT /api/v1/obligations/{obligation_id}/review`.
 
 These routes update accepted Obligation review state only. They do not create
 Tasks or create accepted Obligations from candidates.
 
-The desktop frontend now includes a scoped Tasks workspace review panel for
-entity-scoped Obligations and Decisions. It uses the guarded list/review routes
-and sends only explicit owner `user_confirmed` / `user_rejected` review state.
-It does not create Tasks or convert candidates into accepted Obligations.
+The desktop frontend now includes a Tasks workspace review panel for global
+suggested Obligations and Decisions, with optional entity-scoped filtering. It
+uses the guarded list/review routes and sends only explicit owner
+`user_confirmed` / `user_rejected` review state. It does not create Tasks or
+convert candidates into accepted Obligations.
 
 Migration `0066` and `ObligationStore` project accepted Obligations into graph
 for supported obligated and beneficiary entity kinds. The projection creates

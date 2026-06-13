@@ -69,14 +69,16 @@ These are known product/implementation gaps, not hidden documentation failures:
   `persons`, `person_id`, `person_*` tables and compatibility surfaces.
 - First-class Relationship storage now has an initial implementation baseline in
   migration `0060` and `backend/src/domains/relationships/`, plus active
-  graph projection for supported endpoints through migration `0061`. Supported
-  Relationship graph endpoints currently include Persona, Communication,
-  Document, Project, Decision and Obligation. Guarded backend routes can list
-  Relationships by entity and update review state while keeping the graph
-  projection aligned. The Personas workspace includes a scoped selected-Persona
-  review panel for suggested Relationships. Relationship semantics still need
-  global review, graph node kinds for Organization/Task/Event/Knowledge and
-  compatibility adapters for roles, organization links and project/task links.
+  graph projection for supported endpoints through migrations `0061` and
+  `0068`. Supported Relationship graph endpoints now match the current
+  `RelationshipEntityKind` set: Persona, Organization, Project,
+  Communication, Document, Task, Event, Decision, Obligation and Knowledge.
+  Guarded backend routes can list Relationships by entity or review state and
+  update review state while keeping the graph projection aligned. The Personas
+  workspace includes a global suggested Relationship review panel with
+  selected-Persona compact formatting. Relationship semantics still need
+  compatibility adapters for roles, organization links and project/task links,
+  plus broader cross-domain workflow placement.
 - Memory, Timeline, Trust, Risk and Enrichment behavior still appears in
   domain-local modules and routes such as `health`, `watchtower`,
   `intelligence` and `memory`.
@@ -94,10 +96,11 @@ These are known product/implementation gaps, not hidden documentation failures:
   `fulfillment_task`. Explicit message/imported-document Decision candidates
   can now refresh into source-backed `suggested` Decisions while preserving
   confirmed/rejected review state across repeat refreshes. Guarded backend
-  routes can list accepted Obligations/Decisions and update accepted review
-  state without creating Tasks, Projects or Obligations. The Tasks workspace
-  includes a scoped entity review panel for persisted Decisions and
-  Obligations. Provider-wide ingestion, global review inbox and adapters from
+  routes can list accepted Obligations/Decisions by entity or review state and
+  update accepted review state without creating Tasks, Projects or
+  Obligations. The Tasks workspace includes a global suggested review panel for
+  persisted Decisions and Obligations, with optional entity-scoped filtering.
+  Provider-wide ingestion, candidate-to-domain review routing and adapters from
   person promises, meeting outcomes and project review decisions remain
   incomplete.
 - Consistency / Contradiction Engine now has a structured-claim detection and

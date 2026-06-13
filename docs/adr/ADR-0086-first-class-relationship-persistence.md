@@ -82,8 +82,9 @@ provenance; they are not silent truth.
 `graph_edges` remain a derived graph traversal surface. The implementation
 projects Relationship records between graph-supported entities as generic
 `entity_relationship` graph edges, while preserving the Relationship record as
-source of truth. The current supported projection endpoints are Persona,
-Communication, Document, Project, Decision and Obligation.
+source of truth. The current supported projection endpoints match the current
+`RelationshipEntityKind` set: Persona, Organization, Project, Communication,
+Document, Task, Event, Decision, Obligation and Knowledge.
 
 ## Consequences
 
@@ -102,9 +103,9 @@ Negative:
   surfaces until migration plans retire them.
 - There is temporary duplication between `relationships`, graph edges and
   timeline events.
-- The first desktop review UI is scoped to selected Personas; broader
-  cross-domain review and compatibility adapters still need explicit follow-up
-  work.
+- The first desktop review UI is still surfaced inside the Personas workspace;
+  broader cross-domain workflow placement and compatibility adapters still need
+  explicit follow-up work.
 
 ## Non-Goals
 
@@ -120,21 +121,21 @@ The backend now includes guarded routes for listing Relationship records by
 entity and changing review state:
 
 - `GET /api/v1/relationships?entity_kind=&entity_id=&limit=`
+- `GET /api/v1/relationships?review_state=&limit=`
 - `PUT /api/v1/relationships/{relationship_id}/review`
 
 Review updates re-project active graph-supported Relationship edges so the
 graph projection follows the Relationship source of truth.
 
-The desktop frontend now includes a Personas workspace review panel for
-suggested Relationships linked to the selected Persona. It uses the guarded
-entity-scoped list/review routes and sends explicit owner
+The desktop frontend now includes a Personas workspace review panel for global
+suggested Relationships. It uses the guarded global review list route, keeps
+entity-scoped formatting when a Persona is selected and sends explicit owner
 `user_confirmed` / `user_rejected` review state.
 
 ## Required Follow-Up
 
-- Add graph node kinds for Organization, Task, Event and Knowledge before
-  projecting those Relationship endpoints.
-- Expand desktop review beyond selected-Persona scoped review.
+- Move or duplicate Relationship review into a broader cross-domain review
+  inbox when the workflow shell is defined.
 - Reclassify Persona roles and organization links into Relationship records.
 - Feed reviewed Relationship records into Trust, Risk, Timeline and Dossier
   projections.
