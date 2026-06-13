@@ -28,10 +28,10 @@
 
 ## Current Stop-Factors
 
-- Backend source files over 700 lines still exist outside the first completed slice.
+- Backend source files over 700 lines still exist outside completed backend decomposition slices.
 - Frontend Svelte God Components have been decomposed by completed tasks; do not reintroduce components over 500 lines.
 - Frontend CSS God Files have been decomposed by completed tasks; do not reintroduce CSS files over 700 lines.
-- Frontend TypeScript service/store files over 700 lines still exist and must not receive new feature work before decomposition.
+- Frontend TypeScript service/store files have been decomposed by completed tasks; do not reintroduce files over 700 lines.
 - Feature parity work for mail and Telegram must not add code to these files until the relevant file/component is decomposed.
 
 ### Task 1: Mail Handler God File Decomposition
@@ -1127,7 +1127,53 @@ make backend-validate
 make lint-architecture
 ```
 
-### Task 28: Continue Backend God File Elimination
+### Task 28: Telegram Client Store Boundary Decomposition
+
+**Files:**
+- Modify: `backend/src/integrations/telegram/client.rs`
+- Create: `backend/src/integrations/telegram/client/accounts.rs`
+- Create: `backend/src/integrations/telegram/client/chats.rs`
+- Create: `backend/src/integrations/telegram/client/errors.rs`
+- Create: `backend/src/integrations/telegram/client/identifiers.rs`
+- Create: `backend/src/integrations/telegram/client/messages.rs`
+- Create: `backend/src/integrations/telegram/client/models.rs`
+- Create: `backend/src/integrations/telegram/client/projection.rs`
+- Create: `backend/src/integrations/telegram/client/rows.rs`
+- Create: `backend/src/integrations/telegram/client/store.rs`
+- Create: `backend/src/integrations/telegram/client/tests.rs`
+- Create: `backend/src/integrations/telegram/client/validation.rs`
+- Create: `backend/src/integrations/telegram/client/vault.rs`
+
+- [x] **Step 1: Verify Telegram client boundary failure**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/integrations/telegram/client.rs | tr -d ' ')" -le 700
+test -d backend/src/integrations/telegram/client
+```
+
+Expected before refactor: FAIL because `client.rs` had 1793 lines and mixed provider account setup, credential binding, lifecycle state changes, chat/message ingestion, projection, row mapping, identifiers, validation, error types and tests.
+
+- [x] **Step 2: Extract bounded client modules**
+
+Keep `crate::integrations::telegram::client` as the public crate-local import path by replacing `client.rs` with a facade. Move account setup/lifecycle and credential binding into `accounts.rs`, chat operations into `chats.rs`, message ingestion/query helpers into `messages.rs`, public DTOs into `models.rs`, projection into `projection.rs`, row mappers into `rows.rs`, stable identifiers into `identifiers.rs`, validation helpers into `validation.rs`, secret-vault boundary into `vault.rs`, and tests into `tests.rs`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/integrations/telegram/client.rs | tr -d ' ')" -le 700
+find backend/src/integrations/telegram/client -type f -name '*.rs' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+cargo fmt --manifest-path backend/Cargo.toml --check
+cargo check --manifest-path backend/Cargo.toml
+cargo test --manifest-path backend/Cargo.toml integrations::telegram::client
+make backend-validate
+make lint-architecture
+```
+
+### Task 29: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

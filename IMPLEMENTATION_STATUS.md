@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 21:45 CEST
+Дата последнего обновления: 2026-06-13 21:58 CEST
 
 ## Выполнено
 
@@ -42,6 +42,7 @@
 * [x] Telegram service разделен на bounded modules `automation`, `calls`, `constants`, `fixtures`, `lifecycle`, `messages`, `parsing`, `runtime`, `selection`, `types`, `wizard` и `workspace`; `frontend/src/lib/services/telegram.ts` сокращен с 1584 до 11 строк и оставлен как public facade, все Telegram service modules меньше 700 строк.
 * [x] API contract types разделены на bounded modules `accounts`, `ai`, `calendar`, `communication`, `contradictions`, `decisions`, `documents`, `graph`, `mail`, `obligations`, `organizations`, `persons`, `projects`, `relationships`, `settings`, `tasks`, `telegram`, `vault` и `whatsapp`; `frontend/src/lib/api/types.ts` сокращен с 2615 до 19 строк и оставлен как public facade, все API type modules меньше 700 строк.
 * [x] Telegram TDLib JSON boundary разделен на bounded modules `client`, `identifiers`, `library_paths`, `parsing`, `qr_login`, `qr_login_support`, `requests` и `snapshots`; `backend/src/integrations/telegram/tdjson.rs` сокращен с 2361 до 603 строк и оставлен как public facade, все TDLib modules меньше 700 строк.
+* [x] Telegram client/store boundary разделен на bounded modules `accounts`, `chats`, `errors`, `identifiers`, `messages`, `models`, `projection`, `rows`, `store`, `validation` и `vault`; `backend/src/integrations/telegram/client.rs` сокращен с 1793 до 36 строк и оставлен как public facade, все новые client modules меньше 700 строк.
 
 ## В работе
 
@@ -68,7 +69,7 @@
 ## Архитектурные проблемы
 
 * В коде ещё есть compatibility layers вокруг `persons`, `health`, `watchtower`, legacy Person/Contact терминологии и старых API.
-* В backend остаются source files больше 700 строк за пределами уже разделенных `mail/handlers` и `integrations/telegram/tdjson`.
+* В backend остаются source files больше 700 строк за пределами уже разделенных `mail/handlers`, `integrations/telegram/tdjson` и `integrations/telegram/client`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
 * Во frontend больше не осталось source/service/store files больше 700 строк по текущему scan.
 * Во frontend больше не осталось CSS files больше 700 строк по текущему scan; `app.css` сокращен до 640 строк, `pages.css` — до 457 строк, `sidebar.css` — до 590 строк, `panels.css` — до 697 строк.
