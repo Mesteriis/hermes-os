@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 19:21 CEST
+Дата последнего обновления: 2026-06-13 19:31 CEST
 
 ## Выполнено
 
@@ -29,6 +29,7 @@
 * [x] Documents/Notes-owned CSS вынесен из `frontend/src/lib/pages/pages.css` и `frontend/src/lib/styles/app.css` в owner-файлы `frontend/src/lib/pages/documents/documents.css` и `frontend/src/lib/pages/notes/notes.css`; root `pages.css` сокращен до 1912 строк, `app.css` сокращен до 1008 строк, новые CSS chunks меньше 700 строк.
 * [x] Projects-owned CSS вынесен из `frontend/src/lib/pages/pages.css` и `frontend/src/lib/styles/app.css` в `frontend/src/lib/pages/projects/projects.css`; root `pages.css` сокращен до 1778 строк, `app.css` сокращен до 998 строк, новый CSS chunk меньше 700 строк.
 * [x] Tasks-owned CSS вынесен из `frontend/src/lib/pages/pages.css` и `frontend/src/lib/styles/app.css` в `frontend/src/lib/pages/tasks/tasks.css`; root `pages.css` сокращен до 1628 строк, `app.css` сокращен до 995 строк, новый CSS chunk меньше 700 строк.
+* [x] Persons-owned CSS вынесен из `frontend/src/lib/pages/pages.css` и `frontend/src/lib/styles/app.css` в `frontend/src/lib/pages/persons/persons.css`; root `pages.css` сокращен до 1416 строк, `app.css` сокращен до 990 строк, новый CSS chunk меньше 700 строк.
 
 ## В работе
 
@@ -59,7 +60,7 @@
 * В backend остаются source files больше 700 строк за пределами уже разделенного `mail/handlers`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
 * Во frontend остаются крупные service/source files больше 700 строк, включая `frontend/src/lib/services/accounts.ts`; их нельзя расширять новыми возможностями без предварительной декомпозиции.
-* Во frontend остаются крупные shared CSS files (`pages.css` — 1628 строк, `panels.css` — 1780 строк, `app.css` — 995 строк, `sidebar.css` — 841 строк), которые блокируют ownership-based компонентную декомпозицию.
+* Во frontend остаются крупные shared CSS files (`pages.css` — 1416 строк, `panels.css` — 1780 строк, `app.css` — 990 строк, `sidebar.css` — 841 строк), которые блокируют ownership-based компонентную декомпозицию.
 * Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
 * Некоторые реализованные engine baseline ещё не подключены как полноценные доменные процессы.
 

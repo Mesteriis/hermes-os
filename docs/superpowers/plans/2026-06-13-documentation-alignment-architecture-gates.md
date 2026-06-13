@@ -575,7 +575,43 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 15: Continue Backend God File Elimination
+### Task 15: Persons CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/styles/app.css`
+- Modify: `frontend/src/lib/pages/persons/PersonsPage.svelte`
+- Create: `frontend/src/lib/pages/persons/persons.css`
+
+- [x] **Step 1: Verify Persons CSS ownership failure**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(persons-page|persons-layout|person-detail|person-hero|person-cards|identity-|relationship-review-|identity-trace-target)' frontend/src/lib/pages/pages.css
+! rg -n '\b(persons-layout|person-hero)\b' frontend/src/lib/styles/app.css
+```
+
+Expected before refactor: FAIL because root `pages.css` and app-level `app.css` own Persons page shell, layout, hero, dossier card layout, identity review and relationship review selectors.
+
+- [x] **Step 2: Extract Persons CSS chunk**
+
+Move Persons page shell, 12-column layout, detail, hero, person cards, identity candidate review, identity trace assignment and relationship review selectors into `frontend/src/lib/pages/persons/persons.css` and import it from `PersonsPage.svelte`. Remove the Persons layout and hero selectors from shared `app.css`, preserving the previous effective cascade in the owner file.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(persons-page|persons-layout|person-detail|person-hero|person-cards|identity-|relationship-review-|identity-trace-target)' frontend/src/lib/pages/pages.css
+! rg -n '\b(persons-layout|person-hero)\b' frontend/src/lib/styles/app.css
+test "$(wc -l < frontend/src/lib/pages/persons/persons.css | tr -d ' ')" -le 700
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 16: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

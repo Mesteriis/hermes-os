@@ -433,7 +433,6 @@ p {
 .chat-pane header img,
 .profile-head img,
 .persons-list-panel img,
-.person-hero img,
 .person-list img,
 .person-compact img {
 	border-radius: var(--hh-radius-round);
@@ -766,8 +765,7 @@ input[type='checkbox'] {
 	margin-bottom: 10px;
 }
 
-.chat-pane > header,
-.person-hero {
+.chat-pane > header {
 	display: grid;
 	grid-template-columns: auto 1fr auto;
 	align-items: center;
@@ -833,7 +831,6 @@ input[type='checkbox'] {
 .hero-row,
 .dashboard-grid,
 .three-pane,
-.persons-layout,
 .calendar-layout,
 .knowledge-layout,
 .agents-layout,
@@ -901,7 +898,6 @@ input[type='checkbox'] {
 	.hero-row,
 	.dashboard-grid,
 	.three-pane,
-	.persons-layout,
 		.calendar-layout,
 		.knowledge-layout,
 		.agents-layout,
@@ -934,7 +930,6 @@ h1 {
 	.hero-row,
 	.dashboard-grid,
 	.three-pane,
-	.persons-layout,
 		.calendar-layout,
 		.knowledge-layout,
 		.agents-layout,

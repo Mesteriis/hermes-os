@@ -10,6 +10,7 @@
 	import PersonsIdentityTraceReview from './widgets/PersonsIdentityTraceReview.svelte';
 	import PersonsRelationshipReview from './widgets/PersonsRelationshipReview.svelte';
 	import WidgetEditChrome from '$lib/components/shared/WidgetEditChrome.svelte';
+	import './persons.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

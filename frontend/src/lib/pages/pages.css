@@ -1,5 +1,4 @@
 .home-page,
-.persons-page,
 .projects-page,
 .calendar-page,
 .documents-page,
@@ -27,35 +26,6 @@
 	grid-template-columns: 350px minmax(430px, 1fr) 320px;
 	gap: 12px;
 	min-height: var(--hh-widget-workbench-large);
-}
-
-.persons-layout {
-	display: grid;
-	grid-template-columns: minmax(240px, 0.85fr) minmax(420px, 1fr) minmax(240px, 310px);
-	gap: 12px;
-	min-height: var(--hh-widget-workbench-large);
-}
-
-.person-detail {
-	display: grid;
-	gap: 12px;
-	align-content: start;
-	min-width: 0;
-}
-
-.person-hero img {
-	width: 92px;
-	height: 92px;
-}
-
-.person-hero {
-	grid-template-columns: 92px 1fr auto;
-}
-
-.person-cards {
-	display: grid;
-	grid-template-columns: repeat(3, minmax(0, 1fr));
-	gap: 12px;
 }
 
 .node-detail-list li {
@@ -86,185 +56,6 @@
 	grid-template-columns: minmax(740px, 1fr) 310px;
 	gap: 12px;
 	min-height: var(--hh-widget-workbench-large);
-}
-
-.identity-note {
-	margin: 0 0 8px;
-	color: var(--hh-color-text-muted);
-	font-size: 12px;
-}
-
-.identity-candidate-row {
-	display: grid;
-	gap: 8px;
-	padding: 10px 0;
-	border-top: 1px solid rgba(102, 189, 180, 0.08);
-}
-
-.identity-candidate-row:first-child {
-	border-top: none;
-}
-
-.identity-candidate-row strong {
-	display: block;
-	margin-bottom: 3px;
-}
-
-.identity-candidate-row p {
-	margin: 0 0 4px;
-	color: #dbe9e8;
-}
-
-.identity-candidate-row small {
-	display: block;
-	color: var(--hh-color-text-muted);
-}
-
-.identity-actions {
-	display: inline-flex;
-	gap: 7px;
-	margin-top: 8px;
-}
-
-.identity-actions button {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	padding: 4px 8px;
-	height: auto;
-	font-size: 11px;
-}
-
-.relationship-review-panel {
-	display: grid;
-	gap: 10px;
-}
-
-.relationship-review-panel header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-}
-
-.relationship-review-panel h2 {
-	margin: 2px 0 0;
-}
-
-.relationship-review-panel header button,
-.relationship-review-state button,
-.relationship-review-actions button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	min-height: 30px;
-	border: 1px solid var(--hh-border-subtle);
-	border-radius: var(--hh-radius-control);
-	background: rgba(4, 21, 24, 0.72);
-	color: var(--hh-color-text-soft);
-	padding: 0 10px;
-	font-size: 11px;
-	transition:
-		border-color 160ms ease,
-		background 160ms ease,
-		color 160ms ease;
-}
-
-.relationship-review-panel header button {
-	width: 32px;
-	padding: 0;
-}
-
-.relationship-review-panel button:not(:disabled):hover {
-	border-color: rgba(45, 240, 206, 0.38);
-	background: rgba(25, 154, 132, 0.18);
-	color: var(--hh-color-accent);
-}
-
-.relationship-review-state {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	min-height: 42px;
-	color: var(--hh-color-text-muted);
-	font-size: 12px;
-}
-
-.relationship-review-state.error {
-	color: var(--hh-color-danger);
-}
-
-.relationship-review-list {
-	display: grid;
-	gap: 9px;
-}
-
-.relationship-review-item {
-	display: grid;
-	gap: 8px;
-	border-top: 1px solid rgba(102, 189, 180, 0.08);
-	padding-top: 10px;
-}
-
-.relationship-review-item:first-child {
-	border-top: none;
-	padding-top: 0;
-}
-
-.relationship-review-item strong {
-	display: block;
-	margin-bottom: 3px;
-	overflow-wrap: anywhere;
-}
-
-.relationship-review-item p,
-.relationship-review-item small {
-	display: block;
-	margin: 0 0 4px;
-	color: var(--hh-color-text-muted);
-	font-size: 11px;
-	line-height: 1.35;
-	overflow-wrap: anywhere;
-}
-
-.relationship-review-actions {
-	display: flex;
-	gap: 7px;
-	flex-wrap: wrap;
-}
-
-.identity-trace-target {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) auto;
-	gap: 8px;
-	align-items: center;
-}
-
-.identity-trace-target select {
-	min-width: 0;
-	height: 30px;
-	border: 1px solid var(--hh-border-subtle);
-	border-radius: var(--hh-radius-control);
-	background: rgba(4, 21, 24, 0.72);
-	color: var(--hh-color-text-soft);
-	padding: 0 8px;
-	font-size: 11px;
-}
-
-.identity-trace-target button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	min-height: 30px;
-	border: 1px solid var(--hh-border-subtle);
-	border-radius: var(--hh-radius-control);
-	background: rgba(4, 21, 24, 0.72);
-	color: var(--hh-color-text-soft);
-	padding: 0 10px;
-	font-size: 11px;
 }
 
 .doc-mini {
@@ -1330,7 +1121,6 @@
 }
 
 .home-page,
-.persons-page,
 .projects-page,
 .calendar-page,
 .documents-page,
@@ -1353,7 +1143,6 @@
 }
 
 .home-page > *,
-.persons-page > *,
 .projects-page > *,
 .calendar-page > *,
 .documents-page > *,
@@ -1399,7 +1188,6 @@
 
 @media (max-width: 1359px) {
 .home-page,
-	.persons-page,
 	.projects-page,
 		.calendar-page,
 		.documents-page,
