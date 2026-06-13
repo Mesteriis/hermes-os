@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 17:46 CEST
+Дата последнего обновления: 2026-06-13 17:55 CEST
 
 ## Выполнено
 
@@ -18,6 +18,7 @@
 * [x] `frontend/src/lib/components/shared/AccountSetupModal.svelte` сокращен с 1219 до 97 строк и оставлен как modal shell/router.
 * [x] Mail, Calendar, Telegram и WhatsApp setup flows вынесены в `frontend/src/lib/components/account-setup/`; все новые account setup компоненты меньше 500 строк.
 * [x] `frontend/src/lib/pages/telegram/TelegramPage.svelte` сокращен с 842 до 476 строк; header, action rail и status messages вынесены в focused Telegram widgets.
+* [x] `frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte` сокращен с 622 до 65 строк; AI provider, routing, prompt studio, runs, header, tabs, status и rail вынесены в focused widgets.
 
 ## В работе
 
@@ -28,7 +29,6 @@
 
 ## Осталось реализовать
 
-* [ ] Декомпозировать `frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte`.
 * [ ] Декомпозировать `frontend/src/lib/pages/communications/widgets/CommunicationsMessageDetail.svelte`.
 * [ ] Разнести крупные frontend CSS файлы по владельцам компонентов и страниц: `pages.css`, `panels.css`, `app.css`, `sidebar.css`.
 * [ ] Устранить оставшиеся backend source files больше 700 строк без добавления новых God Files.
@@ -48,7 +48,7 @@
 
 * В коде ещё есть compatibility layers вокруг `persons`, `health`, `watchtower`, legacy Person/Contact терминологии и старых API.
 * В backend остаются source files больше 700 строк за пределами уже разделенного `mail/handlers`.
-* Во frontend остаются компоненты больше 500 строк: `AISettingsControlCenter.svelte`, `CommunicationsMessageDetail.svelte`.
+* Во frontend остаются компоненты больше 500 строк: `CommunicationsMessageDetail.svelte`.
 * Во frontend остаются крупные service/source files больше 700 строк, включая `frontend/src/lib/services/accounts.ts`; их нельзя расширять новыми возможностями без предварительной декомпозиции.
 * Во frontend остаются крупные shared CSS files, которые блокируют ownership-based компонентную декомпозицию.
 * Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
@@ -56,4 +56,4 @@
 
 ## Следующий шаг
 
-Декомпозировать `frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte` перед дальнейшим расширением settings/runtime UI.
+Декомпозировать `frontend/src/lib/pages/communications/widgets/CommunicationsMessageDetail.svelte` перед дальнейшим расширением коммуникационного UI.

@@ -180,7 +180,40 @@ pnpm --dir frontend test:unit
 make lint-frontend
 ```
 
-### Task 4: Continue Backend God File Elimination
+### Task 4: AI Settings Control Center Decomposition
+
+**Files:**
+- Modify: `frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte`
+- Create focused AI settings panel components under `frontend/src/lib/pages/settings/widgets/`
+
+- [x] **Step 1: Verify current component threshold failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte | tr -d ' ')" -le 500
+```
+
+Expected before refactor: FAIL because the component has 622 lines.
+
+- [x] **Step 2: Extract AI settings sections**
+
+Move header, tabs, status, overview, provider panels, routing, prompt studio, runs and rail UI into focused widgets. Keep provider secret handling and remote-consent behavior behind the existing `aiSettings` store/service boundary.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte | tr -d ' ')" -le 500
+find frontend/src/lib/pages/settings/widgets -maxdepth 1 -type f -name 'AI*.svelte' -print0 \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 500 { print; failed=1 } END { exit failed ? 1 : 0 }'
+pnpm --dir frontend test:unit
+make lint-frontend
+```
+
+### Task 5: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
