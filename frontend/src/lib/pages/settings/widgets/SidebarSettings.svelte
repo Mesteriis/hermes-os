@@ -4,6 +4,7 @@
 	import { currentLocale, t } from '$lib/i18n';
 	import type { SidebarSettings, SidebarNavGroup, SidebarItemId, SidebarRootItemId, ResolvedSidebarItem, ResolvedSidebarRootEntry, PrimaryNavId } from '$lib/layout';
 	import { parseCommunicationSidebarItemId } from '$lib/layout';
+	import './sidebarSettings.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

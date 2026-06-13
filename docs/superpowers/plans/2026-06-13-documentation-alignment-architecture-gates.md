@@ -30,7 +30,7 @@
 
 - Backend source files over 700 lines still exist outside the first completed slice.
 - Frontend Svelte components over 500 lines still exist: `AccountSetupModal.svelte`, `TelegramPage.svelte`, `AISettingsControlCenter.svelte`, `CommunicationsMessageDetail.svelte`.
-- Large shared CSS files still exist: `pages.css`, `panels.css`, `app.css`, `sidebar.css`.
+- Large shared CSS files still exist: `panels.css`, `app.css`.
 - Feature parity work for mail and Telegram must not add code to these files until the relevant file/component is decomposed.
 
 ### Task 1: Mail Handler God File Decomposition
@@ -727,7 +727,43 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 19: Continue Backend God File Elimination
+### Task 19: Sidebar Settings CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/components/shell/sidebar.css`
+- Modify: `frontend/src/lib/pages/settings/widgets/SidebarSettings.svelte`
+- Create: `frontend/src/lib/pages/settings/widgets/sidebarSettings.css`
+
+- [x] **Step 1: Verify sidebar settings CSS ownership failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/components/shell/sidebar.css | tr -d ' ')" -le 700
+! rg -n '(^|[,{[:space:]])\.(sidebar-settings-panel|sidebar-settings-actions|sidebar-group-create|sidebar-config-|sidebar-preview-list|sidebar-settings-summary)' frontend/src/lib/components/shell/sidebar.css
+```
+
+Expected before refactor: FAIL because `sidebar.css` has 841 lines and owns Settings sidebar configuration selectors.
+
+- [x] **Step 2: Extract Sidebar Settings CSS chunk**
+
+Move Settings sidebar configuration panel, action, group creation, config item, preview and summary selectors into `frontend/src/lib/pages/settings/widgets/sidebarSettings.css` and import it from `SidebarSettings.svelte`. Keep shell sidebar, rail, navigation and responsive shell selectors in `frontend/src/lib/components/shell/sidebar.css`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/components/shell/sidebar.css | tr -d ' ')" -le 700
+test "$(wc -l < frontend/src/lib/pages/settings/widgets/sidebarSettings.css | tr -d ' ')" -le 700
+! rg -n '(^|[,{[:space:]])\.(sidebar-settings-panel|sidebar-settings-actions|sidebar-group-create|sidebar-config-|sidebar-preview-list|sidebar-settings-summary)' frontend/src/lib/components/shell/sidebar.css
+rg -n '(^|[,{[:space:]])\.(sidebar-settings-panel|sidebar-settings-actions|sidebar-group-create|sidebar-config-|sidebar-preview-list|sidebar-settings-summary)' frontend/src/lib/pages/settings/widgets/sidebarSettings.css
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 20: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
