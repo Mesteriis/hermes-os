@@ -213,7 +213,43 @@ pnpm --dir frontend test:unit
 make lint-frontend
 ```
 
-### Task 5: Continue Backend God File Elimination
+### Task 5: Communications Message Detail Decomposition
+
+**Files:**
+- Modify: `frontend/src/lib/pages/communications/widgets/CommunicationsMessageDetail.svelte`
+- Create focused message detail tab components under `frontend/src/lib/pages/communications/widgets/`
+
+- [x] **Step 1: Verify current component threshold failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/pages/communications/widgets/CommunicationsMessageDetail.svelte | tr -d ' ')" -le 500
+```
+
+Expected before refactor: FAIL because the component has 550 lines.
+
+- [x] **Step 2: Extract message detail tabs**
+
+Move message body rendering, attachment list, header table, related actions/results and timeline UI into focused widgets. Keep selected message derivation and communication callbacks in the existing parent component.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/pages/communications/widgets/CommunicationsMessageDetail.svelte | tr -d ' ')" -le 500
+find frontend/src/lib/pages/communications -type f -name '*.svelte' -print0 \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 500 { print; failed=1 } END { exit failed ? 1 : 0 }'
+find frontend/src -type f -name '*.svelte' -print0 \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 500 { print; failed=1 } END { exit failed ? 1 : 0 }'
+make lint-frontend
+make lint-architecture
+```
+
+### Task 6: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
