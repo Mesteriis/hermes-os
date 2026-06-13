@@ -99,10 +99,15 @@ These are known product/implementation gaps, not hidden documentation failures:
   `ContradictionObservation` persistence baseline in migration `0062` and
   `backend/src/engines/consistency.rs`. It can also extract simple structured
   claim lines from Communication and Document evidence text before comparing
-  them to accepted claims. Guarded backend routes can list open contradiction
-  observations and update review state without overwriting Memory. Polygraph
-  review UI, provider-wide ingestion wiring and natural-language claim
-  extraction remain incomplete.
+  them to accepted claims. Projected Communication message refresh, imported
+  Document refresh, meeting-note refresh and call-transcript refresh can now
+  compare active `person_facts` Memory claims with structured evidence claims
+  matched by Persona email sender, Document email reference, event participant
+  link or active Telegram identity.
+  Guarded backend routes can list open contradiction observations and update
+  review state without overwriting Memory. Polygraph review UI, non-email
+  message-channel wiring and natural-language claim extraction remain
+  incomplete.
 - Communication is product-facing, but much current implementation still lives
   under `backend/src/domains/mail/` as the email-channel implementation.
 - Notes remain document-like capture artifacts unless a future ADR promotes a

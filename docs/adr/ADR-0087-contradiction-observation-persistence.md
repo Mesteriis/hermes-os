@@ -134,10 +134,23 @@ baseline for simple structured Communication and Document evidence lines such
 as `status: blocked` or `location=Madrid`. This converts evidence text into
 `NewEvidenceClaim` values and reuses the same direct-contradiction detector.
 
+`ContradictionObservationStore::refresh_deterministic_observations` now
+provides the first backend ingestion bridge for projected Communication
+messages, imported Documents, meeting notes and call transcripts. It treats
+active `person_facts` as accepted Memory claims, matches a Persona through the
+compatibility `persons.email_address` field, `event_participants.person_id` or
+active `person_identities.telegram` identity, compares message subject/body
+evidence by message sender, compares Document title/extracted-text evidence
+when the Document text references the Persona email, compares meeting-note
+content for linked event participants and compares successful call transcript
+text for linked Telegram identities. It stores reviewable contradiction
+observations and does not overwrite `person_facts`, Trust, Risk or
+Relationships.
+
 ## Required Follow-Up
 
 - Add desktop review UI for contradiction observations.
-- Connect provider-wide Communication and Document ingestion to structured
-  claim extraction.
+- Expand ingestion wiring beyond projected email messages, imported Documents,
+  meeting notes and call transcripts to non-email message channels.
 - Add natural-language claim extraction behind explicit review policy.
 - Link reviewed outcomes to Memory, Trust, Risk and Relationship semantics.
