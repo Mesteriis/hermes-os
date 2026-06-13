@@ -611,7 +611,44 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 16: Continue Backend God File Elimination
+### Task 16: Timeline CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/styles/app.css`
+- Modify: `frontend/src/lib/pages/timeline/TimelinePage.svelte`
+- Create: `frontend/src/lib/pages/timeline/timeline.css`
+
+- [x] **Step 1: Verify Timeline CSS ownership failure**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(timeline-page|timeline-layout|large-timeline|timeline-event-row|rail-dot|timeline-slider)' frontend/src/lib/pages/pages.css
+! rg -n '\btimeline-layout\b' frontend/src/lib/styles/app.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns Timeline page shell, active stream selectors and dead `timeline-slider` selectors, while `app.css` owns the effective Timeline layout grid.
+
+- [x] **Step 2: Extract Timeline CSS chunk**
+
+Move active Timeline page shell, 12-column layout, stream row and rail-dot selectors into `frontend/src/lib/pages/timeline/timeline.css` and import it from `TimelinePage.svelte`. Remove unused `timeline-slider` CSS instead of moving dead selectors.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(timeline-page|timeline-layout|large-timeline|timeline-event-row|rail-dot|timeline-slider)' frontend/src/lib/pages/pages.css
+! rg -n '\btimeline-layout\b' frontend/src/lib/styles/app.css
+! rg -n 'timeline-slider' frontend/src
+test "$(wc -l < frontend/src/lib/pages/timeline/timeline.css | tr -d ' ')" -le 700
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 17: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

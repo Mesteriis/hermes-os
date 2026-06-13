@@ -4,6 +4,7 @@
 	import TimelineStream from './widgets/TimelineStream.svelte';
 	import TimelineFilters from './widgets/TimelineFilters.svelte';
 	import { communicationMessages } from '$lib/stores/communications';
+	import './timeline.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

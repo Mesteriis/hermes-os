@@ -834,7 +834,6 @@ input[type='checkbox'] {
 .calendar-layout,
 .knowledge-layout,
 .agents-layout,
-.timeline-layout,
 .org-layout {
 	--hh-zone-rows: 12;
 	display: grid;
@@ -900,8 +899,7 @@ input[type='checkbox'] {
 	.three-pane,
 		.calendar-layout,
 		.knowledge-layout,
-		.agents-layout,
-		.timeline-layout {
+		.agents-layout {
 		transform-origin: top left;
 	}
 }
@@ -933,7 +931,6 @@ h1 {
 		.calendar-layout,
 		.knowledge-layout,
 		.agents-layout,
-		.timeline-layout,
 		.org-layout {
 		grid-template-columns: repeat(var(--hh-layout-columns), minmax(0, 1fr));
 		min-height: 0;

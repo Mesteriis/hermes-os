@@ -6,8 +6,7 @@
 .knowledge-page,
 .review-page,
 .agents-page,
-.organizations-page,
-.timeline-page {
+.organizations-page {
 	min-height: 0;
 	overflow: auto;
 	padding-right: 2px;
@@ -50,8 +49,7 @@
 	color: #dffffa;
 }
 
-.knowledge-layout,
-.timeline-layout {
+.knowledge-layout {
 	display: grid;
 	grid-template-columns: minmax(740px, 1fr) 310px;
 	gap: 12px;
@@ -792,68 +790,6 @@
 	line-height: 1.4;
 }
 
-.timeline-slider {
-	display: grid;
-	grid-template-columns: auto 1fr auto;
-	gap: 14px;
-	align-items: center;
-	padding: 14px;
-	color: #a6bbbb;
-	font-size: 11px;
-}
-
-.timeline-slider div {
-	height: 4px;
-	border-radius: var(--hh-radius-pill);
-	background: rgba(66, 130, 126, 0.22);
-}
-
-.timeline-slider i {
-	display: block;
-	width: 64%;
-	height: 100%;
-	margin-left: 28%;
-	background: var(--hh-color-accent);
-}
-
-.large-timeline {
-	padding: 0 0 12px;
-}
-
-.timeline-event-row {
-	display: grid;
-	grid-template-columns: 64px 18px 40px 1fr;
-	gap: 10px;
-	min-height: 72px;
-	border-bottom: 1px solid rgba(102, 189, 180, 0.08);
-	padding: 12px 18px;
-}
-
-.timeline-event-row time {
-	color: var(--hh-color-accent);
-	font-size: 12px;
-}
-
-.rail-dot {
-	width: 8px;
-	height: 8px;
-	margin-top: 8px;
-	border-radius: var(--hh-radius-round);
-	background: var(--hh-color-accent);
-	box-shadow: 0 0 12px rgba(45, 240, 206, 0.85);
-}
-
-.timeline-event-row strong {
-	color: var(--hh-color-text-bright);
-	font-size: 13px;
-}
-
-.timeline-event-row p {
-	margin-top: 5px;
-	color: var(--hh-color-text-muted);
-	font-size: 12px;
-}
-
 .drawer-backdrop {
 	position: fixed;
 	inset: 0;
@@ -1128,8 +1064,7 @@
 .knowledge-page,
 .review-page,
 .agents-page,
-.organizations-page,
-.timeline-page {
+.organizations-page {
 	display: grid;
 	grid-template-columns: repeat(var(--hh-layout-columns), minmax(0, 1fr));
 	grid-auto-flow: row;
@@ -1150,8 +1085,7 @@
 .knowledge-page > *,
 .review-page > *,
 .agents-page > *,
-.organizations-page > *,
-.timeline-page > * {
+.organizations-page > * {
 	grid-column: 1 / -1;
 	min-width: 0;
 }
@@ -1195,8 +1129,7 @@
 		.knowledge-page,
 		.review-page,
 		.agents-page,
-		.organizations-page,
-		.timeline-page {
+		.organizations-page {
 		padding-right: 0;
 	}
 .graph-toolbar {
