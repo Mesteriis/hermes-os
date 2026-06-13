@@ -619,3 +619,22 @@
 	white-space: nowrap;
 }
 
+
+.telegram-grid,
+.whatsapp-grid {
+	align-items: stretch;
+}
+
+.telegram-grid > .widget-frame,
+.telegram-grid > .telegram-rail,
+.whatsapp-grid > .widget-frame,
+.whatsapp-grid > .whatsapp-rail {
+	min-height: 0;
+	max-height: 100%;
+	overflow: hidden;
+}
+
+.telegram-chat-pane,
+.whatsapp-chat-pane {
+	min-height: 0;
+}

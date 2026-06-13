@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 18:17 CEST
+Дата последнего обновления: 2026-06-13 18:24 CEST
 
 ## Выполнено
 
@@ -21,6 +21,7 @@
 * [x] `frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte` сокращен с 622 до 65 строк; AI provider, routing, prompt studio, runs, header, tabs, status и rail вынесены в focused widgets.
 * [x] `frontend/src/lib/pages/communications/widgets/CommunicationsMessageDetail.svelte` сокращен с 550 до 318 строк; message body, attachments, headers, related actions и timeline вынесены в focused communication widgets.
 * [x] Communications-owned CSS вынесен из `frontend/src/lib/pages/pages.css` в `frontend/src/lib/pages/communications/communications*.css`; root `pages.css` сокращен с 6852 до 5822 строк, новые communication CSS chunks меньше 700 строк.
+* [x] Telegram-owned CSS вынесен из `frontend/src/lib/pages/pages.css` в `frontend/src/lib/pages/telegram/telegram*.css`, а Telegram QR setup styles — в `frontend/src/lib/components/account-setup/telegramQr.css`; root `pages.css` сокращен до 4737 строк, новые Telegram CSS chunks меньше 700 строк.
 
 ## В работе
 

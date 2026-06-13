@@ -285,7 +285,44 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 7: Continue Backend God File Elimination
+### Task 7: Telegram CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/pages/telegram/TelegramPage.svelte`
+- Modify: `frontend/src/lib/components/account-setup/TelegramAccountSetup.svelte`
+- Modify: `frontend/src/lib/pages/communications/communications.css`
+- Create focused Telegram CSS files under `frontend/src/lib/pages/telegram/`
+- Create Telegram QR setup CSS under `frontend/src/lib/components/account-setup/`
+
+- [x] **Step 1: Verify Telegram CSS ownership failure**
+
+Run:
+
+```sh
+! rg "^(\.telegram-|\.telegram-grid|\.telegram-page|\.communications-grid \.conversation-list > button\.telegram-chat-row)" frontend/src/lib/pages/pages.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns Telegram page, list, thread, rail and Telegram QR setup selectors.
+
+- [x] **Step 2: Extract Telegram CSS chunks**
+
+Move Telegram page/list/thread/rail selectors into focused page-owned CSS chunks. Move Telegram QR-specific setup selectors to account setup CSS. Keep the shared Telegram/WhatsApp grid compatibility selectors in the communication workspace CSS because both pages still use the same `.communications-grid` shell.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg "^(\.telegram-|\.telegram-grid|\.telegram-page|\.communications-grid \.conversation-list > button\.telegram-chat-row)" frontend/src/lib/pages/pages.css
+find frontend/src/lib/pages/telegram frontend/src/lib/components/account-setup -maxdepth 1 -type f -name '*.css' -print0 \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+make lint-frontend
+make lint-architecture
+```
+
+### Task 8: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

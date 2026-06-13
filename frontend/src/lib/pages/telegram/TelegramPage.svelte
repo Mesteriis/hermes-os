@@ -2,6 +2,10 @@
 	import '../communications/communications.css';
 	import '../communications/communications-message.css';
 	import '../communications/communications-inspector.css';
+	import './telegram.css';
+	import './telegram-list.css';
+	import './telegram-thread.css';
+	import './telegram-rail.css';
 	import { onMount } from 'svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import TelegramActionRail from './widgets/TelegramActionRail.svelte';

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import './telegramQr.css';
 	import { onDestroy } from 'svelte';
 	import { cancelTelegramQrLogin, fetchTelegramCapabilities, type TelegramCapabilitiesResponse, type TelegramProviderKind, type TelegramQrLoginStatusResponse } from '$lib/api';
 	import {
