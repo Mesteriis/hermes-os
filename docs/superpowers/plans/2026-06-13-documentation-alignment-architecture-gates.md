@@ -940,7 +940,52 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 24: Continue Backend God File Elimination
+### Task 24: Communications Service Decomposition
+
+**Files:**
+- Modify: `frontend/src/lib/services/communications.ts`
+- Create: `frontend/src/lib/services/communications/actions.ts`
+- Create: `frontend/src/lib/services/communications/compose.ts`
+- Create: `frontend/src/lib/services/communications/constants.ts`
+- Create: `frontend/src/lib/services/communications/formatters.ts`
+- Create: `frontend/src/lib/services/communications/loaders.ts`
+- Create: `frontend/src/lib/services/communications/related.ts`
+- Create: `frontend/src/lib/services/communications/rendering.ts`
+- Create: `frontend/src/lib/services/communications/resources.ts`
+- Create: `frontend/src/lib/services/communications/types.ts`
+- Create: `frontend/src/lib/services/communications/workbench.ts`
+- Create: `frontend/src/lib/services/communications/workflow.ts`
+
+- [x] **Step 1: Verify communications service failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/services/communications.ts | tr -d ' ')" -le 700
+test -f frontend/src/lib/services/communications/rendering.ts
+test -f frontend/src/lib/services/communications/compose.ts
+```
+
+Expected before refactor: FAIL because `communications.ts` had 1437 lines and mixed communications loading, sync, drafts, send, workflow actions, mail resources, workbench selectors, related-message selectors, message rendering and UI label helpers in one service file.
+
+- [x] **Step 2: Extract bounded service modules**
+
+Keep `$lib/services/communications` as the public import path by replacing `communications.ts` with a facade. Move message actions into `actions.ts`, compose/draft/send helpers into `compose.ts`, shared constants into `constants.ts`, UI label/badge helpers into `formatters.ts`, data loaders and sync helpers into `loaders.ts`, related message selectors into `related.ts`, sanitized mail rendering and remote image proxy helpers into `rendering.ts`, resource rail loaders/summaries into `resources.ts`, shared service types into `types.ts`, workbench/account selectors into `workbench.ts`, and workflow command helpers into `workflow.ts`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/services/communications.ts | tr -d ' ')" -le 700
+find frontend/src/lib/services/communications -type f -name '*.ts' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+pnpm --dir frontend test:unit src/lib/services/communications.test.ts src/lib/stores/communications.test.ts src/lib/stores/uiState.test.ts
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 25: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
