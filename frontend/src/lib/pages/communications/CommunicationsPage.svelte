@@ -1,4 +1,7 @@
 <script lang="ts">
+	import './communications.css';
+	import './communications-message.css';
+	import './communications-inspector.css';
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import CommunicationsConversationList from './widgets/CommunicationsConversationList.svelte';

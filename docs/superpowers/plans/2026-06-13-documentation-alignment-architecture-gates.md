@@ -249,7 +249,43 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 6: Continue Backend God File Elimination
+### Task 6: Communications CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/pages/communications/CommunicationsPage.svelte`
+- Modify: `frontend/src/lib/pages/telegram/TelegramPage.svelte`
+- Modify: `frontend/src/lib/pages/whatsapp/WhatsAppPage.svelte`
+- Create focused communication CSS files under `frontend/src/lib/pages/communications/`
+
+- [x] **Step 1: Verify communications CSS ownership failure**
+
+Run:
+
+```sh
+! rg "^(\.communications-page|\.conversation-list-head|\.message-context-tabs|\.related-link-list|\.inspector-header)" frontend/src/lib/pages/pages.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns communications page, conversation list, message tabs, related list and inspector selectors.
+
+- [x] **Step 2: Extract communication workspace CSS**
+
+Move communication workspace, message detail and inspector selectors into communication-owned CSS chunks. Keep each new CSS file below 700 lines and import the shared communication workspace CSS from Communications, Telegram and WhatsApp pages because all three currently use the same `.communications-grid` shell classes.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg "^(\.communications-page|\.conversation-list-head|\.message-context-tabs|\.related-link-list|\.inspector-header)" frontend/src/lib/pages/pages.css
+find frontend/src/lib/pages/communications -maxdepth 1 -type f -name '*.css' -print0 \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+make lint-frontend
+make lint-architecture
+```
+
+### Task 7: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

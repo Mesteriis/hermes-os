@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 18:08 CEST
+Дата последнего обновления: 2026-06-13 18:17 CEST
 
 ## Выполнено
 
@@ -20,6 +20,7 @@
 * [x] `frontend/src/lib/pages/telegram/TelegramPage.svelte` сокращен с 842 до 476 строк; header, action rail и status messages вынесены в focused Telegram widgets.
 * [x] `frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte` сокращен с 622 до 65 строк; AI provider, routing, prompt studio, runs, header, tabs, status и rail вынесены в focused widgets.
 * [x] `frontend/src/lib/pages/communications/widgets/CommunicationsMessageDetail.svelte` сокращен с 550 до 318 строк; message body, attachments, headers, related actions и timeline вынесены в focused communication widgets.
+* [x] Communications-owned CSS вынесен из `frontend/src/lib/pages/pages.css` в `frontend/src/lib/pages/communications/communications*.css`; root `pages.css` сокращен с 6852 до 5822 строк, новые communication CSS chunks меньше 700 строк.
 
 ## В работе
 
@@ -30,7 +31,7 @@
 
 ## Осталось реализовать
 
-* [ ] Разнести крупные frontend CSS файлы по владельцам компонентов и страниц: `pages.css`, `panels.css`, `app.css`, `sidebar.css`.
+* [ ] Продолжить разнос крупных frontend CSS файлов по владельцам компонентов и страниц: `pages.css`, `panels.css`, `app.css`, `sidebar.css`.
 * [ ] Устранить оставшиеся backend source files больше 700 строк без добавления новых God Files.
 * [ ] Удалить compatibility storage вокруг `persons` и перейти на Persona-native schema.
 * [ ] Удалить legacy Contact/Person CRM API и заменить их Persona-domain контрактами.
@@ -50,10 +51,10 @@
 * В backend остаются source files больше 700 строк за пределами уже разделенного `mail/handlers`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
 * Во frontend остаются крупные service/source files больше 700 строк, включая `frontend/src/lib/services/accounts.ts`; их нельзя расширять новыми возможностями без предварительной декомпозиции.
-* Во frontend остаются крупные shared CSS files, которые блокируют ownership-based компонентную декомпозицию.
+* Во frontend остаются крупные shared CSS files (`pages.css`, `panels.css`, `app.css`, `sidebar.css`), которые блокируют ownership-based компонентную декомпозицию.
 * Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
 * Некоторые реализованные engine baseline ещё не подключены как полноценные доменные процессы.
 
 ## Следующий шаг
 
-Разнести крупные frontend CSS files (`pages.css`, `panels.css`, `app.css`, `sidebar.css`) по владельцам компонентов и страниц либо перейти к следующему backend source file больше 700 строк.
+Продолжить декомпозицию `frontend/src/lib/pages/pages.css`, затем разнести `panels.css`, `app.css` и `sidebar.css` по владельцам компонентов.
