@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 21:23 CEST
+Дата последнего обновления: 2026-06-13 21:31 CEST
 
 ## Выполнено
 
@@ -40,6 +40,7 @@
 * [x] Accounts service разделен на bounded modules `calendar`, `drawer`, `labels`, `mailImport`, `mailSetup`, `mailWizard`, `shared`, `telegram` и `types`; `frontend/src/lib/services/accounts.ts` сокращен с 1011 до 9 строк и оставлен как public facade, все account service modules меньше 700 строк.
 * [x] Communications service разделен на bounded modules `actions`, `compose`, `constants`, `formatters`, `loaders`, `related`, `rendering`, `resources`, `types`, `workbench` и `workflow`; `frontend/src/lib/services/communications.ts` сокращен с 1437 до 11 строк и оставлен как public facade, все communication service modules меньше 700 строк.
 * [x] Telegram service разделен на bounded modules `automation`, `calls`, `constants`, `fixtures`, `lifecycle`, `messages`, `parsing`, `runtime`, `selection`, `types`, `wizard` и `workspace`; `frontend/src/lib/services/telegram.ts` сокращен с 1584 до 11 строк и оставлен как public facade, все Telegram service modules меньше 700 строк.
+* [x] API contract types разделены на bounded modules `accounts`, `ai`, `calendar`, `communication`, `contradictions`, `decisions`, `documents`, `graph`, `mail`, `obligations`, `organizations`, `persons`, `projects`, `relationships`, `settings`, `tasks`, `telegram`, `vault` и `whatsapp`; `frontend/src/lib/api/types.ts` сокращен с 2615 до 19 строк и оставлен как public facade, все API type modules меньше 700 строк.
 
 ## В работе
 
@@ -50,7 +51,6 @@
 
 ## Осталось реализовать
 
-* [ ] Устранить оставшиеся frontend service/store files больше 700 строк без добавления новых God Files.
 * [ ] Устранить оставшиеся backend source files больше 700 строк без добавления новых God Files.
 * [ ] Удалить compatibility storage вокруг `persons` и перейти на Persona-native schema.
 * [ ] Удалить legacy Contact/Person CRM API и заменить их Persona-domain контрактами.
@@ -69,11 +69,11 @@
 * В коде ещё есть compatibility layers вокруг `persons`, `health`, `watchtower`, legacy Person/Contact терминологии и старых API.
 * В backend остаются source files больше 700 строк за пределами уже разделенного `mail/handlers`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
-* Во frontend остается крупный service/source файл больше 700 строк: `frontend/src/lib/api/types.ts`; его нельзя расширять новыми возможностями без предварительной декомпозиции.
+* Во frontend больше не осталось source/service/store files больше 700 строк по текущему scan.
 * Во frontend больше не осталось CSS files больше 700 строк по текущему scan; `app.css` сокращен до 640 строк, `pages.css` — до 457 строк, `sidebar.css` — до 590 строк, `panels.css` — до 697 строк.
 * Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
 * Некоторые реализованные engine baseline ещё не подключены как полноценные доменные процессы.
 
 ## Следующий шаг
 
-Продолжить устранение God Files: следующим срезом выбрать backend или frontend source file больше 700 строк по документационной важности и blast radius; не добавлять новую функциональность в такие файлы до декомпозиции.
+Продолжить устранение God Files: следующим срезом выбрать backend source file больше 700 строк по документационной важности и blast radius; не добавлять новую функциональность в такие файлы до декомпозиции.

@@ -1032,7 +1032,60 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 26: Continue Backend God File Elimination
+### Task 26: API Contract Types Decomposition
+
+**Files:**
+- Modify: `frontend/src/lib/api/types.ts`
+- Create: `frontend/src/lib/api/types/accounts.ts`
+- Create: `frontend/src/lib/api/types/ai.ts`
+- Create: `frontend/src/lib/api/types/calendar.ts`
+- Create: `frontend/src/lib/api/types/communication.ts`
+- Create: `frontend/src/lib/api/types/contradictions.ts`
+- Create: `frontend/src/lib/api/types/decisions.ts`
+- Create: `frontend/src/lib/api/types/documents.ts`
+- Create: `frontend/src/lib/api/types/graph.ts`
+- Create: `frontend/src/lib/api/types/mail.ts`
+- Create: `frontend/src/lib/api/types/obligations.ts`
+- Create: `frontend/src/lib/api/types/organizations.ts`
+- Create: `frontend/src/lib/api/types/persons.ts`
+- Create: `frontend/src/lib/api/types/projects.ts`
+- Create: `frontend/src/lib/api/types/relationships.ts`
+- Create: `frontend/src/lib/api/types/settings.ts`
+- Create: `frontend/src/lib/api/types/tasks.ts`
+- Create: `frontend/src/lib/api/types/telegram.ts`
+- Create: `frontend/src/lib/api/types/vault.ts`
+- Create: `frontend/src/lib/api/types/whatsapp.ts`
+
+- [x] **Step 1: Verify API contract type failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/api/types.ts | tr -d ' ')" -le 700
+test -d frontend/src/lib/api/types
+find frontend/src/lib/api -maxdepth 2 -type f -name '*.ts' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+```
+
+Expected before refactor: FAIL because `types.ts` had 2615 lines and mixed all API contract types in one source file.
+
+- [x] **Step 2: Extract bounded contract modules**
+
+Keep `$lib/api/types` and `$lib/api` as public import paths by replacing `types.ts` with a facade. Move contract types into bounded modules for account setup, AI, calendar, communication, graph, mail, persona, projects, tasks, Telegram, WhatsApp and related domains. Preserve the exported type/const name set from the original committed file.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/api/types.ts | tr -d ' ')" -le 700
+find frontend/src/lib/api/types -type f -name '*.ts' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+comm -3 <(git show HEAD:frontend/src/lib/api/types.ts | rg '^export (type|const) ' | sed -E 's/^export (type|const) ([A-Za-z0-9_]+).*/\1 \2/' | sort) <(rg '^export (type|const) ' frontend/src/lib/api/types.ts frontend/src/lib/api/types/*.ts | sed -E 's/^.*:export (type|const) ([A-Za-z0-9_]+).*/\1 \2/' | sort)
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 27: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

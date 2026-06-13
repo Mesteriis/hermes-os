@@ -1,0 +1,46 @@
+export type Organization = {
+	organization_id: string;
+	display_name: string;
+	legal_name: string | null;
+	org_type: string | null;
+	status: string;
+	country: string | null;
+	city: string | null;
+	address: string | null;
+	website: string | null;
+	industry: string | null;
+	description: string | null;
+	primary_language: string | null;
+	timezone: string | null;
+	trust_score: number | null;
+	health_status: string | null;
+	priority: string | null;
+	notes: string | null;
+	tags: string[];
+	org_metadata: Record<string, unknown>;
+	last_interaction_at: string | null;
+	interaction_count: number;
+	registration_number: string | null;
+	country_of_registration: string | null;
+	vat: string | null;
+	cif: string | null;
+	nif: string | null;
+	tax_id: string | null;
+	legal_address: string | null;
+	registry_source: string | null;
+	registry_last_verified: string | null;
+	communication_style: string | null;
+	verbosity: string | null;
+	formality: string | null;
+	secondary_languages: string[] | null;
+	preferred_tone: string | null;
+	official_style_required: boolean | null;
+	last_health_check: string | null;
+	watchlist: boolean;
+	created_at: string;
+	updated_at: string;
+};
+
+export type OrganizationListResponse = {
+	items: Organization[];
+};
