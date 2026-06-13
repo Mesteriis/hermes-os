@@ -8,6 +8,7 @@
 	import DocumentsList from './widgets/DocumentsList.svelte';
 	import DocumentsProcessingJobs from './widgets/DocumentsProcessingJobs.svelte';
 	import DocumentsInsights from './widgets/DocumentsInsights.svelte';
+	import './documents.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

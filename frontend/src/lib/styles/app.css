@@ -549,8 +549,6 @@ h1 {
 .persons-list-panel small,
 .persons-list-panel em,
 .doc-mini small,
-.notes-list p,
-.notes-list small,
 .agent-card p,
 .agent-card footer,
 .detail-list,
@@ -570,7 +568,6 @@ h1 {
 .doc-mini strong,
 .deadline span,
 .collection-row,
-.notes-list strong,
 .agent-card strong {
 	color: #f6fffe;
 	font-size: 13px;
@@ -583,8 +580,7 @@ h1 {
 .task-row em,
 .task-row b,
 .project-hero em,
-.agent-card em,
-.notes-list em {
+.agent-card em {
 	display: inline-block;
 	border-radius: 5px;
 	background: rgba(33, 218, 183, 0.14);
@@ -842,9 +838,6 @@ input[type='checkbox'] {
 .dashboard-grid,
 .three-pane,
 .persons-layout,
-.docs-layout,
-.documents-layout,
-.notes-layout,
 .project-dashboard-grid,
 .tasks-layout,
 .calendar-layout,
@@ -914,13 +907,10 @@ input[type='checkbox'] {
 .desktop-shell.sidebar-rail {
 		grid-template-columns: var(--hh-shell-sidebar-width-rail) minmax(var(--hh-shell-content-min-width-compact), 1fr);
 	}
-.hero-row,
+	.hero-row,
 	.dashboard-grid,
 	.three-pane,
 	.persons-layout,
-	.docs-layout,
-	.documents-layout,
-	.notes-layout,
 	.project-dashboard-grid,
 	.tasks-layout,
 		.calendar-layout,
@@ -952,13 +942,10 @@ input[type='checkbox'] {
 h1 {
 		font-size: 20px;
 	}
-.hero-row,
+	.hero-row,
 	.dashboard-grid,
 	.three-pane,
 	.persons-layout,
-	.docs-layout,
-	.documents-layout,
-	.notes-layout,
 	.project-dashboard-grid,
 	.tasks-layout,
 		.calendar-layout,

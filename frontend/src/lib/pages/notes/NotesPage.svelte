@@ -4,6 +4,7 @@
 	import NotesSourceFilters from './widgets/NotesSourceFilters.svelte';
 	import NotesList from './widgets/NotesList.svelte';
 	import NotesInsights from './widgets/NotesInsights.svelte';
+	import './notes.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

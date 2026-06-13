@@ -467,7 +467,45 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 12: Continue Backend God File Elimination
+### Task 12: Documents and Notes CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/styles/app.css`
+- Modify: `frontend/src/lib/pages/documents/DocumentsPage.svelte`
+- Modify: `frontend/src/lib/pages/notes/NotesPage.svelte`
+- Create: `frontend/src/lib/pages/documents/documents.css`
+- Create: `frontend/src/lib/pages/notes/notes.css`
+
+- [x] **Step 1: Verify Documents/Notes CSS ownership failure**
+
+Run:
+
+```sh
+! rg "^(\.(documents-layout|notes-layout|document-source-cards|document-main-list|notes-main-list|docs-layout|docs-table|category-grid|notes-list))" frontend/src/lib/pages/pages.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns active Documents/Notes layout and overflow selectors plus dead legacy docs/notes selectors.
+
+- [x] **Step 2: Extract Documents/Notes CSS chunks and remove dead legacy selectors**
+
+Move active Documents and Notes page layout/overflow selectors into page-owned CSS files and import them from their page components. Remove unused legacy `docs-*`, `category-grid`, `notes-list` and `notes-main` selectors that have no Svelte consumers. Remove transferred Documents/Notes layout selectors from `app.css` media/layout groups so app-level CSS no longer owns these page layouts.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg "^(\.(documents-layout|notes-layout|document-source-cards|document-main-list|notes-main-list|docs-layout|docs-table|category-grid|notes-list))" frontend/src/lib/pages/pages.css
+! rg "\b(docs-layout|documents-layout|notes-layout|notes-list)\b" frontend/src/lib/styles/app.css
+printf '%s\0' frontend/src/lib/pages/documents/documents.css frontend/src/lib/pages/notes/notes.css \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+make lint-frontend
+make lint-architecture
+```
+
+### Task 13: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
