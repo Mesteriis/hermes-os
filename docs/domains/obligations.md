@@ -66,10 +66,13 @@ Current backend baseline:
 
 - `backend/migrations/0063_create_obligations.sql`;
 - `backend/migrations/0066_obligation_graph_projection.sql`;
+- `backend/migrations/0067_task_candidate_kind_metadata.sql`;
 - `backend/src/domains/obligations/mod.rs`;
 - `backend/src/domains/obligations/api.rs`;
+- `backend/src/domains/tasks/candidates.rs`;
 - `backend/tests/obligations.rs`;
 - `backend/tests/obligations_api.rs`;
+- `backend/tests/task_candidates.rs`;
 - ADR-0088.
 
 This baseline provides source-backed Obligation persistence with evidence,
@@ -78,6 +81,13 @@ Task links. It also projects accepted Obligations into the graph for supported
 obligated and beneficiary entity kinds, using `obligation` graph nodes and
 source-backed `entity_relationship` edges. It explicitly does not auto-create
 Tasks.
+
+Task candidate review has a backend baseline for obligation-derived candidates:
+message candidates produced by the Obligation Engine are stored as
+`candidate_kind = obligation_task`, preserve the source `ObligationCandidate` in
+metadata and, when user-confirmed, create or update a `user_confirmed`
+Obligation with Communication evidence and a `fulfillment_task` link to the
+created Task. Generic task candidates remain task-only.
 
 Backend routes currently expose:
 
@@ -100,9 +110,9 @@ Related behavior still exists through:
 
 1. Keep Obligations distinct from Tasks in all documentation.
 2. Keep the ADR-0088 persistence boundary intact.
-3. Add full Obligation Engine extraction and candidate-to-Obligation review.
-4. Expand reviewed Obligation links to tasks and events without converting
-   every obligation into a task.
+3. Expand Obligation Engine extraction beyond explicit message task candidates.
+4. Expand reviewed Obligation links to events and compatibility sources without
+   converting every obligation into a task.
 5. Project reviewed Obligations into timeline and dossier views.
 6. Use the Consistency / Contradiction Engine when new evidence conflicts with
    obligation status or remembered commitments.

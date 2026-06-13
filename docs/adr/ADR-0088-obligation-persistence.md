@@ -109,7 +109,8 @@ Negative:
 
 - Existing person promises, meeting outcomes and task candidates remain
   compatibility or source surfaces until adapters are added.
-- Desktop UI and candidate-to-Obligation review flow are still follow-up work.
+- Desktop UI and non-task-candidate Obligation review flows are still follow-up
+  work.
 - Obligation extraction from Communications and Documents is not part of the
   first persistence slice.
 
@@ -125,10 +126,9 @@ Negative:
 
 - Add desktop review UI.
 - Connect Communication, meeting and document extraction to obligation
-  candidates.
+  candidates beyond the initial explicit message task-candidate path.
 - Add adapters from person promises and meeting outcomes.
-- Expand accepted Obligation graph projection and link reviewed Obligations to
-  tasks and events when reviewed.
+- Expand reviewed Obligation links to events and compatibility sources.
 - Feed obligation conflicts into the Consistency / Contradiction Engine.
 
 ## Implementation Status
@@ -146,3 +146,10 @@ for supported obligated and beneficiary entity kinds. The projection creates
 `obligation` graph nodes, source-backed `entity_relationship` edges and
 `obligation` graph evidence while preserving the Obligation domain as the
 source of truth.
+
+Migration `0067` adds explicit task-candidate classification metadata.
+`TaskCandidateStore` now materializes `obligation_task` candidates from the
+Obligation Engine when the candidate is user-confirmed: it creates or updates a
+source-backed `user_confirmed` Obligation, preserves Communication evidence and
+links the created Task through `obligation_task_links.link_kind =
+fulfillment_task`. Generic task candidates remain task-only.

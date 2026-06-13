@@ -42,7 +42,7 @@ Current implementation was checked against:
 - `backend/src/app/router.rs`;
 - backend domain modules under `backend/src/domains/`;
 - backend engine/workflow/integration modules;
-- migrations `0001` through `0066`;
+- migrations `0001` through `0067`;
 - `Makefile` development targets;
 - frontend API and page surfaces under `frontend/src/lib/`;
 - active root, backend and frontend README files.
@@ -84,11 +84,17 @@ These are known product/implementation gaps, not hidden documentation failures:
   detection has a first engine baseline in `backend/src/engines/obligation.rs`,
   Decision candidate detection has a first explicit-evidence baseline in
   `backend/src/engines/decision.rs`, and message task candidate refresh uses
-  the Obligation engine for explicit commitments/requests. Guarded backend
+  the Obligation engine for explicit commitments/requests. Migration `0067`
+  classifies obligation-derived task candidates; confirming an
+  `obligation_task` candidate now creates or updates a source-backed
+  `user_confirmed` Obligation and links it to the created Task as a
+  `fulfillment_task`. Explicit message/imported-document Decision candidates
+  can now refresh into source-backed `suggested` Decisions while preserving
+  confirmed/rejected review state across repeat refreshes. Guarded backend
   routes can list accepted Obligations/Decisions and update accepted review
-  state without creating Tasks, Projects or Obligations. Provider-wide ingestion,
-  candidate-to-Obligation/Decision review, desktop UI and adapters from person
-  promises, meeting outcomes and project review decisions remain incomplete.
+  state without creating Tasks, Projects or Obligations. Provider-wide
+  ingestion, desktop UI and adapters from person promises, meeting outcomes and
+  project review decisions remain incomplete.
 - Consistency / Contradiction Engine now has a structured-claim detection and
   `ContradictionObservation` persistence baseline in migration `0062` and
   `backend/src/engines/consistency.rs`. It can also extract simple structured

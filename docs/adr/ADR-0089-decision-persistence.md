@@ -110,9 +110,10 @@ Negative:
 
 - Existing meeting outcomes and review decision tables remain compatibility or
   source surfaces until adapters are added.
-- Desktop UI and candidate-to-Decision review flow are still follow-up work.
-- Provider-wide Decision extraction from Communications, Documents and Meetings
-  is outside the first persistence slice.
+- Desktop UI and meeting/provider-wide candidate-to-Decision review flows are
+  still follow-up work.
+- Provider-wide Decision extraction from Communications and Meetings remains
+  outside the first persistence slice.
 
 ## Non-Goals
 
@@ -125,7 +126,7 @@ Negative:
 ## Required Follow-Up
 
 - Add desktop review UI.
-- Connect meeting, communication and document extraction to Decision
+- Connect meeting and provider-wide communication extraction to Decision
   candidates.
 - Add adapters from meeting outcomes and project review decisions.
 - Expand accepted Decision graph projection and project reviewed Decisions into
@@ -152,3 +153,11 @@ Migration `0065` and `DecisionStore` project accepted Decisions into graph for
 supported impacted entity kinds. The projection creates `decision` graph nodes,
 source-backed `entity_relationship` edges and `decision` graph evidence while
 preserving the Decision domain as the source of truth.
+
+`DecisionStore::refresh_deterministic_candidates` now provides the first backend
+candidate-to-Decision persistence path for explicit Communication messages and
+imported Documents. It stores detected candidates as source-backed `suggested`
+Decisions impacted by the source Communication or Document, preserves
+`user_confirmed` and `user_rejected` review state across repeat refreshes, and
+relies on the existing guarded Decision review route for confirmation. It does
+not create Tasks, Projects or Obligations.

@@ -34,7 +34,7 @@ The current backend has these relevant surfaces:
 - search and automation modules under `backend/src/engines/`;
 - workflow modules under `backend/src/workflows/`;
 - provider integrations under `backend/src/integrations/`;
-- migrations `0001` through `0066`;
+- migrations `0001` through `0067`;
 - frontend pages under `frontend/src/lib/pages/`.
 
 ## Documentation Drift Corrected
@@ -106,9 +106,18 @@ implementation evidence:
 - `backend/src/domains/tasks/candidates.rs` now uses the Obligation Engine when
   refreshing message task candidates for explicit commitment/request language
   that the legacy task scanner does not match.
+- `backend/migrations/0067_task_candidate_kind_metadata.sql` and
+  `backend/src/domains/tasks/candidates.rs` now classify obligation-derived
+  task candidates and materialize confirmed `obligation_task` candidates into
+  source-backed `user_confirmed` Obligations linked to the created Task through
+  `fulfillment_task`.
 - `backend/src/domains/obligations/api.rs` now exposes guarded backend routes
   for listing accepted Obligations by entity and changing accepted Obligation
   review state without creating Tasks.
+- `backend/src/domains/decisions/mod.rs` now refreshes explicit Communication
+  message and imported Document Decision candidates into source-backed
+  `suggested` Decisions and preserves reviewed Decision state across repeat
+  refreshes.
 
 ## Alignment Matrix
 
@@ -123,9 +132,9 @@ implementation evidence:
 | Trust Engine | `persons/trust.rs`, risk/health modules, relationship scores in docs | Trust is partly Persona-local and partly risk/health language. | Normalize trust as source/relationship signal, not generic entity field. |
 | Risk Engine | `health.rs`, `watchtower`, risks routes in persons/orgs/calendar/tasks | Health/watchtower naming hides shared Risk Engine semantics. | Risk terminology migration plan for docs/UI/API compatibility. |
 | Enrichment Engine | persons enrichment, organization enrichment | Enrichment exists per domain. | Shared engine semantics with domain-specific source policies. |
-| Obligation Engine | `backend/src/engines/obligation.rs`, `backend/src/domains/obligations/mod.rs`, `backend/src/domains/obligations/api.rs`, migrations `0063` and `0066`, task candidates, task rules, communication extraction | Candidate detection, accepted Obligation persistence, accepted Obligation graph projection and guarded accepted-Obligation backend review routes have baselines. Message task candidate refresh is wired to the engine for explicit commitments/requests, but provider-wide Communication ingestion, candidate-to-Obligation review, meeting/document adapters and desktop UI are incomplete. | Extend Communication/meeting/document ingestion to the engine and feed reviewed candidates to the Obligations domain without auto-creating Tasks. |
+| Obligation Engine | `backend/src/engines/obligation.rs`, `backend/src/domains/obligations/mod.rs`, `backend/src/domains/obligations/api.rs`, migrations `0063`, `0066` and `0067`, task candidates, task rules, communication extraction | Candidate detection, accepted Obligation persistence, accepted Obligation graph projection, guarded accepted-Obligation backend review routes and confirmed `obligation_task` candidate materialization have baselines. Provider-wide Communication ingestion, meeting/document adapters, desktop UI and compatibility adapters are incomplete. | Extend Communication/meeting/document ingestion to the engine and feed reviewed candidates to the Obligations domain without auto-creating Tasks outside explicit task-candidate review. |
 | Consistency / Contradiction Engine | `backend/src/engines/consistency.rs`, `backend/src/engines/consistency_api.rs`, migration `0062`, ADR-0085, ADR-0087 | Structured direct-contradiction detection, deterministic structured claim extraction from Communication/Document evidence text, observation persistence and guarded backend review routes have a baseline, but desktop review UI, provider-wide ingestion wiring and natural-language claim extraction are incomplete. | Connect ingestion to structured claim extraction, then add desktop review UI without automatic overwrite. |
-| Decisions domain | `backend/src/domains/decisions/mod.rs`, `backend/src/domains/decisions/api.rs`, `backend/src/engines/decision.rs`, migrations `0064` and `0065`, meeting outcomes, project link review decisions, communication/document evidence | Accepted Decision persistence, deterministic explicit-Decision candidate extraction, accepted Decision graph projection and guarded accepted-Decision backend review routes have baselines, but provider-wide ingestion, candidate-to-Decision review, desktop UI and adapters from meeting outcomes/project reviews are incomplete. | Connect meeting/communication/document candidates to the Decisions domain without auto-changing Projects, Tasks or Obligations. |
+| Decisions domain | `backend/src/domains/decisions/mod.rs`, `backend/src/domains/decisions/api.rs`, `backend/src/engines/decision.rs`, migrations `0064` and `0065`, meeting outcomes, project link review decisions, communication/document evidence | Accepted Decision persistence, deterministic explicit-Decision candidate extraction, explicit message/imported-document candidate persistence as `suggested` Decisions, accepted Decision graph projection and guarded accepted-Decision backend review routes have baselines. Provider-wide ingestion, meeting adapters, desktop UI and adapters from meeting outcomes/project reviews are incomplete. | Connect remaining meeting/communication/document candidates to the Decisions domain without auto-changing Projects, Tasks or Obligations. |
 | Agents domain | AI runtime/control center, Ollama/OmniRoute, frontend Agents page | Runtime exists; graph identity and Owner Persona attribution are incomplete. | Agent Persona and capability audit plan. |
 | Notes boundary | frontend Notes page, documents treat notes as artifacts | No backend Notes domain and no ADR promotes one. | Keep Notes as document-like artifacts until ADR changes boundary. |
 
