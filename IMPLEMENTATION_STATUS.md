@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-14 00:36 CEST
+Дата последнего обновления: 2026-06-14 00:45 CEST
 
 ## Выполнено
 
@@ -57,6 +57,7 @@
 * [x] Task candidates boundary разделен на bounded modules `store`, `models`, `events`, `extraction`, `persistence`, `validation`, `ids`, `errors` и `constants`; `backend/src/domains/tasks/candidates.rs` сокращен с 1156 до 16 строк и оставлен как public facade, все новые task candidate modules меньше 700 строк.
 * [x] Mail messages boundary разделен на bounded modules `store`, `models`, `states`, `projection`, `rows`, `payload`, `ids`, `validation` и `errors`; `backend/src/domains/mail/messages.rs` сокращен с 1149 до 20 строк и оставлен как public facade, все новые mail message modules меньше 700 строк.
 * [x] Decisions boundary разделен на bounded modules `store`, `candidate_refresh`, `models`, `graph_projection`, `row_mapping`, `ids`, `validation`, `errors` и `constants`; `backend/src/domains/decisions/mod.rs` сокращен с 1115 до 19 строк и оставлен как public facade, все новые decision modules меньше 700 строк.
+* [x] Document processing boundary разделен на bounded modules `store`, `jobs`, `runner`, `retry`, `artifacts`, `documents`, `models`, `rows`, `ids`, `validation`, `errors` и `constants`; `backend/src/domains/documents/processing.rs` сокращен с 1103 до 20 строк и оставлен как public facade, все новые document processing modules меньше 700 строк.
 
 ## В работе
 
@@ -83,7 +84,7 @@
 ## Архитектурные проблемы
 
 * В коде ещё есть compatibility layers вокруг `persons`, `health`, `watchtower`, legacy Person/Contact терминологии и старых API.
-* В backend остаются source files больше 700 строк за пределами уже разделенных `ai/control_center`, `ai/core`, `app/error`, `app/router`, `domains/api_support`, `domains/decisions`, `domains/persons/handlers`, `domains/tasks/candidates`, `engines/consistency`, `platform/settings`, `mail/handlers`, `mail/messages`, `mail/background_sync`, `calendar/handlers`, `integrations/telegram/tdjson`, `integrations/telegram/client` и `integrations/telegram/runtime`.
+* В backend остаются source files больше 700 строк за пределами уже разделенных `ai/control_center`, `ai/core`, `app/error`, `app/router`, `domains/api_support`, `domains/decisions`, `domains/documents/processing`, `domains/persons/handlers`, `domains/tasks/candidates`, `engines/consistency`, `platform/settings`, `mail/handlers`, `mail/messages`, `mail/background_sync`, `calendar/handlers`, `integrations/telegram/tdjson`, `integrations/telegram/client` и `integrations/telegram/runtime`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
 * Во frontend больше не осталось source/service/store files больше 700 строк по текущему scan.
 * Во frontend больше не осталось CSS files больше 700 строк по текущему scan; `app.css` сокращен до 640 строк, `pages.css` — до 457 строк, `sidebar.css` — до 590 строк, `panels.css` — до 697 строк.
@@ -92,4 +93,4 @@
 
 ## Следующий шаг
 
-Продолжить устранение God Files: следующим срезом выбрать backend source file больше 700 строк по документационной важности и blast radius; текущий следующий кандидат по размеру — `backend/src/domains/documents/processing.rs` на 1103 строки.
+Продолжить устранение God Files: следующим срезом выбрать backend source file больше 700 строк по документационной важности и blast radius; текущий следующий кандидат по размеру — `backend/src/domains/mail/core.rs` на 1048 строк.
