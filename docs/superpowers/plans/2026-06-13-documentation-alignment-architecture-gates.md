@@ -18,6 +18,8 @@
 - `docs/adr/ADR-0003-sveltekit-frontend.md`
 - `docs/adr/ADR-0004-tauri-desktop-shell.md`
 - `docs/adr/ADR-0055-full-email-provider-networking.md`
+- `docs/adr/ADR-0067-calendar-multi-provider-architecture.md`
+- `docs/adr/ADR-0073-backend-module-organization.md`
 - `docs/adr/ADR-0078-frontend-component-decomposition.md`
 - `docs/adr/ADR-0079-script-logic-decomposition.md`
 - `docs/adr/ADR-0080-mail-background-sync-progress-local-trash.md`
@@ -25,6 +27,8 @@
 - `docs/adr/ADR-0091-telegram-production-client-capability-model.md`
 - `docs/adr/ADR-0092-mail-provider-capability-tiers.md`
 - `docs/domains/telegram-channel.md`
+- `docs/calendar/architecture.md`
+- `docs/calendar/README.md`
 - `docs/mail/README.md`
 
 ## Current Stop-Factors
@@ -1259,7 +1263,53 @@ make backend-validate
 make lint-architecture
 ```
 
-### Task 31: Continue Backend God File Elimination
+### Task 31: Calendar Handler Boundary Decomposition
+
+**Files:**
+- Modify: `backend/src/domains/calendar/handlers/mod.rs`
+- Create: `backend/src/domains/calendar/handlers/accounts.rs`
+- Create: `backend/src/domains/calendar/handlers/analytics.rs`
+- Create: `backend/src/domains/calendar/handlers/brain.rs`
+- Create: `backend/src/domains/calendar/handlers/events.rs`
+- Create: `backend/src/domains/calendar/handlers/health.rs`
+- Create: `backend/src/domains/calendar/handlers/intelligence.rs`
+- Create: `backend/src/domains/calendar/handlers/meetings.rs`
+- Create: `backend/src/domains/calendar/handlers/reminders.rs`
+- Create: `backend/src/domains/calendar/handlers/rules.rs`
+- Create: `backend/src/domains/calendar/handlers/scheduling.rs`
+- Create: `backend/src/domains/calendar/handlers/search.rs`
+- Create: `backend/src/domains/calendar/handlers/sync.rs`
+
+- [x] **Step 1: Verify calendar handler boundary failure**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/domains/calendar/handlers/mod.rs | tr -d ' ')" -le 700
+test "$(find backend/src/domains/calendar/handlers -maxdepth 1 -type f -name '*.rs' ! -name mod.rs | wc -l | tr -d ' ')" -gt 0
+```
+
+Expected before refactor: FAIL because `handlers/mod.rs` had 1674 lines and mixed calendar accounts, sources, event CRUD, event context, intelligence, meetings, scheduling, health/watchtower, brain/search, rules, import/export, reminders and analytics handlers.
+
+- [x] **Step 2: Extract bounded handler modules**
+
+Keep `crate::domains::calendar::handlers::*` stable for the app router by leaving `mod.rs` as a crate-local facade. Move handlers by documented Calendar domain responsibility: accounts/sources into `accounts.rs`, event CRUD/context into `events.rs`, classify/analyze/risk into `intelligence.rs`, meeting artifacts into `meetings.rs`, deadlines/focus/smart schedule into `scheduling.rs`, watchtower/health into `health.rs`, brief/brain into `brain.rs`, search into `search.rs`, rules into `rules.rs`, import/export/sync into `sync.rs`, reminders into `reminders.rs`, and analytics into `analytics.rs`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/domains/calendar/handlers/mod.rs | tr -d ' ')" -le 700
+find backend/src/domains/calendar/handlers -maxdepth 1 -type f -name '*.rs' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+cargo fmt --manifest-path backend/Cargo.toml --check
+cargo check --manifest-path backend/Cargo.toml
+cargo test --manifest-path backend/Cargo.toml calendar
+make backend-validate
+make lint-architecture
+```
+
+### Task 32: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
