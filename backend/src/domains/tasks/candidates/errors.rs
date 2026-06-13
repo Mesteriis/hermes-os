@@ -1,0 +1,53 @@
+use thiserror::Error;
+
+use crate::domains::obligations::ObligationStoreError;
+use crate::engines::obligation::ObligationEngineError;
+use crate::platform::events::{EventEnvelopeError, EventStoreError};
+
+#[derive(Debug, Error)]
+pub enum TaskCandidateError {
+    #[error("limit must be between 1 and 100")]
+    InvalidLimit,
+
+    #[error("field must not be empty: {0}")]
+    EmptyField(String),
+
+    #[error("task candidate was not found")]
+    TaskCandidateNotFound,
+
+    #[error("review_state must be suggested, user_confirmed, or user_rejected")]
+    InvalidReviewState(String),
+
+    #[error("payload must be an object")]
+    InvalidPayload(String),
+
+    #[error("payload field was missing: {0}")]
+    MissingPayloadField(String),
+
+    #[error("candidate metadata is missing or invalid: {0}")]
+    InvalidCandidateMetadata(String),
+
+    #[error("actor_id is missing from event")]
+    MissingActorId,
+
+    #[error("invalid review event type")]
+    InvalidEventType,
+
+    #[error(transparent)]
+    EventStore(#[from] EventStoreError),
+
+    #[error(transparent)]
+    EventEnvelope(#[from] EventEnvelopeError),
+
+    #[error(transparent)]
+    ObligationEngine(#[from] ObligationEngineError),
+
+    #[error(transparent)]
+    ObligationStore(#[from] ObligationStoreError),
+
+    #[error(transparent)]
+    SerdeJson(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+}
