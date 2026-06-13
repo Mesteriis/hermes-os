@@ -5,6 +5,7 @@
 	import type { EnrichedPerson, Organization } from '$lib/api';
 	import OrganizationsList from './widgets/OrganizationsList.svelte';
 	import OrganizationsDetail from './widgets/OrganizationsDetail.svelte';
+	import './organizations.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 

@@ -648,7 +648,43 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 17: Continue Backend God File Elimination
+### Task 17: Organizations CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/styles/app.css`
+- Modify: `frontend/src/lib/pages/organizations/OrganizationsPage.svelte`
+- Create: `frontend/src/lib/pages/organizations/organizations.css`
+
+- [x] **Step 1: Verify Organizations CSS ownership failure**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(organizations-page|org-layout|org-list-panel|org-detail-panel|org-detail-grid)' frontend/src/lib/pages/pages.css
+! rg -n '\borg-layout\b' frontend/src/lib/styles/app.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns Organizations page shell, list/detail panel selectors and detail grid selectors, while `app.css` owns the effective Organizations layout grid.
+
+- [x] **Step 2: Extract Organizations CSS chunk**
+
+Move Organizations page shell, 12-column layout, list panel, detail panel/grid and person mini selectors into `frontend/src/lib/pages/organizations/organizations.css` and import it from `OrganizationsPage.svelte`. Remove the Organizations layout selector from shared `app.css`, preserving the previous effective cascade in the owner file.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(organizations-page|org-layout|org-list-panel|org-detail-panel|org-detail-grid)' frontend/src/lib/pages/pages.css
+! rg -n '\borg-layout\b' frontend/src/lib/styles/app.css
+test "$(wc -l < frontend/src/lib/pages/organizations/organizations.css | tr -d ' ')" -le 700
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 18: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

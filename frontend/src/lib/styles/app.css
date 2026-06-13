@@ -833,8 +833,7 @@ input[type='checkbox'] {
 .three-pane,
 .calendar-layout,
 .knowledge-layout,
-.agents-layout,
-.org-layout {
+.agents-layout {
 	--hh-zone-rows: 12;
 	display: grid;
 	grid-template-columns: repeat(var(--hh-layout-columns), minmax(0, 1fr));
@@ -930,8 +929,7 @@ h1 {
 	.three-pane,
 		.calendar-layout,
 		.knowledge-layout,
-		.agents-layout,
-		.org-layout {
+		.agents-layout {
 		grid-template-columns: repeat(var(--hh-layout-columns), minmax(0, 1fr));
 		min-height: 0;
 	}

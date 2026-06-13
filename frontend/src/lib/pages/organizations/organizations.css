@@ -1,0 +1,200 @@
+.organizations-page {
+	display: grid;
+	grid-template-columns: repeat(var(--hh-layout-columns), minmax(0, 1fr));
+	grid-auto-flow: row;
+	grid-auto-rows: min-content;
+	align-content: start;
+	gap: var(--hh-layout-gap);
+	height: 100%;
+	min-height: 0;
+	overflow: hidden;
+	padding-right: 0;
+	scrollbar-color: rgba(45, 240, 206, 0.25) transparent;
+}
+
+.organizations-page > * {
+	grid-column: 1 / -1;
+	min-width: 0;
+}
+
+.org-layout {
+	--hh-zone-rows: 12;
+
+	display: grid;
+	grid-template-columns: repeat(var(--hh-layout-columns), minmax(0, 1fr));
+	grid-auto-flow: dense;
+	grid-auto-rows: min-content;
+	align-content: start;
+	align-items: stretch;
+	gap: var(--hh-layout-gap);
+	width: 100%;
+	min-width: 0;
+	min-height: 0;
+	max-height: 100%;
+	overflow: hidden;
+}
+
+.org-list-panel {
+	position: sticky;
+	top: var(--hh-space-4);
+	max-height: calc(100vh - 160px);
+	overflow-y: auto;
+}
+
+.org-list-panel .org-row {
+	display: flex;
+	align-items: center;
+	gap: var(--hh-space-2);
+	padding: 10px var(--hh-space-2);
+	border: none;
+	background: none;
+	width: 100%;
+	text-align: left;
+	cursor: pointer;
+	border-radius: var(--hh-radius-sm);
+	transition: background 150ms;
+}
+
+.org-list-panel .org-row:hover {
+	background: var(--hh-surface-tint);
+}
+
+.org-list-panel .org-row.active {
+	background: var(--hh-status-info-surface);
+}
+
+.org-list-panel .org-row div {
+	flex: 1;
+	min-width: 0;
+}
+
+.org-list-panel .org-row strong {
+	display: block;
+	font-size: 0.875rem;
+	color: var(--hh-color-text-strong);
+}
+
+.org-list-panel .org-row p {
+	font-size: 0.75rem;
+	color: var(--hh-color-text-muted);
+	margin: 2px 0 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.org-list-panel .org-row small {
+	font-size: 0.7rem;
+	color: var(--hh-color-text-subtle);
+	white-space: nowrap;
+}
+
+.org-detail-panel header {
+	display: flex;
+	align-items: center;
+	gap: var(--hh-space-2);
+	margin-bottom: var(--hh-space-4);
+}
+
+.org-detail-panel header h2 {
+	font-size: 1.125rem;
+	font-weight: 600;
+	margin: 0;
+}
+
+.org-detail-panel header em {
+	font-size: 0.8rem;
+	color: var(--hh-color-text-muted);
+	font-style: normal;
+}
+
+.org-detail-grid {
+	display: flex;
+	flex-direction: column;
+	gap: var(--hh-space-4);
+}
+
+.org-detail-grid .info-card {
+	padding: var(--hh-space-4);
+	border: 1px solid var(--hh-border-subtle);
+	border-radius: var(--hh-radius-md);
+}
+
+.org-detail-grid .info-card h3 {
+	font-size: 0.75rem;
+	font-weight: 600;
+	color: var(--hh-color-text-subtle);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	margin: 0 0 var(--hh-space-2);
+}
+
+.org-detail-grid .info-card .detail-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 6px 0;
+	font-size: 0.8rem;
+	border-bottom: 1px solid var(--hh-border-muted);
+}
+
+.org-detail-grid .info-card .detail-row:last-child {
+	border-bottom: none;
+}
+
+.org-detail-grid .info-card .detail-row span {
+	color: var(--hh-color-text-subtle);
+}
+
+.org-detail-grid .info-card .detail-row strong {
+	color: var(--hh-color-text-strong);
+	font-weight: 500;
+}
+
+.org-detail-grid .info-card .status-chip {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: var(--hh-radius-sm);
+	font-size: 0.75rem;
+	font-weight: 500;
+}
+
+.org-detail-grid .info-card .status-chip.active,
+.org-detail-grid .info-card .status-chip.planning {
+	background: var(--hh-status-info-surface);
+	color: var(--hh-status-info-text);
+}
+
+.org-detail-grid .info-card .status-chip.completed,
+.org-detail-grid .info-card .status-chip.archived {
+	background: var(--hh-status-neutral-surface);
+	color: var(--hh-color-text-soft);
+}
+
+.org-detail-grid .info-card .person-mini {
+	display: flex;
+	align-items: center;
+	gap: var(--hh-space-2);
+	padding: 4px 0;
+	font-size: 0.8rem;
+}
+
+.org-detail-grid .info-card .person-mini strong {
+	font-weight: 500;
+}
+
+.org-detail-grid .info-card .person-mini small {
+	color: var(--hh-color-text-subtle);
+	margin-left: auto;
+}
+
+@media (max-width: 1359px) {
+	.organizations-page {
+		padding-right: 0;
+	}
+
+	.org-layout {
+		grid-template-columns: repeat(var(--hh-layout-columns), minmax(0, 1fr));
+		min-height: 0;
+	}
+}
