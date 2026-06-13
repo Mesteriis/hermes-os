@@ -1085,7 +1085,49 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 27: Continue Backend God File Elimination
+### Task 27: Telegram TDLib JSON Boundary Decomposition
+
+**Files:**
+- Modify: `backend/src/integrations/telegram/tdjson.rs`
+- Create: `backend/src/integrations/telegram/tdjson/client.rs`
+- Create: `backend/src/integrations/telegram/tdjson/identifiers.rs`
+- Create: `backend/src/integrations/telegram/tdjson/library_paths.rs`
+- Create: `backend/src/integrations/telegram/tdjson/parsing.rs`
+- Create: `backend/src/integrations/telegram/tdjson/qr_login.rs`
+- Create: `backend/src/integrations/telegram/tdjson/qr_login_support.rs`
+- Create: `backend/src/integrations/telegram/tdjson/requests.rs`
+- Create: `backend/src/integrations/telegram/tdjson/snapshots.rs`
+
+- [x] **Step 1: Verify TDLib JSON boundary failure**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/integrations/telegram/tdjson.rs | tr -d ' ')" -le 700
+test -d backend/src/integrations/telegram/tdjson
+```
+
+Expected before refactor: FAIL because `tdjson.rs` had 2361 lines and mixed TDLib dynamic library loading, FFI client wrapper, QR-login worker state, request construction, response parsing, snapshot DTOs and tests.
+
+- [x] **Step 2: Extract bounded TDLib modules**
+
+Keep `crate::integrations::telegram::tdjson` as the public crate-local import path by replacing `tdjson.rs` with a facade. Move FFI/client ownership into `client.rs`, library candidate discovery into `library_paths.rs`, TDLib request builders into `requests.rs`, response parsing and error helpers into `parsing.rs`, QR-login orchestration into `qr_login.rs`, QR-login state/response helpers into `qr_login_support.rs`, shared path identifiers into `identifiers.rs`, and TDLib snapshot DTOs into `snapshots.rs`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/integrations/telegram/tdjson.rs | tr -d ' ')" -le 700
+find backend/src/integrations/telegram/tdjson -type f -name '*.rs' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+cargo fmt --manifest-path backend/Cargo.toml --check
+cargo check --manifest-path backend/Cargo.toml
+cargo test --manifest-path backend/Cargo.toml tdjson
+make backend-validate
+make lint-architecture
+```
+
+### Task 28: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
