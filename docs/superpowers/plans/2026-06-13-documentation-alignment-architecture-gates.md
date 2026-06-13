@@ -1309,7 +1309,50 @@ make backend-validate
 make lint-architecture
 ```
 
-### Task 32: Continue Backend God File Elimination
+### Task 32: Shared API Support Boundary Decomposition
+
+**Files:**
+- Modify: `backend/src/domains/api_support.rs`
+- Create: `backend/src/domains/api_support/automation_calls.rs`
+- Create: `backend/src/domains/api_support/communications.rs`
+- Create: `backend/src/domains/api_support/formatting.rs`
+- Create: `backend/src/domains/api_support/messaging_integrations.rs`
+- Create: `backend/src/domains/api_support/platform_dtos.rs`
+- Create: `backend/src/domains/api_support/query_parsing.rs`
+- Create: `backend/src/domains/api_support/review_commands.rs`
+- Create: `backend/src/domains/api_support/review_lists.rs`
+- Create: `backend/src/domains/api_support/stores.rs`
+
+- [x] **Step 1: Verify API support boundary failure**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/domains/api_support.rs | tr -d ' ')" -le 700
+test -d backend/src/domains/api_support
+```
+
+Expected before refactor: FAIL because `api_support.rs` had 1762 lines and mixed store/service factories, application/event DTOs, communication response conversion, Telegram/WhatsApp capability responses, automation/call DTOs, review commands, query parsers, validation helpers and formatting helpers.
+
+- [x] **Step 2: Extract bounded API support modules**
+
+Keep `crate::domains::api_support::*` stable for existing route modules by leaving `api_support.rs` as a crate-local facade. Move state/store helpers into `stores.rs`, application/event/status DTOs into `platform_dtos.rs`, communication DTO conversion into `communications.rs`, candidate list DTOs into `review_lists.rs`, Telegram/WhatsApp API support into `messaging_integrations.rs`, automation/call DTOs into `automation_calls.rs`, review command DTOs into `review_commands.rs`, query parsing and validation into `query_parsing.rs`, and shared formatting/default helpers into `formatting.rs`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/domains/api_support.rs | tr -d ' ')" -le 700
+find backend/src/domains/api_support -type f -name '*.rs' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+cargo fmt --manifest-path backend/Cargo.toml --check
+cargo check --manifest-path backend/Cargo.toml
+cargo test --manifest-path backend/Cargo.toml api
+make backend-validate
+make lint-architecture
+```
+
+### Task 33: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

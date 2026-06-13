@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 22:40 CEST
+Дата последнего обновления: 2026-06-13 22:52 CEST
 
 ## Выполнено
 
@@ -46,6 +46,7 @@
 * [x] Telegram runtime boundary разделен на bounded modules `actor`, `commands`, `manager`, `media`, `models`, `state`, `status` и `validation`; `backend/src/integrations/telegram/runtime.rs` сокращен с 1538 до 22 строк и оставлен как public facade, все новые runtime modules меньше 700 строк.
 * [x] Mail background sync boundary разделен на bounded modules `service`, `provider`, `store`, `models`, `errors`, `rows` и `validation`; `backend/src/domains/mail/background_sync.rs` сокращен с 1684 до 24 строк и оставлен как public facade, все новые background sync modules меньше 700 строк.
 * [x] Calendar handlers boundary разделен на bounded modules `accounts`, `events`, `intelligence`, `meetings`, `scheduling`, `health`, `brain`, `search`, `rules`, `sync`, `reminders` и `analytics`; `backend/src/domains/calendar/handlers/mod.rs` сокращен с 1674 до 171 строки и оставлен как crate-local facade, все calendar handler modules меньше 700 строк.
+* [x] Shared API support boundary разделен на bounded modules `stores`, `platform_dtos`, `communications`, `review_lists`, `messaging_integrations`, `automation_calls`, `review_commands`, `query_parsing` и `formatting`; `backend/src/domains/api_support.rs` сокращен с 1762 до 171 строки и оставлен как crate-local facade, все новые API support modules меньше 700 строк.
 
 ## В работе
 
@@ -72,7 +73,7 @@
 ## Архитектурные проблемы
 
 * В коде ещё есть compatibility layers вокруг `persons`, `health`, `watchtower`, legacy Person/Contact терминологии и старых API.
-* В backend остаются source files больше 700 строк за пределами уже разделенных `mail/handlers`, `mail/background_sync`, `calendar/handlers`, `integrations/telegram/tdjson`, `integrations/telegram/client` и `integrations/telegram/runtime`.
+* В backend остаются source files больше 700 строк за пределами уже разделенных `domains/api_support`, `mail/handlers`, `mail/background_sync`, `calendar/handlers`, `integrations/telegram/tdjson`, `integrations/telegram/client` и `integrations/telegram/runtime`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
 * Во frontend больше не осталось source/service/store files больше 700 строк по текущему scan.
 * Во frontend больше не осталось CSS files больше 700 строк по текущему scan; `app.css` сокращен до 640 строк, `pages.css` — до 457 строк, `sidebar.css` — до 590 строк, `panels.css` — до 697 строк.
