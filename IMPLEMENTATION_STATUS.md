@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 19:44 CEST
+Дата последнего обновления: 2026-06-13 19:58 CEST
 
 ## Выполнено
 
@@ -32,6 +32,7 @@
 * [x] Persons-owned CSS вынесен из `frontend/src/lib/pages/pages.css` и `frontend/src/lib/styles/app.css` в `frontend/src/lib/pages/persons/persons.css`; root `pages.css` сокращен до 1416 строк, `app.css` сокращен до 990 строк, новый CSS chunk меньше 700 строк.
 * [x] Timeline-owned CSS вынесен из `frontend/src/lib/pages/pages.css` и `frontend/src/lib/styles/app.css` в `frontend/src/lib/pages/timeline/timeline.css`; неиспользуемый `timeline-slider` CSS удален; root `pages.css` сокращен до 1349 строк, `app.css` сокращен до 987 строк, новый CSS chunk меньше 700 строк.
 * [x] Organizations-owned CSS вынесен из `frontend/src/lib/pages/pages.css` и `frontend/src/lib/styles/app.css` в `frontend/src/lib/pages/organizations/organizations.css`; root `pages.css` сокращен до 1178 строк, `app.css` сокращен до 985 строк, новый CSS chunk меньше 700 строк.
+* [x] Knowledge/Review-owned CSS вынесен из `frontend/src/lib/pages/pages.css` и `frontend/src/lib/styles/app.css` в `frontend/src/lib/pages/knowledge/knowledge.css` и `frontend/src/lib/pages/review/review.css`; root `pages.css` сокращен до 457 строк и больше не является God File, `app.css` сокращен до 973 строк, новые CSS chunks меньше 700 строк.
 
 ## В работе
 
@@ -42,7 +43,7 @@
 
 ## Осталось реализовать
 
-* [ ] Продолжить разнос крупных frontend CSS файлов по владельцам компонентов и страниц: `pages.css`, `panels.css`, `app.css`, `sidebar.css`.
+* [ ] Продолжить разнос крупных frontend CSS файлов по владельцам компонентов и страниц: `panels.css`, `app.css`, `sidebar.css`.
 * [ ] Устранить оставшиеся backend source files больше 700 строк без добавления новых God Files.
 * [ ] Удалить compatibility storage вокруг `persons` и перейти на Persona-native schema.
 * [ ] Удалить legacy Contact/Person CRM API и заменить их Persona-domain контрактами.
@@ -62,10 +63,10 @@
 * В backend остаются source files больше 700 строк за пределами уже разделенного `mail/handlers`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
 * Во frontend остаются крупные service/source files больше 700 строк, включая `frontend/src/lib/services/accounts.ts`; их нельзя расширять новыми возможностями без предварительной декомпозиции.
-* Во frontend остаются крупные shared CSS files (`pages.css` — 1178 строк, `panels.css` — 1780 строк, `app.css` — 985 строк, `sidebar.css` — 841 строк), которые блокируют ownership-based компонентную декомпозицию.
+* Во frontend остаются крупные shared CSS files (`panels.css` — 1780 строк, `app.css` — 973 строк, `sidebar.css` — 841 строк), которые блокируют ownership-based компонентную декомпозицию; `pages.css` сокращен до 457 строк.
 * Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
 * Некоторые реализованные engine baseline ещё не подключены как полноценные доменные процессы.
 
 ## Следующий шаг
 
-Продолжить декомпозицию `frontend/src/lib/pages/pages.css` по оставшимся page owners, затем разнести `panels.css`, `app.css` и `sidebar.css` по владельцам компонентов.
+Разнести `panels.css`, `app.css` и `sidebar.css` по владельцам компонентов; не добавлять новую функциональность в эти shared CSS файлы до их декомпозиции.

@@ -7,6 +7,7 @@
 	import KnowledgeGraphCanvas from './widgets/KnowledgeGraphCanvas.svelte';
 	import KnowledgeNodeInspector from './widgets/KnowledgeNodeInspector.svelte';
 	import KnowledgePolygraphReview from './widgets/KnowledgePolygraphReview.svelte';
+	import './knowledge.css';
 	import type {
 		ContradictionObservation,
 		ContradictionReviewState,

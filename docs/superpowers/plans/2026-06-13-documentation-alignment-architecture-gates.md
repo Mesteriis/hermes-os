@@ -684,7 +684,50 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 18: Continue Backend God File Elimination
+### Task 18: Knowledge and Review CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/styles/app.css`
+- Modify: `frontend/src/lib/pages/knowledge/KnowledgePage.svelte`
+- Modify: `frontend/src/lib/pages/review/ReviewPage.svelte`
+- Create: `frontend/src/lib/pages/knowledge/knowledge.css`
+- Create: `frontend/src/lib/pages/review/review.css`
+
+- [x] **Step 1: Verify Knowledge/Review CSS ownership failure**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(knowledge-page|knowledge-layout|knowledge-side-rail|graph-filter-tabs|graph-workbench|graph-search-form|graph-search-strip|graph-picker|graph-result-row|knowledge-canvas|graph-edge-layer|graph-node|graph-state-card|graph-loading-overlay|graph-status-bar|polygraph-review-panel|polygraph-state|polygraph-list|polygraph-item|polygraph-actions)' frontend/src/lib/pages/pages.css
+! rg -n '(^|[,{[:space:]])\.(review-page|review-overview|review-metrics|review-board|review-queue-panel|review-empty|review-list|review-item|review-actions)' frontend/src/lib/pages/pages.css
+! rg -n '\b(knowledge-layout|graph-filter-tabs|graph-toolbar)\b' frontend/src/lib/styles/app.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns Knowledge Graph, Polygraph review and Review queue selectors, while `app.css` owns Knowledge layout, filters and toolbar responsive behavior.
+
+- [x] **Step 2: Extract Knowledge and Review CSS chunks**
+
+Move Knowledge page shell, 12-column layout, graph filters, graph workbench, graph canvas and Knowledge Polygraph selectors into `frontend/src/lib/pages/knowledge/knowledge.css`. Move Review page shell, metrics and queue board selectors into `frontend/src/lib/pages/review/review.css`. Keep shared `graph-strip-message`, `doc-mini`, `graph-center` and `evidence-row` in shared/root CSS until a dedicated shared component CSS split; remove unused `knowledge-core` CSS.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(knowledge-page|knowledge-layout|knowledge-side-rail|graph-filter-tabs|graph-workbench|graph-search-form|graph-search-strip|graph-picker|graph-result-row|knowledge-canvas|graph-edge-layer|graph-node|graph-state-card|graph-loading-overlay|graph-status-bar|polygraph-review-panel|polygraph-state|polygraph-list|polygraph-item|polygraph-actions)' frontend/src/lib/pages/pages.css
+! rg -n '(^|[,{[:space:]])\.(review-page|review-overview|review-metrics|review-board|review-queue-panel|review-empty|review-list|review-item|review-actions)' frontend/src/lib/pages/pages.css
+! rg -n '\b(knowledge-layout|graph-filter-tabs|graph-toolbar)\b' frontend/src/lib/styles/app.css
+printf '%s\0' frontend/src/lib/pages/knowledge/knowledge.css frontend/src/lib/pages/review/review.css \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+test "$(wc -l < frontend/src/lib/pages/pages.css | tr -d ' ')" -le 700
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 19: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

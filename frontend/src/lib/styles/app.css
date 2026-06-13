@@ -607,7 +607,6 @@ input[type='checkbox'] {
 .segmented.active,
 .filter-tabs button.active,
 .section-tabs button.active,
-.graph-filter-tabs button.active,
 .filter-bar button.active {
 	border-color: rgba(45, 240, 206, 0.48);
 	background: rgba(25, 154, 132, 0.24);
@@ -616,8 +615,7 @@ input[type='checkbox'] {
 
 .filter-tabs,
 .filter-bar,
-.section-tabs,
-.graph-filter-tabs {
+.section-tabs {
 	display: flex;
 	align-items: center;
 	gap: 8px;
@@ -631,8 +629,7 @@ input[type='checkbox'] {
 
 .filter-tabs button,
 .filter-bar button,
-.section-tabs button,
-.graph-filter-tabs button {
+.section-tabs button {
 	display: inline-flex;
 	align-items: center;
 	gap: 7px;
@@ -832,7 +829,6 @@ input[type='checkbox'] {
 .dashboard-grid,
 .three-pane,
 .calendar-layout,
-.knowledge-layout,
 .agents-layout {
 	--hh-zone-rows: 12;
 	display: grid;
@@ -897,7 +893,6 @@ input[type='checkbox'] {
 	.dashboard-grid,
 	.three-pane,
 		.calendar-layout,
-		.knowledge-layout,
 		.agents-layout {
 		transform-origin: top left;
 	}
@@ -928,7 +923,6 @@ h1 {
 	.dashboard-grid,
 	.three-pane,
 		.calendar-layout,
-		.knowledge-layout,
 		.agents-layout {
 		grid-template-columns: repeat(var(--hh-layout-columns), minmax(0, 1fr));
 		min-height: 0;
@@ -936,9 +930,7 @@ h1 {
 .header-actions,
 	.filter-tabs,
 	.filter-bar,
-	.section-tabs,
-	.graph-filter-tabs,
-	.graph-toolbar {
+	.section-tabs {
 		max-width: 100%;
 		width: 100%;
 		min-width: 0;
@@ -947,17 +939,13 @@ h1 {
 .header-actions,
 	.filter-tabs,
 	.filter-bar,
-	.section-tabs,
-	.graph-filter-tabs,
-	.graph-toolbar {
+	.section-tabs {
 		flex-wrap: wrap;
 		justify-content: start;
 	}
 .filter-tabs button,
 	.filter-bar button,
-	.section-tabs button,
-	.graph-filter-tabs button,
-	.graph-toolbar button {
+	.section-tabs button {
 		flex: 0 1 auto;
 		min-width: 0;
 	}

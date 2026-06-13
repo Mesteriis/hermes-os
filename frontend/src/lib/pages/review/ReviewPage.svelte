@@ -9,6 +9,7 @@
 	import * as contradictionsService from '$lib/services/contradictions';
 	import type { Relationship } from '$lib/api';
 	import type { ReviewWorkspace, ReviewWorkspaceItemAction } from '$lib/services/review';
+	import './review.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 
