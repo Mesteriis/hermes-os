@@ -540,7 +540,42 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 14: Continue Backend God File Elimination
+### Task 14: Tasks CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/styles/app.css`
+- Modify: `frontend/src/lib/pages/tasks/TasksPage.svelte`
+- Create: `frontend/src/lib/pages/tasks/tasks.css`
+
+- [x] **Step 1: Verify Tasks CSS ownership failure**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(tasks-page|tasks-layout|task-table|task-table-head|task-context-review-|task-group)' frontend/src/lib/pages/pages.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns Tasks page shell, layout, task table, task review panel and task group selectors.
+
+- [x] **Step 2: Extract Tasks CSS chunk**
+
+Move Tasks page shell, layout, task table, task context review and task group selectors into `frontend/src/lib/pages/tasks/tasks.css` and import it from `TasksPage.svelte`. Remove the Tasks layout selector from shared `app.css` layout groups so the owner file preserves the previous effective grid behavior without relying on global cascade order. Keep shared `task-row`, `task-stack` and task action selectors in shared CSS because they are also used outside the Tasks page or remain part of the shared panel split.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg -n '(^|[,{[:space:]])\.(tasks-page|tasks-layout|task-table|task-table-head|task-context-review-|task-group)' frontend/src/lib/pages/pages.css
+! rg "\btasks-layout\b" frontend/src/lib/styles/app.css
+test "$(wc -l < frontend/src/lib/pages/tasks/tasks.css | tr -d ' ')" -le 700
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 15: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

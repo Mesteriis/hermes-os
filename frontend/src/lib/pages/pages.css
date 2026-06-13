@@ -1,7 +1,6 @@
 .home-page,
 .persons-page,
 .projects-page,
-.tasks-page,
 .calendar-page,
 .documents-page,
 .notes-page,
@@ -81,21 +80,12 @@
 	color: #dffffa;
 }
 
-.tasks-layout,
 .knowledge-layout,
 .timeline-layout {
 	display: grid;
 	grid-template-columns: minmax(740px, 1fr) 310px;
 	gap: 12px;
 	min-height: var(--hh-widget-workbench-large);
-}
-
-.task-table {
-	min-height: var(--hh-widget-workbench-large);
-}
-
-.task-table-head {
-	grid-template-columns: 2fr 1fr 0.9fr 1fr 0.7fr;
 }
 
 .identity-note {
@@ -275,143 +265,6 @@
 	color: var(--hh-color-text-soft);
 	padding: 0 10px;
 	font-size: 11px;
-}
-
-.task-context-review-panel {
-	display: grid;
-	gap: 10px;
-	padding: 12px;
-}
-
-.task-context-review-panel header {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-}
-
-.task-context-review-panel h2 {
-	margin: 2px 0 0;
-	color: var(--hh-color-text-bright);
-	font-size: 14px;
-	line-height: 1.2;
-}
-
-.task-context-review-panel header button,
-.task-context-review-state button,
-.task-context-review-actions button {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	min-height: 30px;
-	border: 1px solid var(--hh-border-subtle);
-	border-radius: var(--hh-radius-control);
-	background: rgba(4, 21, 24, 0.72);
-	color: var(--hh-color-text-soft);
-	padding: 0 10px;
-	font-size: 11px;
-	transition:
-		border-color 160ms ease,
-		background 160ms ease,
-		color 160ms ease;
-}
-
-.task-context-review-panel header button {
-	width: 32px;
-	padding: 0;
-}
-
-.task-context-review-panel button:not(:disabled):hover {
-	border-color: rgba(45, 240, 206, 0.38);
-	background: rgba(25, 154, 132, 0.18);
-	color: var(--hh-color-accent);
-}
-
-.task-context-review-scope {
-	display: grid;
-	grid-template-columns: 104px minmax(0, 1fr);
-	gap: 8px;
-}
-
-.task-context-review-scope select,
-.task-context-review-scope input {
-	min-width: 0;
-	min-height: 32px;
-	border: 1px solid var(--hh-border-subtle);
-	border-radius: var(--hh-radius-control);
-	background: rgba(4, 21, 24, 0.72);
-	color: var(--hh-color-text-soft);
-	padding: 0 9px;
-	font-size: 11px;
-}
-
-.task-context-review-state {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
-	min-height: 42px;
-	color: var(--hh-color-text-muted);
-	font-size: 12px;
-}
-
-.task-context-review-state.error {
-	color: var(--hh-color-danger);
-}
-
-.task-context-review-list {
-	display: grid;
-	gap: 9px;
-}
-
-.task-context-review-item {
-	display: grid;
-	gap: 8px;
-	border: 1px solid rgba(82, 204, 190, 0.1);
-	border-radius: var(--hh-radius-md);
-	background: rgba(4, 21, 24, 0.54);
-	padding: 10px;
-}
-
-.task-context-review-item strong {
-	display: block;
-	margin-top: 3px;
-	overflow-wrap: anywhere;
-	color: var(--hh-color-text-bright);
-	font-size: 12px;
-	line-height: 1.35;
-}
-
-.task-context-review-item p,
-.task-context-review-item small {
-	margin: 4px 0 0;
-	color: var(--hh-color-text-muted);
-	font-size: 11px;
-	line-height: 1.35;
-	overflow-wrap: anywhere;
-}
-
-.task-context-review-actions {
-	display: flex;
-	gap: 7px;
-	flex-wrap: wrap;
-}
-
-.task-group {
-	color: var(--hh-color-text-soft);
-	font-size: 13px;
-	font-weight: 500;
-	padding: 18px 16px 8px;
-}
-
-.task-group em {
-	border-radius: var(--hh-radius-pill);
-	background: rgba(142, 174, 174, 0.16);
-	color: #d5e7e5;
-	font-size: 10px;
-	font-style: normal;
-	padding: 2px 7px;
 }
 
 .doc-mini {
@@ -1479,7 +1332,6 @@
 .home-page,
 .persons-page,
 .projects-page,
-.tasks-page,
 .calendar-page,
 .documents-page,
 .notes-page,
@@ -1503,7 +1355,6 @@
 .home-page > *,
 .persons-page > *,
 .projects-page > *,
-.tasks-page > *,
 .calendar-page > *,
 .documents-page > *,
 .notes-page > *,
@@ -1550,7 +1401,6 @@
 .home-page,
 	.persons-page,
 	.projects-page,
-	.tasks-page,
 		.calendar-page,
 		.documents-page,
 		.notes-page,

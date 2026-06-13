@@ -20,6 +20,7 @@
 	import TasksContext from './widgets/TasksContext.svelte';
 	import TasksSources from './widgets/TasksSources.svelte';
 	import TasksDecisionObligationReview from './widgets/TasksDecisionObligationReview.svelte';
+	import './tasks.css';
 
 	const _ = (key: string) => t($currentLocale, key);
 
