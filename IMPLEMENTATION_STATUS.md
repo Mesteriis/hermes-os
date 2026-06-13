@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 20:52 CEST
+Дата последнего обновления: 2026-06-13 21:02 CEST
 
 ## Выполнено
 
@@ -37,6 +37,7 @@
 * [x] Shared panel/editor/strip CSS и page-owned panel selectors вынесены из `frontend/src/lib/components/shared/panels.css` в owner-файлы компонентов и страниц; `panels.css` сокращен с 1780 до 697 строк и больше не является God File, новые CSS chunks меньше 700 строк.
 * [x] Shell layout и shell theme CSS вынесены из `frontend/src/lib/styles/app.css` в `frontend/src/lib/styles/shell.css` и `frontend/src/lib/styles/shellTheme.css`; `app.css` сокращен с 973 до 640 строк и больше не является God File.
 * [x] Communications store разделен на bounded modules `state`, `loaders`, `compose`, `actions`, `selectors` и `formatters`; `frontend/src/lib/stores/communications.ts` сокращен с 899 до 5 строк и оставлен как public facade, все store modules меньше 700 строк.
+* [x] Accounts service разделен на bounded modules `calendar`, `drawer`, `labels`, `mailImport`, `mailSetup`, `mailWizard`, `shared`, `telegram` и `types`; `frontend/src/lib/services/accounts.ts` сокращен с 1011 до 9 строк и оставлен как public facade, все account service modules меньше 700 строк.
 
 ## В работе
 
@@ -66,7 +67,7 @@
 * В коде ещё есть compatibility layers вокруг `persons`, `health`, `watchtower`, legacy Person/Contact терминологии и старых API.
 * В backend остаются source files больше 700 строк за пределами уже разделенного `mail/handlers`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
-* Во frontend остаются крупные service/source files больше 700 строк: `frontend/src/lib/api/types.ts`, `frontend/src/lib/services/telegram.ts`, `frontend/src/lib/services/communications.ts`, `frontend/src/lib/services/accounts.ts`; их нельзя расширять новыми возможностями без предварительной декомпозиции.
+* Во frontend остаются крупные service/source files больше 700 строк: `frontend/src/lib/api/types.ts`, `frontend/src/lib/services/telegram.ts`, `frontend/src/lib/services/communications.ts`; их нельзя расширять новыми возможностями без предварительной декомпозиции.
 * Во frontend больше не осталось CSS files больше 700 строк по текущему scan; `app.css` сокращен до 640 строк, `pages.css` — до 457 строк, `sidebar.css` — до 590 строк, `panels.css` — до 697 строк.
 * Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
 * Некоторые реализованные engine baseline ещё не подключены как полноценные доменные процессы.

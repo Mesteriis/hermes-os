@@ -897,7 +897,50 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 23: Continue Backend God File Elimination
+### Task 23: Accounts Service Decomposition
+
+**Files:**
+- Modify: `frontend/src/lib/services/accounts.ts`
+- Create: `frontend/src/lib/services/accounts/calendar.ts`
+- Create: `frontend/src/lib/services/accounts/drawer.ts`
+- Create: `frontend/src/lib/services/accounts/labels.ts`
+- Create: `frontend/src/lib/services/accounts/mailImport.ts`
+- Create: `frontend/src/lib/services/accounts/mailSetup.ts`
+- Create: `frontend/src/lib/services/accounts/mailWizard.ts`
+- Create: `frontend/src/lib/services/accounts/shared.ts`
+- Create: `frontend/src/lib/services/accounts/telegram.ts`
+- Create: `frontend/src/lib/services/accounts/types.ts`
+
+- [x] **Step 1: Verify accounts service failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/services/accounts.ts | tr -d ' ')" -le 700
+test -f frontend/src/lib/services/accounts/mailSetup.ts
+test -f frontend/src/lib/services/accounts/telegram.ts
+```
+
+Expected before refactor: FAIL because `accounts.ts` had 1011 lines and mixed account drawer state, mail setup, mail import/export, mail wizard, calendar setup, Telegram wizard helpers and account labels in one service file.
+
+- [x] **Step 2: Extract bounded service modules**
+
+Keep `$lib/services/accounts` as the public import path by replacing `accounts.ts` with a facade. Move calendar setup helpers into `calendar.ts`, drawer state helpers into `drawer.ts`, account labels into `labels.ts`, mail import/export/account management into `mailImport.ts`, mail setup API helpers into `mailSetup.ts`, mail wizard presets and inference into `mailWizard.ts`, common string normalization into `shared.ts`, Telegram wizard helpers into `telegram.ts`, and shared account setup boundary types into `types.ts`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/services/accounts.ts | tr -d ' ')" -le 700
+find frontend/src/lib/services/accounts -type f -name '*.ts' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+pnpm --dir frontend test:unit src/lib/services/accounts.test.ts
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 24: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
