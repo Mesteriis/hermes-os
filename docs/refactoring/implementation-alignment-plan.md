@@ -163,6 +163,21 @@ implementation evidence:
   `backend/src/workflows/email_sync_pipeline.rs` now adapt manual/API and
   email-sync `organization_contact_links` compatibility records into
   source-backed `member_of` Relationships from Persona to Organization.
+- `backend/src/domains/persons/core.rs` now adapts manual/API `person_roles`
+  compatibility records into source-backed `has_role` Relationships from
+  Persona to role Knowledge anchors, and role removal demotes the same
+  Relationship to `user_rejected`.
+- `backend/src/domains/persons/core.rs` now also adapts manual/API
+  `person_personas` compatibility records into source-backed
+  `interaction_context:*` Persona Preferences, and removes those derived
+  preferences when the compatibility interaction context is deleted.
+- `backend/src/domains/persons/enrichment.rs` now adapts enrichment
+  `persons.trust_score` compatibility writes into suggested Owner Persona ->
+  Persona `trusts` Relationships while keeping the root column as a temporary
+  compatibility cache.
+- `backend/src/domains/persons/enrichment.rs` now adapts manual/API
+  `persons.notes` compatibility writes into sourced Persona Memory Cards while
+  keeping the root column as a temporary compatibility cache.
 - `backend/src/domains/tasks/core.rs` now adapts manual `task_relations`
   compatibility records into source-backed Relationships from Task to known
   target entity kinds. Migration `0069` also relaxes the old
@@ -175,11 +190,11 @@ implementation evidence:
 |---|---|---|---|
 | Communications domain | `/api/v1/communications/*`, `backend/src/domains/mail/*`, Gmail/Telegram/WhatsApp integrations, communication migrations | Public API is communication-shaped, implementation module is still email/mail-shaped. | Communications migration plan before any module rename. |
 | Email channel | `docs/mail/*`, email account routes, mail blob migrations | Email is a channel but still has broad module ownership. | Keep channel docs; do not promote Mail to product domain. |
-| Persona Intelligence | `backend/src/domains/persons/*`, `/api/v1/persons/*`, ADR-0084, person/contact migrations, migration `0059` for `is_self` and `person_type` constraints | Target entity is Persona, current compatibility name is Person/Person ID. Owner Persona and PersonaType have a compatibility-layer baseline, but route/schema naming and Dossier/Relationship semantics remain incomplete. | Schema/API naming migration ADR before code rename. |
-| Relationships | `backend/src/domains/relationships/mod.rs`, `backend/src/domains/relationships/api.rs`, migrations `0060`, `0061` and `0068`, graph core, person roles, organization contacts, task relations, project link reviews, Personas workspace review panel | First-class Relationship persistence, graph projection for all current `RelationshipEntityKind` endpoints, guarded entity/global review routes, organization contact link adapters for manual/API and email-sync paths, manual task relation adapters, project link review adapters and a Personas workspace global suggested review panel have a baseline, but person-role compatibility adapters and broader cross-domain workflow placement are incomplete. | Migrate remaining role/read-model semantics behind compatibility boundaries and move or duplicate review into the cross-domain workflow shell when defined. |
+| Persona Intelligence | `backend/src/domains/persons/*`, `/api/v1/persons/*`, ADR-0084, person/contact migrations, migration `0059` for `is_self` and `person_type` constraints | Target entity is Persona, current compatibility name is Person/Person ID. Owner Persona, PersonaType, role-to-Relationship, interaction-context-to-Preference, trust-to-Relationship and notes-to-memory-card adapters have compatibility-layer baselines, but route/schema naming, Dossier semantics and downstream engine projections remain incomplete. | Schema/API naming migration ADR before code rename. |
+| Relationships | `backend/src/domains/relationships/mod.rs`, `backend/src/domains/relationships/api.rs`, migrations `0060`, `0061` and `0068`, graph core, person roles, organization contacts, task relations, project link reviews, Personas workspace review panel | First-class Relationship persistence, graph projection for all current `RelationshipEntityKind` endpoints, guarded entity/global review routes, person role adapters, organization contact link adapters for manual/API and email-sync paths, manual task relation adapters, project link review adapters and a Personas workspace global suggested review panel have a baseline, but broader cross-domain workflow placement and downstream engine projections are incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and move or duplicate review into the cross-domain workflow shell when defined. |
 | Memory Engine | persons memory, organization memory, project memory docs | Memory behavior is domain-local. | Shared Memory Engine implementation plan after domain source boundaries are stable. |
 | Timeline Engine | calendar events, person timeline, organization timeline, project timelines, frontend timeline page | Timeline views exist in multiple places. | Timeline Engine extraction plan; Calendar remains scheduled event domain. |
-| Trust Engine | `persons/trust.rs`, risk/health modules, relationship scores in docs | Trust is partly Persona-local and partly risk/health language. | Normalize trust as source/relationship signal, not generic entity field. |
+| Trust Engine | `persons/trust.rs`, `persons/enrichment.rs`, risk/health modules, relationship scores in docs | Enrichment trust scores now materialize suggested Owner Persona trust Relationships, but Trust is still partly Persona-local and partly risk/health language. | Continue normalizing trust as source/relationship signal, not generic entity field. |
 | Risk Engine | `health.rs`, `watchtower`, risks routes in persons/orgs/calendar/tasks | Health/watchtower naming hides shared Risk Engine semantics. | Risk terminology migration plan for docs/UI/API compatibility. |
 | Enrichment Engine | persons enrichment, organization enrichment | Enrichment exists per domain. | Shared engine semantics with domain-specific source policies. |
 | Obligation Engine | `backend/src/engines/obligation.rs`, `backend/src/domains/obligations/mod.rs`, `backend/src/domains/obligations/api.rs`, migrations `0063`, `0066` and `0067`, task candidates, task rules, email sync and Telegram/WhatsApp fixture communication extraction, document candidate extraction, meeting outcomes, person promises, Tasks workspace review panel | Candidate detection, accepted Obligation persistence, accepted Obligation graph projection, guarded accepted-Obligation backend entity/global review routes, global Tasks workspace review, obligation-derived task-candidate review-state synchronization, email-sync, document and Telegram/WhatsApp fixture candidate refresh, person promise adapters and meeting `promise`/`task`/`follow_up` outcome adapters have baselines. Live-provider ingestion and broader candidate-to-Obligation review workflow coverage are incomplete. | Extend remaining Communication/document ingestion to the engine and feed reviewed candidates to the Obligations domain without auto-creating Tasks outside explicit task-candidate review. |

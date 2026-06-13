@@ -10,9 +10,9 @@ level, but implementation is blocked by unresolved migration work.
 | Legacy `persons` naming | Domain language now requires Persona, while backend/API still expose person/contact history. | Decide route/schema migration strategy. |
 | Missing Self Persona | Agents and owner-scoped memory need a single `is_self: true` Persona. | Add owner Persona semantics and uniqueness guarantee. |
 | Missing Relationship records | Current model stores relationship-like state as fields and timeline events. | Add first-class Relationship storage and API. |
-| `person_personas` conflict | Nested personas contradict Persona as the root entity. | Deprecate or migrate to interaction context/preferences. |
+| `person_personas` conflict | Nested personas contradict Persona as the root entity. | Compatibility writes now migrate interaction-context values into Persona Preferences; route/schema deprecation remains a future migration decision. |
 | Email-derived `person_id` compatibility | ADR-0074 keeps text IDs for current implementation, but target Persona should not be email-rooted. | Future opaque ID migration ADR if/when implementation changes. |
-| Root trust/health/watchlist fields | These encode CRM-style relationship state on Persona. | Move trust/strength to Relationships and attention state to read models. |
+| Root health/watchlist fields | These encode CRM-style attention state on Persona. | Move attention state to read models. Root `trust_score` remains a compatibility cache, but enrichment now materializes suggested trust Relationships. |
 | Dossier not formalized as read model | Current investigator/export concepts do not fully define cited dossier generation. | Add Dossier read model contract. |
 | PersonaType not enforced | Target requires `human`, `ai_agent`, `organization_proxy`, `system`. | Add typed domain validation in a migration slice. |
 

@@ -188,9 +188,9 @@ Expected future implementation work:
 - add `is_self` Owner Persona semantics;
 - add target `PersonaType` values;
 - add first-class Relationship records;
-- migrate or deprecate `person_roles` and `person_personas`;
-- move trust/strength to Relationships;
-- move notes into cited memory;
+- keep retiring compatibility table/route names after the current
+  `person_roles` Relationship, `person_personas` Preference, trust Relationship
+  and notes Memory Card adapter baselines;
 - introduce Dossier read model with source references;
 - document an explicit route/schema compatibility strategy before any future
   implementation migration.

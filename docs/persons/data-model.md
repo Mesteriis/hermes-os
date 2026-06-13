@@ -339,17 +339,17 @@ model.
 | `persons` | `Persona` projection | Keep as compatibility until a migration ADR. |
 | `persons.email_address` | `PersonaIdentity(trace_type=email)` | Root email is compatibility only. |
 | `persons.person_type` | `Persona.persona_type` | Value set must become `human`, `ai_agent`, `organization_proxy`, `system`. |
-| `persons.trust_score` | `Relationship.trust_score` | Move out of Persona root. |
+| `persons.trust_score` | `Relationship.trust_score` | Compatibility cache only. Enrichment writes now materialize suggested Owner Persona -> Persona trust Relationships. |
 | `persons.primary_role` | `Relationship.relationship_type` or memory fact | Do not model as Persona field. |
 | `persons.organization_reference` | Relationship to organization proxy or organizations domain | Keep only as cached compatibility. |
 | `persons.is_favorite` | UI preference/read model | Not domain identity. |
-| `persons.notes` | Persona memory card or fact | Must carry provenance when promoted to memory. |
+| `persons.notes` | `PersonaMemoryCard` | Compatibility cache only. Writes now materialize a sourced memory card. |
 | `persons.health_status` | Relationship attention read model | Not source of truth. |
 | `persons.watchlist` | UI/read model | Not source of truth. |
 | `person_identities` | `PersonaIdentity` | Extend to document/message traces and disputed status. |
 | `person_identity_candidates` | `IdentityResolutionCandidate` | Rename semantics from person/contact to Persona. |
 | `person_roles` | `Relationship` | Deprecated in target model. |
-| `person_personas` | Deprecated | Persona is the root entity, not an interaction sub-profile. |
+| `person_personas` | `PersonaPreference` interaction context compatibility | Deprecated as a nested Persona concept. Compatibility writes now materialize `interaction_context:*` preferences with source references. |
 | `person_facts` | `PersonaFact` | Keep concept; rename when schema migrates. |
 | `person_memory_cards` | `PersonaMemoryCard` | Keep concept; ensure evidence-backed semantics. |
 | `person_preferences` | `PersonaPreference` | Keep concept. |

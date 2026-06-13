@@ -104,8 +104,8 @@ Negative:
 - There is temporary duplication between `relationships`, graph edges and
   timeline events.
 - The first desktop review UI is still surfaced inside the Personas workspace;
-  broader cross-domain workflow placement and compatibility adapters still need
-  explicit follow-up work.
+  broader cross-domain workflow placement and remaining compatibility adapters
+  still need explicit follow-up work.
 
 ## Non-Goals
 
@@ -132,11 +132,20 @@ suggested Relationships. It uses the guarded global review list route, keeps
 entity-scoped formatting when a Persona is selected and sends explicit owner
 `user_confirmed` / `user_rejected` review state.
 
+Manual/API `person_roles` now materialize source-backed `has_role`
+Relationships from Persona to role Knowledge anchors. Removing a role demotes
+the same Relationship to `user_rejected`.
+
+Manual/API and email-sync `organization_contact_links`, manual `task_relations`
+and explicit project link reviews now also materialize source-backed
+Relationship records behind their compatibility surfaces.
+
 ## Required Follow-Up
 
 - Move or duplicate Relationship review into a broader cross-domain review
   inbox when the workflow shell is defined.
-- Reclassify Persona roles and organization links into Relationship records.
+- Reclassify remaining relationship-shaped compatibility and read-model
+  surfaces into Relationship records.
 - Feed reviewed Relationship records into Trust, Risk, Timeline and Dossier
   projections.
 - Update implementation alignment docs as each compatibility surface is

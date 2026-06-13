@@ -67,6 +67,13 @@ These are known product/implementation gaps, not hidden documentation failures:
 
 - Persona-native naming is not implemented end-to-end. Current code still uses
   `persons`, `person_id`, `person_*` tables and compatibility surfaces.
+  `person_roles` and `person_personas` now have compatibility adapters into
+  target-aligned Relationship and Persona Preference records. Enrichment
+  `trust_score` writes now also materialize suggested Owner Persona trust
+  Relationships while keeping the root column as a temporary compatibility
+  cache. `persons.notes` writes now materialize sourced Persona Memory Cards
+  while keeping the root column as a temporary compatibility cache. Route/schema
+  names remain compatibility names.
 - First-class Relationship storage now has an initial implementation baseline in
   migration `0060` and `backend/src/domains/relationships/`, plus active
   graph projection for supported endpoints through migrations `0061` and
@@ -78,13 +85,15 @@ These are known product/implementation gaps, not hidden documentation failures:
   workspace includes a global suggested Relationship review panel with
   selected-Persona compact formatting. Manual/API organization contact links
   and email-sync organization contact links now materialize source-backed
-  `member_of` Relationships from Persona to Organization. Manual task
-  relations now materialize source-backed Relationships from Task to the
-  related target entity. Explicit project link reviews now materialize
-  source-backed Relationships from Project to reviewed Communication or
-  Document and reset those candidates back to `suggested` when explicit review
-  is cleared. Relationship semantics still need compatibility adapters for
-  person roles plus broader cross-domain workflow placement.
+  `member_of` Relationships from Persona to Organization. Manual/API
+  `person_roles` now materialize source-backed `has_role` Relationships from
+  Persona to role Knowledge anchors, and deletion demotes those Relationships
+  to `user_rejected`. Manual task relations now materialize source-backed
+  Relationships from Task to the related target entity. Explicit project link
+  reviews now materialize source-backed Relationships from Project to reviewed
+  Communication or Document and reset those candidates back to `suggested` when
+  explicit review is cleared. Relationship semantics still need broader
+  cross-domain workflow placement and downstream engine projections.
 - Memory, Timeline, Trust, Risk and Enrichment behavior still appears in
   domain-local modules and routes such as `health`, `watchtower`,
   `intelligence` and `memory`.

@@ -142,8 +142,10 @@ Negative:
 
 - Current `persons` schema and `/persons` API names become compatibility
   details.
-- `person_personas` conflicts with the new Persona meaning and must be migrated
-  or deprecated.
+- `person_personas` conflicts with the new Persona meaning. Compatibility
+  writes now materialize interaction-context values into Persona Preferences,
+  but the nested Persona table and route names remain deprecated compatibility
+  surfaces until a schema/API migration ADR retires them.
 - Existing health, watchlist, role and trust fields must be reclassified before
   deeper implementation work.
 - UI and backend code will need a future migration plan to avoid breaking

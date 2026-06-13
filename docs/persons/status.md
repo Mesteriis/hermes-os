@@ -28,13 +28,15 @@ do not yet fully implement the target model.
 | `persons` table | Transitional Persona projection, still rooted in email/contact history. |
 | `person_identities` | Useful identity trace table; needs Persona naming and extra trace types. |
 | `person_identity_candidates` | Compatible review workflow; contact/person language must become Persona language. |
-| `person_roles` | Deprecated by first-class Relationships. |
-| `person_personas` | Deprecated; conflicts with Persona as the root entity. |
+| `person_roles` | Deprecated as standalone role storage; compatibility writes materialize first-class Relationships. |
+| `person_personas` | Deprecated as nested Personas; compatibility writes materialize `interaction_context:*` Persona Preferences. |
 | `relationship_events` | Useful timeline projection; not a first-class Relationship model. |
 | `person_facts`, `person_memory_cards`, `person_preferences` | Compatible with Persona Memory after naming/provenance alignment. |
 | `person_expertise` | Compatible as Persona skills/knowledge signals. |
 | `person_promises`, `person_risks` | Must be reframed as cited facts, timeline events or observations. |
-| `health_status`, `watchlist`, `is_favorite`, `notes` | UI/read-model or memory concepts, not Persona root identity. |
+| `trust_score` | Compatibility cache; enrichment now materializes suggested Owner Persona trust Relationships. |
+| `notes` | Compatibility cache; writes now materialize sourced Persona Memory Cards. |
+| `health_status`, `watchlist`, `is_favorite` | UI/read-model concepts, not Persona root identity. |
 | `/api/v1/persons/*` | Legacy compatibility API. |
 
 ## Target Migration Slices

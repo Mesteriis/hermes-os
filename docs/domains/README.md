@@ -24,7 +24,7 @@ needs a projection.
 |---|---|---|
 | Communications | [Communications](communications.md) | implemented with email-heavy naming and Telegram/WhatsApp surfaces |
 | Personas | [Personas](persons.md), [Persona Intelligence](../persons/README.md) | partially implemented through `persons` and compatibility migrations |
-| Relationships | [Relationships](relationships.md) | partially implemented through first-class persistence, graph projection for all current Relationship entity kinds, guarded global suggested review, organization contact link adapters, task relation adapters, project link review adapters and Personas workspace review; remaining person-role/cross-domain inbox work incomplete |
+| Relationships | [Relationships](relationships.md) | partially implemented through first-class persistence, graph projection for all current Relationship entity kinds, guarded global suggested review, organization contact link adapters, person role adapters, task relation adapters, project link review adapters and Personas workspace review; remaining cross-domain inbox work incomplete |
 | Organizations | [Organizations](organizations.md), [Organizations Folder](../organizations/README.md) | implemented as a memory anchor domain |
 | Projects | [Projects](projects.md) | implemented, needs stronger domain documentation |
 | Documents | [Documents](documents.md) | implemented, needs clearer Knowledge boundary |
