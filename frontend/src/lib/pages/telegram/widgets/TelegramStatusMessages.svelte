@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '$lib/components/shared/setupControls.css';
 	interface Props {
 		actionMessage: string;
 		error: string;

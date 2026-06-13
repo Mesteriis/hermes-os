@@ -322,7 +322,46 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 8: Continue Backend God File Elimination
+### Task 8: Account Setup and Shared Setup CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/components/shared/AccountSetupModal.svelte`
+- Modify: `frontend/src/lib/components/shared/ComposeDrawer.svelte`
+- Modify setup/status consumers that use shared setup form, setup state or form status classes
+- Create: `frontend/src/lib/components/account-setup/accountSetup.css`
+- Create: `frontend/src/lib/components/shared/accountModal.css`
+- Create: `frontend/src/lib/components/shared/setupControls.css`
+- Create: `frontend/src/lib/components/shared/composeDrawer.css`
+
+- [x] **Step 1: Verify account/setup CSS ownership failure**
+
+Run:
+
+```sh
+! rg "^(\.account-modal|\.provider-tabs|\.account-wizard-tabs|\.wizard-progress|\.wizard-step|\.wizard-choice|\.wizard-back|\.qr-login-panel|\.qr-svg|\.qr-login-copy|\.qr-skeleton|\.setup-form|\.setup-summary-card|\.setup-state|\.form-status|\.send-review-modal|\.send-review-grid)" frontend/src/lib/pages/pages.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns account modal, setup wizard, QR login, shared setup form/status and compose review selectors.
+
+- [x] **Step 2: Extract account setup and shared setup CSS chunks**
+
+Move account setup wizard and QR selectors to account setup CSS. Move modal, shared setup controls/status and compose send-review selectors to focused shared component CSS chunks. Keep existing semantic class names, and remove unused legacy wizard selectors instead of moving dead CSS.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg "^(\.account-modal|\.provider-tabs|\.account-wizard-tabs|\.wizard-progress|\.wizard-step|\.wizard-choice|\.wizard-back|\.qr-login-panel|\.qr-svg|\.qr-login-copy|\.qr-skeleton|\.setup-form|\.setup-summary-card|\.setup-state|\.form-status|\.send-review-modal|\.send-review-grid)" frontend/src/lib/pages/pages.css
+printf '%s\0' frontend/src/lib/components/account-setup/accountSetup.css frontend/src/lib/components/shared/accountModal.css frontend/src/lib/components/shared/setupControls.css frontend/src/lib/components/shared/composeDrawer.css frontend/src/lib/components/account-setup/telegramQr.css \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+make lint-frontend
+make lint-architecture
+```
+
+### Task 9: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

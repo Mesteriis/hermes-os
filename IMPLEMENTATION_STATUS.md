@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-13 18:24 CEST
+Дата последнего обновления: 2026-06-13 18:34 CEST
 
 ## Выполнено
 
@@ -22,6 +22,7 @@
 * [x] `frontend/src/lib/pages/communications/widgets/CommunicationsMessageDetail.svelte` сокращен с 550 до 318 строк; message body, attachments, headers, related actions и timeline вынесены в focused communication widgets.
 * [x] Communications-owned CSS вынесен из `frontend/src/lib/pages/pages.css` в `frontend/src/lib/pages/communications/communications*.css`; root `pages.css` сокращен с 6852 до 5822 строк, новые communication CSS chunks меньше 700 строк.
 * [x] Telegram-owned CSS вынесен из `frontend/src/lib/pages/pages.css` в `frontend/src/lib/pages/telegram/telegram*.css`, а Telegram QR setup styles — в `frontend/src/lib/components/account-setup/telegramQr.css`; root `pages.css` сокращен до 4737 строк, новые Telegram CSS chunks меньше 700 строк.
+* [x] Account setup, shared setup controls, account modal и compose review CSS вынесены из `frontend/src/lib/pages/pages.css` в `frontend/src/lib/components/account-setup/accountSetup.css` и `frontend/src/lib/components/shared/*`; root `pages.css` сокращен до 4259 строк, новые CSS chunks меньше 700 строк.
 
 ## В работе
 
@@ -52,10 +53,10 @@
 * В backend остаются source files больше 700 строк за пределами уже разделенного `mail/handlers`.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
 * Во frontend остаются крупные service/source files больше 700 строк, включая `frontend/src/lib/services/accounts.ts`; их нельзя расширять новыми возможностями без предварительной декомпозиции.
-* Во frontend остаются крупные shared CSS files (`pages.css`, `panels.css`, `app.css`, `sidebar.css`), которые блокируют ownership-based компонентную декомпозицию.
+* Во frontend остаются крупные shared CSS files (`pages.css` — 4259 строк, `panels.css` — 1780 строк, `app.css` — 1021 строк, `sidebar.css` — 841 строк), которые блокируют ownership-based компонентную декомпозицию.
 * Часть интеграционных тестов зависит от общего dev-контейнера, а не от полного цикла Container → Migration → Fixture → Run → Destroy.
 * Некоторые реализованные engine baseline ещё не подключены как полноценные доменные процессы.
 
 ## Следующий шаг
 
-Продолжить декомпозицию `frontend/src/lib/pages/pages.css`, затем разнести `panels.css`, `app.css` и `sidebar.css` по владельцам компонентов.
+Продолжить декомпозицию `frontend/src/lib/pages/pages.css` по оставшимся page owners, затем разнести `panels.css`, `app.css` и `sidebar.css` по владельцам компонентов.

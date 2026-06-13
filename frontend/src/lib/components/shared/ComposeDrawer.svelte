@@ -1,4 +1,7 @@
 <script lang="ts">
+	import './accountModal.css';
+	import './composeDrawer.css';
+	import './setupControls.css';
 	import Icon from '@iconify/svelte';
 	import HermesSelect from '$lib/components/shared/HermesSelect.svelte';
 	import { currentLocale, t } from '$lib/i18n';

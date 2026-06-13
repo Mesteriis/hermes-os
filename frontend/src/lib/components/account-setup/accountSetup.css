@@ -1,0 +1,234 @@
+.wizard-progress {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	border: 1px solid rgba(111, 205, 195, 0.12);
+	border-radius: var(--hh-radius-md);
+	background: rgba(4, 21, 24, 0.6);
+	padding: 6px;
+}
+
+.wizard-progress span {
+	flex: 1;
+	height: 30px;
+	border-radius: var(--hh-radius-control);
+	color: var(--hh-color-text-muted);
+	font-size: 12px;
+	font-weight: 700;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.wizard-progress span.active {
+	background: rgba(36, 207, 178, 0.18);
+	color: var(--hh-color-accent);
+}
+
+.wizard-step {
+	display: grid;
+	gap: 14px;
+	min-width: 0;
+}
+
+.wizard-choice-list {
+	display: grid;
+	border: 1px solid rgba(111, 205, 195, 0.1);
+	border-radius: var(--hh-radius-lg);
+	background: rgba(255, 255, 255, 0.035);
+	overflow: hidden;
+}
+
+.wizard-choice-list button {
+	display: grid;
+	grid-template-columns: 44px minmax(0, 1fr);
+	align-items: center;
+	gap: 12px;
+	min-height: 78px;
+	border-bottom: 1px solid rgba(111, 205, 195, 0.1);
+	background: transparent;
+	color: var(--hh-color-text-bright);
+	padding: 0 18px;
+	text-align: left;
+}
+
+.wizard-choice-list button:last-child {
+	border-bottom: 0;
+}
+
+.wizard-choice-list button.active,
+.wizard-choice-grid button.active {
+	background: rgba(36, 207, 178, 0.14);
+	color: #eafffb;
+}
+
+.wizard-choice-list strong {
+	font-size: 28px;
+	font-weight: 760;
+}
+
+.wizard-choice-grid {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 10px;
+}
+
+.wizard-choice-grid.two {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.wizard-choice-grid button {
+	display: grid;
+	gap: 8px;
+	min-height: 120px;
+	border: 1px solid rgba(111, 205, 195, 0.12);
+	border-radius: var(--hh-radius-md);
+	background: rgba(4, 21, 24, 0.62);
+	color: var(--hh-color-text-soft);
+	padding: 14px;
+	text-align: left;
+}
+
+.wizard-choice-grid strong {
+	color: var(--hh-color-text-bright);
+	font-size: 15px;
+}
+
+.wizard-choice-grid span {
+	color: var(--hh-color-text-muted);
+	font-size: 12px;
+}
+
+.wizard-back {
+	justify-self: start;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	width: auto;
+	height: 30px;
+	border: 1px solid rgba(111, 205, 195, 0.14);
+	border-radius: var(--hh-radius-control);
+	background: rgba(4, 21, 24, 0.62);
+	color: var(--hh-color-text-soft);
+	padding: 0 10px;
+}
+
+.wizard-back.wide {
+	grid-column: 1 / -1;
+}
+
+.qr-login-panel {
+	display: grid;
+	grid-template-columns: 70px minmax(0, 1fr);
+	align-items: center;
+	gap: 12px;
+	border: 1px solid rgba(111, 205, 195, 0.16);
+	border-radius: var(--hh-radius-md);
+	background: rgba(4, 21, 24, 0.66);
+	padding: 12px;
+}
+
+.qr-login-panel.wide {
+	grid-column: 1 / -1;
+}
+
+.qr-login-panel.large {
+	grid-template-columns: 168px minmax(0, 1fr);
+	min-height: 180px;
+}
+
+.qr-login-panel strong {
+	color: var(--hh-color-text-bright);
+	font-size: 14px;
+}
+
+.qr-login-panel p {
+	color: var(--hh-color-text-muted);
+	font-size: 12px;
+	line-height: 1.45;
+}
+
+.qr-login-panel a {
+	color: var(--hh-color-accent);
+	font-size: 12px;
+	font-weight: 700;
+}
+
+.qr-svg {
+	display: grid;
+	place-items: center;
+	width: 70px;
+	height: 70px;
+	border-radius: var(--hh-radius-control);
+	background: #ffffff;
+	overflow: hidden;
+}
+
+.qr-svg svg {
+	width: 62px;
+	height: 62px;
+}
+
+.qr-login-panel.large .qr-svg {
+	width: 156px;
+	height: 156px;
+}
+
+.qr-login-panel.large .qr-svg svg {
+	width: 146px;
+	height: 146px;
+}
+
+.qr-login-copy {
+	display: grid;
+	gap: 6px;
+	justify-items: center;
+	max-width: 320px;
+}
+
+.qr-login-copy .qr-account-hint {
+	color: var(--hh-color-text-dim);
+	font-size: 11px;
+	overflow-wrap: anywhere;
+}
+
+.qr-skeleton {
+	position: relative;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 10px;
+	width: 220px;
+	height: 220px;
+	border-radius: var(--hh-radius-control);
+	background:
+		linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06)),
+		rgba(255, 255, 255, 0.94);
+	background-size: 240% 100%;
+	padding: 22px;
+	animation: qr-skeleton-pulse 1.3s ease-in-out infinite;
+}
+
+.qr-skeleton span {
+	border-radius: 6px;
+	background: rgba(4, 21, 24, 0.72);
+}
+
+.qr-skeleton span:nth-child(2) {
+	align-self: center;
+	height: 42%;
+	background: rgba(4, 21, 24, 0.36);
+}
+
+.qr-skeleton span:nth-child(3) {
+	align-self: end;
+	height: 68%;
+}
+
+@keyframes qr-skeleton-pulse {
+	0% {
+		background-position: 120% 0;
+	}
+	100% {
+		background-position: -120% 0;
+	}
+}

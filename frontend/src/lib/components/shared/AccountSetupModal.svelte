@@ -1,4 +1,7 @@
 <script lang="ts">
+	import '../account-setup/accountSetup.css';
+	import './accountModal.css';
+	import './setupControls.css';
 	import Icon from '@iconify/svelte';
 	import CalendarAccountSetup from '$lib/components/account-setup/CalendarAccountSetup.svelte';
 	import MailAccountSetup from '$lib/components/account-setup/MailAccountSetup.svelte';

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '$lib/components/shared/setupControls.css';
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import type { RenderedMessageContent } from '$lib/services/communications';

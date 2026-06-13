@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '$lib/components/shared/setupControls.css';
 	import { aiSettingsActionMessage, aiSettingsError } from '$lib/stores/aiSettings';
 </script>
 

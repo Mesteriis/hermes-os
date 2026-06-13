@@ -1,0 +1,25 @@
+.send-review-modal {
+	transform: translate(-50%, -50%);
+}
+
+.send-review-grid {
+	display: grid;
+	grid-template-columns: 88px 1fr;
+	gap: 8px 12px;
+	padding: 12px;
+	border: 1px solid rgba(82, 204, 190, 0.14);
+	border-radius: var(--hh-radius-md);
+	background: rgba(6, 24, 27, 0.68);
+}
+
+.send-review-grid span {
+	color: var(--hh-color-text-muted);
+	font-size: 12px;
+}
+
+.send-review-grid strong {
+	color: var(--hh-color-text-bright);
+	font-size: 13px;
+	font-weight: 500;
+	overflow-wrap: anywhere;
+}

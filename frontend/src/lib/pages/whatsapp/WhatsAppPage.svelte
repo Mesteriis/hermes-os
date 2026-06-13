@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '$lib/components/shared/setupControls.css';
 	import '../communications/communications.css';
 	import '../communications/communications-message.css';
 	import '../communications/communications-inspector.css';
