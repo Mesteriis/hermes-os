@@ -117,10 +117,13 @@ These are known product/implementation gaps, not hidden documentation failures:
   Decisions impacted by the Project and reviewed Communication or Document.
   backend routes can list accepted Obligations/Decisions by entity or review
   state and update accepted review state without creating Tasks, Projects or
-  Obligations. The Tasks workspace includes a global suggested review panel for
-  persisted Decisions and Obligations, with optional entity-scoped filtering.
-  Non-email provider ingestion and broader candidate-to-domain review workflow
-  coverage remain incomplete.
+  Obligations. Telegram/WhatsApp fixture message ingestion now uses the same
+  targeted Communication refresh path as email sync for suggested Decision and
+  obligation-derived task candidates. The Tasks workspace includes a global
+  suggested review panel for persisted Decisions and Obligations, with optional
+  entity-scoped filtering. Document task candidate refresh now also uses the
+  Obligation Engine for explicit document commitments. Live-provider ingestion
+  and broader candidate-to-domain review workflow coverage remain incomplete.
 - Consistency / Contradiction Engine now has a structured-claim detection and
   `ContradictionObservation` persistence baseline in migration `0062` and
   `backend/src/engines/consistency.rs`. It can also extract simple structured

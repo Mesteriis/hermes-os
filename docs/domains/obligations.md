@@ -85,13 +85,17 @@ source-backed `entity_relationship` edges. It explicitly does not auto-create
 Tasks.
 
 Task candidate review has a backend baseline for obligation-derived candidates:
-message candidates produced by the Obligation Engine are stored as
+message and document candidates produced by the Obligation Engine are stored as
 `candidate_kind = obligation_task`, preserve the source `ObligationCandidate` in
 metadata and, when user-confirmed, create or update a `user_confirmed`
-Obligation with Communication evidence and a `fulfillment_task` link to the
-created Task. Resetting or rejecting that candidate synchronizes the durable
-Obligation review state and removes the concrete Task link. Generic task
-candidates remain task-only.
+Obligation with source evidence and a `fulfillment_task` link to the created
+Task. Resetting or rejecting that candidate synchronizes the durable Obligation
+review state and removes the concrete Task link. Generic task candidates remain
+task-only.
+Email sync and Telegram/WhatsApp fixture ingestion call the same targeted
+message refresh path after Communication projection. This creates suggested
+obligation-derived task candidates only; it does not auto-create Tasks or
+accepted Obligations.
 
 Meeting outcomes with `outcome_type = promise`, `task` or `follow_up` now adapt
 into source-backed `suggested` Obligations without creating Tasks. If the
@@ -134,8 +138,8 @@ Related behavior still exists through:
 
 1. Keep Obligations distinct from Tasks in all documentation.
 2. Keep the ADR-0088 persistence boundary intact.
-3. Expand Obligation Engine extraction beyond explicit message task candidates
-   and the current meeting outcome adapter.
+3. Expand Obligation Engine extraction beyond explicit message/document task
+   candidates and the current meeting outcome adapter.
 4. Expand candidate-to-Obligation review routing beyond the current
    obligation-derived task-candidate path and add reviewed Obligation links to
    documents, events and compatibility sources without converting every

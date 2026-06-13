@@ -113,8 +113,9 @@ Negative:
   broader routing remains follow-up work.
 - The first desktop UI is scoped to the Tasks workspace; non-task-candidate
   Obligation review routing beyond accepted Obligations remains follow-up work.
-- Obligation extraction from Communications and Documents is not part of the
-  first persistence slice.
+- Obligation extraction remains limited and candidate-first. Explicit message
+  and document task-candidate refresh paths now exist, while full automatic
+  extraction across every provider stream remains follow-up work.
 
 ## Non-Goals
 
@@ -127,8 +128,8 @@ Negative:
 ## Required Follow-Up
 
 - Add candidate-to-Obligation review routing.
-- Connect Communication, meeting and document extraction to obligation
-  candidates beyond the initial explicit message task-candidate path.
+- Connect broader Communication, meeting and document extraction to obligation
+  candidates beyond the explicit task-candidate paths.
 - Expand adapters beyond the initial person promise and meeting outcome
   compatibility baselines.
 - Expand reviewed Obligation links to additional compatibility sources.
@@ -158,11 +159,12 @@ for supported obligated and beneficiary entity kinds. The projection creates
 source of truth.
 
 Migration `0067` adds explicit task-candidate classification metadata.
-`TaskCandidateStore` now materializes `obligation_task` candidates from the
-Obligation Engine when the candidate is user-confirmed: it creates or updates a
-source-backed `user_confirmed` Obligation, preserves Communication evidence and
-links the created Task through `obligation_task_links.link_kind =
-fulfillment_task`. Generic task candidates remain task-only.
+`TaskCandidateStore` now creates `obligation_task` candidates from the
+Obligation Engine for explicit message and document commitments. When the
+candidate is user-confirmed, it creates or updates a source-backed
+`user_confirmed` Obligation, preserves source evidence and links the created
+Task through `obligation_task_links.link_kind = fulfillment_task`. Generic task
+candidates remain task-only.
 
 `PersonPromiseStore::create` now materializes compatibility `person_promises`
 records into source-backed `user_confirmed` Obligations with `raw_record`

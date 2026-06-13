@@ -58,15 +58,15 @@ Current backend state:
 - `backend/src/domains/obligations/api.rs` exposes guarded backend routes for
   listing entity-scoped Obligations and changing accepted Obligation review
   state;
-- message task candidate refresh in
-  `backend/src/domains/tasks/candidates.rs` uses the engine for explicit
+- message and document task candidate refresh in
+  `backend/src/domains/tasks/candidates.rs` use the engine for explicit
   commitment/request language that the legacy task scanner does not match;
 - related candidate behavior still appears in task candidate, task rule and
   task intelligence modules.
 
-The engine baseline remains candidate-first. The message task candidate wiring
-creates reviewable task candidates only. It does not write accepted
-Obligations, create Tasks, run full provider ingestion or provide review
+The engine baseline remains candidate-first. The message and document task
+candidate wiring creates reviewable candidates only. It does not write accepted
+Obligations, create Tasks, run full provider ingestion or provide broad review
 candidate-to-Obligation routing. The desktop Tasks workspace now provides a
 scoped review panel for already persisted entity-scoped Obligations and
 Decisions.
@@ -75,8 +75,8 @@ Decisions.
 
 1. Keep extracted obligations as candidates until reviewed.
 2. Feed reviewed candidates into the ADR-0088 Obligations domain model.
-3. Extend the current message task candidate wiring to full Communication,
-   meeting and document ingestion.
+3. Extend the current message/document task candidate wiring to full
+   Communication, meeting and provider ingestion.
 4. Link accepted obligations to tasks, events and communications.
 5. Use Risk Engine for overdue or blocked obligations.
 6. Use Consistency / Contradiction Engine when evidence conflicts with

@@ -82,6 +82,10 @@ provides the first backend persistence path for explicit Communication message
 and imported Document candidates: it stores them as source-backed `suggested`
 Decisions impacted by the source Communication or Document and preserves
 reviewed state across repeat refreshes.
+Email sync and Telegram/WhatsApp fixture ingestion call the same targeted
+message refresh path for newly projected Communications. This creates
+reviewable suggested Decisions only; it does not auto-create Tasks, Projects or
+Obligations.
 The existing review route can then confirm or reject the suggested Decision. The
 store projects accepted Decisions into the graph for supported impacted entity
 kinds, using `decision` graph nodes and source-backed `entity_relationship`
