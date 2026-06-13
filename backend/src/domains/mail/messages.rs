@@ -746,10 +746,10 @@ impl MessageProjectionStore {
         importance_score: Option<i16>,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
         validate_non_empty("message_id", message_id)?;
-        if let Some(score) = importance_score {
-            if !(0..=100).contains(&score) {
-                return Err(MessageProjectionError::InvalidImportanceScore(score));
-            }
+        if let Some(score) = importance_score
+            && !(0..=100).contains(&score)
+        {
+            return Err(MessageProjectionError::InvalidImportanceScore(score));
         }
         let row = sqlx::query(
             r#"UPDATE communication_messages SET

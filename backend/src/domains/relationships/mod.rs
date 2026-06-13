@@ -495,10 +495,10 @@ impl NewRelationship {
         {
             return Err(RelationshipStoreError::IdenticalEndpoints);
         }
-        if let (Some(valid_from), Some(valid_to)) = (self.valid_from, self.valid_to) {
-            if valid_to < valid_from {
-                return Err(RelationshipStoreError::InvalidTemporalRange);
-            }
+        if let (Some(valid_from), Some(valid_to)) = (self.valid_from, self.valid_to)
+            && valid_to < valid_from
+        {
+            return Err(RelationshipStoreError::InvalidTemporalRange);
         }
 
         Ok(())

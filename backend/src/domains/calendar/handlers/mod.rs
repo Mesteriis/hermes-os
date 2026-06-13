@@ -1409,33 +1409,33 @@ pub(crate) async fn post_calendar_import(
         .as_deref()
         .is_some_and(|value| !value.trim().is_empty());
     let mut imported = 0;
-    if let Some(events) = req.events {
-        if let Some(arr) = events.as_array() {
-            for evt in arr {
-                let title = evt
-                    .get("title")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("Imported Event");
-                let start = evt
-                    .get("start_at")
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| s.parse::<DateTime<Utc>>().ok())
-                    .unwrap_or(Utc::now());
-                let end = evt
-                    .get("end_at")
-                    .and_then(|v| v.as_str())
-                    .and_then(|s| s.parse::<DateTime<Utc>>().ok())
-                    .unwrap_or(start);
-                let _ = CalendarEventStore::new(pool.clone())
-                    .create(&NewCalendarEvent {
-                        title: title.to_string(),
-                        start_at: start,
-                        end_at: end,
-                        ..Default::default()
-                    })
-                    .await;
-                imported += 1;
-            }
+    if let Some(events) = req.events
+        && let Some(arr) = events.as_array()
+    {
+        for evt in arr {
+            let title = evt
+                .get("title")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Imported Event");
+            let start = evt
+                .get("start_at")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<DateTime<Utc>>().ok())
+                .unwrap_or(Utc::now());
+            let end = evt
+                .get("end_at")
+                .and_then(|v| v.as_str())
+                .and_then(|s| s.parse::<DateTime<Utc>>().ok())
+                .unwrap_or(start);
+            let _ = CalendarEventStore::new(pool.clone())
+                .create(&NewCalendarEvent {
+                    title: title.to_string(),
+                    start_at: start,
+                    end_at: end,
+                    ..Default::default()
+                })
+                .await;
+            imported += 1;
         }
     }
     Ok(Json(

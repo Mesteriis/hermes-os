@@ -9,7 +9,7 @@ use reqwest::Url;
 use serde::Deserialize;
 use thiserror::Error;
 
-use super::rich_body_html_for_message;
+use super::communication_messages::rich_body_html_for_message;
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::message_store;
 

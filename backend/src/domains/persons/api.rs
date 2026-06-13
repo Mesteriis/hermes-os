@@ -519,10 +519,10 @@ fn normalize_email_address(email_address: &str) -> Result<String, PersonProjecti
 
 fn email_addr_spec(value: &str) -> &str {
     let value = value.trim();
-    if let Some((_, tail)) = value.rsplit_once('<') {
-        if let Some((addr, _)) = tail.split_once('>') {
-            return addr.trim();
-        }
+    if let Some((_, tail)) = value.rsplit_once('<')
+        && let Some((addr, _)) = tail.split_once('>')
+    {
+        return addr.trim();
     }
     value.trim_matches('"')
 }

@@ -9,20 +9,20 @@ pub fn export_task_md(
     outcome: Option<&str>,
 ) -> String {
     let mut md = format!("# {title}\n\n**Status:** {status}\n\n");
-    if let Some(why) = why {
-        if !why.is_empty() {
-            md.push_str(&format!("**Why:** {why}\n\n"));
-        }
+    if let Some(why) = why
+        && !why.is_empty()
+    {
+        md.push_str(&format!("**Why:** {why}\n\n"));
     }
-    if let Some(desc) = description {
-        if !desc.is_empty() {
-            md.push_str(&format!("{desc}\n\n"));
-        }
+    if let Some(desc) = description
+        && !desc.is_empty()
+    {
+        md.push_str(&format!("{desc}\n\n"));
     }
-    if let Some(out) = outcome {
-        if !out.is_empty() {
-            md.push_str(&format!("**Outcome:** {out}\n\n"));
-        }
+    if let Some(out) = outcome
+        && !out.is_empty()
+    {
+        md.push_str(&format!("**Outcome:** {out}\n\n"));
     }
     md
 }

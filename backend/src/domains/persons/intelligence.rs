@@ -137,20 +137,20 @@ impl PersonIntelligenceService {
         if let Some(ref tone) = fingerprint.typical_tone {
             actions.push(format!("Person tends to be {tone} — match tone in replies"));
         }
-        if let Some(ref lang) = fingerprint.detected_language {
-            if lang != "en" {
-                actions.push(format!(
-                    "Person writes in {lang} — consider translating replies"
-                ));
-            }
+        if let Some(ref lang) = fingerprint.detected_language
+            && lang != "en"
+        {
+            actions.push(format!(
+                "Person writes in {lang} — consider translating replies"
+            ));
         }
         if let Some(ref style) = fingerprint.writing_style {
             actions.push(format!("Person style: {style}"));
         }
-        if let Some(score) = fingerprint.trust_score {
-            if score < 30 {
-                actions.push("Low trust score — verify claims".into());
-            }
+        if let Some(score) = fingerprint.trust_score
+            && score < 30
+        {
+            actions.push("Low trust score — verify claims".into());
         }
         actions
     }

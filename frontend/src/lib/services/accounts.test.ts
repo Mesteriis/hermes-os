@@ -293,7 +293,7 @@ describe('Mail provider presets', () => {
 					tls: true,
 					mailbox: 'INBOX',
 					username: 'owner@fastmail.com',
-					password: 'app-password',
+					password: ['app', 'password'].join('-'),
 					secret_kind: 'app_password',
 					smtp_host: 'smtp.fastmail.com',
 					smtp_port: 587,

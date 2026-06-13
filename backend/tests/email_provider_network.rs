@@ -459,10 +459,10 @@ fn read_http_request(stream: &mut TcpStream) -> RecordedHttpRequest {
         if line.is_empty() {
             break;
         }
-        if let Some((name, value)) = line.split_once(':') {
-            if name.eq_ignore_ascii_case("authorization") {
-                authorization = Some(value.trim().to_owned());
-            }
+        if let Some((name, value)) = line.split_once(':')
+            && name.eq_ignore_ascii_case("authorization")
+        {
+            authorization = Some(value.trim().to_owned());
         }
     }
 

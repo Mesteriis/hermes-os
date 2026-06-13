@@ -1772,10 +1772,10 @@ fn read_http_request(stream: &mut TcpStream) -> TokenRequest {
         if line.is_empty() {
             break;
         }
-        if let Some((name, value)) = line.split_once(':') {
-            if name.eq_ignore_ascii_case("content-length") {
-                content_length = value.trim().parse().expect("content length");
-            }
+        if let Some((name, value)) = line.split_once(':')
+            && name.eq_ignore_ascii_case("content-length")
+        {
+            content_length = value.trim().parse().expect("content length");
         }
     }
 

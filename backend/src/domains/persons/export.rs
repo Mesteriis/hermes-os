@@ -132,10 +132,10 @@ fn render_markdown(d: &PersonDossier) -> String {
         md.push('\n');
     }
 
-    if let Some(notes) = &d.person.notes {
-        if !notes.is_empty() {
-            md.push_str(&format!("## Notes\n\n{notes}\n\n"));
-        }
+    if let Some(notes) = &d.person.notes
+        && !notes.is_empty()
+    {
+        md.push_str(&format!("## Notes\n\n{notes}\n\n"));
     }
 
     if !d.summary.is_empty() {

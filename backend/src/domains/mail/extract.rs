@@ -72,15 +72,14 @@ impl EmailExtractService {
                 message.subject,
                 truncate(body, 3000)
             );
-            if let Ok(result) = runtime.chat(&prompt).await {
-                if let Ok(mut llm_tasks) =
+            if let Ok(result) = runtime.chat(&prompt).await
+                && let Ok(mut llm_tasks) =
                     serde_json::from_str::<Vec<ExtractedTask>>(result.content.trim())
-                {
-                    for t in &mut llm_tasks {
-                        t.source = "llm".into();
-                    }
-                    tasks.extend(llm_tasks);
+            {
+                for t in &mut llm_tasks {
+                    t.source = "llm".into();
                 }
+                tasks.extend(llm_tasks);
             }
         }
         Ok(tasks)

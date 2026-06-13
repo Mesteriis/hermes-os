@@ -543,12 +543,12 @@ impl TelegramHistorySyncRequest {
     fn validate(&self) -> Result<(), TelegramError> {
         validate_non_empty("account_id", &self.account_id)?;
         validate_non_empty("provider_chat_id", &self.provider_chat_id)?;
-        if let Some(from_message_id) = self.from_message_id {
-            if from_message_id <= 0 {
-                return Err(TelegramError::InvalidRequest(
-                    "from_message_id must be a positive TDLib message id".to_owned(),
-                ));
-            }
+        if let Some(from_message_id) = self.from_message_id
+            && from_message_id <= 0
+        {
+            return Err(TelegramError::InvalidRequest(
+                "from_message_id must be a positive TDLib message id".to_owned(),
+            ));
         }
         if self.mode() == TelegramHistorySyncMode::Older && self.from_message_id.is_none() {
             return Err(TelegramError::InvalidRequest(

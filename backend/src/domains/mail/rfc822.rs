@@ -349,10 +349,10 @@ fn header_parameter(value: &str, parameter: &str) -> Option<String> {
             continuation_segments.push(segment);
             continue;
         }
-        if let Some(base_name) = name.strip_suffix('*') {
-            if base_name.eq_ignore_ascii_case(parameter) {
-                encoded_parameter = Some(decode_rfc2231_parameter_value(value));
-            }
+        if let Some(base_name) = name.strip_suffix('*')
+            && base_name.eq_ignore_ascii_case(parameter)
+        {
+            encoded_parameter = Some(decode_rfc2231_parameter_value(value));
         }
     }
 
@@ -482,14 +482,13 @@ fn percent_decode_bytes(value: &str) -> Vec<u8> {
     let mut index = 0;
 
     while index < bytes.len() {
-        if bytes[index] == b'%' {
-            if let (Some(high), Some(low)) = (bytes.get(index + 1), bytes.get(index + 2)) {
-                if let (Some(high), Some(low)) = (hex_value(*high), hex_value(*low)) {
-                    output.push((high << 4) | low);
-                    index += 3;
-                    continue;
-                }
-            }
+        if bytes[index] == b'%'
+            && let (Some(high), Some(low)) = (bytes.get(index + 1), bytes.get(index + 2))
+            && let (Some(high), Some(low)) = (hex_value(*high), hex_value(*low))
+        {
+            output.push((high << 4) | low);
+            index += 3;
+            continue;
         }
         output.push(bytes[index]);
         index += 1;
@@ -537,12 +536,12 @@ fn decode_quoted_printable_bytes(input: &[u8]) -> Vec<u8> {
                 index += 2;
                 continue;
             }
-            if let (Some(high), Some(low)) = (input.get(index + 1), input.get(index + 2)) {
-                if let (Some(high), Some(low)) = (hex_value(*high), hex_value(*low)) {
-                    output.push((high << 4) | low);
-                    index += 3;
-                    continue;
-                }
+            if let (Some(high), Some(low)) = (input.get(index + 1), input.get(index + 2))
+                && let (Some(high), Some(low)) = (hex_value(*high), hex_value(*low))
+            {
+                output.push((high << 4) | low);
+                index += 3;
+                continue;
             }
         }
         output.push(input[index]);

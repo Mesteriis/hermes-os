@@ -196,10 +196,8 @@ impl TelegramStore {
             {
                 object.insert("tdlib_data_path".to_owned(), json!(tdlib_data_path));
             }
-            if !is_qr_authorized {
-                if let Some(api_id) = request.api_id {
-                    object.insert("api_id".to_owned(), json!(api_id));
-                }
+            if !is_qr_authorized && let Some(api_id) = request.api_id {
+                object.insert("api_id".to_owned(), json!(api_id));
             }
         }
 

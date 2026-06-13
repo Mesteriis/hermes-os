@@ -27,15 +27,15 @@ pub fn export_event_md(
     participants: &[String],
 ) -> String {
     let mut md = format!("# {title}\n\n**When:** {start_at} - {end_at}\n\n");
-    if let Some(loc) = location {
-        if !loc.is_empty() {
-            md.push_str(&format!("**Where:** {loc}\n\n"));
-        }
+    if let Some(loc) = location
+        && !loc.is_empty()
+    {
+        md.push_str(&format!("**Where:** {loc}\n\n"));
     }
-    if let Some(desc) = description {
-        if !desc.is_empty() {
-            md.push_str(&format!("{desc}\n\n"));
-        }
+    if let Some(desc) = description
+        && !desc.is_empty()
+    {
+        md.push_str(&format!("{desc}\n\n"));
     }
     if !participants.is_empty() {
         md.push_str("## Participants\n\n");

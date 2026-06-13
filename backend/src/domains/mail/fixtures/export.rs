@@ -137,12 +137,11 @@ fn header_value(headers: &[(String, String)], name: &str) -> Option<String> {
 
 fn body_text_from_part(headers: &[(String, String)], body: &str) -> String {
     let content_type = header_value(headers, "content-type").unwrap_or_default();
-    if content_type.to_ascii_lowercase().starts_with("multipart/") {
-        if let Some(boundary) = content_type_parameter(&content_type, "boundary") {
-            if let Some(text) = first_text_plain_multipart_part(&boundary, body) {
-                return text;
-            }
-        }
+    if content_type.to_ascii_lowercase().starts_with("multipart/")
+        && let Some(boundary) = content_type_parameter(&content_type, "boundary")
+        && let Some(text) = first_text_plain_multipart_part(&boundary, body)
+    {
+        return text;
     }
 
     let decoded = decode_transfer_body(
@@ -233,12 +232,12 @@ fn decode_quoted_printable(input: &str) -> String {
                 index += 2;
                 continue;
             }
-            if let (Some(high), Some(low)) = (bytes.get(index + 1), bytes.get(index + 2)) {
-                if let (Some(high), Some(low)) = (hex_value(*high), hex_value(*low)) {
-                    output.push((high << 4) | low);
-                    index += 3;
-                    continue;
-                }
+            if let (Some(high), Some(low)) = (bytes.get(index + 1), bytes.get(index + 2))
+                && let (Some(high), Some(low)) = (hex_value(*high), hex_value(*low))
+            {
+                output.push((high << 4) | low);
+                index += 3;
+                continue;
             }
         }
         output.push(bytes[index]);
