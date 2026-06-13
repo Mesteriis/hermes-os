@@ -985,7 +985,54 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 25: Continue Backend God File Elimination
+### Task 25: Telegram Service Decomposition
+
+**Files:**
+- Modify: `frontend/src/lib/services/telegram.ts`
+- Create: `frontend/src/lib/services/telegram/automation.ts`
+- Create: `frontend/src/lib/services/telegram/calls.ts`
+- Create: `frontend/src/lib/services/telegram/constants.ts`
+- Create: `frontend/src/lib/services/telegram/fixtures.ts`
+- Create: `frontend/src/lib/services/telegram/lifecycle.ts`
+- Create: `frontend/src/lib/services/telegram/messages.ts`
+- Create: `frontend/src/lib/services/telegram/parsing.ts`
+- Create: `frontend/src/lib/services/telegram/runtime.ts`
+- Create: `frontend/src/lib/services/telegram/selection.ts`
+- Create: `frontend/src/lib/services/telegram/types.ts`
+- Create: `frontend/src/lib/services/telegram/wizard.ts`
+- Create: `frontend/src/lib/services/telegram/workspace.ts`
+
+- [x] **Step 1: Verify Telegram service failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/services/telegram.ts | tr -d ' ')" -le 700
+test -f frontend/src/lib/services/telegram/workspace.ts
+test -f frontend/src/lib/services/telegram/wizard.ts
+test -f frontend/src/lib/services/telegram/messages.ts
+```
+
+Expected before refactor: FAIL because `telegram.ts` had 1584 lines and mixed workspace loading, account lifecycle, runtime sync, QR wizard setup, fixtures, manual send, automation, calls, selection helpers and Telegram workbench model helpers in one service file.
+
+- [x] **Step 2: Extract bounded service modules**
+
+Keep `$lib/services/telegram` as the public import path by replacing `telegram.ts` with a facade. Move automation template/policy/dry-run helpers into `automation.ts`, call/transcript helpers into `calls.ts`, constants into `constants.ts`, fixture/manual-send commands into `fixtures.ts`, account lifecycle helpers into `lifecycle.ts`, chat/message/attachment/link selectors into `messages.ts`, JSON parsing helpers into `parsing.ts`, runtime sync/media commands into `runtime.ts`, selected chat/call form mapping into `selection.ts`, exported UI model types into `types.ts`, QR/account wizard helpers into `wizard.ts`, and workspace loading/runtime status assembly into `workspace.ts`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/services/telegram.ts | tr -d ' ')" -le 700
+find frontend/src/lib/services/telegram -type f -name '*.ts' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+pnpm --dir frontend test:unit src/lib/services/telegram.test.ts
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 26: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
