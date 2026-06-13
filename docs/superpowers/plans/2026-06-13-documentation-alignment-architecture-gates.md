@@ -1173,7 +1173,51 @@ make backend-validate
 make lint-architecture
 ```
 
-### Task 29: Continue Backend God File Elimination
+### Task 29: Telegram Runtime Boundary Decomposition
+
+**Files:**
+- Modify: `backend/src/integrations/telegram/runtime.rs`
+- Modify: `backend/src/integrations/telegram/api.rs`
+- Create: `backend/src/integrations/telegram/runtime/actor.rs`
+- Create: `backend/src/integrations/telegram/runtime/commands.rs`
+- Create: `backend/src/integrations/telegram/runtime/manager.rs`
+- Create: `backend/src/integrations/telegram/runtime/media.rs`
+- Create: `backend/src/integrations/telegram/runtime/models.rs`
+- Create: `backend/src/integrations/telegram/runtime/state.rs`
+- Create: `backend/src/integrations/telegram/runtime/status.rs`
+- Create: `backend/src/integrations/telegram/runtime/tests.rs`
+- Create: `backend/src/integrations/telegram/runtime/validation.rs`
+
+- [x] **Step 1: Verify Telegram runtime boundary failure**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/integrations/telegram/runtime.rs | tr -d ' ')" -le 700
+test -d backend/src/integrations/telegram/runtime
+```
+
+Expected before refactor: FAIL because `runtime.rs` had 1538 lines and mixed runtime manager API, account-scoped actor state, command dispatch, TDLib actor loop, media persistence, request/response DTOs, status assembly, validation and tests.
+
+- [x] **Step 2: Extract bounded runtime modules**
+
+Keep `crate::integrations::telegram::runtime` as the public crate-local import path by replacing `runtime.rs` with a facade. Move the manager facade and public orchestration methods into `manager.rs`, TDLib actor loop and native client operations into `actor.rs`, actor command request wrappers into `commands.rs`, media persistence into `media.rs`, public runtime DTOs into `models.rs`, internal actor state into `state.rs`, account/status helpers into `status.rs`, validation helpers into `validation.rs`, and runtime tests into `tests.rs`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < backend/src/integrations/telegram/runtime.rs | tr -d ' ')" -le 700
+find backend/src/integrations/telegram/runtime -type f -name '*.rs' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+cargo fmt --manifest-path backend/Cargo.toml --check
+cargo check --manifest-path backend/Cargo.toml
+cargo test --manifest-path backend/Cargo.toml integrations::telegram::runtime
+make backend-validate
+make lint-architecture
+```
+
+### Task 30: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

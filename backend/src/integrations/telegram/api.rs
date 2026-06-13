@@ -281,15 +281,19 @@ pub(crate) async fn post_telegram_runtime_start(
     State(state): State<AppState>,
     Json(request): Json<TelegramRuntimeStartRequest>,
 ) -> Result<Json<TelegramRuntimeStatus>, ApiError> {
+    let runtime = state.telegram_runtime.clone();
+    let config = state.config.clone();
+    let vault = state.vault.clone();
+    let communication_store = communication_ingestion_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
+
     Ok(Json(
-        state
-            .telegram_runtime
+        runtime
             .start_account(
-                &communication_ingestion_store(&state)?,
+                &communication_store,
                 &secret_store,
-                &state.vault,
-                &state.config,
+                &vault,
+                &config,
                 &request,
             )
             .await?,
