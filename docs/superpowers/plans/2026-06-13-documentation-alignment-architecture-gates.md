@@ -857,7 +857,47 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 22: Continue Backend God File Elimination
+### Task 22: Communications Store Decomposition
+
+**Files:**
+- Modify: `frontend/src/lib/stores/communications.ts`
+- Create: `frontend/src/lib/stores/communications/state.ts`
+- Create: `frontend/src/lib/stores/communications/loaders.ts`
+- Create: `frontend/src/lib/stores/communications/compose.ts`
+- Create: `frontend/src/lib/stores/communications/actions.ts`
+- Create: `frontend/src/lib/stores/communications/selectors.ts`
+- Create: `frontend/src/lib/stores/communications/formatters.ts`
+
+- [x] **Step 1: Verify communications store failure**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/stores/communications.ts | tr -d ' ')" -le 700
+test -f frontend/src/lib/stores/communications/state.ts
+test -f frontend/src/lib/stores/communications/actions.ts
+```
+
+Expected before refactor: FAIL because `communications.ts` has 899 lines and mixes state ownership, loading, sync, compose, message actions and workflow helpers in one store file.
+
+- [x] **Step 2: Extract bounded store modules**
+
+Keep `$lib/stores/communications` as the public import path by replacing `communications.ts` with a facade. Move store state and derived stores into `state.ts`, load/sync/resource functions into `loaders.ts`, compose and draft commands into `compose.ts`, selected-message/workflow commands into `actions.ts`, shared selectors into `selectors.ts`, and exported formatting helpers into `formatters.ts`.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+test "$(wc -l < frontend/src/lib/stores/communications.ts | tr -d ' ')" -le 700
+find frontend/src/lib/stores/communications -type f -name '*.ts' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+pnpm --dir frontend test:unit src/lib/stores/communications.test.ts src/lib/stores/uiState.test.ts
+pnpm --dir frontend lint:ts
+make lint-frontend
+make lint-architecture
+```
+
+### Task 23: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.
