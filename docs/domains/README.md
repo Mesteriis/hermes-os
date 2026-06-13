@@ -24,14 +24,14 @@ needs a projection.
 |---|---|---|
 | Communications | [Communications](communications.md) | implemented with email-heavy naming and Telegram/WhatsApp surfaces |
 | Personas | [Personas](persons.md), [Persona Intelligence](../persons/README.md) | partially implemented through `persons` and compatibility migrations |
-| Relationships | [Relationships](relationships.md) | partially implemented through first-class persistence and active Persona graph projection; UI/adapters incomplete |
+| Relationships | [Relationships](relationships.md) | partially implemented through first-class persistence, active Persona graph projection and scoped Personas workspace review; adapters/global review incomplete |
 | Organizations | [Organizations](organizations.md), [Organizations Folder](../organizations/README.md) | implemented as a memory anchor domain |
 | Projects | [Projects](projects.md) | implemented, needs stronger domain documentation |
 | Documents | [Documents](documents.md) | implemented, needs clearer Knowledge boundary |
 | Tasks | [Tasks](tasks.md), [Tasks Folder](../tasks/README.md) | implemented, needs stronger Obligation boundary |
 | Calendar/Events | [Calendar And Events](calendar-events.md) | implemented under calendar/calls/meetings surfaces |
-| Decisions | [Decisions](decisions.md) | partially implemented through first-class persistence, accepted graph projection, guarded API and explicit message/imported-document candidate refresh; UI/adapters incomplete |
-| Obligations | [Obligations](obligations.md) | partially implemented through first-class persistence, accepted graph projection, guarded API and obligation-derived task-candidate review; UI/adapters incomplete |
+| Decisions | [Decisions](decisions.md) | partially implemented through first-class persistence, accepted graph projection, guarded API, explicit message/imported-document candidate refresh and scoped Tasks workspace review; global inbox/adapters incomplete |
+| Obligations | [Obligations](obligations.md) | partially implemented through first-class persistence, accepted graph projection, guarded API, obligation-derived task-candidate review and scoped Tasks workspace review; global inbox/adapters incomplete |
 | Knowledge Graph | [Knowledge Graph](knowledge-graph.md) | implemented as graph domain/projection substrate |
 | Agents | [Agents](agents.md) | partially implemented through AI runtime/control surfaces |
 | Notes | [Notes](notes.md) | not a first-class domain; treated as document-like artifacts |

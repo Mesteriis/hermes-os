@@ -95,6 +95,11 @@ review state changes. They do not create Tasks, Projects or Obligations and do
 not convert meeting outcomes or project review decisions into accepted
 Decisions.
 
+The Tasks workspace includes the first scoped desktop review panel for
+entity-scoped Decisions and Obligations. It lists Decisions through the guarded
+Decision route and submits explicit owner confirm/reject review state without
+creating Tasks, Projects or Obligations.
+
 Decisions still also appear indirectly through project context, documents,
 communications and meeting outcomes. Those are source or compatibility surfaces
 until adapters are added.
@@ -105,8 +110,8 @@ until adapters are added.
 2. Keep decision capture candidate-first.
 3. Expand Communication and Meeting ingestion beyond the initial explicit
    message/imported-document refresh path.
-4. Add desktop candidate-to-Decision review before any automatic decision
-   capture.
+4. Expand desktop review beyond the scoped entity panel into candidate-to-
+   Decision review before any automatic decision capture.
 5. Require evidence citations and review state.
 6. Expand graph projection beyond the current supported impacted entity kinds.
 7. Project reviewed Decisions into timeline and dossier views.

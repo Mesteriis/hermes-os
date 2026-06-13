@@ -103,19 +103,21 @@ Current backend baseline:
 - ADR-0086.
 
 This baseline provides first-class Relationship persistence, validation and
-active Persona-to-Persona graph projection. Guarded backend routes can list
-Relationships by entity and change review state while keeping the graph
-projection aligned. It does not yet provide desktop UI, role adapters or
-timeline projection.
+graph projection for Relationship endpoints that already have graph node kinds:
+Persona, Communication, Document, Project, Decision and Obligation. Guarded
+backend routes can list Relationships by entity and change review state while
+keeping the graph projection aligned. The Personas workspace includes a scoped
+desktop review panel for suggested Relationships attached to the selected
+Persona. It does not yet provide role adapters, organization/project/task link
+adapters or timeline projection.
 
 ## Migration Direction
 
 1. Keep `relationships` as the durable source-of-truth table.
-2. Expand Relationship graph projection beyond active Persona-to-Persona
-   relationships.
+2. Add graph node kinds for Organization, Task, Event and Knowledge before
+   projecting those Relationship endpoints.
 3. Reclassify `person_roles`, organization links, project links and task
    relations as compatibility or read-model surfaces.
 4. Feed Relationship records into Trust, Risk, Timeline, Memory and Dossier
    projections.
-5. Add desktop review UI for suggested Relationships after UX boundaries are
-   specified.
+5. Expand desktop review beyond selected-Persona scoped review.

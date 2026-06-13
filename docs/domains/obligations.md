@@ -98,6 +98,11 @@ These routes are guarded by the local API secret and support accepted
 Obligation review state changes. They do not create Tasks or convert task
 candidates into accepted Obligations.
 
+The Tasks workspace includes the first scoped desktop review panel for
+entity-scoped Obligations and Decisions. It lists Obligations through the
+guarded Obligation route and submits explicit owner confirm/reject review state
+without creating Tasks or converting candidates into accepted Obligations.
+
 Related behavior still exists through:
 
 - `backend/src/domains/tasks/candidates.rs`;
@@ -111,8 +116,9 @@ Related behavior still exists through:
 1. Keep Obligations distinct from Tasks in all documentation.
 2. Keep the ADR-0088 persistence boundary intact.
 3. Expand Obligation Engine extraction beyond explicit message task candidates.
-4. Expand reviewed Obligation links to events and compatibility sources without
-   converting every obligation into a task.
+4. Expand desktop review beyond the scoped entity panel and expand reviewed
+   Obligation links to events and compatibility sources without converting
+   every obligation into a task.
 5. Project reviewed Obligations into timeline and dossier views.
 6. Use the Consistency / Contradiction Engine when new evidence conflicts with
    obligation status or remembered commitments.

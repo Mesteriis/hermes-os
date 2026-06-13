@@ -79,10 +79,11 @@ AI output may propose relationships, but accepted durable relationships remain
 source-backed. Suggested relationships are stored with review state and
 provenance; they are not silent truth.
 
-`graph_edges` remain a derived graph traversal surface. The first
-implementation slice projects active Persona-to-Persona Relationship records as
-generic `entity_relationship` graph edges, while preserving the Relationship
-record as source of truth. This ADR does not require immediate desktop UI.
+`graph_edges` remain a derived graph traversal surface. The implementation
+projects Relationship records between graph-supported entities as generic
+`entity_relationship` graph edges, while preserving the Relationship record as
+source of truth. The current supported projection endpoints are Persona,
+Communication, Document, Project, Decision and Obligation.
 
 ## Consequences
 
@@ -101,7 +102,9 @@ Negative:
   surfaces until migration plans retire them.
 - There is temporary duplication between `relationships`, graph edges and
   timeline events.
-- Desktop UI migration still needs explicit follow-up work.
+- The first desktop review UI is scoped to selected Personas; broader
+  cross-domain review and compatibility adapters still need explicit follow-up
+  work.
 
 ## Non-Goals
 
@@ -116,16 +119,22 @@ Negative:
 The backend now includes guarded routes for listing Relationship records by
 entity and changing review state:
 
-- `GET /api/v1/relationships`
+- `GET /api/v1/relationships?entity_kind=&entity_id=&limit=`
 - `PUT /api/v1/relationships/{relationship_id}/review`
 
-Review updates re-project active Persona-to-Persona graph edges so the graph
-projection follows the Relationship source of truth.
+Review updates re-project active graph-supported Relationship edges so the
+graph projection follows the Relationship source of truth.
+
+The desktop frontend now includes a Personas workspace review panel for
+suggested Relationships linked to the selected Persona. It uses the guarded
+entity-scoped list/review routes and sends explicit owner
+`user_confirmed` / `user_rejected` review state.
 
 ## Required Follow-Up
 
-- Expand graph projection beyond active Persona-to-Persona relationships.
-- Add desktop review UI for suggested relationships.
+- Add graph node kinds for Organization, Task, Event and Knowledge before
+  projecting those Relationship endpoints.
+- Expand desktop review beyond selected-Persona scoped review.
 - Reclassify Persona roles and organization links into Relationship records.
 - Feed reviewed Relationship records into Trust, Risk, Timeline and Dossier
   projections.

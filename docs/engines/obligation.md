@@ -67,7 +67,9 @@ Current backend state:
 The engine baseline remains candidate-first. The message task candidate wiring
 creates reviewable task candidates only. It does not write accepted
 Obligations, create Tasks, run full provider ingestion or provide review
-UI or candidate-to-Obligation review routing.
+candidate-to-Obligation routing. The desktop Tasks workspace now provides a
+scoped review panel for already persisted entity-scoped Obligations and
+Decisions.
 
 ## Migration Plan
 
