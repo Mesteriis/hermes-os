@@ -1,4 +1,5 @@
 <script lang="ts">
+	import './hermesSelect.css';
 	import { tick } from 'svelte';
 	import Icon from '@iconify/svelte';
 

@@ -361,7 +361,49 @@ make lint-frontend
 make lint-architecture
 ```
 
-### Task 9: Continue Backend God File Elimination
+### Task 9: Settings and HermesSelect CSS Ownership Split
+
+**Files:**
+- Modify: `frontend/src/lib/pages/pages.css`
+- Modify: `frontend/src/lib/pages/settings/SettingsPage.svelte`
+- Modify: `frontend/src/lib/pages/settings/widgets/AppearanceSettings.svelte`
+- Modify: `frontend/src/lib/pages/settings/widgets/IntegrationsSettings.svelte`
+- Modify: `frontend/src/lib/pages/settings/widgets/AISettingsControlCenter.svelte`
+- Modify: `frontend/src/lib/components/shared/HermesSelect.svelte`
+- Create: `frontend/src/lib/pages/settings/settings.css`
+- Create: `frontend/src/lib/pages/settings/appearance.css`
+- Create: `frontend/src/lib/pages/settings/integrations.css`
+- Create: `frontend/src/lib/pages/settings/aiSettings.css`
+- Create: `frontend/src/lib/components/shared/hermesSelect.css`
+
+- [x] **Step 1: Verify settings CSS ownership failure**
+
+Run:
+
+```sh
+! rg "^(\.(settings-|setting-|appearance-|background-|accent-|bg-preview-|brightness-|integrations-|integration-|mail-settings-import-panel|danger-button|ai-settings-|ai-overview-|ai-provider-|ai-panel-|ai-route-|ai-control-|ai-wizard-|ai-search-box|ai-prompt-|ai-consent-|hermes-select))" frontend/src/lib/pages/pages.css
+```
+
+Expected before refactor: FAIL because root `pages.css` owns settings workbench, appearance, integrations, AI settings and shared HermesSelect selectors.
+
+- [x] **Step 2: Extract settings and shared select CSS chunks**
+
+Move settings page/workbench controls, appearance settings, integrations table/inspector, AI settings control center and HermesSelect CSS into owner files. Keep Agents AI workflow and Telegram/WhatsApp AI analysis selectors in root for later owner-specific extraction because they are not settings-owned.
+
+- [x] **Step 3: Validate**
+
+Run:
+
+```sh
+! rg "^(\.(settings-|setting-|appearance-|background-|accent-|bg-preview-|brightness-|integrations-|integration-|mail-settings-import-panel|danger-button|ai-settings-|ai-overview-|ai-provider-|ai-panel-|ai-route-|ai-control-|ai-wizard-|ai-search-box|ai-prompt-|ai-consent-|hermes-select))" frontend/src/lib/pages/pages.css
+printf '%s\0' frontend/src/lib/pages/settings/settings.css frontend/src/lib/pages/settings/appearance.css frontend/src/lib/pages/settings/integrations.css frontend/src/lib/pages/settings/aiSettings.css frontend/src/lib/components/shared/hermesSelect.css \
+  | xargs -0 wc -l \
+  | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+make lint-frontend
+make lint-architecture
+```
+
+### Task 10: Continue Backend God File Elimination
 
 **Files:**
 - Refactor one file at a time from the current over-700 list.

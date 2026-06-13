@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '../appearance.css';
 	import Icon from '@iconify/svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import {

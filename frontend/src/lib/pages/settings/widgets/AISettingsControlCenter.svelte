@@ -1,4 +1,5 @@
 <script lang="ts">
+	import '../aiSettings.css';
 	import { onMount } from 'svelte';
 	import { currentLocale, t } from '$lib/i18n';
 	import {
