@@ -1,34 +1,16 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use serde::{Deserialize, Serialize};
 
 use crate::app::{ApiError, AppState};
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 
-use super::{Obligation, ObligationEntityKind, ObligationReviewState, ObligationStore};
+use super::super::{Obligation, ObligationEntityKind, ObligationReviewState, ObligationStore};
+use super::models::{ObligationListQuery, ObligationListResponse, ObligationReviewApiRequest};
 
 const OBLIGATION_API_ACTOR_ID: &str = "hermes-frontend";
 const DEFAULT_OBLIGATION_LIMIT: i64 = 50;
 const MIN_OBLIGATION_LIMIT: i64 = 1;
 const MAX_OBLIGATION_LIMIT: i64 = 100;
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ObligationListQuery {
-    entity_kind: Option<String>,
-    entity_id: Option<String>,
-    review_state: Option<String>,
-    limit: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct ObligationReviewApiRequest {
-    review_state: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct ObligationListResponse {
-    items: Vec<Obligation>,
-}
 
 pub(crate) async fn get_v1_obligations(
     State(state): State<AppState>,

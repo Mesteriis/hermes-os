@@ -1,5 +1,9 @@
 use serde_json::{Value, json};
-use thiserror::Error;
+
+use crate::engines::enrichment::errors::EnrichmentEngineError;
+use crate::engines::enrichment::models::{
+    EnrichmentCandidateDraft, PreferenceDraft, validate_confidence, validate_non_empty,
+};
 
 pub struct EnrichmentEngine;
 
@@ -66,49 +70,4 @@ impl EnrichmentEngine {
             conflict_marker,
         })
     }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct PreferenceDraft {
-    pub preference_type: String,
-    pub value: String,
-    pub source: String,
-    pub confidence: f64,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct EnrichmentCandidateDraft {
-    pub entity_kind: String,
-    pub entity_id: String,
-    pub source: String,
-    pub extracted_claim: String,
-    pub data: Value,
-    pub confidence: f64,
-    pub review_state: String,
-    pub freshness: String,
-    pub conflict_marker: bool,
-}
-
-fn validate_non_empty(field: &'static str, value: &str) -> Result<(), EnrichmentEngineError> {
-    if value.trim().is_empty() {
-        return Err(EnrichmentEngineError::EmptyField(field));
-    }
-    Ok(())
-}
-
-fn validate_confidence(confidence: f64) -> Result<(), EnrichmentEngineError> {
-    if !(0.0..=1.0).contains(&confidence) {
-        return Err(EnrichmentEngineError::InvalidConfidence(confidence));
-    }
-    Ok(())
-}
-
-#[derive(Debug, Error, PartialEq)]
-pub enum EnrichmentEngineError {
-    #[error("enrichment candidate {0} must not be empty")]
-    EmptyField(&'static str),
-    #[error("enrichment candidate confidence must be between 0 and 1: {0}")]
-    InvalidConfidence(f64),
-    #[error("enrichment candidate data must be a JSON object")]
-    InvalidData,
 }

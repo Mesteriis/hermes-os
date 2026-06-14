@@ -1,34 +1,16 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use serde::{Deserialize, Serialize};
 
 use crate::app::{ApiError, AppState};
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 
-use super::{Decision, DecisionEntityKind, DecisionReviewState, DecisionStore};
+use super::super::{Decision, DecisionEntityKind, DecisionReviewState, DecisionStore};
+use super::models::{DecisionListQuery, DecisionListResponse, DecisionReviewApiRequest};
 
 const DECISION_API_ACTOR_ID: &str = "hermes-frontend";
 const DEFAULT_DECISION_LIMIT: i64 = 50;
 const MIN_DECISION_LIMIT: i64 = 1;
 const MAX_DECISION_LIMIT: i64 = 100;
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct DecisionListQuery {
-    entity_kind: Option<String>,
-    entity_id: Option<String>,
-    review_state: Option<String>,
-    limit: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-pub(crate) struct DecisionReviewApiRequest {
-    review_state: String,
-}
-
-#[derive(Debug, Serialize)]
-pub(crate) struct DecisionListResponse {
-    items: Vec<Decision>,
-}
 
 pub(crate) async fn get_v1_decisions(
     State(state): State<AppState>,

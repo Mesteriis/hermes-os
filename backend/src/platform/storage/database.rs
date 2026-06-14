@@ -1,9 +1,10 @@
 use serde::Serialize;
 use sqlx::postgres::{PgPool, PgPoolOptions};
-use thiserror::Error;
 
 use crate::platform::events::{EventStoreError, expected_migration_summary, run_migrations};
 use crate::platform::settings::{ApplicationSettingsStore, SettingsError};
+use crate::platform::storage::errors::StorageError;
+use crate::platform::storage::models::{DatabaseReadiness, MigrationReadiness};
 
 #[derive(Clone)]
 pub struct Database {
@@ -120,98 +121,4 @@ impl AppliedMigrationSummary {
             && self.applied_count == expected.count
             && self.latest_version == expected.latest_version
     }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct DatabaseReadiness {
-    status: ReadinessStatus,
-    message: &'static str,
-}
-
-impl DatabaseReadiness {
-    fn ok() -> Self {
-        Self {
-            status: ReadinessStatus::Ok,
-            message: "database is reachable",
-        }
-    }
-
-    fn not_configured() -> Self {
-        Self {
-            status: ReadinessStatus::NotConfigured,
-            message: "DATABASE_URL is not configured",
-        }
-    }
-
-    fn unavailable(message: &'static str) -> Self {
-        Self {
-            status: ReadinessStatus::Unavailable,
-            message,
-        }
-    }
-
-    pub fn status(&self) -> ReadinessStatus {
-        self.status
-    }
-
-    pub fn message(&self) -> &str {
-        self.message
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct MigrationReadiness {
-    status: ReadinessStatus,
-    message: &'static str,
-}
-
-impl MigrationReadiness {
-    fn ok() -> Self {
-        Self {
-            status: ReadinessStatus::Ok,
-            message: "required database migrations are applied",
-        }
-    }
-
-    fn not_configured() -> Self {
-        Self {
-            status: ReadinessStatus::NotConfigured,
-            message: "DATABASE_URL is not configured",
-        }
-    }
-
-    fn unavailable(message: &'static str) -> Self {
-        Self {
-            status: ReadinessStatus::Unavailable,
-            message,
-        }
-    }
-
-    pub fn status(&self) -> ReadinessStatus {
-        self.status
-    }
-
-    pub fn message(&self) -> &str {
-        self.message
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum ReadinessStatus {
-    Ok,
-    NotConfigured,
-    Unavailable,
-}
-
-#[derive(Debug, Error)]
-pub enum StorageError {
-    #[error("failed to connect to PostgreSQL")]
-    Connect(#[from] sqlx::Error),
-
-    #[error(transparent)]
-    EventStore(#[from] EventStoreError),
-
-    #[error(transparent)]
-    Settings(#[from] SettingsError),
 }

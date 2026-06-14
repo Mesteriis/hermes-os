@@ -1,6 +1,6 @@
 # Статус приведения к документации
 
-Дата последнего обновления: 2026-06-14 11:21 CEST
+Дата последнего обновления: 2026-06-14 12:42 CEST
 
 ## Выполнено
 
@@ -131,6 +131,7 @@
 * [x] Calendar core event context boundary разделен на focused modules `participants`, `relations`, `context_packs`, `agendas`, `checklists` и `errors`; `backend/src/domains/calendar/core.rs` сокращен с 368 до 13 строк и оставлен как public facade/re-export boundary, при этом participant persistence, graph relation persistence, event context-pack materialization, agenda persistence, checklist persistence и error mapping больше не смешаны в одном файле. ADR-0067/0068 и `docs/domains/calendar-events.md` semantics сохранены: Calendar remains first-class event domain, participants and event relations stay explicit graph/context links, context packs remain derived JSON snapshots, and event identity storage remains outside Calendar core context stores.
 * [x] Mail background sync model boundary разделен на focused modules `settings`, `status`, `runs`, `progress`, `finish` и `failures`; `backend/src/domains/mail/background_sync/models.rs` сокращен с 361 до 17 строк и оставлен как facade/re-export boundary, при этом public sync settings/status/run DTOs, durable run response conversion, internal trigger/phase/progress state, finish-run persistence command и sanitized provider/vault failure mapping больше не смешаны в одном файле. ADR-0041/0046/0055/0080 semantics сохранены: sync status records expose only sanitized metadata and checkpoint presence, provider credentials remain account-scoped runtime-only, raw mail/blob bytes stay outside PostgreSQL status records, and local-first account sync behavior remains unchanged.
 * [x] Telegram TDLib parsing boundary разделен на focused modules `chats`, `messages`, `message_parts`, `files`, `events` и `values`; `backend/src/integrations/telegram/tdjson/parsing.rs` сокращен с 359 до 14 строк и оставлен как crate-local facade/re-export boundary, при этом chat-id/chat snapshot parsing, message list/snapshot parsing, sender/text extraction, file snapshot parsing, authorization/bootstrap error event parsing и низкоуровневые TDLib value helpers больше не смешаны в одном файле. ADR-0083/0091 и `docs/domains/telegram-channel.md` semantics сохранены: TDLib parsing remains a provider adapter/source-evidence boundary, QR/runtime request handling stays outside parser modules, media messages may keep empty text, and parser errors do not introduce message bodies, media bytes or secrets into audit/logging state.
+* [x] Проведен дополнительный code review AI Control Center provider/model routing boundary относительно ADR-0082/0081/0076: подтверждено, что текущее поведение сохраняет host-vault запись секретов, но backend не enforce-ит готовность remote/API provider перед route/prompt selection.
 
 ## В работе
 
@@ -157,6 +158,7 @@
 
 * В коде ещё есть compatibility layers вокруг `persons`, `health`, `watchtower`, legacy Person/Contact терминологии и старых API.
 * По текущему scan в backend больше не осталось source files больше 700 строк; ближайшие production SRP-аудит кандидаты — `backend/src/ai/control_center/providers.rs` на 349 строк, `backend/src/integrations/omniroute/client.rs` на 344 строки, `backend/src/engines/obligation.rs` на 344 строки, `backend/src/domains/projects/core/read_model.rs` на 343 строки и `backend/src/domains/mail/core/models.rs` на 342 строки. `backend/src/integrations/telegram/tdjson/tests.rs` является test-only спецификацией TDLib boundary и отслеживается отдельно от production facade.
+* AI Control Center сейчас позволяет выбрать remote/API model для `ai_model_routes` и prompt evaluation после одного факта существования catalog model: `put_model_route` проверяет только model existence и embedding dimension, `test_prompt` проверяет только model existence, а `provider_command(Test)` возвращает `ok` для API provider при `consent_state = granted` без проверки `status = ready` и host-vault-backed `ai_provider_secret_refs`. Это расходится с ADR-0082: remote/API providers должны быть недоступны для private-context workflows до explicit consent и vault-backed credential. Frontend selector дополнительно блокирует только `disabled`, missing provider, unavailable model и embedding dimension, поэтому `needs_setup`, `required/revoked` consent и отсутствие secret binding остаются выбираемыми через UI/API.
 * Полный `backend/tests/v1_communications_api.rs` на общем dev PostgreSQL сейчас не является надежным validation gate: `workflow_action_create_task_is_idempotent_and_records_safe_event` воспроизводимо возвращает 400 вместо 200 вне текущего `sending` boundary; требуется изолировать этот тест через Testcontainers/чистую БД или исправить workflow-action fixture.
 * Во frontend больше не осталось Svelte-компонентов больше 500 строк по текущему scan.
 * Во frontend больше не осталось source/service/store files больше 700 строк по текущему scan.
@@ -166,4 +168,4 @@
 
 ## Следующий шаг
 
-Продолжить приведение реализации к документации: выполнить SRP/compatibility-аудит `backend/src/ai/control_center/providers.rs`, especially provider/model catalog DTOs, secret redaction, consent metadata and separation from provider persistence/routes.
+Продолжить приведение реализации к документации: сначала исправить AI Control Center provider readiness invariant для remote/API providers (`status = ready`, `consent_state = granted`, host-vault-backed `ai_provider_secret_refs`) в backend route/prompt selection и UI model availability, затем выполнить SRP split `backend/src/ai/control_center/providers.rs` без ослабления ADR-0082.
