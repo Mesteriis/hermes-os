@@ -30,6 +30,7 @@ export type CommunicationSectionId =
 
 export type SidebarViewId = PrimaryNavId | 'telegram' | 'whatsapp' | 'settings' | 'organizations'
 export type AppViewId = PrimaryNavId | 'settings' | 'organizations'
+type RouteViewId = AppViewId | 'telegram' | 'whatsapp'
 
 function communicationSectionViewId(sectionId: CommunicationSectionId): SidebarViewId {
   if (sectionId === 'telegram' || sectionId === 'whatsapp') {
@@ -103,6 +104,22 @@ export const useNavigationStore = defineStore('navigation', () => {
     router.push(`/${routeViewId}`)
   }
 
+  function syncFromRoute(viewId: RouteViewId): void {
+    if (viewId === 'telegram' || viewId === 'whatsapp') {
+      currentView.value = 'communications'
+      activeCommunicationSection.value = viewId
+      return
+    }
+
+    currentView.value = viewId
+    if (viewId !== 'communications') {
+      activeSidebarRailGroupId.value = null
+      return
+    }
+
+    activeCommunicationSection.value = 'unified'
+  }
+
   function toggleUserMenu(): void {
     isUserMenuOpen.value = !isUserMenuOpen.value
   }
@@ -140,6 +157,7 @@ export const useNavigationStore = defineStore('navigation', () => {
     shellViewClass,
     navigateTo,
     navigateToCommunicationSection,
+    syncFromRoute,
     toggleUserMenu,
     closeUserMenu,
     toggleSidebarRail,

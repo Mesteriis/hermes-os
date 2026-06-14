@@ -18,6 +18,10 @@
 	--hh-shell-sidebar-width-compact: 208px;
 	--hh-shell-sidebar-width-rail: 64px;
 	--hh-shell-content-min-width-compact: 0px;
+	--hh-shell-right-inset: 14px;
+	--hh-shell-bottom-inset: 0px;
+	--hh-shell-topbar-offset: 10px;
+	--hh-shell-workspace-gap: 10px;
 
 	/* Core colors */
 	--hh-color-bg: #02090b;
@@ -37,6 +41,10 @@
 	--hh-color-accent-contrast: #032522;
 	--hh-color-danger: #ffabab;
 	--hh-color-danger-strong: #ef3140;
+	--hh-accent: var(--hh-color-accent);
+	--hh-accent-strong: var(--hh-color-accent-strong);
+	--hh-accent-soft: var(--hh-color-accent-soft);
+	--hh-accent-contrast: var(--hh-color-accent-contrast);
 
 	/* Border & surface colors */
 	--hh-border-accent-soft: rgba(45, 240, 206, 0.18);
@@ -46,6 +54,7 @@
 	--hh-focus-ring: rgba(45, 240, 206, 0.62);
 	--hh-surface-tint: rgba(5, 22, 25, 0.78);
 	--hh-surface-panel: rgba(8, 29, 33, 0.94);
+	--hh-surface-deep: var(--hh-color-surface-deep);
 	--hh-accent-tint: rgba(45, 240, 206, 0.08);
 	--hh-accent-control: rgba(25, 154, 132, 0.2);
 	--hh-danger-tint: rgba(128, 32, 40, 0.26);
@@ -84,6 +93,10 @@
 	--hh-space-4: 16px;
 	--hh-space-5: 20px;
 	--hh-space-6: 24px;
+	--hh-density-scale: 1;
+	--hh-space-panel: 14px;
+	--hh-space-section: 16px;
+	--hh-space-control-x: 12px;
 
 	/* Layout */
 	--hh-layout-row: 37px;
@@ -111,6 +124,12 @@
 	--hh-shadow-sidebar: inset -1px 0 0 rgba(255, 255, 255, 0.03), 18px 0 48px rgba(0, 0, 0, 0.28);
 	--hh-shadow-panel: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 	--hh-shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.55);
+	--hh-shell-bg-image: none;
+	--hh-shell-bg-dim: 0.42;
+	--hh-panel-alpha: 0.7;
+	--hh-panel-alpha-low: 0.56;
+	--hh-panel-opacity: var(--hh-panel-alpha);
+	--hh-panel-blur: 12px;
 
 	/* Semantic aliases used by shell components */
 	--hh-bg: var(--hh-color-bg);
@@ -121,6 +140,42 @@
 	--hh-text-muted: var(--hh-color-text-muted);
 	--hh-hover-bg: var(--hh-accent-tint);
 	--hh-active-bg: rgba(45, 240, 206, 0.1);
+
+	/* Compatibility aliases for migrated Vue screens that still use legacy tokens. */
+	--hh-bg-primary: rgba(5, 22, 25, var(--hh-panel-alpha));
+	--hh-bg-secondary: rgba(8, 29, 33, var(--hh-panel-alpha-low));
+	--hh-bg-hover: var(--hh-accent-tint);
+	--hh-bg-active: rgba(45, 240, 206, 0.16);
+	--hh-bg-input: rgba(2, 12, 16, 0.54);
+	--hh-text-tertiary: var(--hh-color-text-muted);
+	--hh-text-error: var(--hh-color-danger);
+	--hh-bg-info-light: var(--hh-status-info-surface);
+	--hh-status-success: var(--hh-status-success-text);
+	--hh-status-danger: var(--hh-status-danger-text);
+	--color-surface: rgba(5, 22, 25, var(--hh-panel-alpha));
+	--color-bg: rgba(4, 18, 21, var(--hh-panel-alpha-low));
+	--color-border: var(--hh-border-subtle);
+	--color-text: var(--hh-color-text-strong);
+	--color-text-secondary: var(--hh-color-text-muted);
+	--color-primary: var(--hh-accent);
+	--color-primary-subtle: var(--hh-accent-tint);
+	--color-avatar-bg: rgba(45, 240, 206, 0.14);
+	--color-success-bg: var(--hh-status-success-surface);
+	--color-error-bg: var(--hh-status-danger-surface);
+	--text-primary: var(--hh-color-text-strong);
+	--text-secondary: var(--hh-color-text-muted);
+	--bg-card: rgba(5, 22, 25, var(--hh-panel-alpha));
+	--bg-hover: var(--hh-accent-tint);
+	--bg-active: rgba(45, 240, 206, 0.16);
+	--bg-input: rgba(2, 12, 16, 0.54);
+	--border: var(--hh-border-subtle);
+	--accent: var(--hh-accent);
+	--accent-bg: var(--hh-accent-tint);
+	--accent-fg: var(--hh-accent-contrast);
+	--success: var(--hh-status-success-text);
+	--warning: var(--hh-status-warning-text);
+	--danger: var(--hh-status-danger-text);
+	--radius-sm: var(--hh-radius-sm);
 }
 
 body {
@@ -128,57 +183,4 @@ body {
 	font-family: var(--hh-font-sans);
 	background-color: var(--hh-color-bg);
 	color: var(--hh-color-text);
-}
-
-/* Shell theme classes — applied to .viewport-guard by theme store */
-
-/* Accent colors */
-.accent-teal { --hh-accent: #2df0ce; --hh-accent-strong: #25d8bd; }
-.accent-cyan { --hh-accent: #42ddff; --hh-accent-strong: #30c8f0; }
-.accent-blue { --hh-accent: #61a7ff; --hh-accent-strong: #4a8ef0; }
-.accent-violet { --hh-accent: #b98cff; --hh-accent-strong: #a070f0; }
-.accent-amber { --hh-accent: #f2b84b; --hh-accent-strong: #e0a030; }
-.accent-rose { --hh-accent: #ff7aa8; --hh-accent-strong: #f06090; }
-
-/* Brightness */
-.shell-brightness-dark { --hh-bg: #02090b; --hh-color-bg: #02090b; --hh-color-bg-raised: #020d10; --hh-surface-panel: rgba(8, 29, 33, 0.94); --hh-color-text: #eefefb; --hh-color-text-strong: #f2fffd; }
-.shell-brightness-darker { --hh-bg: #010607; --hh-color-bg: #010607; --hh-color-bg-raised: #01090a; --hh-surface-panel: rgba(5, 18, 22, 0.95); --hh-color-text: #dcefed; --hh-color-text-strong: #eefefb; }
-.shell-brightness-darkest { --hh-bg: #000303; --hh-color-bg: #000303; --hh-color-bg-raised: #000505; --hh-surface-panel: rgba(2, 10, 12, 0.97); --hh-color-text: #c8dddd; --hh-color-text-strong: #dcefed; }
-
-/* Panel opacity */
-.panel-opacity-40 { --hh-panel-opacity: 0.4; }
-.panel-opacity-50 { --hh-panel-opacity: 0.5; }
-.panel-opacity-60 { --hh-panel-opacity: 0.6; }
-.panel-opacity-70 { --hh-panel-opacity: 0.7; }
-.panel-opacity-80 { --hh-panel-opacity: 0.8; }
-.panel-opacity-90 { --hh-panel-opacity: 0.9; }
-.panel-opacity-100 { --hh-panel-opacity: 1; }
-
-/* Panel blur */
-.panel-blur-0 { --hh-panel-blur: 0px; }
-.panel-blur-4 { --hh-panel-blur: 4px; }
-.panel-blur-8 { --hh-panel-blur: 8px; }
-.panel-blur-12 { --hh-panel-blur: 12px; }
-.panel-blur-16 { --hh-panel-blur: 16px; }
-.panel-blur-20 { --hh-panel-blur: 20px; }
-.panel-blur-24 { --hh-panel-blur: 24px; }
-
-/* View-specific classes */
-.view-home,
-.view-communications,
-.view-timeline,
-.view-persons,
-.view-projects,
-.view-tasks,
-.view-calendar,
-.view-documents,
-.view-notes,
-.view-knowledge,
-.view-review,
-.view-settings,
-.view-agents,
-.view-organizations,
-.view-telegram,
-.view-whatsapp {
-	/* Reserved for per-view CSS overrides */
 }

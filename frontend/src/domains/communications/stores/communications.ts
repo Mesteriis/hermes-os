@@ -372,6 +372,18 @@ export function communicationSectionWorkflowState(sectionId: string): WorkflowSt
   }
 }
 
+export function communicationWorkflowStateSectionId(state: WorkflowState | ''): CommunicationSectionId {
+  switch (state) {
+    case '': return 'unified'
+    case 'new': return 'inbox'
+    case 'needs_action': return 'needs_reply'
+    case 'waiting': return 'waiting'
+    case 'done': return 'done'
+    case 'archived': return 'archived'
+    default: return 'unified'
+  }
+}
+
 export function senderLabel(sender: string): string {
   const match = sender.match(/^"?(.+?)"?\s*<(.+?)>$/)
   if (match) return match[1].trim()

@@ -62,7 +62,7 @@ function sessionLinkStateClass(state: string): string {
       />
     </label>
 
-    <div ref="parentRef" style="flex:1;overflow-y:auto">
+    <div ref="parentRef" class="session-list-scroll">
       <div v-if="isWhatsappLoading && whatsappSessions.length === 0" class="empty-panel">
         {{ t('Loading WhatsApp Web state...') }}
       </div>
@@ -97,6 +97,11 @@ function sessionLinkStateClass(state: string): string {
 </template>
 
 <style scoped>
+.session-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .session-row {
   display: flex;
   align-items: center;

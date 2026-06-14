@@ -1,16 +1,30 @@
 <script setup lang="ts">
+import { onMounted, watch } from 'vue'
 import { RouterView } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { useNavigationStore } from '../../shared/stores/navigation'
 import { useThemeStore } from '../../shared/stores/theme'
-import { useLayoutEditorStore } from '../../shared/stores/layoutEditor'
 import Sidebar from './Sidebar.vue'
 import Topbar from './Topbar.vue'
 import NotificationsDrawer from './NotificationsDrawer.vue'
-import LayoutEditControls from './LayoutEditControls.vue'
 
 const nav = useNavigationStore()
 const theme = useThemeStore()
-const layoutEditor = useLayoutEditorStore()
+const route = useRoute()
+
+onMounted(() => {
+  void theme.hydrateThemeSettings()
+})
+
+watch(
+  () => route.name,
+  (name) => {
+    if (typeof name === 'string') {
+      nav.syncFromRoute(name as Parameters<typeof nav.syncFromRoute>[0])
+    }
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
@@ -21,8 +35,7 @@ const layoutEditor = useLayoutEditorStore()
     <div
       class="desktop-shell"
       :class="{
-        'sidebar-rail': nav.isSidebarRail,
-        'layout-editing': layoutEditor.isLayoutEditing
+        'sidebar-rail': nav.isSidebarRail
       }"
     >
       <!-- Sidebar -->
@@ -31,7 +44,6 @@ const layoutEditor = useLayoutEditorStore()
       <!-- Workspace -->
       <div class="workspace">
         <Topbar />
-        <LayoutEditControls />
         <NotificationsDrawer />
         <main class="workspace-content">
           <RouterView />
@@ -49,27 +61,39 @@ const layoutEditor = useLayoutEditorStore()
 }
 
 .desktop-shell {
+  position: fixed;
+  inset: 0;
   display: grid;
-  grid-template-columns: var(--hh-shell-sidebar-width) 1fr;
-  width: 100%;
-  height: 100%;
+  grid-template-columns: var(--hh-shell-sidebar-width) minmax(var(--hh-shell-content-min-width), 1fr);
+  gap: 16px;
+  width: 100vw;
+  max-width: 100vw;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 var(--hh-shell-right-inset) var(--hh-shell-bottom-inset) 0;
   transition: grid-template-columns 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .desktop-shell.sidebar-rail {
-  grid-template-columns: var(--hh-shell-sidebar-width-rail) 1fr;
+  grid-template-columns: var(--hh-shell-sidebar-width-rail) minmax(var(--hh-shell-content-min-width), 1fr);
 }
 
 .workspace {
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
+  gap: var(--hh-shell-workspace-gap);
   height: 100%;
+  min-width: 0;
   overflow: hidden;
+  padding-bottom: var(--hh-shell-topbar-offset);
 }
 
 .workspace-content {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  padding: 0;
 }
 </style>

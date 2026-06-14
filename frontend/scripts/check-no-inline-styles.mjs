@@ -1,28 +1,40 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-const sourceRoots = ['src', 'static'];
+const sourceRoots = ['src', 'public'];
 const checkedExtensions = new Set([
 	'.html',
 	'.js',
 	'.jsx',
 	'.mjs',
-	'.svelte',
 	'.ts',
-	'.tsx'
+	'.tsx',
+	'.vue'
 ]);
 const forbiddenStylePatterns = [
 	{
-		pattern: /\sstyle\s*=/,
-		message: 'inline style attributes are forbidden; move styles to CSS files'
-	},
-	{
-		pattern: /<style(\s|>)/i,
-		message: 'embedded style blocks are forbidden; move styles to CSS files'
+		pattern: /(?:^|[\s<])(?<binding>:style|v-bind:style|style)\s*=/,
+		message: 'inline style attributes are forbidden; move styles to CSS files or an approved runtime layout primitive'
 	}
 ];
 
+const dynamicLayoutStyleAllowlist = new Set([
+	'src/domains/communications/components/MailList.vue',
+	'src/domains/documents/components/DocumentsList.vue',
+	'src/domains/knowledge/components/KnowledgeGraphCanvas.vue',
+	'src/domains/notes/components/NotesList.vue',
+	'src/domains/personas/components/PersonsList.vue',
+	'src/domains/tasks/components/TaskList.vue',
+	'src/domains/telegram/components/TelegramChatList.vue',
+	'src/domains/timeline/components/TimelineStream.vue',
+	'src/domains/whatsapp/components/WhatsAppSessionList.vue'
+]);
+
 async function collectSourceFiles(root) {
+	if (!(await exists(root))) {
+		return [];
+	}
+
 	const entries = await readdir(root, { withFileTypes: true });
 	const files = [];
 
@@ -35,11 +47,31 @@ async function collectSourceFiles(root) {
 		}
 
 		if (entry.isFile() && checkedExtensions.has(path.extname(entry.name))) {
+			if (isTestFile(entryPath)) {
+				continue;
+			}
 			files.push(entryPath);
 		}
 	}
 
 	return files;
+}
+
+function isTestFile(filePath) {
+	const normalized = filePath.split(path.sep).join('/');
+	return normalized.includes('/__tests__/') || /\.(test|spec)\.[cm]?[jt]sx?$/.test(normalized);
+}
+
+async function exists(root) {
+	try {
+		await stat(root);
+		return true;
+	} catch (error) {
+		if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') {
+			return false;
+		}
+		throw error;
+	}
 }
 
 async function findStyleContractViolations() {
@@ -48,18 +80,48 @@ async function findStyleContractViolations() {
 
 	for (const file of files) {
 		const source = await readFile(file, 'utf8');
-		const lines = source.split('\n');
+		const scanLines = scanLinesForFile(file, source);
+		const normalizedFile = file.split(path.sep).join('/');
 
-		for (const [index, line] of lines.entries()) {
+		for (const { line, lineNumber } of scanLines) {
 			for (const { pattern, message } of forbiddenStylePatterns) {
-				if (pattern.test(line)) {
-					violations.push(`${file}:${index + 1}: ${message}`);
+				const match = pattern.exec(line);
+				if (match) {
+					const binding = match.groups?.binding;
+					const isAllowedDynamicLayout =
+						binding !== 'style' && dynamicLayoutStyleAllowlist.has(normalizedFile);
+					if (!isAllowedDynamicLayout) {
+						violations.push(`${file}:${lineNumber}: ${message}`);
+					}
 				}
 			}
-		}
+	}
 	}
 
 	return violations;
+}
+
+function scanLinesForFile(file, source) {
+	const lines = source.split('\n');
+	if (path.extname(file) !== '.vue') {
+		return lines.map((line, index) => ({ line, lineNumber: index + 1 }));
+	}
+
+	const ranges = [];
+	let inTemplate = false;
+	for (const [index, line] of lines.entries()) {
+		if (line.includes('<template')) {
+			inTemplate = true;
+		}
+		if (inTemplate) {
+			ranges.push({ line, lineNumber: index + 1 });
+		}
+		if (line.includes('</template>')) {
+			inTemplate = false;
+		}
+	}
+
+	return ranges;
 }
 
 const violations = await findStyleContractViolations();

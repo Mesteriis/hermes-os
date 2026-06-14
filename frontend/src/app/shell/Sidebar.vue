@@ -2,7 +2,6 @@
 import { Icon } from '@iconify/vue'
 import { useNavigationStore } from '../../shared/stores/navigation'
 import { useSidebarStore } from '../../shared/stores/sidebar'
-import type { ResolvedSidebarRootEntry } from '../../shared/stores/sidebar'
 
 const nav = useNavigationStore()
 const sidebar = useSidebarStore()
@@ -46,7 +45,7 @@ function isCommunicationItemActive(sectionId?: string): boolean {
     <!-- Brand -->
     <div class="sidebar-brand" @click="handleSelectItem('home')">
       <div class="sidebar-logo">
-        <span class="sidebar-logo-mark">H</span>
+        <img class="sidebar-logo-image" src="/assets/hermes-logo-mark.png" alt="" aria-hidden="true" />
       </div>
       <div v-if="!nav.isSidebarRail" class="sidebar-brand-text">
         <span class="sidebar-brand-name">Hermes</span>
@@ -77,6 +76,7 @@ function isCommunicationItemActive(sectionId?: string): boolean {
           <div v-if="!nav.isSidebarRail" class="sidebar-nav-group-header">
             <button
               class="sidebar-nav-group-toggle"
+              :class="{ active: isItemActive(entry.group.id) }"
               @click="handleToggleGroup(entry.group.id)"
             >
               <Icon
@@ -120,7 +120,9 @@ function isCommunicationItemActive(sectionId?: string): boolean {
           <div v-else class="sidebar-rail-group">
             <button
               class="sidebar-nav-item"
-              :class="{ 'rail-active': nav.activeSidebarRailGroupId === entry.group.id }"
+              :class="{
+                'rail-active': nav.activeSidebarRailGroupId === entry.group.id || isItemActive(entry.group.id)
+              }"
               @click="nav.setActiveSidebarRailGroup(
                 nav.activeSidebarRailGroupId === entry.group.id ? null : entry.group.id
               )"
@@ -164,7 +166,11 @@ function isCommunicationItemActive(sectionId?: string): boolean {
           {{ nav.isSidebarRail ? 'Expand' : 'Collapse' }}
         </span>
       </button>
-      <button class="sidebar-nav-item" @click="handleSettings">
+      <button
+        class="sidebar-nav-item"
+        :class="{ active: isItemActive('settings') }"
+        @click="handleSettings"
+      >
         <Icon icon="tabler:settings" class="sidebar-nav-icon" />
         <span v-if="!nav.isSidebarRail" class="sidebar-nav-label">Settings</span>
       </button>
@@ -177,8 +183,11 @@ function isCommunicationItemActive(sectionId?: string): boolean {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--hh-panel-bg);
+  background: rgba(5, 22, 25, var(--hh-panel-alpha));
   border-right: 1px solid var(--hh-border);
+  border-radius: var(--hh-radius-sidebar);
+  box-shadow: var(--hh-shadow-sidebar);
+  backdrop-filter: blur(var(--hh-panel-blur));
   width: var(--hh-shell-sidebar-width);
   transition: width 280ms cubic-bezier(0.22, 1, 0.36, 1);
   overflow: hidden;
@@ -193,7 +202,7 @@ function isCommunicationItemActive(sectionId?: string): boolean {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  padding: 1rem;
+  padding: var(--hh-space-section) var(--hh-space-panel);
   cursor: pointer;
   border-bottom: 1px solid var(--hh-border);
   flex-shrink: 0;
@@ -205,15 +214,16 @@ function isCommunicationItemActive(sectionId?: string): boolean {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--hh-accent);
-  border-radius: 0.5rem;
+  background: rgba(45, 240, 206, 0.08);
+  border: 1px solid var(--hh-border-accent-soft);
+  border-radius: var(--hh-radius-md);
   flex-shrink: 0;
 }
 
-.sidebar-logo-mark {
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--hh-bg);
+.sidebar-logo-image {
+  width: 1.45rem;
+  height: 1.45rem;
+  object-fit: contain;
 }
 
 .sidebar-brand-text {
@@ -273,6 +283,11 @@ function isCommunicationItemActive(sectionId?: string): boolean {
 
 .sidebar-nav-group-toggle:hover {
   background: var(--hh-hover-bg);
+}
+
+.sidebar-nav-group-toggle.active {
+  background: var(--hh-active-bg);
+  color: var(--hh-accent);
 }
 
 .sidebar-nav-item {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from '../../../platform/i18n'
+import Icon from '../../../shared/ui/Icon.vue'
 import type { ProjectDetail, ProjectRecord, ProjectStats, ProjectTimelineItem, ProjectMessageSummary, ProjectDocumentSummary } from '../types/project'
 import { projectTimelineIcon, projectDocumentIcon, formatProjectDateTime } from '../stores/projects'
 

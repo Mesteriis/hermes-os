@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { AvatarRoot, AvatarImage, AvatarFallback } from 'reka-ui'
 import { computed } from 'vue'
-import type { CSSProperties } from 'vue'
 
 const props = withDefaults(defineProps<{
   src?: string
@@ -13,18 +12,6 @@ const props = withDefaults(defineProps<{
   alt: 'avatar',
   size: 'md'
 })
-
-const sizeMap: Record<string, string> = {
-  sm: '1.5rem',
-  md: '2rem',
-  lg: '2.5rem',
-  xl: '3rem'
-}
-
-const rootStyle = computed<CSSProperties>(() => ({
-  width: sizeMap[props.size],
-  height: sizeMap[props.size]
-}))
 
 const rootClasses = computed(() => [
   'hermes-avatar-root',
@@ -40,7 +27,7 @@ const fallbackText = computed(() => {
 </script>
 
 <template>
-  <AvatarRoot :class="rootClasses" :style="rootStyle">
+  <AvatarRoot :class="rootClasses">
     <AvatarImage v-if="src" :src="src" :alt="alt" class="hermes-avatar-image" />
     <AvatarFallback class="hermes-avatar-fallback" :delay-ms="src ? 300 : 0">
       {{ fallbackText }}
@@ -84,15 +71,35 @@ const fallbackText = computed(() => {
   font-size: 0.625rem;
 }
 
+.hermes-avatar--sm {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
 .hermes-avatar--md .hermes-avatar-fallback {
   font-size: 0.75rem;
+}
+
+.hermes-avatar--md {
+  width: 2rem;
+  height: 2rem;
 }
 
 .hermes-avatar--lg .hermes-avatar-fallback {
   font-size: 0.875rem;
 }
 
+.hermes-avatar--lg {
+  width: 2.5rem;
+  height: 2.5rem;
+}
+
 .hermes-avatar--xl .hermes-avatar-fallback {
   font-size: 1rem;
+}
+
+.hermes-avatar--xl {
+  width: 3rem;
+  height: 3rem;
 }
 </style>

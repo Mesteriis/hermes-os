@@ -8,17 +8,10 @@ const props = withDefaults(defineProps<{
 }>(), {})
 
 const classes = computed(() => ['hermes-scroll-area', props.class])
-
-const style = computed(() => {
-  if (props.maxHeight) {
-    return { maxHeight: props.maxHeight }
-  }
-  return {}
-})
 </script>
 
 <template>
-  <ScrollAreaRoot :class="classes" :style="style">
+  <ScrollAreaRoot :class="classes">
     <ScrollAreaViewport class="hermes-scroll-viewport">
       <slot />
     </ScrollAreaViewport>

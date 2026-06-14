@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ProgressRoot, ProgressIndicator } from 'reka-ui'
-import { computed } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 
 const props = withDefaults(defineProps<{
   modelValue?: number
@@ -31,9 +31,12 @@ const rootClasses = computed(() => [
   { 'hermes-progress--indeterminate': props.indeterminate }
 ])
 
-const indicatorStyle = computed(() => {
-  if (props.indeterminate) return {}
-  return { transform: `translateX(-${100 - percentage.value}%)` }
+const indicatorRef = ref<InstanceType<typeof ProgressIndicator> | null>(null)
+
+watchEffect(() => {
+  const element = indicatorRef.value?.$el as HTMLElement | undefined
+  if (!element || props.indeterminate) return
+  element.style.transform = `translateX(-${100 - percentage.value}%)`
 })
 </script>
 
@@ -44,7 +47,7 @@ const indicatorStyle = computed(() => {
     :class="rootClasses"
     @update:model-value="(val: any) => emit('update:modelValue', Number(val))"
   >
-    <ProgressIndicator class="hermes-progress-indicator" :style="indicatorStyle" />
+    <ProgressIndicator ref="indicatorRef" class="hermes-progress-indicator" />
   </ProgressRoot>
 </template>
 

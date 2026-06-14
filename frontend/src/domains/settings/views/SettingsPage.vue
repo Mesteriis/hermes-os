@@ -2,6 +2,7 @@
 import { useI18n } from '../../../platform/i18n'
 import { useSettingsStore } from '../stores/settings'
 import { useApplicationSettingsQuery } from '../queries/useSettingsQuery'
+import Icon from '../../../shared/ui/Icon.vue'
 import type { SettingsSection } from '../stores/settings'
 
 import AppearanceSettings from '../components/AppearanceSettings.vue'
@@ -70,7 +71,7 @@ const integrationCount = appSettingsData.value?.items?.length ?? 0
             :class="{ active: store.selectedSection === item.id }"
             @click="store.selectSection(item.id)"
           >
-            <span class="tree-icon">{{ item.icon }}</span>
+            <Icon class="tree-icon" :icon="item.icon" />
             <span>{{ t(item.label) }}</span>
             <em v-if="item.id === 'integrations'">{{ integrationCount }}</em>
           </button>
@@ -123,7 +124,9 @@ const integrationCount = appSettingsData.value?.items?.length ?? 0
   overflow-y: auto;
   border: 1px solid var(--hh-border-muted);
   border-radius: var(--hh-radius-md);
-  background: rgba(4, 18, 20, 0.72);
+  background: rgba(4, 18, 20, var(--hh-panel-alpha));
+  backdrop-filter: blur(var(--hh-panel-blur));
+  box-shadow: var(--hh-shadow-panel);
   padding: 12px 8px;
 }
 
@@ -184,7 +187,9 @@ const integrationCount = appSettingsData.value?.items?.length ?? 0
 }
 
 .tree-icon {
-  font-size: 14px;
+  width: 14px;
+  height: 14px;
+  color: currentColor;
 }
 
 /* Content */

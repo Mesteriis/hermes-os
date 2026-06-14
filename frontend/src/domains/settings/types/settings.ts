@@ -1,22 +1,17 @@
-export type SettingValueKind = 'boolean' | 'integer' | 'string' | 'json'
+export type {
+  ApplicationSetting,
+  ApplicationSettingsResponse,
+  ApplicationSettingValue,
+  SettingValueKind
+} from '../../../platform/settings/applicationSettingsClient'
 
-export interface ApplicationSetting {
-  setting_key: string
-  category: string
-  value_kind: SettingValueKind
-  value: boolean | number | string | Record<string, unknown> | unknown[]
-  label: string
-  description: string
-  metadata: Record<string, unknown>
-  is_editable: boolean
-  updated_by_actor_id: string | null
-  created_at: string
-  updated_at: string
-}
-
-export interface ApplicationSettingsResponse {
-  items: ApplicationSetting[]
-}
+export {
+  FRONTEND_LAYOUT_SETTING_KEY,
+  FRONTEND_SIDEBAR_SETTING_KEY,
+  FRONTEND_LOCALE_SETTING_KEY,
+  FRONTEND_THEME_SETTING_KEY,
+  FRONTEND_UI_STATE_SETTING_KEY
+} from '../../../platform/settings/applicationSettingsClient'
 
 export interface ProviderAccount {
   account_id: string
@@ -41,9 +36,3 @@ export interface CalendarAccount {
   is_active: boolean
   calendar_ids: string[]
 }
-
-export const FRONTEND_LAYOUT_SETTING_KEY = 'frontend.layout'
-export const FRONTEND_SIDEBAR_SETTING_KEY = 'frontend.sidebar'
-export const FRONTEND_LOCALE_SETTING_KEY = 'frontend.locale'
-export const FRONTEND_THEME_SETTING_KEY = 'frontend.theme'
-export const FRONTEND_UI_STATE_SETTING_KEY = 'frontend.ui_state'

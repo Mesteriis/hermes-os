@@ -2,30 +2,18 @@
 import { Icon } from '@iconify/vue'
 import { useNavigationStore } from '../../shared/stores/navigation'
 import { useNotificationsStore } from '../../shared/stores/notifications'
-import { useThemeStore } from '../../shared/stores/theme'
-import { useLayoutEditorStore } from '../../shared/stores/layoutEditor'
 import { useI18n } from '../../platform/i18n'
 
 const nav = useNavigationStore()
 const notifications = useNotificationsStore()
-const theme = useThemeStore()
-const layoutEditor = useLayoutEditorStore()
 const { t, setLocale, locale } = useI18n()
 
 function toggleNotifications(): void {
   notifications.toggleNotificationsDrawer()
 }
 
-function toggleUserMenu(): void {
+function toggleMenu(): void {
   nav.toggleUserMenu()
-}
-
-function toggleLayoutEditing(): void {
-  if (layoutEditor.isLayoutEditing) {
-    layoutEditor.saveLayoutSettings()
-  } else {
-    layoutEditor.startLayoutEditing()
-  }
 }
 
 function toggleLocale(): void {
@@ -41,19 +29,20 @@ function exitApplication(): void {
 
 <template>
   <header class="topbar">
-    <!-- Title Section -->
-    <div class="topbar-title-section">
-      <h1 class="topbar-title">{{ nav.activeView?.title ?? 'Hermes' }}</h1>
-      <p class="topbar-subtitle">{{ nav.activeView?.subtitle ?? '' }}</p>
+    <div class="topbar-slot-shell">
+      <div id="hermes-topbar-slot" class="topbar-slot" />
+      <div class="topbar-slot-fallback">
+        <h1 class="topbar-title">{{ nav.activeView?.title ?? 'Hermes' }}</h1>
+        <p class="topbar-subtitle">{{ nav.activeView?.subtitle ?? '' }}</p>
+      </div>
     </div>
 
-    <!-- Actions -->
     <div class="topbar-actions">
-      <!-- Notification Bell -->
       <button
         class="topbar-action-btn"
         @click="toggleNotifications"
         title="Notifications"
+        aria-label="Notifications"
       >
         <Icon icon="tabler:bell" class="topbar-action-icon" />
         <span
@@ -64,35 +53,18 @@ function exitApplication(): void {
         </span>
       </button>
 
-      <!-- User Menu -->
-      <div class="topbar-user-menu-wrapper">
+      <div class="topbar-menu-wrapper">
         <button
-          class="topbar-action-btn topbar-user-btn"
+          class="topbar-action-btn topbar-menu-btn"
           :class="{ active: nav.isUserMenuOpen }"
-          @click="toggleUserMenu"
-          title="User menu"
+          @click="toggleMenu"
+          title="Menu"
+          aria-label="Menu"
         >
-          <Icon icon="tabler:user-circle" class="topbar-action-icon" />
+          <Icon icon="tabler:menu-2" class="topbar-action-icon" />
         </button>
 
-        <!-- Dropdown -->
         <div v-if="nav.isUserMenuOpen" class="topbar-dropdown" @mouseleave="nav.closeUserMenu()">
-          <!-- Layout Editing -->
-          <button
-            class="topbar-dropdown-item"
-            :class="{ active: layoutEditor.isLayoutEditing }"
-            @click="toggleLayoutEditing"
-          >
-            <Icon
-              :icon="layoutEditor.isLayoutEditing ? 'tabler:layout-grid-add' : 'tabler:layout'"
-              class="topbar-dropdown-icon"
-            />
-            <span>{{ layoutEditor.isLayoutEditing ? t('actions.save') || 'Save Layout' : t('actions.edit_layout') || 'Edit Layout' }}</span>
-          </button>
-
-          <div class="topbar-dropdown-separator" />
-
-          <!-- Locale Switch -->
           <button class="topbar-dropdown-item" @click="toggleLocale">
             <Icon icon="tabler:language" class="topbar-dropdown-icon" />
             <span>{{ locale === 'ru' ? 'English' : 'Русский' }}</span>
@@ -100,7 +72,6 @@ function exitApplication(): void {
 
           <div class="topbar-dropdown-separator" />
 
-          <!-- Exit -->
           <button class="topbar-dropdown-item topbar-dropdown-exit" @click="exitApplication">
             <Icon icon="tabler:logout" class="topbar-dropdown-icon" />
             <span>{{ t('actions.exit') || 'Exit' }}</span>
@@ -115,18 +86,44 @@ function exitApplication(): void {
 .topbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 0.75rem;
   height: 3.5rem;
-  padding: 0 1.25rem;
-  background: var(--hh-panel-bg);
-  border-bottom: 1px solid var(--hh-border);
+  margin-top: var(--hh-shell-topbar-offset);
+  padding: 0 0.875rem;
+  background: rgba(5, 22, 25, var(--hh-panel-alpha));
+  border: 1px solid var(--hh-border);
+  border-radius: var(--hh-radius-md);
+  box-shadow: var(--hh-shadow-panel);
+  backdrop-filter: blur(var(--hh-panel-blur));
   flex-shrink: 0;
 }
 
-.topbar-title-section {
+.topbar-slot-shell {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.topbar-slot {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.topbar-slot:has(> *) + .topbar-slot-fallback {
+  display: none;
+}
+
+.topbar-slot-fallback {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
+  justify-content: center;
   min-width: 0;
 }
 
@@ -148,6 +145,7 @@ function exitApplication(): void {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .topbar-action-btn {
@@ -196,8 +194,9 @@ function exitApplication(): void {
   color: var(--hh-bg);
 }
 
-.topbar-user-menu-wrapper {
+.topbar-menu-wrapper {
   position: relative;
+  flex-shrink: 0;
 }
 
 .topbar-dropdown {

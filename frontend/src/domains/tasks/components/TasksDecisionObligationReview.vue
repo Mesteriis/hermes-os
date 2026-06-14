@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useI18n } from '../../../platform/i18n'
+import Icon from '../../../shared/ui/Icon.vue'
 import type {
   Decision,
   DecisionEntityKind,

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useI18n } from '../../../platform/i18n'
+import Icon from '../../../shared/ui/Icon.vue'
 import type { ProjectDetail, ProjectRecord, ProjectStats, ProjectSummary } from '../types/project'
 import { projectStatusLabel } from '../stores/projects'
 

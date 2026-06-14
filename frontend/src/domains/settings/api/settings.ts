@@ -1,37 +1,19 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
-  ApplicationSetting,
-  ApplicationSettingsResponse,
   ProviderAccountListResponse,
   CalendarAccount
 } from '../types/settings'
 import type { ProviderAccount } from '../types/settings'
 
 export {
+  fetchApplicationSettings,
+  saveApplicationSetting,
   FRONTEND_LAYOUT_SETTING_KEY,
   FRONTEND_SIDEBAR_SETTING_KEY,
   FRONTEND_LOCALE_SETTING_KEY,
   FRONTEND_THEME_SETTING_KEY,
   FRONTEND_UI_STATE_SETTING_KEY
-} from '../types/settings'
-
-export async function fetchApplicationSettings(): Promise<ApplicationSettingsResponse> {
-  return ApiClient.instance.get<ApplicationSettingsResponse>(
-    '/api/v1/settings',
-    'Settings request failed'
-  )
-}
-
-export async function saveApplicationSetting(
-  settingKey: string,
-  value: ApplicationSetting['value']
-): Promise<ApplicationSetting> {
-  return ApiClient.instance.put<ApplicationSetting>(
-    `/api/v1/settings/${encodeURIComponent(settingKey)}`,
-    { value },
-    'Setting update failed'
-  )
-}
+} from '../../../platform/settings/applicationSettingsClient'
 
 export async function fetchProviderAccounts(): Promise<ProviderAccountListResponse> {
   return ApiClient.instance.get<ProviderAccountListResponse>(

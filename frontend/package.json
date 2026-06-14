@@ -8,9 +8,13 @@
 		"dev": "vite",
 		"build": "vue-tsc --noEmit && vite build",
 		"lint:ts": "vue-tsc --noEmit",
-		"lint": "pnpm lint:ts",
+		"lint:styles": "node scripts/check-no-inline-styles.mjs",
+		"lint:srp": "node scripts/check-component-lines.mjs",
+		"lint": "pnpm lint:ts && pnpm lint:styles && pnpm lint:srp",
 		"preview": "vite preview",
-		"test:unit": "vitest run"
+		"test": "pnpm test:unit",
+		"test:unit": "vitest run",
+		"validate": "pnpm lint:ts && pnpm lint:styles && pnpm lint:srp && pnpm test:unit && pnpm build"
 	},
 	"devDependencies": {
 		"@tauri-apps/cli": "^2.11.2",

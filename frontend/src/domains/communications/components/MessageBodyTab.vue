@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
+import { renderMessageBody } from '../../../shared/sanitize/emailHtml'
 import type { MailMessageDetailResponse, MailMessageInsight } from '../types/communications'
 
 const props = defineProps<{
@@ -22,83 +23,28 @@ const showOriginalFrame = ref(false)
 const message = computed(() => props.detail?.message ?? null)
 const attachments = computed(() => props.detail?.attachments ?? [])
 
-const bodyHtml = computed(() => {
-  if (!message.value) return ''
-  return message.value.body_html ?? ''
-})
-
 const bodyText = computed(() => {
   if (!message.value) return ''
   return message.value.body_text ?? ''
 })
 
-const isHtmlEmail = computed(() => !!bodyHtml.value)
+const renderedBody = computed(() =>
+  renderMessageBody({
+    bodyHtml: message.value?.body_html,
+    bodyText: bodyText.value
+  })
+)
 
-// Build sandboxed iframe srcdoc for original HTML email
+const isHtmlEmail = computed(() => renderedBody.value.kind === 'html')
+
 const originalSrcdoc = computed(() => {
-  if (!bodyHtml.value) return ''
-  const safeHtml = sanitizeEmailHtml(bodyHtml.value)
+  if (!isHtmlEmail.value) return ''
+  const safeHtml = renderedBody.value.html
   return `<!DOCTYPE html><html><head><base target="_blank"><meta charset="utf-8"><style>
     body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; background: #fff; padding: 1rem; margin: 0; line-height: 1.5; }
     img { max-width: 100%; height: auto; }
     a { color: #2563eb; }
   </style></head><body>${safeHtml}</body></html>`
-})
-
-// Shadow DOM rendered content for non-HTML
-const shadowHost = ref<HTMLDivElement | null>(null)
-
-function sanitizeEmailHtml(html: string): string {
-  // Strip unsafe tags
-  return html
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<iframe[^>]*>[\s\S]*?<\/iframe>/gi, '')
-    .replace(/<object[^>]*>[\s\S]*?<\/object>/gi, '')
-    .replace(/<embed[^>]*>[\s\S]*?<\/embed>/gi, '')
-    .replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '')
-    .replace(/<math[^>]*>[\s\S]*?<\/math>/gi, '')
-    .replace(/<form[^>]*>[\s\S]*?<\/form>/gi, '')
-    .replace(/<head[^>]*>[\s\S]*?<\/head>/gi, '')
-    .replace(/<meta[^>]*\/?>/gi, '')
-    .replace(/<link[^>]*\/?>/gi, '')
-    // Normalize tags
-    .replace(/<(\/?)b\b/gi, '<$1strong')
-    .replace(/<(\/?)i\b/gi, '<$1em')
-    .replace(/<font\b/gi, '<span')
-    .replace(/<\/font>/gi, '</span')
-}
-
-function renderShadowContent() {
-  if (!shadowHost.value || !message.value) return
-  const host = shadowHost.value
-  if (host.shadowRoot) {
-    host.shadowRoot.innerHTML = ''
-  }
-  const shadow = host.attachShadow({ mode: 'open' })
-  const style = document.createElement('style')
-  style.textContent = `
-    :host { all: initial; display: block; color-scheme: light; }
-    body { font-family: Arial, Helvetica, sans-serif; color: #1f2933; background: #fff; padding: 0; margin: 0; line-height: 1.5; font-size: 14px; }
-    p { margin: 0 0 0.75em; }
-    a { color: #2563eb; }
-    blockquote { margin: 0.5em 0; padding-left: 1em; border-left: 3px solid #d1d5db; color: #6b7280; }
-    img { max-width: 100%; height: auto; }
-    table { border-collapse: collapse; width: 100%; }
-    td, th { padding: 0.5em; border: 1px solid #e5e7eb; }
-  `
-  shadow.appendChild(style)
-  const body = document.createElement('div')
-  body.innerHTML = isHtmlEmail.value
-    ? sanitizeEmailHtml(bodyHtml.value)
-    : bodyText.value.replace(/\n/g, '<br>')
-  shadow.appendChild(body)
-}
-
-onMounted(() => {
-  if (!isHtmlEmail.value && message.value) {
-    renderShadowContent()
-  }
 })
 
 const importanceLabel = computed(() => {
@@ -114,7 +60,7 @@ const importanceLabel = computed(() => {
       <div v-if="showOriginalFrame" class="original-frame-wrapper">
         <iframe
           class="original-iframe"
-          sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+          sandbox="allow-popups allow-popups-to-escape-sandbox"
           :srcdoc="originalSrcdoc"
           title="Message body"
         />
@@ -123,7 +69,7 @@ const importanceLabel = computed(() => {
         </Button>
       </div>
       <div v-else class="shadow-frame-wrapper">
-        <div ref="shadowHost" class="mail-shadow-host" />
+        <div class="mail-html-body" v-html="renderedBody.html" />
         <Button variant="ghost" size="sm" class="toggle-view-btn" @click="showOriginalFrame = true">
           <Icon icon="tabler:file-code" /> Original HTML
         </Button>
@@ -205,9 +151,44 @@ const importanceLabel = computed(() => {
   border: none;
 }
 
-.mail-shadow-host {
+.mail-html-body {
   padding: 1rem;
   min-height: 300px;
+  color: var(--hh-text-primary, #1f2937);
+  background: var(--hh-bg-surface, #fff);
+  line-height: 1.5;
+  font-size: 0.875rem;
+}
+
+.mail-html-body :deep(p) {
+  margin: 0 0 0.75em;
+}
+
+.mail-html-body :deep(a) {
+  color: var(--hh-accent, #2563eb);
+}
+
+.mail-html-body :deep(blockquote) {
+  margin: 0.5em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--hh-border, #d1d5db);
+  color: var(--hh-text-secondary, #6b7280);
+}
+
+.mail-html-body :deep(img) {
+  max-width: 100%;
+  height: auto;
+}
+
+.mail-html-body :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.mail-html-body :deep(td),
+.mail-html-body :deep(th) {
+  padding: 0.5em;
+  border: 1px solid var(--hh-border, #e5e7eb);
 }
 
 .toggle-view-btn {

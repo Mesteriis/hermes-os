@@ -15,13 +15,13 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function scanStatusColor(status: string): string {
+function scanStatusClass(status: string): string {
   switch (status) {
-    case 'clean': return 'var(--hh-text-success, #16a34a)'
-    case 'suspicious': return '#f59e0b'
-    case 'malicious': return '#ef4444'
-    case 'failed': return '#ef4444'
-    default: return 'var(--hh-text-tertiary, #9ca3af)'
+    case 'clean': return 'att-scan--clean'
+    case 'suspicious': return 'att-scan--suspicious'
+    case 'malicious': return 'att-scan--danger'
+    case 'failed': return 'att-scan--danger'
+    default: return 'att-scan--unknown'
   }
 }
 </script>
@@ -37,7 +37,7 @@ function scanStatusColor(status: string): string {
           {{ formatSize(att.size_bytes) }} &middot; {{ att.content_type }}
         </span>
       </div>
-      <span class="att-scan" :style="{ color: scanStatusColor(att.scan_status) }">
+      <span class="att-scan" :class="scanStatusClass(att.scan_status)">
         {{ att.scan_status }}
       </span>
     </div>
@@ -96,6 +96,22 @@ function scanStatusColor(status: string): string {
   font-weight: 500;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+.att-scan--clean {
+  color: var(--hh-status-success-text, #16a34a);
+}
+
+.att-scan--suspicious {
+  color: var(--hh-status-warning-text, #f59e0b);
+}
+
+.att-scan--danger {
+  color: var(--hh-status-danger-text, #ef4444);
+}
+
+.att-scan--unknown {
+  color: var(--hh-text-muted, #9ca3af);
 }
 
 .no-data {
