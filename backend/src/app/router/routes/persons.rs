@@ -2,17 +2,16 @@ use super::support::*;
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router
+        // ── Legacy /api/v1/persons routes ─────────────────────────────────
         .route("/api/v1/persons", get(get_persons))
-        .route("/api/v1/personas", get(get_personas))
-        .route(
-            "/api/v1/personas/{persona_id}",
-            get(get_persona).put(put_persona),
-        )
+        .route("/api/v1/persons/{person_id}", get(get_person))
         .route(
             "/api/v1/persons/owner",
             get(get_owner_persona).put(put_owner_persona),
         )
-        .route("/api/v1/persons/{person_id}", get(get_person))
+        .route("/api/v1/persons/search", get(get_person_search))
+        .route("/api/v1/persons/health", get(get_persons_health))
+        .route("/api/v1/persons/watchlist", get(get_persons_watchlist))
         .route(
             "/api/v1/persons/{person_id}/fingerprint",
             post(post_person_fingerprint),
@@ -22,7 +21,28 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_person_favorite),
         )
         .route("/api/v1/persons/{person_id}/notes", put(put_person_notes))
-        .route("/api/v1/persons/search", get(get_person_search))
+        // ── ADR-0084: /api/v1/personas natively-named routes ──────────────
+        .route("/api/v1/personas", get(get_personas))
+        .route(
+            "/api/v1/personas/{persona_id}",
+            get(get_persona).put(put_persona),
+        )
+        .route(
+            "/api/v1/personas/owner",
+            get(get_owner_persona).put(put_owner_persona),
+        )
+        .route("/api/v1/personas/search", get(get_person_search))
+        .route("/api/v1/personas/health", get(get_persons_health))
+        .route("/api/v1/personas/watchlist", get(get_persons_watchlist))
+        .route(
+            "/api/v1/personas/{persona_id}/fingerprint",
+            post(post_person_fingerprint),
+        )
+        .route(
+            "/api/v1/personas/{persona_id}/favorite",
+            post(post_person_favorite),
+        )
+        .route("/api/v1/personas/{persona_id}/notes", put(put_person_notes))
         .route("/api/v1/identity-candidates", get(get_identity_candidates))
         .route(
             "/api/v1/identity-traces",
@@ -144,8 +164,6 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_person_export_handler),
         )
         .route("/api/v1/persons/{person_id}/health", get(get_person_health))
-        .route("/api/v1/persons/health", get(get_persons_health))
-        .route("/api/v1/persons/watchlist", get(get_persons_watchlist))
         .route(
             "/api/v1/persons/{person_id}/watchlist",
             post(post_person_watchlist_toggle),

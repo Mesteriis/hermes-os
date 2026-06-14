@@ -47,3 +47,8 @@ pub struct Person {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+/// Compatibility alias: Persona ≡ Person.
+/// ADR-0084 defines Persona as the canonical model name.
+/// Use `Persona` in new code; `Person` remains for DB/persistence compatibility.
+pub type Persona = Person;

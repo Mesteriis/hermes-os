@@ -1,7 +1,6 @@
 use chrono::Utc;
 use hermes_hub_backend::domains::mail::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-    NewRawCommunicationRecord,
+    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
 use sqlx::postgres::PgPool;
 use uuid::Uuid;
@@ -47,10 +46,17 @@ impl<'a> EmailFactory<'a> {
 
     /// Create a provider account and a raw communication record for an email.
     /// Returns the raw record.
-    pub async fn create(self) -> Result<(NewProviderAccount, NewRawCommunicationRecord), hermes_hub_backend::domains::mail::core::CommunicationIngestionError> {
+    pub async fn create(
+        self,
+    ) -> Result<
+        (NewProviderAccount, NewRawCommunicationRecord),
+        hermes_hub_backend::domains::mail::core::CommunicationIngestionError,
+    > {
         let store = CommunicationIngestionStore::new(self.pool.clone());
 
-        let account_id = self.account_id.unwrap_or_else(|| format!("acct:{}", Uuid::new_v4()));
+        let account_id = self
+            .account_id
+            .unwrap_or_else(|| format!("acct:{}", Uuid::new_v4()));
         let account = NewProviderAccount {
             account_id: account_id.clone(),
             provider_kind: EmailProviderKind::Gmail,

@@ -18,7 +18,7 @@ impl SemanticSourceKind {
             Self::Document => "document",
             Self::Project => "project",
             Self::Task => "task",
-            Self::Person => "contact",
+            Self::Person => "person",
         }
     }
 

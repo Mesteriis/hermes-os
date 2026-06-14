@@ -68,7 +68,12 @@ impl<'a> TaskFactory<'a> {
         self
     }
 
-    pub async fn create(self) -> Result<hermes_hub_backend::domains::tasks::api::Task, hermes_hub_backend::domains::tasks::api::TaskError> {
+    pub async fn create(
+        self,
+    ) -> Result<
+        hermes_hub_backend::domains::tasks::api::Task,
+        hermes_hub_backend::domains::tasks::api::TaskError,
+    > {
         let store = TaskStore::new(self.pool.clone());
         let new_task = NewTask {
             title: self.title,

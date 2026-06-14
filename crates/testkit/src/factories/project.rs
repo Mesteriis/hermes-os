@@ -36,7 +36,12 @@ impl<'a> ProjectFactory<'a> {
         self
     }
 
-    pub async fn create(self) -> Result<hermes_hub_backend::domains::projects::core::Project, hermes_hub_backend::domains::projects::core::ProjectStoreError> {
+    pub async fn create(
+        self,
+    ) -> Result<
+        hermes_hub_backend::domains::projects::core::Project,
+        hermes_hub_backend::domains::projects::core::ProjectStoreError,
+    > {
         let store = ProjectStore::new(self.pool.clone());
         let project_id = format!("proj:v1:test:{}", Uuid::new_v4());
         let new_project = NewProject {
