@@ -48,8 +48,8 @@
 
 - `ADR-0001` - event sourcing is system spine.
 - `ADR-0002` - Rust backend.
-- `ADR-0003` - SvelteKit frontend.
 - `ADR-0004` - Tauri desktop shell.
+- `ADR-0093` - Vue 3 frontend (supersedes ADR-0003).
 - `ADR-0005` - PostgreSQL primary store.
 - `ADR-0006` - Tantivy full text search.
 - `ADR-0008` - knowledge graph first.

@@ -2,7 +2,10 @@ use sqlx::postgres::PgPool;
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, GenericImage, ImageExt};
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, Instant, sleep};
+
+const POSTGRES_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+const POSTGRES_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(250);
 
 pub struct PostgresContainer {
     _container: ContainerAsync<GenericImage>,
@@ -30,8 +33,6 @@ impl PostgresContainer {
             .await
             .expect("failed to resolve pgvector container port");
 
-        sleep(Duration::from_secs(3)).await;
-
         Self {
             _container: container,
             host_port,
@@ -51,9 +52,7 @@ impl PostgresContainer {
             self.host_port
         );
 
-        let admin_pool = PgPool::connect(&admin_url)
-            .await
-            .expect("failed to connect to admin database");
+        let admin_pool = connect_with_retry(&admin_url, "admin database").await;
 
         let create_sql = format!("CREATE DATABASE \"{}\"", db_name.replace('"', "\"\""));
         sqlx::query(&create_sql)
@@ -68,9 +67,7 @@ impl PostgresContainer {
             self.host_port, db_name
         );
 
-        let pool = PgPool::connect(&db_url)
-            .await
-            .expect("failed to connect to new database");
+        let pool = connect_with_retry(&db_url, "new test database").await;
 
         hermes_hub_backend::platform::events::run_migrations(&pool)
             .await
@@ -81,5 +78,18 @@ impl PostgresContainer {
 
     pub fn host_port(&self) -> u16 {
         self.host_port
+    }
+}
+
+async fn connect_with_retry(database_url: &str, label: &str) -> PgPool {
+    let deadline = Instant::now() + POSTGRES_CONNECT_TIMEOUT;
+    loop {
+        match PgPool::connect(database_url).await {
+            Ok(pool) => return pool,
+            Err(_error) if Instant::now() < deadline => {
+                sleep(POSTGRES_CONNECT_RETRY_DELAY).await;
+            }
+            Err(error) => panic!("failed to connect to {label}: {error}"),
+        }
     }
 }

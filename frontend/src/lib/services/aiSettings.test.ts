@@ -89,6 +89,40 @@ describe('AI settings service helpers', () => {
 		expect(chatOption?.disabledReason).toBe('Requires 2560 dimensions');
 	});
 
+	it('marks remote provider models unavailable until setup and consent are complete', () => {
+		const remoteModel: AiModelCatalogItem = {
+			...models[0],
+			model_key: 'gpt-5.5',
+			provider_id: 'provider:api:openai',
+			display_name: 'GPT-5.5',
+			privacy: 'remote'
+		};
+		const needsSetupProvider: AiProviderAccount = {
+			...provider,
+			provider_id: remoteModel.provider_id,
+			provider_kind: 'api',
+			provider_key: 'openai',
+			display_name: 'OpenAI',
+			status: 'needs_setup',
+			consent_state: 'granted'
+		};
+		const needsConsentProvider: AiProviderAccount = {
+			...needsSetupProvider,
+			status: 'ready',
+			consent_state: 'required'
+		};
+
+		const setupOption = buildModelSelectGroups([remoteModel], [needsSetupProvider])
+			.flatMap((group) => group.options)
+			.at(0);
+		const consentOption = buildModelSelectGroups([remoteModel], [needsConsentProvider])
+			.flatMap((group) => group.options)
+			.at(0);
+
+		expect(setupOption?.disabledReason).toBe('Host-vault API key required');
+		expect(consentOption?.disabledReason).toBe('Remote consent required');
+	});
+
 	it('builds stable route payloads from selected provider model ids', () => {
 		const selectedValue = modelSelectValue(models[1]);
 		const selectedModel = modelFromSelectValue(selectedValue, models);

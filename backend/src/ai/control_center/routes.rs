@@ -59,9 +59,8 @@ impl AiControlCenterStore {
         validate_non_empty("provider_id", &request.provider_id)?;
         validate_non_empty("model_key", &request.model_key)?;
         let model = self
-            .model(&request.provider_id, &request.model_key)
-            .await?
-            .ok_or(AiControlCenterError::ModelNotFound)?;
+            .ensure_model_ready_for_private_context(&request.provider_id, &request.model_key)
+            .await?;
         if slot == "embeddings" && model.embedding_dimension != Some(AI_EMBEDDING_DIMENSION as i32)
         {
             return Err(AiControlCenterError::InvalidRequest(

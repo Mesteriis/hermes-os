@@ -1,8 +1,15 @@
 # ADR-0078: Frontend Component Decomposition — SPA Pages and Widgets
 
-Status: Accepted
+Status: Superseded by ADR-0093
 Date: 2026-06-09
 Deciders: Alex (hermes-hub maintainer)
+
+## Superseded
+
+This ADR is superseded by [ADR-0093](ADR-0093-frontend-platform-migration-to-vue-3.md).
+The frontend platform has migrated from SvelteKit to Vue 3. The Domain-Driven
+Design folder structure defined in ADR-0093 replaces the SvelteKit-specific
+component decomposition described here.
 
 ## Context
 

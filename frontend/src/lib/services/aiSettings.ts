@@ -334,6 +334,13 @@ function unavailableReason(
 ): string {
 	if (!provider) return 'Provider missing';
 	if (provider.status === 'disabled') return 'Provider disabled';
+	if (provider.provider_kind === 'api' && provider.consent_state !== 'granted') {
+		return 'Remote consent required';
+	}
+	if (provider.provider_kind === 'api' && provider.status !== 'ready') {
+		return 'Host-vault API key required';
+	}
+	if (provider.status !== 'ready') return 'Provider setup incomplete';
 	if (!model.is_available) return 'Model unavailable';
 	if (
 		slot?.requires_embedding_dimension &&

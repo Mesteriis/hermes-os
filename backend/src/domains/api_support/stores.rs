@@ -244,7 +244,11 @@ async fn resolve_ai_slot_model(
     let Some(provider) = store.provider(&route.provider_id).await? else {
         return Ok(fallback_model.to_owned());
     };
-    if ai_provider_matches_runtime(&provider, settings.provider) {
+    if ai_provider_matches_runtime(&provider, settings.provider)
+        && store
+            .model_ready_for_private_context(&route.provider_id, &route.model_key)
+            .await?
+    {
         Ok(route.model_key)
     } else {
         Ok(fallback_model.to_owned())

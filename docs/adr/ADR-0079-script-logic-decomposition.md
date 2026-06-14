@@ -1,8 +1,17 @@
 # ADR-0079: Script Logic Decomposition — Services, Smart Pages and Config
 
-Status: Accepted
+Status: Superseded by ADR-0093
 Date: 2026-06-09
 Deciders: Alex (hermes-hub maintainer)
+
+## Superseded
+
+This ADR is superseded by [ADR-0093](ADR-0093-frontend-platform-migration-to-vue-3.md).
+The frontend platform has migrated from SvelteKit to Vue 3. While the general
+pattern of service extraction, config modules and page-owned data loading
+remains valid, the Svelte-specific implementation details ($state, $effect,
+writable stores) are replaced by Vue 3 Composition API, Pinia and TanStack
+Query as defined in ADR-0093.
 
 ## Context
 

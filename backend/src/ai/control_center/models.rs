@@ -71,10 +71,16 @@ pub struct AiProviderCreateRequest {
 
 impl AiProviderCreateRequest {
     pub(super) fn validate(&self) -> Result<(), AiControlCenterError> {
-        validate_provider_kind(&self.provider_kind)?;
+        let provider_kind = self.provider_kind.trim();
+        validate_provider_kind(provider_kind)?;
         validate_non_empty("provider_key", &self.provider_key)?;
         validate_non_empty("display_name", &self.display_name)?;
-        if self.provider_kind == "cli" {
+        if provider_kind != "api" && has_api_key(&self.api_key) {
+            return Err(AiControlCenterError::InvalidRequest(
+                "API keys can only be configured for API providers".to_owned(),
+            ));
+        }
+        if provider_kind == "cli" {
             let preset = self.command_preset.as_deref().ok_or_else(|| {
                 AiControlCenterError::InvalidRequest(
                     "CLI provider requires command_preset".to_owned(),
@@ -84,6 +90,13 @@ impl AiProviderCreateRequest {
         }
         Ok(())
     }
+}
+
+fn has_api_key(api_key: &Option<String>) -> bool {
+    api_key
+        .as_deref()
+        .map(str::trim)
+        .is_some_and(|value| !value.is_empty())
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

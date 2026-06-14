@@ -1,3 +1,4 @@
+mod availability;
 mod catalog;
 mod errors;
 mod models;

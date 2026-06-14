@@ -26,9 +26,8 @@ impl AiControlCenterStore {
             .await?
             .ok_or(AiControlCenterError::PromptVersionNotFound)?;
         let _model = self
-            .model(&request.provider_id, &request.model_key)
-            .await?
-            .ok_or(AiControlCenterError::ModelNotFound)?;
+            .ensure_model_ready_for_private_context(&request.provider_id, &request.model_key)
+            .await?;
         let variables = object_value(request.variables.clone(), "variables")?;
         reject_secret_like_json(&Value::Object(variables.clone()))?;
         let source_refs = request.source_refs.clone().unwrap_or_default();
