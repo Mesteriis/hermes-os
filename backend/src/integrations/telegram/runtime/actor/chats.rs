@@ -1,0 +1,47 @@
+use serde_json::Value;
+
+use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibChatSnapshot};
+
+use super::super::TDJSON_COMMAND_TIMEOUT;
+use super::responses::receive_tdlib_extra;
+
+pub(super) fn actor_load_chats(
+    client: &TdJsonClient,
+    limit: i32,
+) -> Result<Vec<TelegramTdlibChatSnapshot>, TelegramError> {
+    let load_extra = "hermes-runtime-load-chats";
+    client.send_json(&tdjson::tdlib_load_chats_request(limit, load_extra))?;
+    let load_response = receive_tdlib_extra(client, load_extra, TDJSON_COMMAND_TIMEOUT)?;
+    if tdjson::tdlib_error_message(&load_response).is_some() && !is_tdlib_not_found(&load_response)
+    {
+        return Err(TelegramError::TdlibRuntime(
+            tdjson::tdlib_error_message(&load_response)
+                .unwrap_or_else(|| "TDLib loadChats failed".to_owned()),
+        ));
+    }
+
+    let chats_extra = "hermes-runtime-get-chats";
+    client.send_json(&tdjson::tdlib_get_chats_request(limit, chats_extra))?;
+    let chats_response = receive_tdlib_extra(client, chats_extra, TDJSON_COMMAND_TIMEOUT)?;
+    if let Some(message) = tdjson::tdlib_error_message(&chats_response) {
+        return Err(TelegramError::TdlibRuntime(message));
+    }
+    let chat_ids = tdjson::parse_tdlib_chat_ids(&chats_response)?;
+    let mut snapshots = Vec::with_capacity(chat_ids.len());
+    for chat_id in chat_ids {
+        let extra = format!("hermes-runtime-get-chat-{chat_id}");
+        client.send_json(&tdjson::tdlib_get_chat_request(chat_id, &extra))?;
+        let chat_response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
+        if let Some(message) = tdjson::tdlib_error_message(&chat_response) {
+            return Err(TelegramError::TdlibRuntime(message));
+        }
+        snapshots.push(tdjson::parse_tdlib_chat_snapshot(&chat_response)?);
+    }
+    Ok(snapshots)
+}
+
+fn is_tdlib_not_found(event: &Value) -> bool {
+    event.get("@type").and_then(Value::as_str) == Some("error")
+        && event.get("code").and_then(Value::as_i64) == Some(404)
+}

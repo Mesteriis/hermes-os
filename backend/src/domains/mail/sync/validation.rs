@@ -1,0 +1,153 @@
+use serde_json::Value;
+
+use super::errors::EmailSyncPlanError;
+
+pub(super) fn required_string(
+    config: &Value,
+    field: &'static str,
+) -> Result<String, EmailSyncPlanError> {
+    let Some(value) = optional_string(config, field)? else {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "missing string value",
+        });
+    };
+    validate_non_empty(field, &value)
+}
+
+pub(super) fn optional_string(
+    config: &Value,
+    field: &'static str,
+) -> Result<Option<String>, EmailSyncPlanError> {
+    let Some(value) = config.get(field) else {
+        return Ok(None);
+    };
+    let Some(value) = value.as_str() else {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "expected string value",
+        });
+    };
+
+    Ok(Some(value.trim().to_owned()))
+}
+
+pub(super) fn required_port(
+    config: &Value,
+    field: &'static str,
+) -> Result<u16, EmailSyncPlanError> {
+    let Some(value) = config.get(field).and_then(Value::as_u64) else {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "expected integer port",
+        });
+    };
+    let Ok(port) = u16::try_from(value) else {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "port must fit u16",
+        });
+    };
+    if port == 0 {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "port must be greater than zero",
+        });
+    }
+
+    Ok(port)
+}
+
+pub(super) fn required_bool(
+    config: &Value,
+    field: &'static str,
+) -> Result<bool, EmailSyncPlanError> {
+    config
+        .get(field)
+        .and_then(Value::as_bool)
+        .ok_or(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "expected boolean value",
+        })
+}
+
+pub(super) fn reject_secret_like_config_keys(config: &Value) -> Result<(), EmailSyncPlanError> {
+    let Some(object) = config.as_object() else {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field: "config",
+            message: "expected object",
+        });
+    };
+
+    for (key, value) in object {
+        let key_path = key.clone();
+        reject_secret_like_config_key(key, &key_path)?;
+        reject_secret_like_config_value(value, &key_path)?;
+    }
+
+    Ok(())
+}
+
+pub(super) fn validate_non_empty(
+    field: &'static str,
+    value: &str,
+) -> Result<String, EmailSyncPlanError> {
+    let value = value.trim();
+    if value.is_empty() {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "must not be empty",
+        });
+    }
+
+    Ok(value.to_owned())
+}
+
+pub(super) fn validate_no_control_chars(
+    field: &'static str,
+    value: &str,
+) -> Result<(), EmailSyncPlanError> {
+    if value.chars().any(char::is_control) {
+        return Err(EmailSyncPlanError::InvalidProviderConfig {
+            field,
+            message: "must not contain control characters",
+        });
+    }
+
+    Ok(())
+}
+
+fn reject_secret_like_config_value(value: &Value, path: &str) -> Result<(), EmailSyncPlanError> {
+    match value {
+        Value::Object(object) => {
+            for (key, value) in object {
+                let key_path = format!("{path}.{key}");
+                reject_secret_like_config_key(key, &key_path)?;
+                reject_secret_like_config_value(value, &key_path)?;
+            }
+            Ok(())
+        }
+        Value::Array(values) => {
+            for (index, value) in values.iter().enumerate() {
+                reject_secret_like_config_value(value, &format!("{path}[{index}]"))?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
+}
+
+fn reject_secret_like_config_key(key: &str, key_path: &str) -> Result<(), EmailSyncPlanError> {
+    let normalized = key.to_ascii_lowercase();
+    if normalized.contains("password")
+        || normalized.contains("secret")
+        || normalized.contains("token")
+        || normalized.contains("credential")
+    {
+        return Err(EmailSyncPlanError::SecretLikeConfigKey {
+            key: key_path.to_owned(),
+        });
+    }
+
+    Ok(())
+}

@@ -4,6 +4,15 @@ use crate::domains::documents::processing::DocumentProcessingError;
 
 use super::ErrorParts;
 
+pub(super) fn invalid_query_parts(message: &'static str) -> ErrorParts {
+    (
+        StatusCode::BAD_REQUEST,
+        "invalid_document_processing_query",
+        message.to_owned(),
+        false,
+    )
+}
+
 pub(super) fn parts(error: DocumentProcessingError) -> ErrorParts {
     let (status, message) = match error {
         DocumentProcessingError::InvalidLimit => (

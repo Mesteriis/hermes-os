@@ -1460,11 +1460,12 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
     assert_eq!(reference.store_kind, SecretStoreKind::HostVault);
     assert_eq!(reference.secret_kind, SecretKind::AppPassword);
 
-    let binding = communication_store
-        .provider_account_secret_binding(account_id, ProviderAccountSecretPurpose::ImapPassword)
-        .await
-        .expect("load restored binding")
-        .expect("restored binding");
+    let binding = wait_for_provider_account_secret_binding(
+        &communication_store,
+        account_id,
+        ProviderAccountSecretPurpose::ImapPassword,
+    )
+    .await;
     assert_eq!(binding.secret_ref, secret_ref);
 
     let calendar_store = CalendarAccountStore::new(restarted_pool.clone());
@@ -1683,8 +1684,11 @@ impl MockSmtpServer {
             let mut reader = BufReader::new(stream.try_clone().expect("clone SMTP stream"));
             loop {
                 let mut line = String::new();
-                if reader.read_line(&mut line).expect("read SMTP line") == 0 {
-                    break;
+                match reader.read_line(&mut line) {
+                    Ok(0) => break,
+                    Ok(_) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => break,
+                    Err(error) => panic!("read SMTP line: {error}"),
                 }
                 let command = line.trim_end().to_owned();
                 commands_for_thread
@@ -1928,6 +1932,25 @@ async fn wait_for_secret_reference(
     }
 
     panic!("secret reference {secret_ref} was not reconciled");
+}
+
+async fn wait_for_provider_account_secret_binding(
+    communication_store: &CommunicationIngestionStore,
+    account_id: &str,
+    secret_purpose: ProviderAccountSecretPurpose,
+) -> hermes_hub_backend::domains::mail::core::ProviderAccountSecretBinding {
+    for _ in 0..50 {
+        if let Some(binding) = communication_store
+            .provider_account_secret_binding(account_id, secret_purpose)
+            .await
+            .expect("load provider account secret binding")
+        {
+            return binding;
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+
+    panic!("provider account secret binding {account_id}/{secret_purpose:?} was not reconciled");
 }
 
 async fn wait_for_calendar_account(

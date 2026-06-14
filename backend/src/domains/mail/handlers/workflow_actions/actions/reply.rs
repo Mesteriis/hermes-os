@@ -1,0 +1,30 @@
+use crate::app::ApiError;
+use crate::domains::mail::messages::ProjectedMessage;
+
+use super::super::models::{
+    WorkflowActionRequest, WorkflowActionResponse, WorkflowActionStatus, WorkflowActionTarget,
+    WorkflowActionTargetKind,
+};
+use super::super::response::base_response;
+use super::super::validation::require_source_message;
+
+pub(in crate::domains::mail::handlers::workflow_actions) fn reply_response(
+    command_id: &str,
+    event_id: &str,
+    request: &WorkflowActionRequest,
+    message: Option<&ProjectedMessage>,
+) -> Result<WorkflowActionResponse, ApiError> {
+    let message = require_source_message(request, message)?;
+    Ok(base_response(
+        command_id,
+        event_id,
+        request.action.clone(),
+        WorkflowActionStatus::Opened,
+        WorkflowActionTarget {
+            kind: WorkflowActionTargetKind::Compose,
+            id: Some(message.message_id.clone()),
+        },
+        Some(message),
+        vec!["reply compose opened from selected communication message".to_owned()],
+    ))
+}

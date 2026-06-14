@@ -2,7 +2,45 @@ use axum::http::StatusCode;
 
 use crate::domains::persons::api::PersonProjectionError;
 
+use super::super::types::ApiError;
 use super::ErrorParts;
+
+pub(super) fn parts(error: ApiError) -> ErrorParts {
+    match error {
+        ApiError::InvalidPersonaQuery(message) => (
+            StatusCode::BAD_REQUEST,
+            "invalid_persona_query",
+            message.to_owned(),
+            false,
+        ),
+        ApiError::InvalidPersonIdentityReview(message) => (
+            StatusCode::BAD_REQUEST,
+            "invalid_person_identity_review",
+            message.to_owned(),
+            false,
+        ),
+        ApiError::PersonIdentityNotFound => (
+            StatusCode::NOT_FOUND,
+            "person_identity_candidate_not_found",
+            "person identity candidate was not found".to_owned(),
+            false,
+        ),
+        ApiError::PersonProjection(error) => projection_error_parts(error),
+        ApiError::PersonIdentity(error) => {
+            tracing::error!(
+                error = %error,
+                "person identity store operation failed"
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "person_identity_store_error",
+                "person identity store operation failed".to_owned(),
+                false,
+            )
+        }
+        _ => unreachable!("persons response mapper received non-person ApiError"),
+    }
+}
 
 pub(super) fn projection_error_parts(error: PersonProjectionError) -> ErrorParts {
     match error {

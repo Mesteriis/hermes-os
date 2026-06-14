@@ -913,7 +913,7 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
 
     let send_response = app
         .clone()
-        .oneshot(json_post_request_with_actor(
+        .oneshot(json_post_request_with_explicit_actor_header(
             "/api/v1/telegram/messages/send",
             json!({
                 "command_id": command_id,
@@ -922,6 +922,7 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
                 "text": message_text
             }),
             LOCAL_API_TOKEN,
+            "legacy-telegram-test-actor",
         ))
         .await
         .expect("send response");
@@ -1923,6 +1924,22 @@ fn json_post_request_with_actor(path: &str, body: Value, token: &str) -> Request
         .method("POST")
         .uri(path)
         .header("x-hermes-secret", token)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .expect("request")
+}
+
+fn json_post_request_with_explicit_actor_header(
+    path: &str,
+    body: Value,
+    token: &str,
+    actor_id: &str,
+) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("x-hermes-secret", token)
+        .header("x-hermes-actor-id", actor_id)
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .expect("request")
