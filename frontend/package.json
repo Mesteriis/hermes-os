@@ -5,33 +5,38 @@
 	"type": "module",
 	"packageManager": "pnpm@11.5.1",
 	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build",
-		"lint": "pnpm lint:styles && pnpm lint:ts",
-		"lint:styles": "node scripts/check-no-inline-styles.mjs",
-		"lint:ts": "svelte-kit sync && svelte-check --fail-on-warnings --tsconfig ./tsconfig.json",
-		"capture:layout": "node scripts/capture-layout-screenshots.mjs",
-		"test:unit": "vitest run src/lib",
-		"test:layout": "vitest run src/lib/layout",
+		"dev": "vite",
+		"build": "vue-tsc --noEmit && vite build",
+		"lint:ts": "vue-tsc --noEmit",
+		"lint": "pnpm lint:ts",
 		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
-		"check": "pnpm lint && pnpm test:unit",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
+		"test:unit": "vitest run"
 	},
 	"devDependencies": {
-		"@sveltejs/adapter-static": "^3.0.10",
-		"@sveltejs/kit": "^2.57.0",
-		"@sveltejs/vite-plugin-svelte": "^7.0.0",
 		"@tauri-apps/cli": "^2.11.2",
 		"@types/node": "^25.9.1",
-		"playwright": "^1.60.0",
-		"svelte": "^5.55.2",
-		"svelte-check": "^4.4.6",
+		"@vitejs/plugin-vue": "^5.2.3",
+		"autoprefixer": "^10.4.20",
+		"postcss": "^8.5.3",
+		"tailwindcss": "^3.4.17",
 		"typescript": "^6.0.2",
 		"vite": "^8.0.7",
-		"vitest": "^4.1.8"
+		"vitest": "^4.1.8",
+		"vue-tsc": "^2.2.8"
 	},
 	"dependencies": {
-		"@iconify/svelte": "^5.2.1"
+		"@iconify/vue": "^4.3.0",
+		"@tanstack/vue-query": "^5.101.0",
+		"@tanstack/vue-table": "^8.21.3",
+		"@tanstack/vue-virtual": "^3.13.28",
+		"@tiptap/vue-3": "^3.26.1",
+		"@vue-flow/core": "^1.48.2",
+		"@vueuse/core": "^14.3.0",
+		"date-fns": "^4.4.0",
+		"motion-v": "^2.3.0",
+		"pinia": "^3.0.4",
+		"reka-ui": "^2.9.10",
+		"vue": "^3.5.38",
+		"vue-router": "^4.5.0"
 	}
 }

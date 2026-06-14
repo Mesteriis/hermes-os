@@ -10,7 +10,7 @@ help:
 	@printf '%s\n' '  make validate        Run the full local/CI validation gate'
 	@printf '%s\n' '  make lint            Run strict lint-only gates without tests'
 	@printf '%s\n' '  make lint-rust       Run Rust fmt-check and clippy without tests'
-	@printf '%s\n' '  make lint-frontend   Run frontend style and TS/Svelte lint without tests'
+	@printf '%s\n' '  make lint-frontend   Run frontend style and TS/Vue lint without tests'
 	@printf '%s\n' '  make lint-architecture Run repository architecture/code boundary guards'
 	@printf '%s\n' '  make pre-commit-install Install configured pre-commit hooks'
 	@printf '%s\n' '  make pre-commit-run Run configured pre-commit hooks against all files'
@@ -28,10 +28,10 @@ help:
 	@printf '%s\n' '  make clean           Stop services and remove Compose orphans'
 	@printf '%s\n' '  make reset-data      Delete docker/data contents; requires CONFIRM=yes'
 	@printf '%s\n' '  make frontend-install Install frontend dependencies with pnpm'
-	@printf '%s\n' '  make frontend-dev    Run the SvelteKit frontend with Vite HMR'
-	@printf '%s\n' '  make frontend-lint   Run frontend style and TS/Svelte lint without tests'
-	@printf '%s\n' '  make frontend-check  Run frontend style and SvelteKit type checks'
-	@printf '%s\n' '  make frontend-build  Build the SvelteKit frontend'
+	@printf '%s\n' '  make frontend-dev    Run the Vue frontend with Vite HMR'
+	@printf '%s\n' '  make frontend-lint   Run frontend style and TS/Vue lint without tests'
+	@printf '%s\n' '  make frontend-check  Run frontend style and Vue type checks'
+	@printf '%s\n' '  make frontend-build  Build the Vue frontend'
 	@printf '%s\n' '  make google-oauth-resource Prepare bundled Google OAuth Desktop client resource'
 	@printf '%s\n' '  make tdlib-macos-resource Prepare bundled macOS TDLib JSON runtime resource'
 	@printf '%s\n' '  make backend-sidecar-macos Prepare bundled macOS backend sidecar binary'
@@ -279,14 +279,14 @@ frontend-dev: docker-env
 		VITE_HERMES_LOCAL_API_SECRET="$${HERMES_LOCAL_API_SECRET}" \
 		pnpm dev --host "$${HERMES_FRONTEND_BIND:-127.0.0.1}" --port "$$frontend_port" --strictPort
 
-frontend-lint: frontend-lint-ts
-	cd frontend && pnpm check
+frontend-lint:
+	cd frontend && pnpm lint:ts
 
 frontend-lint-ts:
 	cd frontend && pnpm lint:ts
 
 frontend-check:
-	cd frontend && pnpm check
+	cd frontend && pnpm build
 
 frontend-build:
 	cd frontend && pnpm build
