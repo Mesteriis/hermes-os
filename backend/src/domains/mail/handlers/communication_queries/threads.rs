@@ -10,11 +10,19 @@ pub(crate) async fn get_v1_threads(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let store = crate::domains::mail::threads::EmailThreadStore::new(pool);
-    let items = store
-        .list_threads(query.account_id.as_deref(), query.limit.unwrap_or(50))
+    let page = store
+        .list_threads_page(
+            query.account_id.as_deref(),
+            query.cursor.as_deref(),
+            query.limit.unwrap_or(50),
+        )
         .await?;
 
-    Ok(Json(ThreadListResponse { items }))
+    Ok(Json(ThreadListResponse {
+        items: page.items,
+        next_cursor: page.next_cursor,
+        has_more: page.has_more,
+    }))
 }
 
 pub(crate) async fn get_v1_thread_messages(

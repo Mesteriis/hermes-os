@@ -79,7 +79,15 @@ export class ApiClient {
 	}
 
 	static init(baseUrl: string, secret: string): ApiClient {
+		if (secret.trim().length === 0) {
+			throw new Error('X-Hermes-Secret cannot be empty')
+		}
+
 		ApiClient._instance = new ApiClient(baseUrl, secret)
 		return ApiClient._instance
+	}
+
+	static resetForTests(): void {
+		ApiClient._instance = null
 	}
 }

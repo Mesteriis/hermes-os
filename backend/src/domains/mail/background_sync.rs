@@ -8,6 +8,7 @@ const MAX_POLL_INTERVAL_SECONDS: i32 = 86_400;
 const DEFAULT_GMAIL_API_BASE_URL: &str = "https://www.googleapis.com";
 
 mod errors;
+mod events;
 mod models;
 mod provider;
 mod rows;

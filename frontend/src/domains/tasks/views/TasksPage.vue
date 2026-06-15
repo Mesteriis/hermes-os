@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useI18n } from '../../../platform/i18n'
+import Icon from '../../../shared/ui/Icon.vue'
 import { useTaskCandidatesQuery, useTasksQuery } from '../queries/useTasksQuery'
 import { useTasksStore } from '../stores/tasks'
 import { fetchDecisions, fetchDecisionReviewItems, reviewDecision, fetchObligations, fetchObligationReviewItems, reviewObligation } from '../api/tasks'

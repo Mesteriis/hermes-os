@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useI18n } from '../../../platform/i18n'
+import Icon from '../../../shared/ui/Icon.vue'
 import type { Task, TaskCandidate, TaskCandidateReviewState } from '../types/task'
 import { taskSourceLabel, taskConfidence, taskCreatedTime } from '../stores/tasks'
 
@@ -83,7 +84,7 @@ function isTask(item: Task | TaskCandidate): item is Task {
       </div>
 
       <!-- Virtual list -->
-      <div v-else ref="parentRef" class="virtual-list-container" style="overflow-y: auto; max-height: 600px;">
+      <div v-else ref="parentRef" class="virtual-list-container">
         <div class="virtual-list-inner" :style="{ height: `${totalSize}px`, width: '100%', position: 'relative' }">
           <div
             v-for="virtualRow in virtualItems"
@@ -98,7 +99,7 @@ function isTask(item: Task | TaskCandidate): item is Task {
             }"
           >
             <!-- Separator row -->
-            <div v-if="isSeparator(allRows[virtualRow.index])" class="task-group" style="padding: 8px 12px;">
+            <div v-if="isSeparator(allRows[virtualRow.index])" class="task-group task-review-separator">
               <h3>{{ t('Review Queue') }} <em>{{ props.suggestedTaskCandidates.length }}</em></h3>
             </div>
 
@@ -133,3 +134,14 @@ function isTask(item: Task | TaskCandidate): item is Task {
     </section>
   </div>
 </template>
+
+<style scoped>
+.virtual-list-container {
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.task-review-separator {
+  padding: 8px 12px;
+}
+</style>

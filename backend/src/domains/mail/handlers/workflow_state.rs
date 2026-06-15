@@ -1,4 +1,9 @@
 use super::*;
+use crate::domains::mail::ai_state::{
+    MailAiState,
+    MailAiStateStore,
+    MailAiStateTransitionRequest,
+};
 
 #[derive(Deserialize)]
 pub(crate) struct WorkflowStateTransitionApiRequest {
@@ -101,6 +106,7 @@ pub(crate) struct MessageAnalyzeResponse {
     pub(super) analyzed: bool,
     pub(super) category: Option<String>,
     pub(super) summary: Option<String>,
+    pub(super) summary_contract: EmailSummaryContract,
     pub(super) importance_score: Option<i16>,
     pub(super) workflow_state: String,
     pub(super) source: String,
@@ -113,15 +119,35 @@ pub(crate) async fn post_v1_message_analyze(
     Path(message_id): Path<String>,
 ) -> Result<Json<MessageAnalyzeResponse>, ApiError> {
     let store = message_store(&state)?;
+    let ai_state_store = MailAiStateStore::new(
+        state
+            .database
+            .pool()
+            .ok_or(ApiError::DatabaseNotConfigured)?
+            .clone(),
+    );
 
     let message = store
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
 
+    // Mark analysis as processing to reflect runtime activity for UI/state consumers.
+    let _ = ai_state_store
+        .transition(
+            &message_id,
+            MailAiStateTransitionRequest {
+                ai_state: MailAiState::Processing,
+                review_reason: None,
+                last_error: None,
+            },
+        )
+        .await?;
+
     // Always run heuristics (fast, no external dependency)
     let heuristic_score = EmailIntelligenceService::heuristic_score(&message);
     let heuristic_category = EmailIntelligenceService::heuristic_category(&message);
+    let summary_contract = EmailIntelligenceService::heuristic_structured_summary(&message);
 
     store
         .set_ai_analysis(
@@ -131,6 +157,12 @@ pub(crate) async fn post_v1_message_analyze(
             Some(heuristic_score),
         )
         .await?;
+    let mut metadata = message.message_metadata.clone();
+    metadata["ai_summary_contract"] = serde_json::to_value(&summary_contract)
+        .map_err(|_| {
+            ApiError::InvalidCommunicationQuery("summary contract serialization failed")
+        })?;
+    store.set_message_metadata(&message_id, &metadata).await?;
 
     // If score is high, auto-transition to needs_action
     if heuristic_score >= 75 && message.workflow_state.as_str() == "new" {
@@ -138,6 +170,17 @@ pub(crate) async fn post_v1_message_analyze(
             .transition_workflow_state(&message_id, WorkflowState::NeedsAction)
             .await;
     }
+
+    let _ = ai_state_store
+        .transition(
+            &message_id,
+            MailAiStateTransitionRequest {
+                ai_state: MailAiState::Processed,
+                review_reason: None,
+                last_error: None,
+            },
+        )
+        .await?;
 
     let updated = store
         .message(&message_id)
@@ -150,6 +193,7 @@ pub(crate) async fn post_v1_message_analyze(
         analyzed: true,
         category: updated.ai_category,
         summary: updated.ai_summary,
+        summary_contract,
         importance_score: updated.importance_score,
         workflow_state: updated.workflow_state.as_str().to_owned(),
         source: "local_heuristic".to_owned(),
@@ -161,12 +205,15 @@ pub(crate) async fn post_v1_message_analyze(
 #[derive(Deserialize)]
 pub(crate) struct ThreadListQuery {
     pub(super) account_id: Option<String>,
+    pub(super) cursor: Option<String>,
     pub(super) limit: Option<i64>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct ThreadListResponse {
     pub(super) items: Vec<crate::domains::mail::threads::EmailThread>,
+    pub(super) next_cursor: Option<String>,
+    pub(super) has_more: bool,
 }
 
 #[derive(Deserialize)]

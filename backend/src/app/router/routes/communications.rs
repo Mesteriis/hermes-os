@@ -7,12 +7,20 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_v1_communication_messages),
         )
         .route(
+            "/api/v1/communications/messages/bulk-actions",
+            post(post_v1_messages_bulk_action),
+        )
+        .route(
             "/api/v1/communications/messages/{message_id}",
             get(get_v1_communication_message),
         )
         .route(
             "/api/v1/communications/messages/{message_id}/workflow-state",
             put(put_v1_message_workflow_state),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/ai-state",
+            get(get_v1_message_ai_state).put(put_v1_message_ai_state),
         )
         .route(
             "/api/v1/communications/messages/states",
@@ -24,6 +32,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route("/api/v1/workflow-actions", post(post_v1_workflow_action))
         .route("/api/v1/communications/threads", get(get_v1_threads))
+        .route(
+            "/api/v1/communications/threads/translate",
+            post(post_v1_translate_thread),
+        )
         .route(
             "/api/v1/communications/threads/messages",
             get(get_v1_thread_messages),
@@ -40,6 +52,51 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/communications/drafts/{draft_id}",
             get(get_v1_draft).delete(delete_v1_draft),
+        )
+        .route("/api/v1/communications/outbox", get(get_v1_outbox))
+        .route(
+            "/api/v1/communications/outbox/{outbox_id}/undo",
+            post(post_v1_outbox_undo),
+        )
+        .route(
+            "/api/v1/communications/read-receipts",
+            post(post_v1_read_receipt),
+        )
+        .route(
+            "/api/v1/communications/delivery-notifications",
+            post(post_v1_delivery_notification),
+        )
+        .route(
+            "/api/v1/communications/provider-delivery-events",
+            post(post_v1_provider_delivery_event),
+        )
+        .route(
+            "/api/v1/communications/saved-searches",
+            get(get_v1_saved_searches).post(post_v1_saved_search),
+        )
+        .route(
+            "/api/v1/communications/saved-searches/{saved_search_id}",
+            put(put_v1_saved_search).delete(delete_v1_saved_search),
+        )
+        .route(
+            "/api/v1/communications/folders",
+            get(get_v1_mail_folders).post(post_v1_mail_folder),
+        )
+        .route(
+            "/api/v1/communications/folders/{folder_id}",
+            put(put_v1_mail_folder).delete(delete_v1_mail_folder),
+        )
+        .route(
+            "/api/v1/communications/folders/{folder_id}/messages",
+            get(get_v1_mail_folder_messages),
+        )
+        .route(
+            "/api/v1/communications/folders/{folder_id}/messages/{message_id}/copy",
+            post(post_v1_copy_message_to_folder),
+        )
+        .route(
+            "/api/v1/communications/folders/{folder_id}/messages/{message_id}/move",
+            post(post_v1_move_message_to_folder),
         )
         .route(
             "/api/v1/communications/finance/invoices",
@@ -84,6 +141,22 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/communications/subscriptions",
             get(get_v1_subscriptions),
+        )
+        .route(
+            "/api/v1/communications/attachments/search",
+            get(get_v1_attachment_search),
+        )
+        .route(
+            "/api/v1/communications/attachments/{attachment_id}/translate",
+            post(post_v1_translate_attachment),
+        )
+        .route(
+            "/api/v1/communications/attachments/{attachment_id}/preview",
+            get(get_v1_attachment_preview),
+        )
+        .route(
+            "/api/v1/communications/attachments/{attachment_id}/archive-inspection",
+            get(get_v1_attachment_archive_inspection),
         )
         .route(
             "/api/v1/communications/attachments/duplicates",
@@ -135,6 +208,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_v1_forward),
         )
         .route(
+            "/api/v1/communications/messages/{message_id}/redirect",
+            post(post_v1_redirect),
+        )
+        .route(
             "/api/v1/communications/messages/{message_id}/detect-language",
             get(get_v1_detect_language),
         )
@@ -149,6 +226,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/communications/messages/{message_id}/ai-reply-variants",
             post(post_v1_ai_reply_variants),
+        )
+        .route(
+            "/api/v1/communications/messages/{message_id}/bilingual-reply-flow",
+            post(post_v1_bilingual_reply_flow),
         )
         .route(
             "/api/v1/communications/messages/{message_id}/reply-all",
@@ -173,6 +254,14 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/communications/templates/rich",
             get(get_v1_rich_templates).post(post_v1_rich_template),
+        )
+        .route(
+            "/api/v1/communications/templates/rich/mail-merge-preview",
+            post(post_v1_rich_template_mail_merge_preview),
+        )
+        .route(
+            "/api/v1/communications/templates/rich/{template_id}",
+            delete(delete_v1_rich_template),
         )
         .route(
             "/api/v1/communications/templates/rich/render",

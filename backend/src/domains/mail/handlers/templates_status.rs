@@ -1,20 +1,100 @@
 use super::*;
+use crate::domains::mail::templates::{
+    EmailTemplateStore, MailMergePreviewRow, NewEmailTemplate,
+};
+
+const MAX_MAIL_MERGE_PREVIEW_ROWS: usize = 250;
 
 #[derive(Deserialize)]
 pub(crate) struct RenderTemplateRequest {
     pub(super) template_id: String,
     pub(super) variables: Option<HashMap<String, String>>,
 }
-pub(crate) async fn get_v1_rich_templates(
-    State(_state): State<AppState>,
-) -> Result<Json<Value>, ApiError> {
-    Ok(Json(serde_json::json!({"templates": []})))
+
+#[derive(Deserialize)]
+pub(crate) struct MailMergePreviewRequest {
+    pub(super) template_id: String,
+    pub(super) rows: Vec<MailMergePreviewRowRequest>,
 }
-pub(crate) async fn post_v1_rich_template(
-    State(_state): State<AppState>,
-    Json(_req): Json<Value>,
+
+#[derive(Deserialize)]
+pub(crate) struct MailMergePreviewRowRequest {
+    pub(super) row_id: String,
+    pub(super) variables: Option<HashMap<String, String>>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct UpsertTemplateRequest {
+    pub(super) template_id: Option<String>,
+    pub(super) name: String,
+    pub(super) subject_template: Option<String>,
+    pub(super) body_template: Option<String>,
+    pub(super) content: Option<String>,
+    pub(super) variables: Option<Vec<String>>,
+    pub(super) language: Option<String>,
+}
+
+pub(crate) async fn get_v1_rich_templates(
+    State(state): State<AppState>,
 ) -> Result<Json<Value>, ApiError> {
-    Ok(Json(serde_json::json!({"saved": true})))
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let templates = EmailTemplateStore::new(pool.clone()).list().await?;
+    Ok(Json(serde_json::json!({ "templates": templates })))
+}
+
+pub(crate) async fn post_v1_rich_template(
+    State(state): State<AppState>,
+    Json(req): Json<UpsertTemplateRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let template = EmailTemplateStore::new(pool.clone())
+        .upsert(&NewEmailTemplate {
+            template_id: req
+                .template_id
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| {
+                    let timestamp = Utc::now().timestamp_nanos_opt().unwrap_or_default();
+                    format!("mail_template:{timestamp}")
+                }),
+            name: req.name,
+            subject_template: req
+                .subject_template
+                .or_else(|| req.content.clone())
+                .unwrap_or_else(|| "Untitled template".to_owned()),
+            body_template: req.body_template.or(req.content).unwrap_or_default(),
+            variables: req.variables.unwrap_or_default(),
+            language: req.language,
+        })
+        .await?;
+    Ok(Json(serde_json::json!({ "saved": true, "template": template })))
+}
+
+pub(crate) async fn delete_v1_rich_template(
+    State(state): State<AppState>,
+    Path(template_id): Path<String>,
+) -> Result<Json<Value>, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let template_id = template_id.trim();
+    if template_id.is_empty() {
+        return Err(ApiError::InvalidCommunicationQuery("template_id is required"));
+    }
+    let deleted = EmailTemplateStore::new(pool.clone())
+        .delete(template_id)
+        .await?;
+    if !deleted {
+        return Err(ApiError::NotFound);
+    }
+    Ok(Json(serde_json::json!({
+        "template_id": template_id,
+        "deleted": true
+    })))
 }
 
 pub(crate) async fn get_v1_blockers()
@@ -23,14 +103,69 @@ pub(crate) async fn get_v1_blockers()
 }
 
 pub(crate) async fn post_v1_render_template(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     Json(req): Json<RenderTemplateRequest>,
 ) -> Result<Json<Value>, ApiError> {
-    let template_id = req.template_id;
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let store = EmailTemplateStore::new(pool.clone());
+    let template_id = req.template_id.trim();
+    let Some(template) = store.get(template_id).await? else {
+        return Err(ApiError::NotFound);
+    };
     let vars = req.variables.unwrap_or_default();
-    Ok(Json(
-        serde_json::json!({"rendered": true, "template_id": template_id, "variables": vars}),
-    ))
+    let rendered = store.render(&template, &vars)?;
+    Ok(Json(serde_json::json!({
+        "template_id": template.template_id,
+        "variables": vars,
+        "rendered": rendered
+    })))
+}
+
+pub(crate) async fn post_v1_rich_template_mail_merge_preview(
+    State(state): State<AppState>,
+    Json(req): Json<MailMergePreviewRequest>,
+) -> Result<Json<Value>, ApiError> {
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let template_id = req.template_id.trim();
+    if template_id.is_empty() {
+        return Err(ApiError::InvalidCommunicationQuery("template_id is required"));
+    }
+    if req.rows.is_empty() {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "mail merge preview rows are required",
+        ));
+    }
+    if req.rows.len() > MAX_MAIL_MERGE_PREVIEW_ROWS {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "mail merge preview row limit exceeded",
+        ));
+    }
+    let rows = req
+        .rows
+        .into_iter()
+        .map(|row| {
+            let row_id = row.row_id.trim().to_owned();
+            if row_id.is_empty() {
+                return Err(ApiError::InvalidCommunicationQuery("row_id is required"));
+            }
+            Ok(MailMergePreviewRow {
+                row_id,
+                variables: row.variables.unwrap_or_default(),
+            })
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
+    let store = EmailTemplateStore::new(pool.clone());
+    let Some(template) = store.get(template_id).await? else {
+        return Err(ApiError::NotFound);
+    };
+    let preview = store.render_mail_merge_preview(&template, rows)?;
+    Ok(Json(serde_json::to_value(preview).map_err(|_| {
+        ApiError::InvalidCommunicationQuery("mail merge preview response failed")
+    })?))
 }
 
 #[derive(Deserialize)]

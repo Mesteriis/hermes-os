@@ -1,95 +1,98 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
+import Sheet from '../../../shared/ui/Sheet.vue'
+import ComposeSignaturePicker from './ComposeSignaturePicker.vue'
+import ComposeTemplatePicker from './ComposeTemplatePicker.vue'
+import RichComposeEditor from './RichComposeEditor.vue'
 import { useCommunicationsStore } from '../stores/communications'
-import type { ComposeFormModel, EmailDraft } from '../types/communications'
-import { senderEmail } from '../stores/communications'
-import { createDraft, sendEmail, deleteDraft } from '../api/communications'
+import type { ComposeFormModel } from '../types/communications'
+import {
+  useDeleteDraftMutation,
+  useSaveDraftMutation,
+  useSendMailMutation
+} from '../queries/useCommunicationsQuery'
+import { useComposeDraftAutosave } from '../forms/composeDraftAutosave'
+import { datetimeLocalToIso } from '../forms/composeDraftAutosave'
+import { splitComposeRecipients, useComposeValidation } from '../forms/composeValidation'
+import {
+  appendHtmlSignature,
+  appendPlainTextSignature,
+  htmlToComposePlainText,
+  plainTextToComposeHtml
+} from './richComposeHtml'
+import './ComposeDrawer.css'
 
 const store = useCommunicationsStore()
+const sendMailMutation = useSendMailMutation()
+const saveDraftMutation = useSaveDraftMutation()
+const deleteDraftMutation = useDeleteDraftMutation()
 
-// Draft auto-save timer
-let autoSaveTimer: ReturnType<typeof setTimeout> | null = null
-const isSaving = ref(false)
-
-// Recipient managing
-function splitRecipients(value: string): string[] {
-  return value
-    .split(',')
-    .map((r) => r.trim())
-    .filter(Boolean)
+const isSaving = computed(() => saveDraftMutation.isPending.value)
+const isSending = computed(() => sendMailMutation.isPending.value)
+const { errors: composeValidationErrors, validateForSend } = useComposeValidation(() => store.composeForm)
+const htmlEditorMode = ref<'rich' | 'source'>('rich')
+const attachmentInput = ref<HTMLInputElement | null>(null)
+type StagedComposeAttachment = {
+  id: string
+  file: File
+  name: string
+  size: number
+  type: string
 }
+const stagedAttachments = ref<StagedComposeAttachment[]>([])
+const hasStagedAttachments = computed(() => stagedAttachments.value.length > 0)
 
-function buildComposeDraftPayload(): Record<string, unknown> {
-  const form = store.composeForm
-  return {
-    draft_id: form.draftId,
-    account_id: form.accountId,
-    to_recipients: splitRecipients(form.toText),
-    cc_recipients: splitRecipients(form.ccText),
-    bcc_recipients: splitRecipients(form.bccText),
-    subject: form.subject,
-    body_text: form.body,
-    in_reply_to: form.inReplyTo,
-    status: 'draft',
-    metadata: { compose_mode: form.mode }
+const draftAutosave = useComposeDraftAutosave({
+  formSource: () => store.composeForm,
+  saveDraft: (payload) => saveDraftMutation.mutateAsync(payload),
+  onSaved: () => store.setComposeStatusMessage('Draft saved'),
+  onError: (error) => {
+    store.setComposeSendError(error instanceof Error ? error.message : 'Draft save failed')
   }
-}
+})
 
 async function handleSaveDraft() {
-  const form = store.composeForm
-  if (!form.draftId || !form.accountId) return
-  isSaving.value = true
-  try {
-    await createDraft(buildComposeDraftPayload())
-    store.setComposeStatusMessage('Draft saved')
-  } catch (error) {
-    store.setComposeSendError(error instanceof Error ? error.message : 'Draft save failed')
-  } finally {
-    isSaving.value = false
-  }
+  store.setComposeSendError('')
+  await draftAutosave.saveNow()
 }
 
 function triggerAutoSave() {
-  if (autoSaveTimer) clearTimeout(autoSaveTimer)
-  autoSaveTimer = setTimeout(() => {
-    handleSaveDraft()
-  }, 2000)
+  draftAutosave.schedule()
 }
-
-// Subject prefix helpers
-function subjectWithPrefix(subject: string, prefix: 'Re:' | 'Fwd:'): string {
-  return subject.toLowerCase().startsWith(prefix.toLowerCase())
-    ? subject
-    : `${prefix} ${subject}`
-}
-
-// Send
-const isSending = ref(false)
 
 async function handleSend() {
   const form = store.composeForm
   if (isSending.value) return
-  isSending.value = true
   store.setComposeSendError('')
+  if (hasStagedAttachments.value) {
+    store.setComposeSendError('Attachment upload is not connected to provider send yet; remove staged attachments before sending')
+    return
+  }
+  if (!(await validateForSend())) {
+    store.setComposeSendError('Fix compose validation errors before sending')
+    return
+  }
   try {
-    const result = await sendEmail({
+    const result = await sendMailMutation.mutateAsync({
       account_id: form.accountId,
-      to: splitRecipients(form.toText),
-      cc: splitRecipients(form.ccText),
-      bcc: splitRecipients(form.bccText),
+      to: splitComposeRecipients(form.toText),
+      cc: splitComposeRecipients(form.ccText),
+      bcc: splitComposeRecipients(form.bccText),
       subject: form.subject,
       body_text: form.body,
+      body_html: form.bodyFormat === 'html' ? form.bodyHtml : null,
       in_reply_to: form.inReplyTo,
+      draft_id: form.draftId,
+      scheduled_send_at: datetimeLocalToIso(form.scheduledSendAt),
+      undo_send_seconds: form.undoSendSeconds,
       confirmed_provider_write: true
     })
     store.setComposeStatusMessage(`Sent via ${result.transport ?? 'provider'}`)
     store.closeCompose()
   } catch (error) {
     store.setComposeSendError(error instanceof Error ? error.message : 'Send failed')
-  } finally {
-    isSending.value = false
   }
 }
 
@@ -97,20 +100,24 @@ async function handleDeleteCurrentDraft() {
   const draftId = store.composeForm.draftId?.trim()
   if (!draftId) return
   store.setComposeSendError('')
+  draftAutosave.cancel()
   try {
-    await deleteDraft(draftId)
+    await deleteDraftMutation.mutateAsync(draftId)
     store.closeCompose()
   } catch (error) {
     store.setComposeSendError(error instanceof Error ? error.message : 'Delete failed')
   }
 }
 
-function handleClose() {
-  // Auto-save before closing
-  if (store.composeForm.body || store.composeForm.subject || store.composeForm.toText) {
-    handleSaveDraft()
-  }
+async function handleClose() {
+  await draftAutosave.flush()
+  stagedAttachments.value = []
   store.closeCompose()
+}
+
+function handleSheetOpenChange(open: boolean) {
+  if (open) return
+  void handleClose()
 }
 
 function updateField<K extends keyof ComposeFormModel>(key: K, value: ComposeFormModel[K]) {
@@ -120,10 +127,112 @@ function updateField<K extends keyof ComposeFormModel>(key: K, value: ComposeFor
   }
 }
 
+function setBodyFormat(format: ComposeFormModel['bodyFormat'], htmlMode: 'rich' | 'source' = 'rich') {
+  if (format === 'html') {
+    htmlEditorMode.value = htmlMode
+  }
+  updateField('bodyFormat', format)
+  if (format === 'html' && store.composeForm.bodyHtml === null) {
+    updateField('bodyHtml', htmlMode === 'rich'
+      ? plainTextToComposeHtml(store.composeForm.body)
+      : store.composeForm.body)
+  }
+}
+
+function updateHtmlBody(value: string) {
+  store.updateComposeForm({
+    bodyHtml: value,
+    body: htmlToComposePlainText(value)
+  })
+  triggerAutoSave()
+}
+
+function applyRenderedTemplate(payload: { subject: string; bodyHtml: string }) {
+  htmlEditorMode.value = 'rich'
+  store.updateComposeForm({
+    subject: payload.subject,
+    bodyFormat: 'html',
+    bodyHtml: payload.bodyHtml,
+    body: htmlToComposePlainText(payload.bodyHtml)
+  })
+  store.setComposeStatusMessage('Template applied')
+  triggerAutoSave()
+}
+
+function applySignature(signature: string) {
+  const trimmed = signature.trim()
+  if (!trimmed) return
+
+  if (store.composeForm.bodyFormat === 'html') {
+    updateHtmlBody(appendHtmlSignature(store.composeForm.bodyHtml, trimmed))
+  } else {
+    updateField('body', appendPlainTextSignature(store.composeForm.body, trimmed))
+  }
+  store.setComposeStatusMessage('Signature inserted')
+}
+
+function handleAttachmentFiles(files: File[] | FileList) {
+  const nextFiles = Array.from(files).filter((file) => file.size >= 0)
+  if (nextFiles.length === 0) return
+  const existingKeys = new Set(stagedAttachments.value.map((attachment) => attachment.id))
+  const nextAttachments = nextFiles
+    .map((file) => ({
+      id: composeAttachmentId(file),
+      file,
+      name: file.name || 'Untitled attachment',
+      size: file.size,
+      type: file.type || 'application/octet-stream'
+    }))
+    .filter((attachment) => !existingKeys.has(attachment.id))
+  if (nextAttachments.length === 0) {
+    store.setComposeStatusMessage('Attachment already staged')
+    return
+  }
+  stagedAttachments.value = [...stagedAttachments.value, ...nextAttachments]
+  store.setComposeStatusMessage(`${nextAttachments.length} attachment${nextAttachments.length === 1 ? '' : 's'} staged locally`)
+}
+
+function handleAttachmentInput(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input.files) handleAttachmentFiles(input.files)
+  input.value = ''
+}
+
+function handleAttachmentDrop(event: DragEvent) {
+  handleAttachmentFiles(event.dataTransfer?.files ?? [])
+}
+
+function openAttachmentPicker() {
+  attachmentInput.value?.click()
+}
+
+function removeStagedAttachment(id: string) {
+  stagedAttachments.value = stagedAttachments.value.filter((attachment) => attachment.id !== id)
+}
+
+function composeAttachmentId(file: File): string {
+  return `${file.name}:${file.size}:${file.lastModified}`
+}
+
+function formatAttachmentSize(size: number): string {
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
 // Send review
 const isReviewOpen = ref(false)
 
-function openSendReview() {
+async function openSendReview() {
+  store.setComposeSendError('')
+  if (hasStagedAttachments.value) {
+    store.setComposeSendError('Attachment upload is not connected to provider send yet; remove staged attachments before sending')
+    return
+  }
+  if (!(await validateForSend())) {
+    store.setComposeSendError('Fix compose validation errors before sending')
+    return
+  }
   isReviewOpen.value = true
 }
 
@@ -133,7 +242,7 @@ function closeSendReview() {
 
 function confirmSend() {
   isReviewOpen.value = false
-  handleSend()
+  void handleSend()
 }
 
 // Mode label
@@ -144,52 +253,79 @@ const modeLabel = computed(() => {
     default: return 'New Message'
   }
 })
+
+const deliveryActionLabel = computed(() => {
+  return store.composeForm.scheduledSendAt ? 'Schedule' : 'Send'
+})
+const scheduledSendReviewLabel = computed(() => {
+  if (!store.composeForm.scheduledSendAt) return ''
+  const timestamp = Date.parse(store.composeForm.scheduledSendAt)
+  if (!Number.isFinite(timestamp)) return store.composeForm.scheduledSendAt
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(new Date(timestamp))
+})
+const undoSendReviewLabel = computed(() => {
+  return store.composeForm.undoSendSeconds
+    ? `${store.composeForm.undoSendSeconds} seconds`
+    : 'Off'
+})
 </script>
 
 <template>
-  <div class="compose-drawer-overlay" @click.self="handleClose">
-    <div class="compose-drawer">
-      <div class="compose-header">
-        <span class="compose-title">{{ modeLabel }}</span>
-        <div class="compose-header-actions">
-          <span v-if="isSaving" class="saving-indicator">
-            <Icon icon="tabler:loader-2" class="spin-icon" /> Saving...
-          </span>
-          <Button variant="ghost" size="sm" @click="handleClose">
-            <Icon icon="tabler:x" />
-          </Button>
-        </div>
+  <Sheet
+    :open="true"
+    side="right"
+    :title="modeLabel"
+    content-class="compose-drawer"
+    @update:open="handleSheetOpenChange"
+  >
+    <template #header>
+      <div class="compose-header-actions">
+        <span v-if="isSaving" class="saving-indicator">
+          <Icon icon="tabler:loader-2" class="spin-icon" /> Saving...
+        </span>
       </div>
+    </template>
 
-      <!-- Send review step -->
-      <div v-if="isReviewOpen" class="send-review">
-        <h3>Review before sending</h3>
-        <div class="review-field">
-          <span class="review-label">To:</span>
-          <span class="review-value">{{ store.composeForm.toText }}</span>
-        </div>
-        <div v-if="store.composeForm.ccText" class="review-field">
-          <span class="review-label">CC:</span>
-          <span class="review-value">{{ store.composeForm.ccText }}</span>
-        </div>
-        <div v-if="store.composeForm.bccText" class="review-field">
-          <span class="review-label">BCC:</span>
-          <span class="review-value">{{ store.composeForm.bccText }}</span>
-        </div>
-        <div class="review-field">
-          <span class="review-label">Subject:</span>
-          <span class="review-value">{{ store.composeForm.subject || '(No subject)' }}</span>
-        </div>
-        <div class="review-actions">
-          <Button variant="default" @click="confirmSend" :disabled="isSending">
-            <Icon icon="tabler:send" /> {{ isSending ? 'Sending...' : 'Send' }}
-          </Button>
-          <Button variant="ghost" @click="closeSendReview">Edit</Button>
-        </div>
+    <!-- Send review step -->
+    <div v-if="isReviewOpen" class="send-review">
+      <h3>Review before sending</h3>
+      <div class="review-field">
+        <span class="review-label">To:</span>
+        <span class="review-value">{{ store.composeForm.toText }}</span>
       </div>
+      <div v-if="store.composeForm.ccText" class="review-field">
+        <span class="review-label">CC:</span>
+        <span class="review-value">{{ store.composeForm.ccText }}</span>
+      </div>
+      <div v-if="store.composeForm.bccText" class="review-field">
+        <span class="review-label">BCC:</span>
+        <span class="review-value">{{ store.composeForm.bccText }}</span>
+      </div>
+      <div class="review-field">
+        <span class="review-label">Subject:</span>
+        <span class="review-value">{{ store.composeForm.subject || '(No subject)' }}</span>
+      </div>
+      <div v-if="scheduledSendReviewLabel" class="review-field">
+        <span class="review-label">Schedule:</span>
+        <span class="review-value">{{ scheduledSendReviewLabel }}</span>
+      </div>
+      <div class="review-field">
+        <span class="review-label">Undo:</span>
+        <span class="review-value">{{ undoSendReviewLabel }}</span>
+      </div>
+      <div class="review-actions">
+        <Button variant="default" @click="confirmSend" :disabled="isSending">
+          <Icon icon="tabler:send" /> {{ isSending ? 'Sending...' : deliveryActionLabel }}
+        </Button>
+        <Button variant="ghost" @click="closeSendReview">Edit</Button>
+      </div>
+    </div>
 
-      <!-- Compose form -->
-      <div v-else class="compose-form">
+    <!-- Compose form -->
+    <div v-else class="compose-form">
         <div class="form-field">
           <label>To</label>
           <input
@@ -198,6 +334,9 @@ const modeLabel = computed(() => {
             :value="store.composeForm.toText"
             @input="updateField('toText', ($event.target as HTMLInputElement).value)"
           />
+          <span v-if="composeValidationErrors.toText" class="field-error">
+            {{ composeValidationErrors.toText }}
+          </span>
         </div>
         <div class="form-field">
           <label>CC</label>
@@ -207,6 +346,9 @@ const modeLabel = computed(() => {
             :value="store.composeForm.ccText"
             @input="updateField('ccText', ($event.target as HTMLInputElement).value)"
           />
+          <span v-if="composeValidationErrors.ccText" class="field-error">
+            {{ composeValidationErrors.ccText }}
+          </span>
         </div>
         <div class="form-field">
           <label>BCC</label>
@@ -216,6 +358,9 @@ const modeLabel = computed(() => {
             :value="store.composeForm.bccText"
             @input="updateField('bccText', ($event.target as HTMLInputElement).value)"
           />
+          <span v-if="composeValidationErrors.bccText" class="field-error">
+            {{ composeValidationErrors.bccText }}
+          </span>
         </div>
         <div class="form-field">
           <label>Subject</label>
@@ -225,14 +370,132 @@ const modeLabel = computed(() => {
             :value="store.composeForm.subject"
             @input="updateField('subject', ($event.target as HTMLInputElement).value)"
           />
+          <span v-if="composeValidationErrors.subject" class="field-error">
+            {{ composeValidationErrors.subject }}
+          </span>
         </div>
+        <ComposeTemplatePicker
+          :to-text="store.composeForm.toText"
+          :cc-text="store.composeForm.ccText"
+          :bcc-text="store.composeForm.bccText"
+          :subject="store.composeForm.subject"
+          :body="store.composeForm.body"
+          :body-html="store.composeForm.bodyHtml"
+          @apply="applyRenderedTemplate"
+          @saved="(name) => store.setComposeStatusMessage(`Template saved: ${name}`)"
+          @deleted="(name) => store.setComposeStatusMessage(`Template deleted: ${name}`)"
+          @error="store.setComposeSendError"
+        />
+        <ComposeSignaturePicker
+          @apply="applySignature"
+        />
         <div class="form-field body-field">
-          <label>Message</label>
+          <div class="body-toolbar">
+            <label>Message</label>
+            <div class="body-mode-toggle" role="group" aria-label="Message format">
+              <button
+                type="button"
+                :class="{ active: store.composeForm.bodyFormat === 'plain' }"
+                @click="setBodyFormat('plain')"
+              >
+                Text
+              </button>
+              <button
+                type="button"
+                :class="{ active: store.composeForm.bodyFormat === 'html' && htmlEditorMode === 'rich' }"
+                @click="setBodyFormat('html', 'rich')"
+              >
+                Rich
+              </button>
+              <button
+                type="button"
+                :class="{ active: store.composeForm.bodyFormat === 'html' && htmlEditorMode === 'source' }"
+                @click="setBodyFormat('html', 'source')"
+              >
+                HTML
+              </button>
+            </div>
+          </div>
           <textarea
+            v-if="store.composeForm.bodyFormat === 'plain'"
             placeholder="Write your message..."
             :value="store.composeForm.body"
             @input="updateField('body', ($event.target as HTMLTextAreaElement).value)"
           />
+          <RichComposeEditor
+            v-else-if="htmlEditorMode === 'rich'"
+            :model-value="store.composeForm.bodyHtml ?? ''"
+            placeholder="Write your message..."
+            @update:model-value="updateHtmlBody"
+            @attachments-dropped="handleAttachmentFiles"
+            @blur="triggerAutoSave"
+          />
+          <textarea
+            v-else
+            class="html-body-editor"
+            placeholder="<p>Write your message...</p>"
+            :value="store.composeForm.bodyHtml ?? ''"
+            spellcheck="false"
+            @input="updateHtmlBody(($event.target as HTMLTextAreaElement).value)"
+          />
+          <span v-if="composeValidationErrors.body" class="field-error">
+            {{ composeValidationErrors.body }}
+          </span>
+        </div>
+
+        <div class="compose-attachments">
+          <div class="attachment-header">
+            <span>Attachments</span>
+            <button type="button" @click="openAttachmentPicker">
+              <Icon icon="tabler:paperclip" size="16" /> Add
+            </button>
+            <input
+              ref="attachmentInput"
+              class="attachment-input"
+              type="file"
+              multiple
+              @change="handleAttachmentInput"
+            />
+          </div>
+          <div class="attachment-drop-zone" @dragover.prevent @drop.prevent="handleAttachmentDrop">
+            <Icon icon="tabler:paperclip" size="16" />
+            <span>Drop files here or use Add</span>
+          </div>
+          <ul v-if="stagedAttachments.length > 0" class="attachment-list">
+            <li v-for="attachment in stagedAttachments" :key="attachment.id">
+              <span class="attachment-name">{{ attachment.name }}</span>
+              <span class="attachment-meta">{{ formatAttachmentSize(attachment.size) }}</span>
+              <button type="button" title="Remove attachment" @click="removeStagedAttachment(attachment.id)">
+                <Icon icon="tabler:x" size="14" />
+              </button>
+            </li>
+          </ul>
+          <p v-if="hasStagedAttachments" class="attachment-warning">
+            Attachment upload is not connected to provider send yet. Remove staged attachments before sending.
+          </p>
+        </div>
+
+        <div class="delivery-options">
+          <label class="delivery-field">
+            <span>Schedule</span>
+            <input
+              type="datetime-local"
+              :value="store.composeForm.scheduledSendAt"
+              @input="updateField('scheduledSendAt', ($event.target as HTMLInputElement).value)"
+            />
+          </label>
+          <label class="delivery-field">
+            <span>Undo</span>
+            <select
+              :value="store.composeForm.undoSendSeconds ?? ''"
+              @change="updateField('undoSendSeconds', ($event.target as HTMLSelectElement).value ? Number(($event.target as HTMLSelectElement).value) : null)"
+            >
+              <option value="">Off</option>
+              <option value="10">10 seconds</option>
+              <option value="30">30 seconds</option>
+              <option value="60">60 seconds</option>
+            </select>
+          </label>
         </div>
 
         <div v-if="store.composeSendError" class="compose-error">
@@ -244,7 +507,7 @@ const modeLabel = computed(() => {
 
         <div class="compose-actions">
           <Button variant="default" @click="openSendReview" :disabled="!store.composeForm.toText">
-            <Icon icon="tabler:send" /> Send
+            <Icon icon="tabler:send" /> {{ deliveryActionLabel }}
           </Button>
           <Button variant="ghost" @click="handleSaveDraft" :disabled="isSaving">
             <Icon icon="tabler:edit" /> Save Draft
@@ -253,195 +516,6 @@ const modeLabel = computed(() => {
             <Icon icon="tabler:trash" /> Discard
           </Button>
         </div>
-      </div>
     </div>
-  </div>
+  </Sheet>
 </template>
-
-<style scoped>
-.compose-drawer-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.3);
-  z-index: 100;
-  display: flex;
-  justify-content: flex-end;
-  align-items: flex-end;
-}
-
-.compose-drawer {
-  width: 560px;
-  max-height: 85vh;
-  background: var(--hh-bg-primary, #ffffff);
-  border-radius: 0.75rem 0.75rem 0 0;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.12);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.compose-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--hh-border, #e5e7eb);
-  background: var(--hh-bg-primary, #ffffff);
-}
-
-.compose-title {
-  font-weight: 600;
-  font-size: 0.9375rem;
-  color: var(--hh-text-primary, #1f2937);
-}
-
-.compose-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.saving-indicator {
-  font-size: 0.75rem;
-  color: var(--hh-text-secondary, #6b7280);
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.spin-icon {
-  animation: spin 1s linear infinite;
-  width: 14px;
-  height: 14px;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.compose-form {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-  padding: 0.75rem 1rem;
-  gap: 0.5rem;
-}
-
-.form-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.form-field label {
-  font-size: 0.75rem;
-  font-weight: 500;
-  color: var(--hh-text-secondary, #6b7280);
-}
-
-.form-field input {
-  padding: 0.4375rem 0.625rem;
-  border: 1px solid var(--hh-border, #e5e7eb);
-  border-radius: 0.375rem;
-  font-size: 0.8125rem;
-  color: var(--hh-text-primary, #1f2937);
-  background: var(--hh-bg-primary, #ffffff);
-  outline: none;
-  transition: border-color 0.15s;
-}
-
-.form-field input:focus {
-  border-color: var(--hh-accent, #3b82f6);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
-
-.body-field {
-  flex: 1;
-}
-
-.body-field textarea {
-  flex: 1;
-  min-height: 200px;
-  padding: 0.5rem 0.625rem;
-  border: 1px solid var(--hh-border, #e5e7eb);
-  border-radius: 0.375rem;
-  font-size: 0.8125rem;
-  font-family: inherit;
-  color: var(--hh-text-primary, #1f2937);
-  background: var(--hh-bg-primary, #ffffff);
-  resize: vertical;
-  outline: none;
-  line-height: 1.6;
-}
-
-.body-field textarea:focus {
-  border-color: var(--hh-accent, #3b82f6);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-}
-
-.compose-error {
-  padding: 0.5rem 0.75rem;
-  background: var(--hh-bg-error-light, #fef2f2);
-  color: var(--hh-text-error, #ef4444);
-  border-radius: 0.375rem;
-  font-size: 0.8125rem;
-}
-
-.compose-status {
-  padding: 0.375rem 0.75rem;
-  background: var(--hh-bg-success-light, #f0fdf4);
-  color: var(--hh-text-success, #16a34a);
-  border-radius: 0.375rem;
-  font-size: 0.8125rem;
-}
-
-.compose-actions {
-  display: flex;
-  gap: 0.5rem;
-  padding-top: 0.5rem;
-  border-top: 1px solid var(--hh-border, #e5e7eb);
-}
-
-.delete-btn {
-  margin-left: auto;
-}
-
-/* Send review */
-.send-review {
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.send-review h3 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.review-field {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.review-label {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--hh-text-secondary, #6b7280);
-  min-width: 60px;
-  flex-shrink: 0;
-}
-
-.review-value {
-  font-size: 0.8125rem;
-  color: var(--hh-text-primary, #1f2937);
-}
-
-.review-actions {
-  display: flex;
-  gap: 0.5rem;
-  padding-top: 0.5rem;
-}
-</style>

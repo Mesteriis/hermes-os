@@ -1,17 +1,27 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
-import type { CommunicationMessageSummary, NavigatorMode } from '../types/communications'
+import type { CommunicationMessageSummary, MailThreadSummary, NavigatorMode } from '../types/communications'
 import { senderLabel, messageTime } from '../stores/communications'
+import { useThreadMessagesPrefetch } from '../queries/mailPrefetch'
 
 const props = defineProps<{
+  accountId: string
   messages: CommunicationMessageSummary[]
+  threads: MailThreadSummary[]
   selectedIndex: number
+  selectedThreadId: string
   navigatorMode: NavigatorMode
+  hasThreadNextPage: boolean
+  isFetchingThreadNextPage: boolean
 }>()
+
+const prefetchThreadMessages = useThreadMessagesPrefetch()
 
 const emit = defineEmits<{
   select: [index: number]
+  selectThread: [thread: MailThreadSummary]
+  loadMoreThreads: []
   'update:navigatorMode': [mode: NavigatorMode]
 }>()
 
@@ -55,6 +65,10 @@ const contactGroups = computed<ContactGroup[]>(() => {
 function getMessageIndex(msg: CommunicationMessageSummary): number {
   return props.messages.indexOf(msg)
 }
+
+function handleThreadPrefetch(thread: MailThreadSummary): void {
+  void prefetchThreadMessages(props.accountId, thread.subject)
+}
 </script>
 
 <template>
@@ -80,19 +94,35 @@ function getMessageIndex(msg: CommunicationMessageSummary): number {
     <!-- Threads mode -->
     <div v-if="navigatorMode === 'threads'" class="thread-list">
       <div
-        v-for="(msg, i) in messages"
-        :key="msg.message_id"
+        v-for="thread in threads"
+        :key="thread.thread_id"
         class="thread-item"
-        :class="{ selected: i === selectedIndex }"
-        @click="emit('select', i)"
+        :class="{ selected: thread.thread_id === selectedThreadId }"
+        tabindex="0"
+        @mouseenter="handleThreadPrefetch(thread)"
+        @focus="handleThreadPrefetch(thread)"
+        @click="emit('selectThread', thread)"
       >
-        <div class="thread-sender">{{ senderLabel(msg.sender) }}</div>
-        <div class="thread-subject-row">
-          <span v-if="msg.workflow_state === 'new'" class="unread-dot" />
-          <span class="thread-subject">{{ msg.subject }}</span>
+        <div class="thread-sender">
+          {{ thread.message_count }} messages
+          <span v-if="thread.participant_count > 1"> · {{ thread.participant_count }} participants</span>
         </div>
-        <div class="thread-time">{{ messageTime(msg.projected_at ?? msg.occurred_at) }}</div>
+        <div class="thread-subject-row">
+          <span v-if="thread.has_open_action" class="unread-dot" />
+          <span class="thread-subject">{{ thread.subject }}</span>
+          <Icon v-if="thread.has_attachments" icon="tabler:paperclip" class="thread-attachment-icon" />
+        </div>
+        <div class="thread-time">{{ messageTime(thread.last_activity_at) }}</div>
       </div>
+      <button
+        v-if="hasThreadNextPage"
+        class="thread-load-more"
+        type="button"
+        :disabled="isFetchingThreadNextPage"
+        @click="emit('loadMoreThreads')"
+      >
+        <Icon :icon="isFetchingThreadNextPage ? 'tabler:loader-2' : 'tabler:chevron-down'" />
+      </button>
     </div>
 
     <!-- Contacts mode -->
@@ -200,6 +230,7 @@ function getMessageIndex(msg: CommunicationMessageSummary): number {
 }
 
 .thread-subject {
+  flex: 1;
   font-size: 0.75rem;
   color: var(--hh-text-secondary, #6b7280);
   overflow: hidden;
@@ -211,6 +242,35 @@ function getMessageIndex(msg: CommunicationMessageSummary): number {
   font-size: 0.6875rem;
   color: var(--hh-text-tertiary, #9ca3af);
   text-align: right;
+}
+
+.thread-attachment-icon {
+  flex: 0 0 auto;
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--hh-text-secondary, #6b7280);
+}
+
+.thread-load-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  margin: 0.5rem;
+  border: 1px solid var(--hh-border, #e5e7eb);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--hh-bg-primary, #ffffff) 88%, transparent);
+  color: var(--hh-text-secondary, #6b7280);
+  cursor: pointer;
+}
+
+.thread-load-more:hover:not(:disabled) {
+  background: var(--hh-bg-hover, #f3f4f6);
+}
+
+.thread-load-more:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .contact-group {

@@ -188,4 +188,43 @@ impl MailStorageStore {
             .map(row_to_mail_attachment_with_blob)
             .collect()
     }
+
+    pub async fn attachment_by_id(
+        &self,
+        attachment_id: &str,
+    ) -> Result<Option<StoredMailAttachmentWithBlob>, MailStorageError> {
+        let attachment_id = validate_non_empty("attachment_id", attachment_id)?;
+        let row = sqlx::query(
+            r#"
+            SELECT
+                a.attachment_id,
+                a.message_id,
+                a.raw_record_id,
+                a.blob_id,
+                a.provider_attachment_id,
+                a.filename,
+                a.content_type,
+                a.size_bytes,
+                a.sha256,
+                a.disposition,
+                a.scan_status,
+                a.scan_engine,
+                a.scan_checked_at,
+                a.scan_summary,
+                a.scan_metadata,
+                a.created_at,
+                a.updated_at,
+                b.storage_kind AS blob_storage_kind,
+                b.storage_path AS blob_storage_path
+            FROM communication_attachments a
+            JOIN communication_mail_blobs b ON b.blob_id = a.blob_id
+            WHERE a.attachment_id = $1
+            "#,
+        )
+        .bind(attachment_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_mail_attachment_with_blob).transpose()
+    }
 }

@@ -1,8 +1,11 @@
 use std::time::Duration;
 
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::json;
 
 use crate::domains::mail::core::EmailProviderKind;
+use crate::domains::mail::send::{OutgoingEmail, SendResult, build_rfc2822_message};
 use crate::domains::mail::sync::{EmailSyncBatch, FetchedEmailMessage};
 use crate::platform::secrets::ResolvedSecret;
 
@@ -11,7 +14,7 @@ use super::helpers::{
     gmail_history_checkpoint, gmail_message_list_checkpoint, parse_gmail_internal_date,
     select_latest_history_id, sha256_fingerprint, trim_base_url, validate_non_empty,
 };
-use super::models::{GmailHistoryResponse, GmailListResponse, GmailRawMessage};
+use super::models::{GmailHistoryResponse, GmailListResponse, GmailRawMessage, GmailSendResponse};
 use super::options::{GmailFetchOptions, GmailHistoryFetchOptions};
 
 #[derive(Clone)]
@@ -215,6 +218,57 @@ impl GmailApiClient {
             stream_id: "gmail:history".to_owned(),
             checkpoint,
             messages,
+        })
+    }
+
+    pub async fn send_message(
+        &self,
+        access_token: &ResolvedSecret,
+        email: &OutgoingEmail,
+    ) -> Result<SendResult, EmailProviderNetworkError> {
+        validate_non_empty("base_url", &self.base_url)?;
+        validate_non_empty("user_id", &self.user_id)?;
+        if email
+            .to
+            .iter()
+            .chain(email.cc.iter())
+            .chain(email.bcc.iter())
+            .all(|recipient| recipient.trim().is_empty())
+        {
+            return Err(EmailProviderNetworkError::InvalidProviderRequest {
+                field: "recipients",
+                message: "at least one recipient is required",
+            });
+        }
+
+        let raw = URL_SAFE_NO_PAD.encode(build_rfc2822_message(email).as_bytes());
+        let send_url = format!(
+            "{}/gmail/v1/users/{}/messages/send",
+            self.base_url, self.user_id
+        );
+        let response = self
+            .http
+            .post(send_url)
+            .bearer_auth(access_token.expose_for_runtime())
+            .json(&json!({ "raw": raw }))
+            .send()
+            .await?
+            .error_for_status()?
+            .json::<GmailSendResponse>()
+            .await?;
+        let message_id = response
+            .id
+            .ok_or(EmailProviderNetworkError::MissingProviderField { field: "id" })?;
+
+        Ok(SendResult {
+            message_id,
+            accepted_recipients: email
+                .to
+                .iter()
+                .chain(email.cc.iter())
+                .chain(email.bcc.iter())
+                .cloned()
+                .collect(),
         })
     }
 

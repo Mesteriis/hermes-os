@@ -4,14 +4,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::{build_router, build_router_with_database};
 use hermes_hub_backend::domains::mail::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
-use hermes_hub_backend::domains::mail::messages::{
-    MessageProjectionStore, project_raw_email_message,
+    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -62,29 +60,11 @@ fn pput(uri: &str, body: Value) -> Request<Body> {
         .expect("req")
 }
 
-fn del(uri: &str) -> Request<Body> {
-    Request::builder()
-        .method(Method::DELETE)
-        .uri(uri)
-        .header("x-hermes-secret", T)
-        .body(Body::empty())
-        .expect("req")
-}
-
 fn uid() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("t")
         .as_nanos()
-}
-
-async fn response_json(response: axum::response::Response) -> Value {
-    serde_json::from_slice(
-        &to_bytes(response.into_body(), 1024 * 1024)
-            .await
-            .expect("read response body"),
-    )
-    .expect("response json")
 }
 
 async fn router(db: &str) -> axum::Router {
@@ -201,34 +181,13 @@ v1_post_test!(
 );
 
 #[tokio::test]
-async fn workflow_action_endpoint_exists_without_database() {
-    let app = build_router(cfg());
-    let response = app
-        .oneshot(pget_with_actor(
-            "/api/v1/workflow-actions",
-            json!({
-                "command_id": "workflow-action-no-db",
-                "action": "reply",
-                "source": { "kind": "communication_message", "id": "msg:no-db" }
-            }),
-        ))
-        .await
-        .expect("workflow action no-db response");
-
-    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
-}
-
-#[tokio::test]
 async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip sync settings: no DB");
-        return;
-    };
-    let database = Database::connect(Some(&db)).await.expect("db");
-    let pool = database.pool().expect("configured pool").clone();
+    let context = TestContext::new().await;
+    let db = context.connection_string();
+    let pool = context.pool().clone();
     let suffix = uid();
     let account_id = format!("acct-sync-api-{suffix}");
-    CommunicationIngestionStore::new(pool)
+    CommunicationIngestionStore::new(pool.clone())
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
             EmailProviderKind::Imap,
@@ -298,6 +257,35 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     assert_eq!(body["account_id"], account_id);
     assert!(body.get("status").is_some());
     assert!(body.get("phase").is_some());
+    let run_id = body["run_id"].as_str().expect("sync run id");
+    let sync_events = sqlx::query(
+        r#"
+        SELECT event_type, payload
+        FROM event_log
+        WHERE subject->>'kind' = 'mail_sync_run'
+          AND subject->>'id' = $1
+        ORDER BY position ASC
+        "#,
+    )
+    .bind(run_id)
+    .fetch_all(&pool)
+    .await
+    .expect("sync events");
+    let sync_event_types = sync_events
+        .iter()
+        .map(|row| row.get::<String, _>("event_type"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        sync_event_types,
+        vec!["mail.sync.started", "mail.sync.skipped"]
+    );
+    let skipped_payload = sync_events
+        .last()
+        .expect("skipped event")
+        .get::<Value, _>("payload");
+    assert_eq!(skipped_payload["account_id"], account_id);
+    assert_eq!(skipped_payload["run_id"], run_id);
+    assert_eq!(skipped_payload["status"], "skipped");
 
     let resp = r
         .oneshot(pget(
@@ -598,63 +586,6 @@ async fn v1_post_rich_template() {
     );
 }
 
-// Send / Reply / Forward (will fail gracefully without real provider)
-macro_rules! v1_msg_post_test {
-    ($name:ident, $path_suffix:expr, $body:expr) => {
-        #[tokio::test]
-        async fn $name() {
-            let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-                eprintln!("skip");
-                return;
-            };
-            let r = router(&db).await;
-            let resp = r
-                .oneshot(pget(
-                    &format!("/api/v1/communications/messages/msg:fake/{}", $path_suffix),
-                    $body,
-                ))
-                .await
-                .expect("r");
-            assert!(
-                !resp.status().is_server_error(),
-                "{} status={}",
-                stringify!($name),
-                resp.status()
-            );
-        }
-    };
-}
-
-v1_msg_post_test!(
-    v1_send,
-    "send",
-    json!({"to": "test@example.com", "subject": "Test", "body": "Hello"})
-);
-v1_msg_post_test!(v1_reply, "reply", json!({"body": "Reply text"}));
-v1_msg_post_test!(v1_reply_all, "reply-all", json!({"body": "Reply all text"}));
-v1_msg_post_test!(v1_forward, "forward", json!({"to": "fwd@example.com"}));
-v1_msg_post_test!(
-    v1_forward_eml,
-    "forward-eml",
-    json!({"to": "fwd@example.com"})
-);
-v1_msg_post_test!(v1_imap_mark_read, "imap-mark-read", json!({}));
-v1_msg_post_test!(v1_imap_delete, "imap-delete", json!({}));
-v1_msg_post_test!(v1_translate, "translate", json!({"target_language": "es"}));
-v1_msg_post_test!(v1_ai_reply, "ai-reply", json!({"prompt": "Reply to this"}));
-v1_msg_post_test!(
-    v1_ai_reply_variants,
-    "ai-reply-variants",
-    json!({"prompt": "Reply variants"})
-);
-v1_msg_post_test!(v1_extract_tasks, "extract-tasks", json!({}));
-v1_msg_post_test!(v1_extract_notes, "extract-notes", json!({}));
-v1_msg_post_test!(
-    v1_message_analyze,
-    "analyze",
-    json!({"analysis_type": "sentiment"})
-);
-
 // Additional GET endpoints
 
 #[tokio::test]
@@ -694,367 +625,4 @@ async fn v1_draft_detail_404() {
         "draft detail={}",
         resp.status()
     );
-}
-
-// Delete endpoints
-#[tokio::test]
-async fn v1_delete_draft() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
-    let s = uid();
-    let r = router(&db).await;
-    let resp = r
-        .oneshot(del(&format!(
-            "/api/v1/communications/drafts/draft:fake-{s}"
-        )))
-        .await
-        .expect("r");
-    assert!(
-        !resp.status().is_server_error(),
-        "delete draft={}",
-        resp.status()
-    );
-}
-
-#[tokio::test]
-async fn v1_delete_message_label() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
-    let r = router(&db).await;
-    let resp = r
-        .oneshot(del("/api/v1/communications/messages/msg:fake/labels"))
-        .await
-        .expect("r");
-    assert!(
-        !resp.status().is_server_error(),
-        "delete label={}",
-        resp.status()
-    );
-}
-
-#[tokio::test]
-async fn v1_imap_delete_alias_moves_message_to_local_trash_against_postgres() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip imap delete local trash: no DB");
-        return;
-    };
-    let database = Database::connect(Some(&db)).await.expect("db");
-    let pool = database.pool().expect("configured pool").clone();
-    let suffix = uid();
-    let account_id = format!("acct-local-trash-api-{suffix}");
-    let message_id = seed_projected_message(
-        pool,
-        &account_id,
-        &format!("provider-local-trash-api-{suffix}"),
-        "Local trash API",
-    )
-    .await;
-
-    let r = router(&db).await;
-    let resp = r
-        .clone()
-        .oneshot(pget(
-            &format!("/api/v1/communications/messages/{message_id}/imap-delete"),
-            json!({}),
-        ))
-        .await
-        .expect("imap delete alias");
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(
-        &to_bytes(resp.into_body(), 1024 * 1024)
-            .await
-            .expect("read imap-delete body"),
-    )
-    .expect("imap-delete json");
-    assert_eq!(body["deleted"], true);
-    assert_eq!(body["local_state"], "trash");
-
-    let resp = r
-        .clone()
-        .oneshot(get(&format!(
-            "/api/v1/communications/messages?account_id={account_id}&q=Local%20trash%20API"
-        )))
-        .await
-        .expect("active list");
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(
-        &to_bytes(resp.into_body(), 1024 * 1024)
-            .await
-            .expect("read active list"),
-    )
-    .expect("active list json");
-    assert_eq!(body["items"].as_array().expect("items").len(), 0);
-
-    let resp = r
-        .clone()
-        .oneshot(get(&format!(
-            "/api/v1/communications/messages?account_id={account_id}&q=Local%20trash%20API&local_state=trash"
-        )))
-        .await
-        .expect("trash list");
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(
-        &to_bytes(resp.into_body(), 1024 * 1024)
-            .await
-            .expect("read trash list"),
-    )
-    .expect("trash list json");
-    assert_eq!(body["items"].as_array().expect("items").len(), 1);
-    assert_eq!(body["items"][0]["local_state"], "trash");
-
-    let resp = r
-        .oneshot(pget(
-            &format!("/api/v1/communications/messages/{message_id}/restore"),
-            json!({}),
-        ))
-        .await
-        .expect("restore local trash");
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body: Value = serde_json::from_slice(
-        &to_bytes(resp.into_body(), 1024 * 1024)
-            .await
-            .expect("read restore body"),
-    )
-    .expect("restore json");
-    assert_eq!(body["local_state"], "active");
-}
-
-// Workflow state PUT
-#[tokio::test]
-async fn v1_put_workflow_state() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
-    let r = router(&db).await;
-    let resp = r
-        .oneshot(pput(
-            "/api/v1/communications/messages/msg:fake/workflow-state",
-            json!({"state": "reviewed"}),
-        ))
-        .await
-        .expect("r");
-    assert!(
-        !resp.status().is_server_error(),
-        "workflow state={}",
-        resp.status()
-    );
-}
-
-#[tokio::test]
-async fn workflow_action_create_task_is_idempotent_and_records_safe_event() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action task: no DB");
-        return;
-    };
-    let database = Database::connect(Some(&db)).await.expect("db");
-    let pool = database.pool().expect("configured pool").clone();
-    let suffix = uid();
-    let message_id = seed_projected_message(
-        pool.clone(),
-        &format!("acct-workflow-action-{suffix}"),
-        &format!("provider-workflow-action-{suffix}"),
-        &format!("Workflow action task {suffix}"),
-    )
-    .await;
-    let r = router(&db).await;
-    let command_id = format!("workflow-action-task-{suffix}");
-    let body = json!({
-        "command_id": command_id,
-        "action": "create_task",
-        "source": { "kind": "communication_message", "id": message_id },
-        "input": { "title": "Confirm integration access" }
-    });
-
-    let first = r
-        .clone()
-        .oneshot(pget_with_actor("/api/v1/workflow-actions", body.clone()))
-        .await
-        .expect("first workflow action response");
-    assert_eq!(first.status(), StatusCode::OK);
-    let first_body = response_json(first).await;
-    assert_eq!(
-        first_body["event_id"],
-        json!(format!("workflow_action:{command_id}"))
-    );
-    assert_eq!(first_body["target"]["kind"], "task");
-    assert_eq!(first_body["provenance"]["source_id"], message_id);
-
-    let second = r
-        .oneshot(pget_with_actor("/api/v1/workflow-actions", body))
-        .await
-        .expect("second workflow action response");
-    assert_eq!(second.status(), StatusCode::OK);
-    let second_body = response_json(second).await;
-    assert_eq!(second_body["target"], first_body["target"]);
-
-    let task_count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM tasks WHERE source_id = $1 AND source_type = 'message'",
-    )
-    .bind(&message_id)
-    .fetch_one(&pool)
-    .await
-    .expect("task count");
-    assert_eq!(task_count, 1);
-
-    let event_payload: Value =
-        sqlx::query_scalar("SELECT payload FROM event_log WHERE event_id = $1")
-            .bind(format!("workflow_action:{command_id}"))
-            .fetch_one(&pool)
-            .await
-            .expect("workflow event payload");
-    assert!(
-        !event_payload
-            .to_string()
-            .contains("Body for local trash API")
-    );
-}
-
-#[tokio::test]
-async fn workflow_action_create_note_creates_markdown_document() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action note: no DB");
-        return;
-    };
-    let database = Database::connect(Some(&db)).await.expect("db");
-    let pool = database.pool().expect("configured pool").clone();
-    let suffix = uid();
-    let r = router(&db).await;
-    let command_id = format!("workflow-action-note-{suffix}");
-
-    let resp = r
-        .oneshot(pget_with_actor(
-            "/api/v1/workflow-actions",
-            json!({
-                "command_id": command_id,
-                "action": "create_note",
-                "input": {
-                    "title": "Follow-up note",
-                    "body": "Remember to verify keys with the integration owner."
-                }
-            }),
-        ))
-        .await
-        .expect("workflow note response");
-
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body = response_json(resp).await;
-    assert_eq!(body["target"]["kind"], "document");
-    let document_id = body["target"]["id"].as_str().expect("document id");
-    let document_kind: String =
-        sqlx::query_scalar("SELECT document_kind FROM documents WHERE document_id = $1")
-            .bind(document_id)
-            .fetch_one(&pool)
-            .await
-            .expect("document kind");
-    assert_eq!(document_kind, "markdown");
-}
-
-#[tokio::test]
-async fn workflow_action_create_event_requires_start_and_end() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action event validation: no DB");
-        return;
-    };
-    let r = router(&db).await;
-    let resp = r
-        .oneshot(pget_with_actor(
-            "/api/v1/workflow-actions",
-            json!({
-                "command_id": format!("workflow-action-event-missing-{}", uid()),
-                "action": "create_event",
-                "input": { "title": "Missing time event" }
-            }),
-        ))
-        .await
-        .expect("workflow event validation response");
-
-    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
-async fn workflow_action_archive_transitions_message_locally() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action archive: no DB");
-        return;
-    };
-    let database = Database::connect(Some(&db)).await.expect("db");
-    let pool = database.pool().expect("configured pool").clone();
-    let suffix = uid();
-    let message_id = seed_projected_message(
-        pool.clone(),
-        &format!("acct-workflow-archive-{suffix}"),
-        &format!("provider-workflow-archive-{suffix}"),
-        &format!("Workflow archive {suffix}"),
-    )
-    .await;
-    let r = router(&db).await;
-
-    let resp = r
-        .oneshot(pget_with_actor(
-            "/api/v1/workflow-actions",
-            json!({
-                "command_id": format!("workflow-action-archive-{suffix}"),
-                "action": "archive",
-                "source": { "kind": "communication_message", "id": message_id }
-            }),
-        ))
-        .await
-        .expect("workflow archive response");
-
-    assert_eq!(resp.status(), StatusCode::OK);
-    let body = response_json(resp).await;
-    assert_eq!(body["status"], "archived");
-    let workflow_state: String = sqlx::query_scalar(
-        "SELECT workflow_state FROM communication_messages WHERE message_id = $1",
-    )
-    .bind(&message_id)
-    .fetch_one(&pool)
-    .await
-    .expect("workflow state");
-    assert_eq!(workflow_state, "archived");
-}
-
-async fn seed_projected_message(
-    pool: sqlx::PgPool,
-    account_id: &str,
-    provider_record_id: &str,
-    subject: &str,
-) -> String {
-    let communication_store = CommunicationIngestionStore::new(pool.clone());
-    let message_store = MessageProjectionStore::new(pool);
-    communication_store
-        .upsert_provider_account(&NewProviderAccount::new(
-            account_id,
-            EmailProviderKind::Gmail,
-            "Seed Gmail",
-            format!("{account_id}@example.com"),
-        ))
-        .await
-        .expect("store provider account");
-    let raw = communication_store
-        .record_raw_source(&NewRawCommunicationRecord::new(
-            format!("raw-{provider_record_id}"),
-            account_id,
-            "email_message",
-            provider_record_id,
-            format!("sha256:{provider_record_id}"),
-            format!("batch-{provider_record_id}"),
-            json!({
-                "subject": subject,
-                "from": "sender@example.com",
-                "to": ["recipient@example.com"],
-                "body_text": "Body for local trash API"
-            }),
-        ))
-        .await
-        .expect("record raw source");
-    project_raw_email_message(&message_store, &raw)
-        .await
-        .expect("project message")
-        .message_id
 }

@@ -1,39 +1,65 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useForm } from 'vee-validate'
+import { loadFrontendConfig } from '../../../platform/config/env'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
-
-type ProviderKind = 'gmail' | 'icloud' | 'imap'
+import Dialog from '../../../shared/ui/Dialog.vue'
+import {
+  useSetupImapEmailAccountMutation,
+  useStartGmailOAuthSetupMutation
+} from '../queries/useCommunicationsQuery'
+import {
+  accountSetupFormDefaults,
+  accountSetupFormToGmailOAuthStart,
+  accountSetupFormToImapRequest,
+  accountSetupVeeValidationSchema,
+  type AccountSetupFormValues,
+  type MailAccountSetupProvider
+} from '../forms/accountSetupForm'
 
 const emit = defineEmits<{
   close: []
 }>()
 
 const step = ref(1)
-const selectedProvider = ref<ProviderKind | null>(null)
-const accountName = ref('')
-const email = ref('')
-const appPassword = ref('')
-const imapHost = ref('')
-const imapPort = ref(993)
-const smtpHost = ref('')
-const smtpPort = ref(587)
-const useSSL = ref(true)
-const isSubmitting = ref(false)
 const setupError = ref('')
+const setupStatusMessage = ref('')
+const frontendConfig = loadFrontendConfig()
+const gmailOAuthSetupMutation = useStartGmailOAuthSetupMutation()
+const imapEmailAccountSetupMutation = useSetupImapEmailAccountMutation()
 
-const providerOptions: { kind: ProviderKind; label: string; icon: string; description: string }[] = [
-  { kind: 'gmail', label: 'Gmail', icon: 'tabler:brand-google', description: 'Connect a Gmail or Google Workspace account' },
-  { kind: 'icloud', label: 'iCloud', icon: 'tabler:brand-apple', description: 'Connect an iCloud Mail account' },
-  { kind: 'imap', label: 'IMAP', icon: 'tabler:mail', description: 'Connect any IMAP/SMTP email account' }
+const providerOptions: { kind: MailAccountSetupProvider; label: string; icon: string; description: string }[] = [
+  { kind: 'gmail', label: 'Gmail', icon: 'tabler:brand-google', description: 'Google OAuth account setup' },
+  { kind: 'icloud', label: 'iCloud', icon: 'tabler:brand-apple', description: 'iCloud Mail with app password' },
+  { kind: 'imap', label: 'IMAP', icon: 'tabler:mail', description: 'Generic IMAP and SMTP account' }
 ]
 
+const {
+  errors,
+  handleSubmit,
+  isSubmitting,
+  resetForm,
+  setFieldValue,
+  values: formValues
+} = useForm<AccountSetupFormValues>({
+  validationSchema: accountSetupVeeValidationSchema,
+  initialValues: accountSetupFormDefaults('icloud')
+})
+
+const selectedProvider = computed(() => formValues.provider_kind)
 const selectedProviderInfo = computed(() =>
   providerOptions.find(p => p.kind === selectedProvider.value)
 )
+const submitLabel = computed(() => {
+  if (isSubmitting.value) return selectedProvider.value === 'gmail' ? 'Starting...' : 'Connecting...'
+  return selectedProvider.value === 'gmail' ? 'Continue with Google' : 'Connect Account'
+})
 
-function selectProvider(kind: ProviderKind) {
-  selectedProvider.value = kind
+function selectProvider(kind: MailAccountSetupProvider) {
+  resetForm({ values: accountSetupFormDefaults(kind) })
+  setupError.value = ''
+  setupStatusMessage.value = ''
   step.value = 2
 }
 
@@ -41,40 +67,50 @@ function goBack() {
   if (step.value > 1) {
     step.value--
     setupError.value = ''
+    setupStatusMessage.value = ''
   }
 }
 
-async function handleSubmit() {
-  if (!selectedProvider.value || !email.value) return
-  isSubmitting.value = true
+const submitAccountSetup = handleSubmit(async (values) => {
   setupError.value = ''
+  setupStatusMessage.value = ''
 
-  // Build payload
-  const payload: Record<string, unknown> = {
-    provider_kind: selectedProvider.value,
-    account_name: accountName.value || email.value.split('@')[0],
-    email: email.value
-  }
-
-  if (selectedProvider.value === 'imap') {
-    payload.imap_host = imapHost.value
-    payload.imap_port = imapPort.value
-    payload.smtp_host = smtpHost.value
-    payload.smtp_port = smtpPort.value
-    payload.use_ssl = useSSL.value
-  }
-
-  // In a real implementation, this would call the API
-  // For now, simulate success after a short delay
   try {
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000))
+    if (values.provider_kind === 'gmail') {
+      const response = await gmailOAuthSetupMutation.mutateAsync(
+        accountSetupFormToGmailOAuthStart(values, frontendConfig.apiBaseUrl)
+      )
+      window.open(response.authorization_url, '_blank', 'noopener,noreferrer')
+      setupStatusMessage.value = 'Google authorization opened'
+      return
+    }
+
+    await imapEmailAccountSetupMutation.mutateAsync(accountSetupFormToImapRequest(values))
     emit('close')
   } catch (e) {
     setupError.value = e instanceof Error ? e.message : 'Setup failed'
-  } finally {
-    isSubmitting.value = false
   }
+})
+
+function updateStringField(
+  key: keyof AccountSetupFormValues,
+  event: Event
+) {
+  setFieldValue(key, (event.target as HTMLInputElement).value)
+}
+
+function updateNumberField(
+  key: keyof AccountSetupFormValues,
+  event: Event
+) {
+  setFieldValue(key, Number((event.target as HTMLInputElement).value))
+}
+
+function updateBooleanField(
+  key: keyof AccountSetupFormValues,
+  event: Event
+) {
+  setFieldValue(key, (event.target as HTMLInputElement).checked)
 }
 
 function handleClose() {
@@ -83,9 +119,8 @@ function handleClose() {
 </script>
 
 <template>
-  <div class="modal-overlay" @click.self="handleClose">
-    <div class="setup-modal">
-      <!-- Header -->
+  <Dialog :open="true" content-class="account-setup-dialog" @update:open="(open) => { if (!open) handleClose() }">
+    <template #header>
       <div class="modal-header">
         <div class="modal-header-left">
           <Button v-if="step > 1" variant="ghost" size="sm" @click="goBack">
@@ -94,25 +129,25 @@ function handleClose() {
           <h2 v-if="step === 1">Add Mail Account</h2>
           <h2 v-else-if="step === 2">Configure {{ selectedProviderInfo?.label }}</h2>
         </div>
-        <Button variant="ghost" size="sm" @click="handleClose">
-          <Icon icon="tabler:x" />
-        </Button>
       </div>
+    </template>
 
+    <div class="setup-modal">
       <!-- Step 1: Provider selection -->
       <div v-if="step === 1" class="provider-selection">
         <p class="step-desc">Select a mail provider to connect</p>
         <div class="provider-grid">
-          <div
+          <button
             v-for="provider in providerOptions"
             :key="provider.kind"
             class="provider-card"
+            type="button"
             @click="selectProvider(provider.kind)"
           >
             <Icon :icon="provider.icon" class="provider-icon" />
             <span class="provider-label">{{ provider.label }}</span>
             <span class="provider-desc">{{ provider.description }}</span>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -125,112 +160,157 @@ function handleClose() {
             <label>Account Name</label>
             <input
               type="text"
-              v-model="accountName"
+              :value="formValues.display_name"
               placeholder="e.g., Personal Gmail"
+              @input="updateStringField('display_name', $event)"
             />
           </div>
           <div class="field">
             <label>Email Address</label>
             <input
               type="email"
-              v-model="email"
+              :value="formValues.email"
               placeholder="you@example.com"
+              @input="updateStringField('email', $event)"
             />
+            <span v-if="errors.email" class="field-error">{{ errors.email }}</span>
           </div>
 
-          <!-- IMAP specific fields -->
           <template v-if="selectedProvider === 'imap'">
             <div class="field">
               <label>IMAP Host</label>
               <input
                 type="text"
-                v-model="imapHost"
+                :value="formValues.imap_host"
                 placeholder="imap.example.com"
+                @input="updateStringField('imap_host', $event)"
               />
+              <span v-if="errors.imap_host" class="field-error">{{ errors.imap_host }}</span>
             </div>
             <div class="field-row">
               <div class="field">
                 <label>IMAP Port</label>
-                <input type="number" v-model.number="imapPort" />
-              </div>
-              <div class="field">
-                <label>SMTP Host</label>
                 <input
-                  type="text"
-                  v-model="smtpHost"
-                  placeholder="smtp.example.com"
+                  type="number"
+                  :value="formValues.imap_port"
+                  @input="updateNumberField('imap_port', $event)"
                 />
               </div>
+              <div class="field">
+                <label>Username</label>
+                <input
+                  type="text"
+                  :value="formValues.username"
+                  placeholder="user@example.com"
+                  @input="updateStringField('username', $event)"
+                />
+              </div>
+            </div>
+            <div class="field">
+              <label>Password</label>
+              <input
+                type="password"
+                :value="formValues.password"
+                placeholder="Mailbox password"
+                @input="updateStringField('password', $event)"
+              />
+              <span v-if="errors.password" class="field-error">{{ errors.password }}</span>
+            </div>
+            <div class="field">
+              <label>SMTP Host</label>
+              <input
+                type="text"
+                :value="formValues.smtp_host"
+                placeholder="smtp.example.com"
+                @input="updateStringField('smtp_host', $event)"
+              />
             </div>
             <div class="field-row">
               <div class="field">
                 <label>SMTP Port</label>
-                <input type="number" v-model.number="smtpPort" />
+                <input
+                  type="number"
+                  :value="formValues.smtp_port"
+                  @input="updateNumberField('smtp_port', $event)"
+                />
               </div>
               <div class="field checkbox-field">
                 <label class="checkbox-label">
-                  <input type="checkbox" v-model="useSSL" />
-                  Use SSL
+                  <input
+                    type="checkbox"
+                    :checked="formValues.imap_tls"
+                    @change="updateBooleanField('imap_tls', $event)"
+                  />
+                  IMAP TLS
+                </label>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field checkbox-field">
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    :checked="formValues.smtp_tls"
+                    @change="updateBooleanField('smtp_tls', $event)"
+                  />
+                  SMTP TLS
+                </label>
+              </div>
+              <div class="field checkbox-field">
+                <label class="checkbox-label">
+                  <input
+                    type="checkbox"
+                    :checked="formValues.smtp_starttls"
+                    @change="updateBooleanField('smtp_starttls', $event)"
+                  />
+                  SMTP STARTTLS
                 </label>
               </div>
             </div>
           </template>
 
-          <!-- App Password (shown for Gmail/iCloud) -->
-          <div v-if="selectedProvider !== 'imap'" class="field">
+          <div v-if="selectedProvider === 'icloud'" class="field">
             <label>App Password</label>
             <input
               type="password"
-              v-model="appPassword"
+              :value="formValues.password"
               placeholder="Your app-specific password"
+              @input="updateStringField('password', $event)"
             />
-            <p class="field-hint">
-              Generate an app password from your {{ selectedProviderInfo?.label }} account settings.
-              Your regular password will not work.
-            </p>
+            <span v-if="errors.password" class="field-error">{{ errors.password }}</span>
           </div>
         </div>
 
         <div v-if="setupError" class="setup-error">{{ setupError }}</div>
+        <div v-if="setupStatusMessage" class="setup-status">{{ setupStatusMessage }}</div>
 
         <div class="form-actions">
-          <Button variant="default" @click="handleSubmit" :disabled="isSubmitting || !email">
-            {{ isSubmitting ? 'Connecting...' : 'Connect Account' }}
+          <Button variant="default" @click="submitAccountSetup" :loading="isSubmitting">
+            {{ submitLabel }}
           </Button>
           <Button variant="ghost" @click="goBack">Back</Button>
         </div>
       </div>
     </div>
-  </div>
+  </Dialog>
 </template>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+:deep(.account-setup-dialog) {
+  max-width: 520px;
 }
 
 .setup-modal {
-  width: 480px;
-  max-height: 85vh;
-  background: var(--hh-bg-primary, #ffffff);
-  border-radius: 0.75rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  width: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding-right: 2.5rem;
   border-bottom: 1px solid var(--hh-border, #e5e7eb);
 }
 
@@ -268,10 +348,15 @@ function handleClose() {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  width: 100%;
   padding: 0.75rem 1rem;
   border: 1px solid var(--hh-border, #e5e7eb);
   border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
   cursor: pointer;
+  font: inherit;
+  text-align: left;
   transition: background 0.1s, border-color 0.1s;
 }
 
@@ -363,10 +448,24 @@ function handleClose() {
   margin: 0.25rem 0 0;
 }
 
+.field-error {
+  font-size: 0.6875rem;
+  color: var(--hh-text-error, #ef4444);
+}
+
 .setup-error {
   padding: 0.5rem 0.75rem;
   background: var(--hh-bg-error-light, #fef2f2);
   color: var(--hh-text-error, #ef4444);
+  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  margin-top: 0.5rem;
+}
+
+.setup-status {
+  padding: 0.5rem 0.75rem;
+  background: var(--hh-bg-success-light, rgba(16, 185, 129, 0.12));
+  color: var(--hh-text-success, #059669);
   border-radius: 0.375rem;
   font-size: 0.8125rem;
   margin-top: 0.5rem;

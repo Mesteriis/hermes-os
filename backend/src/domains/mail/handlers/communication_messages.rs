@@ -1,4 +1,5 @@
 use super::*;
+use crate::domains::mail::messages::ProjectedMessagePageQuery;
 
 pub(crate) async fn get_v1_communication_messages(
     State(state): State<AppState>,
@@ -18,21 +19,30 @@ pub(crate) async fn get_v1_communication_messages(
         .unwrap_or("active")
         .parse::<LocalMessageState>()
         .map_err(|_| ApiError::InvalidCommunicationQuery("invalid local_state value"))?;
-    let items = message_store(&state)?
-        .list_messages(
-            query.account_id.as_deref(),
+    let page = message_store(&state)?
+        .list_messages_page(ProjectedMessagePageQuery {
+            account_id: query.account_id.as_deref(),
             workflow_state,
-            query.channel_kind.as_deref(),
-            query.q.as_deref(),
+            channel_kind: query.channel_kind.as_deref(),
+            query: query.q.as_deref(),
+            match_mode: query.match_mode,
+            search: query.search.clone(),
             local_state,
+            cursor: query.cursor.as_deref(),
             limit,
-        )
-        .await?
+        })
+        .await?;
+    let items = page
+        .items
         .into_iter()
         .map(CommunicationMessageSummaryResponse::from)
         .collect();
 
-    Ok(Json(CommunicationMessagesResponse { items }))
+    Ok(Json(CommunicationMessagesResponse {
+        items,
+        next_cursor: page.next_cursor,
+        has_more: page.has_more,
+    }))
 }
 
 pub(crate) async fn get_v1_communication_message(

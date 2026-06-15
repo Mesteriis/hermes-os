@@ -1,9 +1,19 @@
+mod attachments;
 mod drafts;
+mod folders;
+mod outbox;
 mod personas;
+mod read_receipts;
+mod saved_searches;
 mod search;
 mod threads;
 
+pub(crate) use attachments::*;
 pub(crate) use drafts::*;
+pub(crate) use folders::*;
+pub(crate) use outbox::*;
 pub(crate) use personas::*;
+pub(crate) use read_receipts::*;
+pub(crate) use saved_searches::*;
 pub(crate) use search::*;
 pub(crate) use threads::*;

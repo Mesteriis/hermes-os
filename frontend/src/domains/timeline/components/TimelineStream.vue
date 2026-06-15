@@ -24,7 +24,7 @@ const totalSize = computed(() => virtualizer.value.getTotalSize())
 </script>
 
 <template>
-	<section class="panel feed-panel large-timeline" ref="parentRef" style="overflow-y: auto; max-height: 100%;">
+	<section class="panel feed-panel large-timeline" ref="parentRef">
 		<header class="panel-title-row">
 			<h2>Today</h2>
 			<button type="button" class="ghost-button" disabled>All Events</button>
@@ -57,6 +57,8 @@ const totalSize = computed(() => virtualizer.value.getTotalSize())
 
 <style scoped>
 .large-timeline {
+	max-height: 100%;
+	overflow-y: auto;
 	padding: 0 0 12px;
 }
 

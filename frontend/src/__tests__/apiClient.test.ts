@@ -3,8 +3,7 @@ import { ApiClient } from '@/platform/api/ApiClient'
 
 describe('ApiClient', () => {
 	beforeEach(() => {
-		// Reset singleton before each test
-		;(ApiClient as any)._instance = null
+		ApiClient.resetForTests()
 	})
 
 	it('throws if accessed before init', () => {
@@ -15,6 +14,12 @@ describe('ApiClient', () => {
 		const client = ApiClient.init('http://localhost:3000', 'test-secret')
 		expect(client).toBeInstanceOf(ApiClient)
 		expect(ApiClient.instance).toBe(client)
+	})
+
+	it('rejects an empty secret', () => {
+		expect(() => ApiClient.init('http://localhost:3000', '   ')).toThrow(
+			'X-Hermes-Secret cannot be empty'
+		)
 	})
 
 	it('strips trailing slash from baseUrl', () => {

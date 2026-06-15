@@ -123,15 +123,21 @@ pub(crate) struct SendRequest {
     pub(super) body_html: Option<String>,
     pub(super) in_reply_to: Option<String>,
     pub(super) references: Option<Vec<String>>,
+    pub(super) draft_id: Option<String>,
+    pub(super) scheduled_send_at: Option<DateTime<Utc>>,
+    pub(super) undo_send_seconds: Option<i64>,
     pub(super) confirmed_provider_write: Option<bool>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct SendResponse {
     pub(super) message_id: String,
+    pub(super) outbox_id: Option<String>,
     pub(super) accepted: Vec<String>,
     pub(super) accepted_recipients: Vec<String>,
     pub(super) transport: String,
     pub(super) status: String,
+    pub(super) scheduled_send_at: Option<DateTime<Utc>>,
+    pub(super) undo_deadline_at: Option<DateTime<Utc>>,
     pub(super) failure_reason: Option<String>,
 }

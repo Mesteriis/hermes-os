@@ -280,13 +280,13 @@ frontend-dev: docker-env
 		pnpm dev --host "$${HERMES_FRONTEND_BIND:-127.0.0.1}" --port "$$frontend_port" --strictPort
 
 frontend-lint:
-	cd frontend && pnpm lint:ts
+	cd frontend && pnpm lint
 
 frontend-lint-ts:
 	cd frontend && pnpm lint:ts
 
 frontend-check:
-	cd frontend && pnpm build
+	cd frontend && pnpm validate
 
 frontend-build:
 	cd frontend && pnpm build

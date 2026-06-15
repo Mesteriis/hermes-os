@@ -19,8 +19,8 @@ pub fn list_blockers() -> Vec<ArchitectureBlocker> {
         ArchitectureBlocker {
             section: "§8".into(),
             feature: "Безопасность вложений (sandbox, антивирус)".into(),
-            reason: "Требует внешних инструментов: ClamAV, контейнеризированная песочница, OLE-парсер макросов. Это инфраструктурная задача, не кодовая.".into(),
-            resolution: "Интегрировать ClamAV как sidecar-контейнер в docker-compose, добавить attachment_scanner с реальной имплементацией.".into(),
+            reason: "Conservative heuristic attachment scanning now flags obvious executable payloads, active-content extensions, macro-enabled office files and MIME/extension mismatch as suspicious or malicious during mail projection. Full clean/malware verdicts still require external tools: ClamAV, a containerized sandbox and an OLE macro parser.".into(),
+            resolution: "Интегрировать ClamAV как sidecar-контейнер в docker-compose, добавить real attachment_scanner backend and keep heuristic scanning as a prefilter/fallback. Do not mark attachments clean without the real scanner backend.".into(),
         },
         ArchitectureBlocker {
             section: "§12 (крипто-проверка)".into(),
@@ -31,14 +31,14 @@ pub fn list_blockers() -> Vec<ArchitectureBlocker> {
         ArchitectureBlocker {
             section: "§16-17".into(),
             feature: "Outbox tracking (delivery status, read receipts, bounce detection) и Follow-up engine".into(),
-            reason: "Требует DSN/MDN парсинга из входящих уведомлений о доставке, а также SMTP-колбеков/webhook'ов от провайдера. Это асинхронный event-driven flow, требующий постоянного мониторинга входящих.".into(),
-            resolution: "Реализовать DSN/MDN парсер, добавить фоновый воркер для отслеживания статусов отправленных писем по Message-ID.".into(),
+            reason: "Durable outbox tracking, runtime scheduling, account-scoped SMTP sender wiring, Gmail OAuth send scopes, immediate and scheduled Gmail API send, retry/backoff handling, sanitized DSN delivery-status ingestion and MDN read-receipt ingestion exist. Production delivery/read receipt tracking still requires provider callback/webhook wiring and richer delivery UX.".into(),
+            resolution: "Connect provider callback/runtime ingestion to the delivery-notification path, and surface delivery status in the user-facing outbox UX without exposing private content in logs or events.".into(),
         },
         ArchitectureBlocker {
             section: "§28-29".into(),
-            feature: "Интеграции (Jira, YouTrack, Google Calendar, Apple Notes, Obsidian) и массовые действия".into(),
-            reason: "Каждая интеграция — отдельный коннектор со своим API и аутентификацией. Это отдельные модули, не часть email-подсистемы. Массовые действия требуют batch API и очередей.".into(),
-            resolution: "Реализовать как plugin-коннекторы по образцу Telegram/WhatsApp модулей. Массовые действия — через фоновые задачи projection runner.".into(),
+            feature: "Интеграции (Jira, YouTrack, Google Calendar, Apple Notes, Obsidian) и provider-side массовые действия".into(),
+            reason: "Каждая интеграция — отдельный коннектор со своим API и аутентификацией. Local bounded bulk actions exist, but provider-side batch mutations, long-running jobs and progress events still require queues.".into(),
+            resolution: "Реализовать интеграции как plugin-коннекторы по образцу Telegram/WhatsApp модулей. Provider-side массовые действия — через фоновые задачи projection runner with progress events.".into(),
         },
         ArchitectureBlocker {
             section: "§8.2".into(),

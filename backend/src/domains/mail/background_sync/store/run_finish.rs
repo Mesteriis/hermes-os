@@ -1,9 +1,11 @@
 use serde_json::json;
 
 use super::super::errors::MailSyncError;
+use super::super::events::sync_run_finished_event;
 use super::super::models::{FinishRun, MailSyncRun};
 use super::super::rows::row_to_run;
 use super::MailSyncStore;
+use crate::platform::events::EventStore;
 
 impl MailSyncStore {
     pub(in crate::domains::mail::background_sync) async fn finish_run(
@@ -11,6 +13,7 @@ impl MailSyncStore {
         run_id: &str,
         finish: FinishRun,
     ) -> Result<MailSyncRun, MailSyncError> {
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             UPDATE communication_mail_sync_runs
@@ -74,9 +77,14 @@ impl MailSyncStore {
         .bind(finish.error_code)
         .bind(finish.error_message)
         .bind(finish.next_run_at)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_run(row)
+        let run = row_to_run(row)?;
+        let event = sync_run_finished_event(&run)?;
+        EventStore::append_in_transaction(&mut transaction, &event).await?;
+        transaction.commit().await?;
+
+        Ok(run)
     }
 }

@@ -47,4 +47,5 @@ Email provider record
 - [Modules](modules.md)
 - [API Reference](api.md)
 - [Status](status.md)
+- [Gap Analysis](gap-analysis.md)
 - [Blockers](blockers.md)

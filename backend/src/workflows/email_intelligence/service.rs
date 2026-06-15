@@ -2,7 +2,7 @@ use crate::domains::mail::messages::{MessageProjectionStore, ProjectedMessage, W
 use crate::integrations::ai_runtime::AiRuntimeClient;
 use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use crate::workflows::email_intelligence::heuristics;
-use crate::workflows::email_intelligence::models::EmailAnalysis;
+use crate::workflows::email_intelligence::models::{EmailAnalysis, EmailSummaryContract};
 use crate::workflows::email_intelligence::prompt::{
     EMAIL_INTELLIGENCE_PROMPT_VERSION, build_email_analysis_prompt,
 };
@@ -62,6 +62,13 @@ impl EmailIntelligenceService {
                 Some(analysis.importance_score),
             )
             .await?;
+        let summary_contract = analysis_summary_contract(&analysis, message);
+        let mut metadata = message.message_metadata.clone();
+        metadata["ai_summary_contract"] = serde_json::to_value(&summary_contract)
+            .map_err(|error| EmailIntelligenceError::ParseError(error.to_string()))?;
+        store
+            .set_message_metadata(&message.message_id, &metadata)
+            .await?;
 
         if let Some(state) = workflow_hint {
             let _ = store
@@ -79,6 +86,10 @@ impl EmailIntelligenceService {
     pub fn heuristic_category(message: &ProjectedMessage) -> Option<String> {
         heuristics::heuristic_category(message)
     }
+
+    pub fn heuristic_structured_summary(message: &ProjectedMessage) -> EmailSummaryContract {
+        heuristics::structured_summary(message)
+    }
 }
 
 fn clean_json_response(content: &str) -> &str {
@@ -88,4 +99,53 @@ fn clean_json_response(content: &str) -> &str {
         .and_then(|value| value.strip_suffix("```"))
         .map(str::trim)
         .unwrap_or(content.trim())
+}
+
+fn analysis_summary_contract(
+    analysis: &EmailAnalysis,
+    message: &ProjectedMessage,
+) -> EmailSummaryContract {
+    let fallback = EmailIntelligenceService::heuristic_structured_summary(message);
+    EmailSummaryContract {
+        key_points: non_empty_or(analysis.key_points.clone(), fallback.key_points),
+        action_items: non_empty_or(analysis.action_items.clone(), fallback.action_items),
+        risks: non_empty_or(analysis.risks.clone(), fallback.risks),
+        deadlines: non_empty_or(analysis.deadlines.clone(), fallback.deadlines),
+        event_candidates: non_empty_candidates_or(
+            analysis.event_candidates.clone(),
+            fallback.event_candidates,
+        ),
+        persona_candidates: non_empty_candidates_or(
+            analysis.persona_candidates.clone(),
+            fallback.persona_candidates,
+        ),
+        organization_candidates: non_empty_candidates_or(
+            analysis.organization_candidates.clone(),
+            fallback.organization_candidates,
+        ),
+        document_candidates: non_empty_candidates_or(
+            analysis.document_candidates.clone(),
+            fallback.document_candidates,
+        ),
+        agreement_candidates: non_empty_candidates_or(
+            analysis.agreement_candidates.clone(),
+            fallback.agreement_candidates,
+        ),
+    }
+}
+
+fn non_empty_or(values: Vec<String>, fallback: Vec<String>) -> Vec<String> {
+    if values.is_empty() {
+        fallback
+    } else {
+        values
+    }
+}
+
+fn non_empty_candidates_or<T>(values: Vec<T>, fallback: Vec<T>) -> Vec<T> {
+    if values.is_empty() {
+        fallback
+    } else {
+        values
+    }
 }

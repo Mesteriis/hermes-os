@@ -1,0 +1,197 @@
+.attachment-search-panel {
+  border-top: 1px solid var(--hh-border);
+  border-bottom: 1px solid var(--hh-border);
+  background: color-mix(in srgb, var(--hh-surface-panel) 82%, transparent);
+}
+
+.attachment-search-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 2rem;
+  padding: 0.375rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--hh-text-primary);
+  cursor: pointer;
+}
+
+.attachment-search-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.attachment-search-count {
+  font-size: 0.6875rem;
+  color: var(--hh-text-muted);
+}
+
+.attachment-search-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0 0.5rem 0.625rem;
+}
+
+.attachment-search-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 0.9fr) auto;
+  gap: 0.375rem;
+  align-items: end;
+}
+
+.attachment-search-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: var(--hh-text-secondary);
+  font-size: 0.6875rem;
+}
+
+.attachment-search-field input,
+.attachment-search-field select {
+  height: 2rem;
+  min-width: 0;
+  border: 1px solid var(--hh-border);
+  border-radius: var(--hh-radius-sm);
+  background: var(--hh-surface-panel);
+  color: var(--hh-text-primary);
+  padding: 0 0.5rem;
+  font: inherit;
+}
+
+.attachment-search-submit,
+.attachment-search-more {
+  height: 2rem;
+  border: 1px solid var(--hh-border);
+  border-radius: var(--hh-radius-sm);
+  background: var(--hh-accent);
+  color: var(--hh-accent-contrast);
+  padding: 0 0.625rem;
+  cursor: pointer;
+}
+
+.attachment-search-submit:disabled,
+.attachment-search-more:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.attachment-search-table-shell {
+  max-height: 16rem;
+  overflow: auto;
+  border: 1px solid var(--hh-border);
+  border-radius: var(--hh-radius-sm);
+  background: var(--hh-surface-panel);
+}
+
+.attachment-search-grid {
+  min-width: 680px;
+  font-size: 0.75rem;
+}
+
+.attachment-search-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--hh-bg-primary) 72%, transparent);
+}
+
+.attachment-search-virtual {
+  position: relative;
+}
+
+.attachment-search-row {
+  display: grid;
+  grid-template-columns:
+    minmax(180px, 1.35fr)
+    minmax(180px, 1.3fr)
+    minmax(140px, 0.9fr)
+    minmax(80px, 0.5fr)
+    minmax(100px, 0.6fr);
+  align-items: center;
+}
+
+.attachment-search-result-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.attachment-search-cell {
+  min-width: 0;
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--hh-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.attachment-search-cell--head {
+  color: var(--hh-text-secondary);
+  font-weight: 600;
+}
+
+.attachment-search-file,
+.attachment-search-message {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.attachment-search-name,
+.attachment-search-subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachment-search-muted {
+  color: var(--hh-text-muted);
+}
+
+.attachment-search-scan {
+  display: inline-flex;
+  align-items: center;
+  width: max-content;
+  max-width: 100%;
+  padding: 0.125rem 0.375rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hh-text-muted) 12%, transparent);
+  color: var(--hh-text-secondary);
+  font-size: 0.6875rem;
+}
+
+.attachment-search-scan.att-scan--clean {
+  background: color-mix(in srgb, var(--hh-color-success) 18%, transparent);
+  color: var(--hh-color-success);
+}
+
+.attachment-search-scan.att-scan--suspicious {
+  background: color-mix(in srgb, var(--hh-color-warning) 18%, transparent);
+  color: var(--hh-color-warning);
+}
+
+.attachment-search-scan.att-scan--danger {
+  background: color-mix(in srgb, var(--hh-color-danger) 18%, transparent);
+  color: var(--hh-color-danger);
+}
+
+.attachment-search-error {
+  color: var(--hh-color-danger);
+  font-size: 0.75rem;
+}
+
+.attachment-search-empty {
+  color: var(--hh-text-muted);
+  font-size: 0.75rem;
+  padding: 0.75rem;
+  text-align: center;
+}

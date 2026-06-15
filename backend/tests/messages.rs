@@ -11,8 +11,9 @@ use hermes_hub_backend::domains::mail::core::{
     StoredRawCommunicationRecord,
 };
 use hermes_hub_backend::domains::mail::messages::{
-    LocalMessageState, MessageProjectionError, MessageProjectionStore, NewProjectedMessage,
-    WorkflowState, project_raw_email_message, project_raw_email_message_from_blob,
+    LocalMessageState, MessageProjectionError, MessageProjectionStore, MessageSearchMatchMode,
+    MessageSearchQuery, NewProjectedMessage, ProjectedMessagePageQuery, WorkflowState,
+    project_raw_email_message, project_raw_email_message_from_blob,
 };
 use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
 use hermes_hub_backend::platform::storage::Database;
@@ -437,6 +438,102 @@ async fn message_local_trash_hides_from_default_lists_and_survives_reprojection_
         .await
         .expect("list restored messages");
     assert_eq!(restored_messages.len(), 1);
+}
+
+#[tokio::test]
+async fn message_search_supports_any_mode_and_field_rules_against_postgres() {
+    let Some((_, communication_store, message_store)) =
+        live_projection_context("message search rules").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let account_id = format!("acct_message_search_rules_{suffix}");
+
+    store_provider_account(
+        &communication_store,
+        &account_id,
+        "Search Rules Gmail",
+        format!("search-rules-{suffix}@example.com"),
+    )
+    .await;
+
+    let quarterly = record_raw_email_message(
+        &communication_store,
+        &account_id,
+        &format!("raw_message_search_rules_quarterly_{suffix}"),
+        &format!("provider-message-search-rules-quarterly-{suffix}"),
+        "Quarterly Report",
+        "Payment follow-up for the finance team",
+    )
+    .await;
+    let travel = record_raw_email_message(
+        &communication_store,
+        &account_id,
+        &format!("raw_message_search_rules_travel_{suffix}"),
+        &format!("provider-message-search-rules-travel-{suffix}"),
+        "Travel Plan",
+        "Invoice approved for next week",
+    )
+    .await;
+
+    let quarterly_projected = project_raw_email_message(&message_store, &quarterly)
+        .await
+        .expect("project quarterly message");
+    let travel_projected = project_raw_email_message(&message_store, &travel)
+        .await
+        .expect("project travel message");
+
+    let any_mode = message_store
+        .list_messages_page(ProjectedMessagePageQuery {
+            account_id: Some(&account_id),
+            workflow_state: None,
+            channel_kind: None,
+            query: None,
+            match_mode: MessageSearchMatchMode::Any,
+            search: MessageSearchQuery {
+                subject_contains: vec!["quarterly".to_owned()],
+                body_contains: vec!["invoice".to_owned()],
+                match_mode: MessageSearchMatchMode::Any,
+                ..MessageSearchQuery::default()
+            },
+            local_state: LocalMessageState::Active,
+            cursor: None,
+            limit: 10,
+        })
+        .await
+        .expect("list any-mode messages");
+
+    let any_ids = any_mode
+        .items
+        .iter()
+        .map(|summary| summary.message.message_id.as_str())
+        .collect::<Vec<_>>();
+    assert!(any_ids.contains(&quarterly_projected.message_id.as_str()));
+    assert!(any_ids.contains(&travel_projected.message_id.as_str()));
+
+    let all_mode = message_store
+        .list_messages_page(ProjectedMessagePageQuery {
+            account_id: Some(&account_id),
+            workflow_state: None,
+            channel_kind: None,
+            query: None,
+            match_mode: MessageSearchMatchMode::All,
+            search: MessageSearchQuery {
+                subject_contains: vec!["quarterly".to_owned()],
+                body_contains: vec!["payment".to_owned()],
+                match_mode: MessageSearchMatchMode::All,
+                ..MessageSearchQuery::default()
+            },
+            local_state: LocalMessageState::Active,
+            cursor: None,
+            limit: 10,
+        })
+        .await
+        .expect("list all-mode messages");
+
+    assert_eq!(all_mode.items.len(), 1);
+    assert_eq!(all_mode.items[0].message.message_id, quarterly_projected.message_id);
 }
 
 #[tokio::test]

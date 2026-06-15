@@ -1,5 +1,7 @@
 // --- Re-exported API types from Svelte reference ---
 
+import type { MailCertificate } from './certificates'
+
 export type LocalMessageState = 'active' | 'trash' | 'all'
 
 export type WorkflowState = 'new' | 'reviewed' | 'needs_action' | 'waiting' | 'done' | 'archived' | 'muted' | 'spam'
@@ -32,6 +34,8 @@ export type CommunicationMessageSummary = {
 
 export type MailMessagesResponse = {
   items: CommunicationMessageSummary[]
+  next_cursor: string | null
+  has_more: boolean
 }
 
 export type CommunicationAttachment = {
@@ -177,13 +181,27 @@ export type EmailThread = {
   participant_count: number
   first_message_at: string | null
   last_message_at: string | null
+  last_activity_at: string
   has_open_action: boolean
   has_attachments: boolean
   dominant_workflow_state: string
 }
 
+export type MailThreadSummary = Pick<
+  EmailThread,
+  | 'thread_id'
+  | 'subject'
+  | 'message_count'
+  | 'participant_count'
+  | 'last_activity_at'
+  | 'has_open_action'
+  | 'has_attachments'
+  | 'dominant_workflow_state'
+>
+
 export type ThreadMessage = {
   message_id: string
+  provider_record_id: string
   account_id: string
   subject: string
   sender: string
@@ -197,9 +215,14 @@ export type ThreadMessage = {
   ai_summary: string | null
   delivery_state: string
   attachment_count: number
+  attachments: CommunicationAttachment[]
 }
 
-export type ThreadListResponse = { items: EmailThread[] }
+export type ThreadListResponse = {
+  items: EmailThread[]
+  next_cursor: string | null
+  has_more: boolean
+}
 export type ThreadMessagesResponse = { items: ThreadMessage[] }
 
 export type MessageAnalyzeResponse = {
@@ -207,11 +230,27 @@ export type MessageAnalyzeResponse = {
   analyzed: boolean
   category: string | null
   summary: string | null
+  summary_contract: {
+    key_points: string[]
+    action_items: string[]
+    risks: string[]
+    deadlines: string[]
+    event_candidates: MailKnowledgeCandidate[]
+    persona_candidates: MailKnowledgeCandidate[]
+    organization_candidates: MailKnowledgeCandidate[]
+    document_candidates: MailKnowledgeCandidate[]
+    agreement_candidates: MailKnowledgeCandidate[]
+  }
   importance_score: number | null
   workflow_state: string
   source: string
   confidence: number | null
   evidence: string[]
+}
+
+export type MailKnowledgeCandidate = {
+  title: string
+  evidence: string
 }
 
 export type WorkflowActionKind =
@@ -262,30 +301,6 @@ export type WorkflowActionResponse = {
   }
 }
 
-export type EmailDraft = {
-  draft_id: string
-  account_id: string
-  persona_id: string | null
-  to_recipients: string[]
-  cc_recipients: string[]
-  bcc_recipients: string[]
-  subject: string
-  body_text: string
-  body_html: string | null
-  in_reply_to: string | null
-  references: string[]
-  status: 'draft' | 'scheduled' | 'sending' | 'sent' | 'failed'
-  scheduled_send_at: string | null
-  send_attempts: number
-  last_error: string | null
-  metadata: Record<string, unknown>
-  created_at: string
-  updated_at: string
-}
-
-export type DraftListResponse = { items: EmailDraft[] }
-export type DraftDeleteResponse = { deleted: boolean }
-
 export type MailboxHealth = {
   total_messages: number
   unread: number
@@ -307,32 +322,16 @@ export type SenderStats = {
   last_message_days: number | null
 }
 
+export type SenderStatsListResponse = {
+  items: SenderStats[]
+  next_cursor: string | null
+  has_more: boolean
+}
+
 export type WorkflowStateTransitionResponse = {
   message_id: string
   workflow_state: string
   previous_state: string
-}
-
-export type SendEmailRequest = {
-  account_id: string
-  to: string[]
-  cc?: string[]
-  bcc?: string[]
-  subject: string
-  body_text: string
-  body_html?: string | null
-  in_reply_to?: string | null
-  references?: string[]
-  confirmed_provider_write: boolean
-}
-
-export type SendEmailResponse = {
-  message_id: string
-  accepted: string[]
-  accepted_recipients: string[]
-  transport: 'smtp' | 'local' | string
-  status: 'sent' | 'queued' | string
-  failure_reason: string | null
 }
 
 export type MessageExplainResponse = {
@@ -358,6 +357,7 @@ export type MessageExportResponse = {
   content: string
   filename: string
 }
+export type MessageExportFormat = 'md' | 'eml' | 'json'
 
 export type MessageAuthResult = {
   result: string
@@ -417,6 +417,15 @@ export type AiReplyResponse = {
   reason?: string
 }
 
+export type AiReplyVariantsRequest = {
+  languages?: string[]
+  tones?: string[]
+}
+
+export type AiReplyVariantsResponse = {
+  variants: AiReplyResponse[]
+}
+
 export type ExtractedTask = {
   title: string
   due_date: string | null
@@ -448,6 +457,12 @@ export type SubscriptionSource = {
   has_unsubscribe: boolean
 }
 
+export type SubscriptionListResponse = {
+  items: SubscriptionSource[]
+  next_cursor: string | null
+  has_more: boolean
+}
+
 export type DuplicateAttachmentGroup = {
   sha256: string
   filenames: string[]
@@ -473,8 +488,8 @@ export type MailResourceSnapshot = {
   duplicates: DuplicateAttachmentGroup[]
   invoices: unknown[]
   legalDocuments: unknown[]
-  certificates: unknown[]
-  expiringCertificates: unknown[]
+  certificates: MailCertificate[]
+  expiringCertificates: MailCertificate[]
   personas: unknown[]
   templates: unknown[]
   blockers: unknown[]
@@ -492,30 +507,36 @@ export type MailResourceSummary = {
   blockers: number
 }
 
-export type EmailTemplate = {
-  template_id: string
-  name: string
-  subject_template: string
-  body_template: string
-  variables: string[]
-  language: string | null
-  created_at: string
-  updated_at: string
-}
-
-export type EmailPersona = {
-  persona_id: string
-  account_id: string
-  name: string
-  display_name: string
-  signature: string
-  default_language: string | null
-  default_tone: string | null
-  is_default: boolean
-  metadata: Record<string, unknown>
-  created_at: string
-  updated_at: string
-}
+export type { EmailPersona } from './personas'
+export type {
+  MailCertificate,
+  MailCertificateCreateRequest,
+  MailCertificateListResponse
+} from './certificates'
+export type {
+  BulkMessageAction,
+  BulkMessageActionRequest,
+  BulkMessageActionResponse,
+  DraftDeleteResponse,
+  DraftListResponse,
+  EmailDraft,
+  EmailOutboxItem,
+  EmailOutboxStatus,
+  OutboxListResponse,
+  RedirectMessageRequest,
+  SendEmailRequest,
+  SendEmailResponse
+} from './mailOperations'
+export type {
+  EmailTemplate,
+  RichTemplateDeleteResponse,
+  RichTemplateMailMergePreviewRequest,
+  RichTemplateMailMergePreviewResponse,
+  RichTemplateRenderRequest,
+  RichTemplateRenderResponse,
+  RichTemplateUpsertRequest,
+  RichTemplateUpsertResponse
+} from './templates'
 
 export type MailArchitectureBlocker = {
   section: string
@@ -537,6 +558,10 @@ export type ComposeFormModel = {
   bccText: string
   subject: string
   body: string
+  bodyHtml: string | null
+  bodyFormat: 'plain' | 'html'
+  scheduledSendAt: string
+  undoSendSeconds: number | null
   inReplyTo: string | null
 }
 

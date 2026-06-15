@@ -34,7 +34,7 @@ use testkit::context::TestContext;
 const LOCAL_API_TOKEN: &str = "account-setup-test-token";
 
 #[test]
-fn gmail_oauth_setup_defaults_to_mail_calendar_and_contacts_read_scopes() {
+fn gmail_oauth_setup_defaults_to_mail_send_calendar_and_contacts_scopes() {
     let request = GmailOAuthSetupRequest::new(
         "acct_google_workspace",
         "Google Workspace",
@@ -47,6 +47,7 @@ fn gmail_oauth_setup_defaults_to_mail_calendar_and_contacts_read_scopes() {
         request.scopes,
         [
             "https://www.googleapis.com/auth/gmail.readonly",
+            "https://www.googleapis.com/auth/gmail.send",
             "https://www.googleapis.com/auth/calendar.readonly",
             "https://www.googleapis.com/auth/contacts.readonly",
         ]
@@ -188,6 +189,7 @@ async fn gmail_oauth_start_api_uses_configured_google_desktop_client_against_pos
     assert!(authorization_url.starts_with("https://accounts.google.com/o/oauth2/auth?"));
     assert!(authorization_url.contains("client_id=desktop-client-id.apps.googleusercontent.com"));
     assert!(authorization_url.contains("gmail.readonly"));
+    assert!(authorization_url.contains("gmail.send"));
     assert!(authorization_url.contains("calendar.readonly"));
     assert!(authorization_url.contains("contacts.readonly"));
 
@@ -611,6 +613,7 @@ async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_pos
     assert!(pending.authorization_url.contains("access_type=offline"));
     assert!(pending.authorization_url.contains("prompt=consent"));
     assert!(pending.authorization_url.contains("gmail.readonly"));
+    assert!(pending.authorization_url.contains("gmail.send"));
     assert!(!pending.authorization_url.contains(&pending.code_verifier));
 
     let completed = service

@@ -23,20 +23,36 @@ pub(crate) async fn get_v1_analytics_health(
 pub(crate) struct SendersQuery {
     pub(super) account_id: Option<String>,
     pub(super) limit: Option<i64>,
+    pub(super) cursor: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SendersResponse {
+    pub(super) items: Vec<crate::domains::mail::analytics::SenderStats>,
+    pub(super) next_cursor: Option<String>,
+    pub(super) has_more: bool,
 }
 
 pub(crate) async fn get_v1_analytics_senders(
     State(state): State<AppState>,
     Query(query): Query<SendersQuery>,
-) -> Result<Json<Vec<crate::domains::mail::analytics::SenderStats>>, ApiError> {
+) -> Result<Json<SendersResponse>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let store = crate::domains::mail::analytics::EmailAnalyticsStore::new(pool);
-    let senders = store
-        .top_senders(query.account_id.as_deref(), query.limit.unwrap_or(20))
+    let page = store
+        .top_senders_page(
+            query.account_id.as_deref(),
+            query.limit.unwrap_or(20),
+            query.cursor.as_deref(),
+        )
         .await?;
-    Ok(Json(senders))
+    Ok(Json(SendersResponse {
+        items: page.items,
+        next_cursor: page.next_cursor,
+        has_more: page.has_more,
+    }))
 }

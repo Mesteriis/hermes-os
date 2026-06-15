@@ -1,3 +1,6 @@
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use serde::Deserialize;
 use serde::Serialize;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -24,6 +27,13 @@ pub struct SenderStats {
     pub message_count: i64,
     pub avg_importance: f64,
     pub last_message_days: Option<f64>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SenderStatsListPage {
+    pub items: Vec<SenderStats>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
 }
 
 #[derive(Clone)]
@@ -79,19 +89,49 @@ impl EmailAnalyticsStore {
         account_id: Option<&str>,
         limit: i64,
     ) -> Result<Vec<SenderStats>, EmailAnalyticsError> {
+        Ok(self
+            .top_senders_page(account_id, limit, None)
+            .await?
+            .items)
+    }
+
+    pub async fn top_senders_page(
+        &self,
+        account_id: Option<&str>,
+        limit: i64,
+        cursor: Option<&str>,
+    ) -> Result<SenderStatsListPage, EmailAnalyticsError> {
         let limit = limit.clamp(1, 50);
+        let cursor = cursor
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(decode_sender_stats_cursor)
+            .transpose()?;
         let rows = sqlx::query(
-            r#"SELECT sender, count(*)::BIGINT AS message_count,
-                COALESCE(avg(importance_score), 0)::DOUBLE PRECISION AS avg_importance,
-                EXTRACT(EPOCH FROM now() - max(occurred_at))::DOUBLE PRECISION / 86400.0::DOUBLE PRECISION AS last_message_days
-            FROM communication_messages
-            WHERE ($1::text IS NULL OR account_id = $1)
-              AND channel_kind = 'email'
-              AND local_state = 'active'
-            GROUP BY sender ORDER BY message_count DESC LIMIT $2"#,
+            r#"WITH sender_stats AS (
+                SELECT sender, count(*)::BIGINT AS message_count,
+                    COALESCE(avg(importance_score), 0)::DOUBLE PRECISION AS avg_importance,
+                    EXTRACT(EPOCH FROM now() - max(occurred_at))::DOUBLE PRECISION / 86400.0::DOUBLE PRECISION AS last_message_days
+                FROM communication_messages
+                WHERE ($1::text IS NULL OR account_id = $1)
+                  AND channel_kind = 'email'
+                  AND local_state = 'active'
+                GROUP BY sender
+            )
+            SELECT sender, message_count, avg_importance, last_message_days
+            FROM sender_stats
+            WHERE (
+                $2::BIGINT IS NULL
+                OR message_count < $2
+                OR (message_count = $2 AND sender > $3)
+            )
+            ORDER BY message_count DESC, sender ASC
+            LIMIT $4"#,
         )
         .bind(account_id)
-        .bind(limit)
+        .bind(cursor.as_ref().map(|value| value.message_count))
+        .bind(cursor.as_ref().map(|value| value.sender.as_str()))
+        .bind(limit + 1)
         .fetch_all(&self.pool)
         .await?;
 
@@ -104,7 +144,20 @@ impl EmailAnalyticsStore {
                 last_message_days: row.try_get("last_message_days")?,
             });
         }
-        Ok(stats)
+        let has_more = stats.len() > limit as usize;
+        if has_more {
+            stats.truncate(limit as usize);
+        }
+        let next_cursor = if has_more {
+            stats.last().map(encode_sender_stats_cursor).transpose()?
+        } else {
+            None
+        };
+        Ok(SenderStatsListPage {
+            items: stats,
+            next_cursor,
+            has_more,
+        })
     }
 }
 
@@ -112,4 +165,35 @@ impl EmailAnalyticsStore {
 pub enum EmailAnalyticsError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
+    #[error("invalid sender stats cursor")]
+    InvalidCursor,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct SenderStatsCursor {
+    message_count: i64,
+    sender: String,
+}
+
+fn encode_sender_stats_cursor(sender: &SenderStats) -> Result<String, EmailAnalyticsError> {
+    let cursor = SenderStatsCursor {
+        message_count: sender.message_count,
+        sender: sender.sender.clone(),
+    };
+    let bytes = serde_json::to_vec(&cursor).map_err(|_| EmailAnalyticsError::InvalidCursor)?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn decode_sender_stats_cursor(cursor: &str) -> Result<SenderStatsCursor, EmailAnalyticsError> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| EmailAnalyticsError::InvalidCursor)?;
+    let cursor: SenderStatsCursor =
+        serde_json::from_slice(&bytes).map_err(|_| EmailAnalyticsError::InvalidCursor)?;
+    if cursor.message_count < 0 || cursor.sender.trim().is_empty() {
+        return Err(EmailAnalyticsError::InvalidCursor);
+    }
+    Ok(cursor)
 }

@@ -1,0 +1,663 @@
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
+use thiserror::Error;
+
+use crate::platform::events::{EventStore, NewEventEnvelope};
+
+mod delivery;
+mod delivery_status;
+mod provider_sender;
+mod smtp_sender;
+
+pub use delivery::{
+    EmailOutboxDeliveryWorker, OutboxDeliveryError, OutboxDeliveryReport, OutboxEmailSender,
+    OutboxRetryPolicy, OutboxSendReceipt,
+};
+pub use delivery_status::{
+    NewOutboxDeliveryStatus, OutboxDeliveryStatus, OutboxDeliveryStatusRecord,
+};
+pub use provider_sender::ProviderOutboxEmailSender;
+pub use smtp_sender::{
+    LiveSmtpTransport, SmtpOutboxEmailSender, SmtpTransport, outgoing_email_from_outbox_item,
+    smtp_config_for_provider_account,
+};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EmailOutboxStatus {
+    Queued,
+    Scheduled,
+    Sending,
+    Sent,
+    Failed,
+    Canceled,
+}
+
+impl EmailOutboxStatus {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Queued => "queued",
+            Self::Scheduled => "scheduled",
+            Self::Sending => "sending",
+            Self::Sent => "sent",
+            Self::Failed => "failed",
+            Self::Canceled => "canceled",
+        }
+    }
+
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim() {
+            "queued" => Some(Self::Queued),
+            "scheduled" => Some(Self::Scheduled),
+            "sending" => Some(Self::Sending),
+            "sent" => Some(Self::Sent),
+            "failed" => Some(Self::Failed),
+            "canceled" => Some(Self::Canceled),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct EmailOutboxItem {
+    pub outbox_id: String,
+    pub account_id: String,
+    pub draft_id: Option<String>,
+    pub to_recipients: Vec<String>,
+    pub cc_recipients: Vec<String>,
+    pub bcc_recipients: Vec<String>,
+    pub subject: String,
+    pub body_text: String,
+    pub body_html: Option<String>,
+    pub status: EmailOutboxStatus,
+    pub scheduled_send_at: Option<DateTime<Utc>>,
+    pub undo_deadline_at: Option<DateTime<Utc>>,
+    pub send_attempts: i32,
+    pub claimed_at: Option<DateTime<Utc>>,
+    pub sent_at: Option<DateTime<Utc>>,
+    pub provider_message_id: Option<String>,
+    pub last_error: Option<String>,
+    pub metadata: Value,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct EmailOutboxListPage {
+    pub items: Vec<EmailOutboxItem>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
+}
+
+#[derive(Clone, Debug)]
+pub struct NewEmailOutboxItem {
+    pub outbox_id: String,
+    pub account_id: String,
+    pub draft_id: Option<String>,
+    pub to_recipients: Vec<String>,
+    pub cc_recipients: Vec<String>,
+    pub bcc_recipients: Vec<String>,
+    pub subject: String,
+    pub body_text: String,
+    pub body_html: Option<String>,
+    pub status: EmailOutboxStatus,
+    pub scheduled_send_at: Option<DateTime<Utc>>,
+    pub undo_deadline_at: Option<DateTime<Utc>>,
+    pub metadata: Value,
+}
+
+impl NewEmailOutboxItem {
+    fn validate(&self) -> Result<(), EmailOutboxError> {
+        validate_non_empty("outbox_id", &self.outbox_id)?;
+        validate_non_empty("account_id", &self.account_id)?;
+        if self
+            .to_recipients
+            .iter()
+            .chain(self.cc_recipients.iter())
+            .chain(self.bcc_recipients.iter())
+            .all(|recipient| recipient.trim().is_empty())
+        {
+            return Err(EmailOutboxError::Invalid(
+                "at least one recipient is required",
+            ));
+        }
+        if !self.metadata.is_object() {
+            return Err(EmailOutboxError::Invalid("metadata must be a JSON object"));
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Clone)]
+pub struct EmailOutboxStore {
+    pool: PgPool,
+}
+
+impl EmailOutboxStore {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn enqueue(
+        &self,
+        item: &NewEmailOutboxItem,
+    ) -> Result<EmailOutboxItem, EmailOutboxError> {
+        item.validate()?;
+        let sql = outbox_returning_query(
+            r#"
+            INSERT INTO email_outbox_tracking (
+                outbox_id,
+                account_id,
+                draft_id,
+                to_recipients,
+                cc_recipients,
+                bcc_recipients,
+                subject,
+                body_text,
+                body_html,
+                status,
+                scheduled_send_at,
+                undo_deadline_at,
+                metadata
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            "#,
+            "email_outbox_tracking",
+        );
+        let row = sqlx::query(&sql)
+            .bind(item.outbox_id.trim())
+            .bind(item.account_id.trim())
+            .bind(item.draft_id.as_deref())
+            .bind(serde_json::to_value(&item.to_recipients)?)
+            .bind(serde_json::to_value(&item.cc_recipients)?)
+            .bind(serde_json::to_value(&item.bcc_recipients)?)
+            .bind(&item.subject)
+            .bind(&item.body_text)
+            .bind(item.body_html.as_deref())
+            .bind(item.status.as_str())
+            .bind(item.scheduled_send_at)
+            .bind(item.undo_deadline_at)
+            .bind(&item.metadata)
+            .fetch_one(&self.pool)
+            .await?;
+
+        row_to_outbox_item(row)
+    }
+
+    pub async fn list(
+        &self,
+        account_id: Option<&str>,
+        status: Option<EmailOutboxStatus>,
+        limit: i64,
+    ) -> Result<Vec<EmailOutboxItem>, EmailOutboxError> {
+        Ok(self.list_page(account_id, status, None, limit).await?.items)
+    }
+
+    pub async fn list_page(
+        &self,
+        account_id: Option<&str>,
+        status: Option<EmailOutboxStatus>,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<EmailOutboxListPage, EmailOutboxError> {
+        let limit = validate_limit(limit)?;
+        let cursor = cursor
+            .map(decode_outbox_list_cursor)
+            .transpose()?;
+        let status = status.map(EmailOutboxStatus::as_str);
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                outbox.outbox_id,
+                outbox.account_id,
+                outbox.draft_id,
+                outbox.to_recipients,
+                outbox.cc_recipients,
+                outbox.bcc_recipients,
+                outbox.subject,
+                outbox.body_text,
+                outbox.body_html,
+                outbox.status,
+                outbox.scheduled_send_at,
+                outbox.undo_deadline_at,
+                outbox.send_attempts,
+                outbox.claimed_at,
+                outbox.sent_at,
+                outbox.provider_message_id,
+                outbox.last_error,
+                CASE
+                    WHEN latest_receipt.latest_read_receipt IS NULL THEN outbox.metadata
+                    ELSE jsonb_set(
+                        outbox.metadata,
+                        '{latest_read_receipt}',
+                        latest_receipt.latest_read_receipt,
+                        true
+                    )
+                END AS metadata,
+                outbox.created_at,
+                outbox.updated_at
+            FROM email_outbox_tracking outbox
+            LEFT JOIN LATERAL (
+                SELECT jsonb_build_object(
+                    'receipt_kind', receipt.receipt_kind,
+                    'read_at', receipt.read_at,
+                    'source_kind', receipt.source_kind
+                ) AS latest_read_receipt
+                FROM mail_read_receipts receipt
+                WHERE receipt.outbox_id = outbox.outbox_id
+                ORDER BY receipt.read_at DESC, receipt.receipt_id ASC
+                LIMIT 1
+            ) latest_receipt ON true
+            WHERE ($1::text IS NULL OR outbox.account_id = $1)
+              AND ($2::text IS NULL OR outbox.status = $2)
+              AND (
+                  $3::timestamptz IS NULL
+                  OR outbox.created_at < $3
+                  OR (outbox.created_at = $3 AND outbox.outbox_id > $4)
+              )
+            ORDER BY outbox.created_at DESC, outbox.outbox_id ASC
+            LIMIT $5
+            "#,
+        )
+        .bind(account_id)
+        .bind(status)
+        .bind(cursor.as_ref().map(|cursor| cursor.created_at))
+        .bind(cursor.as_ref().map(|cursor| cursor.outbox_id.as_str()))
+        .bind(limit + 1)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut items = rows
+            .into_iter()
+            .map(row_to_outbox_item)
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_more = items.len() > limit as usize;
+        if has_more {
+            items.truncate(limit as usize);
+        }
+        let next_cursor = if has_more {
+            items.last().map(encode_outbox_list_cursor).transpose()?
+        } else {
+            None
+        };
+
+        Ok(EmailOutboxListPage {
+            items,
+            next_cursor,
+            has_more,
+        })
+    }
+
+    pub async fn undo(
+        &self,
+        outbox_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<EmailOutboxItem, EmailOutboxError> {
+        validate_non_empty("outbox_id", outbox_id)?;
+        let sql = outbox_returning_query(
+            r#"
+            UPDATE email_outbox_tracking
+            SET status = 'canceled',
+                updated_at = $2
+            WHERE outbox_id = $1
+              AND status IN ('queued', 'scheduled')
+              AND undo_deadline_at IS NOT NULL
+              AND undo_deadline_at >= $2
+            "#,
+            "email_outbox_tracking",
+        );
+        let row = sqlx::query(&sql)
+            .bind(outbox_id.trim())
+            .bind(now)
+            .fetch_optional(&self.pool)
+            .await?;
+
+        match row {
+            Some(row) => row_to_outbox_item(row),
+            None => Err(EmailOutboxError::UndoUnavailable),
+        }
+    }
+
+    pub async fn claim_due(
+        &self,
+        now: DateTime<Utc>,
+        limit: i64,
+    ) -> Result<Vec<EmailOutboxItem>, EmailOutboxError> {
+        let limit = validate_limit(limit)?;
+        let sql = outbox_returning_query(
+            r#"
+            WITH due AS (
+                SELECT outbox_id
+                FROM email_outbox_tracking
+                WHERE status IN ('queued', 'scheduled')
+                  AND (scheduled_send_at IS NULL OR scheduled_send_at <= $1)
+                  AND (undo_deadline_at IS NULL OR undo_deadline_at <= $1)
+                ORDER BY COALESCE(scheduled_send_at, created_at) ASC, created_at ASC, outbox_id ASC
+                LIMIT $2
+                FOR UPDATE SKIP LOCKED
+            )
+            UPDATE email_outbox_tracking item
+            SET status = 'sending',
+                send_attempts = item.send_attempts + 1,
+                claimed_at = $1,
+                updated_at = $1
+            FROM due
+            WHERE item.outbox_id = due.outbox_id
+            "#,
+            "item",
+        );
+        let rows = sqlx::query(&sql)
+            .bind(now)
+            .bind(limit)
+            .fetch_all(&self.pool)
+            .await?;
+
+        rows.into_iter().map(row_to_outbox_item).collect()
+    }
+
+    pub async fn mark_sent(
+        &self,
+        outbox_id: &str,
+        now: DateTime<Utc>,
+        receipt: &OutboxSendReceipt,
+    ) -> Result<Option<EmailOutboxItem>, EmailOutboxError> {
+        validate_non_empty("outbox_id", outbox_id)?;
+        validate_non_empty("provider_message_id", &receipt.provider_message_id)?;
+        let mut transaction = self.pool.begin().await?;
+        let sql = outbox_returning_query(
+            r#"
+            UPDATE email_outbox_tracking
+            SET status = 'sent',
+                sent_at = $2,
+                provider_message_id = $3,
+                last_error = NULL,
+                updated_at = $2
+            WHERE outbox_id = $1
+              AND status = 'sending'
+            "#,
+            "email_outbox_tracking",
+        );
+        let row = sqlx::query(&sql)
+            .bind(outbox_id.trim())
+            .bind(now)
+            .bind(receipt.provider_message_id.trim())
+            .fetch_optional(&mut *transaction)
+            .await?;
+        let Some(item) = row.map(row_to_outbox_item).transpose()? else {
+            transaction.rollback().await?;
+            return Ok(None);
+        };
+        let event = outbox_delivery_event("mail.outbox.sent", &item)?;
+        EventStore::append_in_transaction(&mut transaction, &event).await?;
+        transaction.commit().await?;
+
+        Ok(Some(item))
+    }
+
+    pub async fn mark_failed(
+        &self,
+        outbox_id: &str,
+        now: DateTime<Utc>,
+        error_message: &str,
+    ) -> Result<Option<EmailOutboxItem>, EmailOutboxError> {
+        validate_non_empty("outbox_id", outbox_id)?;
+        validate_non_empty("last_error", error_message)?;
+        let mut transaction = self.pool.begin().await?;
+        let sql = outbox_returning_query(
+            r#"
+            UPDATE email_outbox_tracking
+            SET status = 'failed',
+                sent_at = NULL,
+                provider_message_id = NULL,
+                last_error = $3,
+                updated_at = $2
+            WHERE outbox_id = $1
+              AND status = 'sending'
+            "#,
+            "email_outbox_tracking",
+        );
+        let row = sqlx::query(&sql)
+            .bind(outbox_id.trim())
+            .bind(now)
+            .bind(error_message.trim())
+            .fetch_optional(&mut *transaction)
+            .await?;
+        let Some(item) = row.map(row_to_outbox_item).transpose()? else {
+            transaction.rollback().await?;
+            return Ok(None);
+        };
+        let event = outbox_delivery_event("mail.outbox.failed", &item)?;
+        EventStore::append_in_transaction(&mut transaction, &event).await?;
+        transaction.commit().await?;
+
+        Ok(Some(item))
+    }
+
+    pub async fn mark_retry_scheduled(
+        &self,
+        outbox_id: &str,
+        now: DateTime<Utc>,
+        next_attempt_at: DateTime<Utc>,
+        error_message: &str,
+    ) -> Result<Option<EmailOutboxItem>, EmailOutboxError> {
+        validate_non_empty("outbox_id", outbox_id)?;
+        validate_non_empty("last_error", error_message)?;
+        if next_attempt_at <= now {
+            return Err(EmailOutboxError::Invalid(
+                "next_attempt_at must be after now",
+            ));
+        }
+
+        let mut transaction = self.pool.begin().await?;
+        let sql = outbox_returning_query(
+            r#"
+            UPDATE email_outbox_tracking
+            SET status = 'scheduled',
+                scheduled_send_at = $3,
+                claimed_at = NULL,
+                sent_at = NULL,
+                provider_message_id = NULL,
+                last_error = $4,
+                updated_at = $2
+            WHERE outbox_id = $1
+              AND status = 'sending'
+            "#,
+            "email_outbox_tracking",
+        );
+        let row = sqlx::query(&sql)
+            .bind(outbox_id.trim())
+            .bind(now)
+            .bind(next_attempt_at)
+            .bind(error_message.trim())
+            .fetch_optional(&mut *transaction)
+            .await?;
+        let Some(item) = row.map(row_to_outbox_item).transpose()? else {
+            transaction.rollback().await?;
+            return Ok(None);
+        };
+        let event = outbox_delivery_event("mail.outbox.retry_scheduled", &item)?;
+        EventStore::append_in_transaction(&mut transaction, &event).await?;
+        transaction.commit().await?;
+
+        Ok(Some(item))
+    }
+}
+
+fn outbox_returning_query(prefix: &str, qualifier: &str) -> String {
+    format!(
+        r#"{prefix}
+        RETURNING
+            {qualifier}.outbox_id,
+            {qualifier}.account_id,
+            {qualifier}.draft_id,
+            {qualifier}.to_recipients,
+            {qualifier}.cc_recipients,
+            {qualifier}.bcc_recipients,
+            {qualifier}.subject,
+            {qualifier}.body_text,
+            {qualifier}.body_html,
+            {qualifier}.status,
+            {qualifier}.scheduled_send_at,
+            {qualifier}.undo_deadline_at,
+            {qualifier}.send_attempts,
+            {qualifier}.claimed_at,
+            {qualifier}.sent_at,
+            {qualifier}.provider_message_id,
+            {qualifier}.last_error,
+            {qualifier}.metadata,
+            {qualifier}.created_at,
+            {qualifier}.updated_at
+        "#
+    )
+}
+
+fn row_to_outbox_item(row: PgRow) -> Result<EmailOutboxItem, EmailOutboxError> {
+    let status: String = row.try_get("status")?;
+    Ok(EmailOutboxItem {
+        outbox_id: row.try_get("outbox_id")?,
+        account_id: row.try_get("account_id")?,
+        draft_id: row.try_get("draft_id")?,
+        to_recipients: string_array(row.try_get("to_recipients")?)?,
+        cc_recipients: string_array(row.try_get("cc_recipients")?)?,
+        bcc_recipients: string_array(row.try_get("bcc_recipients")?)?,
+        subject: row.try_get("subject")?,
+        body_text: row.try_get("body_text")?,
+        body_html: row.try_get("body_html")?,
+        status: EmailOutboxStatus::parse(&status).unwrap_or(EmailOutboxStatus::Queued),
+        scheduled_send_at: row.try_get("scheduled_send_at")?,
+        undo_deadline_at: row.try_get("undo_deadline_at")?,
+        send_attempts: row.try_get("send_attempts")?,
+        claimed_at: row.try_get("claimed_at")?,
+        sent_at: row.try_get("sent_at")?,
+        provider_message_id: row.try_get("provider_message_id")?,
+        last_error: row.try_get("last_error")?,
+        metadata: row.try_get("metadata")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn string_array(value: Value) -> Result<Vec<String>, EmailOutboxError> {
+    serde_json::from_value(value).map_err(EmailOutboxError::Serde)
+}
+
+fn validate_non_empty(field_name: &'static str, value: &str) -> Result<(), EmailOutboxError> {
+    if value.trim().is_empty() {
+        return Err(EmailOutboxError::Invalid(field_name));
+    }
+
+    Ok(())
+}
+
+fn validate_limit(limit: i64) -> Result<i64, EmailOutboxError> {
+    if !(1..=500).contains(&limit) {
+        return Err(EmailOutboxError::Invalid("limit must be between 1 and 500"));
+    }
+
+    Ok(limit)
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct OutboxListCursor {
+    created_at: DateTime<Utc>,
+    outbox_id: String,
+}
+
+fn encode_outbox_list_cursor(item: &EmailOutboxItem) -> Result<String, EmailOutboxError> {
+    let cursor = OutboxListCursor {
+        created_at: item.created_at,
+        outbox_id: item.outbox_id.clone(),
+    };
+    let bytes = serde_json::to_vec(&cursor).map_err(|_| EmailOutboxError::InvalidCursor)?;
+
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn decode_outbox_list_cursor(cursor: &str) -> Result<OutboxListCursor, EmailOutboxError> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| EmailOutboxError::InvalidCursor)?;
+    let cursor: OutboxListCursor =
+        serde_json::from_slice(&bytes).map_err(|_| EmailOutboxError::InvalidCursor)?;
+    if cursor.outbox_id.trim().is_empty() {
+        return Err(EmailOutboxError::InvalidCursor);
+    }
+
+    Ok(cursor)
+}
+
+fn outbox_delivery_event(
+    event_type: &str,
+    item: &EmailOutboxItem,
+) -> Result<NewEventEnvelope, EmailOutboxError> {
+    let recipient_count =
+        item.to_recipients.len() + item.cc_recipients.len() + item.bcc_recipients.len();
+    Ok(NewEventEnvelope::builder(
+        generate_outbox_event_id(event_type, &item.outbox_id),
+        event_type,
+        Utc::now(),
+        json!({ "kind": "mail_outbox_worker" }),
+        json!({
+            "kind": "email_outbox",
+            "id": item.outbox_id,
+            "account_id": item.account_id,
+            "status": item.status.as_str(),
+        }),
+    )
+    .actor(json!({ "actor_id": "hermes-outbox-worker" }))
+    .payload(json!({
+        "outbox_id": item.outbox_id,
+        "account_id": item.account_id,
+        "status": item.status.as_str(),
+        "provider_message_id": item.provider_message_id,
+        "last_error": item.last_error,
+        "send_attempts": item.send_attempts,
+        "scheduled_send_at": item.scheduled_send_at,
+        "undo_deadline_at": item.undo_deadline_at,
+        "sent_at": item.sent_at,
+        "recipient_count": recipient_count,
+    }))
+    .provenance(json!({
+        "source_kind": "local_outbox",
+        "source_id": item.outbox_id,
+    }))
+    .correlation_id(item.outbox_id.clone())
+    .build()?)
+}
+
+fn generate_outbox_event_id(event_type: &str, outbox_id: &str) -> String {
+    format!(
+        "mail_outbox_event:{event_type}:{outbox_id}:{:x}",
+        Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    )
+}
+
+#[derive(Debug, Error)]
+pub enum EmailOutboxError {
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
+
+    #[error(transparent)]
+    Serde(#[from] serde_json::Error),
+
+    #[error(transparent)]
+    EventStore(#[from] crate::platform::events::EventStoreError),
+
+    #[error(transparent)]
+    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+
+    #[error("invalid outbox item: {0}")]
+    Invalid(&'static str),
+
+    #[error("invalid outbox cursor")]
+    InvalidCursor,
+
+    #[error("outbox item cannot be undone")]
+    UndoUnavailable,
+}

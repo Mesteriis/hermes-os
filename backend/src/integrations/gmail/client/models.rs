@@ -26,6 +26,11 @@ pub(super) struct GmailRawMessage {
 }
 
 #[derive(Debug, Deserialize)]
+pub(super) struct GmailSendResponse {
+    pub(super) id: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct GmailHistoryResponse {
     pub(super) history: Option<Vec<GmailHistoryItem>>,

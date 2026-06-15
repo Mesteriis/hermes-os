@@ -1,16 +1,32 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
+import { useVirtualizer } from '@tanstack/vue-virtual'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
-import type { EmailDraft, ComposeFormModel } from '../types/communications'
+import type { EmailDraft } from '../types/communications'
 
 const props = defineProps<{
   drafts: EmailDraft[]
+  hasMore: boolean
+  isLoadingMore: boolean
 }>()
 
 const emit = defineEmits<{
   openDraft: [draft: EmailDraft]
   deleteDraft: [draftId: string]
+  loadMore: []
 }>()
+
+const draftScrollRef = ref<HTMLDivElement | null>(null)
+const draftVirtualOptions = computed(() => ({
+  count: props.drafts.length,
+  getScrollElement: () => draftScrollRef.value,
+  estimateSize: () => 46,
+  overscan: 8
+}))
+const draftVirtualizer = useVirtualizer(draftVirtualOptions)
+const virtualDraftRows = computed(() => draftVirtualizer.value.getVirtualItems())
+const draftVirtualTotalSize = computed(() => draftVirtualizer.value.getTotalSize())
 </script>
 
 <template>
@@ -19,17 +35,44 @@ const emit = defineEmits<{
       <Icon icon="tabler:edit" class="draft-strip-icon" />
       <span class="draft-strip-title">Drafts ({{ drafts.length }})</span>
     </div>
-    <div class="draft-list">
-      <div v-for="draft in drafts" :key="draft.draft_id" class="draft-item">
-        <div class="draft-info" @click="emit('openDraft', draft)">
-          <span class="draft-subject">{{ draft.subject || '(No subject)' }}</span>
-          <span class="draft-recipients">{{ draft.to_recipients?.join(', ') || 'No recipients' }}</span>
+    <div ref="draftScrollRef" class="draft-list" :style="{ maxHeight: '12rem' }">
+      <div class="draft-list-track" :style="{ height: `${draftVirtualTotalSize}px` }">
+        <div
+          v-for="virtualRow in virtualDraftRows"
+          :key="String(virtualRow.key)"
+          class="draft-item"
+          :style="{
+            height: `${virtualRow.size}px`,
+            transform: `translateY(${virtualRow.start}px)`
+          }"
+        >
+          <div class="draft-info" @click="emit('openDraft', drafts[virtualRow.index])">
+            <span class="draft-subject">{{ drafts[virtualRow.index].subject || '(No subject)' }}</span>
+            <span class="draft-recipients">{{ drafts[virtualRow.index].to_recipients?.join(', ') || 'No recipients' }}</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            class="draft-delete-btn"
+            @click="emit('deleteDraft', drafts[virtualRow.index].draft_id)"
+          >
+            <Icon icon="tabler:x" />
+          </Button>
         </div>
-        <Button variant="ghost" size="sm" class="draft-delete-btn" @click="emit('deleteDraft', draft.draft_id)">
-          <Icon icon="tabler:x" />
-        </Button>
       </div>
     </div>
+    <Button
+      v-if="hasMore"
+      class="draft-load-more"
+      type="button"
+      variant="ghost"
+      size="sm"
+      :disabled="isLoadingMore"
+      @click="emit('loadMore')"
+    >
+      <Icon icon="tabler:chevron-down" />
+      <span>{{ isLoadingMore ? 'Loading drafts...' : 'Load more drafts' }}</span>
+    </Button>
   </div>
 </template>
 
@@ -59,11 +102,20 @@ const emit = defineEmits<{
 }
 
 .draft-list {
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  overflow: auto;
+}
+
+.draft-list-track {
+  position: relative;
+  width: 100%;
 }
 
 .draft-item {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   padding: 0.25rem 0.75rem;
@@ -99,5 +151,22 @@ const emit = defineEmits<{
 
 .draft-delete-btn {
   flex-shrink: 0;
+}
+
+.draft-load-more {
+  width: 100%;
+  justify-content: center;
+  border-radius: 0;
+  border-top: 1px solid var(--hh-border, #e5e7eb);
+  background: color-mix(in srgb, var(--hh-bg-warning-light, #fffbeb) 78%, transparent);
+  color: var(--hh-text-warning, #d97706);
+  font-size: 0.75rem;
+  font-weight: 600;
+  gap: 0.375rem;
+}
+
+.draft-load-more:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 </style>

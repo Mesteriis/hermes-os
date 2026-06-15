@@ -41,6 +41,9 @@ pub enum MessageProjectionError {
     #[error("message query limit must be between 1 and 5000: {0}")]
     InvalidLimit(i64),
 
+    #[error("invalid communication message cursor")]
+    InvalidCursor,
+
     #[error("communication message was not found")]
     MessageNotFound,
 
