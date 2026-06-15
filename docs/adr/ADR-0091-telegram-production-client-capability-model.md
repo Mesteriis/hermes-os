@@ -362,7 +362,7 @@ Risk handling:
 ## Required Follow-Up
 
 - Keep the detailed product and implementation capability matrix in
-  `docs/domains/telegram-channel.md`.
+  `docs/telegram/status.md` and `docs/telegram/gap-analysis.md`.
 - Add migrations and implementation ADRs before introducing tombstone/message
   version persistence, proxy persistence, outbox persistence, call runtime or
   session bundle schemas.

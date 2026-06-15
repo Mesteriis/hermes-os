@@ -60,7 +60,7 @@ Product workflows operate over Communication, Conversation, Participant,
 Attachment, Event and Context.
 
 Telegram provider-specific production behavior is documented in
-[Telegram Channel Capability Spec](telegram-channel.md). That document is a
+[Telegram Domain Audit](../telegram/README.md). That document set is a
 channel capability spec, not a separate domain.
 
 ## Source Evidence

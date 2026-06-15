@@ -43,7 +43,7 @@ provider into a standalone Hermes domain.
 
 | Channel | Spec | Status |
 |---|---|---|
-| Telegram | [Telegram Channel Capability Spec](telegram-channel.md) | target production capability matrix with current implementation baseline |
+| Telegram | [Telegram Domain Audit](../telegram/README.md) | target production capability matrix with current implementation baseline |
 
 ## Engine Documents
 

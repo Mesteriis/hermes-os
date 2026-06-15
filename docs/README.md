@@ -71,7 +71,7 @@ versioned implementation milestones and may use compatibility terminology.
 Canonical domain specs live under [Domain Catalog](domains/README.md).
 
 - [Communications](domains/communications.md)
-- [Telegram Channel Capability Spec](domains/telegram-channel.md)
+- [Telegram Domain Audit](telegram/README.md)
 - [Personas / Persona Intelligence](persons/README.md)
 - [Organizations](domains/organizations.md)
 - [Projects](domains/projects.md)

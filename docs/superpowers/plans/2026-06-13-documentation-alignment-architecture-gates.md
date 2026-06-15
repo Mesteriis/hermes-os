@@ -26,7 +26,7 @@
 - `docs/adr/ADR-0083-telegram-live-user-client-runtime.md`
 - `docs/adr/ADR-0091-telegram-production-client-capability-model.md`
 - `docs/adr/ADR-0092-mail-provider-capability-tiers.md`
-- `docs/domains/telegram-channel.md`
+- `docs/telegram/README.md`
 - `docs/calendar/architecture.md`
 - `docs/calendar/README.md`
 - `docs/mail/README.md`
@@ -171,7 +171,7 @@ Expected before refactor: FAIL because the component has 842 lines.
 
 - [x] **Step 2: Extract runtime status, capability panel and account action panels**
 
-Keep Telegram actions capability-gated per ADR-0091 and `docs/domains/telegram-channel.md`.
+Keep Telegram actions capability-gated per ADR-0091 and `docs/telegram/`.
 
 - [x] **Step 3: Validate**
 
