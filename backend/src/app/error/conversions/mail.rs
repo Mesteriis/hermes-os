@@ -25,8 +25,15 @@ impl From<MailStorageError> for ApiError {
 
 impl From<crate::domains::mail::threads::EmailThreadError> for ApiError {
     fn from(error: crate::domains::mail::threads::EmailThreadError) -> Self {
-        tracing::error!(error = %error, "email thread operation failed");
-        ApiError::InvalidCommunicationQuery("email thread operation failed")
+        match error {
+            crate::domains::mail::threads::EmailThreadError::InvalidCursor => {
+                ApiError::InvalidCommunicationQuery("invalid thread cursor")
+            }
+            error => {
+                tracing::error!(error = %error, "email thread operation failed");
+                ApiError::InvalidCommunicationQuery("email thread operation failed")
+            }
+        }
     }
 }
 
@@ -46,8 +53,141 @@ impl From<EmailIntelligenceError> for ApiError {
 
 impl From<crate::domains::mail::drafts::EmailDraftError> for ApiError {
     fn from(error: crate::domains::mail::drafts::EmailDraftError) -> Self {
-        tracing::error!(error = %error, "email draft operation failed");
-        ApiError::InvalidCommunicationQuery("email draft operation failed")
+        match error {
+            crate::domains::mail::drafts::EmailDraftError::Invalid(_) => {
+                ApiError::InvalidCommunicationQuery("invalid draft request")
+            }
+            crate::domains::mail::drafts::EmailDraftError::InvalidCursor => {
+                ApiError::InvalidCommunicationQuery("invalid draft cursor")
+            }
+            error => {
+                tracing::error!(error = %error, "email draft operation failed");
+                ApiError::InvalidCommunicationQuery("email draft operation failed")
+            }
+        }
+    }
+}
+
+impl From<crate::domains::mail::outbox::EmailOutboxError> for ApiError {
+    fn from(error: crate::domains::mail::outbox::EmailOutboxError) -> Self {
+        match error {
+            crate::domains::mail::outbox::EmailOutboxError::UndoUnavailable => ApiError::NotFound,
+            crate::domains::mail::outbox::EmailOutboxError::InvalidCursor => {
+                ApiError::InvalidCommunicationQuery("invalid outbox cursor")
+            }
+            error => {
+                tracing::error!(error = %error, "email outbox operation failed");
+                ApiError::InvalidCommunicationQuery("email outbox operation failed")
+            }
+        }
+    }
+}
+
+impl From<crate::domains::mail::bulk_actions::BulkMessageActionError> for ApiError {
+    fn from(error: crate::domains::mail::bulk_actions::BulkMessageActionError) -> Self {
+        match error {
+            crate::domains::mail::bulk_actions::BulkMessageActionError::Invalid(_) => {
+                ApiError::InvalidCommunicationQuery("invalid bulk message action request")
+            }
+            error => {
+                tracing::error!(error = %error, "bulk message action failed");
+                ApiError::InvalidCommunicationQuery("bulk message action failed")
+            }
+        }
+    }
+}
+
+impl From<crate::domains::mail::saved_searches::MailSavedSearchError> for ApiError {
+    fn from(error: crate::domains::mail::saved_searches::MailSavedSearchError) -> Self {
+        match error {
+            crate::domains::mail::saved_searches::MailSavedSearchError::Invalid(_) => {
+                ApiError::InvalidCommunicationQuery("invalid saved search request")
+            }
+            crate::domains::mail::saved_searches::MailSavedSearchError::InvalidCursor => {
+                ApiError::InvalidCommunicationQuery("invalid saved search cursor")
+            }
+            error => {
+                tracing::error!(error = %error, "mail saved search operation failed");
+                ApiError::InvalidCommunicationQuery("mail saved search operation failed")
+            }
+        }
+    }
+}
+
+impl From<crate::domains::mail::folders::MailFolderError> for ApiError {
+    fn from(error: crate::domains::mail::folders::MailFolderError) -> Self {
+        match error {
+            crate::domains::mail::folders::MailFolderError::Invalid(_) => {
+                ApiError::InvalidCommunicationQuery("invalid mail folder request")
+            }
+            crate::domains::mail::folders::MailFolderError::InvalidCursor => {
+                ApiError::InvalidCommunicationQuery("invalid mail folder cursor")
+            }
+            error => {
+                tracing::error!(error = %error, "mail folder operation failed");
+                ApiError::InvalidCommunicationQuery("mail folder operation failed")
+            }
+        }
+    }
+}
+
+impl From<crate::domains::mail::ai_state::MailAiStateError> for ApiError {
+    fn from(error: crate::domains::mail::ai_state::MailAiStateError) -> Self {
+        match error {
+            crate::domains::mail::ai_state::MailAiStateError::Invalid(_) => {
+                ApiError::InvalidCommunicationQuery("invalid mail AI state request")
+            }
+            error => {
+                tracing::error!(error = %error, "mail AI state operation failed");
+                ApiError::InvalidCommunicationQuery("mail AI state operation failed")
+            }
+        }
+    }
+}
+
+impl From<crate::domains::mail::read_receipts::MailReadReceiptError> for ApiError {
+    fn from(error: crate::domains::mail::read_receipts::MailReadReceiptError) -> Self {
+        match error {
+            crate::domains::mail::read_receipts::MailReadReceiptError::Invalid(_) => {
+                ApiError::InvalidCommunicationQuery("invalid mail read receipt request")
+            }
+            error => {
+                tracing::error!(error = %error, "mail read receipt operation failed");
+                ApiError::InvalidCommunicationQuery("mail read receipt operation failed")
+            }
+        }
+    }
+}
+
+impl From<crate::domains::mail::templates::EmailTemplateError> for ApiError {
+    fn from(error: crate::domains::mail::templates::EmailTemplateError) -> Self {
+        match error {
+            crate::domains::mail::templates::EmailTemplateError::InvalidTemplate(_) => {
+                ApiError::InvalidCommunicationQuery("invalid email template request")
+            }
+            error => {
+                tracing::error!(error = %error, "email template operation failed");
+                ApiError::InvalidCommunicationQuery("email template operation failed")
+            }
+        }
+    }
+}
+
+impl From<crate::domains::mail::delivery_notifications::MailDeliveryNotificationError>
+    for ApiError
+{
+    fn from(
+        error: crate::domains::mail::delivery_notifications::MailDeliveryNotificationError,
+    ) -> Self {
+        match error {
+            crate::domains::mail::delivery_notifications::MailDeliveryNotificationError::Invalid(_) => {
+                ApiError::InvalidCommunicationQuery("invalid mail delivery notification request")
+            }
+            error => {
+                tracing::error!(error = %error, "mail delivery notification operation failed");
+                ApiError::InvalidCommunicationQuery("mail delivery notification operation failed")
+            }
+        }
     }
 }
 
@@ -60,8 +200,15 @@ impl From<crate::domains::mail::finance::EmailFinanceError> for ApiError {
 
 impl From<crate::domains::mail::analytics::EmailAnalyticsError> for ApiError {
     fn from(error: crate::domains::mail::analytics::EmailAnalyticsError) -> Self {
-        tracing::error!(error = %error, "email analytics operation failed");
-        ApiError::InvalidCommunicationQuery("email analytics operation failed")
+        match error {
+            crate::domains::mail::analytics::EmailAnalyticsError::InvalidCursor => {
+                ApiError::InvalidCommunicationQuery("invalid analytics cursor")
+            }
+            error => {
+                tracing::error!(error = %error, "email analytics operation failed");
+                ApiError::InvalidCommunicationQuery("email analytics operation failed")
+            }
+        }
     }
 }
 
@@ -88,8 +235,15 @@ impl From<crate::domains::mail::flags::MessageFlagsError> for ApiError {
 
 impl From<crate::domains::mail::subscriptions::SubscriptionError> for ApiError {
     fn from(error: crate::domains::mail::subscriptions::SubscriptionError) -> Self {
-        tracing::error!(error = %error, "subscriptions operation failed");
-        ApiError::InvalidCommunicationQuery("subscriptions operation failed")
+        match error {
+            crate::domains::mail::subscriptions::SubscriptionError::InvalidCursor => {
+                ApiError::InvalidCommunicationQuery("invalid subscription cursor")
+            }
+            error => {
+                tracing::error!(error = %error, "subscriptions operation failed");
+                ApiError::InvalidCommunicationQuery("subscriptions operation failed")
+            }
+        }
     }
 }
 
@@ -97,6 +251,20 @@ impl From<crate::domains::mail::attachment_dedup::AttachmentDedupError> for ApiE
     fn from(error: crate::domains::mail::attachment_dedup::AttachmentDedupError) -> Self {
         tracing::error!(error = %error, "attachment dedup operation failed");
         ApiError::InvalidCommunicationQuery("attachment dedup operation failed")
+    }
+}
+
+impl From<crate::domains::mail::attachment_search::AttachmentSearchError> for ApiError {
+    fn from(error: crate::domains::mail::attachment_search::AttachmentSearchError) -> Self {
+        match error {
+            crate::domains::mail::attachment_search::AttachmentSearchError::InvalidCursor => {
+                ApiError::InvalidCommunicationQuery("invalid attachment search cursor")
+            }
+            error => {
+                tracing::error!(error = %error, "attachment search operation failed");
+                ApiError::InvalidCommunicationQuery("attachment search operation failed")
+            }
+        }
     }
 }
 

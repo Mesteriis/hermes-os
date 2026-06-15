@@ -1,10 +1,12 @@
 use serde_json::{Value, json};
 
 use super::super::errors::MailSyncError;
+use super::super::events::sync_run_started_event;
 use super::super::models::{MailSyncRun, MailSyncSettings, MailSyncTrigger};
 use super::super::rows::row_to_run;
 use super::super::validation::{mail_sync_run_id, validate_account_id};
 use super::MailSyncStore;
+use crate::platform::events::EventStore;
 
 impl MailSyncStore {
     pub(in crate::domains::mail::background_sync) async fn start_run(
@@ -16,6 +18,7 @@ impl MailSyncStore {
     ) -> Result<MailSyncRun, MailSyncError> {
         validate_account_id(account_id)?;
         let run_id = mail_sync_run_id(account_id);
+        let mut transaction = self.pool.begin().await?;
         let result = sqlx::query(
             r#"
             INSERT INTO communication_mail_sync_runs (
@@ -59,11 +62,17 @@ impl MailSyncStore {
         .bind(trigger.as_str())
         .bind(settings.batch_size)
         .bind(checkpoint_before.unwrap_or_else(|| json!({})))
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await;
 
         match result {
-            Ok(row) => row_to_run(row),
+            Ok(row) => {
+                let run = row_to_run(row)?;
+                let event = sync_run_started_event(&run)?;
+                EventStore::append_in_transaction(&mut transaction, &event).await?;
+                transaction.commit().await?;
+                Ok(run)
+            }
             Err(sqlx::Error::Database(error)) if error.is_unique_violation() => {
                 Err(MailSyncError::RunAlreadyActive)
             }

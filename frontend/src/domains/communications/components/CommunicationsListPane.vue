@@ -2,20 +2,39 @@
 import Icon from '../../../shared/ui/Icon.vue'
 import CommunicationsConversationList from './CommunicationsConversationList.vue'
 import MailList from './MailList.vue'
-import type { CommunicationMessageSummary, NavigatorMode } from '../types/communications'
+import type { CommunicationMessageSummary, MailThreadSummary, NavigatorMode } from '../types/communications'
 
 defineProps<{
+  accountId: string
   messages: CommunicationMessageSummary[]
+  threads: MailThreadSummary[]
   selectedIndex: number
+  selectedThreadId: string
+  selectedMessageIds: string[]
   navigatorMode: NavigatorMode
+  isFolderMode: boolean
   isLoading: boolean
+  hasNextPage: boolean
+  isFetchingNextPage: boolean
+  hasThreadNextPage: boolean
+  isFetchingThreadNextPage: boolean
   errorMessage: string
 }>()
 
 const emit = defineEmits<{
   select: [index: number]
+  selectThread: [thread: MailThreadSummary]
+  toggleSelection: [messageId: string, extendRange: boolean]
+  selectVisible: [messageIds: string[]]
+  clearSelection: []
+  loadMore: []
+  loadMoreThreads: []
   'update:navigatorMode': [mode: NavigatorMode]
 }>()
+
+function forwardToggleSelection(messageId: string, extendRange: boolean) {
+  emit('toggleSelection', messageId, extendRange)
+}
 </script>
 
 <template>
@@ -28,12 +47,19 @@ const emit = defineEmits<{
       <Icon icon="tabler:loader-2" class="spin-icon" />
       <span>Loading messages...</span>
     </div>
-    <div v-else-if="navigatorMode === 'threads' || navigatorMode === 'contacts'" class="pane-content">
+    <div v-else-if="!isFolderMode && (navigatorMode === 'threads' || navigatorMode === 'contacts')" class="pane-content">
       <CommunicationsConversationList
+        :account-id="accountId"
         :messages="messages"
+        :threads="threads"
         :selected-index="selectedIndex"
+        :selected-thread-id="selectedThreadId"
         :navigator-mode="navigatorMode"
+        :has-thread-next-page="hasThreadNextPage"
+        :is-fetching-thread-next-page="isFetchingThreadNextPage"
         @select="emit('select', $event)"
+        @select-thread="emit('selectThread', $event)"
+        @load-more-threads="emit('loadMoreThreads')"
         @update:navigator-mode="emit('update:navigatorMode', $event)"
       />
     </div>
@@ -41,14 +67,23 @@ const emit = defineEmits<{
       v-else
       :messages="messages"
       :selected-index="selectedIndex"
+      :selected-message-ids="selectedMessageIds"
       :is-loading="isLoading"
+      :has-next-page="hasNextPage"
+      :is-fetching-next-page="isFetchingNextPage"
       @select="emit('select', $event)"
+      @toggle-selection="forwardToggleSelection"
+      @select-visible="emit('selectVisible', $event)"
+      @clear-selection="emit('clearSelection')"
+      @load-more="emit('loadMore')"
     />
   </nav>
 </template>
 
 <style scoped>
 .communications-list-pane {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;

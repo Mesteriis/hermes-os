@@ -502,6 +502,120 @@ async fn email_sync_pipeline_extracts_attachment_metadata_with_initial_scan_stat
     assert!(blob_root.path().join(storage_path).is_file());
 }
 
+#[tokio::test]
+async fn email_sync_pipeline_marks_executable_attachment_payloads_malicious() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skipping live email sync pipeline test: HERMES_TEST_DATABASE_URL is not set");
+        return;
+    };
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let suffix = unique_suffix();
+    let account_id = format!("acct_sync_malicious_attachment_{suffix}");
+    let provider_record_id = format!("sync-malicious-attachment-message-{suffix}");
+    let blob_root = tempfile::tempdir().expect("mail blob root");
+    let blob_store = LocalMailBlobStore::new(blob_root.path());
+
+    communication_store
+        .upsert_provider_account(&NewProviderAccount::new(
+            &account_id,
+            EmailProviderKind::Imap,
+            "Sync malicious attachment IMAP",
+            format!("sync-malicious-attachment-{suffix}@example.net"),
+        ))
+        .await
+        .expect("store provider account");
+
+    let attachment_body =
+        base64::engine::general_purpose::STANDARD.encode(b"MZ\x90\x00fake portable executable");
+    let raw_rfc822 = format!(
+        "Subject: Attachment Safety\r\n\
+         From: Sender <sender@example.invalid>\r\n\
+         To: Recipient <recipient@example.invalid>\r\n\
+         Content-Type: multipart/mixed; boundary=\"hermes-boundary\"\r\n\
+         \r\n\
+         --hermes-boundary\r\n\
+         Content-Type: text/plain; charset=utf-8\r\n\
+         \r\n\
+         See attached executable payload.\r\n\
+         --hermes-boundary\r\n\
+         Content-Type: application/pdf; name=\"invoice.pdf\"\r\n\
+         Content-Disposition: attachment; filename=\"invoice.pdf\"\r\n\
+         Content-Transfer-Encoding: base64\r\n\
+         \r\n\
+         {attachment_body}\r\n\
+         --hermes-boundary--\r\n"
+    );
+    let raw_rfc822_base64 = base64::engine::general_purpose::STANDARD.encode(raw_rfc822);
+    let batch = EmailSyncBatch {
+        provider_kind: EmailProviderKind::Imap,
+        stream_id: "imap:INBOX".to_owned(),
+        checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 90})),
+        messages: vec![FetchedEmailMessage {
+            provider_record_id: provider_record_id.clone(),
+            source_fingerprint: format!("sha256:sync-malicious-attachment-{suffix}"),
+            occurred_at: Utc.timestamp_millis_opt(1_770_000_200_000).single(),
+            payload: json!({
+                "provider": "imap",
+                "uid": 90,
+                "raw_rfc822_base64": raw_rfc822_base64
+            }),
+        }],
+    };
+
+    let report = project_email_sync_batch_with_mail_blobs(
+        pool.clone(),
+        &blob_store,
+        &account_id,
+        format!("sync-malicious-attachment-batch-{suffix}"),
+        &batch,
+    )
+    .await
+    .expect("project email sync batch");
+
+    assert_eq!(report.attachments_extracted, 1);
+    assert_eq!(report.attachments_not_scanned, 0);
+
+    let attachment = sqlx::query(
+        r#"
+        SELECT
+            a.scan_status,
+            a.scan_engine,
+            a.scan_checked_at,
+            a.scan_summary,
+            a.scan_metadata
+        FROM communication_attachments a
+        JOIN communication_messages m ON m.message_id = a.message_id
+        WHERE m.account_id = $1
+          AND m.provider_record_id = $2
+        "#,
+    )
+    .bind(&account_id)
+    .bind(&provider_record_id)
+    .fetch_one(&pool)
+    .await
+    .expect("projected attachment safety metadata");
+
+    let scan_status: String = attachment.try_get("scan_status").expect("scan_status");
+    let scan_engine: Option<String> = attachment.try_get("scan_engine").expect("scan_engine");
+    let scan_checked_at: Option<chrono::DateTime<Utc>> = attachment
+        .try_get("scan_checked_at")
+        .expect("scan_checked_at");
+    let scan_summary: Option<String> = attachment.try_get("scan_summary").expect("scan_summary");
+    let scan_metadata: serde_json::Value =
+        attachment.try_get("scan_metadata").expect("scan_metadata");
+
+    assert_eq!(scan_status, "malicious");
+    assert_eq!(scan_engine.as_deref(), Some("hermes_heuristic_v1"));
+    assert!(scan_checked_at.is_some());
+    assert_eq!(scan_summary.as_deref(), Some("Executable payload detected"));
+    assert_eq!(scan_metadata["reasons"], json!(["executable_magic"]));
+}
+
 fn unique_suffix() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

@@ -1,10 +1,16 @@
-use sqlx::Row;
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::{Postgres, QueryBuilder, Row};
 
 use super::MessageProjectionStore;
 use crate::domains::mail::messages::errors::MessageProjectionError;
 use crate::domains::mail::messages::models::{
-    ProjectedMessage, ProjectedMessageSummary, WorkflowStateCount,
+    MessageSearchMatchMode, MessageSearchQuery, ProjectedMessage, ProjectedMessagePage,
+    ProjectedMessagePageQuery, ProjectedMessageSummary, WorkflowStateCount,
 };
+use crate::domains::mail::messages::append_message_search_filter;
 use crate::domains::mail::messages::rows::{
     row_to_projected_message, row_to_projected_message_summary,
 };
@@ -139,14 +145,50 @@ impl MessageProjectionStore {
         local_state: LocalMessageState,
         limit: i64,
     ) -> Result<Vec<ProjectedMessageSummary>, MessageProjectionError> {
-        let limit = validate_limit(limit)?;
-        let workflow_state_str = workflow_state.map(|s| s.as_str().to_owned());
-        let local_state_filter = local_state.persisted_filter();
-        let query = query
+        Ok(self
+            .list_messages_page(ProjectedMessagePageQuery {
+                account_id,
+                workflow_state,
+                channel_kind,
+                query,
+                match_mode: MessageSearchMatchMode::All,
+                search: MessageSearchQuery::default(),
+                local_state,
+                cursor: None,
+                limit,
+            })
+            .await?
+            .items)
+    }
+
+    pub async fn list_messages_page(
+        &self,
+        request: ProjectedMessagePageQuery<'_>,
+    ) -> Result<ProjectedMessagePage, MessageProjectionError> {
+        let limit = validate_limit(request.limit)?;
+        let workflow_state_str = request.workflow_state.map(|s| s.as_str().to_owned());
+        let local_state_filter = request.local_state.persisted_filter();
+        let query = request
+            .query
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_owned);
-        let rows = sqlx::query(
+        let search = if request.search.is_empty() {
+            fallback_message_search(query.as_deref(), request.match_mode)
+        } else {
+            request.search.clone()
+        };
+        let cursor = request
+            .cursor
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(decode_message_list_cursor)
+            .transpose()?;
+        let cursor_sort_at = cursor.as_ref().map(|cursor| cursor.sort_at);
+        let cursor_projected_at = cursor.as_ref().map(|cursor| cursor.projected_at);
+        let cursor_message_id = cursor.as_ref().map(|cursor| cursor.message_id.as_str());
+        let fetch_limit = limit + 1;
+        let mut builder = QueryBuilder::<Postgres>::new(
             r#"
             SELECT
                 m.message_id, m.raw_record_id, m.account_id, m.provider_record_id,
@@ -159,28 +201,49 @@ impl MessageProjectionStore {
                 count(a.attachment_id)::BIGINT AS attachment_count
             FROM communication_messages m
             LEFT JOIN communication_attachments a ON a.message_id = m.message_id
-            WHERE ($1::text IS NULL OR m.account_id = $1)
-              AND ($2::text IS NULL OR m.workflow_state = $2)
-              AND ($3::text IS NULL OR m.channel_kind = $3)
-              AND ($4::text IS NULL OR m.local_state = $4)
-              AND (
-                $5::text IS NULL
-                OR NOT EXISTS (
-                  SELECT 1
-                  FROM unnest(regexp_split_to_array(lower(trim($5)), '\s+')) AS term
-                  WHERE term <> ''
-                    AND lower(
-                      concat_ws(
-                        ' ',
-                        m.subject,
-                        m.sender,
-                        m.body_text,
-                        m.provider_record_id,
-                        m.sender_display_name
-                      )
-                    ) NOT LIKE '%' || term || '%'
-                )
-              )
+            WHERE 1 = 1
+            "#,
+        );
+        if let Some(account_id) = request.account_id {
+            builder.push(" AND m.account_id = ");
+            builder.push_bind(account_id);
+        }
+        if let Some(workflow_state) = workflow_state_str.as_deref() {
+            builder.push(" AND m.workflow_state = ");
+            builder.push_bind(workflow_state);
+        }
+        if let Some(channel_kind) = request.channel_kind {
+            builder.push(" AND m.channel_kind = ");
+            builder.push_bind(channel_kind);
+        }
+        if let Some(local_state) = local_state_filter {
+            builder.push(" AND m.local_state = ");
+            builder.push_bind(local_state);
+        }
+        append_message_search_filter(&mut builder, "m", &search);
+        if let Some(sort_at) = cursor_sort_at {
+            builder.push(
+                " AND (COALESCE(m.occurred_at, m.projected_at) < "
+            );
+            builder.push_bind(sort_at);
+            builder.push(
+                " OR (COALESCE(m.occurred_at, m.projected_at) = "
+            );
+            builder.push_bind(sort_at);
+            builder.push(" AND m.projected_at < ");
+            builder.push_bind(cursor_projected_at.expect("cursor projected_at"));
+            builder.push(
+                ") OR (COALESCE(m.occurred_at, m.projected_at) = "
+            );
+            builder.push_bind(sort_at);
+            builder.push(" AND m.projected_at = ");
+            builder.push_bind(cursor_projected_at.expect("cursor projected_at"));
+            builder.push(" AND m.message_id > ");
+            builder.push_bind(cursor_message_id.expect("cursor message_id"));
+            builder.push("))");
+        }
+        builder.push(
+            r#"
             GROUP BY
                 m.message_id, m.raw_record_id, m.account_id, m.provider_record_id,
                 m.subject, m.sender, m.recipients, m.body_text,
@@ -190,20 +253,31 @@ impl MessageProjectionStore {
                 m.ai_summary, m.ai_summary_generated_at,
                 m.local_state, m.local_state_changed_at, m.local_state_reason
             ORDER BY COALESCE(m.occurred_at, m.projected_at) DESC, m.projected_at DESC, m.message_id ASC
-            LIMIT $6
+            LIMIT 
             "#,
-        )
-        .bind(account_id)
-        .bind(workflow_state_str.as_deref())
-        .bind(channel_kind)
-        .bind(local_state_filter)
-        .bind(query.as_deref())
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await?;
-        rows.into_iter()
+        );
+        builder.push_bind(fetch_limit);
+        let rows = builder.build().fetch_all(&self.pool).await?;
+        let has_more = rows.len() > limit as usize;
+        let summaries = rows
+            .into_iter()
+            .take(limit as usize)
             .map(row_to_projected_message_summary)
-            .collect()
+            .collect::<Result<Vec<_>, _>>()?;
+        let next_cursor = if has_more {
+            summaries
+                .last()
+                .map(|summary| encode_message_list_cursor(&summary.message))
+                .transpose()?
+        } else {
+            None
+        };
+
+        Ok(ProjectedMessagePage {
+            items: summaries,
+            next_cursor,
+            has_more,
+        })
     }
 
     pub async fn count_messages_by_state(
@@ -241,4 +315,57 @@ impl MessageProjectionStore {
         }
         Ok(counts)
     }
+}
+
+fn fallback_message_search(
+    query: Option<&str>,
+    match_mode: MessageSearchMatchMode,
+) -> MessageSearchQuery {
+    let plain_terms = query
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| {
+            value
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    MessageSearchQuery {
+        plain_terms,
+        match_mode,
+        ..MessageSearchQuery::default()
+    }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct MessageListCursor {
+    sort_at: DateTime<Utc>,
+    projected_at: DateTime<Utc>,
+    message_id: String,
+}
+
+fn encode_message_list_cursor(
+    message: &ProjectedMessage,
+) -> Result<String, MessageProjectionError> {
+    let cursor = MessageListCursor {
+        sort_at: message.occurred_at.unwrap_or(message.projected_at),
+        projected_at: message.projected_at,
+        message_id: message.message_id.clone(),
+    };
+    let bytes = serde_json::to_vec(&cursor).map_err(|_| MessageProjectionError::InvalidCursor)?;
+
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn decode_message_list_cursor(cursor: &str) -> Result<MessageListCursor, MessageProjectionError> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| MessageProjectionError::InvalidCursor)?;
+    let cursor: MessageListCursor =
+        serde_json::from_slice(&bytes).map_err(|_| MessageProjectionError::InvalidCursor)?;
+    validate_non_empty("message_id", &cursor.message_id)?;
+
+    Ok(cursor)
 }

@@ -22,7 +22,7 @@ const contentClasses = computed(() => ['hermes-dialog-content', props.contentCla
 
 <template>
   <DialogRoot :open="open" @update:open="(val) => emit('update:open', val)">
-    <DialogTrigger as-child>
+    <DialogTrigger v-if="$slots.trigger" as-child>
       <slot name="trigger" />
     </DialogTrigger>
     <DialogPortal>

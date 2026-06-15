@@ -4,11 +4,15 @@ use super::super::*;
 pub(crate) struct DraftListQuery {
     pub(super) account_id: Option<String>,
     pub(super) status: Option<String>,
+    pub(super) cursor: Option<String>,
+    pub(super) limit: Option<i64>,
 }
 
 #[derive(Serialize)]
 pub(crate) struct DraftListResponse {
     pub(super) items: Vec<crate::domains::mail::drafts::EmailDraft>,
+    pub(super) next_cursor: Option<String>,
+    pub(super) has_more: bool,
 }
 
 #[derive(Deserialize)]
@@ -43,8 +47,19 @@ pub(crate) async fn get_v1_drafts(
         .status
         .as_deref()
         .and_then(crate::domains::mail::drafts::DraftStatus::parse);
-    let items = store.list(query.account_id.as_deref(), status).await?;
-    Ok(Json(DraftListResponse { items }))
+    let page = store
+        .list_page(
+            query.account_id.as_deref(),
+            status,
+            query.cursor.as_deref(),
+            query.limit.unwrap_or(100),
+        )
+        .await?;
+    Ok(Json(DraftListResponse {
+        items: page.items,
+        next_cursor: page.next_cursor,
+        has_more: page.has_more,
+    }))
 }
 
 pub(crate) async fn post_v1_draft(

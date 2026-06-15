@@ -251,5 +251,7 @@ pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
             tracing::error!(error = %error, "mail sync communication store failed");
             ApiError::InvalidCommunicationQuery("mail sync operation failed")
         }
+        MailSyncError::EventEnvelope(error) => ApiError::InvalidEnvelope(error),
+        MailSyncError::EventStore(error) => ApiError::Store(error),
     }
 }

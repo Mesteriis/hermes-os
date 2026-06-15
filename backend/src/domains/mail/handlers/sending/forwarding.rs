@@ -28,10 +28,13 @@ pub(crate) async fn post_v1_reply(
             "reply-{}",
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         ),
+        outbox_id: None,
         accepted: req.to.clone(),
         accepted_recipients: req.to.clone(),
         transport: "local".to_owned(),
         status: "queued".to_owned(),
+        scheduled_send_at: None,
+        undo_deadline_at: None,
         failure_reason: None,
     }))
 }
@@ -120,4 +123,105 @@ pub(crate) async fn post_v1_forward_eml(
     Ok(Json(
         serde_json::json!({"forward_eml": true, "eml_size": eml.len()}),
     ))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct RedirectRequest {
+    pub(super) to: Vec<String>,
+    pub(super) cc: Option<Vec<String>>,
+    pub(super) bcc: Option<Vec<String>>,
+    pub(super) confirmed_provider_write: Option<bool>,
+}
+
+pub(crate) async fn post_v1_redirect(
+    State(state): State<AppState>,
+    Path(message_id): Path<String>,
+    Json(req): Json<RedirectRequest>,
+) -> Result<Json<SendResponse>, ApiError> {
+    if req.confirmed_provider_write != Some(true) {
+        return Err(ApiError::ProviderWriteConfirmationRequired);
+    }
+    let to = non_empty_recipients(req.to);
+    let cc = non_empty_recipients(req.cc.unwrap_or_default());
+    let bcc = non_empty_recipients(req.bcc.unwrap_or_default());
+    if to
+        .iter()
+        .chain(cc.iter())
+        .chain(bcc.iter())
+        .all(|recipient| recipient.trim().is_empty())
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "at least one recipient is required",
+        ));
+    }
+
+    let store = message_store(&state)?;
+    let msg = store
+        .message(&message_id)
+        .await?
+        .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let now = Utc::now();
+    let outbox_id = format!(
+        "outbox:redirect:{}:{}",
+        msg.account_id,
+        now.timestamp_nanos_opt().unwrap_or_default()
+    );
+    let recipient_count = to.len() + cc.len() + bcc.len();
+    let outbox = crate::domains::mail::outbox::EmailOutboxStore::new(
+        state
+            .database
+            .pool()
+            .ok_or(ApiError::DatabaseNotConfigured)?
+            .clone(),
+    )
+    .enqueue(&crate::domains::mail::outbox::NewEmailOutboxItem {
+        outbox_id,
+        account_id: msg.account_id.clone(),
+        draft_id: None,
+        to_recipients: to.clone(),
+        cc_recipients: cc,
+        bcc_recipients: bcc,
+        subject: msg.subject,
+        body_text: msg.body_text,
+        body_html: None,
+        status: crate::domains::mail::outbox::EmailOutboxStatus::Queued,
+        scheduled_send_at: None,
+        undo_deadline_at: None,
+        metadata: serde_json::json!({
+            "redirect_mode": "resent",
+            "redirect_of": msg.message_id,
+            "original_sender": msg.sender,
+            "original_provider_record_id": msg.provider_record_id,
+            "resent_at": now,
+        }),
+    })
+    .await?;
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::communication_email_send(
+            "hermes-frontend",
+            &outbox.account_id,
+            recipient_count,
+        ))
+        .await?;
+
+    Ok(Json(SendResponse {
+        message_id: outbox.outbox_id.clone(),
+        outbox_id: Some(outbox.outbox_id),
+        accepted: outbox.to_recipients.clone(),
+        accepted_recipients: outbox.to_recipients,
+        transport: "outbox".to_owned(),
+        status: outbox.status.as_str().to_owned(),
+        scheduled_send_at: outbox.scheduled_send_at,
+        undo_deadline_at: outbox.undo_deadline_at,
+        failure_reason: None,
+    }))
+}
+
+fn non_empty_recipients(recipients: Vec<String>) -> Vec<String> {
+    recipients
+        .into_iter()
+        .map(|recipient| recipient.trim().to_owned())
+        .filter(|recipient| !recipient.is_empty())
+        .collect()
 }

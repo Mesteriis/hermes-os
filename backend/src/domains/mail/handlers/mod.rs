@@ -8,6 +8,7 @@ mod communication_queries;
 mod finance_analytics;
 mod legal_export;
 mod message_actions;
+mod message_ai_state;
 mod remote_images;
 mod sending;
 mod templates_status;
@@ -21,6 +22,7 @@ pub(crate) use communication_queries::*;
 pub(crate) use finance_analytics::*;
 pub(crate) use legal_export::*;
 pub(crate) use message_actions::*;
+pub(crate) use message_ai_state::*;
 pub(crate) use remote_images::get_v1_communication_message_remote_image;
 pub(crate) use sending::*;
 pub(crate) use templates_status::*;
@@ -172,7 +174,9 @@ use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
 use crate::vault::{EntropyEvent, HostVaultError, VaultMode};
-use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
+use crate::workflows::email_intelligence::{
+    EmailIntelligenceError, EmailIntelligenceService, EmailSummaryContract,
+};
 
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::*;

@@ -81,6 +81,7 @@ const BLOCKED_CONTAINER_TAGS = [
 
 const TAG_TOKEN_PATTERN = /<!--[\s\S]*?-->|<![^>]*>|<\/?[A-Za-z][^>]*>/g
 const ATTRIBUTE_PATTERN = /([^\s"'<>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
+const BLOCKED_REMOTE_IMAGE_SRC = 'data:image/gif;base64,R0lGODlhAQABAAAAACw='
 
 export function renderMessageBody(input: { bodyHtml: string | null | undefined; bodyText: string }): RenderedMessageBody {
 	if (input.bodyHtml?.trim()) {
@@ -94,6 +95,42 @@ export function renderMessageBody(input: { bodyHtml: string | null | undefined; 
 		kind: 'plain',
 		html: normalizePlainText(input.bodyText)
 	}
+}
+
+export function remoteImageUrlsFromHtml(html: string): string[] {
+	const urls = new Set<string>()
+	const sanitized = sanitizeEmailHtml(html)
+
+	for (const match of sanitized.matchAll(/<img\b[^>]*\bsrc="([^"]*)"[^>]*>/gi)) {
+		const decoded = decodeHtmlEntities(match[1] ?? '')
+		if (isRemoteImageUrl(decoded)) {
+			urls.add(decoded)
+		}
+	}
+
+	return Array.from(urls)
+}
+
+export function rewriteRemoteImageSources(
+	html: string,
+	remoteSource: (url: string) => string | null
+): string {
+	return html.replace(/<img\b[^>]*\bsrc="([^"]*)"[^>]*>/gi, (tag, rawSrc: string) => {
+		const decoded = decodeHtmlEntities(rawSrc)
+		if (!isRemoteImageUrl(decoded)) {
+			return tag
+		}
+
+		const replacement = remoteSource(decoded)
+		if (!replacement) {
+			return tag.replace(
+				/\bsrc="[^"]*"/i,
+				`src="${BLOCKED_REMOTE_IMAGE_SRC}" data-hermes-remote-src="${escapeAttribute(decoded)}" aria-label="Remote image blocked"`
+			)
+		}
+
+		return tag.replace(/\bsrc="[^"]*"/i, `src="${escapeAttribute(replacement)}"`)
+	})
 }
 
 export function sanitizeEmailHtml(html: string): string {
@@ -217,6 +254,11 @@ function sanitizeAttributes(tagName: string, source: string): string {
 	}
 
 	return attributes.length ? ` ${attributes.join(' ')}` : ''
+}
+
+function isRemoteImageUrl(value: string): boolean {
+	const normalized = value.trim().toLowerCase()
+	return normalized.startsWith('http://') || normalized.startsWith('https://')
 }
 
 function isSafeUrl(tagName: string, attributeName: string, rawValue: string): boolean {

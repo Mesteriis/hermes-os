@@ -15,8 +15,10 @@ import type {
   NavigatorMode,
   InspectorMode,
   MessageContextTab,
+  MessageExportResponse,
   MailMessageInsight,
   CommunicationSectionId,
+  MailThreadSummary,
   ProjectItem,
   TaskItem
 } from '../types/communications'
@@ -30,6 +32,10 @@ const emptyComposeForm: ComposeFormModel = {
   bccText: '',
   subject: '',
   body: '',
+  bodyHtml: null,
+  bodyFormat: 'plain',
+  scheduledSendAt: '',
+  undoSendSeconds: null,
   inReplyTo: null
 }
 
@@ -41,6 +47,9 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   const isCommunicationsLoading = ref(false)
   const selectedConversationIndex = ref(-1)
   const selectedCommunicationMessageId = ref('')
+  const selectedMessageIds = ref<string[]>([])
+  const selectionAnchorMessageId = ref('')
+  const selectedMessageIdSet = computed(() => new Set(selectedMessageIds.value))
 
   // --- Filters ---
   const mailStateFilter = ref<WorkflowState | ''>('')
@@ -62,7 +71,9 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   const topSenders = ref<{ sender: string; message_count: number }[]>([])
 
   // --- Threads ---
-  const threads = ref<{ thread_id: string; subject: string; message_count: number }[]>([])
+  const threads = ref<MailThreadSummary[]>([])
+  const selectedThread = ref<MailThreadSummary | null>(null)
+  const selectedThreadId = computed(() => selectedThread.value?.thread_id ?? '')
 
   // --- Resources ---
   const mailResources = ref<Record<string, unknown>>({})
@@ -75,7 +86,7 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   const isMailActionRunning = ref(false)
   const mailActionStatus = ref('')
   const mailActionError = ref('')
-  const lastMessageExport = ref<{ content_type: string; content: string; filename: string } | null>(null)
+  const lastMessageExport = ref<MessageExportResponse | null>(null)
 
   // --- Sync ---
   const mailSyncStatuses = ref<MailSyncStatus[]>([])
@@ -117,13 +128,74 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
 
   function setMessages(messages: CommunicationMessageSummary[]) {
     communicationMessages.value = messages
+    const visibleIds = new Set(messages.map((message) => message.message_id))
+    selectedMessageIds.value = selectedMessageIds.value.filter((messageId) => visibleIds.has(messageId))
+    if (selectionAnchorMessageId.value && !visibleIds.has(selectionAnchorMessageId.value)) {
+      selectionAnchorMessageId.value = ''
+    }
   }
 
   function selectMessage(index: number) {
+    clearSelectedThread()
     selectedConversationIndex.value = index
     if (index >= 0 && index < communicationMessages.value.length) {
       selectedCommunicationMessageId.value = communicationMessages.value[index].message_id
+      return
     }
+    selectedCommunicationMessageId.value = ''
+  }
+
+  function selectMessageId(messageId: string) {
+    clearSelectedThread()
+    selectedCommunicationMessageId.value = messageId
+    selectedConversationIndex.value = communicationMessages.value.findIndex((message) => message.message_id === messageId)
+  }
+
+  function toggleMessageSelection(messageId: string, extendRange = false) {
+    const normalized = messageId.trim()
+    if (!normalized) return
+    if (extendRange && selectionAnchorMessageId.value) {
+      selectMessageRange(selectionAnchorMessageId.value, normalized)
+      return
+    }
+    if (selectedMessageIdSet.value.has(normalized)) {
+      selectedMessageIds.value = selectedMessageIds.value.filter((id) => id !== normalized)
+      if (selectionAnchorMessageId.value === normalized) selectionAnchorMessageId.value = ''
+      return
+    }
+    selectedMessageIds.value = [...selectedMessageIds.value, normalized]
+    selectionAnchorMessageId.value = normalized
+  }
+
+  function selectMessageRange(anchorMessageId: string, targetMessageId: string) {
+    const anchorIndex = communicationMessages.value.findIndex((message) => message.message_id === anchorMessageId)
+    const targetIndex = communicationMessages.value.findIndex((message) => message.message_id === targetMessageId)
+    if (anchorIndex < 0 || targetIndex < 0) {
+      toggleMessageSelection(targetMessageId)
+      return
+    }
+
+    const [start, end] = anchorIndex < targetIndex
+      ? [anchorIndex, targetIndex]
+      : [targetIndex, anchorIndex]
+    const existing = new Set(selectedMessageIds.value)
+    for (const message of communicationMessages.value.slice(start, end + 1)) {
+      existing.add(message.message_id)
+    }
+    selectedMessageIds.value = communicationMessages.value
+      .map((message) => message.message_id)
+      .filter((id) => existing.has(id))
+  }
+
+  function clearMessageSelection() {
+    selectedMessageIds.value = []
+    selectionAnchorMessageId.value = ''
+  }
+
+  function selectVisibleMessages(messageIds: string[]) {
+    const uniqueIds = [...new Set(messageIds.map((messageId) => messageId.trim()).filter(Boolean))]
+    selectedMessageIds.value = uniqueIds
+    selectionAnchorMessageId.value = uniqueIds[0] ?? ''
   }
 
   function setMessageDetail(detail: MailMessageDetailResponse | null) {
@@ -152,6 +224,9 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
 
   function setMailSyncStatuses(statuses: MailSyncStatus[]) {
     mailSyncStatuses.value = statuses
+    if (!selectedMailAccountId.value) {
+      selectedMailAccountId.value = statuses[0]?.account_id ?? ''
+    }
   }
 
   function setMailSyncStatusMessage(msg: string) {
@@ -178,8 +253,20 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     topSenders.value = senders
   }
 
-  function setThreads(threadList: { thread_id: string; subject: string; message_count: number }[]) {
+  function setThreads(threadList: MailThreadSummary[]) {
     threads.value = threadList
+  }
+
+  function selectThread(thread: MailThreadSummary) {
+    selectedThread.value = thread
+    selectedConversationIndex.value = -1
+    selectedCommunicationMessageId.value = ''
+    selectedCommunicationDetail.value = null
+    mailMessageInsight.value = null
+  }
+
+  function clearSelectedThread() {
+    selectedThread.value = null
   }
 
   function setMailMessageInsight(insight: MailMessageInsight | null) {
@@ -196,6 +283,10 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
 
   function setMailActionError(error: string) {
     mailActionError.value = error
+  }
+
+  function setLastMessageExport(exported: MessageExportResponse | null) {
+    lastMessageExport.value = exported
   }
 
   // --- Compose actions ---
@@ -282,10 +373,10 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   return {
     // State
     communicationMessages, selectedCommunicationDetail, communicationsError, isCommunicationsLoading,
-    selectedConversationIndex, selectedCommunicationMessageId,
+    selectedConversationIndex, selectedCommunicationMessageId, selectedMessageIds,
     mailStateFilter, mailLocalStateFilter, mailStateCounts, isMailStateTransitioning,
     isAiAnswerSubmitting, aiAnalysisResult,
-    drafts, mailboxHealth, topSenders, threads,
+    drafts, mailboxHealth, topSenders, threads, selectedThread, selectedThreadId,
     mailResources, mailResourceSummary, mailMessageInsight,
     isMailActionRunning, mailActionStatus, mailActionError, lastMessageExport,
     mailSyncStatuses, selectedMailSyncSettings, lastMailSyncRuns,
@@ -296,14 +387,15 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     communicationsInspectorMode, activeMessageContextTab,
     communicationProjects, communicationTasks,
     // Computed
-    selectedCommunication,
+    selectedCommunication, selectedMessageIdSet,
     // Setters
-    setMessages, selectMessage, setMessageDetail,
+    setMessages, selectMessage, selectMessageId, toggleMessageSelection, selectVisibleMessages, clearMessageSelection, setMessageDetail,
     setCommunicationsError, setCommunicationsLoading,
     setStateFilter, setLocalStateFilter, setStateCounts,
     setMailSyncStatuses, setMailSyncStatusMessage, setMailSyncError, setIsMailSyncBusy,
-    setDrafts, setMailboxHealth, setTopSenders, setThreads,
+    setDrafts, setMailboxHealth, setTopSenders, setThreads, selectThread, clearSelectedThread,
     setMailMessageInsight, setIsMailActionRunning, setMailActionStatus, setMailActionError,
+    setLastMessageExport,
     openCompose, closeCompose, updateComposeForm,
     setComposeStatusMessage, setComposeSendError, setIsSendingMessage,
     openSendReview, closeSendReview,

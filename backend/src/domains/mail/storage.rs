@@ -16,6 +16,6 @@ pub use models::{
 };
 pub use scanner::{
     AttachmentSafetyScanReport, AttachmentSafetyScanRequest, AttachmentSafetyScanStatus,
-    AttachmentSafetyScanner, NoopAttachmentSafetyScanner,
+    AttachmentSafetyScanner, HeuristicAttachmentSafetyScanner, NoopAttachmentSafetyScanner,
 };
 pub use store::MailStorageStore;

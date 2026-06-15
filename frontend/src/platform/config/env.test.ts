@@ -10,6 +10,8 @@ describe('frontend env config', () => {
 		expect(config.apiBaseUrl).toBe('http://127.0.0.1:8080')
 		expect(config.apiSecret).toBe('dev-secret')
 		expect(config.sseUrl).toBe('http://127.0.0.1:8080/api/events/stream')
+		expect(config.webSocketUrl).toBe('ws://127.0.0.1:8080/api/events/ws')
+		expect(config.realtimeTransport).toBe('sse')
 	})
 
 	it('rejects missing local API secret', () => {
@@ -24,5 +26,15 @@ describe('frontend env config', () => {
 
 		expect(config.apiBaseUrl).toBe('http://127.0.0.1:9090')
 		expect(config.sseUrl).toBe('http://127.0.0.1:9090/api/events/stream')
+		expect(config.webSocketUrl).toBe('ws://127.0.0.1:9090/api/events/ws')
+	})
+
+	it('can opt back to WebSocket transport selection', () => {
+		const config = loadFrontendConfig({
+			VITE_HERMES_LOCAL_API_SECRET: 'dev-secret',
+			VITE_HERMES_REALTIME_TRANSPORT: 'websocket'
+		})
+
+		expect(config.realtimeTransport).toBe('websocket')
 	})
 })

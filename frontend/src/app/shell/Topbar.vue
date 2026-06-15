@@ -1,12 +1,22 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useNavigationStore } from '../../shared/stores/navigation'
 import { useNotificationsStore } from '../../shared/stores/notifications'
+import { useRealtimeStatusStore } from '../../shared/stores/realtimeStatus'
 import { useI18n } from '../../platform/i18n'
 
 const nav = useNavigationStore()
 const notifications = useNotificationsStore()
+const realtimeStatus = useRealtimeStatusStore()
 const { t, setLocale, locale } = useI18n()
+
+const realtimeStatusIcon = computed<string>(() => {
+  if (realtimeStatus.realtimeStatusTone === 'success') return 'tabler:cloud-check'
+  if (realtimeStatus.realtimeStatusTone === 'danger') return 'tabler:cloud-off'
+  if (realtimeStatus.isRealtimeDegraded) return 'tabler:cloud-exclamation'
+  return 'tabler:cloud-up'
+})
 
 function toggleNotifications(): void {
   notifications.toggleNotificationsDrawer()
@@ -38,6 +48,17 @@ function exitApplication(): void {
     </div>
 
     <div class="topbar-actions">
+      <div
+        class="topbar-realtime-status"
+        :class="realtimeStatus.realtimeStatusTone"
+        :title="realtimeStatus.realtimeStatusDetail"
+        :aria-label="realtimeStatus.realtimeStatusDetail"
+      >
+        <span class="topbar-realtime-dot" />
+        <Icon :icon="realtimeStatusIcon" class="topbar-realtime-icon" aria-hidden="true" />
+        <span class="topbar-realtime-label">{{ realtimeStatus.realtimeStatusLabel }}</span>
+      </div>
+
       <button
         class="topbar-action-btn"
         @click="toggleNotifications"
@@ -148,6 +169,71 @@ function exitApplication(): void {
   flex-shrink: 0;
 }
 
+.topbar-realtime-status {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 11rem;
+  height: 2.25rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--hh-border);
+  border-radius: 0.375rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--hh-text-secondary);
+  backdrop-filter: blur(var(--hh-panel-blur));
+}
+
+.topbar-realtime-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--hh-text-muted);
+  box-shadow: 0 0 0 0.1875rem rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
+}
+
+.topbar-realtime-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.topbar-realtime-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.topbar-realtime-status.success {
+  border-color: color-mix(in srgb, var(--hh-status-success, #22c55e) 36%, transparent);
+  color: var(--hh-status-success-text, #16a34a);
+}
+
+.topbar-realtime-status.success .topbar-realtime-dot {
+  background: var(--hh-status-success, #22c55e);
+}
+
+.topbar-realtime-status.warning {
+  border-color: color-mix(in srgb, var(--hh-status-warning, #f59e0b) 36%, transparent);
+  color: var(--hh-status-warning-text, #d97706);
+}
+
+.topbar-realtime-status.warning .topbar-realtime-dot {
+  background: var(--hh-status-warning, #f59e0b);
+}
+
+.topbar-realtime-status.danger {
+  border-color: color-mix(in srgb, var(--hh-status-danger, #ef4444) 36%, transparent);
+  color: var(--hh-status-danger-text, #ef4444);
+}
+
+.topbar-realtime-status.danger .topbar-realtime-dot {
+  background: var(--hh-status-danger, #ef4444);
+}
+
 .topbar-action-btn {
   position: relative;
   display: flex;
@@ -252,5 +338,18 @@ function exitApplication(): void {
   height: 1px;
   background: var(--hh-border);
   margin: 0.25rem 0.5rem;
+}
+
+@media (max-width: 900px) {
+  .topbar-realtime-status {
+    width: 2.25rem;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .topbar-realtime-label,
+  .topbar-realtime-dot {
+    display: none;
+  }
 }
 </style>

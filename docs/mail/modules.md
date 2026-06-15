@@ -65,6 +65,7 @@ Paths below refer to the current Rust implementation under
 |---|---|
 | `signatures.rs` | Сертификаты: 7 типов, 9 провайдеров, детекция S/MIME+PGP |
 | `backend/src/domains/documents/attachment_intelligence.rs` | Классификация вложений: 15 категорий, уровни риска |
+| `storage/scanner.rs` | Conservative attachment safety prefilter: executable magic, active-content extensions, macro-enabled document extensions and MIME/filename mismatch; does not emit `clean` without a real scanner backend |
 | `attachment_dedup.rs` | Поиск дубликатов по SHA-256 + похожие имена |
 
 ## Automation

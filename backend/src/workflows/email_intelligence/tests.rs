@@ -83,6 +83,68 @@ fn heuristic_category_none() {
 }
 
 #[test]
+fn heuristic_structured_summary_extracts_key_points_actions_risks_and_deadlines() {
+    let msg = test_message(
+        "Action Required: Contract review deadline",
+        "Please review the NDA by Friday. The payment risk remains open. Confirm approval before EOD.",
+    );
+
+    let summary = EmailIntelligenceService::heuristic_structured_summary(&msg);
+
+    assert!(summary.key_points.contains(&"Action Required: Contract review deadline".to_owned()));
+    assert!(summary.action_items.iter().any(|item| item.contains("Please review the NDA")));
+    assert!(summary.risks.iter().any(|risk| risk.contains("payment risk")));
+    assert!(summary.deadlines.iter().any(|deadline| deadline.contains("Friday")));
+}
+
+#[test]
+fn heuristic_structured_summary_extracts_mail_knowledge_candidates() {
+    let msg = test_message(
+        "Contract review with Acme Corp",
+        "From: Ada Lovelace <ada@acme.example>\nPlease review the attached MSA and NDA before Friday. Meeting on Monday at 10:00 with Acme Corp.",
+    );
+
+    let summary = EmailIntelligenceService::heuristic_structured_summary(&msg);
+
+    assert!(summary
+        .event_candidates
+        .iter()
+        .any(|candidate| candidate.title.contains("Meeting on Monday")));
+    assert!(summary
+        .persona_candidates
+        .iter()
+        .any(|candidate| candidate.title.contains("Ada Lovelace")));
+    assert!(summary
+        .organization_candidates
+        .iter()
+        .any(|candidate| candidate.title.contains("acme.example")));
+    assert!(summary
+        .document_candidates
+        .iter()
+        .any(|candidate| candidate.title.contains("MSA")));
+    assert!(summary
+        .agreement_candidates
+        .iter()
+        .any(|candidate| candidate.title.contains("NDA")));
+}
+
+#[test]
+fn heuristic_structured_summary_is_bounded_and_deduplicated() {
+    let msg = test_message(
+        "Deadline reminder",
+        "Deadline reminder. Deadline reminder. Please confirm. Please confirm.",
+    );
+
+    let summary = EmailIntelligenceService::heuristic_structured_summary(&msg);
+
+    assert_eq!(summary.key_points, vec!["Deadline reminder"]);
+    assert_eq!(summary.action_items, vec!["Please confirm"]);
+    assert_eq!(summary.deadlines, vec!["Deadline reminder"]);
+    assert!(summary.event_candidates.is_empty());
+    assert!(summary.persona_candidates.is_empty());
+}
+
+#[test]
 fn email_category_from_str_all_valid() {
     assert_eq!(
         EmailCategory::parse("critical"),

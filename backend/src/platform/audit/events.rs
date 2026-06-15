@@ -27,4 +27,25 @@ impl NewApiAuditRecord {
             json!({}),
         )
     }
+
+    pub fn event_list(
+        actor_id: impl Into<String>,
+        after_position: i64,
+        limit: u32,
+        wait_seconds: u64,
+    ) -> Self {
+        Self::new(
+            actor_id,
+            "event.list",
+            "GET",
+            "/api/v1/events",
+            EVENT_TARGET_KIND,
+            None,
+            json!({
+                "after_position": after_position,
+                "limit": limit,
+                "wait_seconds": wait_seconds,
+            }),
+        )
+    }
 }

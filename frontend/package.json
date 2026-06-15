@@ -19,7 +19,7 @@
 	"devDependencies": {
 		"@tauri-apps/cli": "^2.11.2",
 		"@types/node": "^25.9.1",
-		"@vitejs/plugin-vue": "^5.2.3",
+		"@vitejs/plugin-vue": "^6.0.7",
 		"autoprefixer": "^10.4.20",
 		"postcss": "^8.5.3",
 		"tailwindcss": "^3.4.17",
@@ -34,13 +34,16 @@
 		"@tanstack/vue-table": "^8.21.3",
 		"@tanstack/vue-virtual": "^3.13.28",
 		"@tiptap/vue-3": "^3.26.1",
+		"@vee-validate/zod": "^4.15.1",
 		"@vue-flow/core": "^1.48.2",
 		"@vueuse/core": "^14.3.0",
 		"date-fns": "^4.4.0",
 		"motion-v": "^2.3.0",
 		"pinia": "^3.0.4",
 		"reka-ui": "^2.9.10",
+		"vee-validate": "^4.15.1",
 		"vue": "^3.5.38",
-		"vue-router": "^4.5.0"
+		"vue-router": "^4.5.0",
+		"zod": "^3.25.76"
 	}
 }

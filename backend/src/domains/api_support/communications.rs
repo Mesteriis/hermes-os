@@ -3,6 +3,8 @@ use super::*;
 #[derive(Serialize)]
 pub(crate) struct CommunicationMessagesResponse {
     pub(crate) items: Vec<CommunicationMessageSummaryResponse>,
+    pub(crate) next_cursor: Option<String>,
+    pub(crate) has_more: bool,
 }
 
 #[derive(Serialize)]

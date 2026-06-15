@@ -19,11 +19,13 @@ use crate::app::{AccountSetupState, AppError, AppState};
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::platform::config::AppConfig;
 use crate::platform::storage::{Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus};
-use crate::vault::{HostVault, HostVaultConfig};
+use crate::vault::{HostVault, HostVaultConfig, VaultMode};
 
 mod routes;
 
 static MAIL_BACKGROUND_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static MAIL_OUTBOX_DELIVERY_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
 pub fn build_router(config: AppConfig) -> Router {
@@ -50,6 +52,7 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
     };
     spawn_host_vault_manifest_reconciliation(&state);
     spawn_mail_background_sync_scheduler(&state);
+    spawn_mail_outbox_delivery_scheduler(&state);
 
     Router::<AppState>::new()
         .merge(routes::public_routes())
@@ -92,6 +95,53 @@ fn spawn_mail_background_sync_scheduler(state: &AppState) {
     });
 }
 
+fn spawn_mail_outbox_delivery_scheduler(state: &AppState) {
+    let Some(pool) = state.database.pool().cloned() else {
+        return;
+    };
+    let Some(database_url) = state.database.database_url() else {
+        return;
+    };
+    if !register_mail_outbox_delivery_scheduler(database_url) {
+        return;
+    }
+    let vault = state.vault.clone();
+
+    tokio::spawn(async move {
+        let store = crate::domains::mail::outbox::EmailOutboxStore::new(pool.clone());
+        let sender = crate::domains::mail::outbox::ProviderOutboxEmailSender::new(
+            pool,
+            vault.clone(),
+            crate::domains::mail::outbox::LiveSmtpTransport,
+        );
+        let worker = crate::domains::mail::outbox::EmailOutboxDeliveryWorker::new(store, sender);
+        let mut tick = tokio::time::interval(Duration::from_secs(10));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            if !host_vault_is_unlocked(&vault) {
+                continue;
+            }
+            match worker.deliver_due(Utc::now(), 25).await {
+                Ok(report) if report.claimed > 0 => {
+                    tracing::info!(
+                        claimed = report.claimed,
+                        sent = report.sent,
+                        failed = report.failed,
+                        retried = report.retried,
+                        "mail outbox delivery scheduler tick completed"
+                    );
+                }
+                Ok(_) => {}
+                Err(error) => {
+                    tracing::warn!(error = %error, "mail outbox delivery scheduler tick failed");
+                }
+            }
+        }
+    });
+}
+
 fn register_mail_background_sync_scheduler(database_url: &str) -> bool {
     match MAIL_BACKGROUND_SYNC_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
@@ -102,6 +152,48 @@ fn register_mail_background_sync_scheduler(database_url: &str) -> bool {
             );
             false
         }
+    }
+}
+
+fn register_mail_outbox_delivery_scheduler(database_url: &str) -> bool {
+    match MAIL_OUTBOX_DELIVERY_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "mail outbox delivery scheduler registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn host_vault_is_unlocked(vault: &HostVault) -> bool {
+    match vault.status() {
+        Ok(status) => status.state == VaultMode::Unlocked,
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "mail outbox delivery scheduler could not read host vault status"
+            );
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn outbox_delivery_scheduler_registration_is_once_per_database_url() {
+        let database_url = format!(
+            "postgres://outbox-scheduler-test/{}",
+            Utc::now().timestamp_nanos_opt().unwrap_or_default()
+        );
+
+        assert!(register_mail_outbox_delivery_scheduler(&database_url));
+        assert!(!register_mail_outbox_delivery_scheduler(&database_url));
     }
 }
 

@@ -1,9 +1,19 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use base64::Engine as _;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use sqlx::Row;
+use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
+
+use crate::platform::events::{EventStore, NewEventEnvelope};
+
+const EVENT_TYPE_DRAFT_CREATED: &str = "mail.draft.created";
+const EVENT_TYPE_DRAFT_UPDATED: &str = "mail.draft.updated";
+const EVENT_TYPE_DRAFT_DELETED: &str = "mail.draft.deleted";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EmailDraft {
@@ -25,6 +35,13 @@ pub struct EmailDraft {
     pub metadata: Value,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct EmailDraftListPage {
+    pub items: Vec<EmailDraft>,
+    pub next_cursor: Option<String>,
+    pub has_more: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -102,6 +119,8 @@ impl EmailDraftStore {
 
     pub async fn upsert(&self, draft: &NewEmailDraft) -> Result<EmailDraft, EmailDraftError> {
         draft.validate()?;
+        let mut transaction = self.pool.begin().await?;
+        let existed = draft_exists(&mut transaction, &draft.draft_id).await?;
         let row = sqlx::query(
             r#"INSERT INTO email_drafts (draft_id, account_id, persona_id, to_recipients, cc_recipients, bcc_recipients, subject, body_text, body_html, in_reply_to, message_references, status, scheduled_send_at, metadata)
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
@@ -123,8 +142,17 @@ impl EmailDraftStore {
         .bind(draft.in_reply_to.as_deref())
         .bind(serde_json::to_value(&draft.references).unwrap_or_default())
         .bind(draft.status.as_str()).bind(draft.scheduled_send_at).bind(&draft.metadata)
-        .fetch_one(&self.pool).await?;
-        row_to_draft(row)
+        .fetch_one(&mut *transaction).await?;
+        let draft = row_to_draft(row)?;
+        let event_type = if existed {
+            EVENT_TYPE_DRAFT_UPDATED
+        } else {
+            EVENT_TYPE_DRAFT_CREATED
+        };
+        let event = draft_event(event_type, &draft)?;
+        EventStore::append_in_transaction(&mut transaction, &event).await?;
+        transaction.commit().await?;
+        Ok(draft)
     }
 
     pub async fn list(
@@ -135,11 +163,68 @@ impl EmailDraftStore {
         let status_str = status.map(|s| s.as_str().to_owned());
         let rows = sqlx::query(
             r#"SELECT draft_id, account_id, persona_id, to_recipients, cc_recipients, bcc_recipients, subject, body_text, body_html, in_reply_to, message_references, status, scheduled_send_at, send_attempts, last_error, metadata, created_at, updated_at
-            FROM email_drafts WHERE ($1::text IS NULL OR account_id = $1) AND ($2::text IS NULL OR status = $2) ORDER BY updated_at DESC"#,
+            FROM email_drafts
+            WHERE ($1::text IS NULL OR account_id = $1)
+              AND ($2::text IS NULL OR status = $2)
+            ORDER BY updated_at DESC, draft_id ASC"#,
         )
-        .bind(account_id).bind(status_str.as_deref())
+        .bind(account_id)
+        .bind(status_str.as_deref())
         .fetch_all(&self.pool).await?;
         rows.into_iter().map(row_to_draft).collect()
+    }
+
+    pub async fn list_page(
+        &self,
+        account_id: Option<&str>,
+        status: Option<DraftStatus>,
+        cursor: Option<&str>,
+        limit: i64,
+    ) -> Result<EmailDraftListPage, EmailDraftError> {
+        let limit = validate_limit(limit)?;
+        let cursor = cursor
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(decode_draft_list_cursor)
+            .transpose()?;
+        let status_str = status.map(|s| s.as_str().to_owned());
+        let rows = sqlx::query(
+            r#"SELECT draft_id, account_id, persona_id, to_recipients, cc_recipients, bcc_recipients, subject, body_text, body_html, in_reply_to, message_references, status, scheduled_send_at, send_attempts, last_error, metadata, created_at, updated_at
+            FROM email_drafts
+            WHERE ($1::text IS NULL OR account_id = $1)
+              AND ($2::text IS NULL OR status = $2)
+              AND (
+                $3::timestamptz IS NULL
+                OR updated_at < $3
+                OR (updated_at = $3 AND draft_id > $4)
+              )
+            ORDER BY updated_at DESC, draft_id ASC
+            LIMIT $5"#,
+        )
+        .bind(account_id)
+        .bind(status_str.as_deref())
+        .bind(cursor.as_ref().map(|value| value.updated_at))
+        .bind(cursor.as_ref().map(|value| value.draft_id.as_str()))
+        .bind(limit + 1)
+        .fetch_all(&self.pool).await?;
+        let mut items = rows
+            .into_iter()
+            .map(row_to_draft)
+            .collect::<Result<Vec<_>, _>>()?;
+        let has_more = items.len() > limit as usize;
+        if has_more {
+            items.truncate(limit as usize);
+        }
+        let next_cursor = if has_more {
+            items.last().map(encode_draft_list_cursor).transpose()?
+        } else {
+            None
+        };
+        Ok(EmailDraftListPage {
+            items,
+            next_cursor,
+            has_more,
+        })
     }
 
     pub async fn get(&self, draft_id: &str) -> Result<Option<EmailDraft>, EmailDraftError> {
@@ -151,11 +236,24 @@ impl EmailDraftStore {
     }
 
     pub async fn delete(&self, draft_id: &str) -> Result<bool, EmailDraftError> {
-        let result = sqlx::query("DELETE FROM email_drafts WHERE draft_id = $1")
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
+            r#"DELETE FROM email_drafts
+            WHERE draft_id = $1
+            RETURNING draft_id, account_id, persona_id, to_recipients, cc_recipients, bcc_recipients, subject, body_text, body_html, in_reply_to, message_references, status, scheduled_send_at, send_attempts, last_error, metadata, created_at, updated_at"#,
+        )
             .bind(draft_id)
-            .execute(&self.pool)
+            .fetch_optional(&mut *transaction)
             .await?;
-        Ok(result.rows_affected() > 0)
+        let Some(row) = row else {
+            transaction.rollback().await?;
+            return Ok(false);
+        };
+        let draft = row_to_draft(row)?;
+        let event = draft_event(EVENT_TYPE_DRAFT_DELETED, &draft)?;
+        EventStore::append_in_transaction(&mut transaction, &event).await?;
+        transaction.commit().await?;
+        Ok(true)
     }
 
     pub async fn mark_stale_drafts(&self, older_than_days: i32) -> Result<u64, EmailDraftError> {
@@ -164,6 +262,60 @@ impl EmailDraftStore {
         ).bind(older_than_days).execute(&self.pool).await?;
         Ok(result.rows_affected())
     }
+}
+
+async fn draft_exists(
+    transaction: &mut Transaction<'_, Postgres>,
+    draft_id: &str,
+) -> Result<bool, EmailDraftError> {
+    Ok(sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM email_drafts WHERE draft_id = $1)",
+    )
+    .bind(draft_id)
+    .fetch_one(&mut **transaction)
+    .await?)
+}
+
+fn draft_event(event_type: &str, draft: &EmailDraft) -> Result<NewEventEnvelope, EmailDraftError> {
+    Ok(NewEventEnvelope::builder(
+        format!(
+            "mail_draft_event:{}:{}:{:x}",
+            event_type,
+            draft.draft_id,
+            system_time_nanos()
+        ),
+        event_type,
+        Utc::now(),
+        json!({ "kind": "mail_draft_api" }),
+        json!({
+            "kind": "mail_draft",
+            "id": draft.draft_id,
+            "account_id": draft.account_id,
+        }),
+    )
+    .actor(json!({ "actor_id": "hermes-frontend" }))
+    .payload(json!({
+        "draft_id": draft.draft_id,
+        "account_id": draft.account_id,
+        "status": draft.status.as_str(),
+        "scheduled_send_at": draft.scheduled_send_at,
+        "has_body_text": !draft.body_text.trim().is_empty(),
+        "has_body_html": draft
+            .body_html
+            .as_deref()
+            .is_some_and(|body_html| !body_html.trim().is_empty()),
+        "to_recipient_count": draft.to_recipients.len(),
+        "cc_recipient_count": draft.cc_recipients.len(),
+        "bcc_recipient_count": draft.bcc_recipients.len(),
+        "in_reply_to_present": draft.in_reply_to.is_some(),
+        "reference_count": draft.references.len(),
+    }))
+    .provenance(json!({
+        "source_kind": "local_api",
+        "source_id": draft.draft_id,
+    }))
+    .correlation_id(draft.draft_id.clone())
+    .build()?)
 }
 
 fn row_to_draft(row: PgRow) -> Result<EmailDraft, EmailDraftError> {
@@ -195,9 +347,56 @@ pub enum EmailDraftError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
+    EventStore(#[from] crate::platform::events::EventStoreError),
+    #[error(transparent)]
+    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    #[error(transparent)]
     Serde(#[from] serde_json::Error),
     #[error("invalid draft: {0}")]
     Invalid(&'static str),
+    #[error("invalid draft cursor")]
+    InvalidCursor,
+}
+
+fn validate_limit(limit: i64) -> Result<i64, EmailDraftError> {
+    if !(1..=500).contains(&limit) {
+        return Err(EmailDraftError::Invalid("limit must be between 1 and 500"));
+    }
+    Ok(limit)
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct DraftListCursor {
+    updated_at: DateTime<Utc>,
+    draft_id: String,
+}
+
+fn encode_draft_list_cursor(draft: &EmailDraft) -> Result<String, EmailDraftError> {
+    let cursor = DraftListCursor {
+        updated_at: draft.updated_at,
+        draft_id: draft.draft_id.clone(),
+    };
+    let bytes = serde_json::to_vec(&cursor).map_err(|_| EmailDraftError::InvalidCursor)?;
+    Ok(URL_SAFE_NO_PAD.encode(bytes))
+}
+
+fn decode_draft_list_cursor(cursor: &str) -> Result<DraftListCursor, EmailDraftError> {
+    let bytes = URL_SAFE_NO_PAD
+        .decode(cursor)
+        .map_err(|_| EmailDraftError::InvalidCursor)?;
+    let cursor: DraftListCursor =
+        serde_json::from_slice(&bytes).map_err(|_| EmailDraftError::InvalidCursor)?;
+    if cursor.draft_id.trim().is_empty() {
+        return Err(EmailDraftError::InvalidCursor);
+    }
+    Ok(cursor)
+}
+
+fn system_time_nanos() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

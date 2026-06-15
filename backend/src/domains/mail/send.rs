@@ -155,7 +155,7 @@ async fn send_smtp_after_greeting<T: AsyncRead + AsyncWrite + Unpin>(
     }
     write_cmd(&mut reader, "DATA\r\n").await?;
     read_line(&mut reader, &mut buf).await?;
-    let msg = build_rfc2822(email);
+    let msg = build_rfc2822_message(email);
     write_cmd(&mut reader, &format!("{msg}\r\n.\r\n")).await?;
     let resp = read_line(&mut reader, &mut buf).await?;
     let _ = write_cmd(&mut reader, "QUIT\r\n").await;
@@ -195,25 +195,136 @@ async fn write_cmd<W: AsyncWrite + Unpin>(
     Ok(())
 }
 
-fn build_rfc2822(email: &OutgoingEmail) -> String {
+pub fn build_rfc2822_message(email: &OutgoingEmail) -> String {
     let now = chrono::Utc::now().to_rfc2822();
-    let mut m = format!("From: {}\r\nTo: {}\r\n", email.from, email.to.join(", "));
+    let mut message = format!("From: {}\r\nTo: {}\r\n", email.from, email.to.join(", "));
     if !email.cc.is_empty() {
-        m.push_str(&format!("Cc: {}\r\n", email.cc.join(", ")));
+        message.push_str(&format!("Cc: {}\r\n", email.cc.join(", ")));
     }
     if let Some(ref r) = email.in_reply_to {
-        m.push_str(&format!("In-Reply-To: {r}\r\n"));
+        message.push_str(&format!("In-Reply-To: {r}\r\n"));
     }
     if !email.references.is_empty() {
-        m.push_str(&format!("References: {}\r\n", email.references.join(" ")));
+        message.push_str(&format!("References: {}\r\n", email.references.join(" ")));
     }
-    m.push_str(&format!("Date: {now}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n{}", email.subject, email.body_text));
-    m
+    message.push_str(&format!(
+        "Date: {now}\r\nSubject: {}\r\nMIME-Version: 1.0\r\n",
+        email.subject
+    ));
+
+    match email
+        .body_html
+        .as_deref()
+        .map(str::trim)
+        .filter(|body_html| !body_html.is_empty())
+    {
+        Some(body_html) => {
+            let boundary = multipart_alternative_boundary(email);
+            message.push_str(&format!(
+                "Content-Type: multipart/alternative; boundary=\"{boundary}\"\r\n\r\n"
+            ));
+            message.push_str(&format!(
+                "--{boundary}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{}\r\n",
+                email.body_text
+            ));
+            message.push_str(&format!(
+                "--{boundary}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{body_html}\r\n"
+            ));
+            message.push_str(&format!("--{boundary}--"));
+        }
+        None => {
+            message.push_str(&format!(
+                "Content-Type: text/plain; charset=utf-8\r\n\r\n{}",
+                email.body_text
+            ));
+        }
+    }
+
+    message
+}
+
+fn multipart_alternative_boundary(email: &OutgoingEmail) -> String {
+    use sha2::{Digest, Sha256};
+
+    let mut digest = Sha256::new();
+    digest.update(email.from.as_bytes());
+    digest.update(b"\0");
+    digest.update(email.to.join(",").as_bytes());
+    digest.update(b"\0");
+    digest.update(email.subject.as_bytes());
+    digest.update(b"\0");
+    digest.update(email.body_text.as_bytes());
+    digest.update(b"\0");
+    if let Some(body_html) = &email.body_html {
+        digest.update(body_html.as_bytes());
+    }
+
+    let digest = digest.finalize();
+    let mut suffix = String::with_capacity(24);
+    for byte in digest.iter().take(12) {
+        suffix.push(hex_char(byte >> 4));
+        suffix.push(hex_char(byte & 0x0f));
+    }
+    format!("hermes-alt-{suffix}")
+}
+
+fn hex_char(value: u8) -> char {
+    match value {
+        0..=9 => char::from(b'0' + value),
+        10..=15 => char::from(b'a' + (value - 10)),
+        _ => unreachable!("hex nibble must fit in 0..=15"),
+    }
 }
 
 fn base64(data: &[u8]) -> String {
     use base64::Engine;
     base64::engine::general_purpose::STANDARD.encode(data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn outgoing_email(body_html: Option<String>) -> OutgoingEmail {
+        OutgoingEmail {
+            from: "sender@example.com".to_owned(),
+            to: vec!["recipient@example.com".to_owned()],
+            cc: vec!["copy@example.com".to_owned()],
+            bcc: Vec::new(),
+            subject: "Rich body".to_owned(),
+            body_text: "Plain body".to_owned(),
+            body_html,
+            in_reply_to: Some("<parent@example.com>".to_owned()),
+            references: vec!["<root@example.com>".to_owned()],
+        }
+    }
+
+    #[test]
+    fn rfc2822_builder_sends_plain_only_messages_as_text_plain() {
+        let message = build_rfc2822_message(&outgoing_email(None));
+
+        assert!(message.contains("Content-Type: text/plain; charset=utf-8\r\n"));
+        assert!(!message.contains("multipart/alternative"));
+        assert!(message.ends_with("Plain body"));
+    }
+
+    #[test]
+    fn rfc2822_builder_preserves_html_body_as_multipart_alternative() {
+        let message = build_rfc2822_message(&outgoing_email(Some(
+            "<p><strong>Rich body</strong></p>".into(),
+        )));
+
+        assert!(message.contains("MIME-Version: 1.0\r\n"));
+        assert!(message.contains("Content-Type: multipart/alternative; boundary=\"hermes-alt-"));
+        assert!(message.contains("Content-Type: text/plain; charset=utf-8\r\n"));
+        assert!(message.contains("Content-Transfer-Encoding: 8bit\r\n\r\nPlain body\r\n"));
+        assert!(message.contains("Content-Type: text/html; charset=utf-8\r\n"));
+        assert!(message.contains(
+            "Content-Transfer-Encoding: 8bit\r\n\r\n<p><strong>Rich body</strong></p>\r\n"
+        ));
+        assert!(message.contains("In-Reply-To: <parent@example.com>\r\n"));
+        assert!(message.contains("References: <root@example.com>\r\n"));
+    }
 }
 
 #[derive(Debug, Error)]

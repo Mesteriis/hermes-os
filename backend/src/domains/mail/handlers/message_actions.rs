@@ -1,5 +1,80 @@
 use super::*;
 
+#[derive(Deserialize)]
+pub(crate) struct BulkMessageActionRequest {
+    action: String,
+    message_ids: Vec<String>,
+    label: Option<String>,
+    snooze_until: Option<String>,
+}
+
+pub(crate) async fn post_v1_messages_bulk_action(
+    State(state): State<AppState>,
+    Json(request): Json<BulkMessageActionRequest>,
+) -> Result<Json<crate::domains::mail::bulk_actions::BulkMessageActionOutcome>, ApiError> {
+    let action = parse_bulk_message_action(&request)?;
+    let store = crate::domains::mail::bulk_actions::BulkMessageActionStore::new(
+        state
+            .database
+            .pool()
+            .ok_or(ApiError::DatabaseNotConfigured)?
+            .clone(),
+    );
+    Ok(Json(store.apply(request.message_ids, action).await?))
+}
+
+fn parse_bulk_message_action(
+    request: &BulkMessageActionRequest,
+) -> Result<crate::domains::mail::bulk_actions::BulkMessageAction, ApiError> {
+    let action = match request.action.trim() {
+        "mark_read" => crate::domains::mail::bulk_actions::BulkMessageAction::MarkRead,
+        "mark_unread" => crate::domains::mail::bulk_actions::BulkMessageAction::MarkUnread,
+        "archive" => crate::domains::mail::bulk_actions::BulkMessageAction::Archive,
+        "trash" => crate::domains::mail::bulk_actions::BulkMessageAction::Trash,
+        "restore" => crate::domains::mail::bulk_actions::BulkMessageAction::Restore,
+        "pin" => crate::domains::mail::bulk_actions::BulkMessageAction::Pin,
+        "unpin" => crate::domains::mail::bulk_actions::BulkMessageAction::Unpin,
+        "important" => crate::domains::mail::bulk_actions::BulkMessageAction::Important,
+        "not_important" => crate::domains::mail::bulk_actions::BulkMessageAction::NotImportant,
+        "add_label" => {
+            let label = request
+                .label
+                .as_deref()
+                .ok_or(ApiError::InvalidCommunicationQuery(
+                    "label is required for add_label",
+                ))?;
+            crate::domains::mail::bulk_actions::BulkMessageAction::AddLabel(label.to_owned())
+        }
+        "remove_label" => {
+            let label = request
+                .label
+                .as_deref()
+                .ok_or(ApiError::InvalidCommunicationQuery(
+                    "label is required for remove_label",
+                ))?;
+            crate::domains::mail::bulk_actions::BulkMessageAction::RemoveLabel(label.to_owned())
+        }
+        "snooze" => {
+            let until = request
+                .snooze_until
+                .as_deref()
+                .ok_or(ApiError::InvalidCommunicationQuery(
+                    "snooze_until is required for snooze",
+                ))?
+                .parse()
+                .map_err(|_| ApiError::InvalidCommunicationQuery("invalid snooze_until"))?;
+            crate::domains::mail::bulk_actions::BulkMessageAction::Snooze(until)
+        }
+        _ => {
+            return Err(ApiError::InvalidCommunicationQuery(
+                "invalid bulk message action",
+            ));
+        }
+    };
+
+    Ok(action)
+}
+
 pub(crate) async fn post_v1_message_pin(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
@@ -83,22 +158,38 @@ pub(crate) async fn delete_v1_message_label(
 pub(crate) struct SubscriptionsQuery {
     pub(super) account_id: Option<String>,
     pub(super) limit: Option<i64>,
+    pub(super) cursor: Option<String>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct SubscriptionsResponse {
+    pub(super) items: Vec<crate::domains::mail::subscriptions::SubscriptionSource>,
+    pub(super) next_cursor: Option<String>,
+    pub(super) has_more: bool,
 }
 
 pub(crate) async fn get_v1_subscriptions(
     State(state): State<AppState>,
     Query(query): Query<SubscriptionsQuery>,
-) -> Result<Json<Vec<crate::domains::mail::subscriptions::SubscriptionSource>>, ApiError> {
+) -> Result<Json<SubscriptionsResponse>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let store = crate::domains::mail::subscriptions::SubscriptionStore::new(pool);
-    let subs = store
-        .detect_subscriptions(query.account_id.as_deref(), query.limit.unwrap_or(50))
+    let page = store
+        .detect_subscriptions_page(
+            query.account_id.as_deref(),
+            query.limit.unwrap_or(50),
+            query.cursor.as_deref(),
+        )
         .await?;
-    Ok(Json(subs))
+    Ok(Json(SubscriptionsResponse {
+        items: page.items,
+        next_cursor: page.next_cursor,
+        has_more: page.has_more,
+    }))
 }
 
 #[derive(Deserialize)]

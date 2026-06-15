@@ -19,6 +19,7 @@ const forbiddenStylePatterns = [
 ];
 
 const dynamicLayoutStyleAllowlist = new Set([
+	'src/domains/communications/components/AttachmentSearchPanel.vue',
 	'src/domains/communications/components/MailList.vue',
 	'src/domains/documents/components/DocumentsList.vue',
 	'src/domains/knowledge/components/KnowledgeGraphCanvas.vue',

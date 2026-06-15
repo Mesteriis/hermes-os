@@ -1,13 +1,17 @@
 use super::super::errors::MailSyncError;
+use super::super::events::sync_run_progress_event;
 use super::super::models::ProgressUpdate;
+use super::super::rows::row_to_run;
 use super::MailSyncStore;
+use crate::platform::events::EventStore;
 
 impl MailSyncStore {
     pub(in crate::domains::mail::background_sync) async fn update_progress(
         &self,
         update: ProgressUpdate<'_>,
     ) -> Result<(), MailSyncError> {
-        sqlx::query(
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
             r#"
             UPDATE communication_mail_sync_runs
             SET
@@ -20,6 +24,29 @@ impl MailSyncStore {
                 current_batch_size = $7,
                 updated_at = now()
             WHERE run_id = $1
+            RETURNING
+                run_id,
+                account_id,
+                trigger,
+                status,
+                phase,
+                progress_mode,
+                progress_percent,
+                processed_messages,
+                estimated_total_messages,
+                current_batch_size,
+                fetched_messages,
+                projected_messages,
+                upserted_persons,
+                upserted_organizations,
+                checkpoint_before,
+                checkpoint_after,
+                checkpoint_saved,
+                error_code,
+                error_message,
+                started_at,
+                completed_at,
+                next_run_at
             "#,
         )
         .bind(update.run_id)
@@ -29,8 +56,15 @@ impl MailSyncStore {
         .bind(update.processed_messages)
         .bind(update.estimated_total_messages)
         .bind(update.current_batch_size)
-        .execute(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
+
+        if let Some(row) = row {
+            let run = row_to_run(row)?;
+            let event = sync_run_progress_event(&run)?;
+            EventStore::append_in_transaction(&mut transaction, &event).await?;
+        }
+        transaction.commit().await?;
 
         Ok(())
     }

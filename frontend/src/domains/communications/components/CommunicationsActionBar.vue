@@ -5,10 +5,19 @@ import Button from '../../../shared/ui/Button.vue'
 import CommunicationsTopbarSlot from './CommunicationsTopbarSlot.vue'
 import DraftStrip from './DraftStrip.vue'
 import HealthStrip from './HealthStrip.vue'
+import MailCertificateStrip from './MailCertificateStrip.vue'
+import MailResourceOverviewStrip from './MailResourceOverviewStrip.vue'
+import MailSyncSettingsStrip from './MailSyncSettingsStrip.vue'
 import type {
   CommunicationSectionId,
   EmailDraft,
+  MailArchitectureBlocker,
+  MailSyncSettings,
+  MailSyncSettingsUpdate,
   MailboxHealth,
+  MessageExportResponse,
+  SenderStats,
+  SubscriptionSource,
   WorkflowStateCountItem
 } from '../types/communications'
 
@@ -26,10 +35,24 @@ const props = defineProps<{
   isSyncBusy: boolean
   syncStatusMessage: string
   syncError: string
+  syncSettings: MailSyncSettings | null
+  isSyncSettingsLoading: boolean
+  isSyncSettingsSaving: boolean
   health: MailboxHealth | null
+  subscriptions: SubscriptionSource[]
+  topSenders: SenderStats[]
+  blockers: MailArchitectureBlocker[]
+  areResourcesLoading: boolean
+  hasMoreSubscriptions: boolean
+  isLoadingMoreSubscriptions: boolean
+  hasMoreTopSenders: boolean
+  isLoadingMoreTopSenders: boolean
   drafts: EmailDraft[]
+  hasMoreDrafts: boolean
+  isLoadingMoreDrafts: boolean
   actionStatus: string
   actionError: string
+  lastMessageExport: MessageExportResponse | null
   pageError: string
 }>()
 
@@ -39,16 +62,22 @@ const emit = defineEmits<{
   openAccountSetup: []
   compose: []
   syncNow: []
+  updateSyncSettings: [settings: MailSyncSettingsUpdate]
   clearSyncStatus: []
+  loadMoreSubscriptions: []
+  loadMoreTopSenders: []
   selectSection: [sectionId: CommunicationSectionId]
   openDraft: [draft: EmailDraft]
   deleteDraft: [draftId: string]
+  loadMoreDrafts: []
   clearPageError: []
 }>()
 
-const hasInlineBars = computed(() =>
-  Boolean(props.syncStatusMessage || props.syncError || props.health || props.drafts.length > 0)
-)
+const messageExportDownloadHref = computed(() => {
+  if (!props.lastMessageExport) return ''
+  const encoded = encodeURIComponent(props.lastMessageExport.content)
+  return `data:${props.lastMessageExport.content_type};charset=utf-8,${encoded}`
+})
 </script>
 
 <template>
@@ -64,7 +93,7 @@ const hasInlineBars = computed(() =>
     />
   </Teleport>
 
-  <div v-if="hasInlineBars" class="communications-actionbar">
+  <div class="communications-actionbar">
     <div v-if="syncStatusMessage || syncError" class="sync-status-bar">
       <span v-if="syncStatusMessage" class="sync-status-msg">{{ syncStatusMessage }}</span>
       <span v-if="syncError" class="sync-status-error">{{ syncError }}</span>
@@ -73,13 +102,46 @@ const hasInlineBars = computed(() =>
       </Button>
     </div>
 
+    <MailSyncSettingsStrip
+      :settings="syncSettings"
+      :is-loading="isSyncSettingsLoading"
+      :is-saving="isSyncSettingsSaving"
+      @update="emit('updateSyncSettings', $event)"
+    />
     <HealthStrip :health="health" />
-    <DraftStrip :drafts="drafts" @open-draft="emit('openDraft', $event)" @delete-draft="emit('deleteDraft', $event)" />
+    <MailCertificateStrip />
+    <MailResourceOverviewStrip
+      :subscriptions="subscriptions"
+      :top-senders="topSenders"
+      :blockers="blockers"
+      :is-loading="areResourcesLoading"
+      :has-more-subscriptions="hasMoreSubscriptions"
+      :is-loading-more-subscriptions="isLoadingMoreSubscriptions"
+      :has-more-top-senders="hasMoreTopSenders"
+      :is-loading-more-top-senders="isLoadingMoreTopSenders"
+      @load-more-subscriptions="emit('loadMoreSubscriptions')"
+      @load-more-top-senders="emit('loadMoreTopSenders')"
+    />
+    <DraftStrip
+      :drafts="drafts"
+      :has-more="hasMoreDrafts"
+      :is-loading-more="isLoadingMoreDrafts"
+      @open-draft="emit('openDraft', $event)"
+      @delete-draft="emit('deleteDraft', $event)"
+      @load-more="emit('loadMoreDrafts')"
+    />
   </div>
 
   <div v-if="actionStatus" class="action-toast">
     <Icon icon="tabler:check-circle" />
     <span>{{ actionStatus }}</span>
+  </div>
+  <div v-if="lastMessageExport" class="action-toast export-ready">
+    <Icon icon="tabler:download" />
+    <span>Export ready</span>
+    <a :href="messageExportDownloadHref" :download="lastMessageExport.filename">
+      {{ lastMessageExport.filename }}
+    </a>
   </div>
   <div v-if="actionError" class="action-toast error">
     <Icon icon="tabler:alert-circle" />
@@ -140,6 +202,17 @@ const hasInlineBars = computed(() =>
   background: var(--hh-bg-success-light, #f0fdf4);
   color: var(--hh-text-success, #16a34a);
   animation: toast-in 0.2s ease-out;
+}
+
+.export-ready {
+  bottom: 3.75rem;
+}
+
+.export-ready a {
+  color: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .action-toast.error,
