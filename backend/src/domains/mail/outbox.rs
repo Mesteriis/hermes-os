@@ -207,9 +207,7 @@ impl EmailOutboxStore {
         limit: i64,
     ) -> Result<EmailOutboxListPage, EmailOutboxError> {
         let limit = validate_limit(limit)?;
-        let cursor = cursor
-            .map(decode_outbox_list_cursor)
-            .transpose()?;
+        let cursor = cursor.map(decode_outbox_list_cursor).transpose()?;
         let status = status.map(EmailOutboxStatus::as_str);
         let rows = sqlx::query(
             r#"

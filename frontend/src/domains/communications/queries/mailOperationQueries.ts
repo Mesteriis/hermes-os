@@ -295,7 +295,7 @@ function markOutboxItemCanceledInOutboxPage(
 
   let changed = false
   const pages = data.pages.map((page) => {
-    const items = markOutboxItemCanceled(page.items, outboxId)
+    const items = markOutboxItemCanceled(page.items, outboxId) ?? page.items
     if (items === page.items) return page
     changed = true
     return { ...page, items }

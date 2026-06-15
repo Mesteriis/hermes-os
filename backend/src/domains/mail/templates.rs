@@ -233,6 +233,17 @@ struct TemplateValidation {
     malformed_placeholders: Vec<String>,
 }
 
+struct EmailTemplateMetadataInput {
+    template_id: String,
+    name: String,
+    subject_template: String,
+    body_template: String,
+    variables: Vec<String>,
+    language: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
 fn row_to_template(row: PgRow) -> Result<EmailTemplate, EmailTemplateError> {
     let vars: Value = row.try_get("variables")?;
     let variables: Vec<String> = vars
@@ -243,42 +254,37 @@ fn row_to_template(row: PgRow) -> Result<EmailTemplate, EmailTemplateError> {
                 .collect()
         })
         .unwrap_or_default();
-    Ok(email_template_with_metadata(
-        row.try_get("template_id")?,
-        row.try_get("name")?,
-        row.try_get("subject_template")?,
-        row.try_get("body_template")?,
+    Ok(email_template_with_metadata(EmailTemplateMetadataInput {
+        template_id: row.try_get("template_id")?,
+        name: row.try_get("name")?,
+        subject_template: row.try_get("subject_template")?,
+        body_template: row.try_get("body_template")?,
         variables,
-        row.try_get("language")?,
-        row.try_get("created_at")?,
-        row.try_get("updated_at")?,
-    ))
+        language: row.try_get("language")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    }))
 }
 
-fn email_template_with_metadata(
-    template_id: String,
-    name: String,
-    subject_template: String,
-    body_template: String,
-    variables: Vec<String>,
-    language: Option<String>,
-    created_at: DateTime<Utc>,
-    updated_at: DateTime<Utc>,
-) -> EmailTemplate {
-    let validation = validate_template_content(&subject_template, &body_template, &variables);
+fn email_template_with_metadata(input: EmailTemplateMetadataInput) -> EmailTemplate {
+    let validation = validate_template_content(
+        &input.subject_template,
+        &input.body_template,
+        &input.variables,
+    );
     EmailTemplate {
-        template_id,
-        name,
-        subject_template,
-        body_template,
-        variables,
+        template_id: input.template_id,
+        name: input.name,
+        subject_template: input.subject_template,
+        body_template: input.body_template,
+        variables: input.variables,
         placeholder_variables: validation.placeholder_variables,
         undeclared_variables: validation.undeclared_variables,
         unused_variables: validation.unused_variables,
         malformed_placeholders: validation.malformed_placeholders,
-        language,
-        created_at,
-        updated_at,
+        language: input.language,
+        created_at: input.created_at,
+        updated_at: input.updated_at,
     }
 }
 
@@ -325,10 +331,7 @@ fn strings_not_in(source: &[String], excluded: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn render_template_text(
-    template: &str,
-    vars: &HashMap<String, String>,
-) -> RenderedTemplateText {
+fn render_template_text(template: &str, vars: &HashMap<String, String>) -> RenderedTemplateText {
     let mut rendered = String::with_capacity(template.len());
     let mut unresolved_variables = Vec::new();
     let mut malformed_placeholders = Vec::new();
@@ -398,8 +401,8 @@ fn render_template_text(
 fn is_valid_template_variable_name(value: &str) -> bool {
     !value.is_empty()
         && value
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
 }
 
 fn unique_strings<'a>(values: impl Iterator<Item = &'a String>) -> Vec<String> {
@@ -429,16 +432,16 @@ mod tests {
         body_template: &str,
         variables: Vec<String>,
     ) -> EmailTemplate {
-        email_template_with_metadata(
-            "t1".into(),
-            "Test".into(),
-            subject_template.into(),
-            body_template.into(),
+        email_template_with_metadata(EmailTemplateMetadataInput {
+            template_id: "t1".into(),
+            name: "Test".into(),
+            subject_template: subject_template.into(),
+            body_template: body_template.into(),
             variables,
-            Some("en".into()),
-            Utc::now(),
-            Utc::now(),
-        )
+            language: Some("en".into()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
     }
 
     #[test]
@@ -477,9 +480,15 @@ mod tests {
         );
         let rendered = store.render(&tpl, &vars).unwrap();
         assert_eq!(rendered.subject, "Hello Alice");
-        assert_eq!(rendered.body, "Hi Alice,\n\n{{ message }} {{unknown}} {{ blank }}");
+        assert_eq!(
+            rendered.body,
+            "Hi Alice,\n\n{{ message }} {{unknown}} {{ blank }}"
+        );
         assert_eq!(rendered.missing_variables, vec!["message", "blank"]);
-        assert_eq!(rendered.unresolved_variables, vec!["message", "unknown", "blank"]);
+        assert_eq!(
+            rendered.unresolved_variables,
+            vec!["message", "unknown", "blank"]
+        );
         assert!(rendered.malformed_placeholders.is_empty());
     }
 
@@ -509,16 +518,16 @@ mod tests {
 
     #[test]
     fn template_metadata_reports_undeclared_and_unused_variables() {
-        let template = email_template_with_metadata(
-            "t1".into(),
-            "Mismatch".into(),
-            "Hello {{ recipient }}".into(),
-            "Project {{ project }} {{ }} {{ first name }} {{ broken".into(),
-            vec!["recipient".into(), "legacy".into()],
-            Some("en".into()),
-            Utc::now(),
-            Utc::now(),
-        );
+        let template = email_template_with_metadata(EmailTemplateMetadataInput {
+            template_id: "t1".into(),
+            name: "Mismatch".into(),
+            subject_template: "Hello {{ recipient }}".into(),
+            body_template: "Project {{ project }} {{ }} {{ first name }} {{ broken".into(),
+            variables: vec!["recipient".into(), "legacy".into()],
+            language: Some("en".into()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        });
 
         assert_eq!(template.placeholder_variables, vec!["recipient", "project"]);
         assert_eq!(template.undeclared_variables, vec!["project"]);

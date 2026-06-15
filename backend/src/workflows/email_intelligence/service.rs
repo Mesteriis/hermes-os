@@ -135,17 +135,9 @@ fn analysis_summary_contract(
 }
 
 fn non_empty_or(values: Vec<String>, fallback: Vec<String>) -> Vec<String> {
-    if values.is_empty() {
-        fallback
-    } else {
-        values
-    }
+    if values.is_empty() { fallback } else { values }
 }
 
 fn non_empty_candidates_or<T>(values: Vec<T>, fallback: Vec<T>) -> Vec<T> {
-    if values.is_empty() {
-        fallback
-    } else {
-        values
-    }
+    if values.is_empty() { fallback } else { values }
 }

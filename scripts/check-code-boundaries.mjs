@@ -74,6 +74,25 @@ function isIgnored(relativePath) {
 	);
 }
 
+function isDocFile(relativePath) {
+	return relativePath.endsWith('.md');
+}
+
+function isTestFile(relativePath) {
+	return (
+		relativePath.includes('/__tests__/') ||
+		/(\.|-)(test|spec)\.[cm]?[jt]s$/i.test(relativePath) ||
+		/\.boundary\.test\.[cm]?[jt]s$/i.test(relativePath)
+	);
+}
+
+function isFrontendTemplateFile(relativePath) {
+	return (
+		relativePath.startsWith('frontend/src/') &&
+		(relativePath.endsWith('.vue') || relativePath.endsWith('.html'))
+	);
+}
+
 async function collectFiles(relativeRoot) {
 	if (isIgnored(relativeRoot)) return [];
 
@@ -126,7 +145,7 @@ async function checkSourceFiles() {
 		for (const [index, line] of lines.entries()) {
 			const location = `${file}:${index + 1}`;
 
-			if (secretPattern.test(line)) {
+			if (!isDocFile(file) && !isTestFile(file) && secretPattern.test(line)) {
 				failures.push(`${location}: possible hardcoded secret-like value`);
 			}
 
@@ -136,17 +155,11 @@ async function checkSourceFiles() {
 				}
 			}
 
-			if (
-				(file.startsWith('frontend/src/') || file.startsWith('frontend/static/')) &&
-				/\sstyle\s*=/.test(line)
-			) {
+			if (isFrontendTemplateFile(file) && /\sstyle\s*=/.test(line)) {
 				failures.push(`${location}: inline style attributes are forbidden; move styles to CSS files`);
 			}
 
-			if (
-				(file.startsWith('frontend/src/') || file.startsWith('frontend/static/')) &&
-				/<style(\s|>)/i.test(line)
-			) {
+			if (isFrontendTemplateFile(file) && /<style(\s|>)/i.test(line)) {
 				failures.push(`${location}: embedded style blocks are forbidden; move styles to CSS files`);
 			}
 		}

@@ -533,7 +533,10 @@ async fn message_search_supports_any_mode_and_field_rules_against_postgres() {
         .expect("list all-mode messages");
 
     assert_eq!(all_mode.items.len(), 1);
-    assert_eq!(all_mode.items[0].message.message_id, quarterly_projected.message_id);
+    assert_eq!(
+        all_mode.items[0].message.message_id,
+        quarterly_projected.message_id
+    );
 }
 
 #[tokio::test]

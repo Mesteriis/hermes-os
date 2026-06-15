@@ -178,7 +178,10 @@ impl MailSavedSearchStore {
             })
             .collect::<Result<Vec<_>, MailSavedSearchError>>()?;
         let next_cursor = if has_more {
-            items.last().map(encode_saved_search_list_cursor).transpose()?
+            items
+                .last()
+                .map(encode_saved_search_list_cursor)
+                .transpose()?
         } else {
             None
         };
@@ -412,7 +415,8 @@ async fn update_saved_search(
     let row = row.map(row_to_saved_search_record).transpose()?;
     match row {
         Some(record) => {
-            let message_count = count_messages_for_saved_search(&mut **transaction, &record).await?;
+            let message_count =
+                count_messages_for_saved_search(&mut **transaction, &record).await?;
             Ok(Some(saved_search_from_record(record, message_count)))
         }
         None => Ok(None),
@@ -453,7 +457,8 @@ async fn delete_saved_search(
     let row = row.map(row_to_saved_search_record).transpose()?;
     match row {
         Some(record) => {
-            let message_count = count_messages_for_saved_search(&mut **transaction, &record).await?;
+            let message_count =
+                count_messages_for_saved_search(&mut **transaction, &record).await?;
             Ok(Some(saved_search_from_record(record, message_count)))
         }
         None => Ok(None),

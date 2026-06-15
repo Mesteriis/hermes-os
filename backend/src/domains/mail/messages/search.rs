@@ -76,12 +76,9 @@ pub fn effective_message_search_expression(
         MessageSearchBoolean::And
     };
     let mut children = Vec::new();
-    children.extend(
-        search
-            .plain_terms
-            .iter()
-            .map(|value| MessageSearchExpression::Predicate(MessageSearchPredicate::PlainTerm(value.clone()))),
-    );
+    children.extend(search.plain_terms.iter().map(|value| {
+        MessageSearchExpression::Predicate(MessageSearchPredicate::PlainTerm(value.clone()))
+    }));
     extend_rule_terms(
         &mut children,
         MessageSearchField::Subject,
@@ -219,9 +216,17 @@ fn push_predicate<'args>(
                 builder.push(" OR ");
                 push_equals_predicate(builder, &coalesce_column(alias, "body_text"), value);
                 builder.push(" OR ");
-                push_equals_predicate(builder, &coalesce_column(alias, "provider_record_id"), value);
+                push_equals_predicate(
+                    builder,
+                    &coalesce_column(alias, "provider_record_id"),
+                    value,
+                );
                 builder.push(" OR ");
-                push_equals_predicate(builder, &coalesce_column(alias, "sender_display_name"), value);
+                push_equals_predicate(
+                    builder,
+                    &coalesce_column(alias, "sender_display_name"),
+                    value,
+                );
                 builder.push(")");
             }
         },

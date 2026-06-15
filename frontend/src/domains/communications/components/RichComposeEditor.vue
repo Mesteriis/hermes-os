@@ -2,8 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import {
 	EditorContent,
-	useEditor,
-	type Editor
+	useEditor
 } from '@tiptap/vue-3'
 import Icon from '../../../shared/ui/Icon.vue'
 import { richComposeExtensions } from './richComposeExtensions'
@@ -24,17 +23,40 @@ const isFocused = ref(false)
 const lastAppliedHtml = ref('')
 const linkHref = ref('')
 
+type RichComposeEditorInstance = {
+	getHTML: () => string
+	commands: {
+		insertContent: (value: string) => unknown
+		setContent: (value: string, options?: { emitUpdate?: boolean }) => unknown
+	}
+	chain: () => {
+		focus: () => {
+			toggleMark: (name: string) => { run: () => unknown }
+			setNode: (name: string) => { run: () => unknown }
+			toggleNode: (name: string, fallback: string, attributes?: Record<string, unknown>) => { run: () => unknown }
+			updateAttributes: (name: string, attributes: Record<string, unknown>) => { run: () => unknown }
+			toggleList: (name: string, itemName: string) => { run: () => unknown }
+			toggleWrap: (name: string) => { run: () => unknown }
+			extendMarkRange: (name: string) => {
+				setMark: (mark: string, attributes: Record<string, unknown>) => { run: () => unknown }
+				unsetMark: (mark: string) => { run: () => unknown }
+			}
+		}
+	}
+	isActive: (name: string, attributes?: Record<string, unknown>) => boolean
+}
+
 function normalizedHtml(value: string): string {
 	return value.trim() ? value : '<p></p>'
 }
 
-function emitCurrentHtml(editor: Editor): void {
+function emitCurrentHtml(editor: RichComposeEditorInstance): void {
 	const html = editor.getHTML()
 	lastAppliedHtml.value = html
 	emit('update:modelValue', html)
 }
 
-function insertSanitizedClipboardHtml(editor: Editor, html: string): boolean {
+function insertSanitizedClipboardHtml(editor: RichComposeEditorInstance, html: string): boolean {
 	if (!html.trim()) return false
 	editor.commands.insertContent(sanitizeMailComposePastedHtml(html))
 	return true
@@ -179,7 +201,7 @@ function runCommand(command: RichComposeCommand): void {
 	currentEditor.chain().focus().toggleList('bulletList', 'listItem').run()
 }
 
-function setActiveBlockTextAlign(editor: Editor, textAlign: MailComposeTextAlign): void {
+function setActiveBlockTextAlign(editor: RichComposeEditorInstance, textAlign: MailComposeTextAlign): void {
 	const nodeName = editor.isActive('heading') ? 'heading' : 'paragraph'
 	editor.chain().focus().updateAttributes(nodeName, { textAlign }).run()
 }
@@ -195,7 +217,7 @@ function isCommandActive(command: RichComposeActiveCommand): boolean {
 	return currentEditor.isActive(command)
 }
 
-function isActiveTextAlign(editor: Editor, textAlign: MailComposeTextAlign): boolean {
+function isActiveTextAlign(editor: RichComposeEditorInstance, textAlign: MailComposeTextAlign): boolean {
 	return editor.isActive('heading', { textAlign }) || editor.isActive('paragraph', { textAlign })
 }
 </script>

@@ -79,7 +79,7 @@ export function initializeRealtime(
 	let disconnected = false
 	const webSocketClient = createClient({
 		...clientOptions.webSocket,
-		onStatus: (status) => {
+		onStatus: (status: WebSocketStatusEvent) => {
 			bootstrapOptions.onStatus?.(status)
 			if (status.state === 'disconnected' && !disconnected && !sseFallbackClient) {
 				sseFallbackClient = createSseClient()
@@ -123,11 +123,11 @@ function realtimeClientOptions(
 	return {
 		sse: {
 			...common,
-		url: config.sseUrl,
-		longPollUrl: `${config.apiBaseUrl}/api/v1/events`,
-		onError: (error) => {
-			console.warn('[Realtime] SSE stream unavailable', error)
-		},
+			url: config.sseUrl,
+			longPollUrl: `${config.apiBaseUrl}/api/v1/events`,
+			onError: (error) => {
+				console.warn('[Realtime] SSE stream unavailable', error)
+			},
 			onStatus
 		},
 		webSocket: {

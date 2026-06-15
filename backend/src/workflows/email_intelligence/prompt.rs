@@ -1,6 +1,7 @@
 use crate::domains::mail::messages::ProjectedMessage;
 
-pub(super) const EMAIL_INTELLIGENCE_PROMPT_VERSION: &str = "v3-email-intelligence-mail-knowledge-candidates-2026-06-15";
+pub(super) const EMAIL_INTELLIGENCE_PROMPT_VERSION: &str =
+    "v3-email-intelligence-mail-knowledge-candidates-2026-06-15";
 
 pub(super) fn build_email_analysis_prompt(message: &ProjectedMessage) -> String {
     let body = if message.body_text.len() <= 2000 {

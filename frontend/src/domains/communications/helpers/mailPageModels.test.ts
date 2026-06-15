@@ -85,6 +85,7 @@ function threadMessage(overrides: Partial<ThreadMessage> = {}): ThreadMessage {
     ai_summary: null,
     delivery_state: 'received',
     attachment_count: 0,
+    attachments: [],
     ...overrides
   }
 }

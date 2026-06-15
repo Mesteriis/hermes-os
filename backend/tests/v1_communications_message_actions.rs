@@ -143,7 +143,7 @@ async fn v1_message_analyze_returns_structured_ai_summary_against_postgres() {
         "From: Ada Lovelace <ada@acme.example>\nPlease review the attached MSA and NDA by Friday. The payment risk remains open. Meeting on Monday at 10:00 with Acme Corp. Confirm approval before EOD.",
     )
     .await;
-    let r = router(context.database_url()).await;
+    let r = router(&context.connection_string()).await;
 
     let response = r
         .oneshot(post(
@@ -156,51 +156,81 @@ async fn v1_message_analyze_returns_structured_ai_summary_against_postgres() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = response_json(response).await;
     assert_eq!(body["message_id"], message_id);
-    assert!(body["summary_contract"]["key_points"]
-        .as_array()
-        .expect("key points")
-        .iter()
-        .any(|item| item.as_str() == Some("Action Required: Contract review deadline")));
-    assert!(body["summary_contract"]["action_items"]
-        .as_array()
-        .expect("action items")
-        .iter()
-        .any(|item| item.as_str().unwrap_or("").contains("Please review the NDA")));
-    assert!(body["summary_contract"]["risks"]
-        .as_array()
-        .expect("risks")
-        .iter()
-        .any(|item| item.as_str().unwrap_or("").contains("payment risk")));
-    assert!(body["summary_contract"]["deadlines"]
-        .as_array()
-        .expect("deadlines")
-        .iter()
-        .any(|item| item.as_str().unwrap_or("").contains("Friday")));
-    assert!(body["summary_contract"]["event_candidates"]
-        .as_array()
-        .expect("event candidates")
-        .iter()
-        .any(|item| item["title"].as_str().unwrap_or("").contains("Meeting on Monday")));
-    assert!(body["summary_contract"]["persona_candidates"]
-        .as_array()
-        .expect("persona candidates")
-        .iter()
-        .any(|item| item["title"].as_str().unwrap_or("").contains("Ada Lovelace")));
-    assert!(body["summary_contract"]["organization_candidates"]
-        .as_array()
-        .expect("organization candidates")
-        .iter()
-        .any(|item| item["title"].as_str().unwrap_or("").contains("acme.example")));
-    assert!(body["summary_contract"]["document_candidates"]
-        .as_array()
-        .expect("document candidates")
-        .iter()
-        .any(|item| item["title"].as_str().unwrap_or("").contains("MSA")));
-    assert!(body["summary_contract"]["agreement_candidates"]
-        .as_array()
-        .expect("agreement candidates")
-        .iter()
-        .any(|item| item["title"].as_str().unwrap_or("").contains("NDA")));
+    assert!(
+        body["summary_contract"]["key_points"]
+            .as_array()
+            .expect("key points")
+            .iter()
+            .any(|item| item.as_str() == Some("Action Required: Contract review deadline"))
+    );
+    assert!(
+        body["summary_contract"]["action_items"]
+            .as_array()
+            .expect("action items")
+            .iter()
+            .any(|item| item
+                .as_str()
+                .unwrap_or("")
+                .contains("Please review the NDA"))
+    );
+    assert!(
+        body["summary_contract"]["risks"]
+            .as_array()
+            .expect("risks")
+            .iter()
+            .any(|item| item.as_str().unwrap_or("").contains("payment risk"))
+    );
+    assert!(
+        body["summary_contract"]["deadlines"]
+            .as_array()
+            .expect("deadlines")
+            .iter()
+            .any(|item| item.as_str().unwrap_or("").contains("Friday"))
+    );
+    assert!(
+        body["summary_contract"]["event_candidates"]
+            .as_array()
+            .expect("event candidates")
+            .iter()
+            .any(|item| item["title"]
+                .as_str()
+                .unwrap_or("")
+                .contains("Meeting on Monday"))
+    );
+    assert!(
+        body["summary_contract"]["persona_candidates"]
+            .as_array()
+            .expect("persona candidates")
+            .iter()
+            .any(|item| item["title"]
+                .as_str()
+                .unwrap_or("")
+                .contains("Ada Lovelace"))
+    );
+    assert!(
+        body["summary_contract"]["organization_candidates"]
+            .as_array()
+            .expect("organization candidates")
+            .iter()
+            .any(|item| item["title"]
+                .as_str()
+                .unwrap_or("")
+                .contains("acme.example"))
+    );
+    assert!(
+        body["summary_contract"]["document_candidates"]
+            .as_array()
+            .expect("document candidates")
+            .iter()
+            .any(|item| item["title"].as_str().unwrap_or("").contains("MSA"))
+    );
+    assert!(
+        body["summary_contract"]["agreement_candidates"]
+            .as_array()
+            .expect("agreement candidates")
+            .iter()
+            .any(|item| item["title"].as_str().unwrap_or("").contains("NDA"))
+    );
 
     let metadata: Value = sqlx::query_scalar(
         "SELECT message_metadata FROM communication_messages WHERE message_id = $1",
@@ -210,8 +240,7 @@ async fn v1_message_analyze_returns_structured_ai_summary_against_postgres() {
     .await
     .expect("message metadata");
     assert_eq!(
-        metadata["ai_summary_contract"],
-        body["summary_contract"],
+        metadata["ai_summary_contract"], body["summary_contract"],
         "analyze response must persist the structured summary contract"
     );
 }

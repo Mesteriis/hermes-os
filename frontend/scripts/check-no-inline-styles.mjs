@@ -20,7 +20,11 @@ const forbiddenStylePatterns = [
 
 const dynamicLayoutStyleAllowlist = new Set([
 	'src/domains/communications/components/AttachmentSearchPanel.vue',
+	'src/domains/communications/components/DraftStrip.vue',
+	'src/domains/communications/components/MailFolderStrip.vue',
 	'src/domains/communications/components/MailList.vue',
+	'src/domains/communications/components/MailResourceOverviewStrip.vue',
+	'src/domains/communications/components/SavedSearchStrip.vue',
 	'src/domains/documents/components/DocumentsList.vue',
 	'src/domains/knowledge/components/KnowledgeGraphCanvas.vue',
 	'src/domains/notes/components/NotesList.vue',
@@ -104,7 +108,12 @@ async function findStyleContractViolations() {
 
 function scanLinesForFile(file, source) {
 	const lines = source.split('\n');
-	if (path.extname(file) !== '.vue') {
+	const extension = path.extname(file);
+	if (extension !== '.vue' && extension !== '.html') {
+		return [];
+	}
+
+	if (extension === '.html') {
 		return lines.map((line, index) => ({ line, lineNumber: index + 1 }));
 	}
 

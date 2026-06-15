@@ -89,10 +89,7 @@ impl EmailAnalyticsStore {
         account_id: Option<&str>,
         limit: i64,
     ) -> Result<Vec<SenderStats>, EmailAnalyticsError> {
-        Ok(self
-            .top_senders_page(account_id, limit, None)
-            .await?
-            .items)
+        Ok(self.top_senders_page(account_id, limit, None).await?.items)
     }
 
     pub async fn top_senders_page(

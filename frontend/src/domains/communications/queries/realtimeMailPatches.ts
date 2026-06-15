@@ -45,28 +45,37 @@ import {
 
 export type { MailRealtimePatchQueryClient } from './realtimePatchShared'
 
+type AvailableMailRealtimePatchQueryClient = Required<
+	Pick<MailRealtimePatchQueryClient, 'getQueriesData' | 'setQueryData'>
+>
+
 export function applyMailRealtimePatch(
 	eventData: string,
 	queryClient: MailRealtimePatchQueryClient
 ): boolean {
-	if (!queryClient.getQueriesData || !queryClient.setQueryData) return false
+	const { getQueriesData, setQueryData } = queryClient
+	if (!getQueriesData || !setQueryData) return false
+	const availableQueryClient: AvailableMailRealtimePatchQueryClient = {
+		getQueriesData,
+		setQueryData
+	}
 
-	if (applyAiStateRealtimePatch(eventData, queryClient)) return true
-	if (applyOutboxRealtimePatch(eventData, queryClient)) return true
-	if (applyDraftRealtimePatch(eventData, queryClient)) return true
-	if (applyFolderRealtimePatch(eventData, queryClient)) return true
-	if (applyFolderMessageRealtimePatch(eventData, queryClient)) return true
-	if (applySavedSearchRealtimePatch(eventData, queryClient)) return true
-	if (applySyncRealtimePatch(eventData, queryClient)) return true
+	if (applyAiStateRealtimePatch(eventData, availableQueryClient)) return true
+	if (applyOutboxRealtimePatch(eventData, availableQueryClient)) return true
+	if (applyDraftRealtimePatch(eventData, availableQueryClient)) return true
+	if (applyFolderRealtimePatch(eventData, availableQueryClient)) return true
+	if (applyFolderMessageRealtimePatch(eventData, availableQueryClient)) return true
+	if (applySavedSearchRealtimePatch(eventData, availableQueryClient)) return true
+	if (applySyncRealtimePatch(eventData, availableQueryClient)) return true
 
 	const request = bulkActionRequestFromEvent(eventData)
 	if (!request) return false
 
 	let patched = false
-	for (const [queryKey, data] of queryClient.getQueriesData<InfiniteData<MailMessagesResponse>>({
+	for (const [queryKey, data] of availableQueryClient.getQueriesData<InfiniteData<MailMessagesResponse>>({
 		queryKey: ['communications-mail-list']
 	})) {
-		queryClient.setQueryData(queryKey, () =>
+		availableQueryClient.setQueryData(queryKey, () =>
 			applyBulkMessageActionToMailList(data, request, queryKey)
 		)
 		patched = true
@@ -74,7 +83,7 @@ export function applyMailRealtimePatch(
 
 	for (const messageId of request.message_ids) {
 		const queryKey = ['communications-message', messageId] as const
-		queryClient.setQueryData<MailMessageDetailResponse | null | undefined>(queryKey, (data) =>
+		availableQueryClient.setQueryData<MailMessageDetailResponse | null | undefined>(queryKey, (data) =>
 			applyBulkMessageActionToMailDetail(data, request)
 		)
 		patched = true
@@ -121,7 +130,8 @@ function applySyncRealtimePatch(
 	queryClient: Required<Pick<MailRealtimePatchQueryClient, 'getQueriesData' | 'setQueryData'>>
 ): boolean {
 	const envelope = storedEventEnvelope(eventData)
-	const eventType = envelope?.event?.event_type
+	const event = envelope?.event
+	const eventType = event?.event_type
 	if (
 		eventType !== 'mail.sync.started' &&
 		eventType !== 'mail.sync.progress' &&
@@ -132,7 +142,7 @@ function applySyncRealtimePatch(
 		return false
 	}
 
-	const payload = envelope.event?.payload as SyncPatchPayload | undefined
+	const payload = event?.payload as SyncPatchPayload | undefined
 	const accountId = stringValue(payload?.account_id)
 	if (!accountId) return false
 
@@ -202,7 +212,8 @@ function applyFolderMessageRealtimePatch(
 	queryClient: Required<Pick<MailRealtimePatchQueryClient, 'getQueriesData' | 'setQueryData'>>
 ): boolean {
 	const envelope = storedEventEnvelope(eventData)
-	const eventType = envelope?.event?.event_type
+	const event = envelope?.event
+	const eventType = event?.event_type
 	if (
 		eventType !== 'mail.folder_message.copied' &&
 		eventType !== 'mail.folder_message.moved'
@@ -210,7 +221,7 @@ function applyFolderMessageRealtimePatch(
 		return false
 	}
 
-	const payload = envelope.event?.payload as FolderMessagePatchPayload | undefined
+	const payload = event?.payload as FolderMessagePatchPayload | undefined
 	const folderMessage = folderMessageValue(payload?.message)
 	const messageId = stringValue(payload?.message_id)
 	if (!folderMessage || !messageId) return false
@@ -294,7 +305,8 @@ function applySavedSearchRealtimePatch(
 	queryClient: Required<Pick<MailRealtimePatchQueryClient, 'getQueriesData' | 'setQueryData'>>
 ): boolean {
 	const envelope = storedEventEnvelope(eventData)
-	const eventType = envelope?.event?.event_type
+	const event = envelope?.event
+	const eventType = event?.event_type
 	if (
 		eventType !== 'mail.saved_search.created' &&
 		eventType !== 'mail.saved_search.updated' &&
@@ -303,7 +315,7 @@ function applySavedSearchRealtimePatch(
 		return false
 	}
 
-	const savedSearch = savedSearchValue(envelope.event?.payload)
+	const savedSearch = savedSearchValue(event?.payload)
 	if (!savedSearch) return false
 
 	let patched = false
@@ -397,7 +409,8 @@ function applyFolderRealtimePatch(
 	queryClient: Required<Pick<MailRealtimePatchQueryClient, 'getQueriesData' | 'setQueryData'>>
 ): boolean {
 	const envelope = storedEventEnvelope(eventData)
-	const eventType = envelope?.event?.event_type
+	const event = envelope?.event
+	const eventType = event?.event_type
 	if (
 		eventType !== 'mail.folder.created' &&
 		eventType !== 'mail.folder.updated' &&
@@ -406,7 +419,7 @@ function applyFolderRealtimePatch(
 		return false
 	}
 
-	const folder = folderValue(envelope.event?.payload)
+	const folder = folderValue(event?.payload)
 	if (!folder) return false
 
 	let patched = false
@@ -485,9 +498,10 @@ function applyDraftRealtimePatch(
 	queryClient: Required<Pick<MailRealtimePatchQueryClient, 'getQueriesData' | 'setQueryData'>>
 ): boolean {
 	const envelope = storedEventEnvelope(eventData)
-	if (envelope?.event?.event_type !== 'mail.draft.deleted') return false
+	const event = envelope?.event
+	if (event?.event_type !== 'mail.draft.deleted') return false
 
-	const payload = envelope.event.payload as DraftPatchPayload | undefined
+	const payload = event.payload as DraftPatchPayload | undefined
 	const draftId = stringValue(payload?.draft_id)
 	if (!draftId) return false
 
@@ -516,7 +530,8 @@ function applyOutboxRealtimePatch(
 	queryClient: Required<Pick<MailRealtimePatchQueryClient, 'getQueriesData' | 'setQueryData'>>
 ): boolean {
 	const envelope = storedEventEnvelope(eventData)
-	const eventType = envelope?.event?.event_type
+	const event = envelope?.event
+	const eventType = event?.event_type
 	if (
 		eventType !== 'mail.outbox.sent' &&
 		eventType !== 'mail.outbox.failed' &&
@@ -527,7 +542,7 @@ function applyOutboxRealtimePatch(
 		return false
 	}
 
-	const payload = envelope.event?.payload as OutboxPatchPayload | undefined
+	const payload = event?.payload as OutboxPatchPayload | undefined
 	const outboxId = stringValue(payload?.outbox_id)
 	if (!outboxId) return false
 
@@ -649,10 +664,11 @@ function bulkActionRequestFromEvent(eventData: string): BulkMessageActionRequest
 	const envelope = storedEventEnvelope(eventData)
 	if (!envelope) return null
 
-	const eventType = envelope.event?.event_type
+	const event = envelope.event
+	const eventType = event?.event_type
 	if (typeof eventType !== 'string' || !eventType.startsWith('mail.message.')) return null
 
-	const payload = envelope.event.payload as MailMessagePatchPayload | undefined
+	const payload = event?.payload as MailMessagePatchPayload | undefined
 	const action = normalizeBulkAction(payload?.action)
 	const messageIds = normalizeMessageIds(payload?.message_ids)
 	if (!action || messageIds.length === 0) return null

@@ -4,9 +4,7 @@ use sqlx::postgres::PgPool;
 use sqlx::{Postgres, QueryBuilder, Row};
 
 use crate::domains::api_support::parse_communication_message_search_query;
-use crate::domains::mail::messages::{
-    MessageSearchQuery, append_message_search_filter,
-};
+use crate::domains::mail::messages::{MessageSearchQuery, append_message_search_filter};
 use crate::domains::mail::saved_searches::{MailSavedSearchError, SavedSearchRecord};
 
 pub(crate) async fn count_messages_for_saved_search<'e, E>(

@@ -5,12 +5,12 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Postgres, QueryBuilder, Row};
 
 use super::MessageProjectionStore;
+use crate::domains::mail::messages::append_message_search_filter;
 use crate::domains::mail::messages::errors::MessageProjectionError;
 use crate::domains::mail::messages::models::{
     MessageSearchMatchMode, MessageSearchQuery, ProjectedMessage, ProjectedMessagePage,
     ProjectedMessagePageQuery, ProjectedMessageSummary, WorkflowStateCount,
 };
-use crate::domains::mail::messages::append_message_search_filter;
 use crate::domains::mail::messages::rows::{
     row_to_projected_message, row_to_projected_message_summary,
 };
@@ -222,19 +222,13 @@ impl MessageProjectionStore {
         }
         append_message_search_filter(&mut builder, "m", &search);
         if let Some(sort_at) = cursor_sort_at {
-            builder.push(
-                " AND (COALESCE(m.occurred_at, m.projected_at) < "
-            );
+            builder.push(" AND (COALESCE(m.occurred_at, m.projected_at) < ");
             builder.push_bind(sort_at);
-            builder.push(
-                " OR (COALESCE(m.occurred_at, m.projected_at) = "
-            );
+            builder.push(" OR (COALESCE(m.occurred_at, m.projected_at) = ");
             builder.push_bind(sort_at);
             builder.push(" AND m.projected_at < ");
             builder.push_bind(cursor_projected_at.expect("cursor projected_at"));
-            builder.push(
-                ") OR (COALESCE(m.occurred_at, m.projected_at) = "
-            );
+            builder.push(") OR (COALESCE(m.occurred_at, m.projected_at) = ");
             builder.push_bind(sort_at);
             builder.push(" AND m.projected_at = ");
             builder.push_bind(cursor_projected_at.expect("cursor projected_at"));

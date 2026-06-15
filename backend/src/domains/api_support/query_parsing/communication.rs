@@ -2,9 +2,8 @@ use url::form_urlencoded;
 
 use crate::app::ApiError;
 use crate::domains::mail::messages::{
-    MessageSearchBoolean, MessageSearchExpression, MessageSearchField,
-    MessageSearchMatchMode, MessageSearchPredicate, MessageSearchPredicateOperator,
-    MessageSearchQuery,
+    MessageSearchBoolean, MessageSearchExpression, MessageSearchField, MessageSearchMatchMode,
+    MessageSearchPredicate, MessageSearchPredicateOperator, MessageSearchQuery,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -197,20 +196,20 @@ fn parse_match_mode_token(token: &str) -> Option<MessageSearchMatchMode> {
 }
 
 fn parse_rule_expression(token: &str) -> Option<(&str, &str, &str)> {
-    if let Some(index) = token.find("==") {
-        if index > 0 {
-            return Some((&token[0..index], "==", &token[index + 2..]));
-        }
+    if let Some(index) = token.find("==")
+        && index > 0
+    {
+        return Some((&token[0..index], "==", &token[index + 2..]));
     }
-    if let Some(index) = token.find('=') {
-        if index > 0 {
-            return Some((&token[0..index], "=", &token[index + 1..]));
-        }
+    if let Some(index) = token.find('=')
+        && index > 0
+    {
+        return Some((&token[0..index], "=", &token[index + 1..]));
     }
-    if let Some(index) = token.find(':') {
-        if index > 0 {
-            return Some((&token[0..index], ":", &token[index + 1..]));
-        }
+    if let Some(index) = token.find(':')
+        && index > 0
+    {
+        return Some((&token[0..index], ":", &token[index + 1..]));
     }
 
     None
@@ -236,10 +235,12 @@ fn parse_search_operator(value: &str) -> Option<MessageSearchPredicateOperator> 
 
 fn parse_explicit_search_expression(query: &str) -> Option<MessageSearchExpression> {
     let tokens = tokenize_search_expression(query);
-    if !tokens
-        .iter()
-        .any(|token| matches!(token, SearchToken::OpenParen | SearchToken::CloseParen | SearchToken::And | SearchToken::Or))
-    {
+    if !tokens.iter().any(|token| {
+        matches!(
+            token,
+            SearchToken::OpenParen | SearchToken::CloseParen | SearchToken::And | SearchToken::Or
+        )
+    }) {
         return None;
     }
 
@@ -340,7 +341,10 @@ impl ExplicitSearchParser {
             self.index += 1;
             children.push(self.parse_and_expression()?);
         }
-        Some(collapse_expression_group(MessageSearchBoolean::Or, children))
+        Some(collapse_expression_group(
+            MessageSearchBoolean::Or,
+            children,
+        ))
     }
 
     fn parse_and_expression(&mut self) -> Option<MessageSearchExpression> {
@@ -349,7 +353,10 @@ impl ExplicitSearchParser {
             self.index += 1;
             children.push(self.parse_primary()?);
         }
-        Some(collapse_expression_group(MessageSearchBoolean::And, children))
+        Some(collapse_expression_group(
+            MessageSearchBoolean::And,
+            children,
+        ))
     }
 
     fn parse_primary(&mut self) -> Option<MessageSearchExpression> {
@@ -375,11 +382,13 @@ impl ExplicitSearchParser {
         self.index += 1;
 
         if let Some(rule) = parse_query_rule(&raw_term) {
-            return Some(MessageSearchExpression::Predicate(MessageSearchPredicate::Rule {
-                field: rule.field,
-                operator: rule.operator,
-                value: rule.value,
-            }));
+            return Some(MessageSearchExpression::Predicate(
+                MessageSearchPredicate::Rule {
+                    field: rule.field,
+                    operator: rule.operator,
+                    value: rule.value,
+                },
+            ));
         }
 
         let normalized = strip_outer_quotes(&raw_term);
@@ -484,7 +493,8 @@ mod tests {
 
     #[test]
     fn parse_query_with_plain_terms_and_quoted_phrase() {
-        let parsed = parse_communication_message_search_query(Some("quarterly invoice \"alpha beta\""));
+        let parsed =
+            parse_communication_message_search_query(Some("quarterly invoice \"alpha beta\""));
 
         assert_eq!(
             parsed.plain_terms,
@@ -513,11 +523,18 @@ mod tests {
     #[test]
     fn parse_query_with_match_mode_and_plain_terms() {
         let parsed = parse_communication_message_search_query(Some(
-            "mode:any invoice payment mode:all invoice", 
+            "mode:any invoice payment mode:all invoice",
         ));
 
         assert_eq!(parsed.match_mode, MessageSearchMatchMode::Any);
-        assert_eq!(parsed.plain_terms, vec!["invoice".to_owned(), "payment".to_owned(), "invoice".to_owned()]);
+        assert_eq!(
+            parsed.plain_terms,
+            vec![
+                "invoice".to_owned(),
+                "payment".to_owned(),
+                "invoice".to_owned()
+            ]
+        );
         assert_eq!(parsed.subject_contains, Vec::<String>::new());
     }
 

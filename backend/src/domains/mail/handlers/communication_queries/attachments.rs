@@ -1,10 +1,10 @@
 use super::super::*;
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use crate::domains::mail::archive_inspection::{
     ArchiveInspectionLimits, ArchiveInspectionReport, inspect_zip_bytes,
 };
 use crate::domains::mail::attachment_search::{AttachmentSearchQuery, AttachmentSearchStore};
+use base64::Engine as _;
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 
 const MAX_TEXT_PREVIEW_BYTES: usize = 64 * 1024;
 const MAX_IMAGE_PREVIEW_BYTES: usize = 5 * 1024 * 1024;
@@ -85,11 +85,10 @@ pub(crate) async fn get_v1_attachment_preview(
             "attachment preview is blocked by attachment scan status",
         ));
     }
-    let preview_kind = attachment_preview_kind(&attachment).ok_or(
-        ApiError::InvalidCommunicationQuery(
+    let preview_kind =
+        attachment_preview_kind(&attachment).ok_or(ApiError::InvalidCommunicationQuery(
             "attachment preview supports text and image attachments only",
-        ),
-    )?;
+        ))?;
 
     let bytes = LocalMailBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
         .read_blob(&attachment.storage_path)
@@ -140,9 +139,11 @@ fn image_attachment_preview(
             "attachment image preview exceeds size limit",
         ));
     }
-    let content_type = preview_image_content_type(&attachment)
-        .unwrap_or("image/png");
-    let data_url = format!("data:{content_type};base64,{}", BASE64_STANDARD.encode(bytes));
+    let content_type = preview_image_content_type(&attachment).unwrap_or("image/png");
+    let data_url = format!(
+        "data:{content_type};base64,{}",
+        BASE64_STANDARD.encode(bytes)
+    );
 
     Ok(Json(AttachmentPreviewResponse {
         attachment_id: attachment.attachment.attachment_id,
@@ -214,7 +215,9 @@ enum AttachmentPreviewKind {
     Image,
 }
 
-fn attachment_preview_kind(attachment: &StoredMailAttachmentWithBlob) -> Option<AttachmentPreviewKind> {
+fn attachment_preview_kind(
+    attachment: &StoredMailAttachmentWithBlob,
+) -> Option<AttachmentPreviewKind> {
     if is_previewable_text_attachment(attachment) {
         return Some(AttachmentPreviewKind::Text);
     }

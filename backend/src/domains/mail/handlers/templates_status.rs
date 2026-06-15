@@ -1,7 +1,5 @@
 use super::*;
-use crate::domains::mail::templates::{
-    EmailTemplateStore, MailMergePreviewRow, NewEmailTemplate,
-};
+use crate::domains::mail::templates::{EmailTemplateStore, MailMergePreviewRow, NewEmailTemplate};
 
 const MAX_MAIL_MERGE_PREVIEW_ROWS: usize = 250;
 
@@ -71,7 +69,9 @@ pub(crate) async fn post_v1_rich_template(
             language: req.language,
         })
         .await?;
-    Ok(Json(serde_json::json!({ "saved": true, "template": template })))
+    Ok(Json(
+        serde_json::json!({ "saved": true, "template": template }),
+    ))
 }
 
 pub(crate) async fn delete_v1_rich_template(
@@ -83,7 +83,9 @@ pub(crate) async fn delete_v1_rich_template(
     };
     let template_id = template_id.trim();
     if template_id.is_empty() {
-        return Err(ApiError::InvalidCommunicationQuery("template_id is required"));
+        return Err(ApiError::InvalidCommunicationQuery(
+            "template_id is required",
+        ));
     }
     let deleted = EmailTemplateStore::new(pool.clone())
         .delete(template_id)
@@ -132,7 +134,9 @@ pub(crate) async fn post_v1_rich_template_mail_merge_preview(
     };
     let template_id = req.template_id.trim();
     if template_id.is_empty() {
-        return Err(ApiError::InvalidCommunicationQuery("template_id is required"));
+        return Err(ApiError::InvalidCommunicationQuery(
+            "template_id is required",
+        ));
     }
     if req.rows.is_empty() {
         return Err(ApiError::InvalidCommunicationQuery(

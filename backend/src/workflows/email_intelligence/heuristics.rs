@@ -1,7 +1,5 @@
 use crate::domains::mail::messages::ProjectedMessage;
-use crate::workflows::email_intelligence::models::{
-    EmailKnowledgeCandidate, EmailSummaryContract,
-};
+use crate::workflows::email_intelligence::models::{EmailKnowledgeCandidate, EmailSummaryContract};
 
 const URGENT_WORDS: &[&str] = &[
     "urgent",
@@ -232,8 +230,16 @@ fn knowledge_candidates(
 
 fn persona_candidates(message: &ProjectedMessage) -> Vec<EmailKnowledgeCandidate> {
     let mut candidates = Vec::new();
-    push_persona_candidate(&mut candidates, message.sender_display_name.as_deref(), &message.sender);
-    push_persona_candidate(&mut candidates, Some(message.sender.as_str()), &message.sender);
+    push_persona_candidate(
+        &mut candidates,
+        message.sender_display_name.as_deref(),
+        &message.sender,
+    );
+    push_persona_candidate(
+        &mut candidates,
+        Some(message.sender.as_str()),
+        &message.sender,
+    );
     for line in message.body_text.lines().take(20) {
         let trimmed = line.trim();
         if let Some((label, email)) = email_identity(trimmed) {
@@ -327,7 +333,10 @@ fn email_identity(value: &str) -> Option<(String, String)> {
     let email = value
         .split_whitespace()
         .find(|part| part.contains('@'))
-        .map(|part| part.trim_matches(|c| matches!(c, '<' | '>' | ',' | ';')).to_owned())?;
+        .map(|part| {
+            part.trim_matches(|c| matches!(c, '<' | '>' | ',' | ';'))
+                .to_owned()
+        })?;
     let label = value
         .split('<')
         .next()

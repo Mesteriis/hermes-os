@@ -96,16 +96,11 @@ pub struct ProjectedMessagePage {
     pub has_more: bool,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum MessageSearchMatchMode {
+    #[default]
     All,
     Any,
-}
-
-impl Default for MessageSearchMatchMode {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 impl MessageSearchMatchMode {

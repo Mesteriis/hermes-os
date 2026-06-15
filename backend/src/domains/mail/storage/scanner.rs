@@ -137,11 +137,11 @@ impl AttachmentSafetyScanner for HeuristicAttachmentSafetyScanner {
             }
         }
 
-        if let Some(extension) = extension.as_deref() {
-            if is_mime_extension_mismatch(&content_type, extension) {
-                status = max_scan_status(status, AttachmentSafetyScanStatus::Suspicious);
-                reasons.push("mime_extension_mismatch");
-            }
+        if let Some(extension) = extension.as_deref()
+            && is_mime_extension_mismatch(&content_type, extension)
+        {
+            status = max_scan_status(status, AttachmentSafetyScanStatus::Suspicious);
+            reasons.push("mime_extension_mismatch");
         }
 
         if status == AttachmentSafetyScanStatus::NotScanned {
@@ -224,7 +224,10 @@ fn is_active_content_extension(extension: &str) -> bool {
 }
 
 fn is_macro_document_extension(extension: &str) -> bool {
-    matches!(extension, "docm" | "dotm" | "xlsm" | "xltm" | "pptm" | "potm")
+    matches!(
+        extension,
+        "docm" | "dotm" | "xlsm" | "xltm" | "pptm" | "potm"
+    )
 }
 
 fn is_mime_extension_mismatch(content_type: &str, extension: &str) -> bool {
@@ -321,7 +324,10 @@ mod tests {
         assert_eq!(report.status, AttachmentSafetyScanStatus::Malicious);
         assert_eq!(report.engine.as_deref(), Some("hermes_heuristic_v1"));
         assert!(report.checked_at.is_some());
-        assert_eq!(report.summary.as_deref(), Some("Executable payload detected"));
+        assert_eq!(
+            report.summary.as_deref(),
+            Some("Executable payload detected")
+        );
         assert_eq!(
             report.metadata["reasons"],
             serde_json::json!(["executable_magic"])

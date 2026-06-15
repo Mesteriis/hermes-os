@@ -91,10 +91,29 @@ fn heuristic_structured_summary_extracts_key_points_actions_risks_and_deadlines(
 
     let summary = EmailIntelligenceService::heuristic_structured_summary(&msg);
 
-    assert!(summary.key_points.contains(&"Action Required: Contract review deadline".to_owned()));
-    assert!(summary.action_items.iter().any(|item| item.contains("Please review the NDA")));
-    assert!(summary.risks.iter().any(|risk| risk.contains("payment risk")));
-    assert!(summary.deadlines.iter().any(|deadline| deadline.contains("Friday")));
+    assert!(
+        summary
+            .key_points
+            .contains(&"Action Required: Contract review deadline".to_owned())
+    );
+    assert!(
+        summary
+            .action_items
+            .iter()
+            .any(|item| item.contains("Please review the NDA"))
+    );
+    assert!(
+        summary
+            .risks
+            .iter()
+            .any(|risk| risk.contains("payment risk"))
+    );
+    assert!(
+        summary
+            .deadlines
+            .iter()
+            .any(|deadline| deadline.contains("Friday"))
+    );
 }
 
 #[test]
@@ -106,26 +125,36 @@ fn heuristic_structured_summary_extracts_mail_knowledge_candidates() {
 
     let summary = EmailIntelligenceService::heuristic_structured_summary(&msg);
 
-    assert!(summary
-        .event_candidates
-        .iter()
-        .any(|candidate| candidate.title.contains("Meeting on Monday")));
-    assert!(summary
-        .persona_candidates
-        .iter()
-        .any(|candidate| candidate.title.contains("Ada Lovelace")));
-    assert!(summary
-        .organization_candidates
-        .iter()
-        .any(|candidate| candidate.title.contains("acme.example")));
-    assert!(summary
-        .document_candidates
-        .iter()
-        .any(|candidate| candidate.title.contains("MSA")));
-    assert!(summary
-        .agreement_candidates
-        .iter()
-        .any(|candidate| candidate.title.contains("NDA")));
+    assert!(
+        summary
+            .event_candidates
+            .iter()
+            .any(|candidate| candidate.title.contains("Meeting on Monday"))
+    );
+    assert!(
+        summary
+            .persona_candidates
+            .iter()
+            .any(|candidate| candidate.title.contains("Ada Lovelace"))
+    );
+    assert!(
+        summary
+            .organization_candidates
+            .iter()
+            .any(|candidate| candidate.title.contains("acme.example"))
+    );
+    assert!(
+        summary
+            .document_candidates
+            .iter()
+            .any(|candidate| candidate.title.contains("MSA"))
+    );
+    assert!(
+        summary
+            .agreement_candidates
+            .iter()
+            .any(|candidate| candidate.title.contains("NDA"))
+    );
 }
 
 #[test]

@@ -31,7 +31,8 @@ pub async fn require_secret(
 }
 
 fn has_valid_secret(headers: &axum::http::HeaderMap, uri: &Uri, expected_secret: &str) -> bool {
-    has_valid_secret_header(headers, expected_secret) || has_valid_websocket_secret_query(uri, expected_secret)
+    has_valid_secret_header(headers, expected_secret)
+        || has_valid_websocket_secret_query(uri, expected_secret)
 }
 
 fn has_valid_secret_header(headers: &axum::http::HeaderMap, expected_secret: &str) -> bool {

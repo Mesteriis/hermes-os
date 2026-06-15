@@ -166,7 +166,10 @@ async fn v1_saved_searches_crud_and_events_against_postgres() {
         .expect("second saved search page response");
     assert_eq!(response.status(), StatusCode::OK);
     let second_page = response_json(response).await;
-    assert_eq!(second_page["items"].as_array().expect("second page").len(), 1);
+    assert_eq!(
+        second_page["items"].as_array().expect("second page").len(),
+        1
+    );
     assert_eq!(second_page["has_more"], false);
     assert!(second_page["next_cursor"].is_null());
 

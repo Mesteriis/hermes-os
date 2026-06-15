@@ -15,8 +15,7 @@ const T: &str = "v1comms-template-test-token";
 async fn router(db: &str) -> axum::Router {
     let database = Database::connect(Some(db)).await.expect("db");
     build_router_with_database(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", T), ("DATABASE_URL", db)])
-            .expect("cfg"),
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", T), ("DATABASE_URL", db)]).expect("cfg"),
         database,
     )
 }
@@ -134,9 +133,12 @@ async fn rich_template_save_list_render_and_delete_uses_durable_template_store()
         .await
         .expect("render template");
     assert_eq!(render_resp.status(), StatusCode::OK);
-    let render_body: Value =
-        serde_json::from_slice(&to_bytes(render_resp.into_body(), 1024 * 1024).await.unwrap())
-            .unwrap();
+    let render_body: Value = serde_json::from_slice(
+        &to_bytes(render_resp.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(render_body["rendered"]["subject"], "Hello Alex");
     assert_eq!(render_body["rendered"]["body"], "Project Hermes is green.");
     assert_eq!(render_body["rendered"]["missing_variables"], json!([]));
@@ -171,16 +173,22 @@ async fn rich_template_save_list_render_and_delete_uses_durable_template_store()
         .await
         .expect("mail merge preview");
     assert_eq!(preview_resp.status(), StatusCode::OK);
-    let preview_body: Value =
-        serde_json::from_slice(&to_bytes(preview_resp.into_body(), 1024 * 1024).await.unwrap())
-            .unwrap();
+    let preview_body: Value = serde_json::from_slice(
+        &to_bytes(preview_resp.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(preview_body["template_id"], template_id);
     assert_eq!(preview_body["row_count"], 2);
     assert_eq!(preview_body["ready_count"], 1);
     assert_eq!(preview_body["blocked_count"], 1);
     assert_eq!(preview_body["items"][0]["row_id"], "r1");
     assert_eq!(preview_body["items"][0]["ready"], true);
-    assert_eq!(preview_body["items"][0]["rendered"]["subject"], "Hello Alex");
+    assert_eq!(
+        preview_body["items"][0]["rendered"]["subject"],
+        "Hello Alex"
+    );
     assert_eq!(
         preview_body["items"][0]["rendered"]["body"],
         "Project Hermes is green."
@@ -199,9 +207,12 @@ async fn rich_template_save_list_render_and_delete_uses_durable_template_store()
         .await
         .expect("delete template");
     assert_eq!(delete_resp.status(), StatusCode::OK);
-    let delete_body: Value =
-        serde_json::from_slice(&to_bytes(delete_resp.into_body(), 1024 * 1024).await.unwrap())
-            .unwrap();
+    let delete_body: Value = serde_json::from_slice(
+        &to_bytes(delete_resp.into_body(), 1024 * 1024)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
     assert_eq!(delete_body["template_id"], template_id);
     assert_eq!(delete_body["deleted"], true);
 

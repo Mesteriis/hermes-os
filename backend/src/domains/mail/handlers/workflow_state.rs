@@ -1,9 +1,5 @@
 use super::*;
-use crate::domains::mail::ai_state::{
-    MailAiState,
-    MailAiStateStore,
-    MailAiStateTransitionRequest,
-};
+use crate::domains::mail::ai_state::{MailAiState, MailAiStateStore, MailAiStateTransitionRequest};
 
 #[derive(Deserialize)]
 pub(crate) struct WorkflowStateTransitionApiRequest {
@@ -158,10 +154,9 @@ pub(crate) async fn post_v1_message_analyze(
         )
         .await?;
     let mut metadata = message.message_metadata.clone();
-    metadata["ai_summary_contract"] = serde_json::to_value(&summary_contract)
-        .map_err(|_| {
-            ApiError::InvalidCommunicationQuery("summary contract serialization failed")
-        })?;
+    metadata["ai_summary_contract"] = serde_json::to_value(&summary_contract).map_err(|_| {
+        ApiError::InvalidCommunicationQuery("summary contract serialization failed")
+    })?;
     store.set_message_metadata(&message_id, &metadata).await?;
 
     // If score is high, auto-transition to needs_action
