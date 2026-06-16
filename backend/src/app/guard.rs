@@ -43,7 +43,7 @@ fn has_valid_secret_header(headers: &axum::http::HeaderMap, expected_secret: &st
 }
 
 fn has_valid_websocket_secret_query(uri: &Uri, expected_secret: &str) -> bool {
-    if uri.path() != "/api/events/ws" {
+    if uri.path() != "/api/events/ws" && uri.path() != "/api/events/realtime/ws" {
         return false;
     }
 

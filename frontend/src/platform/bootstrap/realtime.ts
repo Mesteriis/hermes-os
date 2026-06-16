@@ -8,6 +8,7 @@ import type {
 } from '../sse'
 import type { FrontendConfig } from '../config/env'
 import { applyMailRealtimePatch } from '../../domains/communications/queries/realtimeMailPatches'
+import { applyTelegramRealtimePatch } from '../../domains/telegram/queries/realtimeTelegramPatches'
 
 export type RealtimeClient = {
 	connect: () => void
@@ -51,6 +52,15 @@ const REALTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
 	['communications-folders'],
 	['communications-folder-messages'],
 	['communications-attachment-search']
+]
+
+const TELEGRAM_QUERY_KEYS: readonly (readonly unknown[])[] = [
+	['telegram', 'capabilities'],
+	['telegram', 'accounts'],
+	['telegram', 'chats'],
+	['telegram', 'messages'],
+	['telegram', 'runtime'],
+	['telegram', 'calls']
 ]
 
 export function initializeRealtime(
@@ -165,6 +175,7 @@ export function handleRealtimeEvent(
 	if (event.event === 'error') return
 
 	applyMailRealtimePatch(event.data, queryClient)
+	applyTelegramRealtimePatch(event.data, queryClient)
 
 	for (const queryKey of queryKeysForRealtimeEvent(event)) {
 		void queryClient.invalidateQueries({ queryKey })
@@ -213,6 +224,24 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 	}
 	if (eventType.startsWith('mail.folder.')) {
 		return [['communications-folders'], ['communications-folder-messages']]
+	}
+	if (eventType.startsWith('telegram.sync.')) {
+		return [['telegram', 'chats'], ['telegram', 'messages'], ['telegram', 'runtime']]
+	}
+	if (eventType.startsWith('telegram.message.')) {
+		return [['telegram', 'messages'], ['telegram', 'chats']]
+	}
+	if (eventType.startsWith('telegram.media.')) {
+		return [['telegram', 'messages'], ['telegram', 'search', 'media']]
+	}
+	if (eventType.startsWith('telegram.reaction.')) {
+		return [['telegram', 'messages']]
+	}
+	if (eventType.startsWith('telegram.command.')) {
+		return [['telegram', 'messages'], ['telegram', 'runtime']]
+	}
+	if (eventType.startsWith('telegram.')) {
+		return TELEGRAM_QUERY_KEYS
 	}
 
 	return REALTIME_QUERY_KEYS

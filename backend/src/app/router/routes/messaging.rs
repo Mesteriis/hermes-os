@@ -19,6 +19,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_telegram_accounts).post(post_telegram_account),
         )
         .route(
+            "/api/v1/telegram/accounts/{account_id}/capabilities",
+            get(get_telegram_account_capabilities),
+        )
+        .route(
             "/api/v1/telegram/accounts/{account_id}",
             delete(delete_telegram_account),
         )
@@ -47,9 +51,60 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_qr_login_password),
         )
         .route("/api/v1/telegram/chats", get(get_telegram_chats))
+        .route("/api/v1/telegram/folders", get(get_telegram_folders))
+        .route("/api/v1/telegram/chats/search", get(search_telegram_chats))
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}",
+            get(get_telegram_chat_detail),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/members",
+            get(get_telegram_chat_members),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/pinned-messages",
+            get(get_telegram_pinned_messages),
+        )
         .route(
             "/api/v1/telegram/sync/chats",
             post(post_telegram_sync_chats),
+        )
+        .route(
+            "/api/v1/telegram/search/messages",
+            get(search_telegram_messages),
+        )
+        .route("/api/v1/telegram/search/media", get(search_telegram_media))
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/pin",
+            post(post_telegram_chat_pin),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/unpin",
+            post(post_telegram_chat_unpin),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/archive",
+            post(post_telegram_chat_archive),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/unarchive",
+            post(post_telegram_chat_unarchive),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/mute",
+            post(post_telegram_chat_mute),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/unmute",
+            post(post_telegram_chat_unmute),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/read",
+            post(post_telegram_chat_mark_read),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/unread",
+            post(post_telegram_chat_mark_unread),
         )
         .route(
             "/api/v1/telegram/sync/history",
@@ -67,6 +122,45 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             "/api/v1/telegram/media/download",
             post(post_telegram_media_download),
         )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/edit",
+            post(post_telegram_message_edit),
+        )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/delete",
+            post(post_telegram_message_delete),
+        )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/restore-visibility",
+            post(post_telegram_message_restore_visibility),
+        )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/pin",
+            post(post_telegram_message_pin),
+        )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/versions",
+            get(get_telegram_message_versions),
+        )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/tombstones",
+            get(get_telegram_message_tombstones),
+        )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/reply-chain",
+            get(get_telegram_reply_chain),
+        )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/forward-chain",
+            get(get_telegram_forward_chain),
+        )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/reactions",
+            get(get_telegram_reactions)
+                .post(post_telegram_reaction)
+                .delete(delete_telegram_reaction),
+        )
+        .route("/api/v1/telegram/commands", get(get_telegram_commands))
         .route(
             "/api/v1/policies/templates",
             get(get_policy_templates).post(post_policy_template),

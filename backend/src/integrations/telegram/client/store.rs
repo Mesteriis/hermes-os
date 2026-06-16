@@ -9,4 +9,8 @@ impl TelegramStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
 }

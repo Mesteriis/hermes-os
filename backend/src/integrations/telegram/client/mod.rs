@@ -2,10 +2,12 @@ mod accounts;
 mod chats;
 mod errors;
 mod identifiers;
+pub mod lifecycle;
 mod messages;
-mod models;
+pub mod models;
 mod projection;
-mod rows;
+pub mod rows;
+mod search;
 mod store;
 #[cfg(test)]
 mod tests;
@@ -22,7 +24,8 @@ pub use self::errors::TelegramError;
 pub use self::models::{
     NewTelegramChat, NewTelegramMessage, TelegramAccount, TelegramAccountLifecycleResponse,
     TelegramAccountListResponse, TelegramAccountSetupRequest, TelegramAccountSetupResponse,
-    TelegramChat, TelegramChatKind, TelegramCredentialBinding, TelegramDeliveryState,
+    TelegramChat, TelegramChatGroupFilter, TelegramChatGroupFilterListResponse, TelegramChatKind,
+    TelegramChatMember, TelegramCredentialBinding, TelegramDeliveryState,
     TelegramLiveAccountSetupRequest, TelegramManualSendRequest, TelegramManualSendResponse,
     TelegramMessage, TelegramMessageIngestResult, TelegramQrLoginPasswordRequest,
     TelegramQrLoginStartRequest, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
@@ -32,5 +35,7 @@ pub use self::projection::project_raw_telegram_message;
 pub use self::store::TelegramStore;
 pub use self::vault::TelegramSecretVault;
 
-pub(crate) use self::identifiers::{ensure_telegram_account_active, telegram_text_preview_hash};
+pub(crate) use self::identifiers::{
+    ensure_telegram_account_active, telegram_chat_id, telegram_text_preview_hash,
+};
 pub(crate) use self::models::TelegramAttachmentAnchor;

@@ -113,3 +113,125 @@ pub(super) async fn request_actor_download_file(
     .await
     .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
 }
+
+pub(super) async fn request_actor_edit_message(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    provider_message_id: String,
+    new_text: String,
+    command_id: String,
+) -> Result<(), TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::EditMessage {
+                provider_chat_id,
+                provider_message_id,
+                new_text,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting edit commands".to_owned(),
+                )
+            })?;
+        reply_rx
+            .recv_timeout(TDJSON_COMMAND_TIMEOUT)
+            .map_err(|_| TelegramError::TdlibRuntime("Telegram TDLib edit timed out".to_owned()))?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_delete_message(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    provider_message_id: String,
+    revoke: bool,
+    command_id: String,
+) -> Result<(), TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::DeleteMessage {
+                provider_chat_id,
+                provider_message_id,
+                revoke,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting delete commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib delete timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_set_reaction(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    provider_message_id: String,
+    reaction_emoji: String,
+    is_active: bool,
+    command_id: String,
+) -> Result<(), TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::SetReaction {
+                provider_chat_id,
+                provider_message_id,
+                reaction_emoji,
+                is_active,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting reaction commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib reaction timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_pin_message(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    provider_message_id: String,
+    pin: bool,
+    command_id: String,
+) -> Result<(), TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::PinMessage {
+                provider_chat_id,
+                provider_message_id,
+                pin,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting pin commands".to_owned(),
+                )
+            })?;
+        reply_rx
+            .recv_timeout(TDJSON_COMMAND_TIMEOUT)
+            .map_err(|_| TelegramError::TdlibRuntime("Telegram TDLib pin timed out".to_owned()))?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}

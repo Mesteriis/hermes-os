@@ -1,3 +1,4 @@
+use serde_json::json;
 use sqlx::Row;
 
 use super::super::errors::TelegramError;
@@ -42,5 +43,225 @@ impl TelegramStore {
             message_id: row.try_get("message_id")?,
             raw_record_id: row.try_get("raw_record_id")?,
         })
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) async fn update_message_attachment_download_state(
+        &self,
+        message_id: &str,
+        provider_attachment_id: &str,
+        tdlib_file_id: i64,
+        download_state: &str,
+        local_path: Option<&str>,
+        size_bytes: Option<i64>,
+        content_type: &str,
+        filename: Option<&str>,
+    ) -> Result<(), TelegramError> {
+        let metadata = sqlx::query_scalar::<_, serde_json::Value>(
+            r#"
+            SELECT message_metadata
+            FROM communication_messages
+            WHERE message_id = $1
+              AND channel_kind IN ('telegram_user', 'telegram_bot')
+            "#,
+        )
+        .bind(message_id.trim())
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| {
+            TelegramError::InvalidRequest(format!("Telegram message `{message_id}` was not found"))
+        })?;
+
+        let mut metadata_object = metadata.as_object().cloned().unwrap_or_default();
+        let attachments = metadata_object
+            .entry("attachments".to_owned())
+            .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+        let attachment_array = attachments.as_array_mut().ok_or_else(|| {
+            TelegramError::InvalidRequest(
+                "telegram attachment metadata must be an array".to_owned(),
+            )
+        })?;
+
+        let mut updated = false;
+        for attachment in attachment_array.iter_mut() {
+            let Some(object) = attachment.as_object_mut() else {
+                continue;
+            };
+            let attachment_id_matches = object
+                .get("attachment_id")
+                .and_then(serde_json::Value::as_str)
+                .map(|value| value == provider_attachment_id)
+                .unwrap_or(false);
+            let tdlib_id_matches = object
+                .get("tdlib_file_id")
+                .and_then(serde_json::Value::as_i64)
+                .map(|value| value == tdlib_file_id)
+                .unwrap_or(false);
+            if !attachment_id_matches && !tdlib_id_matches {
+                continue;
+            }
+
+            object.insert(
+                "attachment_id".to_owned(),
+                json!(provider_attachment_id.to_owned()),
+            );
+            object.insert("tdlib_file_id".to_owned(), json!(tdlib_file_id));
+            object.insert("download_state".to_owned(), json!(download_state));
+            object.insert("content_type".to_owned(), json!(content_type));
+            if let Some(path) = local_path {
+                object.insert("local_path".to_owned(), json!(path));
+            }
+            if let Some(size) = size_bytes {
+                object.insert("size".to_owned(), json!(size));
+            }
+            if let Some(name) = filename {
+                object.insert("filename".to_owned(), json!(name));
+            }
+            updated = true;
+        }
+
+        if !updated {
+            attachment_array.push(json!({
+                "attachment_id": provider_attachment_id,
+                "attachment_type": "file",
+                "content_type": content_type,
+                "tdlib_file_id": tdlib_file_id,
+                "download_state": download_state,
+                "local_path": local_path,
+                "size": size_bytes,
+                "filename": filename,
+            }));
+        }
+
+        sqlx::query(
+            r#"
+            UPDATE communication_messages
+            SET message_metadata = $2::jsonb
+            WHERE message_id = $1
+            "#,
+        )
+        .bind(message_id.trim())
+        .bind(serde_json::Value::Object(metadata_object))
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use serde_json::json;
+    use testkit::context::TestContext;
+
+    use super::*;
+    use crate::domains::mail::core::{
+        CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
+        NewRawCommunicationRecord,
+    };
+    use crate::domains::mail::messages::MessageProjectionStore;
+    use crate::integrations::telegram::client::project_raw_telegram_message;
+
+    #[tokio::test]
+    async fn update_message_attachment_download_state_patches_projected_metadata() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool().clone();
+        let communication_store = CommunicationIngestionStore::new(pool.clone());
+        let message_store = MessageProjectionStore::new(pool.clone());
+        let telegram_store = TelegramStore::new(pool.clone());
+        let suffix = format!("{}", Utc::now().timestamp_nanos_opt().unwrap_or(0));
+        let account_id = format!("telegram-media-metadata-{suffix}");
+        let provider_chat_id = format!("-100{suffix}");
+        let provider_message_id = format!("{provider_chat_id}:7001");
+
+        communication_store
+            .upsert_provider_account(
+                &NewProviderAccount::new(
+                    &account_id,
+                    CommunicationProviderKind::TelegramUser,
+                    "Telegram Media Metadata",
+                    format!("tg-media-metadata-{suffix}"),
+                )
+                .config(json!({"runtime": "tdlib_qr_authorized"})),
+            )
+            .await
+            .expect("provider account");
+        let raw = communication_store
+            .record_raw_source(
+                &NewRawCommunicationRecord::new(
+                    format!("raw:telegram-media-metadata:{suffix}"),
+                    &account_id,
+                    "telegram_message",
+                    &provider_message_id,
+                    format!("sha256:{suffix}"),
+                    format!("telegram-tdlib-history:{account_id}:{provider_chat_id}"),
+                    json!({
+                        "provider_chat_id": provider_chat_id,
+                        "chat_title": "Media Channel",
+                        "chat_kind": "channel",
+                        "sender_id": format!("chat:{provider_chat_id}"),
+                        "sender_display_name": "Media Channel",
+                        "text": "",
+                        "delivery_state": "received",
+                        "tdlib_raw": {
+                            "@type": "message",
+                            "id": 7001_i64,
+                            "chat_id": provider_chat_id,
+                            "content": {"@type": "messagePhoto"}
+                        }
+                    }),
+                )
+                .occurred_at(Utc::now())
+                .provenance(json!({
+                    "provider": "telegram",
+                    "provider_kind": "telegram_user",
+                    "runtime": "tdlib",
+                    "account_id": account_id,
+                    "provider_chat_id": provider_chat_id,
+                })),
+            )
+            .await
+            .expect("raw source");
+
+        let projected = project_raw_telegram_message(&message_store, &raw)
+            .await
+            .expect("project media message");
+
+        telegram_store
+            .update_message_attachment_download_state(
+                &projected.message_id,
+                "attachment-1",
+                7001,
+                "downloaded",
+                Some("/tmp/hermes-telegram-photo.jpg"),
+                Some(2048),
+                "image/jpeg",
+                Some("photo.jpg"),
+            )
+            .await
+            .expect("update projected attachment metadata");
+
+        let metadata: serde_json::Value = sqlx::query_scalar(
+            "SELECT message_metadata FROM communication_messages WHERE message_id = $1",
+        )
+        .bind(&projected.message_id)
+        .fetch_one(&pool)
+        .await
+        .expect("message metadata");
+        let attachments = metadata["attachments"]
+            .as_array()
+            .expect("attachments array");
+        assert_eq!(attachments.len(), 1);
+        assert_eq!(attachments[0]["attachment_id"], json!("attachment-1"));
+        assert_eq!(attachments[0]["tdlib_file_id"], json!(7001));
+        assert_eq!(attachments[0]["download_state"], json!("downloaded"));
+        assert_eq!(
+            attachments[0]["local_path"],
+            json!("/tmp/hermes-telegram-photo.jpg")
+        );
+        assert_eq!(attachments[0]["content_type"], json!("image/jpeg"));
+        assert_eq!(attachments[0]["filename"], json!("photo.jpg"));
+        assert_eq!(attachments[0]["size"], json!(2048));
     }
 }

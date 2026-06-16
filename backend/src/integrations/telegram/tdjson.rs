@@ -17,9 +17,12 @@ pub(crate) use self::parsing::{
 pub(crate) use self::qr_login::{cancel_qr_login, start_qr_login, submit_qr_login_password};
 pub(crate) use self::qr_login_support::{PendingQrLoginMap, TelegramQrLoginSession};
 pub(crate) use self::requests::{
-    check_database_encryption_key_request, set_tdlib_parameters_request, tdlib_database_directory,
-    tdlib_download_file_request, tdlib_get_chat_history_request, tdlib_get_chat_request,
-    tdlib_get_chats_request, tdlib_load_chats_request, tdlib_send_text_message_request,
+    check_database_encryption_key_request, set_tdlib_parameters_request,
+    tdlib_add_message_reaction_request, tdlib_database_directory, tdlib_delete_messages_request,
+    tdlib_download_file_request, tdlib_edit_message_text_request, tdlib_get_chat_history_request,
+    tdlib_get_chat_request, tdlib_get_chats_request, tdlib_load_chats_request,
+    tdlib_pin_chat_message_request, tdlib_remove_message_reaction_request,
+    tdlib_send_text_message_request, tdlib_unpin_chat_message_request,
 };
 pub(crate) use self::snapshots::{
     TelegramTdlibChatSnapshot, TelegramTdlibFileSnapshot, TelegramTdlibMessageSnapshot,

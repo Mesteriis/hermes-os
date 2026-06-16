@@ -12,6 +12,7 @@ use super::state::TelegramRuntimeActorHandle;
 
 mod account;
 mod actor_states;
+pub(crate) mod command_executor;
 mod lifecycle;
 mod media_download;
 mod registry;

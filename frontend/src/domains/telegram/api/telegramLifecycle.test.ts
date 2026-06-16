@@ -1,0 +1,192 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiClient } from '../../../platform/api/ApiClient'
+import {
+  addTelegramReaction,
+  fetchTelegramCommands,
+  fetchTelegramForwardChain,
+  fetchTelegramMessageTombstones,
+  fetchTelegramMessageVersions,
+  fetchTelegramReactions,
+  pinTelegramMessage,
+  fetchTelegramReplyChain,
+  removeTelegramReaction,
+  restoreTelegramMessageVisibility,
+} from './telegramLifecycle'
+
+describe('telegram lifecycle reference API', () => {
+  beforeEach(() => {
+    ApiClient.resetForTests()
+    ApiClient.init('http://127.0.0.1:8080', 'test-secret')
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    ApiClient.resetForTests()
+  })
+
+  it('fetches projected reply chains by message id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message_id: 'msg-1', replies: [], reply_to: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchTelegramReplyChain('msg-1')
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/messages/msg-1/reply-chain')
+  })
+
+  it('fetches projected forward chains by message id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ message_id: 'msg-1', forwards: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchTelegramForwardChain('msg-1')
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/messages/msg-1/forward-chain')
+  })
+
+  it('fetches message versions and tombstones by message id', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message_id: 'msg-1', versions: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message_id: 'msg-1', tombstones: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchTelegramMessageVersions('msg-1')
+    await fetchTelegramMessageTombstones('msg-1')
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/messages/msg-1/versions')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/telegram/messages/msg-1/tombstones')
+  })
+
+  it('fetches account command rows and message reactions', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ items: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ message_id: 'msg-1', reactions: [], summary: { message_id: 'msg-1', total_reactions: 0, active_reactions: 0, reactions: [] } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await fetchTelegramCommands('acct-1', 25)
+    await fetchTelegramReactions('msg-1')
+
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/commands?account_id=acct-1&limit=25')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/telegram/messages/msg-1/reactions')
+  })
+
+  it('sends restore visibility with a generated command id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 'visibility_restored' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await restoreTelegramMessageVisibility({
+      message_id: 'msg-restore-1',
+      account_id: 'acct-1',
+      provider_chat_id: 'chat-1',
+      provider_message_id: 'provider-msg-1',
+    })
+
+    const [, init] = fetchMock.mock.calls[0]
+    const body = JSON.parse(String(init?.body))
+    expect(body.command_id).toMatch(/^cmd_/)
+    expect(body.reason).toBe('manual_restore')
+  })
+
+  it('sends message pin updates with a generated command id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 'pinned' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await pinTelegramMessage({
+      message_id: 'msg-pin-1',
+      account_id: 'acct-1',
+      provider_chat_id: 'chat-1',
+      provider_message_id: 'provider-msg-1',
+      is_pinned: true,
+    })
+
+    const [, init] = fetchMock.mock.calls[0]
+    const body = JSON.parse(String(init?.body))
+    expect(body.command_id).toMatch(/^cmd_/)
+    expect(body.is_pinned).toBe(true)
+  })
+
+  it('adds reactions with a generated command id when one is not provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 'added' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await addTelegramReaction('msg-react-1', {
+      account_id: 'acct-1',
+      provider_chat_id: 'chat-1',
+      provider_message_id: 'provider-msg-1',
+      reaction_emoji: '👍',
+      sender_id: 'owner-1',
+    })
+
+    const [, init] = fetchMock.mock.calls[0]
+    const body = JSON.parse(String(init?.body))
+    expect(body.command_id).toMatch(/^cmd_/)
+  })
+
+  it('removes reactions with a generated command id in the query string', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 'removed' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await removeTelegramReaction('msg-react-1', {
+      account_id: 'acct-1',
+      provider_chat_id: 'chat-1',
+      provider_message_id: 'provider-msg-1',
+      reaction_emoji: '👍',
+      sender_id: 'owner-1',
+    })
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(String(fetchMock.mock.calls[0][0])).toContain('command_id=cmd_')
+  })
+})

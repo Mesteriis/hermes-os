@@ -1,8 +1,14 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
   TelegramCapabilitiesResponse,
+  TelegramCallTranscriptResponse,
   TelegramCallListResponse,
+  TelegramChatDetailResponse,
+  TelegramChatGroupFilterListResponse,
+  TelegramChatMemberListResponse,
   TelegramChatListResponse,
+  TelegramChatActionRequest,
+  TelegramChatActionResponse,
   TelegramMessageListResponse,
   TelegramRuntimeStatus,
   TelegramAccountListResponse,
@@ -33,6 +39,15 @@ export async function fetchTelegramCapabilities(): Promise<TelegramCapabilitiesR
   )
 }
 
+export async function fetchTelegramAccountCapabilities(
+  accountId: string
+): Promise<TelegramCapabilitiesResponse> {
+  return ApiClient.instance.get<TelegramCapabilitiesResponse>(
+    `/api/v1/telegram/accounts/${encodeURIComponent(accountId)}/capabilities`,
+    'Telegram account capabilities request failed'
+  )
+}
+
 // --- Accounts ---
 export async function fetchTelegramAccounts(query?: string): Promise<TelegramAccountListResponse> {
   const qs = query?.trim() ? `?${query}` : ''
@@ -47,7 +62,12 @@ export async function setupTelegramAccount(request: {
   provider_kind: string
   display_name: string
   external_account_id: string
+  api_id?: number
+  api_hash?: string
+  bot_token?: string
+  session_encryption_key?: string
   tdlib_data_path?: string
+  qr_authorized?: boolean
   transcription_enabled: boolean
 }): Promise<TelegramAccountSetupResponse> {
   return ApiClient.instance.post<TelegramAccountSetupResponse>(
@@ -84,11 +104,129 @@ export async function fetchTelegramChats(accountId?: string, limit = 50): Promis
   )
 }
 
+export async function fetchTelegramChatDetail(telegramChatId: string): Promise<TelegramChatDetailResponse> {
+  return ApiClient.instance.get<TelegramChatDetailResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}`,
+    'Telegram chat detail request failed'
+  )
+}
+
+export async function fetchTelegramFolders(accountId?: string): Promise<TelegramChatGroupFilterListResponse> {
+  const params = new URLSearchParams()
+  if (accountId?.trim()) {
+    params.set('account_id', accountId.trim())
+  }
+  const suffix = params.size ? `?${params.toString()}` : ''
+  return ApiClient.instance.get<TelegramChatGroupFilterListResponse>(
+    `/api/v1/telegram/folders${suffix}`,
+    'Telegram folders request failed'
+  )
+}
+
+export async function fetchTelegramChatMembers(
+  telegramChatId: string,
+  limit = 50
+): Promise<TelegramChatMemberListResponse> {
+  const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
+  return ApiClient.instance.get<TelegramChatMemberListResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/members?${params.toString()}`,
+    'Telegram chat members request failed'
+  )
+}
+
 export async function syncTelegramChats(request: TelegramChatSyncRequest): Promise<TelegramChatSyncResponse> {
   return ApiClient.instance.post<TelegramChatSyncResponse>(
     '/api/v1/telegram/sync/chats',
     request,
     'Telegram chat sync failed'
+  )
+}
+
+export async function pinTelegramChat(
+  telegramChatId: string,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/pin`,
+    request,
+    'Telegram chat pin failed'
+  )
+}
+
+export async function unpinTelegramChat(
+  telegramChatId: string,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/unpin`,
+    request,
+    'Telegram chat unpin failed'
+  )
+}
+
+export async function archiveTelegramChat(
+  telegramChatId: string,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/archive`,
+    request,
+    'Telegram chat archive failed'
+  )
+}
+
+export async function unarchiveTelegramChat(
+  telegramChatId: string,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/unarchive`,
+    request,
+    'Telegram chat unarchive failed'
+  )
+}
+
+export async function muteTelegramChat(
+  telegramChatId: string,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/mute`,
+    request,
+    'Telegram chat mute failed'
+  )
+}
+
+export async function unmuteTelegramChat(
+  telegramChatId: string,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/unmute`,
+    request,
+    'Telegram chat unmute failed'
+  )
+}
+
+export async function markTelegramChatRead(
+  telegramChatId: string,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/read`,
+    request,
+    'Telegram chat mark read failed'
+  )
+}
+
+export async function markTelegramChatUnread(
+  telegramChatId: string,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/unread`,
+    request,
+    'Telegram chat mark unread failed'
   )
 }
 
@@ -237,6 +375,13 @@ export async function fetchTelegramCalls(accountId?: string, limit = 50): Promis
   return ApiClient.instance.get<TelegramCallListResponse>(
     `/api/v1/calls?${params.toString()}`,
     'Telegram call request failed'
+  )
+}
+
+export async function fetchTelegramCallTranscript(callId: string): Promise<TelegramCallTranscriptResponse> {
+  return ApiClient.instance.get<TelegramCallTranscriptResponse>(
+    `/api/v1/calls/${encodeURIComponent(callId)}/transcript`,
+    'Telegram call transcript request failed'
   )
 }
 
@@ -517,3 +662,15 @@ export async function downloadTelegramMediaFromUi(
     }
   }
 }
+
+export {
+  addTelegramReaction,
+  deleteTelegramMessage,
+  editTelegramMessage,
+  fetchTelegramCommands,
+  fetchTelegramMessageTombstones,
+  fetchTelegramMessageVersions,
+  fetchTelegramReactions,
+  removeTelegramReaction,
+  restoreTelegramMessageVisibility,
+} from './telegramLifecycle'

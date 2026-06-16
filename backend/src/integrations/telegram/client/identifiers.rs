@@ -7,7 +7,7 @@ use super::TELEGRAM_ACCOUNT_ACTIVE;
 use super::errors::TelegramError;
 use super::models::TelegramAccount;
 
-pub(super) fn telegram_chat_id(account_id: &str, provider_chat_id: &str) -> String {
+pub(crate) fn telegram_chat_id(account_id: &str, provider_chat_id: &str) -> String {
     format!(
         "telegram_chat:v4:{}",
         stable_hash([account_id, provider_chat_id].join("\0").as_bytes())

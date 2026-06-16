@@ -32,12 +32,11 @@ async fn test_context_runs_migrations() {
     let pool = ctx.pool();
 
     // Check that _sqlx_migrations table exists (proof migrations ran)
-    let migration_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM _sqlx_migrations WHERE success = true",
-    )
-    .fetch_one(pool)
-    .await
-    .expect("migrations table must exist and be queryable");
+    let migration_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM _sqlx_migrations WHERE success = true")
+            .fetch_one(pool)
+            .await
+            .expect("migrations table must exist and be queryable");
     assert!(
         migration_count > 0,
         "at least one migration must have been applied (got {migration_count})"
@@ -78,13 +77,12 @@ async fn testkit_contact_factory_creates_person() {
     );
 
     // Verify the person actually exists in the database
-    let exists: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM persons WHERE person_id = $1)",
-    )
-    .bind(&person_id)
-    .fetch_one(ctx.pool())
-    .await
-    .expect("query must succeed");
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM persons WHERE person_id = $1)")
+            .bind(&person_id)
+            .fetch_one(ctx.pool())
+            .await
+            .expect("query must succeed");
     assert!(exists, "person created by ContactFactory must exist in DB");
 }
 

@@ -93,6 +93,10 @@ Telegram runtime event
 | Store/helpers | `frontend/src/domains/telegram/stores/telegram.ts` | Local UI state, filters, derived lists |
 | Components | `frontend/src/domains/telegram/components/` | Chat list, timeline, composer, action rail, inspector |
 
+Realtime delivery on the frontend is shared with the rest of Hermes through
+`frontend/src/platform/bootstrap/realtime.ts`; Telegram views consume query
+state and cache patches instead of opening a second channel-scoped socket.
+
 ## Runtime Kinds
 
 Текущие runtime modes:
@@ -197,7 +201,7 @@ provider message edited
   -> raw edit event
   -> version row
   -> diff metadata
-  -> telegram.message.edited
+  -> telegram.message.updated
 
 provider/local delete observed
   -> raw delete evidence
@@ -364,7 +368,7 @@ telegram.sync.completed
 telegram.sync.failed
 
 telegram.message.created
-telegram.message.edited
+telegram.message.updated
 telegram.message.deleted
 telegram.message.tombstoned
 telegram.message.visibility_restored

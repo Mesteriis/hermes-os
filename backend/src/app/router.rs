@@ -18,6 +18,7 @@ use crate::app::vault_reconciliation::spawn_host_vault_manifest_reconciliation;
 use crate::app::{AccountSetupState, AppError, AppState};
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::platform::config::AppConfig;
+use crate::platform::events::EventBus;
 use crate::platform::storage::{Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus};
 use crate::vault::{HostVault, HostVaultConfig, VaultMode};
 
@@ -26,6 +27,8 @@ mod routes;
 static MAIL_BACKGROUND_SYNC_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static MAIL_OUTBOX_DELIVERY_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
+static TELEGRAM_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 
 pub fn build_router(config: AppConfig) -> Router {
@@ -49,10 +52,12 @@ pub fn build_router_with_database(config: AppConfig, database: Database) -> Rout
         vault,
         account_setup: AccountSetupState::default(),
         telegram_runtime: TelegramRuntimeManager::default(),
+        event_bus: EventBus::new(),
     };
     spawn_host_vault_manifest_reconciliation(&state);
     spawn_mail_background_sync_scheduler(&state);
     spawn_mail_outbox_delivery_scheduler(&state);
+    spawn_telegram_command_executor(&state);
 
     Router::<AppState>::new()
         .merge(routes::public_routes())
@@ -140,6 +145,46 @@ fn spawn_mail_outbox_delivery_scheduler(state: &AppState) {
             }
         }
     });
+}
+
+fn spawn_telegram_command_executor(state: &AppState) {
+    let Some(pool) = state.database.pool().cloned() else {
+        return;
+    };
+    let Some(database_url) = state.database.database_url() else {
+        return;
+    };
+    if !register_telegram_command_executor(database_url) {
+        return;
+    }
+    let runtime = state.telegram_runtime.clone();
+    let event_bus = state.event_bus.clone();
+
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            crate::integrations::telegram::runtime::execute_queued_commands(
+                &pool, &runtime, &event_bus, 10,
+            )
+            .await;
+        }
+    });
+}
+
+fn register_telegram_command_executor(database_url: &str) -> bool {
+    match TELEGRAM_COMMAND_EXECUTOR_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "telegram command executor registry is unavailable"
+            );
+            false
+        }
+    }
 }
 
 fn register_mail_background_sync_scheduler(database_url: &str) -> bool {

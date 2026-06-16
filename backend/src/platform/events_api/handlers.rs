@@ -19,6 +19,7 @@ use crate::domains::api_support::{
     event_store,
 };
 use crate::platform::audit::NewApiAuditRecord;
+use crate::platform::events::bus::sanitize_event_payload;
 use crate::platform::events::{EventEnvelope, StoredEventEnvelope};
 
 pub(crate) async fn post_event(
@@ -339,3 +340,70 @@ fn stream_error_event() -> Event {
         .event("error")
         .data(json!({ "error": "event_stream_unavailable" }).to_string())
 }
+
+// ---------------------------------------------------------------------------
+// Realtime bus subscription endpoint (ADR-0091)
+// ---------------------------------------------------------------------------
+
+use crate::platform::events::NewEventEnvelope;
+
+#[derive(Deserialize)]
+pub(crate) struct RealtimeQuery {
+    /// Optional event type prefix filter (e.g., "telegram" or "telegram.message")
+    event_prefix: Option<String>,
+}
+
+/// WebSocket endpoint that subscribes to the in-memory EventBus for realtime events.
+/// Filterable by event type prefix.
+pub(crate) async fn get_realtime_websocket(
+    State(state): State<AppState>,
+    Query(query): Query<RealtimeQuery>,
+    ws: WebSocketUpgrade,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut rx = state.event_bus.subscribe();
+    let prefix = query.event_prefix.unwrap_or_default();
+
+    Ok(ws.on_upgrade(move |mut socket| async move {
+        loop {
+            match rx.recv().await {
+                Ok(event) => {
+                    if prefix.is_empty() || event.event_type.starts_with(&prefix) {
+                        let payload = json!({
+                            "type": "event",
+                            "data": {
+                                "event_type": &event.event_type,
+                                "event_id": &event.event_id,
+                                "occurred_at": event.occurred_at.to_rfc3339(),
+                                "subject": &event.subject,
+                                "payload": sanitize_event_payload(event.payload.clone()),
+                            }
+                        });
+                        if socket
+                            .send(Message::Text(payload.to_string().into()))
+                            .await
+                            .is_err()
+                        {
+                            return;
+                        }
+                    }
+                }
+                Err(broadcast::error::RecvError::Lagged(n)) => {
+                    let payload = json!({
+                        "type": "lagged",
+                        "data": { "skipped": n }
+                    });
+                    if socket
+                        .send(Message::Text(payload.to_string().into()))
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+                Err(broadcast::error::RecvError::Closed) => return,
+            }
+        }
+    }))
+}
+
+use tokio::sync::broadcast;

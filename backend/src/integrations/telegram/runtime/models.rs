@@ -139,7 +139,7 @@ impl TelegramMediaDownloadRequest {
         Ok(())
     }
 
-    pub(super) fn provider_attachment_id(&self) -> String {
+    pub(crate) fn provider_attachment_id(&self) -> String {
         self.provider_attachment_id
             .as_deref()
             .map(str::trim)
@@ -148,7 +148,7 @@ impl TelegramMediaDownloadRequest {
             .unwrap_or_else(|| format!("tdlib-file:{}", self.tdlib_file_id))
     }
 
-    pub(super) fn content_type(&self) -> String {
+    pub(crate) fn content_type(&self) -> String {
         self.content_type
             .as_deref()
             .map(str::trim)
@@ -157,7 +157,7 @@ impl TelegramMediaDownloadRequest {
             .unwrap_or_else(|| "application/octet-stream".to_owned())
     }
 
-    pub(super) fn filename(&self) -> Option<String> {
+    pub(crate) fn filename(&self) -> Option<String> {
         self.filename
             .as_deref()
             .map(str::trim)
@@ -192,9 +192,14 @@ pub struct TelegramRuntimeStatus {
     pub runtime_kind: String,
     pub status: String,
     pub fixture_runtime: bool,
+    pub tdjson_path: Option<String>,
     pub tdjson_runtime_available: bool,
+    pub tdjson_probe_error: Option<String>,
+    pub telegram_api_id_configured: bool,
+    pub telegram_api_hash_configured: bool,
     pub telegram_app_credentials_configured: bool,
     pub live_send_available: bool,
+    pub runtime_blockers: Vec<String>,
     pub last_error: Option<String>,
     pub updated_at: DateTime<Utc>,
 }

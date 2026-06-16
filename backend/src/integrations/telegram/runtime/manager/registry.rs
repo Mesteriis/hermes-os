@@ -50,4 +50,15 @@ impl TelegramRuntimeManager {
             .get(account_id)
             .and_then(|handle| handle.command_tx.clone()))
     }
+
+    pub(crate) fn active_account_ids(&self) -> Result<Vec<String>, TelegramError> {
+        let actors = self.actors.lock().map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram runtime state lock poisoned".into())
+        })?;
+        Ok(actors
+            .iter()
+            .filter(|(_, handle)| handle.command_tx.is_some())
+            .map(|(id, _)| id.clone())
+            .collect())
+    }
 }

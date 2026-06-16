@@ -2,17 +2,21 @@
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import type {
+  TelegramCapabilitiesResponse,
   TelegramChat,
+  TelegramOperationCapability,
   TelegramRailTab,
   TelegramRuntimeStatus,
   TelegramThreadTab
 } from '../../types/telegram'
+import { telegramChatMentionCountValue } from '../../stores/telegram'
 
 const { t } = useI18n()
 
-defineProps<{
+const props = defineProps<{
   selectedTelegramChat: TelegramChat
   selectedTelegramRuntimeStatus: TelegramRuntimeStatus | null
+  capabilities?: TelegramCapabilitiesResponse | null
   isSearchOpen: boolean
   isTelegramActionSubmitting: boolean
   isTelegramLoading: boolean
@@ -24,6 +28,10 @@ const emit = defineEmits<{
   railTabChange: [tab: TelegramRailTab]
   loadWorkspace: []
   syncHistory: []
+  togglePinChat: []
+  toggleArchiveChat: []
+  toggleMuteChat: []
+  toggleReadChat: []
 }>()
 
 function memberSummary(chat: TelegramChat): string {
@@ -34,6 +42,41 @@ function memberSummary(chat: TelegramChat): string {
   }
   if (typeof memberCount === 'number') return `${memberCount.toLocaleString('en-US')} ${t('members')}`
   return `${chat.account_id} · ${chat.provider_chat_id}`
+}
+
+function capability(operation: string): TelegramOperationCapability | null {
+  return props.capabilities?.capabilities.find((item) => item.operation === operation) ?? null
+}
+
+function capabilityEnabled(operation: string): boolean {
+  const item = capability(operation)
+  return item?.status === 'available' || item?.status === 'degraded'
+}
+
+function capabilityTitle(operation: string, fallback: string): string {
+  const item = capability(operation)
+  return item?.reason || fallback
+}
+
+function isPinned(chat: TelegramChat): boolean {
+  return Boolean(chat.metadata.is_pinned ?? chat.metadata.pinned)
+}
+
+function isArchived(chat: TelegramChat): boolean {
+  return Boolean(chat.metadata.is_archived)
+}
+
+function isMuted(chat: TelegramChat): boolean {
+  return Boolean(chat.metadata.is_muted ?? chat.metadata.muted)
+}
+
+function unreadCount(chat: TelegramChat): number {
+  const value = chat.metadata.unread_count
+  return typeof value === 'number' ? value : 0
+}
+
+function mentionCount(chat: TelegramChat): number {
+  return telegramChatMentionCountValue(chat)
 }
 </script>
 
@@ -46,6 +89,14 @@ function memberSummary(chat: TelegramChat): string {
       <div>
         <h2>{{ selectedTelegramChat.title }}</h2>
         <p>{{ memberSummary(selectedTelegramChat) }}</p>
+        <div class="telegram-thread-stats">
+          <span v-if="unreadCount(selectedTelegramChat) > 0" class="telegram-thread-stat">
+            {{ unreadCount(selectedTelegramChat) }} {{ t('unread') }}
+          </span>
+          <span v-if="mentionCount(selectedTelegramChat) > 0" class="telegram-thread-stat telegram-thread-stat-mention">
+            @{{ mentionCount(selectedTelegramChat) }} {{ t('mentions') }}
+          </span>
+        </div>
       </div>
     </div>
     <span
@@ -70,6 +121,42 @@ function memberSummary(chat: TelegramChat): string {
         @click="emit('update:activeThreadTab', 'pinned')"
       >
         <Icon icon="tabler:pin" width="18" height="18" />
+      </button>
+      <button
+        type="button"
+        :disabled="isTelegramActionSubmitting || !capabilityEnabled('dialogs.mark_read')"
+        :title="capabilityTitle('dialogs.mark_read', unreadCount(selectedTelegramChat) > 0 ? t('Mark read') : t('Mark unread'))"
+        :class="{ active: unreadCount(selectedTelegramChat) > 0 }"
+        @click="emit('toggleReadChat')"
+      >
+        <Icon :icon="unreadCount(selectedTelegramChat) > 0 ? 'tabler:mail-opened' : 'tabler:mail'" width="18" height="18" />
+      </button>
+      <button
+        type="button"
+        :disabled="isTelegramActionSubmitting || !capabilityEnabled('dialogs.pin')"
+        :title="capabilityTitle('dialogs.pin', isPinned(selectedTelegramChat) ? t('Unpin chat') : t('Pin chat'))"
+        :class="{ active: isPinned(selectedTelegramChat) }"
+        @click="emit('togglePinChat')"
+      >
+        <Icon icon="tabler:pin" width="18" height="18" />
+      </button>
+      <button
+        type="button"
+        :disabled="isTelegramActionSubmitting || !capabilityEnabled('dialogs.archive')"
+        :title="capabilityTitle('dialogs.archive', isArchived(selectedTelegramChat) ? t('Unarchive chat') : t('Archive chat'))"
+        :class="{ active: isArchived(selectedTelegramChat) }"
+        @click="emit('toggleArchiveChat')"
+      >
+        <Icon icon="tabler:archive" width="18" height="18" />
+      </button>
+      <button
+        type="button"
+        :disabled="isTelegramActionSubmitting || !capabilityEnabled('dialogs.mute')"
+        :title="capabilityTitle('dialogs.mute', isMuted(selectedTelegramChat) ? t('Unmute chat') : t('Mute chat'))"
+        :class="{ active: isMuted(selectedTelegramChat) }"
+        @click="emit('toggleMuteChat')"
+      >
+        <Icon :icon="isMuted(selectedTelegramChat) ? 'tabler:bell' : 'tabler:bell-off'" width="18" height="18" />
       </button>
       <button type="button" :title="t('Members')" @click="emit('railTabChange', 'members')">
         <Icon icon="tabler:users" width="18" height="18" />
@@ -120,6 +207,27 @@ function memberSummary(chat: TelegramChat): string {
   font-size: 11px;
   margin: 0;
   color: var(--color-text-secondary, #777);
+}
+.telegram-thread-stats {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.telegram-thread-stat {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  background: #e3f2fd;
+  color: #0b5394;
+}
+.telegram-thread-stat-mention {
+  background: #fff4e5;
+  color: #9a5b00;
 }
 .telegram-avatar.large {
   width: 36px;

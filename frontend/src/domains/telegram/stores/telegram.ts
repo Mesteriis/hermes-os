@@ -3,14 +3,13 @@ import { defineStore } from 'pinia'
 import type {
   TelegramChat,
   TelegramMessage,
-  TelegramCapabilitiesResponse,
-  TelegramRuntimeStatus,
   TelegramChatFilter,
+  TelegramChatFilterCount,
   TelegramChatGroupFilter,
   TelegramRailTab,
   TelegramThreadTab,
-  TelegramChatFilterCount,
-  TelegramAttachmentHint
+  TelegramAttachmentHint,
+  TelegramMediaItem,
 } from '../types/telegram'
 
 // --- Metadata helpers ---
@@ -41,6 +40,10 @@ export function telegramMessagesChronological(messages: TelegramMessage[]): Tele
 
 export function telegramChatUnreadCount(chat: TelegramChat): number {
   return metaNumber(chat.metadata, 'unread_count')
+}
+
+export function telegramChatMentionCountValue(chat: TelegramChat): number {
+  return metaNumber(chat.metadata, 'mention_count')
 }
 
 export function telegramChatIsPinned(chat: TelegramChat): boolean {
@@ -74,7 +77,7 @@ export function telegramChatFilterCounts(
 ): TelegramChatFilterCount[] {
   const all = chats.length
   const unread = chats.filter((c) => telegramChatUnreadCount(c) > 0).length
-  const mentions = chats.filter((c) => metaNumber(c.metadata, 'mention_count') > 0).length
+  const mentions = chats.filter((c) => telegramChatMentionCountValue(c) > 0).length
   const pinned = chats.filter((c) => telegramChatIsPinned(c)).length
   const projects = chats.filter((c) => telegramChatIsProject(c)).length
   const bots = chats.filter((c) => telegramChatIsBot(c)).length
@@ -147,7 +150,7 @@ export function filterTelegramChats(
       case 'unread':
         return telegramChatUnreadCount(chat) > 0
       case 'mentions':
-        return metaNumber(chat.metadata, 'mention_count') > 0
+        return telegramChatMentionCountValue(chat) > 0
       case 'pinned':
         return telegramChatIsPinned(chat)
       case 'projects':
@@ -177,8 +180,27 @@ export function telegramMessageAttachmentHints(
     providerAttachmentId: (att.attachment_id as string) ?? '',
     downloadState: ((att.download_state as string) ?? 'unknown') as TelegramAttachmentHint['downloadState'],
     localPath: (att.local_path as string) ?? null,
-    messageId: message.message_id
+    messageId: message.message_id,
+    providerMessageId: message.provider_message_id,
   }))
+}
+
+export function telegramAttachmentHintFromMediaItem(
+  item: TelegramMediaItem
+): TelegramAttachmentHint {
+  return {
+    id: `${item.message_id}:${item.file_name}`,
+    kind: (item.kind as TelegramAttachmentHint['kind']) ?? 'file',
+    fileName: item.file_name,
+    mimeType: item.mime_type,
+    sizeBytes: item.size_bytes,
+    tdlibFileId: item.tdlib_file_id,
+    providerAttachmentId: item.provider_attachment_id ?? '',
+    downloadState: (item.download_state as TelegramAttachmentHint['downloadState']) ?? 'unknown',
+    localPath: item.local_path,
+    messageId: item.message_id,
+    providerMessageId: item.provider_message_id,
+  }
 }
 
 export function telegramAttachmentHintsForMessages(
@@ -195,6 +217,38 @@ export function telegramAttachmentHintsForMessages(
     }
   }
   return hints
+}
+
+export function telegramVoiceAttachmentHintsForMessages(
+  messages: TelegramMessage[]
+): ReturnType<typeof telegramMessageAttachmentHints> {
+  return telegramAttachmentHintsForMessages(messages).filter((hint) => hint.kind === 'voice' || hint.kind === 'audio')
+}
+
+export function mergeTelegramAttachmentHints(
+  galleryItems: TelegramMediaItem[],
+  fileHints: TelegramAttachmentHint[]
+): TelegramAttachmentHint[] {
+  const merged = new Map<string, TelegramAttachmentHint>()
+  for (const item of galleryItems) {
+    const hint = telegramAttachmentHintFromMediaItem(item)
+    merged.set(`${hint.messageId}:${hint.fileName}`, hint)
+  }
+  for (const hint of fileHints) {
+    const key = `${hint.messageId}:${hint.fileName}`
+    const current = merged.get(key)
+    merged.set(key, {
+      ...current,
+      ...hint,
+      kind: hint.kind === 'file' && current?.kind ? current.kind : hint.kind,
+      providerAttachmentId: hint.providerAttachmentId || current?.providerAttachmentId || '',
+      providerMessageId: hint.providerMessageId ?? current?.providerMessageId ?? null,
+      tdlibFileId: hint.tdlibFileId ?? current?.tdlibFileId ?? null,
+      localPath: hint.localPath ?? current?.localPath ?? null,
+      downloadState: hint.downloadState === 'unknown' && current?.downloadState ? current.downloadState : hint.downloadState,
+    })
+  }
+  return Array.from(merged.values())
 }
 
 export function telegramLinkHintsForMessages(
@@ -218,7 +272,9 @@ export function telegramLinkHintsForMessages(
 }
 
 export function telegramPinnedMessages(messages: TelegramMessage[]): TelegramMessage[] {
-  return messages.filter((m) => metaBoolean(m.metadata, 'is_pinned'))
+  return messages.filter(
+    (m) => metaBoolean(m.metadata, 'is_pinned') || metaBoolean(m.metadata, 'pinned')
+  )
 }
 
 export function telegramMessageTime(message: TelegramMessage): string {
@@ -235,7 +291,7 @@ export function telegramMessageTime(message: TelegramMessage): string {
 }
 
 export function telegramChatMentionCount(chat: TelegramChat, _messages: TelegramMessage[]): number {
-  return metaNumber(chat.metadata, 'mention_count')
+  return telegramChatMentionCountValue(chat)
 }
 
 // --- Pinia Store ---
@@ -245,18 +301,13 @@ export interface TelegramManualSendForm {
 }
 
 export const useTelegramStore = defineStore('telegram-ui', () => {
-  // Data state
-  const telegramChats = ref<TelegramChat[]>([])
-  const telegramMessages = ref<TelegramMessage[]>([])
-  const telegramCapabilities = ref<TelegramCapabilitiesResponse | null>(null)
-  const telegramRuntimeStatuses = ref<Record<string, TelegramRuntimeStatus>>({})
-
   // Selection state
   const selectedTelegramChatId = ref('')
   const activeTelegramFilter = ref<TelegramChatFilter>('all')
   const activeTelegramGroupFilter = ref('local:all')
   const activeThreadTab = ref<TelegramThreadTab>('messages')
   const activeRailTab = ref<TelegramRailTab>('context')
+  const focusedTelegramMessage = ref<TelegramMessage | null>(null)
 
   // UI state
   const telegramError = ref('')
@@ -270,71 +321,18 @@ export const useTelegramStore = defineStore('telegram-ui', () => {
   const isTelegramInspectorOpen = ref(false)
 
   // Form state
-  const telegramManualSendForm = ref<TelegramManualSendForm>({ text: '' })
-
-  // Derived
-  const selectedTelegramChat = computed(() =>
-    telegramChats.value.find((chat) => chat.provider_chat_id === selectedTelegramChatId.value) ??
-    telegramChats.value[0] ??
-    null
-  )
-
-  const selectedTelegramMessages = computed(() => {
-    if (!selectedTelegramChat.value) return telegramMessages.value
-    return telegramMessagesChronological(
-      telegramMessages.value.filter(
-        (message) => message.provider_chat_id === selectedTelegramChat.value!.provider_chat_id
-      )
-    )
-  })
-
-  const chatFilterCounts = computed<TelegramChatFilterCount[]>(() =>
-    telegramChatFilterCounts(telegramChats.value, telegramMessages.value)
-  )
-
-  const chatGroupFilters = computed<TelegramChatGroupFilter[]>(() =>
-    telegramChatGroupFilters(telegramChats.value)
-  )
-
-  const filteredTelegramChats = computed(() =>
-    filterTelegramChats(
-      filterTelegramChatsByGroup(telegramChats.value, activeTelegramGroupFilter.value),
-      telegramMessages.value,
-      telegramSearchQuery.value,
-      activeTelegramFilter.value
-    )
-  )
-
-  const selectedTelegramRuntimeStatus = computed(() => {
-    if (!selectedTelegramChat.value) return null
-    return telegramRuntimeStatuses.value[selectedTelegramChat.value.account_id] ?? null
-  })
+  const telegramManualSendText = ref('')
 
   const isTelegramBusy = computed(() =>
     isTelegramActionSubmitting.value || isTelegramHistorySyncing.value
   )
 
   // Actions
-  function setTelegramData(data: {
-    chats: TelegramChat[]
-    messages: TelegramMessage[]
-    capabilities: TelegramCapabilitiesResponse | null
-    runtimeStatuses: Record<string, TelegramRuntimeStatus>
-    selectedChatId: string
-    error: string
-  }) {
-    telegramChats.value = data.chats
-    telegramMessages.value = data.messages
-    telegramCapabilities.value = data.capabilities
-    telegramRuntimeStatuses.value = data.runtimeStatuses
-    selectedTelegramChatId.value = data.selectedChatId
-    telegramError.value = data.error
-  }
-
   function selectTelegramChat(chat: TelegramChat) {
     selectedTelegramChatId.value = chat.provider_chat_id
     activeThreadTab.value = 'messages'
     activeRailTab.value = 'context'
+    focusedTelegramMessage.value = null
   }
 
   function selectTelegramFilter(filter: TelegramChatFilter) {
@@ -399,28 +397,31 @@ export const useTelegramStore = defineStore('telegram-ui', () => {
     telegramActionMessage.value = message
   }
 
-  function updateRuntimeStatus(accountId: string, status: TelegramRuntimeStatus) {
-    telegramRuntimeStatuses.value = {
-      ...telegramRuntimeStatuses.value,
-      [accountId]: status
-    }
+  function resetSendForm() {
+    telegramManualSendText.value = ''
   }
 
-  function resetSendForm() {
-    telegramManualSendForm.value = { text: '' }
+  function setTelegramManualSendText(value: string) {
+    telegramManualSendText.value = value
+  }
+
+  function focusTelegramMessage(message: TelegramMessage) {
+    focusedTelegramMessage.value = message
+    activeThreadTab.value = 'messages'
+  }
+
+  function clearTelegramFocusedMessage() {
+    focusedTelegramMessage.value = null
   }
 
   return {
     // State
-    telegramChats,
-    telegramMessages,
-    telegramCapabilities,
-    telegramRuntimeStatuses,
     selectedTelegramChatId,
     activeTelegramFilter,
     activeTelegramGroupFilter,
     activeThreadTab,
     activeRailTab,
+    focusedTelegramMessage,
     telegramError,
     telegramActionMessage,
     isTelegramLoading,
@@ -430,17 +431,9 @@ export const useTelegramStore = defineStore('telegram-ui', () => {
     isTelegramFiltersMenuOpen,
     isTelegramNewMenuOpen,
     isTelegramInspectorOpen,
-    telegramManualSendForm,
-    // Derived
-    selectedTelegramChat,
-    selectedTelegramMessages,
-    chatFilterCounts,
-    chatGroupFilters,
-    filteredTelegramChats,
-    selectedTelegramRuntimeStatus,
+    telegramManualSendText,
     isTelegramBusy,
     // Actions
-    setTelegramData,
     selectTelegramChat,
     selectTelegramFilter,
     selectTelegramGroupFilter,
@@ -455,7 +448,9 @@ export const useTelegramStore = defineStore('telegram-ui', () => {
     setTelegramHistorySyncing,
     setTelegramError,
     setTelegramActionMessage,
-    updateRuntimeStatus,
-    resetSendForm
+    resetSendForm,
+    setTelegramManualSendText,
+    focusTelegramMessage,
+    clearTelegramFocusedMessage
   }
 })

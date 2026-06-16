@@ -2,12 +2,15 @@
 import { ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
+import TelegramSendDryRunPanel from './TelegramSendDryRunPanel.vue'
 
 const { t } = useI18n()
 
 const props = defineProps<{
   text: string
   isTelegramActionSubmitting: boolean
+  selectedAccountId: string | null
+  selectedProviderChatId: string | null
 }>()
 
 const emit = defineEmits<{
@@ -92,6 +95,11 @@ function submitManualSend() {
         >
           <Icon icon="tabler:history" width="15" height="15" />{{ t('Sync History') }}
         </button>
+        <TelegramSendDryRunPanel
+          :accountId="selectedAccountId"
+          :providerChatId="selectedProviderChatId"
+          :text="text"
+        />
       </div>
     </div>
   </form>
@@ -166,6 +174,9 @@ function submitManualSend() {
 .command-popover {
   min-width: 140px;
   padding: 4px;
+}
+.telegram-send-popover {
+  min-width: 280px;
 }
 .command-popover button {
   display: flex;

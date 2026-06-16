@@ -85,4 +85,33 @@ pub(super) enum TelegramRuntimeCommand {
         priority: i32,
         reply_tx: Sender<Result<TelegramTdlibFileSnapshot, TelegramError>>,
     },
+    EditMessage {
+        provider_chat_id: String,
+        provider_message_id: String,
+        new_text: String,
+        command_id: String,
+        reply_tx: Sender<Result<(), TelegramError>>,
+    },
+    DeleteMessage {
+        provider_chat_id: String,
+        provider_message_id: String,
+        revoke: bool,
+        command_id: String,
+        reply_tx: Sender<Result<(), TelegramError>>,
+    },
+    SetReaction {
+        provider_chat_id: String,
+        provider_message_id: String,
+        reaction_emoji: String,
+        is_active: bool,
+        command_id: String,
+        reply_tx: Sender<Result<(), TelegramError>>,
+    },
+    PinMessage {
+        provider_chat_id: String,
+        provider_message_id: String,
+        pin: bool,
+        command_id: String,
+        reply_tx: Sender<Result<(), TelegramError>>,
+    },
 }

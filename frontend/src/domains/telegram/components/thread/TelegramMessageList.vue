@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import type { MessageAnalyzeResponse } from '../../../communications/types/communications'
-import type { TelegramAttachmentHint, TelegramChat, TelegramMessage } from '../../types/telegram'
+import type { TelegramAttachmentHint, TelegramChat, TelegramMessage, TelegramOperationCapability, TelegramCapabilitiesResponse } from '../../types/telegram'
 import { telegramMessageAttachmentHints } from '../../stores/telegram'
+import TelegramMessageReferencePanel from './TelegramMessageReferencePanel.vue'
 
 const { t } = useI18n()
 
@@ -15,13 +17,70 @@ const props = defineProps<{
   aiAnalysisResult: MessageAnalyzeResponse | null
   selectedCommunication: { message_id?: string } | null
   telegramMessageTime: (message: TelegramMessage) => string
+  capabilities?: TelegramCapabilitiesResponse | null
 }>()
 
 const emit = defineEmits<{
   syncOlderHistory: []
   downloadMedia: [attachment: TelegramAttachmentHint, message?: TelegramMessage]
+  editMessage: [message: TelegramMessage]
+  deleteMessage: [message: TelegramMessage]
+  restoreMessage: [message: TelegramMessage]
+  togglePinMessage: [message: TelegramMessage]
+  addReaction: [payload: { message: TelegramMessage; emoji: string }]
+  removeReaction: [payload: { message: TelegramMessage; emoji: string }]
+  openSearchMessage: [message: TelegramMessage]
 }>()
 
+const editingMessageId = ref<string | null>(null)
+const editText = ref('')
+const confirmDeleteId = ref<string | null>(null)
+const activeReactionPicker = ref<string | null>(null)
+const activeReferencePanel = ref<string | null>(null)
+const reactionPalette = ['👍', '👎', '❤️', '🔥', '🥰', '👏', '😁', '🤔', '🤯', '😱', '🤬', '😢', '🎉', '🤩', '🤮', '💩']
+function capability(operation: string): TelegramOperationCapability | undefined {
+  return props.capabilities?.capabilities.find((item) => item.operation === operation)
+}
+function messageReactions(message: TelegramMessage): Array<{ reaction_emoji: string; count: number; senders: string[] }> {
+  const summary = message.metadata?.reaction_summary as
+    | { reactions?: unknown }
+    | undefined
+  const reactionItems = summary?.reactions
+  if (!Array.isArray(reactionItems)) {
+    return []
+  }
+  return reactionItems
+    .filter((item: unknown): item is { reaction_emoji: string; count: number; senders: string[] } => {
+      return (
+        item !== null &&
+        typeof item === 'object' &&
+        'reaction_emoji' in item &&
+        typeof item.reaction_emoji === 'string' &&
+        'count' in item &&
+        typeof item.count === 'number' &&
+        'senders' in item &&
+        Array.isArray(item.senders)
+      )
+    })
+    .map((item) => ({
+      reaction_emoji: item.reaction_emoji,
+      count: item.count,
+      senders: item.senders.filter((sender: unknown): sender is string => typeof sender === 'string'),
+    }))
+}
+function toggleReactionPicker(messageId: string) {
+  activeReactionPicker.value = activeReactionPicker.value === messageId ? null : messageId
+}
+function toggleReferencePanel(messageId: string) {
+  activeReferencePanel.value = activeReferencePanel.value === messageId ? null : messageId
+}
+function emitReaction(message: any, emoji: string) {
+  activeReactionPicker.value = null
+  emit('addReaction', { message, emoji })
+}
+function emitReactionRemoval(message: TelegramMessage, emoji: string) {
+  emit('removeReaction', { message, emoji })
+}
 function senderName(message: TelegramMessage): string {
   return message.sender_display_name ?? message.sender
 }
@@ -40,7 +99,76 @@ function senderInitials(message: TelegramMessage): string {
 function isOutbound(message: TelegramMessage): boolean {
   return message.delivery_state === 'sent' || message.delivery_state === 'send_dry_run'
 }
-
+function isCapabilityVisible(operation: string): boolean {
+  return capability(operation)?.status !== 'unsupported'
+}
+function isCapabilityAvailable(operation: string): boolean {
+  return capability(operation)?.status === 'available'
+}
+function capabilityTitle(operation: string, fallbackLabel: string): string {
+  const op = capability(operation)
+  if (!op) return fallbackLabel
+  return op.status === 'available' ? fallbackLabel : `${fallbackLabel}: ${op.reason}`
+}
+function canReact(): boolean {
+  const status = capability('reactions.add')?.status
+  return status === 'available' || status === 'degraded'
+}
+function canRemoveReaction(): boolean {
+  const status = capability('reactions.remove')?.status
+  return status === 'available' || status === 'degraded'
+}
+function canRemoveReactionGroup(group: { senders: string[] }): boolean {
+  return canRemoveReaction() && group.senders.includes('Owner')
+}
+function canEdit(): boolean {
+  return isCapabilityAvailable('messages.edit')
+}
+function canDelete(): boolean {
+  return isCapabilityAvailable('messages.delete')
+}
+function canRestore(): boolean {
+  return isCapabilityAvailable('messages.restore_visibility')
+}
+function canPin(): boolean {
+  const status = capability('messages.pin')?.status
+  return status === 'available' || status === 'degraded'
+}
+function isMessagePinned(message: TelegramMessage): boolean {
+  return Boolean(message.metadata?.is_pinned ?? message.metadata?.pinned)
+}
+function messagePinTitle(message: TelegramMessage): string {
+  return capabilityTitle(
+    'messages.pin',
+    isMessagePinned(message) ? t('Message unpinned') : t('Message pinned')
+  )
+}
+function startEdit(message: TelegramMessage) {
+  editingMessageId.value = message.message_id
+  editText.value = message.text
+}
+function cancelEdit() {
+  editingMessageId.value = null
+  editText.value = ''
+}
+function confirmEdit(message: TelegramMessage) {
+  if (editText.value.trim() && editText.value !== message.text) {
+    emit('editMessage', { ...message, text: editText.value })
+    editingMessageId.value = null
+  } else {
+    cancelEdit()
+  }
+}
+function startDelete(message: TelegramMessage) {
+  confirmDeleteId.value = message.message_id
+}
+function cancelDelete() {
+  confirmDeleteId.value = null
+}
+function confirmDelete(message: TelegramMessage) {
+  emit('deleteMessage', message)
+  confirmDeleteId.value = null
+}
 function handleThreadScroll(event: Event) {
   if (props.isTelegramActionSubmitting) return
   const target = event.currentTarget as HTMLElement | null
@@ -82,12 +210,60 @@ function formatBytes(bytes: number): string {
         v-for="message in filteredMessages"
         :key="message.message_id"
         class="telegram-message-row"
-        :class="{ outbound: isOutbound(message) }"
+        :class="{ outbound: isOutbound(message), 'is-editing': editingMessageId === message.message_id }"
       >
         <span class="telegram-message-avatar">{{ senderInitials(message) }}</span>
         <div class="bubble telegram-bubble" :class="{ outbound: isOutbound(message), inbound: !isOutbound(message) }">
           <strong>{{ senderName(message) }}</strong>
-          <p>{{ message.text }}</p>
+          <div v-if="editingMessageId === message.message_id" class="telegram-edit-area">
+            <textarea
+              v-model="editText"
+              class="telegram-edit-input"
+              rows="3"
+              :disabled="isTelegramActionSubmitting"
+            />
+            <div class="telegram-edit-actions">
+              <button
+                type="button"
+                class="btn-small btn-primary"
+                :disabled="isTelegramActionSubmitting || !editText.trim()"
+                @click="confirmEdit(message)"
+              >
+                {{ t('Save') }}
+              </button>
+              <button
+                type="button"
+                class="btn-small btn-ghost"
+                :disabled="isTelegramActionSubmitting"
+                @click="cancelEdit()"
+              >
+                {{ t('Cancel') }}
+              </button>
+            </div>
+          </div>
+          <p v-else>{{ message.text }}</p>
+          <div v-if="confirmDeleteId === message.message_id" class="telegram-delete-confirm">
+            <p>{{ t('Delete this message? A tombstone record will be created.') }}</p>
+            <div class="telegram-edit-actions">
+              <button
+                type="button"
+                class="btn-small btn-danger"
+                :disabled="isTelegramActionSubmitting"
+                @click="confirmDelete(message)"
+              >
+                {{ t('Delete') }}
+              </button>
+              <button
+                type="button"
+                class="btn-small btn-ghost"
+                :disabled="isTelegramActionSubmitting"
+                @click="cancelDelete()"
+              >
+                {{ t('Cancel') }}
+              </button>
+            </div>
+          </div>
+
           <div v-if="telegramMessageAttachmentHints(message).length" class="telegram-bubble-files">
             <div
               v-for="attachment in telegramMessageAttachmentHints(message)"
@@ -113,6 +289,132 @@ function formatBytes(bytes: number): string {
             {{ telegramMessageTime(message) }}
             <span>{{ message.delivery_state }}</span>
           </time>
+          <div class="telegram-reaction-bar" v-if="messageReactions(message) && messageReactions(message).length">
+            <span
+              v-for="group in messageReactions(message)"
+              :key="group.reaction_emoji"
+              class="telegram-reaction-chip"
+              :title="group.senders.join(', ')"
+            >
+              {{ group.reaction_emoji }} {{ group.count }}
+              <button
+                v-if="canRemoveReactionGroup(group)"
+                type="button"
+                class="telegram-reaction-remove"
+                :title="capabilityTitle('reactions.remove', t('Remove your reaction'))"
+                :disabled="isTelegramActionSubmitting"
+                @click.stop="emitReactionRemoval(message, group.reaction_emoji)"
+              >
+                <Icon icon="tabler:x" width="10" height="10" />
+              </button>
+            </span>
+          </div>
+          <div class="telegram-reaction-picker" v-if="isCapabilityVisible('reactions.add')">
+            <button
+              type="button"
+              class="telegram-reaction-trigger"
+              :title="capabilityTitle('reactions.add', t('Add reaction'))"
+              :disabled="!canReact() || isTelegramActionSubmitting"
+              @click.stop="toggleReactionPicker(message.message_id)"
+            >
+              <Icon icon="tabler:mood-smile" width="14" height="14" />
+            </button>
+            <div
+              v-if="activeReactionPicker === message.message_id && canReact()"
+              class="telegram-emoji-palette"
+            >
+              <button
+                v-for="emoji in reactionPalette"
+                :key="emoji"
+                type="button"
+                class="telegram-emoji-btn"
+                :disabled="isTelegramActionSubmitting"
+                @click.stop="emitReaction(message, emoji)"
+              >
+                {{ emoji }}
+              </button>
+            </div>
+          </div>
+          <div class="telegram-message-actions" v-if="isOutbound(message) && !isTelegramActionSubmitting && editingMessageId !== message.message_id && confirmDeleteId !== message.message_id">
+            <button
+              type="button"
+              class="btn-icon-only"
+              :title="t('Message references')"
+              @click.stop="toggleReferencePanel(message.message_id)"
+            >
+              <Icon icon="tabler:git-merge" width="14" height="14" />
+            </button>
+            <button
+              v-if="isCapabilityVisible('messages.pin')"
+              type="button"
+              class="btn-icon-only"
+              :title="messagePinTitle(message)"
+              :disabled="!canPin()"
+              @click.stop="emit('togglePinMessage', message)"
+            >
+              <Icon :icon="isMessagePinned(message) ? 'tabler:pinned-off' : 'tabler:pinned'" width="14" height="14" />
+            </button>
+            <button
+              v-if="isCapabilityVisible('messages.edit')"
+              type="button"
+              class="btn-icon-only"
+              :title="capabilityTitle('messages.edit', t('Edit message'))"
+              :disabled="!canEdit()"
+              @click.stop="startEdit(message)"
+            >
+              <Icon icon="tabler:pencil" width="14" height="14" />
+            </button>
+            <button
+              v-if="isCapabilityVisible('messages.delete')"
+              type="button"
+              class="btn-icon-only btn-icon-danger"
+              :title="capabilityTitle('messages.delete', t('Delete message'))"
+              :disabled="!canDelete()"
+              @click.stop="startDelete(message)"
+            >
+              <Icon icon="tabler:trash" width="14" height="14" />
+            </button>
+          </div>
+          <button
+            v-else-if="!isTelegramActionSubmitting"
+            type="button"
+            class="btn-icon-only telegram-reference-toggle"
+            :title="t('Message references')"
+            @click.stop="toggleReferencePanel(message.message_id)"
+          >
+            <Icon icon="tabler:git-merge" width="14" height="14" />
+          </button>
+          <div
+            class="telegram-message-actions"
+            v-if="!isOutbound(message) && !isTelegramActionSubmitting && (isCapabilityVisible('messages.restore_visibility') || isCapabilityVisible('messages.pin'))"
+          >
+            <button
+              v-if="isCapabilityVisible('messages.pin')"
+              type="button"
+              class="btn-icon-only"
+              :title="messagePinTitle(message)"
+              :disabled="!canPin()"
+              @click.stop="emit('togglePinMessage', message)"
+            >
+              <Icon :icon="isMessagePinned(message) ? 'tabler:pinned-off' : 'tabler:pinned'" width="14" height="14" />
+            </button>
+            <button
+              type="button"
+              class="btn-icon-only"
+              :title="capabilityTitle('messages.restore_visibility', t('Restore visibility'))"
+              :disabled="!canRestore()"
+              @click.stop="emit('restoreMessage', message)"
+            >
+              <Icon icon="tabler:eye" width="14" height="14" />
+            </button>
+          </div>
+          <TelegramMessageReferencePanel
+            v-if="activeReferencePanel === message.message_id"
+            :messageId="message.message_id"
+            :isOpen="activeReferencePanel === message.message_id"
+            :currentMessage="message"
+            @openMessage="emit('openSearchMessage', $event)"
+          />
         </div>
       </article>
     </template>
@@ -151,8 +453,7 @@ function formatBytes(bytes: number): string {
   margin: 2px 0;
   color: var(--color-text-secondary, #666);
 }
-.telegram-history-actions,
-.telegram-date-chip {
+.telegram-history-actions, .telegram-date-chip {
   text-align: center;
   padding: 8px 0;
 }
@@ -263,7 +564,136 @@ function formatBytes(bytes: number): string {
   padding: 4px;
   flex-shrink: 0;
 }
-.telegram-file-card button:hover:not(:disabled) {
-  background: var(--color-primary-subtle, #e3f2fd);
+.telegram-file-card button:hover:not(:disabled) { background: var(--color-primary-subtle, #e3f2fd); }
+.telegram-message-actions {
+  display: flex;
+  gap: 2px;
+  margin-top: 4px;
+  justify-content: flex-end;
 }
+.btn-icon-only {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--color-text-secondary, #777);
+  padding: 0;
+}
+.btn-icon-only:hover {
+  background: var(--color-surface-hover, #f0f0f0);
+}
+.btn-icon-danger:hover {
+  background: var(--color-danger-subtle, #fde8e8);
+  color: var(--color-danger, #c62828);
+}
+.telegram-edit-area {
+  margin: 4px 0;
+}
+.telegram-edit-input {
+  width: 100%;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  resize: vertical;
+  background: var(--color-bg, #fff);
+  color: var(--color-text, #333);
+}
+.telegram-edit-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  justify-content: flex-end;
+}
+.btn-small {
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border, #e0e0e0);
+  cursor: pointer;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #333);
+}
+.btn-small:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--color-primary, #0066cc);
+  color: #fff;
+  border-color: var(--color-primary, #0066cc);
+}
+.btn-danger {
+  background: var(--color-danger, #c62828);
+  color: #fff;
+  border-color: var(--color-danger, #c62828);
+}
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+.telegram-delete-confirm {
+  margin: 4px 0;
+  padding: 6px;
+  background: var(--color-danger-subtle, #fde8e8);
+  border-radius: 4px;
+}
+.telegram-delete-confirm p {
+  font-size: 11px;
+  margin: 0 0 4px;
+  color: var(--color-danger, #c62828);
+}
+.telegram-reaction-bar {
+  display: flex; flex-wrap: wrap; gap: 2px; margin-top: 4px;
+}
+.telegram-reaction-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 1px 6px; border-radius: 10px; font-size: 11px;
+  background: var(--color-surface-hover, #f0f0f0);
+  border: 1px solid var(--color-border, #e0e0e0); cursor: default;
+}
+.telegram-reaction-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary, #777);
+  cursor: pointer;
+  line-height: 1;
+}
+.telegram-reaction-remove:hover {
+  background: var(--color-danger-subtle, #fde8e8);
+  color: var(--color-danger, #c62828);
+}
+.telegram-reaction-picker { position: relative; display: inline-block; margin-top: 4px; }
+.telegram-reaction-trigger {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border: none; background: transparent;
+  border-radius: 4px; cursor: pointer; color: var(--color-text-secondary, #777);
+}
+.telegram-reaction-trigger:hover { background: var(--color-surface-hover, #f0f0f0); }
+.telegram-emoji-palette {
+  position: absolute; bottom: 100%; left: 0;
+  display: flex; flex-wrap: wrap; gap: 2px; padding: 4px;
+  background: var(--color-surface, #fff); border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  z-index: 10; max-width: 200px;
+}
+.telegram-emoji-btn {
+  width: 28px; height: 28px; border: none; background: transparent;
+  border-radius: 4px; cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+.telegram-emoji-btn:hover { background: var(--color-primary-subtle, #e3f2fd); }
 </style>

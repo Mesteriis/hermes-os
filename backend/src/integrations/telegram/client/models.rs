@@ -1,6 +1,6 @@
 mod accounts;
 mod chats;
-mod messages;
+pub mod messages;
 mod qr_login;
 
 pub use accounts::{
@@ -8,7 +8,10 @@ pub use accounts::{
     TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramCredentialBinding,
     TelegramLiveAccountSetupRequest,
 };
-pub use chats::{NewTelegramChat, TelegramChat, TelegramChatKind, TelegramSyncState};
+pub use chats::{
+    NewTelegramChat, TelegramChat, TelegramChatGroupFilter, TelegramChatGroupFilterListResponse,
+    TelegramChatKind, TelegramChatMember, TelegramSyncState,
+};
 pub use messages::{
     NewTelegramMessage, TelegramDeliveryState, TelegramManualSendRequest,
     TelegramManualSendResponse, TelegramMessage, TelegramMessageIngestResult,

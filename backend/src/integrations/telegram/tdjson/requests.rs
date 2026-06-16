@@ -162,6 +162,117 @@ pub(crate) fn tdlib_download_file_request(file_id: i64, priority: i32, extra: &s
     })
 }
 
+pub(crate) fn tdlib_edit_message_text_request(
+    chat_id: i64,
+    message_id: i64,
+    text: &str,
+    extra: &str,
+) -> Result<Value, TelegramError> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(TelegramError::InvalidRequest(
+            "edit text must not be empty".to_owned(),
+        ));
+    }
+    Ok(json!({
+        "@type": "editMessageText",
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "input_message_content": {
+            "@type": "inputMessageText",
+            "text": {
+                "@type": "formattedText",
+                "text": text,
+                "entities": []
+            },
+            "clear_draft": false
+        },
+        "@extra": extra.trim()
+    }))
+}
+
+pub(crate) fn tdlib_delete_messages_request(
+    chat_id: i64,
+    message_ids: &[i64],
+    revoke: bool,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "deleteMessages",
+        "chat_id": chat_id,
+        "message_ids": message_ids,
+        "revoke": revoke,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_add_message_reaction_request(
+    chat_id: i64,
+    message_id: i64,
+    reaction_emoji: &str,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "addMessageReaction",
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "reaction_type": {
+            "@type": "reactionTypeEmoji",
+            "emoji": reaction_emoji.trim()
+        },
+        "is_big": false,
+        "update_recent_reactions": true,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_remove_message_reaction_request(
+    chat_id: i64,
+    message_id: i64,
+    reaction_emoji: &str,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "removeMessageReaction",
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "reaction_type": {
+            "@type": "reactionTypeEmoji",
+            "emoji": reaction_emoji.trim()
+        },
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_pin_chat_message_request(
+    chat_id: i64,
+    message_id: i64,
+    disable_notification: bool,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "pinChatMessage",
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "disable_notification": disable_notification,
+        "only_for_self": false,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_unpin_chat_message_request(
+    chat_id: i64,
+    message_id: i64,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "unpinChatMessage",
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "@extra": extra.trim()
+    })
+}
+
 fn tdlib_page_limit(limit: i32) -> i32 {
     limit.clamp(1, 100)
 }

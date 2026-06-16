@@ -194,6 +194,182 @@ impl NewApiAuditRecord {
             metadata,
         )
     }
+    pub fn telegram_message_edit(
+        actor_id: impl Into<String>,
+        message_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+    ) -> Self {
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::ProviderWrite,
+            "telegram.message.edit",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+
+        Self::new(
+            actor_id,
+            "telegram.message.edit",
+            "POST",
+            "/api/v1/telegram/messages/{message_id}/edit",
+            "telegram_message",
+            Some(message_id.into()),
+            metadata,
+        )
+    }
+
+    pub fn telegram_message_delete(
+        actor_id: impl Into<String>,
+        message_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+    ) -> Self {
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::Destructive,
+            "telegram.message.delete",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+
+        Self::new(
+            actor_id,
+            "telegram.message.delete",
+            "POST",
+            "/api/v1/telegram/messages/{message_id}/delete",
+            "telegram_message",
+            Some(message_id.into()),
+            metadata,
+        )
+    }
+
+    pub fn telegram_message_restore_visibility(
+        actor_id: impl Into<String>,
+        message_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+    ) -> Self {
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::LocalWrite,
+            "telegram.message.restore_visibility",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+
+        Self::new(
+            actor_id,
+            "telegram.message.restore_visibility",
+            "POST",
+            "/api/v1/telegram/messages/{message_id}/restore-visibility",
+            "telegram_message",
+            Some(message_id.into()),
+            metadata,
+        )
+    }
+
+    pub fn telegram_message_pin(
+        actor_id: impl Into<String>,
+        message_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+        is_pinned: bool,
+    ) -> Self {
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::LocalWrite,
+            "telegram.message.pin",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+        insert_non_empty(
+            metadata_object,
+            "operation",
+            if is_pinned { "pin" } else { "unpin" }.to_owned(),
+        );
+
+        Self::new(
+            actor_id,
+            if is_pinned {
+                "telegram.message.pin"
+            } else {
+                "telegram.message.unpin"
+            },
+            "POST",
+            "/api/v1/telegram/messages/{message_id}/pin",
+            "telegram_message",
+            Some(message_id.into()),
+            metadata,
+        )
+    }
+
+    pub fn telegram_message_reaction(
+        actor_id: impl Into<String>,
+        message_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+        reaction_emoji: impl Into<String>,
+        is_active: bool,
+    ) -> Self {
+        let capability = if is_active {
+            "telegram.message.react"
+        } else {
+            "telegram.message.unreact"
+        };
+        let path_template = "/api/v1/telegram/messages/{message_id}/reactions";
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::LocalWrite,
+            capability,
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+        insert_non_empty(metadata_object, "reaction_emoji", reaction_emoji.into());
+        insert_non_empty(
+            metadata_object,
+            "operation",
+            if is_active {
+                "add".to_owned()
+            } else {
+                "remove".to_owned()
+            },
+        );
+
+        Self::new(
+            actor_id,
+            if is_active {
+                "telegram.message.react"
+            } else {
+                "telegram.message.unreact"
+            },
+            if is_active { "POST" } else { "DELETE" },
+            path_template,
+            "telegram_message",
+            Some(message_id.into()),
+            metadata,
+        )
+    }
 }
 
 struct TelegramSendDryRunAuditDecision<'a> {

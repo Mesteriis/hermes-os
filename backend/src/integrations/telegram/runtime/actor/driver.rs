@@ -10,6 +10,9 @@ use super::super::state::TelegramRuntimeCommand;
 use super::authorization::{prepare_tdlib_client, wait_for_tdlib_ready};
 use super::chats::actor_load_chats;
 use super::download::actor_download_file;
+use super::edit::{
+    actor_delete_message, actor_edit_message, actor_pin_message, actor_set_reaction,
+};
 use super::history::actor_sync_history;
 use super::send::actor_send_text;
 
@@ -52,6 +55,68 @@ pub(super) fn drive_tdlib_actor(
                 reply_tx,
             } => {
                 let _ = reply_tx.send(actor_download_file(&client, file_id, priority));
+            }
+            TelegramRuntimeCommand::EditMessage {
+                provider_chat_id,
+                provider_message_id,
+                new_text,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_edit_message(
+                    &client,
+                    &provider_chat_id,
+                    &provider_message_id,
+                    &new_text,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::DeleteMessage {
+                provider_chat_id,
+                provider_message_id,
+                revoke,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_delete_message(
+                    &client,
+                    &provider_chat_id,
+                    &provider_message_id,
+                    revoke,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::SetReaction {
+                provider_chat_id,
+                provider_message_id,
+                reaction_emoji,
+                is_active,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_set_reaction(
+                    &client,
+                    &provider_chat_id,
+                    &provider_message_id,
+                    &reaction_emoji,
+                    is_active,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::PinMessage {
+                provider_chat_id,
+                provider_message_id,
+                pin,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_pin_message(
+                    &client,
+                    &provider_chat_id,
+                    &provider_message_id,
+                    pin,
+                    &command_id,
+                ));
             }
         }
     }

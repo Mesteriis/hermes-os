@@ -5,6 +5,7 @@ use crate::domains::mail::accounts::GmailOAuthPendingGrant;
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::integrations::telegram::tdjson::PendingQrLoginMap;
 use crate::platform::config::AppConfig;
+use crate::platform::events::EventBus;
 use crate::platform::storage::Database;
 use crate::vault::HostVault;
 
@@ -15,6 +16,7 @@ pub(crate) struct AppState {
     pub(crate) vault: HostVault,
     pub(crate) account_setup: AccountSetupState,
     pub(crate) telegram_runtime: TelegramRuntimeManager,
+    pub(crate) event_bus: EventBus,
 }
 
 #[derive(Clone, Default)]

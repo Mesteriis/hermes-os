@@ -2,6 +2,7 @@ mod authorization;
 mod chats;
 mod download;
 mod driver;
+mod edit;
 mod history;
 mod responses;
 mod send;

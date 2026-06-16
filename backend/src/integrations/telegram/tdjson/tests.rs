@@ -168,6 +168,99 @@ fn tdlib_download_file_request_uses_synchronous_on_demand_download() {
 }
 
 #[test]
+fn tdlib_edit_message_text_request_uses_edit_message_text_type() {
+    let command = super::tdlib_edit_message_text_request(
+        123456789,
+        987654321,
+        "Updated text",
+        "hermes-edit-cmd-1",
+    )
+    .expect("edit message request");
+
+    assert_eq!(command["@type"], "editMessageText");
+    assert_eq!(command["chat_id"], 123456789);
+    assert_eq!(command["message_id"], 987654321);
+    assert_eq!(command["@extra"], "hermes-edit-cmd-1");
+    assert_eq!(
+        command["input_message_content"]["@type"],
+        "inputMessageText"
+    );
+    assert_eq!(
+        command["input_message_content"]["text"]["text"],
+        "Updated text"
+    );
+}
+
+#[test]
+fn tdlib_edit_message_text_request_rejects_empty_text() {
+    let result = super::tdlib_edit_message_text_request(123, 456, "   ", "hermes-edit-1");
+    assert!(result.is_err());
+}
+
+#[test]
+fn tdlib_delete_messages_request_uses_delete_messages_type() {
+    let command =
+        super::tdlib_delete_messages_request(123456789, &[111, 222], true, "hermes-delete-1");
+
+    assert_eq!(command["@type"], "deleteMessages");
+    assert_eq!(command["chat_id"], 123456789);
+    assert_eq!(command["message_ids"], json!([111, 222]));
+    assert_eq!(command["revoke"], true);
+    assert_eq!(command["@extra"], "hermes-delete-1");
+}
+
+#[test]
+fn tdlib_add_message_reaction_request_uses_add_message_reaction_type() {
+    let command =
+        super::tdlib_add_message_reaction_request(123456789, 987654321, "👍", "hermes-react-1");
+
+    assert_eq!(command["@type"], "addMessageReaction");
+    assert_eq!(command["chat_id"], 123456789);
+    assert_eq!(command["message_id"], 987654321);
+    assert_eq!(command["reaction_type"]["@type"], "reactionTypeEmoji");
+    assert_eq!(command["reaction_type"]["emoji"], "👍");
+    assert_eq!(command["is_big"], false);
+    assert_eq!(command["@extra"], "hermes-react-1");
+}
+
+#[test]
+fn tdlib_remove_message_reaction_request_uses_remove_message_reaction_type() {
+    let command = super::tdlib_remove_message_reaction_request(
+        123456789,
+        987654321,
+        "👍",
+        "hermes-unreact-1",
+    );
+
+    assert_eq!(command["@type"], "removeMessageReaction");
+    assert_eq!(command["reaction_type"]["emoji"], "👍");
+    assert_eq!(command["@extra"], "hermes-unreact-1");
+}
+
+#[test]
+fn tdlib_pin_chat_message_request_uses_pin_chat_message_type() {
+    let command =
+        super::tdlib_pin_chat_message_request(123456789, 987654321, false, "hermes-pin-1");
+
+    assert_eq!(command["@type"], "pinChatMessage");
+    assert_eq!(command["chat_id"], 123456789);
+    assert_eq!(command["message_id"], 987654321);
+    assert_eq!(command["disable_notification"], false);
+    assert_eq!(command["only_for_self"], false);
+    assert_eq!(command["@extra"], "hermes-pin-1");
+}
+
+#[test]
+fn tdlib_unpin_chat_message_request_uses_unpin_chat_message_type() {
+    let command = super::tdlib_unpin_chat_message_request(123456789, 987654321, "hermes-unpin-1");
+
+    assert_eq!(command["@type"], "unpinChatMessage");
+    assert_eq!(command["chat_id"], 123456789);
+    assert_eq!(command["message_id"], 987654321);
+    assert_eq!(command["@extra"], "hermes-unpin-1");
+}
+
+#[test]
 fn parses_tdlib_file_snapshot_from_download_file_response() {
     let file = super::parse_tdlib_file_snapshot(&json!({
         "@type": "file",

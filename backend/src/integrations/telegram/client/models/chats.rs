@@ -20,6 +20,28 @@ pub struct TelegramChat {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TelegramChatMember {
+    pub sender_id: String,
+    pub sender_display_name: Option<String>,
+    pub message_count: i64,
+    pub last_message_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TelegramChatGroupFilter {
+    pub id: String,
+    pub label: String,
+    pub source: String,
+    pub count: i64,
+    pub icon: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct TelegramChatGroupFilterListResponse {
+    pub items: Vec<TelegramChatGroupFilter>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct NewTelegramChat {
     pub account_id: String,

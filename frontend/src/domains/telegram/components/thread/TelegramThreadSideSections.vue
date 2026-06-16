@@ -1,30 +1,64 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import type {
   TelegramAttachmentHint,
+  TelegramMediaItem,
   TelegramMessage,
   TelegramThreadTab
 } from '../../types/telegram'
+import { mergeTelegramAttachmentHints } from '../../stores/telegram'
+import TelegramMediaViewer from './TelegramMediaViewer.vue'
 
 const { t } = useI18n()
 
-defineProps<{
+const emit = defineEmits<{
+  downloadMedia: [attachment: TelegramAttachmentHint, message?: TelegramMessage]
+  openMessage: [message: TelegramMessage]
+}>()
+
+const props = defineProps<{
   activeThreadTab: TelegramThreadTab
   chronologicalMessages: TelegramMessage[]
   fileHints: TelegramAttachmentHint[]
+  voiceHints: TelegramAttachmentHint[]
+  mediaGalleryItems: TelegramMediaItem[]
   linkHints: Array<{ url: string; label: string; occurredAt: string | null }>
   pinnedMessages: TelegramMessage[]
   isTelegramActionSubmitting: boolean
   telegramMessageTime: (message: TelegramMessage) => string
 }>()
 
-const emit = defineEmits<{
-  downloadMedia: [attachment: TelegramAttachmentHint, message?: TelegramMessage]
-}>()
+const activeViewerAttachment = ref<TelegramAttachmentHint | null>(null)
+
+const mergedFileHints = computed(() =>
+  mergeTelegramAttachmentHints(props.mediaGalleryItems, props.fileHints)
+)
 
 function senderName(message: TelegramMessage): string {
   return message.sender_display_name ?? message.sender
+}
+
+function messageForAttachment(attachment: TelegramAttachmentHint): TelegramMessage | null {
+  return props.chronologicalMessages.find((message) => message.message_id === attachment.messageId) ?? null
+}
+
+function openAttachmentMessage(attachment: TelegramAttachmentHint) {
+  const message = messageForAttachment(attachment)
+  if (message) {
+    emit('openMessage', message)
+  }
+}
+
+function attachmentSender(attachment: TelegramAttachmentHint): string {
+  const message = messageForAttachment(attachment)
+  return message ? senderName(message) : ''
+}
+
+function attachmentTime(attachment: TelegramAttachmentHint): string {
+  const message = messageForAttachment(attachment)
+  return message ? props.telegramMessageTime(message) : ''
 }
 
 function isOutbound(message: TelegramMessage): boolean {
@@ -42,32 +76,55 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+function openViewer(attachment: TelegramAttachmentHint) {
+  activeViewerAttachment.value = attachment
+}
 </script>
 
 <template>
   <div class="chat-body telegram-thread-body">
     <template v-if="activeThreadTab === 'files'">
-      <div v-if="fileHints.length === 0" class="empty-panel fill">
+      <div v-if="mediaGalleryItems.length === 0 && fileHints.length === 0" class="empty-panel fill">
         {{ t('No files in selected Telegram history.') }}
       </div>
       <div v-else class="telegram-file-list">
-        <div v-for="file in fileHints" :key="file.fileName" class="telegram-file-card">
+        <div
+          v-for="attachment in mergedFileHints"
+          :key="attachment.id"
+          class="telegram-file-card"
+        >
           <span>
             <Icon
-              :icon="file.kind === 'photo' ? 'tabler:photo' : file.kind === 'video' ? 'tabler:video' : 'tabler:file-description'"
+              :icon="attachment.kind === 'photo' ? 'tabler:photo' : attachment.kind === 'video' ? 'tabler:video' : attachment.kind === 'audio' || attachment.kind === 'voice' ? 'tabler:wave-sine' : 'tabler:file-description'"
               width="20"
               height="20"
             />
           </span>
           <div>
-            <strong>{{ file.fileName }}</strong>
-            <small>{{ file.mimeType ?? file.kind }} · {{ file.sizeBytes == null ? file.downloadState : formatBytes(file.sizeBytes) }}</small>
+            <strong>{{ attachment.fileName }}</strong>
+            <small>{{ attachment.mimeType ?? attachment.kind }} · {{ attachment.sizeBytes == null ? attachment.downloadState : formatBytes(attachment.sizeBytes) }}</small>
           </div>
           <button
+            v-if="messageForAttachment(attachment)"
             type="button"
-            :disabled="isTelegramActionSubmitting || file.tdlibFileId === null"
-            :title="file.tdlibFileId === null ? t('Download requires TDLib file metadata') : t('Download media')"
-            @click="emit('downloadMedia', file)"
+            :title="t('Open message')"
+            @click="openAttachmentMessage(attachment)"
+          >
+            <Icon icon="tabler:arrow-up-right" width="17" height="17" />
+          </button>
+          <button
+            type="button"
+            :title="t('Preview media')"
+            @click="openViewer(attachment)"
+          >
+            <Icon icon="tabler:eye" width="17" height="17" />
+          </button>
+          <button
+            type="button"
+            :disabled="isTelegramActionSubmitting || attachment.tdlibFileId === null"
+            :title="attachment.tdlibFileId === null ? t('Download requires TDLib file metadata') : t('Download media')"
+            @click="emit('downloadMedia', attachment, messageForAttachment(attachment) ?? undefined)"
           >
             <Icon icon="tabler:download" width="17" height="17" />
           </button>
@@ -88,12 +145,74 @@ function formatBytes(bytes: number): string {
       </div>
     </template>
 
+    <template v-else-if="activeThreadTab === 'voice'">
+      <div v-if="voiceHints.length === 0" class="empty-panel fill">
+        {{ t('No voice notes or audio files in selected Telegram history.') }}
+      </div>
+      <div v-else class="telegram-voice-list">
+        <article
+          v-for="voice in voiceHints"
+          :key="voice.id"
+          class="telegram-voice-card"
+        >
+          <div class="telegram-voice-card__meta">
+            <span class="telegram-voice-card__icon">
+              <Icon :icon="voice.kind === 'voice' ? 'tabler:microphone-2' : 'tabler:wave-sine'" width="18" height="18" />
+            </span>
+            <div>
+              <strong>{{ voice.fileName }}</strong>
+              <small>
+                {{ voice.mimeType ?? voice.kind }} · {{ voice.sizeBytes == null ? voice.downloadState : formatBytes(voice.sizeBytes) }}
+              </small>
+            </div>
+            <button
+              v-if="messageForAttachment(voice)"
+              type="button"
+              class="telegram-voice-card__jump"
+              :title="t('Open message')"
+              @click="openAttachmentMessage(voice)"
+            >
+              <Icon icon="tabler:arrow-up-right" width="16" height="16" />
+            </button>
+          </div>
+          <audio
+            v-if="voice.localPath"
+            class="telegram-voice-card__player"
+            :src="voice.localPath"
+            controls
+            preload="metadata"
+          ></audio>
+          <div v-else class="telegram-voice-card__empty">
+            <span>{{ t('Voice playback is available after local download.') }}</span>
+            <button
+              type="button"
+              :disabled="isTelegramActionSubmitting || voice.tdlibFileId === null"
+              :title="voice.tdlibFileId === null ? t('Download requires TDLib file metadata') : t('Download voice file')"
+              @click="emit('downloadMedia', voice, messageForAttachment(voice) ?? undefined)"
+            >
+              <Icon icon="tabler:download" width="16" height="16" />
+              {{ t('Download') }}
+            </button>
+          </div>
+          <footer v-if="messageForAttachment(voice)" class="telegram-voice-card__footer">
+            <span>{{ attachmentSender(voice) }}</span>
+            <time>{{ attachmentTime(voice) }}</time>
+          </footer>
+        </article>
+      </div>
+    </template>
+
     <template v-else-if="activeThreadTab === 'pinned'">
       <div v-if="pinnedMessages.length === 0" class="empty-panel fill">
         {{ t('No pinned messages in selected Telegram history.') }}
       </div>
       <template v-else>
-        <article v-for="message in pinnedMessages" :key="message.message_id" class="telegram-timeline-row">
+        <article
+          v-for="message in pinnedMessages"
+          :key="message.message_id"
+          class="telegram-timeline-row telegram-timeline-row-action"
+          @click="emit('openMessage', message)"
+        >
           <Icon icon="tabler:pin" width="16" height="16" />
           <div><strong>{{ senderName(message) }}</strong><p>{{ message.text }}</p></div>
           <time>{{ telegramMessageTime(message) }}</time>
@@ -118,6 +237,10 @@ function formatBytes(bytes: number): string {
       {{ t('Telegram topics are available after TDLib forum topic sync is implemented.') }}
     </div>
   </div>
+  <TelegramMediaViewer
+    :attachment="activeViewerAttachment"
+    @close="activeViewerAttachment = null"
+  />
 </template>
 
 <style scoped>
@@ -135,7 +258,8 @@ function formatBytes(bytes: number): string {
   color: var(--color-text-secondary, #999);
 }
 .telegram-file-list,
-.telegram-link-list {
+.telegram-link-list,
+.telegram-voice-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -195,6 +319,76 @@ function formatBytes(bytes: number): string {
   font-size: 10px;
   color: var(--color-text-secondary, #aaa);
 }
+.telegram-voice-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border, #d8e0e7);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(249, 251, 252, 0.98) 0%, rgba(241, 246, 249, 0.98) 100%);
+}
+.telegram-voice-card__meta,
+.telegram-voice-card__footer,
+.telegram-voice-card__empty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.telegram-voice-card__meta strong,
+.telegram-voice-card__meta small {
+  display: block;
+}
+.telegram-voice-card__meta small,
+.telegram-voice-card__footer,
+.telegram-voice-card__empty {
+  font-size: 11px;
+  color: var(--color-text-secondary, #667085);
+}
+.telegram-voice-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: rgba(12, 74, 110, 0.08);
+  color: #0c4a6e;
+  flex-shrink: 0;
+}
+.telegram-voice-card__jump {
+  margin-left: auto;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary, #667085);
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.telegram-voice-card__jump:hover,
+.telegram-voice-card__empty button:hover:not(:disabled) {
+  background: var(--color-primary-subtle, #e3f2fd);
+}
+.telegram-voice-card__player {
+  width: 100%;
+}
+.telegram-voice-card__empty {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.telegram-voice-card__empty button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--color-border, #d0d5dd);
+  background: var(--color-surface, #fff);
+  border-radius: 999px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.telegram-voice-card__footer {
+  justify-content: space-between;
+}
 .telegram-timeline-row {
   display: flex;
   align-items: flex-start;
@@ -217,5 +411,11 @@ function formatBytes(bytes: number): string {
 }
 .telegram-timeline-row time {
   white-space: nowrap;
+}
+.telegram-timeline-row-action {
+  cursor: pointer;
+}
+.telegram-timeline-row-action:hover {
+  background: var(--color-primary-subtle, #e3f2fd);
 }
 </style>

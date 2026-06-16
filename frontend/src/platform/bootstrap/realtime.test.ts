@@ -384,20 +384,29 @@ describe('realtime bootstrap', () => {
 
   it('patches cached outbox metadata for delivery status and read receipt events', () => {
     const outboxKey = ['communications-outbox', undefined, undefined]
-    const outboxItems = [
-      {
-        outbox_id: 'outbox-1',
-        account_id: 'account-1',
-        status: 'sent',
-        provider_message_id: 'provider-1',
-        last_error: null,
-        send_attempts: 1,
-        scheduled_send_at: null,
-        undo_deadline_at: null,
-        sent_at: '2026-06-15T10:00:00Z',
-        metadata: {}
-      }
-    ]
+    const outboxItems = {
+      pages: [
+        {
+          items: [
+            {
+              outbox_id: 'outbox-1',
+              account_id: 'account-1',
+              status: 'sent',
+              provider_message_id: 'provider-1',
+              last_error: null,
+              send_attempts: 1,
+              scheduled_send_at: null,
+              undo_deadline_at: null,
+              sent_at: '2026-06-15T10:00:00Z',
+              metadata: {}
+            }
+          ],
+          next_cursor: null,
+          has_more: false
+        }
+      ],
+      pageParams: [null]
+    }
     const setQueryData = vi.fn((queryKey, updater) =>
       typeof updater === 'function' ? updater(outboxItems) : updater
     )
@@ -425,9 +434,8 @@ describe('realtime bootstrap', () => {
       },
       queryClient
     )
-
     const patchedDeliveryItems = setQueryData.mock.results[0]?.value
-    expect(patchedDeliveryItems[0].metadata.delivery_status).toMatchObject({
+    expect(patchedDeliveryItems.pages[0].items[0].metadata.delivery_status).toMatchObject({
       delivery_status: 'delivered',
       source_kind: 'provider_runtime',
       recorded_at: '2026-06-15T10:01:00Z'
@@ -454,7 +462,7 @@ describe('realtime bootstrap', () => {
     )
 
     const patchedReadItems = setQueryData.mock.results[1]?.value
-    expect(patchedReadItems[0].metadata.latest_read_receipt).toMatchObject({
+    expect(patchedReadItems.pages[0].items[0].metadata.latest_read_receipt).toMatchObject({
       receipt_id: 'receipt-1',
       receipt_kind: 'read',
       read_at: '2026-06-15T10:02:00Z'

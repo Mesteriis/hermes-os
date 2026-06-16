@@ -1,4 +1,5 @@
 mod builder;
+pub mod bus;
 mod cursors;
 mod errors;
 mod migrations;
@@ -8,6 +9,7 @@ mod store;
 mod validation;
 
 pub use self::builder::NewEventEnvelopeBuilder;
+pub use self::bus::EventBus;
 pub use self::cursors::ProjectionCursorStore;
 pub use self::errors::{EventEnvelopeError, EventStoreError};
 pub use self::migrations::{MigrationSummary, expected_migration_summary, run_migrations};

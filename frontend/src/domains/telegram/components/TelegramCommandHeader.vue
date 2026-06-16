@@ -50,7 +50,7 @@ function filterCount(filter: TelegramChatFilter): number {
       <Icon icon="tabler:search" width="18" height="18" />
       <input
         :value="searchQuery"
-        :placeholder="t('Search conversations...')"
+        :placeholder="t('Search Telegram messages or filter chats...')"
         autocomplete="off"
         @input="emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
       />

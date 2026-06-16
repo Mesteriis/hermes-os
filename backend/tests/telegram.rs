@@ -15,6 +15,7 @@ use hermes_hub_backend::domains::mail::core::{
     NewRawCommunicationRecord, ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::domains::mail::messages::MessageProjectionStore;
+use hermes_hub_backend::integrations::telegram::client::lifecycle;
 use hermes_hub_backend::integrations::telegram::client::project_raw_telegram_message;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
@@ -226,13 +227,13 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
         true,
     );
     assert_capability_status(&capabilities_body, "automation_dry_run", "available", true);
-    assert_capability_status(&capabilities_body, "tdlib_live_runtime", "blocked", false);
-    assert_capability_status(&capabilities_body, "automation_live_send", "blocked", false);
+    assert_capability_status(&capabilities_body, "tdlib_live_runtime", "blocked", true);
+    assert_capability_status(&capabilities_body, "automation_live_send", "blocked", true);
     assert_capability_status(
         &capabilities_body,
         "whisper_rs_speech_to_text",
         "blocked",
-        false,
+        true,
     );
     assert!(
         capabilities_body["unsupported_features"]
@@ -564,6 +565,13 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     assert_eq!(initial_body["status"], json!("stopped"));
     assert_eq!(initial_body["live_send_available"], json!(false));
     assert_eq!(initial_body["fixture_runtime"], json!(true));
+    assert_eq!(initial_body["telegram_api_id_configured"], json!(false));
+    assert_eq!(initial_body["telegram_api_hash_configured"], json!(false));
+    assert_eq!(
+        initial_body["telegram_app_credentials_configured"],
+        json!(false)
+    );
+    assert_eq!(initial_body["runtime_blockers"], json!([]));
 
     let start_response = app
         .clone()
@@ -592,6 +600,84 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let running_body = json_body(running_status).await;
     assert_eq!(running_body["status"], json!("running"));
     assert_eq!(running_body["last_error"], Value::Null);
+    assert_eq!(running_body["runtime_blockers"], json!([]));
+}
+
+#[tokio::test]
+async fn telegram_runtime_status_reports_tdlib_diagnostics_for_qr_authorized_user_accounts() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-runtime-health-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+            (
+                "HERMES_TDJSON_PATH",
+                "/tmp/hermes-hub-test-missing-libtdjson-runtime-health.dylib",
+            ),
+            ("HERMES_TELEGRAM_API_ID", "12345"),
+            ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let account_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/accounts",
+            json!({
+                "account_id": account_id,
+                "provider_kind": "telegram_user",
+                "display_name": "Telegram Runtime Health",
+                "external_account_id": format!("telegram:{suffix}"),
+                "tdlib_data_path": format!("docker/data/telegram/runtime-health-{suffix}"),
+                "transcription_enabled": false
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("account response");
+    assert_eq!(account_response.status(), StatusCode::OK);
+
+    let runtime_status = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/runtime/status?account_id={account_id}"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("runtime status response");
+    assert_eq!(runtime_status.status(), StatusCode::OK);
+    let body = json_body(runtime_status).await;
+    assert_eq!(body["runtime_kind"], json!("tdlib_qr_authorized"));
+    assert_eq!(
+        body["tdjson_path"],
+        json!("/tmp/hermes-hub-test-missing-libtdjson-runtime-health.dylib")
+    );
+    assert_eq!(body["tdjson_runtime_available"], json!(false));
+    assert_eq!(body["telegram_api_id_configured"], json!(true));
+    assert_eq!(body["telegram_api_hash_configured"], json!(true));
+    assert_eq!(body["telegram_app_credentials_configured"], json!(true));
+    assert_eq!(body["live_send_available"], json!(false));
+    assert!(
+        body["tdjson_probe_error"]
+            .as_str()
+            .expect("tdjson probe error")
+            .contains("unable to load libtdjson")
+    );
+    assert!(
+        body["runtime_blockers"]
+            .as_array()
+            .expect("runtime blockers")
+            .iter()
+            .any(|value| value == "tdjson_runtime_unavailable")
+    );
 }
 
 #[tokio::test]
@@ -1178,6 +1264,1353 @@ async fn telegram_fixture_sync_selected_history_returns_projected_messages() {
 }
 
 #[tokio::test]
+async fn telegram_dialog_actions_record_durable_command_rows() {
+    let ctx = TestContext::new().await;
+    let pool = ctx.pool().clone();
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-dialog-actions-{suffix}");
+    let chat_id = format!("dialog-chat-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Dialog Actions",
+            "external_account_id": format!("tg-dialog-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": chat_id,
+            "provider_message_id": format!("dialog-message-{suffix}"),
+            "chat_kind": "private",
+            "chat_title": "Dialog Action Chat",
+            "sender_id": format!("sender-{suffix}"),
+            "sender_display_name": "Maria Petrova",
+            "text": "@hermes dialog action command rows should exist.",
+            "import_batch_id": format!("telegram-dialog-fixture-{suffix}"),
+            "occurred_at": "2026-06-06T12:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let chats_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/chats?account_id={account_id}&limit=10"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("chats response");
+    assert_eq!(chats_response.status(), StatusCode::OK);
+    let chats_body = json_body(chats_response).await;
+    let telegram_chat_id = chats_body["items"][0]["telegram_chat_id"]
+        .as_str()
+        .expect("telegram chat id")
+        .to_owned();
+    assert_eq!(chats_body["items"][0]["metadata"]["unread_count"], json!(1));
+    assert_eq!(
+        chats_body["items"][0]["metadata"]["mention_count"],
+        json!(1)
+    );
+
+    let pin_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            &format!("/api/v1/telegram/chats/{telegram_chat_id}/pin"),
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("pin response");
+    assert_eq!(pin_response.status(), StatusCode::OK);
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": chat_id,
+            "provider_message_id": format!("dialog-message-follow-up-{suffix}"),
+            "chat_kind": "private",
+            "chat_title": "Dialog Action Chat",
+            "sender_id": format!("sender-{suffix}"),
+            "sender_display_name": "Maria Petrova",
+            "text": "Unread counters should survive repeated ingest.",
+            "import_batch_id": format!("telegram-dialog-fixture-follow-up-{suffix}"),
+            "occurred_at": "2026-06-06T12:05:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let detail_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/chats/{telegram_chat_id}"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("chat detail response");
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_body = json_body(detail_response).await;
+    assert_eq!(detail_body["item"]["metadata"]["is_pinned"], json!(true));
+    assert_eq!(detail_body["item"]["metadata"]["unread_count"], json!(2));
+    assert_eq!(detail_body["item"]["metadata"]["mention_count"], json!(1));
+
+    for action in [
+        "unpin",
+        "archive",
+        "unarchive",
+        "mute",
+        "unmute",
+        "read",
+        "unread",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_post_request_with_actor(
+                &format!("/api/v1/telegram/chats/{telegram_chat_id}/{action}"),
+                json!({
+                    "account_id": account_id,
+                    "provider_chat_id": chat_id
+                }),
+                LOCAL_API_TOKEN,
+            ))
+            .await
+            .expect("dialog action response");
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "expected {action} to succeed"
+        );
+        if action == "read" {
+            let body = json_body(response).await;
+            assert_eq!(body["metadata"]["unread_count"], json!(0));
+            assert_eq!(body["metadata"]["mention_count"], json!(0));
+        } else if action == "unread" {
+            let body = json_body(response).await;
+            assert_eq!(body["metadata"]["unread_count"], json!(2));
+            assert_eq!(body["metadata"]["mention_count"], json!(1));
+        }
+    }
+
+    let commands_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/commands?account_id={account_id}&limit=20"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("commands response");
+    assert_eq!(commands_response.status(), StatusCode::OK);
+    let commands_body = json_body(commands_response).await;
+    let items = commands_body["items"].as_array().expect("command items");
+    let kinds: Vec<&str> = items
+        .iter()
+        .filter_map(|item| item["command_kind"].as_str())
+        .collect();
+
+    for expected_kind in [
+        "pin",
+        "unpin",
+        "archive",
+        "unarchive",
+        "mute",
+        "unmute",
+        "mark_read",
+        "mark_unread",
+    ] {
+        assert!(
+            kinds.iter().any(|kind| kind == &expected_kind),
+            "expected command row for {expected_kind}, got {kinds:?}"
+        );
+    }
+
+    let command_event_payload: Value = sqlx::query_scalar::<_, Value>(
+        r#"
+        SELECT payload
+        FROM event_log
+        WHERE event_type = 'telegram.command.status_changed'
+          AND payload->>'telegram_chat_id' = $1
+        ORDER BY position DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&telegram_chat_id)
+    .fetch_one(&pool)
+    .await
+    .expect("dialog command event payload");
+    assert_eq!(command_event_payload["action"], json!("mark_unread"));
+    assert_eq!(command_event_payload["status"], json!("queued"));
+    assert_eq!(
+        command_event_payload["chat"]["telegram_chat_id"],
+        json!(telegram_chat_id)
+    );
+    assert_eq!(
+        command_event_payload["chat"]["provider_chat_id"],
+        json!(chat_id)
+    );
+    assert_eq!(
+        command_event_payload["chat"]["metadata"]["unread_count"],
+        json!(2)
+    );
+    assert_eq!(
+        command_event_payload["chat"]["metadata"]["mention_count"],
+        json!(1)
+    );
+    assert_eq!(
+        command_event_payload["chat"]["metadata"]["is_muted"],
+        json!(false)
+    );
+}
+
+#[tokio::test]
+async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-lifecycle-actions-{suffix}");
+    let chat_id = format!("lifecycle-chat-{suffix}");
+    let provider_message_id = format!("lifecycle-message-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Lifecycle Actions",
+            "external_account_id": format!("tg-lifecycle-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    let message_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": provider_message_id,
+                "chat_kind": "private",
+                "chat_title": "Lifecycle Action Chat",
+                "sender_id": format!("sender-{suffix}"),
+                "sender_display_name": "Pavel Sidorov",
+                "text": "Lifecycle actions should create durable command rows.",
+                "import_batch_id": format!("telegram-lifecycle-fixture-{suffix}"),
+                "occurred_at": "2026-06-06T12:00:00Z",
+                "delivery_state": "received"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("message response");
+    assert_eq!(message_response.status(), StatusCode::OK);
+    let message_body = json_body(message_response).await;
+    let message_id = message_body["message_id"]
+        .as_str()
+        .expect("message id")
+        .to_owned();
+
+    let restore_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            &format!("/api/v1/telegram/messages/{message_id}/restore-visibility"),
+            json!({
+                "command_id": format!("restore-{suffix}"),
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": provider_message_id,
+                "reason": "manual_restore"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("restore response");
+    assert_eq!(restore_response.status(), StatusCode::OK);
+
+    let add_reaction_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            &format!("/api/v1/telegram/messages/{message_id}/reactions"),
+            json!({
+                "command_id": format!("react-{suffix}"),
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": provider_message_id,
+                "reaction_emoji": "👍",
+                "sender_id": "owner",
+                "sender_display_name": "Owner"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("add reaction response");
+    assert_eq!(add_reaction_response.status(), StatusCode::OK);
+
+    let remove_reaction_response = app
+        .clone()
+        .oneshot(delete_request_with_token(
+            &format!(
+                "/api/v1/telegram/messages/{message_id}/reactions?account_id={account_id}&provider_chat_id={chat_id}&provider_message_id={provider_message_id}&reaction_emoji=%F0%9F%91%8D&sender_id=owner&sender_display_name=Owner&command_id=unreact-{suffix}"
+            ),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("remove reaction response");
+    assert_eq!(remove_reaction_response.status(), StatusCode::OK);
+
+    let commands_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/commands?account_id={account_id}&limit=20"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("commands response");
+    assert_eq!(commands_response.status(), StatusCode::OK);
+    let commands_body = json_body(commands_response).await;
+    let items = commands_body["items"].as_array().expect("command items");
+    let kinds: Vec<&str> = items
+        .iter()
+        .filter_map(|item| item["command_kind"].as_str())
+        .collect();
+
+    for expected_kind in ["restore_visibility", "react", "unreact"] {
+        assert!(
+            kinds.iter().any(|kind| kind == &expected_kind),
+            "expected command row for {expected_kind}, got {kinds:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn telegram_dialog_search_returns_projected_chat_matches() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-dialog-search-{suffix}");
+    let matching_chat_id = format!("chat-alpha-{suffix}");
+    let other_chat_id = format!("chat-beta-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Dialog Search",
+            "external_account_id": format!("tg-dialog-search-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": matching_chat_id,
+            "provider_message_id": format!("dialog-search-message-1-{suffix}"),
+            "chat_kind": "private",
+            "chat_title": "Project Alpha Ops",
+            "sender_id": format!("sender-alpha-{suffix}"),
+            "sender_display_name": "Alpha Sender",
+            "text": "Alpha conversation seed",
+            "import_batch_id": format!("telegram-dialog-search-seed-1-{suffix}"),
+            "occurred_at": "2026-06-06T12:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": other_chat_id,
+            "provider_message_id": format!("dialog-search-message-2-{suffix}"),
+            "chat_kind": "private",
+            "chat_title": "Beta Support",
+            "sender_id": format!("sender-beta-{suffix}"),
+            "sender_display_name": "Beta Sender",
+            "text": "Beta conversation seed",
+            "import_batch_id": format!("telegram-dialog-search-seed-2-{suffix}"),
+            "occurred_at": "2026-06-06T12:05:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/chats/search?q=Alpha&account_id={account_id}&limit=10"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("dialog search response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    let items = body["items"].as_array().expect("dialog search items");
+    assert_eq!(body["query"], json!("Alpha"));
+    assert_eq!(body["total"], json!(1));
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["provider_chat_id"], json!(matching_chat_id));
+    assert_eq!(items[0]["title"], json!("Project Alpha Ops"));
+}
+
+#[tokio::test]
+async fn telegram_media_search_filters_by_free_text_query() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-media-search-{suffix}");
+    let chat_id = format!("chat-media-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Media Search",
+            "external_account_id": format!("tg-media-search-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    let message_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": format!("media-search-message-1-{suffix}"),
+                "chat_kind": "private",
+                "chat_title": "Media Search Chat",
+                "sender_id": format!("sender-media-{suffix}"),
+                "sender_display_name": "Media Sender",
+                "text": "invoice attachment",
+                "import_batch_id": format!("telegram-media-search-seed-1-{suffix}"),
+                "occurred_at": "2026-06-06T12:00:00Z",
+                "delivery_state": "received"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("message response");
+    assert_eq!(message_response.status(), StatusCode::OK);
+    let message_body = json_body(message_response).await;
+    let message_id = message_body["message_id"]
+        .as_str()
+        .expect("message id")
+        .to_owned();
+
+    sqlx::query(
+        r#"
+        UPDATE communication_messages
+        SET message_metadata = $2::jsonb
+        WHERE message_id = $1
+        "#,
+    )
+    .bind(&message_id)
+    .bind(json!({
+        "attachments": [
+            {
+                "file_name": "invoice-2026.pdf",
+                "kind": "document",
+                "mime_type": "application/pdf",
+                "size_bytes": 12345,
+                "download_state": "downloaded",
+                "attachment_id": "attachment-invoice-1",
+                "tdlib_file_id": 4201,
+                "local_path": "/tmp/hermes/invoice-2026.pdf"
+            },
+            {
+                "file_name": "holiday-photo.jpg",
+                "kind": "photo",
+                "mime_type": "image/jpeg",
+                "size_bytes": 45678,
+                "download_state": "downloaded"
+            }
+        ]
+    }))
+    .execute(&pool)
+    .await
+    .expect("update message metadata");
+
+    let response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!(
+                "/api/v1/telegram/search/media?q=invoice&account_id={account_id}&provider_chat_id={chat_id}&limit=20"
+            ),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("media search response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    let items = body["items"].as_array().expect("media search items");
+    assert_eq!(body["query"], json!("invoice"));
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["file_name"], json!("invoice-2026.pdf"));
+    assert_eq!(
+        items[0]["provider_attachment_id"],
+        json!("attachment-invoice-1")
+    );
+    assert_eq!(items[0]["tdlib_file_id"], json!(4201));
+    assert_eq!(
+        items[0]["local_path"],
+        json!("/tmp/hermes/invoice-2026.pdf")
+    );
+}
+
+#[tokio::test]
+async fn telegram_pinned_messages_route_returns_projection_backed_items() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-pinned-messages-{suffix}");
+    let chat_id = format!("chat-pinned-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Pinned Messages",
+            "external_account_id": format!("tg-pinned-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+
+    let first_message_id = ingest_fixture_telegram_message(
+        app.clone(),
+        &account_id,
+        &chat_id,
+        &format!("pinned-message-1-{suffix}"),
+        "Pinned root message",
+        "2026-06-06T12:00:00Z",
+    )
+    .await;
+    let second_message_id = ingest_fixture_telegram_message(
+        app.clone(),
+        &account_id,
+        &chat_id,
+        &format!("pinned-message-2-{suffix}"),
+        "Newest pinned message",
+        "2026-06-06T12:10:00Z",
+    )
+    .await;
+    let unpinned_message_id = ingest_fixture_telegram_message(
+        app.clone(),
+        &account_id,
+        &chat_id,
+        &format!("pinned-message-3-{suffix}"),
+        "Unpinned message",
+        "2026-06-06T12:20:00Z",
+    )
+    .await;
+
+    for message_id in [&first_message_id, &second_message_id] {
+        sqlx::query(
+            r#"
+            UPDATE communication_messages
+            SET message_metadata = $2::jsonb
+            WHERE message_id = $1
+            "#,
+        )
+        .bind(message_id)
+        .bind(json!({ "is_pinned": true }))
+        .execute(&pool)
+        .await
+        .expect("update pinned metadata");
+    }
+    sqlx::query(
+        r#"
+        UPDATE communication_messages
+        SET message_metadata = $2::jsonb
+        WHERE message_id = $1
+        "#,
+    )
+    .bind(&unpinned_message_id)
+    .bind(json!({ "is_pinned": false }))
+    .execute(&pool)
+    .await
+    .expect("update unpinned metadata");
+
+    let chats_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/chats?account_id={account_id}&limit=10"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("chats response");
+    assert_eq!(chats_response.status(), StatusCode::OK);
+    let chats_body = json_body(chats_response).await;
+    let telegram_chat_id = chats_body["items"][0]["telegram_chat_id"]
+        .as_str()
+        .expect("telegram chat id")
+        .to_owned();
+
+    let response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/chats/{telegram_chat_id}/pinned-messages?limit=10"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("pinned messages response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    let items = body["items"].as_array().expect("pinned message items");
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["message_id"], json!(second_message_id));
+    assert_eq!(items[0]["text"], json!("Newest pinned message"));
+    assert_eq!(items[1]["message_id"], json!(first_message_id));
+    assert!(
+        items
+            .iter()
+            .all(|item| item["message_id"] != json!(unpinned_message_id))
+    );
+}
+
+#[tokio::test]
+async fn telegram_message_created_event_includes_projected_chat_snapshot() {
+    let ctx = TestContext::new().await;
+    let pool = ctx.pool().clone();
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-created-event-{suffix}");
+    let chat_id = format!("chat-created-event-{suffix}");
+    let provider_message_id = format!("provider-created-event-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Created Event",
+            "external_account_id": format!("tg-created-event-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+
+    let message_id = ingest_fixture_telegram_message(
+        app.clone(),
+        &account_id,
+        &chat_id,
+        &provider_message_id,
+        "@hermes newest message should patch dialog caches.",
+        "2026-06-06T12:00:00Z",
+    )
+    .await;
+
+    let chats_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/chats?account_id={account_id}&limit=10"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("chats response");
+    assert_eq!(chats_response.status(), StatusCode::OK);
+    let chats_body = json_body(chats_response).await;
+    let telegram_chat_id = chats_body["items"][0]["telegram_chat_id"]
+        .as_str()
+        .expect("telegram chat id")
+        .to_owned();
+
+    let realtime_payload: Value = sqlx::query_scalar::<_, Value>(
+        r#"
+        SELECT payload
+        FROM event_log
+        WHERE event_type = 'telegram.message.created'
+          AND subject->>'id' = $1
+        ORDER BY position DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("telegram message created event payload");
+    assert_eq!(realtime_payload["message"]["message_id"], json!(message_id));
+    assert_eq!(
+        realtime_payload["telegram_chat_id"],
+        json!(telegram_chat_id)
+    );
+    assert_eq!(
+        realtime_payload["chat"]["telegram_chat_id"],
+        json!(telegram_chat_id)
+    );
+    assert_eq!(realtime_payload["chat"]["provider_chat_id"], json!(chat_id));
+    assert_eq!(
+        realtime_payload["chat"]["metadata"]["unread_count"],
+        json!(1)
+    );
+    assert_eq!(
+        realtime_payload["chat"]["metadata"]["mention_count"],
+        json!(1)
+    );
+}
+
+#[tokio::test]
+async fn telegram_message_pin_route_records_local_projection_command_and_audit() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-message-pin-{suffix}");
+    let chat_id = format!("chat-message-pin-{suffix}");
+    let provider_message_id = format!("provider-message-pin-{suffix}");
+    let command_id = format!("pin-message-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Message Pin",
+            "external_account_id": format!("tg-message-pin-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    let message_id = ingest_fixture_telegram_message(
+        app.clone(),
+        &account_id,
+        &chat_id,
+        &provider_message_id,
+        "Pin this Telegram message locally.",
+        "2026-06-06T12:00:00Z",
+    )
+    .await;
+
+    let response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            &format!("/api/v1/telegram/messages/{message_id}/pin"),
+            json!({
+                "command_id": command_id,
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": provider_message_id,
+                "is_pinned": true
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("message pin response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    assert_eq!(body["operation"], json!("pin"));
+    assert_eq!(body["status"], json!("pinned"));
+
+    let metadata: Value = sqlx::query_scalar(
+        "SELECT message_metadata FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message metadata");
+    assert_eq!(metadata["pinned"], json!(true));
+    assert_eq!(metadata["is_pinned"], json!(true));
+
+    let command_row = sqlx::query(
+        r#"
+        SELECT command_kind, capability_state, action_class, payload
+        FROM telegram_provider_write_commands
+        WHERE command_id = $1
+        "#,
+    )
+    .bind(&command_id)
+    .fetch_one(&pool)
+    .await
+    .expect("pin command row");
+    let command_kind: String = command_row.try_get("command_kind").expect("command kind");
+    let capability_state: String = command_row
+        .try_get("capability_state")
+        .expect("capability state");
+    let action_class: String = command_row.try_get("action_class").expect("action class");
+    let payload: Value = command_row.try_get("payload").expect("payload");
+    assert_eq!(command_kind, "pin");
+    assert_eq!(capability_state, "degraded");
+    assert_eq!(action_class, "local_write");
+    assert_eq!(payload["is_pinned"], json!(true));
+
+    let audit_row = sqlx::query(
+        r#"
+        SELECT operation, metadata
+        FROM api_audit_log
+        WHERE target_id = $1
+          AND operation = 'telegram.message.pin'
+        ORDER BY audit_id DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("pin audit row");
+    let audit_metadata: Value = audit_row.try_get("metadata").expect("audit metadata");
+    assert_eq!(audit_metadata["action_class"], json!("local_write"));
+    assert_eq!(audit_metadata["capability"], json!("telegram.message.pin"));
+    assert_eq!(audit_metadata["operation"], json!("pin"));
+    assert_eq!(audit_metadata["provider_chat_id"], json!(chat_id));
+
+    let realtime_payload: Value = sqlx::query_scalar(
+        r#"
+        SELECT payload
+        FROM event_log
+        WHERE event_type = 'telegram.message.updated'
+          AND subject->>'id' = $1
+        ORDER BY position DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("telegram message updated event payload");
+    assert_eq!(realtime_payload["is_pinned"], json!(true));
+    assert_eq!(realtime_payload["message"]["message_id"], json!(message_id));
+    assert_eq!(
+        realtime_payload["message"]["provider_chat_id"],
+        json!(chat_id)
+    );
+    assert_eq!(
+        realtime_payload["message"]["metadata"]["is_pinned"],
+        json!(true)
+    );
+    assert!(
+        realtime_payload["telegram_chat_id"]
+            .as_str()
+            .expect("telegram chat id")
+            .starts_with("telegram_chat:v4:")
+    );
+}
+
+#[tokio::test]
+async fn telegram_reference_routes_return_enriched_message_summaries() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-reference-{suffix}");
+    let chat_id = format!("reference-chat-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram References",
+            "external_account_id": format!("tg-reference-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+
+    let root_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": format!("reference-root-{suffix}"),
+                "chat_kind": "group",
+                "chat_title": "Reference Room",
+                "sender_id": format!("sender-root-{suffix}"),
+                "sender_display_name": "Root Sender",
+                "text": "Root message for reply targets",
+                "import_batch_id": format!("telegram-reference-root-{suffix}"),
+                "occurred_at": "2026-06-06T12:00:00Z",
+                "delivery_state": "received"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("root response");
+    assert_eq!(root_response.status(), StatusCode::OK);
+    let root_body = json_body(root_response).await;
+    let root_message_id = root_body["message_id"]
+        .as_str()
+        .expect("root message id")
+        .to_owned();
+
+    let reply_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": format!("reference-reply-{suffix}"),
+                "chat_kind": "group",
+                "chat_title": "Reference Room",
+                "sender_id": format!("sender-reply-{suffix}"),
+                "sender_display_name": "Reply Sender",
+                "text": "Reply body should appear in chain",
+                "import_batch_id": format!("telegram-reference-reply-{suffix}"),
+                "occurred_at": "2026-06-06T12:01:00Z",
+                "delivery_state": "received"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("reply response");
+    assert_eq!(reply_response.status(), StatusCode::OK);
+    let reply_body = json_body(reply_response).await;
+    let reply_message_id = reply_body["message_id"]
+        .as_str()
+        .expect("reply message id")
+        .to_owned();
+
+    let forward_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": format!("reference-forward-{suffix}"),
+                "chat_kind": "group",
+                "chat_title": "Reference Room",
+                "sender_id": format!("sender-forward-{suffix}"),
+                "sender_display_name": "Forward Sender",
+                "text": "Forward body should appear in summaries",
+                "import_batch_id": format!("telegram-reference-forward-{suffix}"),
+                "occurred_at": "2026-06-06T12:02:00Z",
+                "delivery_state": "received"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("forward response");
+    assert_eq!(forward_response.status(), StatusCode::OK);
+    let forward_body = json_body(forward_response).await;
+    let forward_message_id = forward_body["message_id"]
+        .as_str()
+        .expect("forward message id")
+        .to_owned();
+
+    let pool = ctx.pool();
+    lifecycle::insert_reply_ref(
+        pool,
+        &reply_message_id,
+        &root_message_id,
+        &account_id,
+        &chat_id,
+        &format!("reference-reply-{suffix}"),
+        &format!("reference-root-{suffix}"),
+        false,
+    )
+    .await
+    .expect("insert reply ref");
+    lifecycle::insert_forward_ref(
+        pool,
+        &forward_message_id,
+        &account_id,
+        &chat_id,
+        &format!("reference-forward-{suffix}"),
+        Some("origin-chat-1"),
+        Some("origin-message-1"),
+        Some("origin-sender-1"),
+        Some("Original Author"),
+        Some(
+            chrono::DateTime::parse_from_rfc3339("2026-06-05T11:00:00Z")
+                .expect("timestamp")
+                .with_timezone(&Utc),
+        ),
+    )
+    .await
+    .expect("insert forward ref");
+
+    let reply_chain_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/messages/{reply_message_id}/reply-chain"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("reply chain response");
+    assert_eq!(reply_chain_response.status(), StatusCode::OK);
+    let reply_chain_body = json_body(reply_chain_response).await;
+    assert_eq!(
+        reply_chain_body["reply_to"][0]["target_message_summary"]["text"],
+        json!("Root message for reply targets")
+    );
+    assert_eq!(
+        reply_chain_body["reply_to"][0]["target_message_summary"]["sender_display_name"],
+        json!("Root Sender")
+    );
+
+    let root_chain_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/messages/{root_message_id}/reply-chain"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("root chain response");
+    assert_eq!(root_chain_response.status(), StatusCode::OK);
+    let root_chain_body = json_body(root_chain_response).await;
+    assert_eq!(
+        root_chain_body["replies"][0]["source_message_summary"]["text"],
+        json!("Reply body should appear in chain")
+    );
+    assert_eq!(
+        root_chain_body["replies"][0]["source_message_summary"]["sender_display_name"],
+        json!("Reply Sender")
+    );
+
+    let forward_chain_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/messages/{forward_message_id}/forward-chain"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("forward chain response");
+    assert_eq!(forward_chain_response.status(), StatusCode::OK);
+    let forward_chain_body = json_body(forward_chain_response).await;
+    assert_eq!(
+        forward_chain_body["forwards"][0]["source_message_summary"]["text"],
+        json!("Forward body should appear in summaries")
+    );
+    assert_eq!(
+        forward_chain_body["forwards"][0]["forward_origin_sender_name"],
+        json!("Original Author")
+    );
+}
+
+#[tokio::test]
+async fn telegram_chat_detail_and_members_routes_return_projected_data() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-chat-detail-{suffix}");
+    let chat_id = format!("chat-detail-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Chat Detail",
+            "external_account_id": format!("tg-chat-detail-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    for (index, (sender_id, sender_display_name, text)) in [
+        (format!("sender-a-{suffix}"), "Alice", "First chat message"),
+        (format!("sender-b-{suffix}"), "Bob", "Second chat message"),
+        (format!("sender-a-{suffix}"), "Alice", "Third chat message"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        assert_ok(
+            app.clone(),
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": format!("message-{sender_display_name}-{suffix}-{index}"),
+                "chat_kind": "group",
+                "chat_title": "Project Room",
+                "sender_id": sender_id,
+                "sender_display_name": sender_display_name,
+                "text": text,
+                "import_batch_id": format!("telegram-chat-detail-seed-{suffix}"),
+                "occurred_at": "2026-06-06T12:00:00Z",
+                "delivery_state": "received"
+            }),
+        )
+        .await;
+    }
+
+    let chats_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/chats?account_id={account_id}&limit=10"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("chat list response");
+    assert_eq!(chats_response.status(), StatusCode::OK);
+    let chats_body = json_body(chats_response).await;
+    let telegram_chat_id = chats_body["items"][0]["telegram_chat_id"]
+        .as_str()
+        .expect("telegram chat id")
+        .to_owned();
+
+    let detail_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/chats/{telegram_chat_id}"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("chat detail response");
+    assert_eq!(detail_response.status(), StatusCode::OK);
+    let detail_body = json_body(detail_response).await;
+    assert_eq!(detail_body["item"]["provider_chat_id"], json!(chat_id));
+    assert_eq!(detail_body["item"]["title"], json!("Project Room"));
+
+    let members_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/chats/{telegram_chat_id}/members?limit=10"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("chat members response");
+    assert_eq!(members_response.status(), StatusCode::OK);
+    let members_body = json_body(members_response).await;
+    let items = members_body["items"].as_array().expect("member items");
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["sender_display_name"], json!("Alice"));
+    assert_eq!(items[0]["message_count"], json!(2));
+    assert_eq!(items[1]["sender_display_name"], json!("Bob"));
+}
+
+#[tokio::test]
+async fn telegram_folders_route_returns_projection_backed_filters() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-folders-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Folder Source",
+            "external_account_id": format!("tg-folders-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/folders-{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+
+    for (provider_chat_id, title, folder_name) in [
+        ("chat-alpha", "Alpha Room", "Work"),
+        ("chat-beta", "Beta Room", "Work"),
+        ("chat-gamma", "Gamma Room", "Archive"),
+    ] {
+        assert_ok(
+            app.clone(),
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": format!("{provider_chat_id}-{suffix}"),
+                "provider_message_id": format!("message-{provider_chat_id}-{suffix}"),
+                "chat_kind": "group",
+                "chat_title": title,
+                "sender_id": format!("sender-{provider_chat_id}-{suffix}"),
+                "sender_display_name": title,
+                "text": format!("Message for {folder_name}"),
+                "import_batch_id": format!("telegram-folders-seed-{suffix}"),
+                "occurred_at": "2026-06-06T12:00:00Z",
+                "delivery_state": "received"
+            }),
+        )
+        .await;
+
+        sqlx::query(
+            r#"
+            UPDATE telegram_chats
+            SET metadata = jsonb_set(
+                COALESCE(metadata, '{}'::jsonb),
+                '{folder_name}',
+                to_jsonb($3::text),
+                true
+            )
+            WHERE account_id = $1
+              AND provider_chat_id = $2
+            "#,
+        )
+        .bind(&account_id)
+        .bind(format!("{provider_chat_id}-{suffix}"))
+        .bind(folder_name)
+        .execute(&pool)
+        .await
+        .expect("folder metadata update");
+    }
+
+    let folders_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/folders?account_id={account_id}"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("folders response");
+    assert_eq!(folders_response.status(), StatusCode::OK);
+    let folders_body = json_body(folders_response).await;
+    let items = folders_body["items"].as_array().expect("folder items");
+    assert_eq!(items.len(), 3);
+    assert_eq!(items[0]["id"], json!("local:all"));
+    assert_eq!(items[0]["count"], json!(3));
+    assert_eq!(items[1]["id"], json!("folder:Archive"));
+    assert_eq!(items[1]["count"], json!(1));
+    assert_eq!(items[2]["id"], json!("folder:Work"));
+    assert_eq!(items[2]["count"], json!(2));
+}
+
+#[tokio::test]
 async fn telegram_tdlib_projection_accepts_media_message_without_text() {
     let ctx = TestContext::new().await;
     let database_url = ctx.connection_string();
@@ -1693,7 +3126,101 @@ async fn telegram_capabilities_report_qr_login_readiness_inputs() {
     assert_eq!(body["telegram_app_credentials_configured"], json!(true));
     assert_eq!(body["tdjson_runtime_available"], json!(false));
     assert_eq!(body["qr_login_ready"], json!(false));
-    assert_capability_status(&body, "tdlib_live_runtime", "blocked", false);
+    assert_capability_status(&body, "tdlib_live_runtime", "blocked", true);
+}
+
+#[tokio::test]
+async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let suffix = unique_suffix();
+    let user_account_id = format!("telegram-cap-user-{suffix}");
+    let bot_account_id = format!("telegram-cap-bot-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": user_account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Capability User",
+            "external_account_id": format!("tg-cap-user-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/cap-user-{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": bot_account_id,
+            "provider_kind": "telegram_bot",
+            "display_name": "Telegram Capability Bot",
+            "external_account_id": format!("tg-cap-bot-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/cap-bot-{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+
+    let user_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/accounts/{user_account_id}/capabilities"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("user account capabilities response");
+    assert_eq!(user_response.status(), StatusCode::OK);
+    let user_body = json_body(user_response).await;
+    assert_eq!(
+        user_body["account_scope"]["account_id"],
+        json!(user_account_id)
+    );
+    assert_eq!(
+        user_body["account_scope"]["provider_kind"],
+        json!("telegram_user")
+    );
+    assert_eq!(user_body["account_scope"]["runtime_kind"], json!("fixture"));
+    assert_eq!(
+        user_body["account_scope"]["lifecycle_state"],
+        json!("active")
+    );
+    assert_eq!(user_body["runtime_mode"], json!("fixture"));
+    assert_capability_status(&user_body, "messages.send_text", "degraded", true);
+
+    let bot_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/accounts/{bot_account_id}/capabilities"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("bot account capabilities response");
+    assert_eq!(bot_response.status(), StatusCode::OK);
+    let bot_body = json_body(bot_response).await;
+    assert_eq!(
+        bot_body["account_scope"]["account_id"],
+        json!(bot_account_id)
+    );
+    assert_eq!(
+        bot_body["account_scope"]["provider_kind"],
+        json!("telegram_bot")
+    );
+    assert_capability_status(&bot_body, "runtime.tdlib_live", "unsupported", true);
+    assert_capability_status(&bot_body, "auth.qr_start", "unsupported", true);
 }
 
 #[tokio::test]
@@ -1889,14 +3416,60 @@ async fn telegram_qr_login_cancel_unknown_setup_returns_json_not_found() {
 
 fn assert_capability_status(body: &Value, capability: &str, status: &str, closure_gate: bool) {
     let capabilities = body["capabilities"].as_array().expect("capabilities");
+    let operation = match capability {
+        "telegram_fixture_runtime" => "runtime.fixture",
+        "automation_dry_run" => "automation.dry_run",
+        "tdlib_live_runtime" => "runtime.tdlib_live",
+        "automation_live_send" => "automation.live_send",
+        "whisper_rs_speech_to_text" => "calls.transcription_live",
+        other => other,
+    };
     assert!(
         capabilities.iter().any(|item| {
-            item["capability"] == capability
+            (item["capability"] == capability || item["operation"] == operation)
                 && item["status"] == status
                 && item["closure_gate"] == closure_gate
         }),
-        "expected capability {capability} to have status {status} and closure_gate {closure_gate}"
+        "expected capability {capability}/{operation} to have status {status} and closure_gate {closure_gate}"
     );
+}
+
+async fn ingest_fixture_telegram_message<S>(
+    app: S,
+    account_id: &str,
+    chat_id: &str,
+    provider_message_id: &str,
+    text: &str,
+    occurred_at: &str,
+) -> String
+where
+    S: tower::Service<Request<Body>, Response = axum::response::Response> + Clone,
+    S::Error: std::fmt::Debug,
+    S::Future: Send + 'static,
+{
+    let response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": chat_id,
+                "provider_message_id": provider_message_id,
+                "chat_kind": "private",
+                "chat_title": "Pinned Message Chat",
+                "sender_id": "sender-pinned",
+                "sender_display_name": "Pinned Sender",
+                "text": text,
+                "import_batch_id": format!("telegram-pinned-seed-{provider_message_id}"),
+                "occurred_at": occurred_at,
+                "delivery_state": "received"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("fixture message response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    body["message_id"].as_str().expect("message id").to_owned()
 }
 
 async fn assert_ok<S>(app: S, path: &str, body: Value)

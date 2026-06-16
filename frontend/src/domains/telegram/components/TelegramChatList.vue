@@ -6,6 +6,7 @@ import Icon from '../../../shared/ui/Icon.vue'
 import type { TelegramChat, TelegramMessage } from '../types/telegram'
 import {
   telegramChatIsPinned,
+  telegramChatMentionCountValue,
   telegramChatUnreadCount,
   telegramChatPreview,
   telegramMessageAttachmentHints
@@ -119,6 +120,13 @@ function hasAttachment(chat: TelegramChat): boolean {
           </span>
           <span class="telegram-chat-side">
             <time>{{ chatTime(telegramChats[vitem.index]) }}</time>
+            <span
+              v-if="telegramChatMentionCountValue(telegramChats[vitem.index]) > 0"
+              class="telegram-chat-mention-badge"
+              :title="t('Unread mentions')"
+            >
+              @{{ telegramChatMentionCountValue(telegramChats[vitem.index]) }}
+            </span>
             <b v-if="telegramChatUnreadCount(telegramChats[vitem.index]) > 0">{{ telegramChatUnreadCount(telegramChats[vitem.index]) }}</b>
             <Icon v-else-if="telegramChats[vitem.index].metadata?.delivery_state === 'sent'" icon="tabler:checks" width="15" height="15" />
           </span>
@@ -271,6 +279,16 @@ function hasAttachment(chat: TelegramChat): boolean {
   border-radius: 10px;
   padding: 1px 6px;
   min-width: 18px;
+  text-align: center;
+}
+.telegram-chat-mention-badge {
+  font-size: 10px;
+  background: #fff4e5;
+  color: #9a5b00;
+  border: 1px solid #f4c37d;
+  border-radius: 10px;
+  padding: 1px 6px;
+  min-width: 22px;
   text-align: center;
 }
 .telegram-list-footer {

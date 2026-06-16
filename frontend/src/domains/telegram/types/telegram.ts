@@ -35,20 +35,35 @@ export type TelegramAccountLifecycleResponse = {
 }
 
 // --- Capabilities ---
-export type TelegramCapabilityStatus = {
-  capability: string
-  status: 'available' | 'blocked' | string
-  closure_gate: boolean
+export type TelegramCapabilityState = 'available' | 'blocked' | 'degraded' | 'unsupported'
+export type TelegramActionClass = 'read' | 'local_write' | 'provider_write' | 'destructive' | 'export' | 'secret_access' | 'automation'
+
+export type TelegramOperationCapability = {
+  operation: string
+  category: string
+  status: TelegramCapabilityState
+  action_class: TelegramActionClass
   reason: string
+  confirmation_required: boolean
+  closure_gate: boolean
+}
+
+export type TelegramCapabilityAccountScope = {
+  account_id: string
+  provider_kind: TelegramProviderKind
+  runtime_kind: string
+  lifecycle_state: TelegramAccountLifecycleState
 }
 
 export type TelegramCapabilitiesResponse = {
   version: string
   runtime_mode: string
+  account_scope?: TelegramCapabilityAccountScope | null
   telegram_app_credentials_configured: boolean
   tdjson_runtime_available: boolean
   qr_login_ready: boolean
-  capabilities: TelegramCapabilityStatus[]
+  bot_runtime_available: boolean
+  capabilities: TelegramOperationCapability[]
   unsupported_features: string[]
 }
 
@@ -59,10 +74,25 @@ export type TelegramRuntimeStatus = {
   runtime_kind: string
   status: 'stopped' | 'running' | 'blocked' | 'degraded' | 'error' | string
   fixture_runtime: boolean
+  tdjson_path: string | null
   tdjson_runtime_available: boolean
+  tdjson_probe_error: string | null
+  telegram_api_id_configured: boolean
+  telegram_api_hash_configured: boolean
   telegram_app_credentials_configured: boolean
   live_send_available: boolean
+  runtime_blockers: string[]
   last_error: string | null
+  last_sync_scope?: string | null
+  last_sync_status?: string | null
+  last_synced_count?: number | null
+  last_sync_has_more?: boolean | null
+  last_sync_provider_chat_id?: string | null
+  last_command_id?: string | null
+  last_command_status?: string | null
+  last_command_provider_chat_id?: string | null
+  last_command_message_id?: string | null
+  last_command_telegram_chat_id?: string | null
   updated_at: string
 }
 
@@ -88,6 +118,37 @@ export type TelegramChatListResponse = {
   items: TelegramChat[]
 }
 
+export type TelegramChatDetailResponse = {
+  item: TelegramChat
+}
+
+export type TelegramChatGroupFilterListResponse = {
+  items: TelegramChatGroupFilter[]
+}
+
+export type TelegramChatMember = {
+  sender_id: string
+  sender_display_name: string | null
+  message_count: number
+  last_message_at: string | null
+}
+
+export type TelegramChatMemberListResponse = {
+  items: TelegramChatMember[]
+}
+
+export type TelegramChatActionRequest = {
+  account_id: string
+  provider_chat_id: string
+}
+
+export type TelegramChatActionResponse = {
+  telegram_chat_id: string
+  action: string
+  status: string
+  metadata: Record<string, unknown>
+}
+
 // --- Messages ---
 export type TelegramMessage = {
   message_id: string
@@ -110,6 +171,34 @@ export type TelegramMessageListResponse = {
   items: TelegramMessage[]
 }
 
+export type TelegramMessageSearchResponse = {
+  query: string
+  items: TelegramMessage[]
+  total: number
+}
+export type TelegramChatSearchResponse = {
+  query: string
+  items: TelegramChat[]
+  total: number
+}
+export type TelegramMediaItem = {
+  message_id: string
+  provider_message_id: string
+  provider_chat_id: string
+  file_name: string
+  kind: string
+  mime_type: string | null
+  size_bytes: number | null
+  occurred_at: string | null
+  download_state: string
+  tdlib_file_id: number | null
+  provider_attachment_id: string | null
+  local_path: string | null
+}
+export type TelegramMediaSearchResponse = {
+  query?: string | null
+  items: TelegramMediaItem[]
+}
 // --- Sync ---
 export type TelegramChatSyncRequest = {
   account_id: string
@@ -170,7 +259,7 @@ export type TelegramQrLoginStatusResponse = {
 
 // --- UI types ---
 export type TelegramChatFilter = 'all' | 'unread' | 'mentions' | 'pinned' | 'projects' | 'bots' | 'archived'
-export type TelegramThreadTab = 'messages' | 'files' | 'links' | 'topics' | 'pinned' | 'timeline'
+export type TelegramThreadTab = 'messages' | 'files' | 'links' | 'voice' | 'topics' | 'pinned' | 'timeline'
 export type TelegramRailTab = 'context' | 'members' | 'about'
 
 export type TelegramChatFilterCount = {
@@ -197,6 +286,7 @@ export type TelegramAttachmentHint = {
   downloadState: 'remote' | 'downloading' | 'downloaded' | 'unknown'
   localPath: string | null
   messageId: string
+  providerMessageId?: string | null
 }
 
 // --- Additional request/response types for API ---
@@ -266,5 +356,344 @@ export type TelegramMessageIngestResponse = {
 }
 
 export type TelegramCallListResponse = {
-  items: { call_id: string; account_id: string; provider_chat_id: string; status: string; occurred_at: string | null }[]
+  items: TelegramCall[]
 }
+
+export type TelegramCall = {
+  call_id: string
+  account_id: string
+  provider_chat_id: string
+  status: string
+  occurred_at: string | null
+}
+
+export type TelegramCallTranscript = {
+  transcript_id: string
+  call_id: string
+  account_id: string
+  provider_chat_id: string
+  transcript_status: string
+  stt_provider: string
+  source_audio_ref: string | null
+  language_code: string | null
+  transcript_text: string
+  segments: unknown
+  provenance: unknown
+  created_at: string
+  updated_at: string
+}
+
+export type TelegramCallTranscriptResponse = {
+  transcript: TelegramCallTranscript | null
+}
+
+// --- Lifecycle types (ADR-0091) ---
+
+export type TelegramTombstoneReasonClass =
+  | 'deleted_by_owner'
+  | 'deleted_by_counterparty'
+  | 'deleted_by_provider'
+  | 'moderation_removed'
+  | 'account_removed'
+  | 'retention_policy'
+  | 'unknown'
+
+export type TelegramTombstoneActorClass = 'owner' | 'provider' | 'automation' | 'system' | 'unknown'
+
+export type TelegramCommandKind =
+  | 'send_text'
+  | 'send_media'
+  | 'edit'
+  | 'delete'
+  | 'restore_visibility'
+  | 'mark_read'
+  | 'pin'
+  | 'unpin'
+  | 'archive'
+  | 'unarchive'
+  | 'mute'
+  | 'unmute'
+  | 'react'
+  | 'unreact'
+  | 'reply'
+  | 'forward'
+  | 'join'
+  | 'leave'
+  | 'admin_action'
+
+export type TelegramCommandStatus = 'queued' | 'executing' | 'completed' | 'failed' | 'retrying' | 'cancelled'
+export type TelegramConfirmationDecision = 'pending' | 'confirmed' | 'rejected' | 'not_required'
+
+export type TelegramLifecycleResponse = {
+  operation: string
+  message_id: string
+  account_id: string
+  provider_chat_id: string
+  provider_message_id: string
+  status: string
+  timestamp: string
+  version_number: number | null
+  tombstone_id: string | null
+}
+
+export type TelegramEditRequest = {
+  command_id: string
+  account_id: string
+  provider_chat_id: string
+  provider_message_id: string
+  new_text: string
+}
+
+export type TelegramDeleteRequest = {
+  command_id: string
+  account_id: string
+  provider_chat_id: string
+  provider_message_id: string
+  reason_class: TelegramTombstoneReasonClass
+  actor_class: TelegramTombstoneActorClass
+  is_provider_delete: boolean
+}
+
+export type TelegramRestoreVisibilityRequest = {
+  command_id: string
+  account_id: string
+  provider_chat_id: string
+  provider_message_id: string
+  reason: string
+}
+
+export type TelegramPinRequest = {
+  command_id: string
+  account_id: string
+  provider_chat_id: string
+  provider_message_id: string
+  is_pinned: boolean
+}
+
+export type TelegramMessageVersion = {
+  version_id: string
+  message_id: string
+  account_id: string
+  provider_message_id: string
+  provider_chat_id: string
+  version_number: number
+  body_text: string | null
+  edit_timestamp: string
+  source_event: string | null
+  raw_diff_payload: Record<string, unknown>
+  provenance: Record<string, unknown>
+  created_at: string
+}
+
+export type TelegramMessageVersionListResponse = {
+  message_id: string
+  versions: TelegramMessageVersion[]
+}
+
+export type TelegramMessageTombstone = {
+  tombstone_id: string
+  message_id: string
+  account_id: string
+  provider_message_id: string
+  provider_chat_id: string
+  reason_class: TelegramTombstoneReasonClass
+  actor_class: TelegramTombstoneActorClass
+  observed_at: string
+  source_event: string | null
+  is_provider_delete: boolean
+  is_local_visible: boolean
+  metadata: Record<string, unknown>
+  provenance: Record<string, unknown>
+  created_at: string
+}
+
+export type TelegramMessageTombstoneListResponse = {
+  message_id: string
+  tombstones: TelegramMessageTombstone[]
+}
+
+export type TelegramReplyRef = {
+  reply_ref_id: string
+  source_message_id: string
+  target_message_id: string
+  account_id: string
+  provider_chat_id: string
+  source_provider_id: string
+  target_provider_id: string
+  reply_depth: number
+  is_topic_reply: boolean
+  topic_id: string | null
+  source_message_summary: TelegramMessageReferenceSummary | null
+  target_message_summary: TelegramMessageReferenceSummary | null
+  metadata: Record<string, unknown>
+  provenance: Record<string, unknown>
+  created_at: string
+}
+
+export type TelegramMessageReferenceSummary = {
+  message_id: string
+  provider_message_id: string
+  provider_chat_id: string | null
+  chat_title: string
+  sender: string
+  sender_display_name: string | null
+  text: string
+  occurred_at: string | null
+}
+
+export type TelegramForwardRef = {
+  forward_ref_id: string
+  source_message_id: string
+  account_id: string
+  provider_chat_id: string
+  source_provider_id: string
+  forward_origin_chat_id: string | null
+  forward_origin_message_id: string | null
+  forward_origin_sender_id: string | null
+  forward_origin_sender_name: string | null
+  forward_date: string | null
+  forward_depth: number
+  source_message_summary: TelegramMessageReferenceSummary | null
+  metadata: Record<string, unknown>
+  provenance: Record<string, unknown>
+  created_at: string
+}
+
+export type TelegramReplyChainResponse = {
+  message_id: string
+  replies: TelegramReplyRef[]
+  reply_to: TelegramReplyRef[]
+}
+
+export type TelegramForwardChainResponse = {
+  message_id: string
+  forwards: TelegramForwardRef[]
+}
+
+export type TelegramProviderWriteCommand = {
+  command_id: string
+  account_id: string
+  command_kind: TelegramCommandKind
+  idempotency_key: string
+  provider_chat_id: string
+  provider_message_id: string | null
+  target_ref: Record<string, unknown>
+  payload: Record<string, unknown>
+  capability_state: TelegramCapabilityState
+  action_class: TelegramActionClass
+  confirmation_decision: TelegramConfirmationDecision
+  status: TelegramCommandStatus
+  retry_count: number
+  max_retries: number
+  last_error: string | null
+  result_payload: Record<string, unknown>
+  audit_metadata: Record<string, unknown>
+  actor_id: string
+  happened_at: string
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export type TelegramCommandListResponse = {
+  items: TelegramProviderWriteCommand[]
+}
+
+// --- Realtime event types (ADR-0091) ---
+
+export type TelegramRealtimeEventType =
+  | 'telegram.sync.started'
+  | 'telegram.sync.progress'
+  | 'telegram.sync.completed'
+  | 'telegram.sync.failed'
+  | 'telegram.message.created'
+  | 'telegram.message.updated'
+  | 'telegram.message.edited'
+  | 'telegram.message.deleted'
+  | 'telegram.message.tombstoned'
+  | 'telegram.message.visibility_restored'
+  | 'telegram.reaction.changed'
+  | 'telegram.chat.updated'
+  | 'telegram.chat.pinned'
+  | 'telegram.chat.archived'
+  | 'telegram.chat.muted'
+  | 'telegram.topic.updated'
+  | 'telegram.media.downloaded'
+  | 'telegram.command.status_changed'
+
+export type TelegramRealtimeEvent = {
+  event_type: TelegramRealtimeEventType
+  event_id: string
+  occurred_at: string
+  subject: { id: string; kind: string }
+  payload: Record<string, unknown>
+}
+
+export type TelegramRealtimeMessage =
+  | { type: 'event'; data: TelegramRealtimeEvent }
+  | { type: 'lagged'; data: { skipped: number } }
+
+// --- Reaction types (ADR-0091) ---
+
+export type TelegramReaction = {
+  reaction_id: string
+  message_id: string
+  account_id: string
+  provider_message_id: string
+  provider_chat_id: string
+  sender_id: string
+  sender_display_name: string | null
+  reaction_emoji: string
+  is_active: boolean
+  observed_at: string
+  source_event: string | null
+  provider_actor_id: string | null
+  metadata: Record<string, unknown>
+  provenance: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
+export type TelegramReactionRequest = {
+  account_id: string
+  provider_chat_id: string
+  provider_message_id: string
+  reaction_emoji: string
+  sender_id: string
+  sender_display_name?: string | null
+  command_id?: string
+}
+
+export type TelegramReactionResponse = {
+  reaction_id: string
+  message_id: string
+  account_id: string
+  provider_chat_id: string
+  provider_message_id: string
+  reaction_emoji: string
+  is_active: boolean
+  status: string
+  timestamp: string
+}
+
+export type TelegramReactionGroup = {
+  reaction_emoji: string
+  count: number
+  senders: string[]
+}
+
+export type TelegramReactionSummary = {
+  message_id: string
+  total_reactions: number
+  active_reactions: number
+  reactions: TelegramReactionGroup[]
+}
+
+export type TelegramReactionListResponse = {
+  message_id: string
+  reactions: TelegramReaction[]
+  summary: TelegramReactionSummary
+}
+
+// Common emoji reactions palette
+export const TELEGRAM_REACTION_PALETTE = ['👍', '👎', '❤️', '🔥', '🥰', '👏', '😁', '🤔', '🤯', '😱', '🤬', '😢', '🎉', '🤩', '🤮', '💩']
