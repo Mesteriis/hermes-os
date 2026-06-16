@@ -306,10 +306,15 @@ per-message reference panel now also reads
 `GET /api/v1/telegram/messages/{message_id}/reactions` for evidence-backed
 reaction details.
 
+The `telegram.reaction.changed` event now also patches the
+`['telegram', 'message-reactions', messageId]` reaction detail cache surgically,
+updating aggregate summary counts without requiring a full refetch.
+
 Remaining gaps:
 
 - provider-side reaction execution/sync;
-- background/provider reconciliation.
+- background/provider reconciliation;
+- individual sender rows in reaction detail list not updated via event (requires full fetch).
 
 ### §16 Message history/versioning — 55%
 
@@ -433,7 +438,7 @@ Remaining gaps:
 - topic/member search;
 - saved Telegram-specific searches.
 
-### §22 Realtime — 70%
+### §22 Realtime — 80%
 
 Generic WebSocket/SSE/long-poll transports exist. Telegram now emits typed
 events into the canonical event flow and the dedicated realtime bus for:
@@ -474,11 +479,18 @@ events now also carry a sanitized projected `chat` snapshot plus `action`,
 which lets the frontend patch account-scoped chat lists and active chat-detail
 caches immediately after pin/archive/mute/read/unread actions.
 
+Frontend cache patching now also handles:
+
+- `telegram.chat.pinned/archived/muted`: surgical metadata toggle on matching chat rows in list and detail caches;
+- `telegram.chat.updated`: full chat snapshot upsert in list and detail;
+- `telegram.command.status_changed`: status field update on the matching row in the commands list cache;
+- `telegram.reaction.changed`: aggregate summary count patch on the reaction detail cache.
+
 Remaining gaps:
 
-- dedicated frontend cache patching is still partial and still falls back to invalidation for broader provider dialog/status surfaces;
+- `telegram.chat.pinned/archived/muted/updated` events not yet emitted by backend routes (handlers defined, constants exist);
 - Telegram media progress/retry event families beyond the completed-download event;
-- broader provider-command status coverage beyond manual send, lifecycle/dialog local actions and reactions;
+- individual sender rows in reaction detail cache not patched (requires full fetch);
 - richer optimistic patching without follow-up query refresh.
 
 ### §23 AI assistance — 20%

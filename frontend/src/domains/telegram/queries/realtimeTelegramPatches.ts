@@ -5,9 +5,26 @@ import type {
   TelegramMessage,
   TelegramMessageListResponse,
   TelegramMessageSearchResponse,
+  TelegramProviderWriteCommand,
+  TelegramReactionListResponse,
   TelegramRuntimeStatus
 } from '../types/telegram'
 import { isRecord, storedEventEnvelope, stringValue } from '../../communications/queries/realtimePatchShared'
+import {
+  type TelegramEventPayload,
+  type TelegramStoredEventEnvelope,
+  chatQueryScope,
+  eventSubjectId,
+  insertChatByRecency,
+  insertMessageByRecency,
+  matchesChatScope,
+  matchesMessageScope,
+  messageQueryScope,
+  patchPinMetadata,
+  runtimeAccountId,
+  telegramChatSnapshot,
+  telegramMessageSnapshot
+} from './realtimeTelegramPatchShared'
 
 export type TelegramRealtimePatchQueryClient = {
   getQueriesData?: <TData>(filters: { queryKey: readonly unknown[] }) => Array<
@@ -17,44 +34,6 @@ export type TelegramRealtimePatchQueryClient = {
     queryKey: readonly unknown[],
     updater: TData | ((data: TData | undefined) => TData | undefined)
   ) => unknown
-}
-
-type TelegramEventPayload = {
-  provider_chat_id?: unknown
-  provider_message_id?: unknown
-  delivery_state?: unknown
-  runtime_kind?: unknown
-  status?: unknown
-  version_number?: unknown
-  reason_class?: unknown
-  tombstone_id?: unknown
-  reaction_emoji?: unknown
-  is_active?: unknown
-  scope?: unknown
-  synced_count?: unknown
-  has_more?: unknown
-  tdlib_file_id?: unknown
-  download_state?: unknown
-  local_path?: unknown
-  attachment_id?: unknown
-  blob_id?: unknown
-  scan_status?: unknown
-  command_id?: unknown
-  action?: unknown
-  message_id?: unknown
-  is_pinned?: unknown
-  telegram_chat_id?: unknown
-  chat?: unknown
-  message?: unknown
-}
-
-type TelegramStoredEventEnvelope = {
-  event?: {
-    event_type?: unknown
-    metadata?: unknown
-    subject?: unknown
-    payload?: unknown
-  }
 }
 
 export function applyTelegramRealtimePatch(
@@ -141,6 +120,26 @@ export function applyTelegramRealtimePatch(
     }
   }
 
+  for (const [queryKey, data] of getQueriesData<TelegramProviderWriteCommand[]>({
+    queryKey: ['telegram', 'commands']
+  })) {
+    const updated = patchCommandList(queryKey, data, eventType, payload)
+    if (updated !== data) {
+      setQueryData(queryKey, updated)
+      patched = true
+    }
+  }
+
+  for (const [queryKey, data] of getQueriesData<TelegramReactionListResponse>({
+    queryKey: ['telegram', 'message-reactions']
+  })) {
+    const updated = patchReactionDetail(queryKey, data, eventType, subjectId, payload)
+    if (updated !== data) {
+      setQueryData(queryKey, updated)
+      patched = true
+    }
+  }
+
   for (const [queryKey, data] of getQueriesData<TelegramRuntimeStatus | null>({
     queryKey: ['telegram', 'runtime']
   })) {
@@ -152,11 +151,6 @@ export function applyTelegramRealtimePatch(
   }
 
   return patched
-}
-
-function eventSubjectId(subject: unknown): string | null {
-  if (!isRecord(subject)) return null
-  return stringValue(subject.id)
 }
 
 function patchMessageList(
@@ -180,20 +174,15 @@ function patchMessageList(
     if (message.message_id !== targetMessageId) return message
 
     if (eventType === 'telegram.message.created') {
-      if (snapshot) {
-        return snapshot
-      }
+      if (snapshot) return snapshot
       return {
         ...message,
         delivery_state: stringValue(payload?.delivery_state) ?? message.delivery_state,
       }
     }
 
-    if (
-      eventType === 'telegram.message.updated' ||
-      eventType === 'telegram.message.edited'
-    ) {
-      const metadata = {
+    if (eventType === 'telegram.message.updated' || eventType === 'telegram.message.edited') {
+      const meta = {
         ...(snapshot?.metadata ?? message.metadata),
         lifecycle: {
           ...(snapshot && isRecord(snapshot.metadata.lifecycle) ? snapshot.metadata.lifecycle : {}),
@@ -204,16 +193,10 @@ function patchMessageList(
               : snapshot?.metadata.latest_version_number ?? message.metadata.latest_version_number ?? null,
         },
       }
-      return {
-        ...(snapshot ?? message),
-        metadata: patchPinMetadata(metadata, payload),
-      }
+      return { ...(snapshot ?? message), metadata: patchPinMetadata(meta, payload) }
     }
 
-    if (
-      eventType === 'telegram.message.deleted' ||
-      eventType === 'telegram.message.visibility_restored'
-    ) {
+    if (eventType === 'telegram.message.deleted' || eventType === 'telegram.message.visibility_restored') {
       return {
         ...(snapshot ?? message),
         metadata: {
@@ -227,9 +210,7 @@ function patchMessageList(
       }
     }
 
-    if (eventType === 'telegram.media.downloaded' && snapshot) {
-      return snapshot
-    }
+    if (eventType === 'telegram.media.downloaded' && snapshot) return snapshot
 
     if (eventType === 'telegram.reaction.changed') {
       const reactionEmoji = stringValue(payload?.reaction_emoji)
@@ -239,33 +220,31 @@ function patchMessageList(
       const currentSummary = isRecord(currentMetadata.reaction_summary)
         ? currentMetadata.reaction_summary
         : { reactions: [] as Array<Record<string, unknown>> }
-      const currentReactions = Array.isArray(currentSummary.reactions)
-        ? currentSummary.reactions
-        : []
-      const existingIndex = currentReactions.findIndex((item) => {
-        return isRecord(item) && stringValue(item.reaction_emoji) === reactionEmoji
-      })
+      const currentReactions = Array.isArray(currentSummary.reactions) ? currentSummary.reactions : []
+      const existingIndex = currentReactions.findIndex(
+        (item) => isRecord(item) && stringValue(item.reaction_emoji) === reactionEmoji
+      )
       const isActive = payload?.is_active === true
-
       const nextReactions = currentReactions.slice()
       if (existingIndex >= 0 && isRecord(nextReactions[existingIndex])) {
         const existing = nextReactions[existingIndex]
         const currentCount = typeof existing.count === 'number' ? existing.count : 0
-        const nextCount = isActive ? currentCount + 1 : Math.max(currentCount - 1, 0)
-        nextReactions[existingIndex] = { ...existing, count: nextCount }
+        nextReactions[existingIndex] = {
+          ...existing,
+          count: isActive ? currentCount + 1 : Math.max(currentCount - 1, 0),
+        }
       } else if (isActive) {
         nextReactions.push({ reaction_emoji: reactionEmoji, count: 1, senders: [] })
       }
-
       return {
         ...(snapshot ?? message),
         metadata: {
           ...currentMetadata,
           reaction_summary: {
             ...currentSummary,
-            reactions: nextReactions.filter((item) => {
-              return !isRecord(item) || typeof item.count !== 'number' || item.count > 0
-            }),
+            reactions: nextReactions.filter(
+              (item) => !isRecord(item) || typeof item.count !== 'number' || item.count > 0
+            ),
           },
         },
       }
@@ -275,9 +254,7 @@ function patchMessageList(
   })
 
   const existingIndex = patched.findIndex((message) => message.message_id === targetMessageId)
-  if (existingIndex >= 0) {
-    return patched
-  }
+  if (existingIndex >= 0) return patched
   if ((eventType === 'telegram.message.created' || eventType === 'telegram.media.downloaded') && snapshot) {
     return insertMessageByRecency(messages, snapshot, limit)
   }
@@ -301,15 +278,12 @@ function patchRuntimeStatus(
   if (!status) return status
   const queryAccountId = runtimeAccountId(queryKey)
   const eventAccountId = stringValue(metadata?.account_id)
-  if (queryAccountId && eventAccountId && queryAccountId !== eventAccountId) {
-    return status
-  }
+  if (queryAccountId && eventAccountId && queryAccountId !== eventAccountId) return status
 
   if (eventType.startsWith('telegram.sync.')) {
     if (!payload) return status
     const scope = stringValue(payload.scope)
     if (!scope) return status
-
     return {
       ...status,
       status:
@@ -328,7 +302,6 @@ function patchRuntimeStatus(
   }
 
   if (eventType !== 'telegram.command.status_changed' || !payload) return status
-
   return {
     ...status,
     last_command_id: stringValue(payload.command_id),
@@ -340,160 +313,6 @@ function patchRuntimeStatus(
   }
 }
 
-function runtimeAccountId(queryKey: readonly unknown[]): string | null {
-  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'runtime') return null
-  return typeof queryKey[2] === 'string' ? queryKey[2] : null
-}
-
-function telegramChatSnapshot(value: unknown): TelegramChat | null {
-  if (!isRecord(value)) return null
-  const telegramChatId = stringValue(value.telegram_chat_id)
-  const accountId = stringValue(value.account_id)
-  const providerChatId = stringValue(value.provider_chat_id)
-  const chatKind = stringValue(value.chat_kind)
-  const title = stringValue(value.title)
-  const syncState = stringValue(value.sync_state)
-  const createdAt = stringValue(value.created_at)
-  const updatedAt = stringValue(value.updated_at)
-  if (
-    !telegramChatId ||
-    !accountId ||
-    !providerChatId ||
-    !chatKind ||
-    !title ||
-    !syncState ||
-    !createdAt ||
-    !updatedAt
-  ) {
-    return null
-  }
-
-  return {
-    telegram_chat_id: telegramChatId,
-    account_id: accountId,
-    provider_chat_id: providerChatId,
-    chat_kind: chatKind as TelegramChat['chat_kind'],
-    title,
-    username: stringValue(value.username),
-    sync_state: syncState as TelegramChat['sync_state'],
-    last_message_at: stringValue(value.last_message_at),
-    metadata: isRecord(value.metadata) ? value.metadata : {},
-    created_at: createdAt,
-    updated_at: updatedAt,
-  }
-}
-
-function telegramMessageSnapshot(value: unknown): TelegramMessage | null {
-  if (!isRecord(value)) return null
-  const messageId = stringValue(value.message_id)
-  const accountId = stringValue(value.account_id)
-  const providerMessageId = stringValue(value.provider_message_id)
-  const chatTitle = stringValue(value.chat_title)
-  const sender = stringValue(value.sender)
-  const projectedAt = stringValue(value.projected_at)
-  const channelKind = stringValue(value.channel_kind)
-  const deliveryState = stringValue(value.delivery_state)
-  if (
-    !messageId ||
-    !accountId ||
-    !providerMessageId ||
-    !chatTitle ||
-    !sender ||
-    !projectedAt ||
-    !channelKind ||
-    !deliveryState
-  ) {
-    return null
-  }
-
-  return {
-    message_id: messageId,
-    raw_record_id: stringValue(value.raw_record_id) ?? '',
-    account_id: accountId,
-    provider_message_id: providerMessageId,
-    provider_chat_id: stringValue(value.provider_chat_id),
-    chat_title: chatTitle,
-    sender,
-    sender_display_name: stringValue(value.sender_display_name),
-    text: stringValue(value.text) ?? '',
-    occurred_at: stringValue(value.occurred_at),
-    projected_at: projectedAt,
-    channel_kind: channelKind as TelegramMessage['channel_kind'],
-    delivery_state: deliveryState,
-    metadata: isRecord(value.metadata) ? value.metadata : {},
-  }
-}
-
-function messageQueryScope(queryKey: readonly unknown[]): [string | null, string | null, number | null] {
-  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'messages') return [null, null, null]
-  const accountId = typeof queryKey[2] === 'string' && queryKey[2] !== 'all' && queryKey[2] !== 'none'
-    ? queryKey[2]
-    : null
-  const providerChatId = typeof queryKey[3] === 'string' && queryKey[3] !== 'all' && queryKey[3] !== 'none'
-    ? queryKey[3]
-    : null
-  const limit = typeof queryKey[4] === 'number' ? queryKey[4] : null
-  return [accountId, providerChatId, limit]
-}
-
-function chatQueryScope(queryKey: readonly unknown[]): [string | null, number | null] {
-  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'chats') return [null, null]
-  const accountId = typeof queryKey[2] === 'string' && queryKey[2] !== 'all'
-    ? queryKey[2]
-    : null
-  const limit = typeof queryKey[3] === 'number' ? queryKey[3] : null
-  return [accountId, limit]
-}
-
-function matchesMessageScope(message: TelegramMessage, accountId: string | null, providerChatId: string | null): boolean {
-  if (accountId && message.account_id !== accountId) return false
-  if (providerChatId && message.provider_chat_id !== providerChatId) return false
-  return true
-}
-
-function matchesChatScope(chat: TelegramChat, accountId: string | null): boolean {
-  if (accountId && chat.account_id !== accountId) return false
-  return true
-}
-
-function insertMessageByRecency(
-  messages: TelegramMessage[],
-  nextMessage: TelegramMessage,
-  limit: number | null
-): TelegramMessage[] {
-  const items = [nextMessage, ...messages.filter((message) => message.message_id !== nextMessage.message_id)]
-  items.sort((left, right) => recencyKey(right).localeCompare(recencyKey(left)))
-  return typeof limit === 'number' ? items.slice(0, limit) : items
-}
-
-function recencyKey(message: TelegramMessage): string { return message.occurred_at ?? message.projected_at ?? '' }
-
-function insertChatByRecency(
-  chats: TelegramChat[],
-  nextChat: TelegramChat,
-  limit: number | null
-): TelegramChat[] {
-  const items = [nextChat, ...chats.filter((chat) => chat.telegram_chat_id !== nextChat.telegram_chat_id)]
-  items.sort((left, right) => chatRecencyKey(right).localeCompare(chatRecencyKey(left)))
-  return typeof limit === 'number' ? items.slice(0, limit) : items
-}
-
-function chatRecencyKey(chat: TelegramChat): string { return chat.last_message_at ?? chat.updated_at ?? '' }
-
-function patchPinMetadata(
-  metadata: Record<string, unknown>,
-  payload: TelegramEventPayload | undefined
-): Record<string, unknown> {
-  if (typeof payload?.is_pinned !== 'boolean') {
-    return metadata
-  }
-  return {
-    ...metadata,
-    pinned: payload.is_pinned,
-    is_pinned: payload.is_pinned,
-  }
-}
-
 function patchChatList(
   queryKey: readonly unknown[],
   chats: TelegramChat[] | undefined,
@@ -501,9 +320,39 @@ function patchChatList(
   payload: TelegramEventPayload | undefined,
   snapshot: TelegramChat | null
 ): TelegramChat[] | undefined {
-  if (!chats || !payload || !snapshot) {
-    return chats
+  if (!chats || !payload) return chats
+
+  // Chat flag events: surgical metadata toggle, no snapshot required
+  if (
+    eventType === 'telegram.chat.pinned' ||
+    eventType === 'telegram.chat.archived' ||
+    eventType === 'telegram.chat.muted'
+  ) {
+    const targetChatId = stringValue(payload.telegram_chat_id)
+    if (!targetChatId) return chats
+    const [accountId] = chatQueryScope(queryKey)
+    const metadataPatch =
+      eventType === 'telegram.chat.pinned' ? { is_pinned: payload.is_pinned } :
+      eventType === 'telegram.chat.archived' ? { is_archived: payload.is_archived } :
+      { is_muted: payload.is_muted }
+    const nextChats = chats.map((chat) => {
+      if (chat.telegram_chat_id !== targetChatId) return chat
+      if (accountId && chat.account_id !== accountId) return chat
+      return { ...chat, metadata: { ...chat.metadata, ...metadataPatch } }
+    })
+    return nextChats.some((chat, i) => chat !== chats[i]) ? nextChats : chats
   }
+
+  if (!snapshot) return chats
+
+  if (eventType === 'telegram.chat.updated') {
+    const [accountId, limit] = chatQueryScope(queryKey)
+    if (!matchesChatScope(snapshot, accountId)) return chats
+    const existingIndex = chats.findIndex((chat) => chat.telegram_chat_id === snapshot.telegram_chat_id)
+    if (existingIndex < 0) return insertChatByRecency(chats, snapshot, limit)
+    return chats.map((chat) => chat.telegram_chat_id === snapshot.telegram_chat_id ? snapshot : chat)
+  }
+
   const supportsRealtimeChatPatch = eventType === 'telegram.command.status_changed'
     || eventType === 'telegram.message.created'
     || eventType === 'telegram.message.updated'
@@ -514,13 +363,10 @@ function patchChatList(
   const [accountId, limit] = chatQueryScope(queryKey)
   if (!matchesChatScope(snapshot, accountId)) return chats
 
-  if (eventType === 'telegram.message.created') {
-    return insertChatByRecency(chats, snapshot, limit)
-  }
+  if (eventType === 'telegram.message.created') return insertChatByRecency(chats, snapshot, limit)
 
   const existingIndex = chats.findIndex((chat) => chat.telegram_chat_id === snapshot.telegram_chat_id)
   if (existingIndex < 0) return chats
-
   return chats.map((chat) => chat.telegram_chat_id === snapshot.telegram_chat_id ? snapshot : chat)
 }
 
@@ -531,16 +377,35 @@ function patchChatDetail(
   payload: TelegramEventPayload | undefined,
   snapshot: TelegramChat | null
 ): TelegramChat | null | undefined {
+  if (!chat || !payload) return chat
+  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'chat-detail') return chat
+
+  if (
+    eventType === 'telegram.chat.pinned' ||
+    eventType === 'telegram.chat.archived' ||
+    eventType === 'telegram.chat.muted'
+  ) {
+    const targetChatId = stringValue(payload.telegram_chat_id)
+    if (!targetChatId || queryKey[2] !== targetChatId) return chat
+    const metadataPatch =
+      eventType === 'telegram.chat.pinned' ? { is_pinned: payload.is_pinned } :
+      eventType === 'telegram.chat.archived' ? { is_archived: payload.is_archived } :
+      { is_muted: payload.is_muted }
+    return { ...chat, metadata: { ...chat.metadata, ...metadataPatch } }
+  }
+
+  if (!snapshot) return chat
+  if (eventType === 'telegram.chat.updated') {
+    if (queryKey[2] !== snapshot.telegram_chat_id) return chat
+    return snapshot
+  }
+
   const supportsRealtimeChatPatch = eventType === 'telegram.command.status_changed'
     || eventType === 'telegram.message.created'
     || eventType === 'telegram.message.updated'
     || eventType === 'telegram.message.deleted'
     || eventType === 'telegram.message.visibility_restored'
-  if (!supportsRealtimeChatPatch || !payload || !snapshot) {
-    return chat
-  }
-  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'chat-detail') return chat
-  if (queryKey[2] !== snapshot.telegram_chat_id) return chat
+  if (!supportsRealtimeChatPatch || queryKey[2] !== snapshot.telegram_chat_id) return chat
   return snapshot
 }
 
@@ -571,7 +436,6 @@ function patchPinnedMessages(
     return existing.length === response.items.length ? response : { ...response, items: existing }
   }
   if (!snapshot) return response
-
   const limit = typeof queryKey[4] === 'number' ? queryKey[4] : null
   return {
     ...response,
@@ -603,9 +467,7 @@ function patchMessageSearch(
   if (!matchesMessageScope(snapshot, accountId, providerChatId)) return response
 
   const matchesQuery = [snapshot.text, snapshot.sender, snapshot.sender_display_name ?? '', snapshot.provider_message_id]
-    .join(' ')
-    .toLowerCase()
-    .includes(query)
+    .join(' ').toLowerCase().includes(query)
   const nextItems = response.items.filter((item) => item.message_id !== targetMessageId)
 
   if (!matchesQuery || eventType === 'telegram.message.deleted') {
@@ -618,11 +480,7 @@ function patchMessageSearch(
     { ...snapshot, metadata: patchPinMetadata(snapshot.metadata, payload) },
     limit
   )
-  return {
-    ...response,
-    items: inserted,
-    total: Math.max(response.total, inserted.length),
-  }
+  return { ...response, items: inserted, total: Math.max(response.total, inserted.length) }
 }
 
 function patchMediaSearch(
@@ -654,10 +512,7 @@ function patchMediaSearch(
   const nextItems = Array.from(nextItemsById.values()).sort(
     (left, right) => (right.occurred_at ?? '').localeCompare(left.occurred_at ?? '')
   )
-  return {
-    ...response,
-    items: typeof limit === 'number' ? nextItems.slice(0, limit) : nextItems
-  }
+  return { ...response, items: typeof limit === 'number' ? nextItems.slice(0, limit) : nextItems }
 }
 
 function telegramMediaItemsFromMessageSnapshot(message: TelegramMessage): TelegramMediaItem[] {
@@ -677,9 +532,7 @@ function telegramMediaItemsFromMessageSnapshot(message: TelegramMessage): Telegr
       mime_type: stringValue(attachment.content_type) ?? stringValue(attachment.mime_type),
       size_bytes: typeof attachment.size === 'number'
         ? attachment.size
-        : typeof attachment.size_bytes === 'number'
-          ? attachment.size_bytes
-          : null,
+        : typeof attachment.size_bytes === 'number' ? attachment.size_bytes : null,
       occurred_at: message.occurred_at,
       download_state: stringValue(attachment.download_state) ?? 'unknown',
       tdlib_file_id: typeof attachment.tdlib_file_id === 'number' ? attachment.tdlib_file_id : null,
@@ -690,10 +543,77 @@ function telegramMediaItemsFromMessageSnapshot(message: TelegramMessage): Telegr
 }
 
 function matchesMediaQuery(item: TelegramMediaItem, query: string): boolean {
-  return [
-    item.file_name,
-    item.kind,
-    item.provider_message_id,
-    item.mime_type ?? ''
-  ].join(' ').toLowerCase().includes(query)
+  return [item.file_name, item.kind, item.provider_message_id, item.mime_type ?? '']
+    .join(' ').toLowerCase().includes(query)
+}
+
+function patchCommandList(
+  queryKey: readonly unknown[],
+  commands: TelegramProviderWriteCommand[] | undefined,
+  eventType: string,
+  payload: TelegramEventPayload | undefined
+): TelegramProviderWriteCommand[] | undefined {
+  if (!commands || eventType !== 'telegram.command.status_changed' || !payload) return commands
+  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'commands') return commands
+
+  const queryAccountId = typeof queryKey[2] === 'string' && queryKey[2] !== 'none' ? queryKey[2] : null
+  const commandId = stringValue(payload.command_id)
+  const newStatus = stringValue(payload.status)
+  if (!commandId || !newStatus) return commands
+
+  const matchIndex = commands.findIndex((cmd) => cmd.command_id === commandId)
+  if (matchIndex < 0) return commands
+  if (queryAccountId && commands[matchIndex].account_id !== queryAccountId) return commands
+
+  return commands.map((cmd, i) =>
+    i === matchIndex
+      ? { ...cmd, status: newStatus as TelegramProviderWriteCommand['status'], updated_at: new Date().toISOString() }
+      : cmd
+  )
+}
+
+function patchReactionDetail(
+  queryKey: readonly unknown[],
+  detail: TelegramReactionListResponse | undefined,
+  eventType: string,
+  subjectId: string | null,
+  payload: TelegramEventPayload | undefined
+): TelegramReactionListResponse | undefined {
+  if (!detail || eventType !== 'telegram.reaction.changed' || !payload) return detail
+  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'message-reactions') return detail
+
+  const queryMessageId = typeof queryKey[2] === 'string' ? queryKey[2] : null
+  const targetMessageId = subjectId ?? stringValue(payload.message_id)
+  if (!queryMessageId || !targetMessageId || queryMessageId !== targetMessageId) return detail
+
+  const reactionEmoji = stringValue(payload.reaction_emoji)
+  if (!reactionEmoji) return detail
+  const isActive = payload.is_active === true
+
+  // Update summary aggregate counts only — individual sender records require a full fetch
+  const currentSummary = detail.summary
+  const currentReactions = currentSummary.reactions ?? []
+  const existingIdx = currentReactions.findIndex((r) => r.reaction_emoji === reactionEmoji)
+  const nextReactions = currentReactions.slice()
+
+  if (existingIdx >= 0) {
+    const existing = nextReactions[existingIdx]
+    const nextCount = isActive ? existing.count + 1 : Math.max(existing.count - 1, 0)
+    nextReactions[existingIdx] = { ...existing, count: nextCount }
+  } else if (isActive) {
+    nextReactions.push({ reaction_emoji: reactionEmoji, count: 1, senders: [] })
+  }
+
+  const filteredReactions = nextReactions.filter((r) => r.count > 0)
+  const totalActive = filteredReactions.reduce((acc, r) => acc + r.count, 0)
+
+  return {
+    ...detail,
+    summary: {
+      ...currentSummary,
+      reactions: filteredReactions,
+      active_reactions: totalActive,
+      total_reactions: totalActive,
+    },
+  }
 }
