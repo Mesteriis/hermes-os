@@ -59,7 +59,7 @@ Most gaps are `PARTIAL` or `MISSING`.
 
 | Capability | Status | Evidence / Gap |
 |---|---|---|
-| Topics | MISSING | No topic table/API/projection found. |
+| Topics | PARTIAL | Migration 0086 adds `telegram_topics` table; `upsert_topic`/`list_topics`/`get_topic` queries exist; three API routes (`GET /chats/{id}/topics`, `GET /topics/{id}`, `GET /topics/{id}/messages`) are wired; frontend `TelegramTopic` type, `useTelegramTopicsQuery`/`useTelegramTopicMessagesQuery` hooks, and Topics tab in `TelegramThreadSideSections` are in place. TDLib `updateForumTopicInfo` ingest, topic write commands, and topic-scoped unread/pinned sync still missing. |
 | Replies | PARTIAL | Reply-chain projection API exists and thread UI can read projected references with local sender/text summaries, reference rows can reopen projected reply targets/sources into the selected thread, and the reference panel now supports local filtering across projected reply/forward/history evidence, but there is still no reply command flow or multi-hop reply-thread model. |
 | Reply chains | PARTIAL | `GET /api/v1/telegram/messages/{message_id}/reply-chain` now returns projected source/target message summaries and the reference panel can reopen/filter those summaries inside the thread, but deeper graph navigation and provider-side reply creation are still missing. |
 | Forwards | PARTIAL | Forward-chain projection API exists and thread UI can read origin attribution, but there is no forward command flow yet. |

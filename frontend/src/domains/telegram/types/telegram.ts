@@ -695,5 +695,5 @@ export type TelegramReactionListResponse = {
   summary: TelegramReactionSummary
 }
 
-// Common emoji reactions palette
+export type { TelegramTopic, TelegramTopicListResponse } from './telegramTopics'
 export const TELEGRAM_REACTION_PALETTE = ['👍', '👎', '❤️', '🔥', '🥰', '👏', '😁', '🤔', '🤯', '😱', '🤬', '😢', '🎉', '🤩', '🤮', '💩']

@@ -7,6 +7,7 @@ mod messages;
 mod qr_login;
 mod runtime;
 mod search;
+mod topics;
 
 pub(crate) use accounts::{
     delete_telegram_account, get_telegram_accounts, post_telegram_account,
@@ -36,4 +37,7 @@ pub(crate) use runtime::{get_telegram_runtime_status, post_telegram_runtime_star
 pub(crate) use search::{
     get_telegram_pinned_messages, search_telegram_chats, search_telegram_media,
     search_telegram_messages,
+};
+pub(crate) use topics::{
+    get_telegram_topic_detail, get_telegram_topic_messages, get_telegram_topics,
 };

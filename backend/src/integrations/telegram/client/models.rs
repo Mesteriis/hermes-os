@@ -2,6 +2,7 @@ mod accounts;
 mod chats;
 pub mod messages;
 mod qr_login;
+pub mod topics;
 
 pub use accounts::{
     TelegramAccount, TelegramAccountLifecycleResponse, TelegramAccountListResponse,
@@ -20,5 +21,6 @@ pub use qr_login::{
     TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatus,
     TelegramQrLoginStatusResponse,
 };
+pub use topics::{NewTelegramTopic, TelegramTopic, TelegramTopicListResponse};
 
 pub(crate) use messages::TelegramAttachmentAnchor;

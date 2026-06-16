@@ -162,6 +162,18 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route("/api/v1/telegram/commands", get(get_telegram_commands))
         .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/topics",
+            get(get_telegram_topics),
+        )
+        .route(
+            "/api/v1/telegram/topics/{topic_id}",
+            get(get_telegram_topic_detail),
+        )
+        .route(
+            "/api/v1/telegram/topics/{topic_id}/messages",
+            get(get_telegram_topic_messages),
+        )
+        .route(
             "/api/v1/policies/templates",
             get(get_policy_templates).post(post_policy_template),
         )

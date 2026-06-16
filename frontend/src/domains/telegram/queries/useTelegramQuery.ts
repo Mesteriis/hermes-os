@@ -28,7 +28,9 @@ import {
   muteTelegramChat,
   unmuteTelegramChat,
   markTelegramChatRead,
-  markTelegramChatUnread
+  markTelegramChatUnread,
+  fetchTelegramTopics,
+  fetchTelegramTopicMessages
 } from '../api/telegram'
 import {
   addTelegramReaction,
@@ -50,7 +52,9 @@ import type {
   TelegramChatSyncRequest,
   TelegramHistorySyncRequest,
   TelegramMediaDownloadRequest,
-  TelegramReactionRequest
+  TelegramReactionRequest,
+  TelegramTopicListResponse,
+  TelegramMessageListResponse
 } from '../types/telegram'
 
 export const telegramQueryKeys = {
@@ -65,6 +69,8 @@ export const telegramQueryKeys = {
   runtime: ['telegram', 'runtime'] as const,
   calls: ['telegram', 'calls'] as const,
   callTranscript: ['telegram', 'call-transcript'] as const,
+  topics: ['telegram', 'topics'] as const,
+  topicMessages: ['telegram', 'topic-messages'] as const,
 }
 
 // --- Fetch capabilities ---
@@ -587,4 +593,44 @@ function computedTelegramCallsQueryKey(
     toValue(accountId) ?? 'all',
     toValue(limit)
   ])
+}
+
+// --- Forum topics ---
+
+export function useTelegramTopicsQuery(
+  telegramChatId: MaybeRefOrGetter<string | null | undefined>,
+  limit: MaybeRefOrGetter<number> = 100
+) {
+  return useQuery<TelegramTopicListResponse>({
+    queryKey: computed(() => [
+      ...telegramQueryKeys.topics,
+      toValue(telegramChatId) ?? 'none',
+      toValue(limit),
+    ]),
+    queryFn: async () => {
+      const chatId = toValue(telegramChatId)
+      if (!chatId) return { telegram_chat_id: '', items: [] }
+      return fetchTelegramTopics(chatId, toValue(limit))
+    },
+    enabled: computed(() => Boolean(toValue(telegramChatId))),
+  })
+}
+
+export function useTelegramTopicMessagesQuery(
+  topicId: MaybeRefOrGetter<string | null | undefined>,
+  limit: MaybeRefOrGetter<number> = 50
+) {
+  return useQuery<TelegramMessageListResponse>({
+    queryKey: computed(() => [
+      ...telegramQueryKeys.topicMessages,
+      toValue(topicId) ?? 'none',
+      toValue(limit),
+    ]),
+    queryFn: async () => {
+      const tid = toValue(topicId)
+      if (!tid) return { items: [] }
+      return fetchTelegramTopicMessages(tid, toValue(limit))
+    },
+    enabled: computed(() => Boolean(toValue(topicId))),
+  })
 }

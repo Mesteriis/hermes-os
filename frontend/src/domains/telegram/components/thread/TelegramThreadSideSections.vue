@@ -10,16 +10,19 @@ import type {
 } from '../../types/telegram'
 import { mergeTelegramAttachmentHints } from '../../stores/telegram'
 import TelegramMediaViewer from './TelegramMediaViewer.vue'
+import { useTelegramTopicsQuery } from '../../queries/useTelegramQuery'
 
 const { t } = useI18n()
 
 const emit = defineEmits<{
   downloadMedia: [attachment: TelegramAttachmentHint, message?: TelegramMessage]
   openMessage: [message: TelegramMessage]
+  selectTopic: [topicId: string]
 }>()
 
 const props = defineProps<{
   activeThreadTab: TelegramThreadTab
+  telegramChatId: string | null | undefined
   chronologicalMessages: TelegramMessage[]
   fileHints: TelegramAttachmentHint[]
   voiceHints: TelegramAttachmentHint[]
@@ -29,6 +32,10 @@ const props = defineProps<{
   isTelegramActionSubmitting: boolean
   telegramMessageTime: (message: TelegramMessage) => string
 }>()
+
+const { data: topicsData, isLoading: topicsLoading } = useTelegramTopicsQuery(
+  computed(() => props.telegramChatId)
+)
 
 const activeViewerAttachment = ref<TelegramAttachmentHint | null>(null)
 
@@ -233,8 +240,37 @@ function openViewer(attachment: TelegramAttachmentHint) {
       </template>
     </template>
 
+    <template v-else-if="activeThreadTab === 'topics'">
+      <div v-if="topicsLoading" class="empty-panel fill">
+        {{ t('Loading topics…') }}
+      </div>
+      <div v-else-if="!topicsData || topicsData.items.length === 0" class="empty-panel fill">
+        {{ t('No forum topics found for this chat.') }}
+      </div>
+      <div v-else class="telegram-topic-list">
+        <article
+          v-for="topic in topicsData.items"
+          :key="topic.topic_id"
+          class="telegram-topic-card"
+          @click="emit('selectTopic', topic.topic_id)"
+        >
+          <span class="telegram-topic-card__icon">
+            <template v-if="topic.icon_emoji">{{ topic.icon_emoji }}</template>
+            <Icon v-else icon="tabler:message-circle" width="16" height="16" />
+          </span>
+          <div class="telegram-topic-card__body">
+            <strong>{{ topic.title }}</strong>
+            <small v-if="topic.is_closed">{{ t('Closed') }}</small>
+          </div>
+          <span v-if="topic.unread_count > 0" class="telegram-topic-card__badge">{{ topic.unread_count }}</span>
+          <Icon v-if="topic.is_pinned" icon="tabler:pin" width="13" height="13" class="telegram-topic-card__pin" />
+          <Icon icon="tabler:chevron-right" width="16" height="16" class="telegram-topic-card__arrow" />
+        </article>
+      </div>
+    </template>
+
     <div v-else class="empty-panel fill">
-      {{ t('Telegram topics are available after TDLib forum topic sync is implemented.') }}
+      {{ t('Select a tab to view content.') }}
     </div>
   </div>
   <TelegramMediaViewer
@@ -417,5 +453,70 @@ function openViewer(attachment: TelegramAttachmentHint) {
 }
 .telegram-timeline-row-action:hover {
   background: var(--color-primary-subtle, #e3f2fd);
+}
+.telegram-topic-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+}
+.telegram-topic-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  border: 1px solid var(--color-border, #e8ecf0);
+  background: var(--color-surface, #fff);
+}
+.telegram-topic-card:hover {
+  background: var(--color-primary-subtle, #e3f2fd);
+}
+.telegram-topic-card__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.telegram-topic-card__body {
+  flex: 1;
+  min-width: 0;
+}
+.telegram-topic-card__body strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.telegram-topic-card__body small {
+  font-size: 10px;
+  color: var(--color-text-secondary, #999);
+}
+.telegram-topic-card__badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-primary, #0066cc);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.telegram-topic-card__pin {
+  color: var(--color-text-secondary, #aaa);
+  flex-shrink: 0;
+}
+.telegram-topic-card__arrow {
+  color: var(--color-text-secondary, #bbb);
+  flex-shrink: 0;
 }
 </style>

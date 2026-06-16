@@ -28,7 +28,8 @@ import type {
   TelegramMediaDownloadResponse,
   TelegramRuntimeStartRequest,
   TelegramChat,
-  TelegramMessage
+  TelegramMessage,
+  TelegramTopicListResponse
 } from '../types/telegram'
 
 // --- Capabilities ---
@@ -661,6 +662,28 @@ export async function downloadTelegramMediaFromUi(
       result: null
     }
   }
+}
+
+// --- Forum topics ---
+
+export async function fetchTelegramTopics(
+  telegramChatId: string,
+  limit = 100
+): Promise<TelegramTopicListResponse> {
+  return ApiClient.instance.get<TelegramTopicListResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/topics?limit=${limit}`,
+    'Telegram topics fetch failed'
+  )
+}
+
+export async function fetchTelegramTopicMessages(
+  topicId: string,
+  limit = 50
+): Promise<TelegramMessageListResponse> {
+  return ApiClient.instance.get<TelegramMessageListResponse>(
+    `/api/v1/telegram/topics/${encodeURIComponent(topicId)}/messages?limit=${limit}`,
+    'Telegram topic messages fetch failed'
+  )
 }
 
 export {

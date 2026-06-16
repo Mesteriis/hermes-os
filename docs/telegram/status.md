@@ -20,7 +20,7 @@ Organizations или Timeline.
 | 8 | Dialog/chat list | ◐ | 64 |
 | 9 | Private chats | ◐ | 60 |
 | 10 | Groups/supergroups/channels | ◐ | 35 |
-| 11 | Topics/forums | ✗ | 0 |
+| 11 | Topics/forums | ⚠ | 40 |
 | 12 | Message ingestion/projection | ✓ | 85 |
 | 13 | Message lifecycle commands | ◐ | 48 |
 | 14 | Replies/forwards/pins | ◐ | 38 |
@@ -221,17 +221,20 @@ Missing:
 - channel post/admin state;
 - topic-enabled forum support.
 
-### §11 Topics/forums — 0%
+### §11 Topics/forums — 40%
 
-No topic table/API/projection found.
+Foundation in place: `telegram_topics` table (migration 0086), `TelegramTopic` model,
+`topics.rs` client (upsert/list/get), three API routes
+(`GET /chats/{id}/topics`, `GET /topics/{id}`, `GET /topics/{id}/messages`),
+frontend types, TanStack Query hooks (`useTelegramTopicsQuery`,
+`useTelegramTopicMessagesQuery`), and a Topics tab in `TelegramThreadSideSections`.
 
-Required:
+Missing:
 
-- topic identity;
-- topic-scoped timeline;
-- topic reply model;
-- topic unread/pinned state;
-- provider sync.
+- TDLib forumTopic sync (ingest from `updateForumTopicInfo`);
+- topic reply model (thread-scoped message list with reply context);
+- topic unread/pinned state driven by live events;
+- provider write (create/close/reopen topic).
 
 ### §12 Message ingestion/projection — 85%
 

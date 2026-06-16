@@ -11,6 +11,7 @@ mod search;
 mod store;
 #[cfg(test)]
 mod tests;
+pub mod topics;
 mod validation;
 mod vault;
 
@@ -22,14 +23,15 @@ const TELEGRAM_ACCOUNT_REMOVED: &str = "removed";
 
 pub use self::errors::TelegramError;
 pub use self::models::{
-    NewTelegramChat, NewTelegramMessage, TelegramAccount, TelegramAccountLifecycleResponse,
-    TelegramAccountListResponse, TelegramAccountSetupRequest, TelegramAccountSetupResponse,
-    TelegramChat, TelegramChatGroupFilter, TelegramChatGroupFilterListResponse, TelegramChatKind,
-    TelegramChatMember, TelegramCredentialBinding, TelegramDeliveryState,
-    TelegramLiveAccountSetupRequest, TelegramManualSendRequest, TelegramManualSendResponse,
-    TelegramMessage, TelegramMessageIngestResult, TelegramQrLoginPasswordRequest,
-    TelegramQrLoginStartRequest, TelegramQrLoginStatus, TelegramQrLoginStatusResponse,
-    TelegramSyncState,
+    NewTelegramChat, NewTelegramMessage, NewTelegramTopic, TelegramAccount,
+    TelegramAccountLifecycleResponse, TelegramAccountListResponse, TelegramAccountSetupRequest,
+    TelegramAccountSetupResponse, TelegramChat, TelegramChatGroupFilter,
+    TelegramChatGroupFilterListResponse, TelegramChatKind, TelegramChatMember,
+    TelegramCredentialBinding, TelegramDeliveryState, TelegramLiveAccountSetupRequest,
+    TelegramManualSendRequest, TelegramManualSendResponse, TelegramMessage,
+    TelegramMessageIngestResult, TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest,
+    TelegramQrLoginStatus, TelegramQrLoginStatusResponse, TelegramSyncState, TelegramTopic,
+    TelegramTopicListResponse,
 };
 pub use self::projection::project_raw_telegram_message;
 pub use self::store::TelegramStore;

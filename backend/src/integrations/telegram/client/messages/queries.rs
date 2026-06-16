@@ -82,4 +82,41 @@ impl TelegramStore {
 
         rows.into_iter().map(row_to_telegram_message).collect()
     }
+
+    pub async fn messages_by_ids(
+        &self,
+        message_ids: &[String],
+    ) -> Result<Vec<TelegramMessage>, TelegramError> {
+        if message_ids.is_empty() {
+            return Ok(vec![]);
+        }
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                message_id,
+                raw_record_id,
+                account_id,
+                provider_record_id,
+                subject,
+                sender,
+                body_text,
+                occurred_at,
+                projected_at,
+                channel_kind,
+                conversation_id,
+                sender_display_name,
+                delivery_state,
+                message_metadata
+            FROM communication_messages
+            WHERE message_id = ANY($1)
+              AND channel_kind IN ('telegram_user', 'telegram_bot')
+            ORDER BY COALESCE(occurred_at, projected_at) DESC, message_id ASC
+            "#,
+        )
+        .bind(message_ids)
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_telegram_message).collect()
+    }
 }

@@ -72,12 +72,14 @@ const emit = defineEmits<{
   toggleArchiveChat: []
   toggleMuteChat: []
   toggleReadChat: []
+  selectTopic: [topicId: string]
 }>()
 
 const threadSearchQuery = ref('')
 const isSearchOpen = ref(false)
+const telegramChatId = computed(() => props.selectedTelegramChat?.telegram_chat_id ?? null)
 const pinnedMessagesQuery = useTelegramPinnedMessagesQuery({
-  telegramChatId: computed(() => props.selectedTelegramChat?.telegram_chat_id ?? null),
+  telegramChatId,
   limit: 100
 })
 
@@ -219,6 +221,7 @@ watch(
       <TelegramThreadSideSections
         v-else
         :activeThreadTab="activeThreadTab"
+        :telegramChatId="telegramChatId"
         :chronologicalMessages="chronologicalMessages"
         :fileHints="fileHints"
         :voiceHints="voiceHints"
@@ -229,6 +232,7 @@ watch(
         :telegramMessageTime="telegramMessageTime"
         @downloadMedia="(attachment, message) => emit('downloadMedia', attachment, message)"
         @openMessage="(message) => emit('openSearchMessage', message)"
+        @selectTopic="(topicId) => emit('selectTopic', topicId)"
       />
 
       <TelegramComposer
