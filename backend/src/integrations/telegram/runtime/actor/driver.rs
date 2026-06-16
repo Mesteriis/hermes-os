@@ -14,6 +14,7 @@ use super::edit::{
     actor_delete_message, actor_edit_message, actor_pin_message, actor_set_reaction,
 };
 use super::history::actor_sync_history;
+use super::search::{actor_search_chat_messages, actor_search_messages};
 use super::send::{actor_send_reply, actor_send_text};
 use super::topics::actor_get_forum_topics;
 
@@ -140,6 +141,26 @@ pub(super) fn drive_tdlib_actor(
                 reply_tx,
             } => {
                 let _ = reply_tx.send(actor_get_forum_topics(&client, &provider_chat_id, limit));
+            }
+            TelegramRuntimeCommand::SearchMessages {
+                query,
+                limit,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_search_messages(&client, &query, limit));
+            }
+            TelegramRuntimeCommand::SearchChatMessages {
+                provider_chat_id,
+                query,
+                limit,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_search_chat_messages(
+                    &client,
+                    &provider_chat_id,
+                    &query,
+                    limit,
+                ));
             }
         }
     }

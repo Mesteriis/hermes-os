@@ -14,6 +14,7 @@ const TDJSON_COMMAND_TIMEOUT: std::time::Duration = std::time::Duration::from_se
 const TDJSON_RECEIVE_POLL_SECONDS: f64 = 1.0;
 
 pub(crate) use self::manager::TelegramMediaDownloadContext;
+pub(crate) use self::manager::TelegramProviderSearchRequest;
 pub use self::manager::TelegramRuntimeManager;
 pub(crate) use self::manager::command_executor::execute_queued_commands;
 pub use self::models::{

@@ -3,8 +3,11 @@ use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 
 use crate::app::{ApiError, AppState};
-use crate::domains::api_support::telegram_store;
+use crate::domains::api_support::{communication_ingestion_store, telegram_store};
 use crate::integrations::telegram::client::models::TelegramChat;
+use crate::integrations::telegram::runtime::TelegramProviderSearchRequest;
+
+use super::helpers::telegram_secret_store;
 
 #[derive(Deserialize)]
 pub(crate) struct TelegramMessageSearchQuery {
@@ -86,6 +89,33 @@ pub(crate) async fn search_telegram_messages(
                 "search query `q` is required".to_owned(),
             ),
         ));
+    }
+
+    if let Some(account_id) = &query.account_id {
+        let secret_store = telegram_secret_store(&state)?;
+        if let Err(error) = state
+            .telegram_runtime
+            .search_provider_messages(
+                &communication_ingestion_store(&state)?,
+                &store,
+                &secret_store,
+                &state.vault,
+                &state.config,
+                &TelegramProviderSearchRequest {
+                    account_id: account_id.clone(),
+                    provider_chat_id: query.provider_chat_id.clone(),
+                    query: search_q.clone(),
+                    limit: limit as i32,
+                },
+            )
+            .await
+        {
+            tracing::debug!(
+                error = %error,
+                account_id = %account_id,
+                "search_telegram_messages: TDLib provider search failed, serving DB projection"
+            );
+        }
     }
 
     let items = store

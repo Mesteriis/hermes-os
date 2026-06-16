@@ -130,7 +130,7 @@ Most gaps are `PARTIAL` or `MISSING`.
 | Message search | PARTIAL | Workspace UI now uses `GET /api/v1/telegram/search/messages` for query-backed Telegram message results, but provider-side TDLib search and saved searches are still missing. |
 | Dialog search | PARTIAL | `GET /api/v1/telegram/chats/search` now backs header-driven dialog search results and can reopen projected chats, but it remains projection/local-only and does not reach provider-side TDLib search. |
 | Media search | PARTIAL | `GET /api/v1/telegram/search/media` now backs the files-tab media gallery and workspace media hits with projection/local free-text filters plus download metadata for files-tab parity, and workspace media cards can reopen the owning message context in the current dialog, but it remains projection-local and does not reach provider-side TDLib search. |
-| Provider search | MISSING | No stable TDLib provider-search API/UI found. |
+| Provider search | PARTIAL | `SearchMessages` and `SearchChatMessages` runtime command variants call TDLib `searchMessages`/`searchChatMessages`; `search_provider_messages` method on `TelegramRuntimeManager` ingests results before the projection query; `GET /api/v1/telegram/search/messages` now triggers live TDLib search when `account_id` is present. No dedicated provider-only search UI or saved searches. |
 | Topic search | MISSING | `telegram_topics` projection and list endpoint now exist (Slice 3), but no dedicated topic search route or UI has been built yet. |
 | Member search | PARTIAL | The inspector `Members` tab now supports local search over the projected member roster returned by `GET /api/v1/telegram/chats/{chat_id}/members`, but there is still no dedicated provider/member search route or provider-synced roster. |
 

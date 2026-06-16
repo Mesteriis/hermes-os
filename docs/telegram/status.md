@@ -30,7 +30,7 @@ Organizations или Timeline.
 | 18 | Attachments preview/search/dedup | ◐ | 38 |
 | 19 | Voice/video messages | ◐ | 18 |
 | 20 | Calls/transcripts | ◐ | 43 |
-| 21 | Search | ◐ | 55 |
+| 21 | Search | ◐ | 68 |
 | 22 | Realtime | ◐ | 74 |
 | 23 | AI assistance | ◐ | 20 |
 | 24 | Frontend workbench | ◐ | 70 |
@@ -426,7 +426,7 @@ Missing:
 
 Hidden recording remains unsupported.
 
-### §21 Search — 55%
+### §21 Search — 68%
 
 Local UI chat/message filtering exists. Shared Communication search can include
 Telegram-projected messages by channel kind. Backend now also exposes:
@@ -445,9 +445,14 @@ Frontend now uses those routes for:
   metadata merged into the local file cards for preview/download parity beyond
   the currently loaded message window.
 
+Provider-side TDLib search is now wired: `SearchMessages` and `SearchChatMessages`
+runtime command variants call TDLib `searchMessages`/`searchChatMessages`; results
+are ingested via `search_provider_messages` on `TelegramRuntimeManager` before the
+projection query — `GET /api/v1/telegram/search/messages` now automatically enriches
+the DB projection with live TDLib results when `account_id` is present.
+
 Remaining gaps:
 
-- provider-side Telegram search;
 - richer gallery filters;
 - topic/member search;
 - saved Telegram-specific searches.

@@ -16,12 +16,15 @@ pub(crate) mod command_executor;
 mod lifecycle;
 mod media_download;
 mod registry;
+mod search;
 mod send;
 mod sync_chats;
 mod sync_history;
 mod sync_history_tdlib;
 mod tdlib_actor;
 mod topics;
+
+pub(crate) use self::search::TelegramProviderSearchRequest;
 
 #[derive(Clone, Default)]
 pub struct TelegramRuntimeManager {

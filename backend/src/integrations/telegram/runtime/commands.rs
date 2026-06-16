@@ -267,6 +267,60 @@ pub(super) async fn request_actor_pin_message(
     .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
 }
 
+pub(super) async fn request_actor_search_messages(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    query: String,
+    limit: i32,
+) -> Result<Vec<TelegramTdlibMessageSnapshot>, TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::SearchMessages {
+                query,
+                limit,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting search commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib search timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_search_chat_messages(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    query: String,
+    limit: i32,
+) -> Result<Vec<TelegramTdlibMessageSnapshot>, TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::SearchChatMessages {
+                provider_chat_id,
+                query,
+                limit,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting chat search commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib chat search timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
 pub(super) async fn request_actor_get_forum_topics(
     command_tx: Sender<TelegramRuntimeCommand>,
     provider_chat_id: String,

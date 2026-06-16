@@ -127,4 +127,15 @@ pub(super) enum TelegramRuntimeCommand {
         limit: i32,
         reply_tx: Sender<Result<Vec<TelegramTdlibTopicSnapshot>, TelegramError>>,
     },
+    SearchMessages {
+        query: String,
+        limit: i32,
+        reply_tx: Sender<Result<Vec<TelegramTdlibMessageSnapshot>, TelegramError>>,
+    },
+    SearchChatMessages {
+        provider_chat_id: String,
+        query: String,
+        limit: i32,
+        reply_tx: Sender<Result<Vec<TelegramTdlibMessageSnapshot>, TelegramError>>,
+    },
 }

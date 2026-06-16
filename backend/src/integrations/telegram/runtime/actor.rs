@@ -5,6 +5,7 @@ mod driver;
 mod edit;
 mod history;
 mod responses;
+mod search;
 mod send;
 mod session;
 mod spawn;

@@ -305,6 +305,39 @@ pub(crate) fn tdlib_unpin_chat_message_request(
     })
 }
 
+pub(crate) fn tdlib_search_messages_request(query: &str, limit: i32, extra: &str) -> Value {
+    json!({
+        "@type": "searchMessages",
+        "chat_list": { "@type": "chatListMain" },
+        "query": query.trim(),
+        "offset_date": 0,
+        "offset_chat_id": 0,
+        "offset_message_id": 0,
+        "limit": tdlib_page_limit(limit),
+        "filter": { "@type": "searchMessagesFilterEmpty" },
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_search_chat_messages_request(
+    chat_id: i64,
+    query: &str,
+    limit: i32,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "searchChatMessages",
+        "chat_id": chat_id,
+        "query": query.trim(),
+        "sender_id": null,
+        "from_message_id": 0,
+        "offset": 0,
+        "limit": tdlib_page_limit(limit),
+        "filter": { "@type": "searchMessagesFilterEmpty" },
+        "@extra": extra.trim()
+    })
+}
+
 pub(crate) fn tdlib_get_forum_topics_request(chat_id: i64, limit: i32, extra: &str) -> Value {
     json!({
         "@type": "getForumTopics",
