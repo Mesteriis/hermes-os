@@ -15,6 +15,7 @@ use super::edit::{
 };
 use super::history::actor_sync_history;
 use super::send::{actor_send_reply, actor_send_text};
+use super::topics::actor_get_forum_topics;
 
 pub(super) fn drive_tdlib_actor(
     config: AppConfig,
@@ -132,6 +133,13 @@ pub(super) fn drive_tdlib_actor(
                     &text,
                     &command_id,
                 ));
+            }
+            TelegramRuntimeCommand::GetForumTopics {
+                provider_chat_id,
+                limit,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_get_forum_topics(&client, &provider_chat_id, limit));
             }
         }
     }

@@ -10,6 +10,7 @@ mod session;
 mod spawn;
 mod start_request;
 mod support;
+mod topics;
 
 pub(super) use self::session::optional_telegram_session_key;
 pub(super) use self::spawn::spawn_tdlib_actor;

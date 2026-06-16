@@ -5,6 +5,7 @@ use tokio::task;
 use crate::integrations::telegram::client::{TelegramError, TelegramManualSendRequest};
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatSnapshot, TelegramTdlibFileSnapshot, TelegramTdlibMessageSnapshot,
+    TelegramTdlibTopicSnapshot,
 };
 
 use super::TDJSON_COMMAND_TIMEOUT;
@@ -261,6 +262,32 @@ pub(super) async fn request_actor_pin_message(
         reply_rx
             .recv_timeout(TDJSON_COMMAND_TIMEOUT)
             .map_err(|_| TelegramError::TdlibRuntime("Telegram TDLib pin timed out".to_owned()))?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_get_forum_topics(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    limit: i32,
+) -> Result<Vec<TelegramTdlibTopicSnapshot>, TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::GetForumTopics {
+                provider_chat_id,
+                limit,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting forum topic requests".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib forum topics timed out".to_owned())
+        })?
     })
     .await
     .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?

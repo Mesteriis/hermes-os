@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use crate::integrations::telegram::client::{TelegramError, TelegramManualSendRequest};
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatSnapshot, TelegramTdlibFileSnapshot, TelegramTdlibMessageSnapshot,
+    TelegramTdlibTopicSnapshot,
 };
 
 use super::models::TelegramHistorySyncMode;
@@ -120,5 +121,10 @@ pub(super) enum TelegramRuntimeCommand {
         text: String,
         command_id: String,
         reply_tx: Sender<Result<TelegramTdlibMessageSnapshot, TelegramError>>,
+    },
+    GetForumTopics {
+        provider_chat_id: String,
+        limit: i32,
+        reply_tx: Sender<Result<Vec<TelegramTdlibTopicSnapshot>, TelegramError>>,
     },
 }

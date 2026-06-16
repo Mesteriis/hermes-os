@@ -305,6 +305,19 @@ pub(crate) fn tdlib_unpin_chat_message_request(
     })
 }
 
+pub(crate) fn tdlib_get_forum_topics_request(chat_id: i64, limit: i32, extra: &str) -> Value {
+    json!({
+        "@type": "getForumTopics",
+        "chat_id": chat_id,
+        "query": "",
+        "offset_date": 0,
+        "offset_message_id": 0,
+        "offset_message_thread_id": 0,
+        "limit": tdlib_page_limit(limit),
+        "@extra": extra.trim()
+    })
+}
+
 fn tdlib_page_limit(limit: i32) -> i32 {
     limit.clamp(1, 100)
 }

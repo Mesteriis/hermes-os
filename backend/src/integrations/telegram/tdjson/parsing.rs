@@ -3,6 +3,7 @@ mod events;
 mod files;
 mod message_parts;
 mod messages;
+mod topics;
 mod values;
 
 pub(crate) use chats::{parse_tdlib_chat_ids, parse_tdlib_chat_snapshot};
@@ -12,3 +13,4 @@ pub(crate) use events::{
 };
 pub(crate) use files::parse_tdlib_file_snapshot;
 pub(crate) use messages::{parse_tdlib_message_list, parse_tdlib_message_snapshot};
+pub(crate) use topics::parse_tdlib_topic_list;

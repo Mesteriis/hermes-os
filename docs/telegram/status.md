@@ -20,7 +20,7 @@ Organizations или Timeline.
 | 8 | Dialog/chat list | ◐ | 64 |
 | 9 | Private chats | ◐ | 60 |
 | 10 | Groups/supergroups/channels | ◐ | 35 |
-| 11 | Topics/forums | ⚠ | 40 |
+| 11 | Topics/forums | ⚠ | 60 |
 | 12 | Message ingestion/projection | ✓ | 85 |
 | 13 | Message lifecycle commands | ◐ | 48 |
 | 14 | Replies/forwards/pins | ◐ | 38 |
@@ -221,7 +221,7 @@ Missing:
 - channel post/admin state;
 - topic-enabled forum support.
 
-### §11 Topics/forums — 40%
+### §11 Topics/forums — 60%
 
 Foundation in place: `telegram_topics` table (migration 0086), `TelegramTopic` model,
 `topics.rs` client (upsert/list/get), three API routes
@@ -229,10 +229,15 @@ Foundation in place: `telegram_topics` table (migration 0086), `TelegramTopic` m
 frontend types, TanStack Query hooks (`useTelegramTopicsQuery`,
 `useTelegramTopicMessagesQuery`), and a Topics tab in `TelegramThreadSideSections`.
 
+Live TDLib sync is now wired: `GetForumTopics` runtime command, `actor_get_forum_topics`
+actor handler, `request_actor_get_forum_topics` async wrapper, and `sync_forum_topics`
+method on `TelegramRuntimeManager`. The `GET /chats/{id}/topics` API route calls
+`sync_forum_topics` before serving the DB projection, so topics are auto-populated for
+live TDLib accounts on first request. Falls back silently to DB rows for fixture accounts.
+
 Missing:
 
-- TDLib forumTopic sync (ingest from `updateForumTopicInfo`);
-- topic reply model (thread-scoped message list with reply context);
+- push-event listener for TDLib `updateForumTopicInfo` (live topic state changes);
 - topic unread/pinned state driven by live events;
 - provider write (create/close/reopen topic).
 

@@ -21,6 +21,7 @@ mod sync_chats;
 mod sync_history;
 mod sync_history_tdlib;
 mod tdlib_actor;
+mod topics;
 
 #[derive(Clone, Default)]
 pub struct TelegramRuntimeManager {
