@@ -84,7 +84,7 @@ Most gaps are `PARTIAL` or `MISSING`.
 | Message history | PARTIAL | Selected/older history sync exists; observed edit versions/diffs/deletion history missing. |
 | Edit versions | PARTIAL | `telegram_message_versions` plus list endpoint exist, and the per-message reference panel now renders local edit-history summaries with relative text-length deltas between captured versions, but provider-observed diffs are still missing. |
 | Tombstones | PARTIAL | `telegram_message_tombstones` plus list endpoint exist, and the per-message reference panel now renders provider-delete vs local-visibility state summaries, but provider reconciliation/history UX is still missing. |
-| Provider command retry | MISSING | No command outbox/retry model found. |
+| Provider command retry | PARTIAL | `retry_command` increments `retry_count` up to `max_retries`; the executor polls `status IN ('queued', 'retrying') AND retry_count < max_retries`; final failure marks `failed` with `last_error`. Exponential back-off and dead-letter UI still missing. |
 
 ## Reactions
 
@@ -131,7 +131,7 @@ Most gaps are `PARTIAL` or `MISSING`.
 | Dialog search | PARTIAL | `GET /api/v1/telegram/chats/search` now backs header-driven dialog search results and can reopen projected chats, but it remains projection/local-only and does not reach provider-side TDLib search. |
 | Media search | PARTIAL | `GET /api/v1/telegram/search/media` now backs the files-tab media gallery and workspace media hits with projection/local free-text filters plus download metadata for files-tab parity, and workspace media cards can reopen the owning message context in the current dialog, but it remains projection-local and does not reach provider-side TDLib search. |
 | Provider search | MISSING | No stable TDLib provider-search API/UI found. |
-| Topic search | MISSING | No topic search because topic projection is missing. |
+| Topic search | MISSING | `telegram_topics` projection and list endpoint now exist (Slice 3), but no dedicated topic search route or UI has been built yet. |
 | Member search | PARTIAL | The inspector `Members` tab now supports local search over the projected member roster returned by `GET /api/v1/telegram/chats/{chat_id}/members`, but there is still no dedicated provider/member search route or provider-synced roster. |
 
 ## Realtime
