@@ -5,7 +5,9 @@ import type {
   TelegramEditRequest,
   TelegramForwardChainResponse,
   TelegramLifecycleResponse,
+  TelegramManualSendResponse,
   TelegramReplyChainResponse,
+  TelegramReplyRequest,
   TelegramPinRequest,
   TelegramMessageTombstoneListResponse,
   TelegramMessageVersionListResponse,
@@ -196,5 +198,26 @@ export async function fetchTelegramReactions(
   return ApiClient.instance.get<TelegramReactionListResponse>(
     `/api/v1/telegram/messages/${encodeURIComponent(messageId)}/reactions`,
     'Telegram reactions request failed'
+  )
+}
+
+export async function replyToTelegramMessage(params: {
+  message_id: string
+  account_id: string
+  provider_chat_id: string
+  reply_to_provider_message_id: string
+  text: string
+}): Promise<TelegramManualSendResponse> {
+  const request: TelegramReplyRequest = {
+    command_id: newCommandId(),
+    account_id: params.account_id,
+    provider_chat_id: params.provider_chat_id,
+    reply_to_provider_message_id: params.reply_to_provider_message_id,
+    text: params.text,
+  }
+  return ApiClient.instance.post<TelegramManualSendResponse>(
+    `/api/v1/telegram/messages/${encodeURIComponent(params.message_id)}/reply`,
+    request,
+    'Telegram message reply failed'
   )
 }

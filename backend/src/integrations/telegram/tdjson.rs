@@ -22,7 +22,7 @@ pub(crate) use self::requests::{
     tdlib_download_file_request, tdlib_edit_message_text_request, tdlib_get_chat_history_request,
     tdlib_get_chat_request, tdlib_get_chats_request, tdlib_load_chats_request,
     tdlib_pin_chat_message_request, tdlib_remove_message_reaction_request,
-    tdlib_send_text_message_request, tdlib_unpin_chat_message_request,
+    tdlib_send_reply_request, tdlib_send_text_message_request, tdlib_unpin_chat_message_request,
 };
 pub(crate) use self::snapshots::{
     TelegramTdlibChatSnapshot, TelegramTdlibFileSnapshot, TelegramTdlibMessageSnapshot,

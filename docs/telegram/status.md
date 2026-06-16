@@ -276,7 +276,7 @@ Remaining gaps:
 - retries/executing/failed transitions backed by a real outbox worker;
 - per-target result rows beyond the current command record.
 
-### §14 Replies/forwards/pins — 38%
+### §14 Replies/forwards/pins — 52%
 
 Pinned-message metadata can already surface in UI, and the selected-chat pinned
 tab is now backed by a dedicated projection query instead of only the currently
@@ -291,6 +291,12 @@ history/command evidence plus richer forward source summaries. `POST
 /api/v1/telegram/messages/{message_id}/pin` now also records local pin/unpin
 state with durable command rows, redacted audit and thread-level pin/unpin
 controls.
+
+Reply command flow is now complete: `tdlib_send_reply_request` builder,
+`ReplyMessage` runtime command variant, actor handler, async request function,
+`POST /api/v1/telegram/messages/{message_id}/reply` API route, and full
+frontend wiring — composer reply-preview banner, Reply action in message list,
+and `useTelegramSendActions` composable routing send vs reply in TelegramPage.
 
 Missing:
 

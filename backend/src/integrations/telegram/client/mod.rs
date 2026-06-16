@@ -30,8 +30,8 @@ pub use self::models::{
     TelegramCredentialBinding, TelegramDeliveryState, TelegramLiveAccountSetupRequest,
     TelegramManualSendRequest, TelegramManualSendResponse, TelegramMessage,
     TelegramMessageIngestResult, TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest,
-    TelegramQrLoginStatus, TelegramQrLoginStatusResponse, TelegramSyncState, TelegramTopic,
-    TelegramTopicListResponse,
+    TelegramQrLoginStatus, TelegramQrLoginStatusResponse, TelegramReplyRequest, TelegramSyncState,
+    TelegramTopic, TelegramTopicListResponse,
 };
 pub use self::projection::project_raw_telegram_message;
 pub use self::store::TelegramStore;

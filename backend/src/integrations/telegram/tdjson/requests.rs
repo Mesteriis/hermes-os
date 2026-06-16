@@ -260,6 +260,38 @@ pub(crate) fn tdlib_pin_chat_message_request(
     })
 }
 
+pub(crate) fn tdlib_send_reply_request(
+    chat_id: i64,
+    reply_to_message_id: i64,
+    text: &str,
+    extra: &str,
+) -> Result<Value, TelegramError> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Err(TelegramError::InvalidRequest(
+            "reply text must not be empty".to_owned(),
+        ));
+    }
+    Ok(json!({
+        "@type": "sendMessage",
+        "chat_id": chat_id,
+        "reply_to": {
+            "@type": "inputMessageReplyToMessage",
+            "message_id": reply_to_message_id
+        },
+        "input_message_content": {
+            "@type": "inputMessageText",
+            "text": {
+                "@type": "formattedText",
+                "text": text,
+                "entities": []
+            },
+            "clear_draft": true
+        },
+        "@extra": extra.trim()
+    }))
+}
+
 pub(crate) fn tdlib_unpin_chat_message_request(
     chat_id: i64,
     message_id: i64,

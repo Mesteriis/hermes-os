@@ -114,4 +114,11 @@ pub(super) enum TelegramRuntimeCommand {
         command_id: String,
         reply_tx: Sender<Result<(), TelegramError>>,
     },
+    ReplyMessage {
+        provider_chat_id: String,
+        reply_to_provider_message_id: String,
+        text: String,
+        command_id: String,
+        reply_tx: Sender<Result<TelegramTdlibMessageSnapshot, TelegramError>>,
+    },
 }

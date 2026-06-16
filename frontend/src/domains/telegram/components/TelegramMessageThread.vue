@@ -48,6 +48,7 @@ const props = defineProps<{
   mediaGalleryItems: TelegramMediaItem[]
   isWorkspaceSearchLoading: boolean
   focusedTelegramMessage?: TelegramMessage | null
+  replyTo?: TelegramMessage | null
 }>()
 
 const emit = defineEmits<{
@@ -73,6 +74,8 @@ const emit = defineEmits<{
   toggleMuteChat: []
   toggleReadChat: []
   selectTopic: [topicId: string]
+  replyMessage: [message: TelegramMessage]
+  clearReply: []
 }>()
 
 const threadSearchQuery = ref('')
@@ -213,6 +216,7 @@ watch(
         @editMessage="(message) => emit('editMessage', message)"
         @deleteMessage="(message) => emit('deleteMessage', message)"
         @restoreMessage="(message) => emit('restoreMessage', message)"
+        @replyMessage="(message) => emit('replyMessage', message)"
         @togglePinMessage="(message) => emit('togglePinMessage', message)"
         @addReaction="(payload) => emit('addReaction', payload)"
         @removeReaction="(payload) => emit('removeReaction', payload)"
@@ -241,9 +245,11 @@ watch(
         :isTelegramActionSubmitting="isTelegramActionSubmitting"
         :selectedAccountId="selectedTelegramChat.account_id"
         :selectedProviderChatId="selectedTelegramChat.provider_chat_id"
+        :replyTo="replyTo"
         @update:text="updateDraftText"
         @sendMessage="emit('sendMessage')"
         @syncHistory="emit('syncHistory')"
+        @clearReply="emit('clearReply')"
       />
     </template>
     <div v-else class="empty-panel fill">

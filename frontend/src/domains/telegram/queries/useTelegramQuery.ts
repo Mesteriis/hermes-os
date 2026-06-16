@@ -30,7 +30,8 @@ import {
   markTelegramChatRead,
   markTelegramChatUnread,
   fetchTelegramTopics,
-  fetchTelegramTopicMessages
+  fetchTelegramTopicMessages,
+  replyToTelegramMessage
 } from '../api/telegram'
 import {
   addTelegramReaction,
@@ -344,6 +345,17 @@ export function useEditTelegramMessageMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: editTelegramMessage,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
+    }
+  })
+}
+
+export function useReplyTelegramMessageMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: replyToTelegramMessage,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })

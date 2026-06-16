@@ -26,6 +26,7 @@ const emit = defineEmits<{
   editMessage: [message: TelegramMessage]
   deleteMessage: [message: TelegramMessage]
   restoreMessage: [message: TelegramMessage]
+  replyMessage: [message: TelegramMessage]
   togglePinMessage: [message: TelegramMessage]
   addReaction: [payload: { message: TelegramMessage; emoji: string }]
   removeReaction: [payload: { message: TelegramMessage; emoji: string }]
@@ -345,6 +346,14 @@ function formatBytes(bytes: number): string {
               <Icon icon="tabler:git-merge" width="14" height="14" />
             </button>
             <button
+              type="button"
+              class="btn-icon-only"
+              :title="t('Reply')"
+              @click.stop="emit('replyMessage', message)"
+            >
+              <Icon icon="tabler:corner-up-left" width="14" height="14" />
+            </button>
+            <button
               v-if="isCapabilityVisible('messages.pin')"
               type="button"
               class="btn-icon-only"
@@ -388,6 +397,14 @@ function formatBytes(bytes: number): string {
             class="telegram-message-actions"
             v-if="!isOutbound(message) && !isTelegramActionSubmitting && (isCapabilityVisible('messages.restore_visibility') || isCapabilityVisible('messages.pin'))"
           >
+            <button
+              type="button"
+              class="btn-icon-only"
+              :title="t('Reply')"
+              @click.stop="emit('replyMessage', message)"
+            >
+              <Icon icon="tabler:corner-up-left" width="14" height="14" />
+            </button>
             <button
               v-if="isCapabilityVisible('messages.pin')"
               type="button"
@@ -624,20 +641,9 @@ function formatBytes(bytes: number): string {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.btn-primary {
-  background: var(--color-primary, #0066cc);
-  color: #fff;
-  border-color: var(--color-primary, #0066cc);
-}
-.btn-danger {
-  background: var(--color-danger, #c62828);
-  color: #fff;
-  border-color: var(--color-danger, #c62828);
-}
-.btn-ghost {
-  background: transparent;
-  border-color: transparent;
-}
+.btn-primary { background: var(--color-primary, #0066cc); color: #fff; border-color: var(--color-primary, #0066cc); }
+.btn-danger { background: var(--color-danger, #c62828); color: #fff; border-color: var(--color-danger, #c62828); }
+.btn-ghost { background: transparent; border-color: transparent; }
 .telegram-delete-confirm {
   margin: 4px 0;
   padding: 6px;
@@ -659,23 +665,11 @@ function formatBytes(bytes: number): string {
   border: 1px solid var(--color-border, #e0e0e0); cursor: default;
 }
 .telegram-reaction-remove {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--color-text-secondary, #777);
-  cursor: pointer;
-  line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 14px; height: 14px; padding: 0; border: none; border-radius: 999px;
+  background: transparent; color: var(--color-text-secondary, #777); cursor: pointer; line-height: 1;
 }
-.telegram-reaction-remove:hover {
-  background: var(--color-danger-subtle, #fde8e8);
-  color: var(--color-danger, #c62828);
-}
+.telegram-reaction-remove:hover { background: var(--color-danger-subtle, #fde8e8); color: var(--color-danger, #c62828); }
 .telegram-reaction-picker { position: relative; display: inline-block; margin-top: 4px; }
 .telegram-reaction-trigger {
   display: inline-flex; align-items: center; justify-content: center;

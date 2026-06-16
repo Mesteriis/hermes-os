@@ -664,8 +664,6 @@ export async function downloadTelegramMediaFromUi(
   }
 }
 
-// --- Forum topics ---
-
 export async function fetchTelegramTopics(
   telegramChatId: string,
   limit = 100
@@ -695,5 +693,6 @@ export {
   fetchTelegramMessageVersions,
   fetchTelegramReactions,
   removeTelegramReaction,
+  replyToTelegramMessage,
   restoreTelegramMessageVisibility,
 } from './telegramLifecycle'

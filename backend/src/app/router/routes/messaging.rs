@@ -135,6 +135,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_message_restore_visibility),
         )
         .route(
+            "/api/v1/telegram/messages/{message_id}/reply",
+            post(post_telegram_message_reply),
+        )
+        .route(
             "/api/v1/telegram/messages/{message_id}/pin",
             post(post_telegram_message_pin),
         )

@@ -15,7 +15,7 @@ pub use chats::{
 };
 pub use messages::{
     NewTelegramMessage, TelegramDeliveryState, TelegramManualSendRequest,
-    TelegramManualSendResponse, TelegramMessage, TelegramMessageIngestResult,
+    TelegramManualSendResponse, TelegramMessage, TelegramMessageIngestResult, TelegramReplyRequest,
 };
 pub use qr_login::{
     TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatus,

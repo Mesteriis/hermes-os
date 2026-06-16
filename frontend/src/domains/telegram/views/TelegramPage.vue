@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
+import { useTelegramSendActions } from '../queries/useTelegramSendActions'
 import { useQueryClient } from '@tanstack/vue-query'
 import { useI18n } from '../../../platform/i18n'
 import TelegramActionRail from '../components/TelegramActionRail.vue'
@@ -42,7 +43,6 @@ import {
   usePinTelegramMessageMutation,
   useRemoveTelegramReactionMutation,
   useRestoreTelegramMessageMutation,
-  useSendTelegramMessageMutation,
   useStartTelegramRuntimeMutation,
   useSyncTelegramChatsMutation,
   useSyncTelegramHistoryMutation,
@@ -149,7 +149,18 @@ watch(
 )
 const syncChatsMutation = useSyncTelegramChatsMutation()
 const syncHistoryMutation = useSyncTelegramHistoryMutation()
-const sendMessageMutation = useSendTelegramMessageMutation()
+const { replyTo, sendOrReply } = useTelegramSendActions(
+  () => selectedTelegramChat.value,
+  () => store.isTelegramBusy,
+  () => store.telegramManualSendText,
+  {
+    setActionSubmitting: store.setTelegramActionSubmitting,
+    setActionMessage: store.setTelegramActionMessage,
+    setError: store.setTelegramError,
+    resetSendForm: store.resetSendForm,
+    setSelectedChatId: (id) => { store.selectedTelegramChatId = id },
+  }
+)
 const startRuntimeMutation = useStartTelegramRuntimeMutation()
 const editMessageMutation = useEditTelegramMessageMutation()
 const deleteMessageMutation = useDeleteTelegramMessageMutation()
@@ -299,24 +310,7 @@ async function syncOlderTelegramHistory() {
   }
 }
 async function sendTelegramManualMessage() {
-  if (store.isTelegramBusy || !selectedTelegramChat.value) return
-  store.setTelegramActionSubmitting(true)
-  store.setTelegramActionMessage('')
-  store.setTelegramError('')
-  try {
-    const result = await sendMessageMutation.mutateAsync({
-      account_id: selectedTelegramChat.value.account_id,
-      provider_chat_id: selectedTelegramChat.value.provider_chat_id,
-      text: store.telegramManualSendText
-    })
-    store.selectedTelegramChatId = result.provider_chat_id
-    store.setTelegramActionMessage(`Telegram message ${result.status}`)
-    store.resetSendForm()
-  } catch (err) {
-    store.setTelegramError(err instanceof Error ? err.message : String(err))
-  } finally {
-    store.setTelegramActionSubmitting(false)
-  }
+  await sendOrReply()
 }
 async function editTelegramMessage(message: TelegramMessage) {
   if (store.isTelegramBusy || !selectedTelegramChat.value) return
@@ -635,6 +629,7 @@ function openTelegramAccountSetup() {
         :mediaGalleryItems="telegramMediaGalleryItems"
         :isWorkspaceSearchLoading="isWorkspaceSearchLoading"
         :focusedTelegramMessage="store.focusedTelegramMessage"
+        :replyTo="replyTo"
         @update:activeThreadTab="store.activeThreadTab = $event"
         @update:telegramManualSendText="store.setTelegramManualSendText($event)"
         @railTabChange="(tab) => store.openTelegramInspector(tab)"
@@ -661,6 +656,8 @@ function openTelegramAccountSetup() {
         @toggleArchiveChat="void toggleArchivedTelegramChat()"
         @toggleMuteChat="void toggleMutedTelegramChat()"
         @toggleReadChat="void toggleReadTelegramChat()"
+        @replyMessage="(message) => { replyTo = message; store.activeThreadTab = 'messages' }"
+        @clearReply="replyTo = null"
       />
       <TelegramRail
         v-if="store.isTelegramInspectorOpen"

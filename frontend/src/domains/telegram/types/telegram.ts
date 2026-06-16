@@ -436,39 +436,13 @@ export type TelegramLifecycleResponse = {
   tombstone_id: string | null
 }
 
-export type TelegramEditRequest = {
-  command_id: string
-  account_id: string
-  provider_chat_id: string
-  provider_message_id: string
-  new_text: string
-}
-
-export type TelegramDeleteRequest = {
-  command_id: string
-  account_id: string
-  provider_chat_id: string
-  provider_message_id: string
-  reason_class: TelegramTombstoneReasonClass
-  actor_class: TelegramTombstoneActorClass
-  is_provider_delete: boolean
-}
-
-export type TelegramRestoreVisibilityRequest = {
-  command_id: string
-  account_id: string
-  provider_chat_id: string
-  provider_message_id: string
-  reason: string
-}
-
-export type TelegramPinRequest = {
-  command_id: string
-  account_id: string
-  provider_chat_id: string
-  provider_message_id: string
-  is_pinned: boolean
-}
+export type {
+  TelegramDeleteRequest,
+  TelegramEditRequest,
+  TelegramPinRequest,
+  TelegramReplyRequest,
+  TelegramRestoreVisibilityRequest,
+} from './telegramLifecycleRequests'
 
 export type TelegramMessageVersion = {
   version_id: string

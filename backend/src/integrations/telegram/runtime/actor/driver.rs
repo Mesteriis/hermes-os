@@ -14,7 +14,7 @@ use super::edit::{
     actor_delete_message, actor_edit_message, actor_pin_message, actor_set_reaction,
 };
 use super::history::actor_sync_history;
-use super::send::actor_send_text;
+use super::send::{actor_send_reply, actor_send_text};
 
 pub(super) fn drive_tdlib_actor(
     config: AppConfig,
@@ -115,6 +115,21 @@ pub(super) fn drive_tdlib_actor(
                     &provider_chat_id,
                     &provider_message_id,
                     pin,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::ReplyMessage {
+                provider_chat_id,
+                reply_to_provider_message_id,
+                text,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_send_reply(
+                    &client,
+                    &provider_chat_id,
+                    &reply_to_provider_message_id,
+                    &text,
                     &command_id,
                 ));
             }

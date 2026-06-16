@@ -138,6 +138,29 @@ pub struct TelegramManualSendResponse {
     pub rendered_preview_hash: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct TelegramReplyRequest {
+    pub command_id: String,
+    pub account_id: String,
+    pub provider_chat_id: String,
+    pub reply_to_provider_message_id: String,
+    pub text: String,
+}
+
+impl TelegramReplyRequest {
+    pub(crate) fn validate(&self) -> Result<(), TelegramError> {
+        validate_non_empty("command_id", &self.command_id)?;
+        validate_non_empty("account_id", &self.account_id)?;
+        validate_non_empty("provider_chat_id", &self.provider_chat_id)?;
+        validate_non_empty(
+            "reply_to_provider_message_id",
+            &self.reply_to_provider_message_id,
+        )?;
+        validate_non_empty("text", &self.text)?;
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TelegramMessage {
     pub message_id: String,

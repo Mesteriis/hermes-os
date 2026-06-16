@@ -206,6 +206,36 @@ pub(super) async fn request_actor_set_reaction(
     .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
 }
 
+pub(super) async fn request_actor_reply(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    reply_to_provider_message_id: String,
+    text: String,
+    command_id: String,
+) -> Result<TelegramTdlibMessageSnapshot, TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::ReplyMessage {
+                provider_chat_id,
+                reply_to_provider_message_id,
+                text,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting reply commands".to_owned(),
+                )
+            })?;
+        reply_rx
+            .recv_timeout(TDJSON_COMMAND_TIMEOUT)
+            .map_err(|_| TelegramError::TdlibRuntime("Telegram TDLib reply timed out".to_owned()))?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
 pub(super) async fn request_actor_pin_message(
     command_tx: Sender<TelegramRuntimeCommand>,
     provider_chat_id: String,

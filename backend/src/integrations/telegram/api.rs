@@ -27,7 +27,8 @@ pub(crate) use messages::{
     get_telegram_message_tombstones, get_telegram_message_versions, get_telegram_messages,
     get_telegram_reactions, get_telegram_reply_chain, post_telegram_fixture_message,
     post_telegram_manual_send, post_telegram_message_delete, post_telegram_message_edit,
-    post_telegram_message_pin, post_telegram_message_restore_visibility, post_telegram_reaction,
+    post_telegram_message_pin, post_telegram_message_reply,
+    post_telegram_message_restore_visibility, post_telegram_reaction,
 };
 pub(crate) use qr_login::{
     delete_telegram_qr_login, get_telegram_qr_login_status, post_telegram_qr_login_password,

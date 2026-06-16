@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import TelegramSendDryRunPanel from './TelegramSendDryRunPanel.vue'
+import type { TelegramMessage } from '../../types/telegram'
 
 const { t } = useI18n()
 
@@ -11,12 +12,14 @@ const props = defineProps<{
   isTelegramActionSubmitting: boolean
   selectedAccountId: string | null
   selectedProviderChatId: string | null
+  replyTo?: TelegramMessage | null
 }>()
 
 const emit = defineEmits<{
   'update:text': [value: string]
   sendMessage: []
   syncHistory: []
+  clearReply: []
 }>()
 
 const isEmojiTrayOpen = ref(false)
@@ -34,6 +37,15 @@ function submitManualSend() {
 </script>
 
 <template>
+  <div class="telegram-composer-wrapper">
+  <div v-if="replyTo" class="telegram-reply-banner">
+    <Icon icon="tabler:corner-up-left" width="14" height="14" />
+    <span class="telegram-reply-banner__sender">{{ replyTo.sender_display_name ?? replyTo.sender }}</span>
+    <span class="telegram-reply-banner__text">{{ replyTo.text?.slice(0, 80) }}</span>
+    <button type="button" :title="t('Cancel reply')" @click="emit('clearReply')">
+      <Icon icon="tabler:x" width="14" height="14" />
+    </button>
+  </div>
   <form class="telegram-compose-bar" @submit.prevent="submitManualSend">
     <button type="button" disabled :title="t('Attachment upload is not available in this slice')">
       <Icon icon="tabler:paperclip" width="18" height="18" />
@@ -103,6 +115,7 @@ function submitManualSend() {
       </div>
     </div>
   </form>
+  </div>
 </template>
 
 <style scoped>
@@ -190,5 +203,39 @@ function submitManualSend() {
 .command-popover button:hover,
 .telegram-emoji-popover button:hover {
   background: var(--color-bg, #f5f5f5);
+}
+.telegram-composer-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+.telegram-reply-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--color-primary-subtle, #e3f2fd);
+  border-top: 1px solid var(--color-border, #e0e0e0);
+  font-size: 11px;
+  color: var(--color-text-secondary, #555);
+}
+.telegram-reply-banner__sender {
+  font-weight: 600;
+  color: var(--color-primary, #0066cc);
+  flex-shrink: 0;
+}
+.telegram-reply-banner__text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.telegram-reply-banner button {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px;
+  color: var(--color-text-secondary, #999);
+  border-radius: 4px;
+  flex-shrink: 0;
 }
 </style>
