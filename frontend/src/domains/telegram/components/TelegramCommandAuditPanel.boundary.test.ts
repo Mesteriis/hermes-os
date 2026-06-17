@@ -10,7 +10,9 @@ describe('TelegramCommandAuditPanel boundary', () => {
     )
 
     expect(source).toContain('useTelegramCommandsQuery')
+    expect(source).toContain('providerChatId: computed(() =>')
     expect(source).toContain('telegramCommandAuditState')
+    expect(source).toContain('telegramCommandSubject')
     expect(source).toContain('telegramCommandRetrySummary')
     expect(source).toContain('filteredCommands')
     expect(source).toContain("t('Current chat only')")

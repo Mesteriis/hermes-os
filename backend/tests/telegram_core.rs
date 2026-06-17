@@ -200,12 +200,22 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
         "blocked",
         true,
     );
+    assert_capability_status(&capabilities_body, "topics.list", "degraded", false);
+    assert_capability_status(&capabilities_body, "topics.create", "blocked", true);
+    assert_capability_status(&capabilities_body, "topics.close", "blocked", true);
     assert!(
         capabilities_body["unsupported_features"]
             .as_array()
             .expect("unsupported features")
             .iter()
             .any(|feature| feature == "video_calls")
+    );
+    assert!(
+        !capabilities_body["unsupported_features"]
+            .as_array()
+            .expect("unsupported features")
+            .iter()
+            .any(|feature| feature == "forum_topic_mutations")
     );
 
     let account_response = app

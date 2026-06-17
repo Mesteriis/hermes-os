@@ -101,14 +101,33 @@ pub async fn reconcile_join_commands_from_provider_roster(
     provider_member_id: &str,
     observed_at: chrono::DateTime<Utc>,
 ) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
+    reconcile_join_commands_from_provider_roster_with_source(
+        pool,
+        account_id,
+        provider_chat_id,
+        provider_member_id,
+        observed_at,
+        "tdlib.getSupergroupMembers",
+    )
+    .await
+}
+
+pub async fn reconcile_join_commands_from_provider_roster_with_source(
+    pool: &PgPool,
+    account_id: &str,
+    provider_chat_id: &str,
+    provider_member_id: &str,
+    observed_at: chrono::DateTime<Utc>,
+    observed_via: &str,
+) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
     let provider_state = json!({
         "provider_chat_id": provider_chat_id,
         "provider_member_id": provider_member_id,
-        "observed_via": "tdlib.getSupergroupMembers",
+        "observed_via": observed_via,
         "membership_state": "present",
     });
     let result_payload = json!({
-        "source": "tdlib.getSupergroupMembers",
+        "source": observed_via,
         "provider_chat_id": provider_chat_id,
         "provider_member_id": provider_member_id,
         "membership_state": "present",
@@ -152,6 +171,134 @@ pub async fn reconcile_join_commands_from_provider_roster(
     rows.into_iter()
         .map(row_to_telegram_provider_write_command)
         .collect()
+}
+
+pub async fn reconcile_leave_commands_from_provider_roster(
+    pool: &PgPool,
+    account_id: &str,
+    provider_chat_id: &str,
+    provider_member_id: &str,
+    membership_state: &str,
+    status: Option<&str>,
+    role: Option<&str>,
+    observed_at: chrono::DateTime<Utc>,
+) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
+    reconcile_leave_commands_from_provider_roster_with_source(
+        pool,
+        account_id,
+        provider_chat_id,
+        provider_member_id,
+        membership_state,
+        status,
+        role,
+        observed_at,
+        "tdlib.getSupergroupMembers",
+    )
+    .await
+}
+
+pub async fn reconcile_leave_commands_from_provider_roster_with_source(
+    pool: &PgPool,
+    account_id: &str,
+    provider_chat_id: &str,
+    provider_member_id: &str,
+    membership_state: &str,
+    status: Option<&str>,
+    role: Option<&str>,
+    observed_at: chrono::DateTime<Utc>,
+    observed_via: &str,
+) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
+    let provider_state = json!({
+        "provider_chat_id": provider_chat_id,
+        "provider_member_id": provider_member_id,
+        "observed_via": observed_via,
+        "membership_state": membership_state,
+        "status": status,
+        "role": role,
+    });
+    let result_payload = json!({
+        "source": observed_via,
+        "provider_chat_id": provider_chat_id,
+        "provider_member_id": provider_member_id,
+        "membership_state": membership_state,
+        "status": status,
+        "role": role,
+        "provider_observed_at": observed_at,
+    });
+    let rows = sqlx::query(
+        r#"
+        UPDATE telegram_provider_write_commands
+        SET status = 'completed',
+            result_payload = $4,
+            last_error = NULL,
+            provider_observed_at = $3,
+            provider_state = $5,
+            reconciliation_status = 'observed',
+            reconciled_at = $3,
+            completed_at = $3,
+            locked_at = NULL,
+            locked_by = NULL,
+            next_attempt_at = NULL,
+            dead_lettered_at = NULL,
+            updated_at = $3
+        WHERE account_id = $1
+          AND provider_chat_id = $2
+          AND command_kind = 'leave'
+          AND status IN ('queued', 'retrying', 'executing')
+          AND provider_message_id IS NULL
+          AND confirmation_decision IN ('confirmed', 'not_required')
+          AND capability_state IN ('available', 'degraded')
+        RETURNING *
+        "#,
+    )
+    .bind(account_id)
+    .bind(provider_chat_id)
+    .bind(observed_at)
+    .bind(&result_payload)
+    .bind(&provider_state)
+    .fetch_all(pool)
+    .await
+    .map_err(TelegramError::from)?;
+
+    rows.into_iter()
+        .map(row_to_telegram_provider_write_command)
+        .collect()
+}
+
+pub async fn reconcile_leave_commands_from_exhaustive_absence(
+    pool: &PgPool,
+    account_id: &str,
+    provider_chat_id: &str,
+    provider_member_id: &str,
+    observed_at: chrono::DateTime<Utc>,
+    observed_via: &str,
+) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
+    reconcile_leave_commands_from_provider_roster_with_source(
+        pool,
+        account_id,
+        provider_chat_id,
+        provider_member_id,
+        "absent_exhaustive",
+        None,
+        None,
+        observed_at,
+        observed_via,
+    )
+    .await
+}
+
+pub fn inactive_roster_membership_state(item: &TelegramChatMember) -> Option<&'static str> {
+    if matches!(item.status.as_deref(), Some("banned"))
+        || matches!(item.role.as_deref(), Some("banned"))
+    {
+        return Some("banned");
+    }
+    if matches!(item.status.as_deref(), Some("left"))
+        || matches!(item.role.as_deref(), Some("left"))
+    {
+        return Some("left");
+    }
+    None
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -299,6 +446,8 @@ pub async fn list_provider_chat_members(
                permissions, source, observed_at
         FROM telegram_chat_participants
         WHERE telegram_chat_id = $1
+          AND coalesce(status, '') NOT IN ('left', 'banned', 'absent_exhaustive')
+          AND coalesce(role, '') NOT IN ('left', 'banned')
           AND ($2::TEXT IS NULL OR role = $2)
           AND (
               $3::TEXT IS NULL
@@ -405,7 +554,10 @@ fn is_numeric_id(value: &str) -> bool {
 mod tests {
     use serde_json::json;
 
-    use super::{tdlib_self_membership_lifecycle, telegram_self_provider_member_id};
+    use super::{
+        TelegramChatMember, inactive_roster_membership_state, tdlib_self_membership_lifecycle,
+        telegram_self_provider_member_id,
+    };
 
     #[test]
     fn derives_self_provider_member_id_only_from_numeric_telegram_identity() {
@@ -482,5 +634,32 @@ mod tests {
             )
             .is_none()
         );
+    }
+
+    #[test]
+    fn derives_inactive_roster_membership_state_from_status_or_role() {
+        let member = TelegramChatMember {
+            sender_id: "user:42".to_owned(),
+            sender_display_name: None,
+            message_count: 0,
+            last_message_at: None,
+            source: "tdlib".to_owned(),
+            provider_member_id: "user:42".to_owned(),
+            username: None,
+            role: Some("member".to_owned()),
+            status: Some("left".to_owned()),
+            is_admin: false,
+            is_owner: false,
+            permissions: json!({}),
+            observed_at: None,
+        };
+        assert_eq!(inactive_roster_membership_state(&member), Some("left"));
+
+        let banned = TelegramChatMember {
+            status: Some("administrator".to_owned()),
+            role: Some("banned".to_owned()),
+            ..member
+        };
+        assert_eq!(inactive_roster_membership_state(&banned), Some("banned"));
     }
 }

@@ -11,6 +11,8 @@ import type {
   TelegramChatActionRequest,
   TelegramChatActionResponse,
   TelegramChatLifecycleCommandResponse,
+  TelegramChatFolderReassignRequest,
+  TelegramChatFolderReassignResponse,
   TelegramMessageListResponse,
   TelegramRuntimeStatus,
   TelegramAccountListResponse,
@@ -211,6 +213,41 @@ export async function muteTelegramChat(
     `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/mute`,
     request,
     'Telegram chat mute failed'
+  )
+}
+
+export async function addTelegramChatToFolder(
+  telegramChatId: string,
+  providerFolderId: number,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatLifecycleCommandResponse> {
+  return ApiClient.instance.post<TelegramChatLifecycleCommandResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/folders/${providerFolderId}`,
+    request,
+    'Telegram chat folder add failed'
+  )
+}
+
+export async function removeTelegramChatFromFolder(
+  telegramChatId: string,
+  providerFolderId: number,
+  request: TelegramChatActionRequest
+): Promise<TelegramChatLifecycleCommandResponse> {
+  return ApiClient.instance.post<TelegramChatLifecycleCommandResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/folders/${providerFolderId}/remove`,
+    request,
+    'Telegram chat folder remove failed'
+  )
+}
+
+export async function reassignTelegramChatFolders(
+  telegramChatId: string,
+  request: TelegramChatFolderReassignRequest
+): Promise<TelegramChatFolderReassignResponse> {
+  return ApiClient.instance.post<TelegramChatFolderReassignResponse>(
+    `/api/v1/telegram/chats/${encodeURIComponent(telegramChatId)}/folders/reassign`,
+    request,
+    'Telegram chat folder reassignment failed'
   )
 }
 

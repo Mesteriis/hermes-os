@@ -82,7 +82,7 @@ pub(super) fn row_to_telegram_message_tombstone(
     })
 }
 
-pub(super) fn row_to_telegram_provider_write_command(
+pub(crate) fn row_to_telegram_provider_write_command(
     row: PgRow,
 ) -> Result<TelegramProviderWriteCommand, TelegramError> {
     Ok(TelegramProviderWriteCommand {

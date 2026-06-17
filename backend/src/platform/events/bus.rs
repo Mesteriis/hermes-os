@@ -61,6 +61,7 @@ pub mod telegram_event_types {
     pub const CHAT_PINNED: &str = "telegram.chat.pinned";
     pub const CHAT_ARCHIVED: &str = "telegram.chat.archived";
     pub const CHAT_MUTED: &str = "telegram.chat.muted";
+    pub const FOLDERS_UPDATED: &str = "telegram.folders.updated";
 
     pub const TYPING_CHANGED: &str = "telegram.typing.changed";
 

@@ -40,6 +40,15 @@ pub(crate) struct TelegramTdlibChatPositionSnapshot {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibChatRemovedFromListSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) list_kind: String,
+    pub(crate) provider_folder_id: Option<i64>,
+    pub(crate) source_event: String,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TelegramTdlibTopicUpdateSnapshot {
     pub(crate) provider_chat_id: String,
     pub(crate) topic: TelegramTdlibTopicSnapshot,
@@ -52,6 +61,12 @@ pub(crate) struct TelegramTdlibTypingSnapshot {
     pub(crate) sender_id: String,
     pub(crate) action: String,
     pub(crate) is_active: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibChatFoldersUpdateSnapshot {
+    pub(crate) folders: Vec<crate::integrations::telegram::tdjson::TelegramTdlibChatFolderSnapshot>,
+    pub(crate) source_event: String,
 }
 
 pub(crate) fn authorization_state(event: &Value) -> Option<&Value> {
@@ -316,6 +331,113 @@ pub(crate) fn parse_tdlib_chat_position_snapshot(
     }))
 }
 
+pub(crate) fn parse_tdlib_chat_folder_snapshot(
+    event: &Value,
+) -> Result<
+    Option<crate::integrations::telegram::tdjson::TelegramTdlibChatFolderSnapshot>,
+    TelegramError,
+> {
+    if event.get("@type").and_then(Value::as_str) != Some("chatFolder") {
+        return Ok(None);
+    }
+
+    let provider_folder_id = event
+        .get("id")
+        .and_then(Value::as_i64)
+        .ok_or_else(|| TelegramError::TdlibRuntime("chatFolder missing `id`".to_owned()))?;
+    let title = tdlib_chat_folder_name(event.get("name"))
+        .ok_or_else(|| TelegramError::TdlibRuntime("chatFolder missing `name.text`".to_owned()))?;
+
+    Ok(Some(
+        crate::integrations::telegram::tdjson::TelegramTdlibChatFolderSnapshot {
+            provider_folder_id,
+            title,
+            icon_name: tdlib_chat_folder_icon_name(event.get("icon")),
+            color_id: event.get("color_id").and_then(Value::as_i64),
+            raw: event.clone(),
+        },
+    ))
+}
+
+pub(crate) fn parse_tdlib_chat_removed_from_list_snapshot(
+    event: &Value,
+) -> Result<Option<TelegramTdlibChatRemovedFromListSnapshot>, TelegramError> {
+    if event.get("@type").and_then(Value::as_str) != Some("updateChatRemovedFromList") {
+        return Ok(None);
+    }
+
+    let provider_chat_id = tdlib_event_id(event, "chat_id").ok_or_else(|| {
+        TelegramError::TdlibRuntime("updateChatRemovedFromList missing `chat_id`".to_owned())
+    })?;
+    let list = event.get("chat_list").ok_or_else(|| {
+        TelegramError::TdlibRuntime("updateChatRemovedFromList missing `chat_list`".to_owned())
+    })?;
+    let list_type = list.get("@type").and_then(Value::as_str).ok_or_else(|| {
+        TelegramError::TdlibRuntime(
+            "updateChatRemovedFromList missing `chat_list.@type`".to_owned(),
+        )
+    })?;
+    let (list_kind, provider_folder_id) = match list_type {
+        "chatListMain" => ("main".to_owned(), None),
+        "chatListArchive" => ("archive".to_owned(), None),
+        "chatListFolder" => (
+            "folder".to_owned(),
+            list.get("chat_folder_id").and_then(Value::as_i64),
+        ),
+        other => {
+            return Err(TelegramError::TdlibRuntime(format!(
+                "unsupported updateChatRemovedFromList list type `{other}`"
+            )));
+        }
+    };
+
+    Ok(Some(TelegramTdlibChatRemovedFromListSnapshot {
+        provider_chat_id,
+        list_kind,
+        provider_folder_id,
+        source_event: "updateChatRemovedFromList".to_owned(),
+        raw: event.clone(),
+    }))
+}
+
+pub(crate) fn parse_tdlib_chat_folders_update_snapshot(
+    event: &Value,
+) -> Result<Option<TelegramTdlibChatFoldersUpdateSnapshot>, TelegramError> {
+    if event.get("@type").and_then(Value::as_str) != Some("updateChatFolders") {
+        return Ok(None);
+    }
+
+    let folders = event
+        .get("chat_folders")
+        .and_then(Value::as_array)
+        .ok_or_else(|| {
+            TelegramError::TdlibRuntime("updateChatFolders missing `chat_folders`".to_owned())
+        })?;
+    let mut snapshots = Vec::with_capacity(folders.len());
+    for folder in folders {
+        let provider_folder_id = folder.get("id").and_then(Value::as_i64).ok_or_else(|| {
+            TelegramError::TdlibRuntime("updateChatFolders folder missing `id`".to_owned())
+        })?;
+        let title = tdlib_chat_folder_name(folder.get("name")).ok_or_else(|| {
+            TelegramError::TdlibRuntime("updateChatFolders folder missing `name.text`".to_owned())
+        })?;
+        snapshots.push(
+            crate::integrations::telegram::tdjson::TelegramTdlibChatFolderSnapshot {
+                provider_folder_id,
+                title,
+                icon_name: tdlib_chat_folder_icon_name(folder.get("icon")),
+                color_id: folder.get("color_id").and_then(Value::as_i64),
+                raw: folder.clone(),
+            },
+        );
+    }
+
+    Ok(Some(TelegramTdlibChatFoldersUpdateSnapshot {
+        folders: snapshots,
+        source_event: "updateChatFolders".to_owned(),
+    }))
+}
+
 fn tdlib_event_id(event: &Value, key: &str) -> Option<String> {
     event
         .get(key)
@@ -334,4 +456,29 @@ fn tdlib_sender_id(sender: &Value) -> Option<String> {
         "messageSenderChat" => tdlib_event_id(sender, "chat_id").map(|id| format!("chat:{id}")),
         _ => None,
     }
+}
+
+fn tdlib_chat_folder_name(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(|value| value.get("text"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            value
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned)
+        })
+}
+
+fn tdlib_chat_folder_icon_name(value: Option<&Value>) -> Option<String> {
+    value
+        .and_then(|value| value.get("name"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }

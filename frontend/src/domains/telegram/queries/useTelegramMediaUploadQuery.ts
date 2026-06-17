@@ -2,6 +2,8 @@ import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { z } from 'zod'
 import { importCommunicationAttachment, uploadTelegramMedia, type TelegramMediaUploadKind } from '../api/telegramMediaUpload'
 import { telegramQueryKeys } from './useTelegramQuery'
+import { patchTelegramCommandList } from './realtimeTelegramCommandPatches'
+import type { TelegramProviderWriteCommand } from '../types/telegram'
 
 export type TelegramMediaUploadInput = {
   accountId: string
@@ -29,7 +31,8 @@ export function useTelegramMediaUploadMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: uploadTelegramMediaFile,
-    onSuccess: (result) => {
+    onSuccess: (result, variables) => {
+      primeTelegramUploadCommandQueues(queryClient, result, variables.file.name || undefined, variables.caption)
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
@@ -37,6 +40,57 @@ export function useTelegramMediaUploadMutation() {
       queryClient.invalidateQueries({ queryKey: ['telegram', 'commands'] })
     }
   })
+}
+
+export function primeTelegramUploadCommandQueues(
+  queryClient: {
+    getQueriesData: <TData>(filters: { queryKey: readonly unknown[] }) => Array<
+      [readonly unknown[], TData | undefined]
+    >
+    setQueryData: <TData>(queryKey: readonly unknown[], updater: TData) => unknown
+  },
+  result: Awaited<ReturnType<typeof uploadTelegramMedia>>,
+  filename?: string,
+  caption?: string
+): void {
+  for (const [queryKey, data] of queryClient.getQueriesData<TelegramProviderWriteCommand[]>({
+    queryKey: ['telegram', 'commands']
+  })) {
+    const updated = patchTelegramCommandList(
+      queryKey,
+      data,
+      'telegram.media.upload.started',
+      {
+        command_id: result.command_id,
+        account_id: result.account_id,
+        provider_chat_id: result.provider_chat_id,
+        command_kind: 'send_media',
+        idempotency_key: result.command_id,
+        capability_state: 'available',
+        action_class: 'provider_write',
+        confirmation_decision: 'confirmed',
+        status: result.status,
+        retry_count: 0,
+        max_retries: 3,
+        reconciliation_status: result.reconciliation_status,
+        payload: {
+          attachment_id: result.attachment_id,
+          blob_id: result.blob_id,
+          media_type: result.media_type,
+          filename: filename?.trim() || undefined,
+          caption: caption?.trim() || undefined,
+        },
+        target_ref: {
+          provider_chat_id: result.provider_chat_id,
+          attachment_id: result.attachment_id,
+          blob_id: result.blob_id,
+        },
+      }
+    )
+    if (updated !== data) {
+      queryClient.setQueryData(queryKey, updated)
+    }
+  }
 }
 
 export async function uploadTelegramMediaFile(input: TelegramMediaUploadInput) {

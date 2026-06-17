@@ -229,8 +229,8 @@ impl EmailThreadStore {
                             'scan_checked_at', a.scan_checked_at,
                             'scan_summary', a.scan_summary,
                             'scan_metadata', a.scan_metadata,
-                            'storage_kind', a.storage_kind,
-                            'storage_path', a.storage_path,
+                            'storage_kind', b.storage_kind,
+                            'storage_path', b.storage_path,
                             'created_at', a.created_at,
                             'updated_at', a.updated_at
                         )
@@ -240,6 +240,7 @@ impl EmailThreadStore {
                 ) AS attachments
             FROM communication_messages m
             LEFT JOIN communication_attachments a ON a.message_id = m.message_id
+            LEFT JOIN communication_mail_blobs b ON b.blob_id = a.blob_id
             WHERE m.account_id = $1
               AND m.channel_kind = 'email'
               AND m.local_state = 'active'

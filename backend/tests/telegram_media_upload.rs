@@ -158,6 +158,22 @@ async fn telegram_media_upload_imports_attachment_and_queues_provider_command() 
     .await
     .expect("started event status");
     assert_eq!(started_status.as_deref(), Some("queued"));
+    let started_payload = sqlx::query_scalar::<_, Value>(
+        r#"
+        SELECT payload
+        FROM event_log
+        WHERE event_type = 'telegram.media.upload.started'
+          AND subject->>'id' = $1
+        "#,
+    )
+    .bind(&command_id)
+    .fetch_one(&pool)
+    .await
+    .expect("started event payload");
+    assert_eq!(started_payload["command_kind"], "send_media");
+    assert_eq!(started_payload["payload"]["attachment_id"], attachment_id);
+    assert_eq!(started_payload["payload"]["filename"], "upload-note.txt");
+    assert_eq!(started_payload["capability_state"], "available");
 }
 
 #[tokio::test]

@@ -5,7 +5,9 @@ use serde_json::json;
 use super::{AUDIT_ACTOR_ID, build_command_event, build_event};
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::{TelegramReactionDeleteQuery, api_audit_log, telegram_store};
-use crate::integrations::telegram::api::helpers::publish_telegram_event;
+use crate::integrations::telegram::api::helpers::{
+    ensure_telegram_account_operation_allowed, publish_telegram_event,
+};
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::{
     TelegramReactionListResponse, TelegramReactionRequest, TelegramReactionResponse,
@@ -20,6 +22,7 @@ pub(crate) async fn post_telegram_reaction(
     Json(mut request): Json<TelegramReactionRequest>,
 ) -> Result<Json<TelegramReactionResponse>, ApiError> {
     request.validate()?;
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "reactions.add").await?;
     let command_id = request
         .command_id
         .clone()
@@ -54,9 +57,18 @@ pub(crate) async fn post_telegram_reaction(
     let command_event = build_command_event(
         &request.account_id,
         &command_id,
+        "react",
         &request.provider_chat_id,
         Some(&message_id),
+        Some(&request.provider_message_id),
         "queued",
+        json!({
+            "telegram_message_id": &message_id,
+            "reaction_emoji": &request.reaction_emoji,
+            "sender_id": &request.sender_id,
+            "sender_display_name": &request.sender_display_name,
+            "is_active": true,
+        }),
     );
     publish_telegram_event(&state, command_event).await?;
 
@@ -83,6 +95,8 @@ pub(crate) async fn delete_telegram_reaction(
         command_id: Some(command_id.clone()),
     };
     request.validate()?;
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "reactions.remove")
+        .await?;
     let store = telegram_store(&state)?;
     let response = lifecycle::remove_reaction(store.pool(), &request, &message_id).await?;
 
@@ -112,9 +126,18 @@ pub(crate) async fn delete_telegram_reaction(
     let command_event = build_command_event(
         &request.account_id,
         &command_id,
+        "unreact",
         &request.provider_chat_id,
         Some(&message_id),
+        Some(&request.provider_message_id),
         "queued",
+        json!({
+            "telegram_message_id": &message_id,
+            "reaction_emoji": &request.reaction_emoji,
+            "sender_id": &request.sender_id,
+            "sender_display_name": &request.sender_display_name,
+            "is_active": false,
+        }),
     );
     publish_telegram_event(&state, command_event).await?;
 

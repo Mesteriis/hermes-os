@@ -9,7 +9,13 @@ import type {
   TelegramRuntimeStatus,
   TelegramThreadTab
 } from '../../types/telegram'
-import { telegramChatIsSavedMessages, telegramChatMentionCountValue, telegramChatTypingLabel } from '../../stores/telegram'
+import {
+  telegramChatIsSavedMessages,
+  telegramChatLastReadInboxProviderMessageId,
+  telegramChatMentionCountValue,
+  telegramRuntimeCommandTarget,
+  telegramChatTypingLabel
+} from '../../stores/telegram'
 
 const { t } = useI18n()
 
@@ -76,12 +82,20 @@ function unreadCount(chat: TelegramChat): number {
   return typeof value === 'number' ? value : 0
 }
 
+function unreadReadToggleCapability(chat: TelegramChat): string {
+  return unreadCount(chat) > 0 ? 'dialogs.mark_read' : 'dialogs.mark_unread'
+}
+
 function mentionCount(chat: TelegramChat): number {
   return telegramChatMentionCountValue(chat)
 }
 
 function typingLabel(chat: TelegramChat): string {
   return telegramChatTypingLabel(chat)
+}
+
+function lastReadInboxProviderMessageId(chat: TelegramChat): string {
+  return telegramChatLastReadInboxProviderMessageId(chat)
 }
 
 function syncStateMatchesChat(
@@ -117,7 +131,8 @@ function commandStateLabel(
 ): string {
   if (!commandStateMatchesChat(status, chat)) return ''
   const parts = [status?.last_command_status ?? t('command')]
-  if (status?.last_command_message_id) parts.push(status.last_command_message_id)
+  const target = telegramRuntimeCommandTarget(status)
+  if (target) parts.push(target)
   return parts.join(' · ')
 }
 </script>
@@ -140,6 +155,12 @@ function commandStateLabel(
           </span>
           <span v-if="typingLabel(selectedTelegramChat)" class="telegram-thread-stat telegram-thread-stat-typing">
             {{ typingLabel(selectedTelegramChat) }}
+          </span>
+          <span
+            v-if="lastReadInboxProviderMessageId(selectedTelegramChat)"
+            class="telegram-thread-stat telegram-thread-stat-read"
+          >
+            {{ t('Read through') }} {{ lastReadInboxProviderMessageId(selectedTelegramChat) }}
           </span>
           <span
             v-if="syncStateMatchesChat(selectedTelegramRuntimeStatus, selectedTelegramChat)"
@@ -181,8 +202,8 @@ function commandStateLabel(
       </button>
       <button
         type="button"
-        :disabled="isTelegramActionSubmitting || !capabilityEnabled('dialogs.mark_read')"
-        :title="capabilityTitle('dialogs.mark_read', unreadCount(selectedTelegramChat) > 0 ? t('Mark read') : t('Mark unread'))"
+        :disabled="isTelegramActionSubmitting || !capabilityEnabled(unreadReadToggleCapability(selectedTelegramChat))"
+        :title="capabilityTitle(unreadReadToggleCapability(selectedTelegramChat), unreadCount(selectedTelegramChat) > 0 ? t('Mark read') : t('Mark unread'))"
         :class="{ active: unreadCount(selectedTelegramChat) > 0 }"
         @click="emit('toggleReadChat')"
       >

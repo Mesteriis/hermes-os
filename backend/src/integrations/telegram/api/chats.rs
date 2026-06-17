@@ -4,11 +4,13 @@ use chrono::Utc;
 use serde_json::json;
 
 use super::helpers::{
-    publish_telegram_event, telegram_runtime_event_bridge_context, telegram_secret_store,
+    AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
+    telegram_runtime_event_bridge_context, telegram_secret_store,
 };
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::{
-    TelegramChatListResponse, TelegramListQuery, communication_ingestion_store, telegram_store,
+    TelegramChatListResponse, TelegramListQuery, api_audit_log, communication_ingestion_store,
+    telegram_store,
 };
 use crate::integrations::telegram::client::{
     TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramError,
@@ -20,6 +22,7 @@ use crate::integrations::telegram::runtime::{
 use crate::integrations::telegram::runtime::{
     TelegramMemberSyncContext, TelegramRuntimeOperationContext,
 };
+use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
 
@@ -151,9 +154,22 @@ pub(crate) async fn post_telegram_chat_members_sync(
                 "Telegram chat `{telegram_chat_id}` was not found"
             )))
         })?;
+    ensure_telegram_account_operation_allowed(&state, &chat.account_id, "participants.sync")
+        .await?;
+    let started = build_event(
+        telegram_event_types::SYNC_STARTED,
+        &chat.account_id,
+        &telegram_chat_id,
+        json!({
+            "scope": "members",
+            "provider_chat_id": &chat.provider_chat_id,
+        }),
+    );
+    publish_telegram_event(&state, started).await?;
+
     let secret_store = telegram_secret_store(&state)?;
     let communication_store = communication_ingestion_store(&state)?;
-    let items = state
+    let items = match state
         .telegram_runtime
         .sync_chat_members(
             TelegramMemberSyncContext {
@@ -166,21 +182,60 @@ pub(crate) async fn post_telegram_chat_members_sync(
             },
             &telegram_chat_id,
         )
+        .await
+    {
+        Ok(items) => items,
+        Err(error) => {
+            let failed = build_event(
+                telegram_event_types::SYNC_FAILED,
+                &chat.account_id,
+                &telegram_chat_id,
+                json!({
+                    "scope": "members",
+                    "provider_chat_id": &chat.provider_chat_id,
+                    "status": "failed",
+                }),
+            );
+            publish_telegram_event(&state, failed).await?;
+            return Err(error.into());
+        }
+    };
+
+    api_audit_log(&state)?
+        .record(&NewApiAuditRecord::telegram_participants_sync(
+            AUDIT_ACTOR_ID,
+            &telegram_chat_id,
+            &chat.account_id,
+            &chat.provider_chat_id,
+            items.len() as i64,
+        ))
         .await?;
 
-    for item in &items {
-        let event = build_event(
-            telegram_event_types::PARTICIPANT_UPDATED,
-            &chat.account_id,
-            &telegram_chat_id,
-            json!({
-                "telegram_chat_id": telegram_chat_id,
-                "provider_chat_id": chat.provider_chat_id,
-                "participant": item,
-            }),
-        );
-        publish_telegram_event(&state, event).await?;
-    }
+    let progress = build_event(
+        telegram_event_types::SYNC_PROGRESS,
+        &chat.account_id,
+        &telegram_chat_id,
+        json!({
+            "scope": "members",
+            "provider_chat_id": &chat.provider_chat_id,
+            "synced_count": items.len(),
+            "status": "completed",
+        }),
+    );
+    publish_telegram_event(&state, progress).await?;
+
+    let completed = build_event(
+        telegram_event_types::SYNC_COMPLETED,
+        &chat.account_id,
+        &telegram_chat_id,
+        json!({
+            "scope": "members",
+            "provider_chat_id": &chat.provider_chat_id,
+            "synced_count": items.len(),
+            "status": "completed",
+        }),
+    );
+    publish_telegram_event(&state, completed).await?;
 
     Ok(Json(TelegramChatMembersSyncResponse {
         telegram_chat_id,

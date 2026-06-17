@@ -9,10 +9,11 @@ import type {
   TelegramThreadTab
 } from '../../types/telegram'
 import { mergeTelegramAttachmentHints, telegramMediaAlbumGroupsForMessages } from '../../stores/telegram'
-import { telegramTopicProviderLabel, telegramTopicStateLabel } from '../../stores/telegramTopicProjection'
+import { telegramAttachmentReadiness } from '../../stores/telegramMediaSearch'
 import TelegramAttachmentSearchPanel from './TelegramAttachmentSearchPanel.vue'
+import TelegramDownloadQueueStatus from './TelegramDownloadQueueStatus.vue'
 import TelegramMediaViewer from './TelegramMediaViewer.vue'
-import { useTelegramTopicsQuery, useTelegramTopicSearchQuery } from '../../queries/useTelegramQuery'
+import TelegramThreadTopicsPanel from './TelegramThreadTopicsPanel.vue'
 
 const { t } = useI18n()
 
@@ -35,18 +36,6 @@ const props = defineProps<{
   isTelegramActionSubmitting: boolean
   telegramMessageTime: (message: TelegramMessage) => string
 }>()
-
-const topicSearchQuery = ref('')
-const { data: topicsData, isLoading: topicsLoading } = useTelegramTopicsQuery(
-  computed(() => props.telegramChatId)
-)
-const { data: topicSearchData } = useTelegramTopicSearchQuery(
-  computed(() => props.telegramChatId),
-  topicSearchQuery
-)
-const displayedTopics = computed(() =>
-  topicSearchQuery.value.trim() ? (topicSearchData.value?.items ?? []) : (topicsData.value?.items ?? [])
-)
 
 const activeViewerAttachment = ref<TelegramAttachmentHint | null>(null)
 
@@ -82,6 +71,10 @@ function attachmentTime(attachment: TelegramAttachmentHint): string {
   return message ? props.telegramMessageTime(message) : ''
 }
 
+function attachmentReadiness(attachment: TelegramAttachmentHint) {
+  return telegramAttachmentReadiness(attachment)
+}
+
 function isOutbound(message: TelegramMessage): boolean {
   return message.delivery_state === 'sent' || message.delivery_state === 'send_dry_run'
 }
@@ -109,12 +102,19 @@ function attachmentIcon(attachment: TelegramAttachmentHint): string {
   if (attachment.kind === 'sticker') return 'tabler:sticker'
   return 'tabler:file-description'
 }
+
 </script>
 
 <template>
   <div class="chat-body telegram-thread-body">
     <template v-if="activeThreadTab === 'files'">
       <TelegramAttachmentSearchPanel :accountId="accountId" />
+      <TelegramDownloadQueueStatus
+        :fileHints="mergedFileHints"
+        :voiceHints="voiceHints"
+        :isTelegramActionSubmitting="isTelegramActionSubmitting"
+        @downloadMedia="(attachment) => emit('downloadMedia', attachment, messageForAttachment(attachment) ?? undefined)"
+      />
       <div v-if="mediaGalleryItems.length === 0 && fileHints.length === 0" class="empty-panel fill">
         {{ t('No files in selected Telegram history.') }}
       </div>
@@ -153,7 +153,8 @@ function attachmentIcon(attachment: TelegramAttachmentHint): string {
           </span>
           <div>
             <strong>{{ attachment.fileName }}</strong>
-            <small>{{ attachment.mimeType ?? attachment.kind }} · {{ attachment.sizeBytes == null ? attachment.downloadState : formatBytes(attachment.sizeBytes) }}</small>
+            <small>{{ attachment.mimeType ?? attachment.kind }} · {{ attachment.sizeBytes == null ? attachmentReadiness(attachment).label : formatBytes(attachment.sizeBytes) }}</small>
+            <small>{{ attachmentReadiness(attachment).detail }}</small>
           </div>
           <button
             v-if="messageForAttachment(attachment)"
@@ -172,8 +173,8 @@ function attachmentIcon(attachment: TelegramAttachmentHint): string {
           </button>
           <button
             type="button"
-            :disabled="isTelegramActionSubmitting || attachment.tdlibFileId === null"
-            :title="attachment.tdlibFileId === null ? t('Download requires TDLib file metadata') : t('Download media')"
+            :disabled="isTelegramActionSubmitting || !attachmentReadiness(attachment).can_request_download"
+            :title="attachmentReadiness(attachment).can_request_download ? t(attachmentReadiness(attachment).action_label) : attachmentReadiness(attachment).detail"
             @click="emit('downloadMedia', attachment, messageForAttachment(attachment) ?? undefined)"
           >
             <Icon icon="tabler:download" width="17" height="17" />
@@ -196,6 +197,12 @@ function attachmentIcon(attachment: TelegramAttachmentHint): string {
     </template>
 
     <template v-else-if="activeThreadTab === 'voice'">
+      <TelegramDownloadQueueStatus
+        :fileHints="mergedFileHints"
+        :voiceHints="voiceHints"
+        :isTelegramActionSubmitting="isTelegramActionSubmitting"
+        @downloadMedia="(attachment) => emit('downloadMedia', attachment, messageForAttachment(attachment) ?? undefined)"
+      />
       <div v-if="voiceHints.length === 0" class="empty-panel fill">
         {{ t('No voice notes or audio files in selected Telegram history.') }}
       </div>
@@ -212,8 +219,9 @@ function attachmentIcon(attachment: TelegramAttachmentHint): string {
             <div>
               <strong>{{ voice.fileName }}</strong>
               <small>
-                {{ voice.mimeType ?? voice.kind }} · {{ voice.sizeBytes == null ? voice.downloadState : formatBytes(voice.sizeBytes) }}
+                {{ voice.mimeType ?? voice.kind }} · {{ voice.sizeBytes == null ? attachmentReadiness(voice).label : formatBytes(voice.sizeBytes) }}
               </small>
+              <small>{{ attachmentReadiness(voice).detail }}</small>
             </div>
             <button
               v-if="messageForAttachment(voice)"
@@ -236,12 +244,12 @@ function attachmentIcon(attachment: TelegramAttachmentHint): string {
             <span>{{ t('Voice playback is available after local download.') }}</span>
             <button
               type="button"
-              :disabled="isTelegramActionSubmitting || voice.tdlibFileId === null"
-              :title="voice.tdlibFileId === null ? t('Download requires TDLib file metadata') : t('Download voice file')"
+              :disabled="isTelegramActionSubmitting || !attachmentReadiness(voice).can_request_download"
+              :title="attachmentReadiness(voice).can_request_download ? t(attachmentReadiness(voice).action_label) : attachmentReadiness(voice).detail"
               @click="emit('downloadMedia', voice, messageForAttachment(voice) ?? undefined)"
             >
               <Icon icon="tabler:download" width="16" height="16" />
-              {{ t('Download') }}
+              {{ t(attachmentReadiness(voice).action_label) }}
             </button>
           </div>
           <footer v-if="messageForAttachment(voice)" class="telegram-voice-card__footer">
@@ -284,41 +292,13 @@ function attachmentIcon(attachment: TelegramAttachmentHint): string {
     </template>
 
     <template v-else-if="activeThreadTab === 'topics'">
-      <div class="telegram-topic-search-bar">
-        <input
-          v-model="topicSearchQuery"
-          type="search"
-          :placeholder="t('Search topics…')"
-          class="telegram-topic-search-input"
-        />
-      </div>
-      <div v-if="topicsLoading && !topicSearchQuery.trim()" class="empty-panel fill">
-        {{ t('Loading topics…') }}
-      </div>
-      <div v-else-if="displayedTopics.length === 0" class="empty-panel fill">
-        {{ topicSearchQuery.trim() ? t('No topics match your search.') : t('No forum topics found for this chat.') }}
-      </div>
-      <div v-else class="telegram-topic-list">
-        <article
-          v-for="topic in displayedTopics"
-          :key="topic.topic_id"
-          class="telegram-topic-card"
-          @click="emit('selectTopic', topic.topic_id)"
-        >
-          <span class="telegram-topic-card__icon">
-            <template v-if="topic.icon_emoji">{{ topic.icon_emoji }}</template>
-            <Icon v-else icon="tabler:message-circle" width="16" height="16" />
-          </span>
-          <div class="telegram-topic-card__body">
-            <strong>{{ topic.title }}</strong>
-            <small>{{ telegramTopicStateLabel(topic) }}</small>
-            <small>{{ telegramTopicProviderLabel(topic) }}</small>
-          </div>
-          <span v-if="topic.unread_count > 0" class="telegram-topic-card__badge">{{ topic.unread_count }}</span>
-          <Icon v-if="topic.is_pinned" icon="tabler:pin" width="13" height="13" class="telegram-topic-card__pin" />
-          <Icon icon="tabler:chevron-right" width="16" height="16" class="telegram-topic-card__arrow" />
-        </article>
-      </div>
+      <TelegramThreadTopicsPanel
+        :accountId="accountId"
+        :telegramChatId="telegramChatId"
+        :providerChatIdHint="chronologicalMessages[0]?.provider_chat_id ?? null"
+        :isTelegramActionSubmitting="isTelegramActionSubmitting"
+        @selectTopic="emit('selectTopic', $event)"
+      />
     </template>
 
     <div v-else class="empty-panel fill">
@@ -348,7 +328,8 @@ function attachmentIcon(attachment: TelegramAttachmentHint): string {
 }
 .telegram-file-list,
 .telegram-link-list,
-.telegram-voice-list {
+.telegram-voice-list,
+.telegram-topic-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -506,73 +487,5 @@ function attachmentIcon(attachment: TelegramAttachmentHint): string {
 }
 .telegram-timeline-row-action:hover {
   background: var(--color-primary-subtle, #e3f2fd);
-}
-.telegram-topic-search-bar { padding: 6px 8px 2px; }
-.telegram-topic-search-input { width: 100%; padding: 5px 8px; border: 1px solid var(--color-border, #ddd); border-radius: 4px; font-size: 12px; background: var(--color-bg, #fff); color: var(--color-text, #333); }
-.telegram-topic-search-input:focus { outline: none; border-color: var(--color-primary, #2196f3); }
-.telegram-topic-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 6px 0;
-}
-.telegram-topic-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 13px;
-  border: 1px solid var(--color-border, #e8ecf0);
-  background: var(--color-surface, #fff);
-}
-.telegram-topic-card:hover {
-  background: var(--color-primary-subtle, #e3f2fd);
-}
-.telegram-topic-card__icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  font-size: 16px;
-  flex-shrink: 0;
-}
-.telegram-topic-card__body {
-  flex: 1;
-  min-width: 0;
-}
-.telegram-topic-card__body strong {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.telegram-topic-card__body small {
-  font-size: 10px;
-  color: var(--color-text-secondary, #999);
-}
-.telegram-topic-card__badge {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  background: var(--color-primary, #0066cc);
-  color: #fff;
-  font-size: 10px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.telegram-topic-card__pin {
-  color: var(--color-text-secondary, #aaa);
-  flex-shrink: 0;
-}
-.telegram-topic-card__arrow {
-  color: var(--color-text-secondary, #bbb);
-  flex-shrink: 0;
 }
 </style>

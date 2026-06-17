@@ -4,6 +4,7 @@ import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import type { TelegramAttachmentHint } from '../../types/telegram'
 import { useTelegramAttachmentPreviewQuery } from '../../queries/useTelegramAttachmentPreviewQuery'
+import { telegramAttachmentReadiness } from '../../stores/telegramMediaSearch'
 
 const { t } = useI18n()
 
@@ -23,6 +24,9 @@ const attachmentPreviewQuery = useTelegramAttachmentPreviewQuery(
 )
 const attachmentPreview = computed(() => attachmentPreviewQuery.data.value ?? null)
 const isAttachmentPreviewError = computed(() => attachmentPreviewQuery.isError.value)
+const attachmentReadiness = computed(() =>
+  props.attachment ? telegramAttachmentReadiness(props.attachment) : null
+)
 
 const previewKind = computed(() => {
   const kind = props.attachment?.kind
@@ -86,7 +90,8 @@ function formatBytes(bytes: number | null): string {
         <div v-else class="telegram-media-viewer__empty">
           <Icon icon="tabler:file-search" width="28" height="28" />
           <p>{{ t('Preview is available after the Telegram media file is downloaded locally.') }}</p>
-          <small>{{ t('Current state:') }} {{ attachment.downloadState }}</small>
+          <small>{{ attachmentReadiness?.label }}</small>
+          <small>{{ attachmentReadiness?.detail }}</small>
           <small v-if="isAttachmentPreviewError">
             {{ t('Safe preview is unavailable for this attachment.') }}
           </small>
@@ -98,12 +103,12 @@ function formatBytes(bytes: number | null): string {
         <span>{{ t('Message ID') }}: {{ attachment.messageId }}</span>
         <button
           type="button"
-          :disabled="attachment.tdlibFileId === null"
-          :title="attachment.tdlibFileId === null ? t('Download requires TDLib file metadata') : t('Download media')"
+          :disabled="!attachmentReadiness?.can_request_download"
+          :title="attachmentReadiness?.can_request_download ? t(attachmentReadiness.action_label) : attachmentReadiness?.detail"
           @click="emit('downloadMedia', attachment)"
         >
           <Icon icon="tabler:download" width="15" height="15" />
-          {{ t('Download') }}
+          {{ t(attachmentReadiness?.action_label ?? 'Download') }}
         </button>
       </footer>
     </section>

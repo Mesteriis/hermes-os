@@ -1,6 +1,16 @@
 import type { TelegramChatMember } from '../types/telegram'
 import { isRecord, storedEventEnvelope, stringValue } from '../../communications/queries/realtimePatchShared'
 
+type TelegramChatMembersPage = {
+  items: TelegramChatMember[]
+  next_cursor: string | null
+}
+
+type TelegramChatMembersInfiniteData = {
+  pages: TelegramChatMembersPage[]
+  pageParams: unknown[]
+}
+
 export type TelegramParticipantPatchQueryClient = {
   getQueriesData?: <TData>(filters: { queryKey: readonly unknown[] }) => Array<
     [readonly unknown[], TData | undefined]
@@ -27,11 +37,11 @@ export function applyTelegramParticipantRealtimePatch(
   if (!telegramChatId || !participant) return false
 
   let patched = false
-  for (const [queryKey, data] of getQueriesData<TelegramChatMember[]>({
+  for (const [queryKey, data] of getQueriesData<TelegramChatMember[] | TelegramChatMembersInfiniteData>({
     queryKey: ['telegram', 'chat-members']
   })) {
     if (queryKey[2] !== telegramChatId) continue
-    const updated = upsertParticipant(data, participant)
+    const updated = patchParticipantQuery(queryKey, data, participant)
     if (updated !== data) {
       setQueryData(queryKey, updated)
       patched = true
@@ -67,14 +77,86 @@ function telegramMemberSource(value: unknown): TelegramChatMember['source'] {
     : 'tdlib'
 }
 
-function upsertParticipant(
-  members: TelegramChatMember[] | undefined,
+function patchParticipantQuery(
+  queryKey: readonly unknown[],
+  data: TelegramChatMember[] | TelegramChatMembersInfiniteData | undefined,
   participant: TelegramChatMember
+): TelegramChatMember[] | TelegramChatMembersInfiniteData | undefined {
+  if (!data) return data
+
+  const query = typeof queryKey[4] === 'string' ? queryKey[4].trim().toLowerCase() : ''
+  const role = typeof queryKey[5] === 'string' ? queryKey[5].trim().toLowerCase() : ''
+
+  if (Array.isArray(data)) {
+    return patchParticipantCollection(data, participant, query, role)
+  }
+
+  if (!isInfiniteData(data)) return data
+  const nextPages = data.pages.map((page) => ({
+    ...page,
+    items: patchParticipantCollection(page.items, participant, query, role) ?? page.items,
+  }))
+  return nextPages.some((page, index) => page.items !== data.pages[index]?.items)
+    ? { ...data, pages: nextPages }
+    : data
+}
+
+function patchParticipantCollection(
+  members: TelegramChatMember[] | undefined,
+  participant: TelegramChatMember,
+  query: string,
+  role: string
 ): TelegramChatMember[] | undefined {
   if (!members) return members
+  if (participantIsInactive(participant)) {
+    return members.filter((member) => member.provider_member_id !== participant.provider_member_id)
+  }
+  const participantMatches = participantMatchesFilters(participant, query, role)
   const existingIndex = members.findIndex(
     (member) => member.provider_member_id === participant.provider_member_id
   )
+  if (!participantMatches) {
+    if (existingIndex < 0) return members
+    return members.filter((member) => member.provider_member_id !== participant.provider_member_id)
+  }
   if (existingIndex < 0) return [participant, ...members]
   return members.map((member, index) => (index === existingIndex ? participant : member))
+}
+
+function participantIsInactive(participant: TelegramChatMember): boolean {
+  const status = (participant.status ?? '').trim().toLowerCase()
+  const role = (participant.role ?? '').trim().toLowerCase()
+  return (
+    status === 'left' ||
+    status === 'banned' ||
+    status === 'absent_exhaustive' ||
+    role === 'left' ||
+    role === 'banned'
+  )
+}
+
+function participantMatchesFilters(
+  participant: TelegramChatMember,
+  query: string,
+  role: string
+): boolean {
+  if (role && (participant.role ?? '').trim().toLowerCase() !== role) return false
+  if (!query) return true
+
+  return [
+    participant.sender_display_name ?? '',
+    participant.sender_id,
+    participant.provider_member_id,
+    participant.username ?? '',
+    participant.role ?? '',
+    participant.status ?? '',
+    participant.source,
+  ]
+    .join(' ')
+    .toLowerCase()
+    .includes(query)
+}
+
+function isInfiniteData(value: unknown): value is TelegramChatMembersInfiniteData {
+  return isRecord(value) && Array.isArray(value.pages) && Array.isArray(value.pageParams)
 }

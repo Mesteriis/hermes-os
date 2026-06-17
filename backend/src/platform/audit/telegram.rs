@@ -362,6 +362,71 @@ impl NewApiAuditRecord {
         )
     }
 
+    pub fn telegram_topic_create(
+        actor_id: impl Into<String>,
+        telegram_chat_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+    ) -> Self {
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::ProviderWrite,
+            "telegram.topic.create",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+
+        Self::new(
+            actor_id,
+            "telegram.topic.create",
+            "POST",
+            "/api/v1/telegram/chats/{telegram_chat_id}/topics",
+            "telegram_chat",
+            Some(telegram_chat_id.into()),
+            metadata,
+        )
+    }
+
+    pub fn telegram_topic_close(
+        actor_id: impl Into<String>,
+        topic_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+        is_closed: bool,
+    ) -> Self {
+        let capability = if is_closed {
+            "telegram.topic.close"
+        } else {
+            "telegram.topic.reopen"
+        };
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::ProviderWrite,
+            capability,
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+        insert_non_empty(metadata_object, "is_closed", is_closed.to_string());
+
+        Self::new(
+            actor_id,
+            capability,
+            "POST",
+            "/api/v1/telegram/topics/{topic_id}/close",
+            "telegram_topic",
+            Some(topic_id.into()),
+            metadata,
+        )
+    }
+
     pub fn telegram_message_restore_visibility(
         actor_id: impl Into<String>,
         message_id: impl Into<String>,
@@ -424,6 +489,41 @@ impl NewApiAuditRecord {
             },
             "POST",
             "/api/v1/telegram/messages/{message_id}/pin",
+            "telegram_message",
+            Some(message_id.into()),
+            metadata,
+        )
+    }
+
+    pub fn telegram_message_mark_read(
+        actor_id: impl Into<String>,
+        message_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+        provider_message_id: impl Into<String>,
+    ) -> Self {
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::ProviderWrite,
+            "telegram.message.mark_read",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+        insert_non_empty(
+            metadata_object,
+            "provider_message_id",
+            provider_message_id.into(),
+        );
+
+        Self::new(
+            actor_id,
+            "telegram.message.mark_read",
+            "POST",
+            "/api/v1/telegram/messages/{message_id}/mark-read",
             "telegram_message",
             Some(message_id.into()),
             metadata,

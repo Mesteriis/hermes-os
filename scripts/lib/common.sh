@@ -186,3 +186,25 @@ wait_for_http() {
 	error "$label did not become ready: $url"
 	return 1
 }
+
+wait_for_service_http() {
+	local pid="$1"
+	local url="$2"
+	local label="$3"
+	local attempts="${4:-60}"
+	local sleep_seconds="${5:-1}"
+	local index=1
+	while [ "$index" -le "$attempts" ]; do
+		if ! kill -0 "$pid" >/dev/null 2>&1; then
+			error "$label failed because the service process exited before readiness: pid=$pid"
+			return 1
+		fi
+		if curl --silent --show-error --fail "$url" >/dev/null 2>&1; then
+			return 0
+		fi
+		sleep "$sleep_seconds"
+		index=$((index + 1))
+	done
+	error "$label did not become ready: $url"
+	return 1
+}

@@ -64,7 +64,11 @@ const reactionsQuery = useTelegramMessageReactionsQuery(
 const commandsQuery = useTelegramCommandsQuery(
   computed(() => props.currentMessage.account_id),
   25,
-  computed(() => props.isOpen)
+  computed(() => props.isOpen),
+  {
+    providerChatId: computed(() => props.currentMessage.provider_chat_id),
+    providerMessageId: computed(() => props.currentMessage.provider_message_id),
+  }
 )
 
 const replyToItems = computed(() => replyChainQuery.data.value?.reply_to ?? [])
@@ -76,16 +80,7 @@ const reactions = computed(() => reactionsQuery.data.value?.reactions ?? [])
 const reactionSummary = computed(() => reactionsQuery.data.value?.summary ?? null)
 const hasSourceEvidence = computed(() => hasTelegramSourceEvidence(props.currentMessage, t))
 const isSourceEvidenceMatch = computed(() => matchesTelegramSourceEvidence(props.currentMessage, t, referenceSearchQuery.value))
-const relatedCommands = computed(() => {
-  const commands = commandsQuery.data.value ?? []
-  const directMatches = commands.filter((command) => command.provider_message_id === props.currentMessage.provider_message_id)
-  if (directMatches.length > 0) {
-    return directMatches
-  }
-  return commands
-    .filter((command) => command.provider_chat_id === props.currentMessage.provider_chat_id)
-    .slice(0, 5)
-})
+const relatedCommands = computed(() => (commandsQuery.data.value ?? []).slice(0, 5))
 const isLoading = computed(
   () =>
     replyChainQuery.isLoading.value ||

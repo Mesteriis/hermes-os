@@ -71,12 +71,15 @@ describe('telegram realtime invalidation handling', () => {
       queryClient
     )
 
-    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(3)
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['telegram', 'messages'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['telegram', 'runtime'],
+    })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'commands'],
     })
   })
 
@@ -102,6 +105,31 @@ describe('telegram realtime invalidation handling', () => {
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['telegram', 'search', 'media'],
+    })
+  })
+
+  it('invalidates telegram command queue queries for media upload events', () => {
+    const queryClient = { invalidateQueries: vi.fn() }
+
+    handleRealtimeEvent(
+      {
+        id: 'tg-48-upload',
+        event: 'event',
+        data: JSON.stringify({
+          event: {
+            event_type: 'telegram.media.upload.failed',
+          },
+        }),
+      },
+      queryClient
+    )
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'commands'],
+    })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'runtime'],
     })
   })
 
@@ -149,6 +177,36 @@ describe('telegram realtime invalidation handling', () => {
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['telegram', 'chat-members'],
+    })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'chats'],
+    })
+  })
+
+  it('invalidates telegram folder and chat queries for provider chat updates', () => {
+    const queryClient = { invalidateQueries: vi.fn() }
+
+    handleRealtimeEvent(
+      {
+        id: 'tg-folder-membership-1',
+        event: 'event',
+        data: JSON.stringify({
+          event: {
+            event_type: 'telegram.chat.updated',
+            payload: {
+              action: 'provider_chat_position_update',
+              list_kind: 'folder',
+              provider_folder_id: 9,
+              order: 42,
+            },
+          },
+        }),
+      },
+      queryClient
+    )
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'folders'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['telegram', 'chats'],

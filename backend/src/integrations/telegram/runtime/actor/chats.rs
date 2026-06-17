@@ -1,7 +1,9 @@
 use serde_json::Value;
 
 use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibChatSnapshot};
+use crate::integrations::telegram::tdjson::{
+    self, TdJsonClient, TelegramTdlibChatFolderSnapshot, TelegramTdlibChatSnapshot,
+};
 
 use super::super::TDJSON_COMMAND_TIMEOUT;
 use super::responses::receive_tdlib_extra;
@@ -37,6 +39,25 @@ pub(super) fn actor_load_chats(
             return Err(TelegramError::TdlibRuntime(message));
         }
         snapshots.push(tdjson::parse_tdlib_chat_snapshot(&chat_response)?);
+    }
+    Ok(snapshots)
+}
+
+pub(super) fn actor_get_chat_folders(
+    client: &TdJsonClient,
+    folder_ids: &[i64],
+) -> Result<Vec<TelegramTdlibChatFolderSnapshot>, TelegramError> {
+    let mut snapshots = Vec::with_capacity(folder_ids.len());
+    for folder_id in folder_ids {
+        let extra = format!("hermes-runtime-get-chat-folder-{folder_id}");
+        client.send_json(&tdjson::tdlib_get_chat_folder_request(*folder_id, &extra))?;
+        let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
+        if let Some(message) = tdjson::tdlib_error_message(&response) {
+            return Err(TelegramError::TdlibRuntime(message));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_chat_folder_snapshot(&response)? {
+            snapshots.push(snapshot);
+        }
     }
     Ok(snapshots)
 }

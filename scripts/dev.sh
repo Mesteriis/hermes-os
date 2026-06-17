@@ -95,15 +95,15 @@ export VITE_HERMES_LOCAL_API_SECRET="$HERMES_LOCAL_API_SECRET"
 
 run_service backend "$color_cyan" bash -lc "cd '$REPO_ROOT' && exec bacon --headless backend-dev"
 backend_pid="$RUN_SERVICE_PID"
+info "Waiting for backend health check"
+wait_for_service_http "$backend_pid" "http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT/healthz" "Backend healthz"
+info "Waiting for backend readiness check"
+wait_for_service_http "$backend_pid" "http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT/readyz" "Backend readyz"
+
 run_service frontend "$color_green" bash -lc "cd '$REPO_ROOT/frontend' && exec pnpm dev --host '$HERMES_FRONTEND_BIND' --port '$HERMES_FRONTEND_PORT' --strictPort"
 frontend_pid="$RUN_SERVICE_PID"
-
-wait_for_http "http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT/healthz" "Backend healthz"
-wait_for_http "http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT/readyz" "Backend readyz"
-wait_for_http "http://$HERMES_FRONTEND_BIND:$HERMES_FRONTEND_PORT" "Frontend Vite"
-
-run_service tauri "$color_yellow" bash -lc "cd '$REPO_ROOT/frontend' && exec pnpm tauri dev"
-tauri_pid="$RUN_SERVICE_PID"
+info "Waiting for frontend dev server"
+wait_for_service_http "$frontend_pid" "http://$HERMES_FRONTEND_BIND:$HERMES_FRONTEND_PORT" "Frontend Vite"
 
 info "Flow ID: $flow_id"
 info "Logs: $session_log"
@@ -112,6 +112,5 @@ printf '%s\n' "PostgreSQL:"
 postgres_status
 printf '%s\n' "Backend:  http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT (pid $backend_pid)"
 printf '%s\n' "Frontend: http://$HERMES_FRONTEND_BIND:$HERMES_FRONTEND_PORT (pid $frontend_pid)"
-printf '%s\n' "Tauri:    desktop dev shell (pid $tauri_pid)"
 
-wait "$tauri_pid"
+wait "$backend_pid" "$frontend_pid"

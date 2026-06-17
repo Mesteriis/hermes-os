@@ -43,6 +43,10 @@ function mediaLabel(item: TelegramMediaItem): string {
   return item.mime_type ?? item.kind
 }
 
+function mediaReadiness(item: TelegramMediaItem) {
+  return telegramMediaReadiness(item)
+}
+
 function totalResultsCount(): number {
   return props.chats.length + props.total + props.mediaItems.length
 }
@@ -128,6 +132,7 @@ function totalResultsCount(): number {
             :key="`${item.message_id}:${item.file_name}`"
             type="button"
             class="telegram-search-results__media-card"
+            :title="mediaReadiness(item).detail"
             @click="emit('openMedia', item)"
           >
             <span class="telegram-search-results__icon">
@@ -136,7 +141,7 @@ function totalResultsCount(): number {
             <div>
               <strong>{{ item.file_name }}</strong>
               <small>{{ mediaLabel(item) }} · {{ item.download_state }}</small>
-              <small>{{ telegramMediaReadiness(item).label }} · {{ telegramMediaReadiness(item).detail }}</small>
+              <small>{{ mediaReadiness(item).label }} · {{ mediaReadiness(item).detail }}</small>
               <small>{{ formatDate(item.occurred_at) }}</small>
             </div>
           </button>

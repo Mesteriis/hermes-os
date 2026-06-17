@@ -6,7 +6,7 @@ SHELL := /usr/bin/env bash
 
 help:
 	@printf '%s\n' 'Hermes development commands:'
-	@printf '%s\n' '  make dev           Start PostgreSQL, backend watcher, Vite, and Tauri dev shell'
+	@printf '%s\n' '  make dev           Start PostgreSQL, backend watcher, and Vite dev server'
 	@printf '%s\n' '  make logs          Tail the active live development log'
 	@printf '%s\n' '  make build         Build backend, frontend, and Tauri release artifacts'
 	@printf '%s\n' '  make migrate       Start PostgreSQL if needed and run backend-managed migrations'

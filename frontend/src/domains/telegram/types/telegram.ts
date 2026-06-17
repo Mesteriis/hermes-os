@@ -90,6 +90,7 @@ export type TelegramRuntimeStatus = {
   last_sync_provider_chat_id?: string | null
   last_command_id?: string | null
   last_command_status?: string | null
+  last_command_kind?: string | null
   last_command_provider_chat_id?: string | null
   last_command_message_id?: string | null
   last_command_telegram_chat_id?: string | null
@@ -135,6 +136,8 @@ export type {
 export type {
   TelegramChatActionRequest,
   TelegramChatActionResponse,
+  TelegramChatFolderReassignRequest,
+  TelegramChatFolderReassignResponse,
   TelegramChatLifecycleCommandResponse
 } from './telegramChatActions'
 
@@ -183,6 +186,11 @@ export type TelegramMediaItem = {
   tdlib_file_id: number | null
   provider_attachment_id: string | null
   local_path: string | null
+  expected_size_bytes?: number | null
+  downloaded_size_bytes?: number | null
+  is_downloading_active?: boolean | null
+  is_downloading_completed?: boolean | null
+  last_error?: string | null
 }
 export type TelegramMediaSearchResponse = {
   query?: string | null
@@ -265,6 +273,7 @@ export type TelegramChatGroupFilter = {
   source: 'local' | 'telegram'
   count: number
   icon: string
+  provider_folder_id?: number | null
 }
 
 export type TelegramAttachmentHint = {
@@ -275,8 +284,13 @@ export type TelegramAttachmentHint = {
   sizeBytes: number | null
   tdlibFileId: number | null
   providerAttachmentId: string
-  downloadState: 'remote' | 'downloading' | 'downloaded' | 'unknown'
+  downloadState: 'remote' | 'downloading' | 'downloaded' | 'failed' | 'unknown'
   localPath: string | null
+  expectedSizeBytes?: number | null
+  downloadedSizeBytes?: number | null
+  isDownloadingActive?: boolean | null
+  isDownloadingCompleted?: boolean | null
+  lastError?: string | null
   messageId: string
   providerMessageId?: string | null
 }
@@ -414,12 +428,17 @@ export type TelegramCommandKind =
   | 'unarchive'
   | 'mute'
   | 'unmute'
+  | 'folder_add'
+  | 'folder_remove'
   | 'react'
   | 'unreact'
   | 'reply'
   | 'forward'
   | 'join'
   | 'leave'
+  | 'topic_create'
+  | 'topic_close'
+  | 'topic_reopen'
   | 'admin_action'
 
 export type TelegramCommandStatus = 'queued' | 'executing' | 'completed' | 'failed' | 'retrying' | 'cancelled' | 'dead_letter'
@@ -583,44 +602,6 @@ export type TelegramProviderWriteCommand = {
 export type TelegramCommandListResponse = {
   items: TelegramProviderWriteCommand[]
 }
-
-// --- Realtime event types (ADR-0091) ---
-
-export type TelegramRealtimeEventType =
-  | 'telegram.sync.started'
-  | 'telegram.sync.progress'
-  | 'telegram.sync.completed'
-  | 'telegram.sync.failed'
-  | 'telegram.message.created'
-  | 'telegram.message.updated'
-  | 'telegram.message.edited'
-  | 'telegram.message.deleted'
-  | 'telegram.message.tombstoned'
-  | 'telegram.message.visibility_restored'
-  | 'telegram.reaction.changed'
-  | 'telegram.chat.updated'
-  | 'telegram.chat.pinned'
-  | 'telegram.chat.archived'
-  | 'telegram.chat.muted'
-  | 'telegram.topic.updated'
-  | 'telegram.media.download.started'
-  | 'telegram.media.download.progress'
-  | 'telegram.media.download.failed'
-  | 'telegram.media.downloaded'
-  | 'telegram.command.status_changed'
-  | 'telegram.command.reconciled'
-
-export type TelegramRealtimeEvent = {
-  event_type: TelegramRealtimeEventType
-  event_id: string
-  occurred_at: string
-  subject: { id: string; kind: string }
-  payload: Record<string, unknown>
-}
-
-export type TelegramRealtimeMessage =
-  | { type: 'event'; data: TelegramRealtimeEvent }
-  | { type: 'lagged'; data: { skipped: number } }
 
 // --- Reaction types (ADR-0091) ---
 

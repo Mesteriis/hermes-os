@@ -14,6 +14,7 @@ import { applyTelegramRealtimePatch } from '../../domains/telegram/queries/realt
 export type RealtimeClient = {
 	connect: () => void
 	disconnect: () => void
+	reconnect: () => void
 }
 
 export type RealtimeQueryClient = {
@@ -34,6 +35,8 @@ export type RealtimeStatusHandler = (status: SseStatusEvent | WebSocketStatusEve
 
 export type RealtimeBootstrapOptions = {
 	createClient?: RealtimeClientFactory
+	onEventObserved?: (eventId: string) => void
+	onLaggedObserved?: (skipped: number) => void
 	onStatus?: RealtimeStatusHandler
 }
 
@@ -59,6 +62,7 @@ const TELEGRAM_QUERY_KEYS: readonly (readonly unknown[])[] = [
 	['telegram', 'capabilities'],
 	['telegram', 'accounts'],
 	['telegram', 'chats'],
+	['telegram', 'folders'],
 	['telegram', 'messages'],
 	['telegram', 'runtime'],
 	['telegram', 'calls']
@@ -70,29 +74,50 @@ export function initializeRealtime(
 	options: RealtimeClientFactory | RealtimeBootstrapOptions = {}
 ): RealtimeClient {
 	const bootstrapOptions = normalizeRealtimeBootstrapOptions(options)
-	const createClient =
+	const createClient: RealtimeClientFactory =
 		bootstrapOptions.createClient ??
 		((clientOptions) =>
-			isWebSocketClientOptions(clientOptions)
-				? new WebSocketClient(clientOptions)
-				: new SseClient(clientOptions))
+			adaptRealtimeClient(
+				isWebSocketClientOptions(clientOptions)
+					? new WebSocketClient(clientOptions)
+					: new SseClient(clientOptions)
+			))
 
-	const clientOptions = realtimeClientOptions(config, queryClient, bootstrapOptions.onStatus)
+	const clientOptions = realtimeClientOptions(
+		config,
+		queryClient,
+		bootstrapOptions.onEventObserved,
+		bootstrapOptions.onLaggedObserved,
+		bootstrapOptions.onStatus
+	)
 	const createSseClient = (): RealtimeClient => createClient(clientOptions.sse)
 
 	if (config.realtimeTransport !== 'websocket') {
 		const client = createSseClient()
 		client.connect()
-		return client
+		return {
+			connect: () => client.connect(),
+			disconnect: () => client.disconnect(),
+			reconnect: () => {
+				client.disconnect()
+				client.connect()
+			}
+		}
 	}
 
 	let sseFallbackClient: RealtimeClient | null = null
 	let disconnected = false
+	let reconnecting = false
 	const webSocketClient = createClient({
 		...clientOptions.webSocket,
 		onStatus: (status: WebSocketStatusEvent) => {
 			bootstrapOptions.onStatus?.(status)
-			if (status.state === 'disconnected' && !disconnected && !sseFallbackClient) {
+			if (
+				status.state === 'disconnected' &&
+				!disconnected &&
+				!reconnecting &&
+				!sseFallbackClient
+			) {
 				sseFallbackClient = createSseClient()
 				sseFallbackClient.connect()
 			}
@@ -113,6 +138,16 @@ export function initializeRealtime(
 			disconnected = true
 			webSocketClient.disconnect()
 			sseFallbackClient?.disconnect()
+		},
+		reconnect: () => {
+			reconnecting = true
+			disconnected = true
+			sseFallbackClient?.disconnect()
+			sseFallbackClient = null
+			webSocketClient.disconnect()
+			disconnected = false
+			reconnecting = false
+			webSocketClient.connect()
 		}
 	}
 }
@@ -120,13 +155,22 @@ export function initializeRealtime(
 function realtimeClientOptions(
 	config: FrontendConfig,
 	queryClient: RealtimeQueryClient,
+	onEventObserved?: (eventId: string) => void,
+	onLaggedObserved?: (skipped: number) => void,
 	onStatus?: RealtimeStatusHandler
 ): { sse: SseClientOptions; webSocket: WebSocketClientOptions } {
 	const common = {
 		secret: config.apiSecret,
 		lastEventId: readRealtimeCursor(),
 		onMessage: (event: SseMessageEvent) => {
+			if (event.event === 'lagged') {
+				onLaggedObserved?.(laggedSkippedCount(event.data))
+				handleRealtimeEvent(event, queryClient)
+				return
+			}
+
 			persistRealtimeCursor(event.id)
+			onEventObserved?.(event.id)
 			handleRealtimeEvent(event, queryClient)
 		}
 	}
@@ -168,12 +212,29 @@ function isWebSocketClientOptions(
 	return options.url.includes('/api/events/ws')
 }
 
+function adaptRealtimeClient(client: { connect: () => void; disconnect: () => void }): RealtimeClient {
+	return {
+		connect: () => client.connect(),
+		disconnect: () => client.disconnect(),
+		reconnect: () => {
+			client.disconnect()
+			client.connect()
+		}
+	}
+}
+
 export function handleRealtimeEvent(
 	event: SseMessageEvent,
 	queryClient: RealtimeQueryClient
 ): void {
 	if (event.event === 'heartbeat') return
 	if (event.event === 'error') return
+	if (event.event === 'lagged') {
+		for (const queryKey of laggedRealtimeQueryKeys()) {
+			void queryClient.invalidateQueries({ queryKey })
+		}
+		return
+	}
 
 	applyMailRealtimePatch(event.data, queryClient)
 	applyTelegramRealtimePatch(event.data, queryClient)
@@ -182,6 +243,10 @@ export function handleRealtimeEvent(
 	for (const queryKey of queryKeysForRealtimeEvent(event)) {
 		void queryClient.invalidateQueries({ queryKey })
 	}
+}
+
+function laggedRealtimeQueryKeys(): readonly (readonly unknown[])[] {
+	return [...REALTIME_QUERY_KEYS, ...TELEGRAM_QUERY_KEYS]
 }
 
 function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly unknown[])[] {
@@ -242,14 +307,20 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 	if (eventType.startsWith('telegram.participant.')) {
 		return [['telegram', 'chat-members'], ['telegram', 'chats']]
 	}
-	if (eventType.startsWith('telegram.media.')) {
+	if (eventType.startsWith('telegram.folders.')) {
+		return [['telegram', 'folders'], ['telegram', 'chats']]
+	}
+	if (eventType.startsWith('telegram.media.upload.')) {
+		return [['telegram', 'commands'], ['telegram', 'runtime']]
+	}
+	if (eventType.startsWith('telegram.media.download.')) {
 		return [['telegram', 'messages'], ['telegram', 'search', 'media']]
 	}
 	if (eventType.startsWith('telegram.reaction.')) {
 		return [['telegram', 'messages']]
 	}
 	if (eventType.startsWith('telegram.command.')) {
-		return [['telegram', 'messages'], ['telegram', 'runtime']]
+		return [['telegram', 'messages'], ['telegram', 'runtime'], ['telegram', 'commands']]
 	}
 	if (eventType.startsWith('telegram.')) {
 		return TELEGRAM_QUERY_KEYS
@@ -265,6 +336,17 @@ function canonicalEventType(data: string): string | null {
 		return typeof eventType === 'string' && eventType.trim() ? eventType : null
 	} catch {
 		return null
+	}
+}
+
+function laggedSkippedCount(data: string): number {
+	try {
+		const parsed = JSON.parse(data) as { skipped?: unknown }
+		return typeof parsed.skipped === 'number' && parsed.skipped > 0
+			? Math.floor(parsed.skipped)
+			: 0
+	} catch {
+		return 0
 	}
 }
 

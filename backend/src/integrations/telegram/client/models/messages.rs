@@ -337,6 +337,11 @@ pub enum TelegramCommandKind {
     Forward,
     Join,
     Leave,
+    FolderAdd,
+    FolderRemove,
+    TopicCreate,
+    TopicClose,
+    TopicReopen,
     AdminAction,
 }
 
@@ -362,6 +367,11 @@ impl TelegramCommandKind {
             Self::Forward => "forward",
             Self::Join => "join",
             Self::Leave => "leave",
+            Self::FolderAdd => "folder_add",
+            Self::FolderRemove => "folder_remove",
+            Self::TopicCreate => "topic_create",
+            Self::TopicClose => "topic_close",
+            Self::TopicReopen => "topic_reopen",
             Self::AdminAction => "admin_action",
         }
     }

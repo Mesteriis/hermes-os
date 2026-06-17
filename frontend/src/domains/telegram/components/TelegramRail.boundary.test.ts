@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 describe('TelegramRail runtime diagnostics boundary', () => {
-  it('renders TDLib diagnostics plus projected member search, calls panel and command audit surfaces', () => {
+  it('renders TDLib diagnostics plus projected member search, calls panel, read progress and command audit surfaces', () => {
     const source = readFileSync(
       resolve('src/domains/telegram/components/TelegramRail.vue'),
       'utf8'
@@ -29,7 +29,9 @@ describe('TelegramRail runtime diagnostics boundary', () => {
     expect(source).toContain('TelegramCommandAuditPanel')
     expect(source).toContain('TelegramCallsPanel')
     expect(source).toContain('TelegramMembersPanel')
-    expect(source).toContain(':chatMembers="chatMembers"')
+    expect(source).toContain('TelegramReadProgressPanel')
+    expect(source).toContain(':selectedChat="selectedTelegramChatDetail"')
+    expect(source).toContain(':selectedMessages="selectedTelegramMessages"')
     expect(source).toContain(':capabilities="capabilities"')
     expect(source).toContain(':accountId="selectedTelegramChat?.account_id ?? null"')
     expect(source).toContain(':providerChatId="selectedTelegramChat?.provider_chat_id ?? null"')

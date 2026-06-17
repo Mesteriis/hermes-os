@@ -9,7 +9,8 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::integrations::telegram::client::participants::{
-    reconcile_join_commands_from_provider_roster, telegram_self_provider_member_id,
+    reconcile_join_commands_from_provider_roster, reconcile_leave_commands_from_provider_roster,
+    telegram_self_provider_member_id,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -344,6 +345,130 @@ async fn telegram_roster_sync_reconciles_join_only_after_self_member_is_observed
         "observed"
     );
     assert_eq!(provider_state["membership_state"], "present");
+    assert_eq!(result_payload["source"], "tdlib.getSupergroupMembers");
+    assert!(
+        row.try_get::<Option<chrono::DateTime<Utc>>, _>("completed_at")
+            .expect("completed at")
+            .is_some()
+    );
+}
+
+#[tokio::test]
+async fn telegram_roster_sync_reconciles_leave_when_self_member_is_inactive() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-leave-reconcile-{suffix}");
+    let provider_chat_id = format!("leave-reconcile-chat-{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    post_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Leave Reconcile",
+            "external_account_id": "telegram:12345",
+            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    post_ok(
+        app.clone(),
+        "/api/v1/telegram/messages",
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": provider_chat_id,
+            "provider_message_id": format!("leave-reconcile-message-{suffix}"),
+            "chat_kind": "group",
+            "chat_title": "Leave Reconcile Room",
+            "sender_id": format!("sender-{suffix}"),
+            "sender_display_name": "Sender",
+            "text": "seed chat",
+            "import_batch_id": format!("telegram-leave-reconcile-seed-{suffix}"),
+            "occurred_at": "2026-06-06T12:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let telegram_chat_id = first_chat_id(app.clone(), &account_id).await;
+    let leave_body = command_response(
+        app.clone(),
+        &format!("/api/v1/telegram/chats/{telegram_chat_id}/leave"),
+        json!({
+            "account_id": account_id,
+            "provider_chat_id": provider_chat_id
+        }),
+    )
+    .await;
+    let command_id = leave_body["command_id"].as_str().expect("command id");
+
+    let observed_at = Utc::now();
+    let commands = reconcile_leave_commands_from_provider_roster(
+        &pool,
+        &account_id,
+        &provider_chat_id,
+        "user:12345",
+        "left",
+        Some("left"),
+        Some("member"),
+        observed_at,
+    )
+    .await
+    .expect("reconciled leave commands");
+
+    assert_eq!(commands.len(), 1);
+    assert_eq!(commands[0].command_id, command_id);
+    assert_eq!(commands[0].status, "completed");
+    assert_eq!(commands[0].reconciliation_status, "observed");
+    assert_eq!(
+        commands[0].provider_state["observed_via"],
+        "tdlib.getSupergroupMembers"
+    );
+    assert_eq!(commands[0].provider_state["membership_state"], "left");
+    assert_eq!(commands[0].provider_state["status"], "left");
+    assert_eq!(commands[0].provider_state["role"], "member");
+    assert!(commands[0].provider_observed_at.is_some());
+    assert!(commands[0].completed_at.is_some());
+
+    let row = sqlx::query(
+        r#"
+        SELECT status, reconciliation_status, provider_state, result_payload, completed_at
+        FROM telegram_provider_write_commands
+        WHERE command_id = $1
+        "#,
+    )
+    .bind(command_id)
+    .fetch_one(&pool)
+    .await
+    .expect("reconciled leave command row");
+    let provider_state: Value = row.try_get("provider_state").expect("provider state");
+    let result_payload: Value = row.try_get("result_payload").expect("result payload");
+    assert_eq!(
+        row.try_get::<String, _>("status").expect("status"),
+        "completed"
+    );
+    assert_eq!(
+        row.try_get::<String, _>("reconciliation_status")
+            .expect("reconciliation status"),
+        "observed"
+    );
+    assert_eq!(provider_state["membership_state"], "left");
+    assert_eq!(provider_state["status"], "left");
     assert_eq!(result_payload["source"], "tdlib.getSupergroupMembers");
     assert!(
         row.try_get::<Option<chrono::DateTime<Utc>>, _>("completed_at")

@@ -41,6 +41,10 @@ type WebSocketEnvelope = {
 	data?: WebSocketPayload | string
 }
 
+type WebSocketLaggedPayload = {
+	skipped?: number
+}
+
 /**
  * Browser WebSocket event client with replay cursor persistence and reconnect loop.
  * Uses query parameters for authentication and replay because browsers cannot set
@@ -137,6 +141,21 @@ export class WebSocketClient {
 		}
 
 		if (envelope.type === 'heartbeat') {
+			return
+		}
+
+		if (envelope.type === 'lagged') {
+			const skipped = parseLaggedSkipped(envelope.data)
+			if (skipped === null) {
+				this.onError?.(new Error('WebSocket lagged payload missing skipped count'))
+				return
+			}
+
+			this.onMessage?.({
+				id: this.lastEventId,
+				event: 'lagged',
+				data: JSON.stringify({ skipped })
+			})
 			return
 		}
 
@@ -247,6 +266,13 @@ function parseEnvelopePosition(data: WebSocketPayload | string): string | null {
 	}
 
 	return String(Math.floor(position))
+}
+
+function parseLaggedSkipped(data: WebSocketPayload | string | undefined): number | null {
+	if (!data || typeof data === 'string') return null
+
+	const payload = data as WebSocketLaggedPayload
+	return typeof payload.skipped === 'number' && payload.skipped > 0 ? payload.skipped : null
 }
 
 function statusErrorMessage(error: unknown): string {

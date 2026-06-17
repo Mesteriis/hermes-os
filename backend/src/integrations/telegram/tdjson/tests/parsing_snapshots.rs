@@ -116,6 +116,40 @@ fn parses_tdlib_chat_members_with_roles_and_permissions() {
 }
 
 #[test]
+fn parses_tdlib_basic_group_full_info_members() {
+    let members = super::super::parse_tdlib_basic_group_member_list(&json!({
+        "@type": "basicGroupFullInfo",
+        "creator_user_id": 42,
+        "members": [
+            {
+                "@type": "chatMember",
+                "member_id": {"@type": "messageSenderUser", "user_id": 42},
+                "status": {
+                    "@type": "chatMemberStatusCreator",
+                    "is_member": true
+                }
+            },
+            {
+                "@type": "chatMember",
+                "member_id": {"@type": "messageSenderUser", "user_id": 77},
+                "status": {
+                    "@type": "chatMemberStatusMember",
+                    "member_until_date": 0
+                }
+            }
+        ]
+    }))
+    .expect("basic group member list");
+
+    assert_eq!(members.len(), 2);
+    assert_eq!(members[0].provider_member_id, "user:42");
+    assert_eq!(members[0].role, "owner");
+    assert_eq!(members[1].provider_member_id, "user:77");
+    assert_eq!(members[1].role, "member");
+    assert_eq!(members[1].status, "member");
+}
+
+#[test]
 fn parses_tdlib_typing_update_from_user_chat_action() {
     let typing = super::super::parse_tdlib_typing_snapshot(&json!({
         "@type": "updateUserChatAction",
@@ -286,6 +320,76 @@ fn parses_tdlib_chat_position_update() {
     assert_eq!(update.order, 42);
     assert!(!update.is_pinned);
     assert_eq!(update.source_event, "updateChatPosition");
+}
+
+#[test]
+fn parses_tdlib_chat_removed_from_list_snapshot() {
+    let update = super::super::parse_tdlib_chat_removed_from_list_snapshot(&json!({
+        "@type": "updateChatRemovedFromList",
+        "chat_id": -1001234567890_i64,
+        "chat_list": {
+            "@type": "chatListFolder",
+            "chat_folder_id": 7
+        }
+    }))
+    .expect("parse result")
+    .expect("chat removed from list update");
+
+    assert_eq!(update.provider_chat_id, "-1001234567890");
+    assert_eq!(update.list_kind, "folder");
+    assert_eq!(update.provider_folder_id, Some(7));
+    assert_eq!(update.source_event, "updateChatRemovedFromList");
+    assert_eq!(update.raw["@type"], "updateChatRemovedFromList");
+}
+
+#[test]
+fn parses_tdlib_chat_folder_snapshot() {
+    let snapshot = super::super::parse_tdlib_chat_folder_snapshot(&json!({
+        "@type": "chatFolder",
+        "id": 7,
+        "name": {
+            "@type": "chatFolderName",
+            "text": "Projects"
+        },
+        "icon": {
+            "@type": "chatFolderIcon",
+            "name": "Custom"
+        },
+        "color_id": 3
+    }))
+    .expect("parse result")
+    .expect("chat folder snapshot");
+
+    assert_eq!(snapshot.provider_folder_id, 7);
+    assert_eq!(snapshot.title, "Projects");
+    assert_eq!(snapshot.icon_name.as_deref(), Some("Custom"));
+    assert_eq!(snapshot.color_id, Some(3));
+}
+
+#[test]
+fn parses_tdlib_chat_folders_update() {
+    let snapshot = super::super::parse_tdlib_chat_folders_update_snapshot(&json!({
+        "@type": "updateChatFolders",
+        "chat_folders": [{
+            "@type": "chatFolder",
+            "id": 7,
+            "name": {
+                "@type": "chatFolderName",
+                "text": "Projects"
+            },
+            "icon": {
+                "@type": "chatFolderIcon",
+                "name": "Custom"
+            }
+        }]
+    }))
+    .expect("parse result")
+    .expect("chat folders update");
+
+    assert_eq!(snapshot.source_event, "updateChatFolders");
+    assert_eq!(snapshot.folders.len(), 1);
+    assert_eq!(snapshot.folders[0].provider_folder_id, 7);
+    assert_eq!(snapshot.folders[0].title, "Projects");
 }
 
 #[test]

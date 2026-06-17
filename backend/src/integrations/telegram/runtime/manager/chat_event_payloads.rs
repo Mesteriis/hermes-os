@@ -142,6 +142,52 @@ pub(super) fn chat_notification_settings_updated_event(
     .build()
 }
 
+pub(super) fn chat_notification_settings_chat_updated_event(
+    account_id: &str,
+    chat: &TelegramChat,
+    snapshot: &TelegramTdlibChatNotificationSettingsSnapshot,
+    occurred_at: DateTime<Utc>,
+) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+    let is_muted = !snapshot.use_default_mute_for && snapshot.mute_for > 0;
+    NewEventEnvelope::builder(
+        format!(
+            "evt_telegram_chat_updated_notification_settings_{}_{}_{}",
+            account_id,
+            chat.telegram_chat_id,
+            occurred_at.timestamp_nanos_opt().unwrap_or(0)
+        ),
+        telegram_event_types::CHAT_UPDATED,
+        occurred_at,
+        json!({
+            "channel": "telegram",
+            "account_id": account_id,
+            "runtime": "tdlib"
+        }),
+        json!({
+            "kind": "telegram_chat",
+            "id": chat.telegram_chat_id,
+            "provider_chat_id": chat.provider_chat_id
+        }),
+    )
+    .payload(json!({
+        "account_id": account_id,
+        "telegram_chat_id": chat.telegram_chat_id,
+        "provider_chat_id": chat.provider_chat_id,
+        "action": "provider_notification_settings_update",
+        "is_muted": is_muted,
+        "use_default_mute_for": snapshot.use_default_mute_for,
+        "mute_for": snapshot.mute_for,
+        "chat": chat,
+        "source": format!("tdlib.{}", snapshot.source_event)
+    }))
+    .provenance(json!({
+        "provider": "telegram",
+        "runtime": "tdlib",
+        "tdlib_event": snapshot.source_event
+    }))
+    .build()
+}
+
 pub(super) fn chat_archived_updated_event(
     account_id: &str,
     chat: &TelegramChat,
@@ -189,6 +235,108 @@ pub(super) fn chat_archived_updated_event(
         "provider": "telegram",
         "runtime": "tdlib",
         "tdlib_event": snapshot.source_event
+    }))
+    .build()
+}
+
+pub(super) fn chat_position_updated_event(
+    account_id: &str,
+    chat: &TelegramChat,
+    snapshot: &TelegramTdlibChatPositionSnapshot,
+    occurred_at: DateTime<Utc>,
+) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+    let is_archived = chat
+        .metadata
+        .get("is_archived")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    NewEventEnvelope::builder(
+        format!(
+            "evt_telegram_chat_updated_position_{}_{}_{}",
+            account_id,
+            chat.telegram_chat_id,
+            occurred_at.timestamp_nanos_opt().unwrap_or(0)
+        ),
+        telegram_event_types::CHAT_UPDATED,
+        occurred_at,
+        json!({
+            "channel": "telegram",
+            "account_id": account_id,
+            "runtime": "tdlib"
+        }),
+        json!({
+            "kind": "telegram_chat",
+            "id": chat.telegram_chat_id,
+            "provider_chat_id": chat.provider_chat_id
+        }),
+    )
+    .payload(json!({
+        "account_id": account_id,
+        "telegram_chat_id": chat.telegram_chat_id,
+        "provider_chat_id": chat.provider_chat_id,
+        "action": "provider_chat_position_update",
+        "is_archived": is_archived,
+        "list_kind": snapshot.list_kind,
+        "provider_folder_id": snapshot.provider_folder_id,
+        "order": snapshot.order,
+        "is_pinned": snapshot.is_pinned,
+        "chat": chat,
+        "source": format!("tdlib.{}", snapshot.source_event)
+    }))
+    .provenance(json!({
+        "provider": "telegram",
+        "runtime": "tdlib",
+        "tdlib_event": snapshot.source_event
+    }))
+    .build()
+}
+
+pub(super) fn chat_folder_labels_updated_event(
+    account_id: &str,
+    chat: &TelegramChat,
+    occurred_at: DateTime<Utc>,
+) -> Result<NewEventEnvelope, crate::platform::events::EventEnvelopeError> {
+    let folder_labels = chat
+        .metadata
+        .get("folder_labels")
+        .cloned()
+        .unwrap_or_else(|| json!([]));
+    let provider_folder_id = chat.metadata.get("provider_folder_id").cloned();
+
+    NewEventEnvelope::builder(
+        format!(
+            "evt_telegram_chat_folder_labels_{}_{}_{}",
+            account_id,
+            chat.telegram_chat_id,
+            occurred_at.timestamp_nanos_opt().unwrap_or(0)
+        ),
+        telegram_event_types::CHAT_UPDATED,
+        occurred_at,
+        json!({
+            "channel": "telegram",
+            "account_id": account_id,
+            "runtime": "tdlib"
+        }),
+        json!({
+            "kind": "telegram_chat",
+            "id": chat.telegram_chat_id,
+            "provider_chat_id": chat.provider_chat_id
+        }),
+    )
+    .payload(json!({
+        "account_id": account_id,
+        "telegram_chat_id": chat.telegram_chat_id,
+        "provider_chat_id": chat.provider_chat_id,
+        "action": "provider_chat_folder_labels_update",
+        "folder_labels": folder_labels,
+        "provider_folder_id": provider_folder_id,
+        "chat": chat,
+        "source": "tdlib.updateChatFolders"
+    }))
+    .provenance(json!({
+        "provider": "telegram",
+        "runtime": "tdlib",
+        "tdlib_event": "updateChatFolders"
     }))
     .build()
 }
@@ -354,6 +502,47 @@ mod tests {
     }
 
     #[test]
+    fn chat_notification_settings_chat_updated_event_contains_snapshot_payload() {
+        let occurred_at = Utc
+            .with_ymd_and_hms(2026, 6, 17, 12, 0, 0)
+            .single()
+            .expect("valid test timestamp");
+        let chat = TelegramChat {
+            telegram_chat_id: "telegram_chat:v1:test".to_owned(),
+            account_id: "acct-1".to_owned(),
+            provider_chat_id: "-100123".to_owned(),
+            chat_kind: "group".to_owned(),
+            title: "Release Chat".to_owned(),
+            username: None,
+            sync_state: "synced".to_owned(),
+            last_message_at: None,
+            metadata: json!({
+                "is_muted": true
+            }),
+            created_at: occurred_at,
+            updated_at: occurred_at,
+        };
+        let snapshot = TelegramTdlibChatNotificationSettingsSnapshot {
+            provider_chat_id: "-100123".to_owned(),
+            use_default_mute_for: false,
+            mute_for: 31_708_800,
+            source_event: "updateChatNotificationSettings".to_owned(),
+        };
+
+        let event =
+            chat_notification_settings_chat_updated_event("acct-1", &chat, &snapshot, occurred_at)
+                .expect("event");
+
+        assert_eq!(event.event_type, telegram_event_types::CHAT_UPDATED);
+        assert_eq!(
+            event.payload["action"],
+            "provider_notification_settings_update"
+        );
+        assert_eq!(event.payload["is_muted"], true);
+        assert_eq!(event.payload["chat"]["metadata"]["is_muted"], true);
+    }
+
+    #[test]
     fn chat_archived_updated_event_contains_provider_state_payload() {
         let occurred_at = Utc
             .with_ymd_and_hms(2026, 6, 17, 12, 0, 0)
@@ -389,6 +578,48 @@ mod tests {
         assert_eq!(event.event_type, telegram_event_types::CHAT_ARCHIVED);
         assert_eq!(event.payload["is_archived"], true);
         assert_eq!(event.payload["list_kind"], "archive");
+    }
+
+    #[test]
+    fn chat_position_updated_event_contains_snapshot_payload() {
+        let occurred_at = Utc
+            .with_ymd_and_hms(2026, 6, 17, 12, 0, 0)
+            .single()
+            .expect("valid test timestamp");
+        let chat = TelegramChat {
+            telegram_chat_id: "telegram_chat:v1:test".to_owned(),
+            account_id: "acct-1".to_owned(),
+            provider_chat_id: "-100123".to_owned(),
+            chat_kind: "group".to_owned(),
+            title: "Release Chat".to_owned(),
+            username: None,
+            sync_state: "synced".to_owned(),
+            last_message_at: None,
+            metadata: json!({
+                "is_archived": true,
+                "is_pinned": true
+            }),
+            created_at: occurred_at,
+            updated_at: occurred_at,
+        };
+        let snapshot = TelegramTdlibChatPositionSnapshot {
+            provider_chat_id: "-100123".to_owned(),
+            list_kind: "archive".to_owned(),
+            provider_folder_id: Some(7),
+            order: 42,
+            is_pinned: true,
+            source_event: "updateChatPosition".to_owned(),
+        };
+
+        let event =
+            chat_position_updated_event("acct-1", &chat, &snapshot, occurred_at).expect("event");
+
+        assert_eq!(event.event_type, telegram_event_types::CHAT_UPDATED);
+        assert_eq!(event.payload["action"], "provider_chat_position_update");
+        assert_eq!(event.payload["is_archived"], true);
+        assert_eq!(event.payload["is_pinned"], true);
+        assert_eq!(event.payload["provider_folder_id"], 7);
+        assert_eq!(event.payload["chat"]["metadata"]["is_archived"], true);
     }
 
     #[test]

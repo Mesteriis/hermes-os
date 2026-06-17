@@ -25,6 +25,15 @@ pub(crate) struct TelegramTdlibChatSnapshot {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibChatFolderSnapshot {
+    pub(crate) provider_folder_id: i64,
+    pub(crate) title: String,
+    pub(crate) icon_name: Option<String>,
+    pub(crate) color_id: Option<i64>,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TelegramTdlibChatMemberSnapshot {
     pub(crate) provider_member_id: String,
     pub(crate) display_name: Option<String>,

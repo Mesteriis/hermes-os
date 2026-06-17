@@ -21,6 +21,9 @@ pub use qr_login::{
     TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest, TelegramQrLoginStatus,
     TelegramQrLoginStatusResponse,
 };
-pub use topics::{NewTelegramTopic, TelegramTopic, TelegramTopicListResponse};
+pub use topics::{
+    NewTelegramTopic, TelegramTopic, TelegramTopicCloseRequest, TelegramTopicCreateRequest,
+    TelegramTopicLifecycleResponse, TelegramTopicListResponse,
+};
 
 pub(crate) use messages::TelegramAttachmentAnchor;

@@ -6,15 +6,22 @@ use crate::integrations::telegram::tdjson::snapshots::TelegramTdlibChatMemberSna
 pub(crate) fn parse_tdlib_chat_member_list(
     response: &Value,
 ) -> Result<Vec<TelegramTdlibChatMemberSnapshot>, TelegramError> {
-    let members = response
-        .get("members")
-        .and_then(Value::as_array)
-        .ok_or_else(|| {
-            TelegramError::TdlibRuntime(
-                "TDLib chatMembers response missing `members` array".to_owned(),
-            )
-        })?;
+    parse_member_array(response.get("members"), "TDLib chatMembers response")
+}
 
+pub(crate) fn parse_tdlib_basic_group_member_list(
+    response: &Value,
+) -> Result<Vec<TelegramTdlibChatMemberSnapshot>, TelegramError> {
+    parse_member_array(response.get("members"), "TDLib basicGroupFullInfo response")
+}
+
+fn parse_member_array(
+    members: Option<&Value>,
+    response_kind: &str,
+) -> Result<Vec<TelegramTdlibChatMemberSnapshot>, TelegramError> {
+    let members = members.and_then(Value::as_array).ok_or_else(|| {
+        TelegramError::TdlibRuntime(format!("{response_kind} missing `members` array"))
+    })?;
     members.iter().map(parse_chat_member).collect()
 }
 

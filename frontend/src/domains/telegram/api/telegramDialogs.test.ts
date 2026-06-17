@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient } from '../../../platform/api/ApiClient'
 import {
+  addTelegramChatToFolder,
   archiveTelegramChat,
   fetchTelegramCalls,
   fetchTelegramCallTranscript,
@@ -15,7 +16,9 @@ import {
   markTelegramChatUnread,
   muteTelegramChat,
   pinTelegramChat,
+  reassignTelegramChatFolders,
   removeTelegramAccount,
+  removeTelegramChatFromFolder,
   restartTelegramRuntime,
   setupTelegramAccount,
   stopTelegramRuntime,
@@ -268,6 +271,103 @@ describe('telegram dialog action API', () => {
     }
   })
 
+  it('posts add-to-folder dialog lifecycle requests', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({
+          telegram_chat_id: 'tgchat-1',
+          provider_chat_id: 'provider-chat-1',
+          action: 'folder_add',
+          status: 'queued',
+          command_id: 'cmd-folder-add',
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await addTelegramChatToFolder('tgchat-1', 7, {
+      account_id: 'acc-1',
+      provider_chat_id: 'provider-chat-1',
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/chats/tgchat-1/folders/7')
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      account_id: 'acc-1',
+      provider_chat_id: 'provider-chat-1',
+    })
+  })
+
+  it('posts remove-from-folder dialog lifecycle requests', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({
+          telegram_chat_id: 'tgchat-1',
+          provider_chat_id: 'provider-chat-1',
+          action: 'folder_remove',
+          status: 'queued',
+          command_id: 'cmd-folder-remove',
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await removeTelegramChatFromFolder('tgchat-1', 7, {
+      account_id: 'acc-1',
+      provider_chat_id: 'provider-chat-1',
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/chats/tgchat-1/folders/7/remove')
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      account_id: 'acc-1',
+      provider_chat_id: 'provider-chat-1',
+    })
+  })
+
+  it('posts folder reassignment requests for projected Telegram chats', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({
+          telegram_chat_id: 'tgchat-1',
+          provider_chat_id: 'provider-chat-1',
+          action: 'folder_reassign',
+          status: 'queued',
+          command_ids: ['cmd-folder-add', 'cmd-folder-remove'],
+          added_provider_folder_ids: [11],
+          removed_provider_folder_ids: [7],
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await reassignTelegramChatFolders('tgchat-1', {
+      account_id: 'acc-1',
+      provider_chat_id: 'provider-chat-1',
+      target_provider_folder_ids: [11],
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/chats/tgchat-1/folders/reassign')
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
+      account_id: 'acc-1',
+      provider_chat_id: 'provider-chat-1',
+      target_provider_folder_ids: [11],
+    })
+  })
+
   it('posts participant join and leave lifecycle requests through command routes', async () => {
     const fetchMock = vi
       .fn()
@@ -323,18 +423,26 @@ describe('telegram dialog action API', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    await markTelegramChatRead('tgchat-1', { account_id: 'acc-1', provider_chat_id: 'provider-chat-1' })
+    await markTelegramChatRead('tgchat-1', {
+      account_id: 'acc-1',
+      provider_chat_id: 'provider-chat-1',
+      last_read_inbox_provider_message_id: 'provider-chat-1:777',
+    })
     await markTelegramChatUnread('tgchat-1', { account_id: 'acc-1', provider_chat_id: 'provider-chat-1' })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/chats/tgchat-1/read')
     expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/telegram/chats/tgchat-1/unread')
-    for (const [, init] of fetchMock.mock.calls) {
-      expect(init.method).toBe('POST')
-      expect(JSON.parse(init.body as string)).toEqual({
-        account_id: 'acc-1',
-        provider_chat_id: 'provider-chat-1',
-      })
-    }
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
+      account_id: 'acc-1',
+      provider_chat_id: 'provider-chat-1',
+      last_read_inbox_provider_message_id: 'provider-chat-1:777',
+    })
+    expect(fetchMock.mock.calls[1][1].method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({
+      account_id: 'acc-1',
+      provider_chat_id: 'provider-chat-1',
+    })
   })
 })

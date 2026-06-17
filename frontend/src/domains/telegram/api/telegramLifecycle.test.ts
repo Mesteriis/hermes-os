@@ -8,6 +8,7 @@ import {
   fetchTelegramMessageVersions,
   fetchTelegramReactions,
   forwardTelegramMessage,
+  markTelegramMessageRead,
   pinTelegramMessage,
   fetchTelegramReplyChain,
   removeTelegramReaction,
@@ -124,10 +125,17 @@ describe('telegram lifecycle reference API', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    await fetchTelegramCommands('acct-1', 25)
+    await fetchTelegramCommands('acct-1', 25, {
+      providerChatId: 'chat-42',
+      providerMessageId: 'chat-42:77',
+      commandKinds: ['mark_read', 'mark_unread'],
+    })
     await fetchTelegramReactions('msg-1')
 
     expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/commands?account_id=acct-1&limit=25')
+    expect(fetchMock.mock.calls[0][0]).toContain('provider_chat_id=chat-42')
+    expect(fetchMock.mock.calls[0][0]).toContain('provider_message_id=chat-42%3A77')
+    expect(fetchMock.mock.calls[0][0]).toContain('command_kinds=mark_read%2Cmark_unread')
     expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/telegram/messages/msg-1/reactions')
   })
 
@@ -191,6 +199,31 @@ describe('telegram lifecycle reference API', () => {
     const body = JSON.parse(String(init?.body))
     expect(body.command_id).toMatch(/^cmd_/)
     expect(body.is_pinned).toBe(true)
+  })
+
+  it('posts message-level mark-read against the dedicated Telegram route', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ telegram_chat_id: 'tgchat-1', action: 'mark_read', status: 'read', metadata: {} }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await markTelegramMessageRead({
+      message_id: 'msg-read-1',
+      account_id: 'acct-1',
+      provider_chat_id: 'chat-1',
+    })
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/messages/msg-read-1/mark-read')
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init?.method).toBe('POST')
+    expect(JSON.parse(String(init?.body))).toEqual({
+      account_id: 'acct-1',
+      provider_chat_id: 'chat-1',
+    })
   })
 
   it('adds reactions with a generated command id when one is not provided', async () => {

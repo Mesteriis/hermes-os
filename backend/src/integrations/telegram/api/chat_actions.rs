@@ -3,10 +3,13 @@ use axum::extract::{Path, State};
 use chrono::Utc;
 use serde_json::json;
 
-use super::helpers::{AUDIT_ACTOR_ID, publish_telegram_event};
+use super::helpers::{
+    AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
+};
 use crate::app::{ApiError, AppState};
-use crate::domains::api_support::telegram_store;
+use crate::domains::api_support::{api_audit_log, telegram_store};
 use crate::integrations::telegram::client::{TelegramChat, lifecycle};
+use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
 
@@ -34,6 +37,7 @@ fn build_command_event(
     command_id: &str,
     provider_chat_id: &str,
     telegram_chat_id: Option<&str>,
+    provider_message_id: Option<&str>,
     action: &str,
     status: &str,
     chat: Option<&TelegramChat>,
@@ -47,6 +51,7 @@ fn build_command_event(
             "action": action,
             "provider_chat_id": provider_chat_id,
             "telegram_chat_id": telegram_chat_id,
+            "message_id": provider_message_id,
             "status": status,
             "chat": chat,
         }),
@@ -97,6 +102,8 @@ fn build_chat_updated_event(
 pub(crate) struct TelegramChatActionRequest {
     pub(crate) account_id: String,
     pub(crate) provider_chat_id: String,
+    #[serde(default)]
+    pub(crate) last_read_inbox_provider_message_id: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -129,6 +136,11 @@ async fn record_dialog_command(
         request,
         command_kind,
         action_class,
+        if command_kind == "mark_read" {
+            request.last_read_inbox_provider_message_id.as_deref()
+        } else {
+            None
+        },
     )
     .await
 }
@@ -139,14 +151,53 @@ async fn record_chat_lifecycle_command(
     request: &TelegramChatActionRequest,
     command_kind: &str,
     action_class: &str,
+    provider_message_id: Option<&str>,
+) -> Result<String, ApiError> {
+    record_chat_lifecycle_command_with_payload(
+        state,
+        telegram_chat_id,
+        request,
+        command_kind,
+        action_class,
+        provider_message_id,
+        false,
+        json!({
+            "source": "telegram_chat_lifecycle",
+            "last_read_inbox_provider_message_id": provider_message_id,
+        }),
+        json!({
+            "source": "telegram_chat_lifecycle",
+            "last_read_inbox_provider_message_id": provider_message_id,
+        }),
+    )
+    .await
+}
+
+pub(crate) async fn record_chat_lifecycle_command_with_payload(
+    state: &AppState,
+    telegram_chat_id: Option<&str>,
+    request: &TelegramChatActionRequest,
+    command_kind: &str,
+    action_class: &str,
+    provider_message_id: Option<&str>,
+    skip_default_audit: bool,
+    payload: serde_json::Value,
+    audit_metadata: serde_json::Value,
 ) -> Result<String, ApiError> {
     let store = telegram_store(state)?;
     let command_id = lifecycle::new_command_id();
     let target_subject = telegram_chat_id.unwrap_or(request.provider_chat_id.trim());
     let target_ref = if let Some(telegram_chat_id) = telegram_chat_id {
-        json!({"telegram_chat_id": telegram_chat_id, "provider_chat_id": &request.provider_chat_id})
+        json!({
+            "telegram_chat_id": telegram_chat_id,
+            "provider_chat_id": &request.provider_chat_id,
+            "provider_message_id": provider_message_id
+        })
     } else {
-        json!({"provider_chat_id": &request.provider_chat_id})
+        json!({
+            "provider_chat_id": &request.provider_chat_id,
+            "provider_message_id": provider_message_id
+        })
     };
 
     let _cmd = lifecycle::insert_command(
@@ -160,16 +211,29 @@ async fn record_chat_lifecycle_command(
             Utc::now().timestamp_millis()
         ),
         &request.provider_chat_id,
-        None,
+        provider_message_id,
         "available",
         action_class,
         "confirmed",
         AUDIT_ACTOR_ID,
-        json!({}),
+        payload,
         target_ref,
-        json!({"source": "telegram_chat_lifecycle"}),
+        audit_metadata,
     )
     .await?;
+
+    if !skip_default_audit {
+        api_audit_log(state)?
+            .record(&NewApiAuditRecord::telegram_chat_action(
+                AUDIT_ACTOR_ID,
+                telegram_chat_id,
+                &request.account_id,
+                &request.provider_chat_id,
+                provider_message_id,
+                command_kind,
+            ))
+            .await?;
+    }
 
     let chat = if let Some(telegram_chat_id) = telegram_chat_id {
         store.telegram_chat_by_id(telegram_chat_id).await?
@@ -181,6 +245,7 @@ async fn record_chat_lifecycle_command(
         &command_id,
         &request.provider_chat_id,
         telegram_chat_id,
+        provider_message_id,
         command_kind,
         "queued",
         chat.as_ref(),
@@ -194,8 +259,11 @@ pub(crate) async fn post_telegram_chat_join(
     State(state): State<AppState>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatLifecycleCommandResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "participants.join")
+        .await?;
     let command_id =
-        record_chat_lifecycle_command(&state, None, &request, "join", "provider_write").await?;
+        record_chat_lifecycle_command(&state, None, &request, "join", "provider_write", None)
+            .await?;
 
     Ok(Json(TelegramChatLifecycleCommandResponse {
         telegram_chat_id: None,
@@ -211,12 +279,15 @@ pub(crate) async fn post_telegram_chat_leave(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatLifecycleCommandResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "participants.leave")
+        .await?;
     let command_id = record_chat_lifecycle_command(
         &state,
         Some(&telegram_chat_id),
         &request,
         "leave",
         "provider_write",
+        None,
     )
     .await?;
 
@@ -267,6 +338,7 @@ pub(crate) async fn post_telegram_chat_pin(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.pin").await?;
     let store = telegram_store(&state)?;
     let metadata = store
         .set_chat_metadata_bool(&telegram_chat_id, "is_pinned", true)
@@ -296,6 +368,7 @@ pub(crate) async fn post_telegram_chat_unpin(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.pin").await?;
     let store = telegram_store(&state)?;
     let metadata = store
         .set_chat_metadata_bool(&telegram_chat_id, "is_pinned", false)
@@ -331,6 +404,8 @@ pub(crate) async fn post_telegram_chat_archive(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.archive")
+        .await?;
     let store = telegram_store(&state)?;
     let metadata = store
         .set_chat_metadata_bool(&telegram_chat_id, "is_archived", true)
@@ -366,6 +441,8 @@ pub(crate) async fn post_telegram_chat_unarchive(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.archive")
+        .await?;
     let store = telegram_store(&state)?;
     let metadata = store
         .set_chat_metadata_bool(&telegram_chat_id, "is_archived", false)
@@ -401,6 +478,7 @@ pub(crate) async fn post_telegram_chat_mute(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.mute").await?;
     let store = telegram_store(&state)?;
     let metadata = store
         .set_chat_metadata_bool(&telegram_chat_id, "is_muted", true)
@@ -436,6 +514,7 @@ pub(crate) async fn post_telegram_chat_unmute(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.mute").await?;
     let store = telegram_store(&state)?;
     let metadata = store
         .set_chat_metadata_bool(&telegram_chat_id, "is_muted", false)
@@ -471,6 +550,8 @@ pub(crate) async fn post_telegram_chat_mark_read(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.mark_read")
+        .await?;
     let store = telegram_store(&state)?;
     store
         .set_chat_last_read_at(&telegram_chat_id, Some(Utc::now()))
@@ -499,6 +580,8 @@ pub(crate) async fn post_telegram_chat_mark_unread(
     Path(telegram_chat_id): Path<String>,
     Json(request): Json<TelegramChatActionRequest>,
 ) -> Result<Json<TelegramChatActionResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "dialogs.mark_unread")
+        .await?;
     let store = telegram_store(&state)?;
     store.set_chat_last_read_at(&telegram_chat_id, None).await?;
     let metadata = store.recompute_chat_unread_count(&telegram_chat_id).await?;

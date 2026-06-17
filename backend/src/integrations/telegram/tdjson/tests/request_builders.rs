@@ -172,6 +172,92 @@ fn tdlib_download_file_request_uses_synchronous_on_demand_download() {
 }
 
 #[test]
+fn tdlib_create_forum_topic_request_uses_expected_shape() {
+    let command = super::super::tdlib_create_forum_topic_request(
+        123456789,
+        "Release planning",
+        "hermes-topic-create-1",
+    )
+    .expect("topic create request");
+
+    assert_eq!(command["@type"], "createForumTopic");
+    assert_eq!(command["chat_id"], 123456789);
+    assert_eq!(command["name"], "Release planning");
+    assert_eq!(command["icon_custom_emoji_id"], 0);
+    assert_eq!(command["@extra"], "hermes-topic-create-1");
+}
+
+#[test]
+fn tdlib_create_forum_topic_request_rejects_empty_title() {
+    let result =
+        super::super::tdlib_create_forum_topic_request(123456789, "   ", "hermes-topic-create-2");
+
+    assert!(result.is_err());
+}
+
+#[test]
+fn tdlib_edit_chat_folder_remove_chat_request_preserves_shape_and_excludes_chat() {
+    let command = super::super::tdlib_edit_chat_folder_remove_chat_request(
+        7,
+        222,
+        &json!({
+            "@type": "chatFolder",
+            "name": {
+                "@type": "chatFolderName",
+                "text": "Projects",
+                "animate_custom_emoji": false
+            },
+            "icon": {
+                "@type": "chatFolderIcon",
+                "name": "Custom"
+            },
+            "color_id": 3,
+            "is_shareable": false,
+            "pinned_chat_ids": [111, 222],
+            "included_chat_ids": [222, 333],
+            "excluded_chat_ids": [444],
+            "exclude_muted": false,
+            "exclude_read": true,
+            "exclude_archived": false,
+            "include_contacts": true,
+            "include_non_contacts": false,
+            "include_bots": false,
+            "include_groups": true,
+            "include_channels": true
+        }),
+        "hermes-folder-remove-1",
+    )
+    .expect("folder remove request");
+
+    assert_eq!(command["@type"], "editChatFolder");
+    assert_eq!(command["chat_folder_id"], 7);
+    assert_eq!(command["@extra"], "hermes-folder-remove-1");
+    assert_eq!(command["folder"]["name"]["text"], "Projects");
+    assert_eq!(command["folder"]["icon"]["name"], "Custom");
+    assert_eq!(command["folder"]["pinned_chat_ids"], json!([111]));
+    assert_eq!(command["folder"]["included_chat_ids"], json!([333]));
+    assert_eq!(command["folder"]["excluded_chat_ids"], json!([444, 222]));
+    assert_eq!(command["folder"]["exclude_read"], true);
+    assert_eq!(command["folder"]["include_channels"], true);
+}
+
+#[test]
+fn tdlib_toggle_forum_topic_is_closed_request_uses_expected_shape() {
+    let command = super::super::tdlib_toggle_forum_topic_is_closed_request(
+        123456789,
+        555,
+        true,
+        "hermes-topic-close-1",
+    );
+
+    assert_eq!(command["@type"], "toggleForumTopicIsClosed");
+    assert_eq!(command["chat_id"], 123456789);
+    assert_eq!(command["message_thread_id"], 555);
+    assert_eq!(command["is_closed"], true);
+    assert_eq!(command["@extra"], "hermes-topic-close-1");
+}
+
+#[test]
 fn tdlib_edit_message_text_request_uses_edit_message_text_type() {
     let command = super::super::tdlib_edit_message_text_request(
         123456789,
@@ -288,6 +374,19 @@ fn tdlib_toggle_chat_marked_as_unread_request_uses_toggle_type() {
 }
 
 #[test]
+fn tdlib_view_messages_request_uses_force_read_view_messages_type() {
+    let command =
+        super::super::tdlib_view_messages_request(123456789, &[987654321], true, "hermes-read-1");
+
+    assert_eq!(command["@type"], "viewMessages");
+    assert_eq!(command["chat_id"], 123456789);
+    assert_eq!(command["message_ids"], json!([987654321]));
+    assert_eq!(command["source"], serde_json::Value::Null);
+    assert_eq!(command["force_read"], true);
+    assert_eq!(command["@extra"], "hermes-read-1");
+}
+
+#[test]
 fn tdlib_send_forward_request_uses_forward_messages_type() {
     let command = super::super::tdlib_send_forward_request(
         123456789,
@@ -327,6 +426,15 @@ fn tdlib_add_chat_to_list_request_uses_main_chat_list() {
 }
 
 #[test]
+fn tdlib_get_chat_folder_request_uses_get_chat_folder_type() {
+    let command = super::super::tdlib_get_chat_folder_request(7, "hermes-folder-7");
+
+    assert_eq!(command["@type"], "getChatFolder");
+    assert_eq!(command["chat_folder_id"], 7);
+    assert_eq!(command["@extra"], "hermes-folder-7");
+}
+
+#[test]
 fn tdlib_set_chat_mute_request_uses_notification_settings() {
     let command = super::super::tdlib_set_chat_mute_request(123456789, true, "hermes-mute-1");
 
@@ -361,13 +469,55 @@ fn tdlib_set_chat_mute_request_uses_default_mute_for_unmute() {
 #[test]
 fn tdlib_get_supergroup_members_request_uses_recent_filter() {
     let command =
-        super::super::tdlib_get_supergroup_members_request(555, 250, "hermes-members-555");
+        super::super::tdlib_get_supergroup_members_request(555, 25, 250, "hermes-members-555");
 
     assert_eq!(command["@type"], "getSupergroupMembers");
     assert_eq!(command["supergroup_id"], 555);
     assert_eq!(command["filter"]["@type"], "supergroupMembersFilterRecent");
+    assert_eq!(command["offset"], 25);
     assert_eq!(command["limit"], 100);
     assert_eq!(command["@extra"], "hermes-members-555");
+}
+
+#[test]
+fn tdlib_get_supergroup_administrators_request_uses_admin_filter() {
+    let command = super::super::tdlib_get_supergroup_administrators_request(
+        555,
+        10,
+        250,
+        "hermes-members-admins-555",
+    );
+
+    assert_eq!(command["@type"], "getSupergroupMembers");
+    assert_eq!(command["supergroup_id"], 555);
+    assert_eq!(
+        command["filter"]["@type"],
+        "supergroupMembersFilterAdministrators"
+    );
+    assert_eq!(command["offset"], 10);
+    assert_eq!(command["limit"], 100);
+    assert_eq!(command["@extra"], "hermes-members-admins-555");
+}
+
+#[test]
+fn tdlib_get_basic_group_request_uses_basic_group_type() {
+    let command = super::super::tdlib_get_basic_group_request(321, "hermes-basic-group-321");
+
+    assert_eq!(command["@type"], "getBasicGroup");
+    assert_eq!(command["basic_group_id"], 321);
+    assert_eq!(command["@extra"], "hermes-basic-group-321");
+}
+
+#[test]
+fn tdlib_get_basic_group_full_info_request_uses_expected_shape() {
+    let command = super::super::tdlib_get_basic_group_full_info_request(
+        321,
+        "hermes-basic-group-full-info-321",
+    );
+
+    assert_eq!(command["@type"], "getBasicGroupFullInfo");
+    assert_eq!(command["basic_group_id"], 321);
+    assert_eq!(command["@extra"], "hermes-basic-group-full-info-321");
 }
 
 #[test]
@@ -386,4 +536,15 @@ fn tdlib_leave_chat_request_uses_leave_chat_type() {
     assert_eq!(command["@type"], "leaveChat");
     assert_eq!(command["chat_id"], 123456789);
     assert_eq!(command["@extra"], "hermes-leave-1");
+}
+
+#[test]
+fn tdlib_add_chat_to_folder_request_uses_chat_list_folder() {
+    let command = super::super::tdlib_add_chat_to_folder_request(123456789, 7, " folder-extra ");
+
+    assert_eq!(command["@type"], "addChatToList");
+    assert_eq!(command["chat_id"], 123456789);
+    assert_eq!(command["chat_list"]["@type"], "chatListFolder");
+    assert_eq!(command["chat_list"]["chat_folder_id"], 7);
+    assert_eq!(command["@extra"], "folder-extra");
 }

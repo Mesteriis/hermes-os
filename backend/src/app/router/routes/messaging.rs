@@ -112,6 +112,18 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_chat_mute),
         )
         .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/folders/{provider_folder_id}",
+            post(post_telegram_chat_add_folder),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/folders/{provider_folder_id}/remove",
+            post(post_telegram_chat_remove_folder),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/folders/reassign",
+            post(post_telegram_chat_reassign_folders),
+        )
+        .route(
             "/api/v1/telegram/chats/{telegram_chat_id}/unmute",
             post(post_telegram_chat_unmute),
         )
@@ -172,6 +184,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_message_pin),
         )
         .route(
+            "/api/v1/telegram/messages/{message_id}/mark-read",
+            post(post_telegram_message_mark_read),
+        )
+        .route(
             "/api/v1/telegram/messages/{message_id}/versions",
             get(get_telegram_message_versions),
         )
@@ -204,7 +220,7 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route(
             "/api/v1/telegram/chats/{telegram_chat_id}/topics",
-            get(get_telegram_topics),
+            get(get_telegram_topics).post(post_telegram_topic_create),
         )
         .route(
             "/api/v1/telegram/topics/search",
@@ -213,6 +229,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/telegram/topics/{topic_id}",
             get(get_telegram_topic_detail),
+        )
+        .route(
+            "/api/v1/telegram/topics/{topic_id}/close",
+            post(post_telegram_topic_close),
         )
         .route(
             "/api/v1/telegram/topics/{topic_id}/messages",

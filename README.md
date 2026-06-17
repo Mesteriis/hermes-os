@@ -105,7 +105,7 @@ make dev
 `make dev` is the single local full-stack entrypoint. It creates `docker/.env`
 from `docker/.env.example` when missing, starts PostgreSQL in Docker, runs the
 Rust backend through repo-local `bacon`, runs the Vue 3 + Vite frontend
-natively, starts the Tauri development shell, and writes structured local logs under
+natively, and writes structured local logs under
 `.local/dev-logs/`.
 
 For a stable tail target during one dev session:

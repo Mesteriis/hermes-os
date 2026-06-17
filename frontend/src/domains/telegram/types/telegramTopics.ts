@@ -21,3 +21,28 @@ export type TelegramTopicListResponse = {
   telegram_chat_id: string
   items: TelegramTopic[]
 }
+
+export type TelegramTopicCreateRequest = {
+  command_id: string
+  account_id: string
+  provider_chat_id: string
+  title: string
+}
+
+export type TelegramTopicCloseRequest = {
+  command_id: string
+  account_id: string
+  provider_chat_id: string
+  is_closed: boolean
+}
+
+export type TelegramTopicLifecycleResponse = {
+  operation: string
+  topic_id: string | null
+  account_id: string
+  provider_chat_id: string
+  provider_topic_id: number | null
+  status: string
+  timestamp: string
+  command_id: string
+}

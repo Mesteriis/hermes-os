@@ -44,4 +44,17 @@ describe('useTelegramFolderFilters', () => {
       { id: 'folder:Archive', label: 'Archive', source: 'telegram', count: 1, icon: 'tabler:folder' },
     ])
   })
+
+  it('derives fallback folder filters from provider-synced folder label arrays', () => {
+    const chats = [
+      chat({ metadata: { folder_labels: ['Projects', 'Pinned'] } }),
+      chat({ telegram_chat_id: 'tgchat-2', provider_chat_id: 'chat-2', metadata: { folder_labels: ['Projects'] } }),
+    ]
+
+    expect(resolveTelegramGroupFilters(chats, null)).toEqual([
+      { id: 'local:all', label: 'All', source: 'local', count: 2, icon: 'tabler:message' },
+      { id: 'folder:Projects', label: 'Projects', source: 'telegram', count: 2, icon: 'tabler:folder' },
+      { id: 'folder:Pinned', label: 'Pinned', source: 'telegram', count: 1, icon: 'tabler:folder' },
+    ])
+  })
 })

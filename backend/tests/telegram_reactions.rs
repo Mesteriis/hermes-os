@@ -59,7 +59,7 @@ async fn telegram_provider_message_state_reconciles_react_and_unreact_commands()
     .await
     .expect("reconcile reaction commands");
 
-    assert_eq!(reconciled.len(), 2);
+    assert_eq!(reconciled.len(), 3);
     assert!(
         reconciled
             .iter()
@@ -74,6 +74,13 @@ async fn telegram_provider_message_state_reconciles_react_and_unreact_commands()
                 && command.status == "completed"
                 && command.reconciliation_status == "observed")
     );
+    assert!(
+        reconciled
+            .iter()
+            .any(|command| command.command_id == "tcmd_react_still_pending"
+                && command.status == "failed"
+                && command.reconciliation_status == "mismatch")
+    );
 
     let commands = lifecycle::list_commands(&pool, &account_id, 10)
         .await
@@ -82,8 +89,15 @@ async fn telegram_provider_message_state_reconciles_react_and_unreact_commands()
         .iter()
         .find(|command| command.command_id == "tcmd_react_still_pending")
         .expect("pending command");
-    assert_eq!(pending.status, "queued");
-    assert_eq!(pending.reconciliation_status, "not_observed");
+    assert_eq!(pending.status, "failed");
+    assert_eq!(pending.reconciliation_status, "mismatch");
+    assert_eq!(
+        pending.last_error.as_deref(),
+        Some("Provider observed a different reaction state than requested")
+    );
+    assert_eq!(pending.provider_state["reaction_emoji"], json!("😎"));
+    assert_eq!(pending.provider_state["expected_is_chosen"], json!(true));
+    assert_eq!(pending.provider_state["observed_is_chosen"], json!(false));
 }
 
 async fn create_telegram_account(

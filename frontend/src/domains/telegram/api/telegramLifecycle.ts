@@ -1,5 +1,6 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
+  TelegramChatActionResponse,
   TelegramCommandListResponse,
   TelegramDeleteRequest,
   TelegramEditRequest,
@@ -110,6 +111,21 @@ export async function pinTelegramMessage(params: {
   )
 }
 
+export async function markTelegramMessageRead(params: {
+  message_id: string
+  account_id: string
+  provider_chat_id: string
+}): Promise<TelegramChatActionResponse> {
+  return ApiClient.instance.post<TelegramChatActionResponse>(
+    `/api/v1/telegram/messages/${encodeURIComponent(params.message_id)}/mark-read`,
+    {
+      account_id: params.account_id,
+      provider_chat_id: params.provider_chat_id,
+    },
+    'Telegram message mark read failed'
+  )
+}
+
 export async function fetchTelegramMessageVersions(
   messageId: string
 ): Promise<TelegramMessageVersionListResponse> {
@@ -130,9 +146,26 @@ export async function fetchTelegramMessageTombstones(
 
 export async function fetchTelegramCommands(
   accountId: string,
-  limit = 50
+  limit = 50,
+  options?: {
+    providerChatId?: string | null
+    providerMessageId?: string | null
+    commandKinds?: string[]
+  }
 ): Promise<TelegramCommandListResponse> {
   const params = new URLSearchParams({ account_id: accountId, limit: String(limit) })
+  if (options?.providerChatId?.trim()) {
+    params.set('provider_chat_id', options.providerChatId.trim())
+  }
+  if (options?.providerMessageId?.trim()) {
+    params.set('provider_message_id', options.providerMessageId.trim())
+  }
+  const commandKinds = (options?.commandKinds ?? [])
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+  if (commandKinds.length > 0) {
+    params.set('command_kinds', commandKinds.join(','))
+  }
   return ApiClient.instance.get<TelegramCommandListResponse>(
     `/api/v1/telegram/commands?${params.toString()}`,
     'Telegram commands request failed'

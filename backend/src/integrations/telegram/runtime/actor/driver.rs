@@ -10,18 +10,23 @@ use crate::platform::config::AppConfig;
 
 use super::super::state::{TelegramRuntimeCommand, TelegramRuntimeEvent};
 use super::authorization::{prepare_tdlib_client, wait_for_tdlib_ready};
-use super::chats::actor_load_chats;
+use super::chats::{actor_get_chat_folders, actor_load_chats};
 use super::download::actor_download_file;
 use super::edit::{
-    actor_delete_message, actor_edit_message, actor_join_chat, actor_leave_chat, actor_pin_message,
-    actor_set_reaction, actor_toggle_chat_archive, actor_toggle_chat_mute,
-    actor_toggle_chat_unread,
+    actor_add_chat_to_folder, actor_delete_message, actor_edit_message, actor_join_chat,
+    actor_leave_chat, actor_pin_message, actor_remove_chat_from_folder, actor_set_reaction,
+    actor_toggle_chat_archive, actor_toggle_chat_mute, actor_toggle_chat_unread,
 };
 use super::history::actor_sync_history;
-use super::participants::actor_get_supergroup_members;
+use super::participants::{
+    actor_get_basic_group_members, actor_get_supergroup_administrators,
+    actor_get_supergroup_members,
+};
 use super::search::{actor_search_chat_messages, actor_search_messages};
 use super::send::{actor_send_forward, actor_send_media, actor_send_reply, actor_send_text};
-use super::topics::actor_get_forum_topics;
+use super::topics::{
+    actor_create_forum_topic, actor_get_forum_topics, actor_toggle_forum_topic_closed,
+};
 
 pub(super) fn drive_tdlib_actor(
     config: AppConfig,
@@ -47,6 +52,12 @@ pub(super) fn drive_tdlib_actor(
         match command {
             TelegramRuntimeCommand::LoadChats { limit, reply_tx } => {
                 let _ = reply_tx.send(actor_load_chats(&client, limit));
+            }
+            TelegramRuntimeCommand::GetChatFolders {
+                folder_ids,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_get_chat_folders(&client, &folder_ids));
             }
             TelegramRuntimeCommand::SyncHistory {
                 provider_chat_id,
@@ -141,6 +152,7 @@ pub(super) fn drive_tdlib_actor(
             TelegramRuntimeCommand::ToggleChatUnread {
                 provider_chat_id,
                 is_marked_as_unread,
+                read_through_provider_message_id,
                 command_id,
                 reply_tx,
             } => {
@@ -148,6 +160,7 @@ pub(super) fn drive_tdlib_actor(
                     &client,
                     &provider_chat_id,
                     is_marked_as_unread,
+                    read_through_provider_message_id.as_deref(),
                     &command_id,
                 ));
             }
@@ -174,6 +187,32 @@ pub(super) fn drive_tdlib_actor(
                     &client,
                     &provider_chat_id,
                     muted,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::AddChatToFolder {
+                provider_chat_id,
+                provider_folder_id,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_add_chat_to_folder(
+                    &client,
+                    &provider_chat_id,
+                    provider_folder_id,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::RemoveChatFromFolder {
+                provider_chat_id,
+                provider_folder_id,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_remove_chat_from_folder(
+                    &client,
+                    &provider_chat_id,
+                    provider_folder_id,
                     &command_id,
                 ));
             }
@@ -228,12 +267,57 @@ pub(super) fn drive_tdlib_actor(
             } => {
                 let _ = reply_tx.send(actor_get_forum_topics(&client, &provider_chat_id, limit));
             }
+            TelegramRuntimeCommand::CreateForumTopic {
+                provider_chat_id,
+                title,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_create_forum_topic(
+                    &client,
+                    &provider_chat_id,
+                    &title,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::ToggleForumTopicClosed {
+                provider_chat_id,
+                provider_topic_id,
+                is_closed,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_toggle_forum_topic_closed(
+                    &client,
+                    &provider_chat_id,
+                    provider_topic_id,
+                    is_closed,
+                    &command_id,
+                ));
+            }
             TelegramRuntimeCommand::GetSupergroupMembers {
                 supergroup_id,
                 limit,
                 reply_tx,
             } => {
                 let _ = reply_tx.send(actor_get_supergroup_members(&client, supergroup_id, limit));
+            }
+            TelegramRuntimeCommand::GetSupergroupAdministrators {
+                supergroup_id,
+                limit,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_get_supergroup_administrators(
+                    &client,
+                    supergroup_id,
+                    limit,
+                ));
+            }
+            TelegramRuntimeCommand::GetBasicGroupMembers {
+                basic_group_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_get_basic_group_members(&client, basic_group_id));
             }
             TelegramRuntimeCommand::SearchMessages {
                 query,
@@ -312,6 +396,13 @@ fn drain_unsolicited_tdlib_events(
         }
         if let Some(snapshot) = tdjson::parse_tdlib_chat_position_snapshot(&event)? {
             let _ = runtime_event_tx.send(TelegramRuntimeEvent::ChatPositionUpdated(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_chat_removed_from_list_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::ChatRemovedFromList(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_chat_folders_update_snapshot(&event)? {
+            let _ =
+                runtime_event_tx.send(TelegramRuntimeEvent::ChatFoldersUpdated(snapshot.folders));
         }
     }
 

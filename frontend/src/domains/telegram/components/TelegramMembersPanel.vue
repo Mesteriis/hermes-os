@@ -3,9 +3,16 @@ import { computed, ref } from 'vue'
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
+import { useTelegramCommandRetryMutation, useTelegramCommandsQuery } from '../queries/useTelegramLifecycleQuery'
 import { useJoinTelegramChatMutation, useLeaveTelegramChatMutation } from '../queries/useTelegramParticipantLifecycleQuery'
-import { useSyncTelegramChatMembersMutation } from '../queries/useTelegramQuery'
+import { useSyncTelegramChatMembersMutation, useTelegramChatMembersQuery } from '../queries/useTelegramMembersQuery'
+import { telegramCommandAuditState } from '../stores/telegramCommandAudit'
+import {
+  telegramParticipantLifecycleCommands,
+  telegramParticipantLifecycleTitle,
+} from '../stores/telegramParticipantLifecycle'
 import type { TelegramCapabilitiesResponse, TelegramChatMember, TelegramOperationCapability } from '../types/telegram'
+import type { TelegramProviderWriteCommand } from '../types/telegram'
 
 const { t } = useI18n()
 
@@ -13,36 +20,45 @@ const props = defineProps<{
   telegramChatId: string | null
   accountId: string | null
   providerChatId: string | null
-  chatMembers: TelegramChatMember[]
   capabilities: TelegramCapabilitiesResponse | null
 }>()
 
 const memberSearchQuery = ref('')
+const memberRoleFilter = ref('')
 const syncMembersMutation = useSyncTelegramChatMembersMutation()
 const joinChatMutation = useJoinTelegramChatMutation()
 const leaveChatMutation = useLeaveTelegramChatMutation()
+const retryMutation = useTelegramCommandRetryMutation()
+const membersQuery = useTelegramChatMembersQuery(
+  () => props.telegramChatId,
+  () => 50,
+  () => memberSearchQuery.value,
+  () => memberRoleFilter.value
+)
+const commandsQuery = useTelegramCommandsQuery(
+  () => props.accountId,
+  10,
+  () => Boolean(props.accountId && props.providerChatId),
+  {
+    providerChatId: () => props.providerChatId,
+    commandKinds: () => ['join', 'leave'],
+  }
+)
 
-const filteredChatMembers = computed(() => {
-  const query = memberSearchQuery.value.trim().toLowerCase()
-  if (!query) return props.chatMembers
-  return props.chatMembers.filter((member) =>
-    [
-      member.sender_display_name ?? '',
-      member.sender_id,
-      member.provider_member_id,
-      member.username ?? '',
-      member.role ?? '',
-      member.status ?? '',
-      member.source,
-    ]
-      .join(' ')
-      .toLowerCase()
-      .includes(query)
+const chatMembers = computed<TelegramChatMember[]>(() => membersQuery.data.value ?? [])
+const lifecycleCommands = computed(() =>
+  telegramParticipantLifecycleCommands(
+    commandsQuery.data.value ?? [],
+    props.providerChatId,
+    2
   )
-})
+)
+const hasActiveMemberFilters = computed(
+  () => memberSearchQuery.value.trim().length > 0 || memberRoleFilter.value.trim().length > 0
+)
 
 const hasProviderRoster = computed(() =>
-  props.chatMembers.some((member) => member.source === 'tdlib' || member.source === 'bot_api')
+  chatMembers.value.some((member) => member.source === 'tdlib' || member.source === 'bot_api')
 )
 
 const syncLabel = computed(() => {
@@ -84,9 +100,9 @@ function sourceLabel(member: TelegramChatMember): string {
 }
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return '-'
+  if (!value) return '—'
   const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '-'
+  if (Number.isNaN(date.getTime())) return '—'
   return new Intl.DateTimeFormat('en', {
     month: 'short',
     day: 'numeric',
@@ -100,6 +116,11 @@ function permissionSummary(member: TelegramChatMember): string {
     .filter(([, value]) => typeof value === 'boolean')
     .map(([key, value]) => `${key.replace(/^can_/, '')}:${value ? 'yes' : 'no'}`)
   return entries.length ? entries.join(' | ') : '-'
+}
+
+function requestNextPage() {
+  if (!membersQuery.hasNextPage.value || membersQuery.isFetchingNextPage.value) return
+  void membersQuery.fetchNextPage()
 }
 
 function syncMembers() {
@@ -124,17 +145,29 @@ function leaveChat() {
     providerChatId: props.providerChatId,
   })
 }
+
+function canRetryLifecycleCommand(command: TelegramProviderWriteCommand): boolean {
+  return command.status === 'dead_letter' || command.status === 'failed'
+}
 </script>
 
 <template>
   <div class="telegram-members-panel">
     <div class="telegram-members-panel__toolbar">
-      <label v-if="chatMembers.length > 0" class="telegram-member-search">
+      <label class="telegram-member-search">
         <Icon icon="tabler:search" width="15" height="15" />
         <input
           v-model="memberSearchQuery"
           type="search"
           :placeholder="t('Search provider members')"
+        />
+      </label>
+      <label class="telegram-member-role">
+        <Icon icon="tabler:shield" width="15" height="15" />
+        <input
+          v-model="memberRoleFilter"
+          type="search"
+          :placeholder="t('Role filter')"
         />
       </label>
       <Button
@@ -180,18 +213,55 @@ function leaveChat() {
     <p v-if="leaveChatMutation.error.value" class="telegram-members-panel__error">
       {{ leaveChatMutation.error.value.message }}
     </p>
+    <p v-if="commandsQuery.error.value" class="telegram-members-panel__error">
+      {{ commandsQuery.error.value.message }}
+    </p>
+    <p v-if="membersQuery.error.value" class="telegram-members-panel__error">
+      {{ membersQuery.error.value.message }}
+    </p>
     <p v-if="chatMembers.length > 0 && !hasProviderRoster" class="telegram-members-panel__hint">
       {{ t('Showing message-sender fallback until provider roster is synced.') }}
     </p>
 
-    <div v-if="chatMembers.length === 0" class="telegram-inspector-placeholder">
-      {{ t('Members will appear after provider roster sync or selected-chat history sync.') }}
+    <div
+      v-if="lifecycleCommands.length > 0"
+      class="telegram-members-panel__lifecycle"
+      aria-live="polite"
+    >
+      <article
+        v-for="command in lifecycleCommands"
+        :key="command.command_id"
+        class="telegram-members-panel__lifecycle-item"
+      >
+        <div class="telegram-members-panel__lifecycle-row">
+          <strong>{{ t(telegramParticipantLifecycleTitle(command)) }}</strong>
+          <span>{{ t(telegramCommandAuditState(command).label) }}</span>
+        </div>
+        <small>{{ telegramCommandAuditState(command).detail }}</small>
+        <small>{{ formatDate(command.updated_at || command.happened_at) }}</small>
+        <button
+          v-if="canRetryLifecycleCommand(command)"
+          type="button"
+          class="telegram-members-panel__retry"
+          :disabled="retryMutation.isPending.value"
+          @click="retryMutation.mutate(command.command_id)"
+        >
+          <Icon icon="tabler:refresh" width="13" height="13" />
+          {{ t('Retry command') }}
+        </button>
+      </article>
     </div>
-    <div v-else-if="filteredChatMembers.length === 0" class="telegram-inspector-placeholder">
-      {{ t('No provider members match this search.') }}
+
+    <div v-if="membersQuery.isLoading.value" class="telegram-inspector-placeholder">
+      {{ t('Loading provider roster...') }}
+    </div>
+    <div v-else-if="chatMembers.length === 0" class="telegram-inspector-placeholder">
+      {{ hasActiveMemberFilters
+        ? t('No provider members match this search.')
+        : t('Members will appear after provider roster sync or selected-chat history sync.') }}
     </div>
     <article
-      v-for="member in filteredChatMembers"
+      v-for="member in chatMembers"
       :key="member.provider_member_id"
       class="telegram-rail-card telegram-member-card"
     >
@@ -210,6 +280,16 @@ function leaveChat() {
         <small>{{ formatDate(member.observed_at ?? member.last_message_at) }}</small>
       </div>
     </article>
+    <Button
+      v-if="membersQuery.hasNextPage.value"
+      variant="outline"
+      size="sm"
+      :disabled="membersQuery.isFetchingNextPage.value"
+      @click="requestNextPage"
+    >
+      <Icon icon="tabler:chevrons-down" />
+      {{ membersQuery.isFetchingNextPage.value ? t('Loading members') : t('Load more members') }}
+    </Button>
   </div>
 </template>
 
@@ -222,7 +302,7 @@ function leaveChat() {
 }
 .telegram-members-panel__toolbar {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 140px) auto;
   gap: 8px;
   align-items: center;
 }
@@ -231,7 +311,37 @@ function leaveChat() {
   flex-wrap: wrap;
   gap: 8px;
 }
+.telegram-members-panel__lifecycle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.telegram-members-panel__lifecycle-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 8px;
+  background: var(--color-bg, #fafafa);
+}
+.telegram-members-panel__lifecycle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
 .telegram-member-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 999px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text-secondary, #777);
+}
+.telegram-member-role {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -250,14 +360,45 @@ function leaveChat() {
   color: var(--color-text, #333);
   outline: none;
 }
+.telegram-member-role input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: var(--color-text, #333);
+  outline: none;
+}
 .telegram-members-panel__hint,
-.telegram-members-panel__error {
+.telegram-members-panel__error,
+.telegram-members-panel__lifecycle-item small,
+.telegram-members-panel__lifecycle-row span {
   margin: 0;
   font-size: 11px;
   color: var(--color-text-secondary, #777);
 }
+.telegram-members-panel__lifecycle-row strong {
+  font-size: 12px;
+  color: var(--color-text, #333);
+}
 .telegram-members-panel__error {
   color: var(--color-danger, #b42318);
+}
+.telegram-members-panel__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-accent, #2563eb);
+  font-size: 11px;
+  cursor: pointer;
+}
+.telegram-members-panel__retry:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .telegram-member-card {
   display: flex;

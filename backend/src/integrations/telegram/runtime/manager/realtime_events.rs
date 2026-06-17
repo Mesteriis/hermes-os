@@ -10,8 +10,9 @@ use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
 
 use super::super::state::TelegramRuntimeEvent;
 use super::chat_events::{
-    publish_chat_marked_as_unread_event, publish_chat_notification_settings_event,
-    publish_chat_position_event, publish_chat_unread_event,
+    publish_chat_folders_event, publish_chat_marked_as_unread_event,
+    publish_chat_notification_settings_event, publish_chat_position_event,
+    publish_chat_removed_from_list_event, publish_chat_unread_event,
 };
 use super::message_events::{
     publish_message_content_updated_event, publish_message_created_event,
@@ -90,6 +91,13 @@ pub(super) fn spawn_telegram_runtime_event_bridge(
                 TelegramRuntimeEvent::ChatPositionUpdated(snapshot) => {
                     publish_chat_position_event(&pool, &event_bus, &account_id, &snapshot).await;
                 }
+                TelegramRuntimeEvent::ChatRemovedFromList(snapshot) => {
+                    publish_chat_removed_from_list_event(&pool, &event_bus, &account_id, &snapshot)
+                        .await;
+                }
+                TelegramRuntimeEvent::ChatFoldersUpdated(folders) => {
+                    publish_chat_folders_event(&pool, &event_bus, &account_id, &folders).await;
+                }
             }
         }
     });
@@ -126,19 +134,30 @@ pub(super) async fn publish_command_reconciled_events(
     .await;
 }
 
-async fn publish_command_event(
-    context: &TelegramRuntimeEventBridgeContext,
+pub(super) fn command_event_payload(
     command: &TelegramProviderWriteCommand,
-    event_type: &str,
+    status: &str,
     extra_payload: serde_json::Value,
-) {
-    let now = Utc::now();
+) -> serde_json::Value {
     let mut payload = json!({
         "command_id": command.command_id,
         "account_id": command.account_id,
+        "command_kind": command.command_kind,
         "provider_chat_id": command.provider_chat_id,
         "message_id": command.provider_message_id,
-        "status": command.status,
+        "status": status,
+        "retry_count": command.retry_count,
+        "max_retries": command.max_retries,
+        "last_error": command.last_error,
+        "result_payload": command.result_payload,
+        "next_attempt_at": command.next_attempt_at,
+        "last_attempt_at": command.last_attempt_at,
+        "provider_observed_at": command.provider_observed_at,
+        "provider_state": command.provider_state,
+        "reconciliation_status": command.reconciliation_status,
+        "reconciled_at": command.reconciled_at,
+        "dead_lettered_at": command.dead_lettered_at,
+        "completed_at": command.completed_at,
     });
     if let (Some(payload_obj), Some(extra_obj)) =
         (payload.as_object_mut(), extra_payload.as_object())
@@ -150,6 +169,17 @@ async fn publish_command_event(
     if let Some(payload_obj) = payload.as_object_mut() {
         payload_obj.insert("payload".to_owned(), extra_payload);
     }
+    payload
+}
+
+async fn publish_command_event(
+    context: &TelegramRuntimeEventBridgeContext,
+    command: &TelegramProviderWriteCommand,
+    event_type: &str,
+    extra_payload: serde_json::Value,
+) {
+    let now = Utc::now();
+    let payload = command_event_payload(command, &command.status, extra_payload);
 
     let event = NewEventEnvelope::builder(
         format!(
@@ -178,6 +208,120 @@ async fn publish_command_event(
     }
 
     let _ = context.event_bus.broadcast(event);
+}
+
+#[cfg(test)]
+mod typing_tests {
+    use chrono::Utc;
+    use serde_json::json;
+    use testkit::context::TestContext;
+
+    use super::command_event_payload;
+    use super::{TelegramRuntimeEventBridgeContext, publish_command_reconciled_events};
+    use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
+    use crate::platform::events::EventBus;
+
+    fn sample_command() -> TelegramProviderWriteCommand {
+        TelegramProviderWriteCommand {
+            command_id: "cmd-1".to_owned(),
+            account_id: "account-1".to_owned(),
+            command_kind: "edit".to_owned(),
+            idempotency_key: "idem-1".to_owned(),
+            provider_chat_id: "chat-1".to_owned(),
+            provider_message_id: Some("chat-1:42".to_owned()),
+            target_ref: json!({"provider_message_id": "chat-1:42"}),
+            payload: json!({"new_text": "after"}),
+            capability_state: "available".to_owned(),
+            action_class: "provider_write".to_owned(),
+            confirmation_decision: "not_required".to_owned(),
+            status: "completed".to_owned(),
+            retry_count: 2,
+            max_retries: 5,
+            last_error: Some("temporary failure".to_owned()),
+            result_payload: json!({"projection_message_id": "msg-1"}),
+            audit_metadata: json!({"source": "test"}),
+            actor_id: "hermes-frontend".to_owned(),
+            happened_at: Utc::now(),
+            next_attempt_at: None,
+            last_attempt_at: Some(Utc::now()),
+            locked_at: None,
+            locked_by: None,
+            provider_observed_at: Some(Utc::now()),
+            provider_state: json!({"state": "observed"}),
+            reconciliation_status: "observed".to_owned(),
+            reconciled_at: Some(Utc::now()),
+            dead_lettered_at: None,
+            completed_at: Some(Utc::now()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn command_event_payload_includes_durable_command_state() {
+        let command = sample_command();
+        let payload = command_event_payload(
+            &command,
+            "completed",
+            json!({"source": "test", "phase": "provider_observed"}),
+        );
+
+        assert_eq!(payload["command_id"], json!("cmd-1"));
+        assert_eq!(payload["command_kind"], json!("edit"));
+        assert_eq!(payload["status"], json!("completed"));
+        assert_eq!(payload["retry_count"], json!(2));
+        assert_eq!(payload["max_retries"], json!(5));
+        assert_eq!(payload["last_error"], json!("temporary failure"));
+        assert_eq!(
+            payload["result_payload"]["projection_message_id"],
+            json!("msg-1")
+        );
+        assert_eq!(payload["provider_state"]["state"], json!("observed"));
+        assert_eq!(payload["reconciliation_status"], json!("observed"));
+        assert_eq!(payload["payload"]["source"], json!("test"));
+        assert_eq!(payload["payload"]["phase"], json!("provider_observed"));
+        assert!(payload["completed_at"].is_string());
+    }
+
+    #[tokio::test]
+    async fn publish_command_reconciled_events_appends_status_and_reconciled_records() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool().clone();
+        let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), EventBus::new());
+        let command = sample_command();
+
+        publish_command_reconciled_events(Some(&context), &command, "tdlib.updateMessageContent")
+            .await;
+
+        let rows: Vec<(String, serde_json::Value)> = sqlx::query_as(
+            r#"
+            SELECT event_type, payload
+            FROM event_log
+            WHERE subject->>'id' = $1
+              AND event_type IN ('telegram.command.status_changed', 'telegram.command.reconciled')
+            ORDER BY position ASC
+            "#,
+        )
+        .bind(&command.command_id)
+        .fetch_all(&pool)
+        .await
+        .expect("command reconciliation events");
+
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0].0, "telegram.command.status_changed");
+        assert_eq!(rows[1].0, "telegram.command.reconciled");
+
+        for (_, payload) in rows {
+            assert_eq!(payload["command_id"], json!("cmd-1"));
+            assert_eq!(payload["status"], json!("completed"));
+            assert_eq!(payload["reconciliation_status"], json!("observed"));
+            assert_eq!(payload["source"], json!("tdlib.updateMessageContent"));
+            assert_eq!(
+                payload["payload"]["source"],
+                json!("tdlib.updateMessageContent")
+            );
+        }
+    }
 }
 
 async fn publish_typing_event(

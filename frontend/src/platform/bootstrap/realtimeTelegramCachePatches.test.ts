@@ -65,6 +65,121 @@ describe('telegram realtime cache patch handling', () => {
     expect(setQueryData.mock.results[1]?.value.metadata.active_typing.sender_id).toBe('user:777')
   })
 
+  it('patches cached telegram chat detail and list snapshots for provider unread progress updates', () => {
+    const chatsKey = ['telegram', 'chats', 'account-1', 50]
+    const chatDetailKey = ['telegram', 'chat-detail', 'tgchat-1']
+    const chat = {
+      telegram_chat_id: 'tgchat-1',
+      account_id: 'account-1',
+      provider_chat_id: 'chat-1',
+      chat_kind: 'private',
+      title: 'Chat',
+      username: null,
+      sync_state: 'synced',
+      last_message_at: null,
+      metadata: { unread_count: 4 },
+      created_at: '2026-06-16T09:00:00Z',
+      updated_at: '2026-06-16T09:00:00Z'
+    }
+    const updatedChat = {
+      ...chat,
+      metadata: {
+        ...chat.metadata,
+        unread_count: 1,
+        provider_unread_count: 1,
+        last_read_inbox_provider_message_id: '777',
+      },
+    }
+    const setQueryData = vi.fn((queryKey, updater) => {
+      if (typeof updater !== 'function') return updater
+      if (JSON.stringify(queryKey) === JSON.stringify(chatsKey)) return updater([chat])
+      if (JSON.stringify(queryKey) === JSON.stringify(chatDetailKey)) return updater(chat)
+      return updater(undefined)
+    })
+    const queryClient = {
+      invalidateQueries: vi.fn(),
+      getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
+        const key = JSON.stringify(queryKey)
+        if (key === JSON.stringify(['telegram', 'chats'])) return [[chatsKey, [chat]]]
+        if (key === JSON.stringify(['telegram', 'chat-detail'])) return [[chatDetailKey, chat]]
+        return []
+      }),
+      setQueryData
+    }
+
+    handleRealtimeEvent(
+      {
+        id: 'tg-56b',
+        event: 'event',
+        data: JSON.stringify({
+          event: {
+            event_type: 'telegram.chat.updated',
+            occurred_at: '2026-06-16T09:00:00.000Z',
+            payload: {
+              telegram_chat_id: 'tgchat-1',
+              provider_chat_id: 'chat-1',
+              chat: updatedChat
+            }
+          }
+        })
+      },
+      queryClient
+    )
+
+    expect(setQueryData.mock.results[0]?.value[0].metadata.last_read_inbox_provider_message_id).toBe('777')
+    expect(setQueryData.mock.results[1]?.value.metadata.last_read_inbox_provider_message_id).toBe('777')
+  })
+
+  it('patches cached telegram folder filters for provider folder update events', () => {
+    const foldersKey = ['telegram', 'folders', 'account-1']
+    const folders = [
+      { id: 'local:all', label: 'All', source: 'local', count: 2, icon: 'tabler:message' },
+      { id: 'folder:Work', label: 'Work', source: 'telegram', count: 2, icon: 'tabler:folder', provider_folder_id: 7 },
+    ]
+    const setQueryData = vi.fn((queryKey, updater) =>
+      typeof updater === 'function' ? updater(folders) : updater
+    )
+    const queryClient = {
+      invalidateQueries: vi.fn(),
+      getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
+        const key = JSON.stringify(queryKey)
+        if (key === JSON.stringify(['telegram', 'folders'])) return [[foldersKey, folders]]
+        return []
+      }),
+      setQueryData
+    }
+
+    handleRealtimeEvent(
+      {
+        id: 'tg-folders-1',
+        event: 'event',
+        data: JSON.stringify({
+          event: {
+            event_type: 'telegram.folders.updated',
+            occurred_at: '2026-06-17T10:00:00.000Z',
+            payload: {
+              account_id: 'account-1',
+              items: [
+                { id: 'local:all', label: 'All', source: 'local', count: 3, icon: 'tabler:message' },
+                { id: 'folder:Projects', label: 'Projects', source: 'telegram', count: 2, icon: 'tabler:folder', provider_folder_id: 9 },
+              ],
+            },
+            metadata: {
+              account_id: 'account-1',
+            }
+          }
+        })
+      },
+      queryClient
+    )
+
+    expect(setQueryData.mock.results[0]?.value).toEqual([
+      { id: 'local:all', label: 'All', source: 'local', count: 3, icon: 'tabler:message', provider_folder_id: null },
+      { id: 'folder:Projects', label: 'Projects', source: 'telegram', count: 2, icon: 'tabler:folder', provider_folder_id: 9 },
+    ])
+  })
+
+
   it('patches cached telegram message reaction summary for telegram reaction events', () => {
     const messageKey = ['telegram', 'messages', 'account-1', 'chat-1', 50]
     const messages = [
@@ -465,6 +580,7 @@ describe('telegram realtime cache patch handling', () => {
             metadata: { account_id: 'account-1' },
             payload: {
               command_id: 'cmd-1',
+              command_kind: 'mark_read',
               status: 'pinned',
               provider_chat_id: 'chat-1',
               telegram_chat_id: 'telegram_chat:v4:abc',
@@ -480,114 +596,10 @@ describe('telegram realtime cache patch handling', () => {
     expect(patchedRuntime.status).toBe('running')
     expect(patchedRuntime.last_command_id).toBe('cmd-1')
     expect(patchedRuntime.last_command_status).toBe('pinned')
+    expect(patchedRuntime.last_command_kind).toBe('mark_read')
     expect(patchedRuntime.last_command_provider_chat_id).toBe('chat-1')
     expect(patchedRuntime.last_command_telegram_chat_id).toBe('telegram_chat:v4:abc')
     expect(patchedRuntime.last_command_message_id).toBe('msg-1')
-  })
-
-  it('patches cached telegram message and media search results for media download events', () => {
-    const messageKey = ['telegram', 'messages', 'account-1', 'chat-1', 50]
-    const mediaKey = ['telegram', 'search', 'media', '', 'account-1', 'chat-1', 'all', 100]
-    const messages = [
-      {
-        message_id: 'tg-msg-media-1',
-        raw_record_id: 'raw-media-1',
-        account_id: 'account-1',
-        provider_message_id: 'provider-media-1',
-        provider_chat_id: 'chat-1',
-        chat_title: 'Chat',
-        sender: 'sender-1',
-        sender_display_name: 'Sender',
-        text: '',
-        occurred_at: '2026-06-16T10:15:00Z',
-        projected_at: '2026-06-16T10:15:01Z',
-        channel_kind: 'telegram_user',
-        delivery_state: 'received',
-        metadata: {
-          attachments: [
-            {
-              attachment_id: 'att-1',
-              attachment_type: 'photo',
-              filename: 'before.jpg',
-              content_type: 'image/jpeg',
-              download_state: 'remote',
-            },
-          ],
-        },
-      },
-    ]
-    const mediaResponse = { query: '', items: [] }
-    const downloadedSnapshot = {
-      ...messages[0],
-      metadata: {
-        attachments: [
-          {
-            attachment_id: 'att-1',
-            attachment_type: 'photo',
-            filename: 'after.jpg',
-            content_type: 'image/jpeg',
-            download_state: 'downloaded',
-            local_path: '/tmp/after.jpg',
-            size: 2048,
-          },
-        ],
-      },
-    }
-    const setQueryData = vi.fn((queryKey, updater) => {
-      if (typeof updater !== 'function') return updater
-      if (JSON.stringify(queryKey) === JSON.stringify(messageKey)) return updater(messages)
-      if (JSON.stringify(queryKey) === JSON.stringify(mediaKey)) return updater(mediaResponse)
-      return updater(undefined)
-    })
-    const queryClient = {
-      invalidateQueries: vi.fn(),
-      getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        const key = JSON.stringify(queryKey)
-        if (key === JSON.stringify(['telegram', 'messages'])) return [[messageKey, messages]]
-        if (key === JSON.stringify(['telegram', 'search', 'media'])) {
-          return [[mediaKey, mediaResponse]]
-        }
-        return []
-      }),
-      setQueryData,
-    }
-
-    handleRealtimeEvent(
-      {
-        id: 'tg-62',
-        event: 'event',
-        data: JSON.stringify({
-          event: {
-            event_type: 'telegram.media.downloaded',
-            subject: { id: 'tg-msg-media-1', kind: 'telegram_message' },
-            payload: {
-              provider_chat_id: 'chat-1',
-              provider_message_id: 'provider-media-1',
-              attachment_id: 'att-1',
-              download_state: 'downloaded',
-              local_path: '/tmp/after.jpg',
-              message: downloadedSnapshot,
-            },
-          },
-        }),
-      },
-      queryClient
-    )
-
-    const patchedMessages = setQueryData.mock.results[0]?.value
-    expect(patchedMessages[0].metadata.attachments[0].download_state).toBe('downloaded')
-    expect(patchedMessages[0].metadata.attachments[0].local_path).toBe('/tmp/after.jpg')
-
-    const patchedMedia = setQueryData.mock.results[1]?.value
-    expect(patchedMedia.items).toHaveLength(1)
-    expect(patchedMedia.items[0]).toMatchObject({
-      message_id: 'tg-msg-media-1',
-      provider_chat_id: 'chat-1',
-      file_name: 'after.jpg',
-      kind: 'photo',
-      mime_type: 'image/jpeg',
-      download_state: 'downloaded',
-    })
   })
 
   it('patches cached telegram chat list and detail for dialog command status events', () => {

@@ -1,5 +1,6 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
+export { telegramRuntimeCommandTarget } from './telegramRuntimeStatus'
 import type {
   TelegramChat,
   TelegramMessage,
@@ -28,6 +29,12 @@ function metaString(metadata: Record<string, unknown>, key: string): string {
   return typeof v === 'string' ? v : ''
 }
 
+function metaStringArray(metadata: Record<string, unknown>, key: string): string[] {
+  const value = metadata[key]
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+}
+
 // --- Helper functions (ported from Svelte services/telegram/messages.ts) ---
 
 export function telegramMessagesChronological(messages: TelegramMessage[]): TelegramMessage[] {
@@ -44,6 +51,10 @@ export function telegramChatUnreadCount(chat: TelegramChat): number {
 
 export function telegramChatMentionCountValue(chat: TelegramChat): number {
   return metaNumber(chat.metadata, 'mention_count')
+}
+
+export function telegramChatLastReadInboxProviderMessageId(chat: TelegramChat): string {
+  return metaString(chat.metadata, 'last_read_inbox_provider_message_id')
 }
 
 export function telegramChatIsPinned(chat: TelegramChat): boolean {
@@ -128,8 +139,12 @@ export function telegramChatGroupFilters(chats: TelegramChat[]): TelegramChatGro
   ]
   const folders = new Map<string, { name: string; count: number }>()
   for (const chat of chats) {
-    const folderName = metaString(chat.metadata, 'folder_name')
-    if (folderName) {
+    const folderNames = metaStringArray(chat.metadata, 'folder_labels')
+    const labels = folderNames.length ? folderNames : (() => {
+      const folderName = metaString(chat.metadata, 'folder_name')
+      return folderName ? [folderName] : []
+    })()
+    for (const folderName of labels) {
       const existing = folders.get(folderName)
       if (existing) {
         existing.count++
@@ -157,7 +172,11 @@ export function filterTelegramChatsByGroup(
   if (groupFilter === 'local:all') return chats
   if (groupFilter.startsWith('folder:')) {
     const folderName = groupFilter.slice(7)
-    return chats.filter((c) => metaString(c.metadata, 'folder_name') === folderName)
+    return chats.filter((chat) => {
+      const labels = metaStringArray(chat.metadata, 'folder_labels')
+      if (labels.length) return labels.includes(folderName)
+      return metaString(chat.metadata, 'folder_name') === folderName
+    })
   }
   return chats
 }
@@ -209,6 +228,11 @@ export function telegramMessageAttachmentHints(
     providerAttachmentId: (att.attachment_id as string) ?? '',
     downloadState: ((att.download_state as string) ?? 'unknown') as TelegramAttachmentHint['downloadState'],
     localPath: (att.local_path as string) ?? null,
+    expectedSizeBytes: (att.expected_size_bytes as number) ?? null,
+    downloadedSizeBytes: (att.downloaded_size_bytes as number) ?? null,
+    isDownloadingActive: (att.is_downloading_active as boolean) ?? null,
+    isDownloadingCompleted: (att.is_downloading_completed as boolean) ?? null,
+    lastError: (att.last_error as string) ?? null,
     messageId: message.message_id,
     providerMessageId: message.provider_message_id,
   }))
@@ -227,6 +251,11 @@ export function telegramAttachmentHintFromMediaItem(
     providerAttachmentId: item.provider_attachment_id ?? '',
     downloadState: (item.download_state as TelegramAttachmentHint['downloadState']) ?? 'unknown',
     localPath: item.local_path,
+    expectedSizeBytes: item.expected_size_bytes ?? null,
+    downloadedSizeBytes: item.downloaded_size_bytes ?? null,
+    isDownloadingActive: item.is_downloading_active ?? null,
+    isDownloadingCompleted: item.is_downloading_completed ?? null,
+    lastError: item.last_error ?? null,
     messageId: item.message_id,
     providerMessageId: item.provider_message_id,
   }

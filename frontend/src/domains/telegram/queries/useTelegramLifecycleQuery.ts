@@ -50,12 +50,34 @@ export function useTelegramMessageReactionsQuery(
 export function useTelegramCommandsQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,
   limit: MaybeRefOrGetter<number> = 25,
-  enabled: MaybeRefOrGetter<boolean> = true
+  enabled: MaybeRefOrGetter<boolean> = true,
+  filters?: {
+    providerChatId?: MaybeRefOrGetter<string | null | undefined>
+    providerMessageId?: MaybeRefOrGetter<string | null | undefined>
+    commandKinds?: MaybeRefOrGetter<string[] | null | undefined>
+  }
 ) {
   return useQuery<TelegramProviderWriteCommand[]>({
-    queryKey: computed(() => ['telegram', 'commands', toValue(accountId) ?? 'none', toValue(limit)]),
+    queryKey: computed(() => {
+      const commandKinds = [...(toValue(filters?.commandKinds) ?? [])]
+        .filter((value) => value.trim().length > 0)
+        .sort()
+      return [
+        'telegram',
+        'commands',
+        toValue(accountId) ?? 'none',
+        toValue(limit),
+        toValue(filters?.providerChatId) ?? 'all',
+        toValue(filters?.providerMessageId) ?? 'all',
+        commandKinds.length > 0 ? commandKinds.join('|') : 'all',
+      ]
+    }),
     queryFn: async () => {
-      const response = await fetchTelegramCommands(toValue(accountId) as string, toValue(limit))
+      const response = await fetchTelegramCommands(toValue(accountId) as string, toValue(limit), {
+        providerChatId: toValue(filters?.providerChatId),
+        providerMessageId: toValue(filters?.providerMessageId),
+        commandKinds: toValue(filters?.commandKinds) ?? undefined,
+      })
       return response.items
     },
     enabled: computed(() => Boolean(toValue(accountId)) && Boolean(toValue(enabled))),

@@ -4,8 +4,9 @@ use chrono::{DateTime, Utc};
 
 use crate::integrations::telegram::client::{TelegramError, TelegramManualSendRequest};
 use crate::integrations::telegram::tdjson::{
-    TelegramTdlibChatMarkedAsUnreadSnapshot, TelegramTdlibChatMemberSnapshot,
-    TelegramTdlibChatNotificationSettingsSnapshot, TelegramTdlibChatPositionSnapshot,
+    TelegramTdlibChatFolderSnapshot, TelegramTdlibChatMarkedAsUnreadSnapshot,
+    TelegramTdlibChatMemberSnapshot, TelegramTdlibChatNotificationSettingsSnapshot,
+    TelegramTdlibChatPositionSnapshot, TelegramTdlibChatRemovedFromListSnapshot,
     TelegramTdlibChatSnapshot, TelegramTdlibChatUnreadSnapshot, TelegramTdlibFileSnapshot,
     TelegramTdlibMessageContentSnapshot, TelegramTdlibMessageDeleteSnapshot,
     TelegramTdlibMessageEditedSnapshot, TelegramTdlibMessageInteractionInfoSnapshot,
@@ -75,6 +76,10 @@ pub(super) enum TelegramRuntimeCommand {
         limit: i32,
         reply_tx: Sender<Result<Vec<TelegramTdlibChatSnapshot>, TelegramError>>,
     },
+    GetChatFolders {
+        folder_ids: Vec<i64>,
+        reply_tx: Sender<Result<Vec<TelegramTdlibChatFolderSnapshot>, TelegramError>>,
+    },
     SyncHistory {
         provider_chat_id: String,
         from_message_id: Option<i64>,
@@ -127,6 +132,7 @@ pub(super) enum TelegramRuntimeCommand {
     ToggleChatUnread {
         provider_chat_id: String,
         is_marked_as_unread: bool,
+        read_through_provider_message_id: Option<String>,
         command_id: String,
         reply_tx: Sender<Result<(), TelegramError>>,
     },
@@ -139,6 +145,18 @@ pub(super) enum TelegramRuntimeCommand {
     ToggleChatMute {
         provider_chat_id: String,
         muted: bool,
+        command_id: String,
+        reply_tx: Sender<Result<(), TelegramError>>,
+    },
+    AddChatToFolder {
+        provider_chat_id: String,
+        provider_folder_id: i64,
+        command_id: String,
+        reply_tx: Sender<Result<(), TelegramError>>,
+    },
+    RemoveChatFromFolder {
+        provider_chat_id: String,
+        provider_folder_id: i64,
         command_id: String,
         reply_tx: Sender<Result<(), TelegramError>>,
     },
@@ -171,9 +189,31 @@ pub(super) enum TelegramRuntimeCommand {
         limit: i32,
         reply_tx: Sender<Result<Vec<TelegramTdlibTopicSnapshot>, TelegramError>>,
     },
+    CreateForumTopic {
+        provider_chat_id: String,
+        title: String,
+        command_id: String,
+        reply_tx: Sender<Result<TelegramTdlibTopicSnapshot, TelegramError>>,
+    },
+    ToggleForumTopicClosed {
+        provider_chat_id: String,
+        provider_topic_id: i64,
+        is_closed: bool,
+        command_id: String,
+        reply_tx: Sender<Result<(), TelegramError>>,
+    },
     GetSupergroupMembers {
         supergroup_id: i64,
         limit: i32,
+        reply_tx: Sender<Result<Vec<TelegramTdlibChatMemberSnapshot>, TelegramError>>,
+    },
+    GetSupergroupAdministrators {
+        supergroup_id: i64,
+        limit: i32,
+        reply_tx: Sender<Result<Vec<TelegramTdlibChatMemberSnapshot>, TelegramError>>,
+    },
+    GetBasicGroupMembers {
+        basic_group_id: i64,
         reply_tx: Sender<Result<Vec<TelegramTdlibChatMemberSnapshot>, TelegramError>>,
     },
     SearchMessages {
@@ -203,4 +243,6 @@ pub(super) enum TelegramRuntimeEvent {
     ChatMarkedAsUnreadUpdated(TelegramTdlibChatMarkedAsUnreadSnapshot),
     ChatNotificationSettingsUpdated(TelegramTdlibChatNotificationSettingsSnapshot),
     ChatPositionUpdated(TelegramTdlibChatPositionSnapshot),
+    ChatRemovedFromList(TelegramTdlibChatRemovedFromListSnapshot),
+    ChatFoldersUpdated(Vec<TelegramTdlibChatFolderSnapshot>),
 }

@@ -1,7 +1,9 @@
 mod accounts;
 mod capabilities;
 mod chat_actions;
+mod chat_folder_actions;
 mod chats;
+mod commands;
 mod helpers;
 mod media;
 mod messages;
@@ -23,17 +25,22 @@ pub(crate) use chat_actions::{
     post_telegram_chat_pin, post_telegram_chat_unarchive, post_telegram_chat_unmute,
     post_telegram_chat_unpin,
 };
+pub(crate) use chat_folder_actions::{
+    post_telegram_chat_add_folder, post_telegram_chat_reassign_folders,
+    post_telegram_chat_remove_folder,
+};
 pub(crate) use chats::{
     get_telegram_chat_detail, get_telegram_chat_members, get_telegram_chats, get_telegram_folders,
     post_telegram_chat_members_sync, post_telegram_sync_chats, post_telegram_sync_history,
 };
+pub(crate) use commands::get_telegram_commands;
 pub(crate) use media::{post_telegram_media_download, post_telegram_media_upload};
 pub(crate) use messages::{
-    delete_telegram_reaction, get_telegram_commands, get_telegram_forward_chain,
-    get_telegram_message_tombstones, get_telegram_message_versions, get_telegram_messages,
-    get_telegram_reactions, get_telegram_reply_chain, post_telegram_fixture_message,
-    post_telegram_manual_send, post_telegram_message_delete, post_telegram_message_edit,
-    post_telegram_message_forward, post_telegram_message_pin, post_telegram_message_reply,
+    delete_telegram_reaction, get_telegram_forward_chain, get_telegram_message_tombstones,
+    get_telegram_message_versions, get_telegram_messages, get_telegram_reactions,
+    get_telegram_reply_chain, post_telegram_fixture_message, post_telegram_manual_send,
+    post_telegram_message_delete, post_telegram_message_edit, post_telegram_message_forward,
+    post_telegram_message_mark_read, post_telegram_message_pin, post_telegram_message_reply,
     post_telegram_message_restore_visibility, post_telegram_reaction,
 };
 pub(crate) use outbox::post_telegram_command_retry;
@@ -52,5 +59,5 @@ pub(crate) use search::{
 };
 pub(crate) use topics::{
     get_telegram_topic_detail, get_telegram_topic_messages, get_telegram_topics,
-    search_telegram_topics,
+    post_telegram_topic_close, post_telegram_topic_create, search_telegram_topics,
 };

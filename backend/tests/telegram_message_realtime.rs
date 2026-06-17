@@ -218,6 +218,87 @@ async fn telegram_provider_edit_observation_is_idempotent_and_reconciles_edit_co
 }
 
 #[tokio::test]
+async fn telegram_provider_edit_observation_marks_mismatched_edit_command_failed() {
+    let ctx = TestContext::new().await;
+    let pool = ctx.pool().clone();
+    let account_id =
+        create_telegram_account(&pool, "message-edit-mismatch", "telegram:edit-mismatch").await;
+    let store = TelegramStore::new(pool.clone());
+    let provider_chat_id = "-100message-edit-mismatch";
+    let provider_message_id = format!("{provider_chat_id}:42");
+
+    store
+        .ingest_fixture_message(&NewTelegramMessage {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.to_owned(),
+            provider_message_id: provider_message_id.clone(),
+            chat_kind: TelegramChatKind::Private,
+            chat_title: "Edit Mismatch Test".to_owned(),
+            sender_id: "user:777".to_owned(),
+            sender_display_name: "Alice".to_owned(),
+            text: "before".to_owned(),
+            import_batch_id: "telegram-realtime-test".to_owned(),
+            occurred_at: Utc::now(),
+            delivery_state: TelegramDeliveryState::Received,
+        })
+        .await
+        .expect("ingest fixture message");
+
+    lifecycle::insert_command(
+        &pool,
+        "tcmd_edit_mismatch",
+        &account_id,
+        "edit",
+        "edit-mismatch",
+        provider_chat_id,
+        Some(&provider_message_id),
+        "available",
+        "provider_write",
+        "confirmed",
+        "hermes-frontend",
+        json!({"new_text": "expected provider body"}),
+        json!({
+            "provider_chat_id": provider_chat_id,
+            "provider_message_id": provider_message_id,
+        }),
+        json!({"source": "test"}),
+    )
+    .await
+    .expect("insert edit command");
+
+    let reconciled = reconcile_edit_commands_from_provider_state(
+        &pool,
+        &account_id,
+        provider_chat_id,
+        &provider_message_id,
+        "different provider body",
+        Utc::now(),
+        "tdlib.updateMessageContent",
+    )
+    .await
+    .expect("reconcile mismatched edit commands");
+
+    assert_eq!(reconciled.len(), 1);
+    assert_eq!(reconciled[0].command_id, "tcmd_edit_mismatch");
+    assert_eq!(reconciled[0].status, "failed");
+    assert_eq!(reconciled[0].reconciliation_status, "mismatch");
+    assert_eq!(
+        reconciled[0].last_error.as_deref(),
+        Some("Provider observed a different message body than requested")
+    );
+    assert_eq!(
+        reconciled[0].provider_state["expected_body_text"],
+        json!("expected provider body")
+    );
+    assert_eq!(
+        reconciled[0].provider_state["observed_body_text"],
+        json!("different provider body")
+    );
+    assert!(reconciled[0].completed_at.is_none());
+    assert!(reconciled[0].reconciled_at.is_some());
+}
+
+#[tokio::test]
 async fn telegram_provider_pin_state_reconciles_message_pin_command() {
     let ctx = TestContext::new().await;
     let pool = ctx.pool().clone();
@@ -281,6 +362,87 @@ async fn telegram_provider_pin_state_reconciles_message_pin_command() {
     assert_eq!(reconciled[0].command_id, "tcmd_pin_observed");
     assert_eq!(reconciled[0].status, "completed");
     assert_eq!(reconciled[0].reconciliation_status, "observed");
+}
+
+#[tokio::test]
+async fn telegram_provider_pin_state_marks_mismatched_unpin_command_failed() {
+    let ctx = TestContext::new().await;
+    let pool = ctx.pool().clone();
+    let account_id =
+        create_telegram_account(&pool, "message-pin-mismatch", "telegram:pin-mismatch").await;
+    let store = TelegramStore::new(pool.clone());
+    let provider_chat_id = "-100message-pin-mismatch";
+    let provider_message_id = format!("{provider_chat_id}:42");
+
+    store
+        .ingest_fixture_message(&NewTelegramMessage {
+            account_id: account_id.clone(),
+            provider_chat_id: provider_chat_id.to_owned(),
+            provider_message_id: provider_message_id.clone(),
+            chat_kind: TelegramChatKind::Private,
+            chat_title: "Pin Mismatch Test".to_owned(),
+            sender_id: "user:777".to_owned(),
+            sender_display_name: "Alice".to_owned(),
+            text: "pin mismatch".to_owned(),
+            import_batch_id: "telegram-realtime-test".to_owned(),
+            occurred_at: Utc::now(),
+            delivery_state: TelegramDeliveryState::Received,
+        })
+        .await
+        .expect("ingest fixture message");
+
+    lifecycle::insert_command(
+        &pool,
+        "tcmd_unpin_mismatch",
+        &account_id,
+        "unpin",
+        "unpin-mismatch",
+        provider_chat_id,
+        Some(&provider_message_id),
+        "available",
+        "provider_write",
+        "confirmed",
+        "hermes-frontend",
+        json!({"is_pinned": false}),
+        json!({
+            "provider_chat_id": provider_chat_id,
+            "provider_message_id": provider_message_id,
+        }),
+        json!({"source": "test"}),
+    )
+    .await
+    .expect("insert unpin command");
+
+    let reconciled = reconcile_message_pin_commands_from_provider_state(
+        &pool,
+        &account_id,
+        provider_chat_id,
+        &provider_message_id,
+        true,
+        Utc::now(),
+        "tdlib.updateMessageIsPinned",
+    )
+    .await
+    .expect("reconcile mismatched pin commands");
+
+    assert_eq!(reconciled.len(), 1);
+    assert_eq!(reconciled[0].command_id, "tcmd_unpin_mismatch");
+    assert_eq!(reconciled[0].status, "failed");
+    assert_eq!(reconciled[0].reconciliation_status, "mismatch");
+    assert_eq!(
+        reconciled[0].last_error.as_deref(),
+        Some("Provider observed a different pin state than requested")
+    );
+    assert_eq!(
+        reconciled[0].provider_state["expected_is_pinned"],
+        json!(false)
+    );
+    assert_eq!(
+        reconciled[0].provider_state["observed_is_pinned"],
+        json!(true)
+    );
+    assert!(reconciled[0].completed_at.is_none());
+    assert!(reconciled[0].reconciled_at.is_some());
 }
 
 async fn create_telegram_account(

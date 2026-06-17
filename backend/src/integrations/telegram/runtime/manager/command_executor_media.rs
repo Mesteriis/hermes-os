@@ -139,6 +139,37 @@ pub(super) async fn emit_media_upload_event(
     let _ = event_bus.broadcast(event);
 }
 
+pub(super) fn media_upload_progress_payload(
+    command: &TelegramProviderWriteCommand,
+    phase: &str,
+    detail: &str,
+) -> Value {
+    let mut provider_state = command.provider_state.clone();
+    if let Some(provider_state_obj) = provider_state.as_object_mut() {
+        provider_state_obj.insert("upload_phase".to_owned(), Value::String(phase.to_owned()));
+        provider_state_obj.insert(
+            "progress_detail".to_owned(),
+            Value::String(detail.to_owned()),
+        );
+    }
+    json!({
+        "status": command.status,
+        "retry_count": command.retry_count,
+        "max_retries": command.max_retries,
+        "last_error": command.last_error,
+        "next_attempt_at": command.next_attempt_at,
+        "last_attempt_at": command.last_attempt_at,
+        "provider_observed_at": command.provider_observed_at,
+        "provider_state": provider_state,
+        "reconciliation_status": command.reconciliation_status,
+        "reconciled_at": command.reconciled_at,
+        "dead_lettered_at": command.dead_lettered_at,
+        "completed_at": command.completed_at,
+        "progress_phase": phase,
+        "progress_detail": detail,
+    })
+}
+
 fn payload_string(
     command: &TelegramProviderWriteCommand,
     key: &str,
@@ -166,4 +197,74 @@ fn payload_optional_string(command: &TelegramProviderWriteCommand, key: &str) ->
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+    use serde_json::json;
+
+    use super::media_upload_progress_payload;
+    use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
+
+    fn sample_command() -> TelegramProviderWriteCommand {
+        TelegramProviderWriteCommand {
+            command_id: "cmd-1".to_owned(),
+            account_id: "account-1".to_owned(),
+            command_kind: "send_media".to_owned(),
+            idempotency_key: "idem-1".to_owned(),
+            provider_chat_id: "chat-1".to_owned(),
+            provider_message_id: None,
+            target_ref: json!({}),
+            payload: json!({"attachment_id": "att-1", "blob_id": "blob-1"}),
+            capability_state: "available".to_owned(),
+            action_class: "provider_write".to_owned(),
+            confirmation_decision: "confirmed".to_owned(),
+            status: "executing".to_owned(),
+            retry_count: 1,
+            max_retries: 3,
+            last_error: None,
+            result_payload: json!({}),
+            audit_metadata: json!({}),
+            actor_id: "hermes-frontend".to_owned(),
+            happened_at: Utc::now(),
+            next_attempt_at: None,
+            last_attempt_at: None,
+            locked_at: None,
+            locked_by: None,
+            provider_observed_at: None,
+            provider_state: json!({"dispatch": "claimed"}),
+            reconciliation_status: "not_observed".to_owned(),
+            reconciled_at: None,
+            dead_lettered_at: None,
+            completed_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn media_upload_progress_payload_carries_phase_detail_in_provider_state() {
+        let payload = media_upload_progress_payload(
+            &sample_command(),
+            "dispatching_to_provider",
+            "Uploading local media to Telegram",
+        );
+
+        assert_eq!(payload["status"], "executing");
+        assert_eq!(payload["progress_phase"], "dispatching_to_provider");
+        assert_eq!(
+            payload["progress_detail"],
+            "Uploading local media to Telegram"
+        );
+        assert_eq!(payload["provider_state"]["dispatch"], "claimed");
+        assert_eq!(
+            payload["provider_state"]["upload_phase"],
+            "dispatching_to_provider"
+        );
+        assert_eq!(
+            payload["provider_state"]["progress_detail"],
+            "Uploading local media to Telegram"
+        );
+    }
 }

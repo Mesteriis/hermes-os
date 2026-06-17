@@ -5,12 +5,20 @@ import type { TelegramChatGroupFilter } from '../types/telegram'
 
 const { t } = useI18n()
 
-defineProps<{
+const props = defineProps<{
   groupFilters: TelegramChatGroupFilter[]
   activeGroupFilter: string
   isTelegramBusy: boolean
   hasSelectedTelegramChat: boolean
   isInspectorOpen: boolean
+  isActiveFolderMember?: boolean
+  canAddActiveFolder?: boolean
+  addActiveFolderTitle?: string
+  canRemoveActiveFolder?: boolean
+  removeActiveFolderTitle?: string
+  canReassignActiveFolder?: boolean
+  reassignActiveFolderTitle?: string
+  canMoveToActiveFolder?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -20,8 +28,20 @@ const emit = defineEmits<{
   'stopRuntime': []
   'restartRuntime': []
   'selectGroupFilter': [filter: TelegramChatGroupFilter]
+  'addToActiveFolder': [providerFolderId: number]
+  'removeFromActiveFolder': [providerFolderId: number]
+  'moveToActiveFolder': [providerFolderId: number]
   'toggleInspector': []
 }>()
+
+function activeTelegramFolder(): TelegramChatGroupFilter | null {
+  return props.groupFilters.find(
+    (group) =>
+      group.id === props.activeGroupFilter &&
+      group.source === 'telegram' &&
+      typeof group.provider_folder_id === 'number'
+  ) ?? null
+}
 </script>
 
 <template>
@@ -80,6 +100,36 @@ const emit = defineEmits<{
       </template>
     </div>
     <button
+      v-if="activeTelegramFolder()"
+      type="button"
+      class="telegram-folder-action"
+      :title="addActiveFolderTitle"
+      :disabled="isTelegramBusy || !hasSelectedTelegramChat || !canAddActiveFolder || isActiveFolderMember"
+      @click="emit('addToActiveFolder', activeTelegramFolder()!.provider_folder_id!)"
+    >
+      <Icon icon="tabler:folder-plus" width="16" height="16" />{{ t('Add to Active Folder') }}
+    </button>
+    <button
+      v-if="activeTelegramFolder()"
+      type="button"
+      class="telegram-folder-action"
+      :title="removeActiveFolderTitle"
+      :disabled="isTelegramBusy || !hasSelectedTelegramChat || !canRemoveActiveFolder || !isActiveFolderMember"
+      @click="emit('removeFromActiveFolder', activeTelegramFolder()!.provider_folder_id!)"
+    >
+      <Icon icon="tabler:folder-minus" width="16" height="16" />{{ t('Remove from Active Folder') }}
+    </button>
+    <button
+      v-if="activeTelegramFolder()"
+      type="button"
+      class="telegram-folder-action"
+      :title="reassignActiveFolderTitle"
+      :disabled="isTelegramBusy || !hasSelectedTelegramChat || !canReassignActiveFolder || !canMoveToActiveFolder"
+      @click="emit('moveToActiveFolder', activeTelegramFolder()!.provider_folder_id!)"
+    >
+      <Icon icon="tabler:folders" width="16" height="16" />{{ t('Move to Active Folder') }}
+    </button>
+    <button
       type="button"
       class="telegram-inspector-toggle"
       :class="{ active: isInspectorOpen }"
@@ -105,7 +155,8 @@ const emit = defineEmits<{
   gap: 4px;
 }
 .telegram-action-cluster button,
-.telegram-inspector-toggle {
+.telegram-inspector-toggle,
+.telegram-folder-action {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -117,7 +168,8 @@ const emit = defineEmits<{
   cursor: pointer;
   color: var(--color-text, #333);
 }
-.telegram-action-cluster button:disabled {
+.telegram-action-cluster button:disabled,
+.telegram-folder-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

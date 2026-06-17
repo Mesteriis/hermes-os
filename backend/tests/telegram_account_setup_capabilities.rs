@@ -453,13 +453,25 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
         "available",
         false,
     );
+    assert_capability_status(&user_body, "messages.mark_read", "blocked", true);
     assert_capability_status(&user_body, "messages.pin", "degraded", true);
     assert_capability_status(&user_body, "reactions.add", "degraded", true);
     assert_capability_status(&user_body, "reactions.remove", "degraded", true);
     assert_capability_status(&user_body, "runtime.stop", "available", false);
     assert_capability_status(&user_body, "runtime.restart", "available", false);
     assert_capability_status(&user_body, "dialogs.mark_read", "unsupported", false);
-    for operation in ["dialogs.archive", "dialogs.mute", "dialogs.mark_read"] {
+    assert_capability_status(&user_body, "dialogs.mark_unread", "unsupported", false);
+    assert_capability_status(&user_body, "dialogs.folder_reassign", "blocked", false);
+    assert_capability_status(&user_body, "topics.list", "degraded", false);
+    assert_capability_status(&user_body, "topics.create", "blocked", true);
+    assert_capability_status(&user_body, "topics.close", "blocked", true);
+    for operation in [
+        "dialogs.pin",
+        "dialogs.archive",
+        "dialogs.mute",
+        "dialogs.mark_read",
+        "dialogs.mark_unread",
+    ] {
         let capability = user_body["capabilities"]
             .as_array()
             .expect("capabilities")
@@ -496,4 +508,7 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
     );
     assert_capability_status(&bot_body, "runtime.tdlib_live", "unsupported", true);
     assert_capability_status(&bot_body, "auth.qr_start", "unsupported", true);
+    assert_capability_status(&bot_body, "topics.list", "unsupported", false);
+    assert_capability_status(&bot_body, "topics.create", "unsupported", true);
+    assert_capability_status(&bot_body, "topics.close", "unsupported", true);
 }

@@ -43,7 +43,7 @@ make clean-vault
 
 `make dev` is the supported desktop development loop. It starts PostgreSQL in
 Docker, runs the backend via repo-local `bacon`, starts this Vue 3 + Vite
-frontend natively, and then launches `pnpm tauri dev` against the already-running Vite server at
+frontend natively at
 `http://127.0.0.1:5174`.
 
 The active session also exposes an aggregated plain-text log at:

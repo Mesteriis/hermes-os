@@ -4,22 +4,17 @@ use sqlx::PgPool;
 
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
-use crate::integrations::telegram::client::{
-    TelegramError, TelegramManualSendRequest, TelegramStore,
-};
-use crate::integrations::telegram::tdjson::TelegramTdlibMessageSnapshot;
+use crate::integrations::telegram::client::{TelegramError, TelegramStore};
 use crate::platform::events::bus::telegram_event_types;
 use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
 
-use super::super::commands::{
-    request_actor_delete_message, request_actor_edit_message, request_actor_forward,
-    request_actor_join_chat, request_actor_leave_chat, request_actor_pin_message,
-    request_actor_reply, request_actor_send, request_actor_send_media, request_actor_set_reaction,
-    request_actor_toggle_chat_archive, request_actor_toggle_chat_mute,
-    request_actor_toggle_chat_unread,
-};
 use super::TelegramRuntimeManager;
-use super::command_executor_media::{emit_media_upload_event, media_send_request};
+use super::command_executor_dispatch::{DispatchOutcome, dispatch_command};
+use super::command_executor_media::{
+    emit_media_upload_event, media_send_request, media_upload_progress_payload,
+};
+use super::realtime_events::command_event_payload;
+use super::topic_events::upsert_topic_snapshot;
 
 const RETRY_BASE_DELAY_SECONDS: i64 = 30;
 const RETRY_MAX_DELAY_SECONDS: i64 = 15 * 60;
@@ -118,165 +113,23 @@ async fn execute_account_commands(
             json!({"source": "command_executor", "phase": "claimed"}),
         )
         .await;
+        if command.command_kind == "send_media" {
+            emit_media_upload_event(
+                event_bus,
+                pool,
+                &command,
+                telegram_event_types::MEDIA_UPLOAD_PROGRESS,
+                media_upload_progress_payload(
+                    &command,
+                    "dispatching_to_provider",
+                    "Uploading local media to Telegram",
+                ),
+            )
+            .await;
+        }
 
         let result = dispatch_command(pool, &command, command_tx.clone()).await;
         handle_dispatch_result(pool, event_bus, &command, result).await;
-    }
-}
-
-enum DispatchOutcome {
-    AwaitingProvider,
-    ObservedMessage(TelegramTdlibMessageSnapshot),
-}
-
-async fn dispatch_command(
-    pool: &PgPool,
-    command: &TelegramProviderWriteCommand,
-    command_tx: std::sync::mpsc::Sender<super::super::state::TelegramRuntimeCommand>,
-) -> Result<DispatchOutcome, TelegramError> {
-    match command.command_kind.as_str() {
-        "send_text" => {
-            let snapshot = request_actor_send(
-                command_tx,
-                TelegramManualSendRequest {
-                    command_id: command.command_id.clone(),
-                    account_id: command.account_id.clone(),
-                    provider_chat_id: command.provider_chat_id.clone(),
-                    text: payload_string(command, "text")?,
-                },
-            )
-            .await?;
-            Ok(DispatchOutcome::ObservedMessage(snapshot))
-        }
-        "send_media" => {
-            let request = media_send_request(pool, command).await?;
-            let snapshot = request_actor_send_media(command_tx, request).await?;
-            Ok(DispatchOutcome::ObservedMessage(snapshot))
-        }
-        "reply" => {
-            let snapshot = request_actor_reply(
-                command_tx,
-                command.provider_chat_id.clone(),
-                payload_string(command, "reply_to_provider_message_id")?,
-                payload_string(command, "text")?,
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::ObservedMessage(snapshot))
-        }
-        "forward" => {
-            let snapshot = request_actor_forward(
-                command_tx,
-                command.provider_chat_id.clone(),
-                payload_string(command, "from_provider_chat_id")?,
-                payload_string(command, "from_provider_message_id")?,
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::ObservedMessage(snapshot))
-        }
-        "edit" => {
-            request_actor_edit_message(
-                command_tx,
-                command.provider_chat_id.clone(),
-                provider_message_id(command, "edit")?,
-                payload_string(command, "new_text")?,
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::AwaitingProvider)
-        }
-        "delete" => {
-            request_actor_delete_message(
-                command_tx,
-                command.provider_chat_id.clone(),
-                provider_message_id(command, "delete")?,
-                command
-                    .payload
-                    .get("is_provider_delete")
-                    .and_then(Value::as_bool)
-                    .unwrap_or(true),
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::AwaitingProvider)
-        }
-        "react" | "unreact" => {
-            let is_active = command.command_kind == "react";
-            request_actor_set_reaction(
-                command_tx,
-                command.provider_chat_id.clone(),
-                provider_message_id(command, &command.command_kind)?,
-                payload_string(command, "reaction_emoji")?,
-                is_active,
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::AwaitingProvider)
-        }
-        "pin" | "unpin" => {
-            let pin = command.command_kind == "pin";
-            request_actor_pin_message(
-                command_tx,
-                command.provider_chat_id.clone(),
-                provider_message_id(command, &command.command_kind)?,
-                pin,
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::AwaitingProvider)
-        }
-        "mark_read" | "mark_unread" => {
-            request_actor_toggle_chat_unread(
-                command_tx,
-                command.provider_chat_id.clone(),
-                command.command_kind == "mark_unread",
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::AwaitingProvider)
-        }
-        "archive" | "unarchive" => {
-            request_actor_toggle_chat_archive(
-                command_tx,
-                command.provider_chat_id.clone(),
-                command.command_kind == "archive",
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::AwaitingProvider)
-        }
-        "mute" | "unmute" => {
-            request_actor_toggle_chat_mute(
-                command_tx,
-                command.provider_chat_id.clone(),
-                command.command_kind == "mute",
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::AwaitingProvider)
-        }
-        "join" => {
-            request_actor_join_chat(
-                command_tx,
-                command.provider_chat_id.clone(),
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::AwaitingProvider)
-        }
-        "leave" => {
-            request_actor_leave_chat(
-                command_tx,
-                command.provider_chat_id.clone(),
-                command.command_id.clone(),
-            )
-            .await?;
-            Ok(DispatchOutcome::AwaitingProvider)
-        }
-        other => Err(TelegramError::InvalidRequest(format!(
-            "command executor: unsupported command kind `{other}`"
-        ))),
     }
 }
 
@@ -373,6 +226,97 @@ async fn handle_dispatch_result(
                 )
                 .await;
             }
+        }
+        Ok(DispatchOutcome::ObservedTopic(snapshot)) => {
+            let telegram_store = TelegramStore::new(pool.clone());
+            let topic = match upsert_topic_snapshot(
+                &telegram_store,
+                &command.account_id,
+                &command.provider_chat_id,
+                &snapshot,
+            )
+            .await
+            {
+                Ok(Some(topic)) => topic,
+                Ok(None) => {
+                    handle_command_error(
+                        pool,
+                        event_bus,
+                        command,
+                        TelegramError::InvalidRequest(
+                            "topic create observed for unknown telegram chat".to_owned(),
+                        ),
+                        now,
+                    )
+                    .await;
+                    return;
+                }
+                Err(error) => {
+                    handle_command_error(pool, event_bus, command, error, now).await;
+                    return;
+                }
+            };
+            let provider_state = json!({
+                "provider_chat_id": command.provider_chat_id,
+                "provider_topic_id": snapshot.provider_topic_id,
+                "topic_id": topic.topic_id,
+                "title": topic.title,
+                "is_closed": topic.is_closed,
+                "observed_via": "tdlib_returned_topic",
+            });
+            let result_payload = json!({
+                "provider_chat_id": command.provider_chat_id,
+                "provider_topic_id": snapshot.provider_topic_id,
+                "topic_id": topic.topic_id,
+                "title": topic.title,
+                "is_closed": topic.is_closed,
+            });
+            if let Err(error) = lifecycle::mark_command_reconciled(
+                pool,
+                &command.command_id,
+                now,
+                provider_state,
+                result_payload,
+            )
+            .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    command_id = %command.command_id,
+                    "command executor: failed to mark topic command reconciled"
+                );
+            }
+            emit_command_event(
+                event_bus,
+                pool,
+                command,
+                "completed",
+                json!({
+                    "source": "command_executor",
+                    "reconciliation_status": "observed",
+                    "provider_observed_at": now,
+                    "reconciled_at": now,
+                    "provider_topic_id": snapshot.provider_topic_id,
+                    "topic_id": topic.topic_id,
+                }),
+            )
+            .await;
+            emit_command_event_type(
+                event_bus,
+                pool,
+                command,
+                telegram_event_types::COMMAND_RECONCILED,
+                "completed",
+                json!({
+                    "source": "command_executor",
+                    "reconciliation_status": "observed",
+                    "provider_observed_at": now,
+                    "reconciled_at": now,
+                    "provider_topic_id": snapshot.provider_topic_id,
+                    "topic_id": topic.topic_id,
+                }),
+            )
+            .await;
         }
         Ok(DispatchOutcome::AwaitingProvider) => {
             if let Err(error) = lifecycle::mark_command_awaiting_provider(
@@ -479,42 +423,6 @@ async fn handle_command_error(
     }
 }
 
-fn payload_string(
-    command: &TelegramProviderWriteCommand,
-    key: &str,
-) -> Result<String, TelegramError> {
-    command
-        .payload
-        .get(key)
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| {
-            TelegramError::InvalidRequest(format!(
-                "{} command missing `{key}`",
-                command.command_kind
-            ))
-        })
-}
-
-fn provider_message_id(
-    command: &TelegramProviderWriteCommand,
-    operation: &str,
-) -> Result<String, TelegramError> {
-    command
-        .provider_message_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToOwned::to_owned)
-        .ok_or_else(|| {
-            TelegramError::InvalidRequest(format!(
-                "{operation} command missing provider_message_id"
-            ))
-        })
-}
-
 fn next_attempt_at(now: chrono::DateTime<Utc>, completed_attempts: i32) -> chrono::DateTime<Utc> {
     let retry_index = completed_attempts.saturating_sub(1).max(0) as u32;
     let factor = 1_i64.checked_shl(retry_index.min(30)).unwrap_or(i64::MAX);
@@ -555,23 +463,7 @@ async fn emit_command_event_type(
     extra_payload: Value,
 ) {
     let now = Utc::now();
-    let mut payload = json!({
-        "command_id": command.command_id,
-        "account_id": command.account_id,
-        "provider_chat_id": command.provider_chat_id,
-        "message_id": command.provider_message_id,
-        "status": status,
-    });
-    if let (Some(payload_obj), Some(extra_obj)) =
-        (payload.as_object_mut(), extra_payload.as_object())
-    {
-        for (key, value) in extra_obj {
-            payload_obj.insert(key.clone(), value.clone());
-        }
-    }
-    if let Some(payload_obj) = payload.as_object_mut() {
-        payload_obj.insert("payload".to_owned(), extra_payload);
-    }
+    let payload = command_event_payload(command, status, extra_payload);
 
     let event = NewEventEnvelope::builder(
         format!("evt_{}", now.timestamp_nanos_opt().unwrap_or(0)),

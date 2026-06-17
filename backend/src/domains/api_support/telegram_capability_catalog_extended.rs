@@ -6,6 +6,22 @@ pub(super) fn push_extended_capabilities(
     capabilities: &mut Vec<TelegramOperationCapability>,
     qr_ready: bool,
 ) {
+    // ── dialogs ──
+    let cat_dialogs = "dialogs";
+    capabilities.push(TelegramOperationCapability::new(
+        "dialogs.mark_unread",
+        cat_dialogs,
+        if qr_ready {
+            TelegramCapabilityState::Degraded
+        } else {
+            TelegramCapabilityState::Unsupported
+        },
+        TelegramActionClass::ProviderWrite,
+        "Mark-unread relies on durable provider-write commands and TDLib unread-state reconciliation.",
+        false,
+        false,
+    ));
+
     // ── media ──
     let cat_media = "media";
     capabilities.push(TelegramOperationCapability::new(

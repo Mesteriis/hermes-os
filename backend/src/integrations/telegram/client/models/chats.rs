@@ -62,6 +62,7 @@ pub struct TelegramChatGroupFilter {
     pub source: String,
     pub count: i64,
     pub icon: String,
+    pub provider_folder_id: Option<i64>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

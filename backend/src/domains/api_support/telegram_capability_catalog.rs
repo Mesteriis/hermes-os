@@ -2,6 +2,10 @@ use super::telegram_capabilities::{
     TelegramActionClass, TelegramCapabilityState, TelegramOperationCapability,
 };
 
+#[cfg(test)]
+#[path = "telegram_capability_catalog_tests.rs"]
+mod telegram_capability_catalog_tests;
+
 pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationCapability> {
     let mut capabilities = Vec::new();
 
@@ -313,12 +317,12 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
         "dialogs.pin",
         cat_dialogs,
         if qr_ready {
-            TelegramCapabilityState::Degraded
+            TelegramCapabilityState::Available
         } else {
             TelegramCapabilityState::Unsupported
         },
-        TelegramActionClass::LocalWrite,
-        "Local projected pin/unpin is available; provider-synced parity still requires durable outbox execution.",
+        TelegramActionClass::ProviderWrite,
+        "Dialog pin/unpin uses the durable provider-write outbox and provider-observed TDLib chat-position reconciliation.",
         false,
         false,
     ));
@@ -326,12 +330,12 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
         "dialogs.archive",
         cat_dialogs,
         if qr_ready {
-            TelegramCapabilityState::Degraded
+            TelegramCapabilityState::Available
         } else {
             TelegramCapabilityState::Unsupported
         },
         TelegramActionClass::ProviderWrite,
-        "Local projection is updated immediately; active TDLib actors execute queued addChatToList archive/unarchive commands, while provider-observed folder reconciliation remains incomplete.",
+        "Dialog archive/unarchive uses the durable provider-write outbox and provider-observed TDLib chat-position reconciliation.",
         false,
         false,
     ));
@@ -339,12 +343,12 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
         "dialogs.mute",
         cat_dialogs,
         if qr_ready {
-            TelegramCapabilityState::Degraded
+            TelegramCapabilityState::Available
         } else {
             TelegramCapabilityState::Unsupported
         },
         TelegramActionClass::ProviderWrite,
-        "Local projection is updated immediately; active TDLib actors execute queued setChatNotificationSettings mute/unmute commands, while provider-observed notification reconciliation remains incomplete.",
+        "Dialog mute/unmute uses the durable provider-write outbox and provider-observed TDLib notification-settings reconciliation.",
         false,
         false,
     ));
@@ -352,12 +356,12 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
         "dialogs.unread_counters",
         cat_dialogs,
         if qr_ready {
-            TelegramCapabilityState::Degraded
+            TelegramCapabilityState::Available
         } else {
             TelegramCapabilityState::Unsupported
         },
         TelegramActionClass::Read,
-        "Local projected unread counters are available; provider-observed unread reconciliation is still missing.",
+        "Projected unread and mention counters are available and provider-observed TDLib chat-state updates reconcile them into shared chat metadata.",
         false,
         false,
     ));
@@ -370,7 +374,46 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
             TelegramCapabilityState::Unsupported
         },
         TelegramActionClass::ProviderWrite,
-        "Local projection is updated immediately; active TDLib actors execute queued provider manual unread toggles for read/unread parity.",
+        "Mark-read can target the latest visible provider message through TDLib viewMessages, while mark-unread still relies on provider manual unread toggles.",
+        false,
+        false,
+    ));
+    capabilities.push(TelegramOperationCapability::new(
+        "dialogs.folder_add",
+        cat_dialogs,
+        if qr_ready {
+            TelegramCapabilityState::Available
+        } else {
+            TelegramCapabilityState::Unsupported
+        },
+        TelegramActionClass::ProviderWrite,
+        "Adding a chat to a Telegram folder uses the durable provider-write outbox and TDLib chat-position reconciliation for the target folder.",
+        false,
+        false,
+    ));
+    capabilities.push(TelegramOperationCapability::new(
+        "dialogs.folder_remove",
+        cat_dialogs,
+        if qr_ready {
+            TelegramCapabilityState::Available
+        } else {
+            TelegramCapabilityState::Unsupported
+        },
+        TelegramActionClass::ProviderWrite,
+        "Removing a chat from a Telegram folder uses the durable provider-write outbox plus TDLib folder-edit reconciliation when the provider confirms removal.",
+        false,
+        false,
+    ));
+    capabilities.push(TelegramOperationCapability::new(
+        "dialogs.folder_reassign",
+        cat_dialogs,
+        if qr_ready {
+            TelegramCapabilityState::Available
+        } else {
+            TelegramCapabilityState::Unsupported
+        },
+        TelegramActionClass::ProviderWrite,
+        "Reassigning Telegram folder membership computes a durable add/remove command set from the current TDLib folder projection and queues those provider-write commands atomically from one API action.",
         false,
         false,
     ));
@@ -486,8 +529,17 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
     ));
     capabilities.push(TelegramOperationCapability::new(
             "messages.mark_read", cat_msg_write,
-            TelegramCapabilityState::Blocked, TelegramActionClass::ProviderWrite,
-            "Provider-synced mark read/unread still requires durable command execution; only local dialog-level state exists.",
+            if qr_ready {
+                TelegramCapabilityState::Degraded
+            } else {
+                TelegramCapabilityState::Blocked
+            },
+            TelegramActionClass::ProviderWrite,
+            if qr_ready {
+                "Provider mark-read uses TDLib viewMessages and now has dedicated message-level API/UI, but mark-unread symmetry and richer read-history remain incomplete."
+            } else {
+                "Provider mark-read requires TDLib QR runtime; mark-unread symmetry and richer read-history remain incomplete."
+            },
             true, true,
         ));
 
@@ -583,7 +635,7 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
         },
         TelegramActionClass::Read,
         if qr_ready {
-            "TDLib provider member roster sync is available for supergroups/channels."
+            "TDLib provider member roster sync is available for supergroups/channels with recent-member pagination plus administrator snapshots, for basic groups through getBasicGroup/getBasicGroupFullInfo, and for private/saved-message chats through TDLib chat metadata."
         } else {
             "Provider member roster sync requires TDLib QR runtime."
         },
@@ -600,7 +652,7 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
         },
         TelegramActionClass::ProviderWrite,
         if qr_ready {
-            "TDLib chat join is available through the durable provider-write outbox."
+            "TDLib chat join is available through the durable provider-write outbox with roster/service-message reconciliation."
         } else {
             "Chat join requires TDLib QR runtime and provider reconciliation."
         },
@@ -617,7 +669,7 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
         },
         TelegramActionClass::Destructive,
         if qr_ready {
-            "TDLib chat leave is available through the durable provider-write outbox."
+            "TDLib chat leave is available through the durable provider-write outbox with service-message and inactive-roster reconciliation."
         } else {
             "Chat leave requires TDLib QR runtime and provider reconciliation."
         },
@@ -630,18 +682,51 @@ pub(super) fn telegram_capability_rows(qr_ready: bool) -> Vec<TelegramOperationC
     capabilities.push(TelegramOperationCapability::new(
         "topics.list",
         cat_topics,
-        TelegramCapabilityState::Unsupported,
+        if qr_ready {
+            TelegramCapabilityState::Available
+        } else {
+            TelegramCapabilityState::Degraded
+        },
         TelegramActionClass::Read,
-        "Topic projection and topic-scoped timeline not yet implemented.",
+        if qr_ready {
+            "Topic projection, topic search and topic-scoped timeline reads are available."
+        } else {
+            "Topic projection reads are available from local state, but live TDLib refresh requires QR-authorized runtime."
+        },
         false,
         false,
     ));
     capabilities.push(TelegramOperationCapability::new(
         "topics.create",
         cat_topics,
-        TelegramCapabilityState::Unsupported,
+        if qr_ready {
+            TelegramCapabilityState::Available
+        } else {
+            TelegramCapabilityState::Blocked
+        },
         TelegramActionClass::ProviderWrite,
-        "Topic create requires forum/supergroup topic projection model.",
+        if qr_ready {
+            "Topic create uses the durable provider-write outbox and TDLib forum topic creation."
+        } else {
+            "Topic create requires TDLib QR runtime before provider-write execution is available."
+        },
+        true,
+        true,
+    ));
+    capabilities.push(TelegramOperationCapability::new(
+        "topics.close",
+        cat_topics,
+        if qr_ready {
+            TelegramCapabilityState::Available
+        } else {
+            TelegramCapabilityState::Blocked
+        },
+        TelegramActionClass::ProviderWrite,
+        if qr_ready {
+            "Topic close/reopen uses the durable provider-write outbox and provider-observed reconciliation."
+        } else {
+            "Topic close/reopen requires TDLib QR runtime before provider-write execution is available."
+        },
         true,
         true,
     ));

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   mergeTelegramAttachmentHints,
+  telegramChatLastReadInboxProviderMessageId,
   telegramChatPreview,
   telegramChatTypingLabel,
   telegramFilterTabs,
@@ -63,6 +64,24 @@ describe('telegram chat typing projection helpers', () => {
 
     expect(telegramChatTypingLabel(chat, Date.parse('2026-06-16T10:00:06.999Z'))).toBe('user:777 typing...')
     expect(telegramChatTypingLabel(chat, Date.parse('2026-06-16T10:00:07.000Z'))).toBe('')
+  })
+
+  it('reads provider last-read inbox progress from projected chat metadata', () => {
+    const chat = {
+      telegram_chat_id: 'tgchat-1',
+      account_id: 'account-1',
+      provider_chat_id: 'chat-1',
+      chat_kind: 'private' as const,
+      title: 'Chat',
+      username: null,
+      sync_state: 'synced' as const,
+      last_message_at: null,
+      metadata: { last_read_inbox_provider_message_id: '777' },
+      created_at: '2026-06-16T10:00:00Z',
+      updated_at: '2026-06-16T10:00:00Z',
+    }
+
+    expect(telegramChatLastReadInboxProviderMessageId(chat)).toBe('777')
   })
 })
 

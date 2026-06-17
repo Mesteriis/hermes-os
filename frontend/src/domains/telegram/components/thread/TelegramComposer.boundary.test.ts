@@ -6,11 +6,14 @@ describe('TelegramComposer dry-run boundary', () => {
     const source = readFileSync(new URL('./TelegramComposer.vue', import.meta.url), 'utf8')
 
     expect(source).toContain('TelegramSendDryRunPanel')
+    expect(source).toContain('TelegramUploadQueueStatus')
     expect(source).toContain('selectedAccountId: string | null')
     expect(source).toContain('selectedProviderChatId: string | null')
     expect(source).toContain('capabilities?: TelegramCapabilitiesResponse | null')
     expect(source).toContain(':accountId="selectedAccountId"')
     expect(source).toContain(':providerChatId="selectedProviderChatId"')
+    expect(source).toContain(':selectedAccountId="selectedAccountId"')
+    expect(source).toContain(':selectedProviderChatId="selectedProviderChatId"')
   })
 
   it('derives disabled media and voice affordance reasons from the capability contract', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { telegramMediaReadiness, telegramMediaSearchSourceLabel } from './telegramMediaSearch'
-import type { TelegramMediaItem } from '../types/telegram'
+import { telegramAttachmentReadiness, telegramMediaReadiness, telegramMediaSearchSourceLabel } from './telegramMediaSearch'
+import type { TelegramAttachmentHint, TelegramMediaItem } from '../types/telegram'
 
 function mediaItem(overrides: Partial<TelegramMediaItem>): TelegramMediaItem {
   return {
@@ -34,6 +34,7 @@ describe('telegram media search projection', () => {
       detail: 'Downloaded local file is available',
       can_preview_locally: true,
       can_request_download: false,
+      action_label: 'Downloaded',
     })
   })
 
@@ -50,6 +51,7 @@ describe('telegram media search projection', () => {
       detail: 'TDLib file 42 · attachment-42',
       can_preview_locally: false,
       can_request_download: true,
+      action_label: 'Download',
     })
   })
 
@@ -65,6 +67,53 @@ describe('telegram media search projection', () => {
       detail: 'metadata-only',
       can_preview_locally: false,
       can_request_download: false,
+      action_label: 'Unavailable',
+    })
+  })
+
+  it('exposes progress and retry semantics for attachment-hint based download UX', () => {
+    const attachment: TelegramAttachmentHint = {
+      id: 'att-1',
+      kind: 'document',
+      fileName: 'invoice.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 2048,
+      tdlibFileId: 42,
+      providerAttachmentId: 'attachment-42',
+      downloadState: 'downloading',
+      localPath: null,
+      expectedSizeBytes: 4096,
+      downloadedSizeBytes: 1024,
+      isDownloadingActive: true,
+      isDownloadingCompleted: false,
+      lastError: null,
+      messageId: 'msg-1',
+      providerMessageId: 'provider-msg-1',
+    }
+
+    expect(telegramAttachmentReadiness(attachment)).toEqual({
+      label: 'Download in progress',
+      detail: '25% · 1024/4096 bytes',
+      can_preview_locally: false,
+      can_request_download: false,
+      action_label: 'Downloading',
+    })
+
+    expect(
+      telegramAttachmentReadiness({
+        ...attachment,
+        downloadState: 'failed',
+        downloadedSizeBytes: null,
+        expectedSizeBytes: null,
+        isDownloadingActive: false,
+        lastError: 'tdlib timeout',
+      })
+    ).toEqual({
+      label: 'Download failed',
+      detail: 'tdlib timeout',
+      can_preview_locally: false,
+      can_request_download: true,
+      action_label: 'Retry download',
     })
   })
 

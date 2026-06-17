@@ -67,6 +67,7 @@ const emit = defineEmits<{
   editMessage: [message: TelegramMessage]
   deleteMessage: [message: TelegramMessage]
   restoreMessage: [message: TelegramMessage]
+  markReadMessage: [message: TelegramMessage]
   togglePinMessage: [message: TelegramMessage]
   addReaction: [payload: { message: TelegramMessage; emoji: string }]
   removeReaction: [payload: { message: TelegramMessage; emoji: string }]
@@ -228,6 +229,7 @@ watch(
         @editMessage="(message) => emit('editMessage', message)"
         @deleteMessage="(message) => emit('deleteMessage', message)"
         @restoreMessage="(message) => emit('restoreMessage', message)"
+        @markReadMessage="(message) => emit('markReadMessage', message)"
         @replyMessage="(message) => emit('replyMessage', message)"
         @forwardMessage="(message) => emit('forwardMessage', message)"
         @togglePinMessage="(message) => emit('togglePinMessage', message)"

@@ -6,6 +6,9 @@ describe('TelegramCapabilityMatrix boundary', () => {
     const source = readFileSync(new URL('./TelegramCapabilityMatrix.vue', import.meta.url), 'utf8')
 
     expect(source).toContain('useTelegramAccountCapabilitiesQuery')
+    expect(source).toContain('unsupported_features')
+    expect(source).toContain('capability.operation')
+    expect(source).toContain('capability.status')
     expect(source).toContain("t('Capabilities')")
     expect(source).toContain('confirmation_required')
     expect(source).toContain('closure_gate')

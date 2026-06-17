@@ -20,6 +20,12 @@ pub(crate) fn parse_tdlib_topic_list(
     topics.iter().map(parse_forum_topic).collect()
 }
 
+pub(crate) fn parse_tdlib_created_forum_topic(
+    response: &Value,
+) -> Result<TelegramTdlibTopicSnapshot, TelegramError> {
+    parse_forum_topic_info(response)
+}
+
 fn parse_forum_topic(topic: &Value) -> Result<TelegramTdlibTopicSnapshot, TelegramError> {
     let info = topic
         .get("info")

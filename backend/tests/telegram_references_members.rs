@@ -359,10 +359,38 @@ async fn telegram_folders_route_returns_projection_backed_filters() {
     )
     .await;
 
-    for (provider_chat_id, title, folder_name) in [
-        ("chat-alpha", "Alpha Room", "Work"),
-        ("chat-beta", "Beta Room", "Work"),
-        ("chat-gamma", "Gamma Room", "Archive"),
+    for (
+        provider_chat_id,
+        title,
+        folder_name,
+        folder_labels,
+        provider_folder_id,
+        provider_folder_ids,
+    ) in [
+        (
+            "chat-alpha",
+            "Alpha Room",
+            "Work",
+            vec!["Work"],
+            Some(7_i64),
+            vec![7_i64],
+        ),
+        (
+            "chat-beta",
+            "Beta Room",
+            "Work",
+            vec!["Work", "Pinned"],
+            Some(7_i64),
+            vec![7_i64, 11_i64],
+        ),
+        (
+            "chat-gamma",
+            "Gamma Room",
+            "Archive",
+            vec!["Archive"],
+            Some(9_i64),
+            vec![9_i64],
+        ),
     ] {
         assert_ok(
             app.clone(),
@@ -386,12 +414,16 @@ async fn telegram_folders_route_returns_projection_backed_filters() {
         sqlx::query(
             r#"
             UPDATE telegram_chats
-            SET metadata = jsonb_set(
-                COALESCE(metadata, '{}'::jsonb),
-                '{folder_name}',
-                to_jsonb($3::text),
-                true
-            )
+            SET metadata = COALESCE(metadata, '{}'::jsonb)
+                || jsonb_build_object(
+                    'folder_name', to_jsonb($3::text),
+                    'folder_labels', to_jsonb($4::text[]),
+                    'provider_folder_ids', to_jsonb($6::bigint[])
+                )
+                || CASE
+                    WHEN $5::bigint IS NULL THEN '{}'::jsonb
+                    ELSE jsonb_build_object('provider_folder_id', to_jsonb($5::bigint))
+                   END
             WHERE account_id = $1
               AND provider_chat_id = $2
             "#,
@@ -399,6 +431,9 @@ async fn telegram_folders_route_returns_projection_backed_filters() {
         .bind(&account_id)
         .bind(format!("{provider_chat_id}-{suffix}"))
         .bind(folder_name)
+        .bind(folder_labels)
+        .bind(provider_folder_id)
+        .bind(provider_folder_ids)
         .execute(&pool)
         .await
         .expect("folder metadata update");
@@ -415,11 +450,16 @@ async fn telegram_folders_route_returns_projection_backed_filters() {
     assert_eq!(folders_response.status(), StatusCode::OK);
     let folders_body = json_body(folders_response).await;
     let items = folders_body["items"].as_array().expect("folder items");
-    assert_eq!(items.len(), 3);
+    assert_eq!(items.len(), 4);
     assert_eq!(items[0]["id"], json!("local:all"));
     assert_eq!(items[0]["count"], json!(3));
     assert_eq!(items[1]["id"], json!("folder:Archive"));
     assert_eq!(items[1]["count"], json!(1));
-    assert_eq!(items[2]["id"], json!("folder:Work"));
-    assert_eq!(items[2]["count"], json!(2));
+    assert_eq!(items[1]["provider_folder_id"], json!(9));
+    assert_eq!(items[2]["id"], json!("folder:Pinned"));
+    assert_eq!(items[2]["count"], json!(1));
+    assert_eq!(items[2]["provider_folder_id"], json!(11));
+    assert_eq!(items[3]["id"], json!("folder:Work"));
+    assert_eq!(items[3]["count"], json!(2));
+    assert_eq!(items[3]["provider_folder_id"], json!(7));
 }

@@ -1,0 +1,475 @@
+use std::env;
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
+use serde_json::json;
+use tempfile::tempdir;
+use tower::ServiceExt;
+
+use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
+use hermes_hub_backend::domains::mail::core::{
+    CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
+};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::secrets::{
+    SecretReferenceStore, SecretResolver, SecretStoreKind,
+};
+use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::vault::{HostVault, HostVaultConfig};
+use testkit::context::TestContext;
+
+use super::support::{
+    LOCAL_API_TOKEN, MockTokenServer, get_request, json_body, json_request_with_token_and_actor,
+    text_body, unique_suffix, unlock_test_vault,
+};
+
+#[tokio::test]
+async fn gmail_oauth_start_api_uses_configured_google_desktop_client_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping gmail oauth desktop config API test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let vault_dir = tempdir().expect("vault tempdir");
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+            (
+                "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON",
+                r#"{
+                    "installed": {
+                        "client_id": "desktop-client-id.apps.googleusercontent.com",
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "client_secret": "desktop-client-secret",
+                        "redirect_uris": ["http://localhost"]
+                    }
+                }"#,
+            ),
+        ])
+        .expect("config"),
+        database.clone(),
+    );
+    unlock_test_vault(app.clone()).await;
+
+    let response = app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/email-accounts/gmail/oauth/start",
+            json!({
+                "account_id": "gmail-primary",
+                "display_name": "Google Workspace",
+                "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback"
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    let authorization_url = body["authorization_url"]
+        .as_str()
+        .expect("authorization url");
+    assert!(authorization_url.starts_with("https://accounts.google.com/o/oauth2/auth?"));
+    assert!(authorization_url.contains("client_id=desktop-client-id.apps.googleusercontent.com"));
+    assert!(authorization_url.contains("gmail.readonly"));
+    assert!(authorization_url.contains("gmail.send"));
+    assert!(authorization_url.contains("calendar.readonly"));
+    assert!(authorization_url.contains("contacts.readonly"));
+
+    drop(database);
+}
+
+#[tokio::test]
+async fn gmail_oauth_start_api_requires_initialized_host_vault_against_postgres() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+            (
+                "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON",
+                r#"{
+                    "installed": {
+                        "client_id": "desktop-client-id.apps.googleusercontent.com",
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "client_secret": "desktop-client-secret",
+                        "redirect_uris": ["http://localhost"]
+                    }
+                }"#,
+            ),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        Database::connect(Some(&database_url))
+            .await
+            .expect("database connection"),
+    );
+
+    let response = app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/email-accounts/gmail/oauth/start",
+            json!({
+                "account_id": "gmail-primary",
+                "display_name": "Google Workspace",
+                "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback"
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    let body = json_body(response).await;
+    assert_eq!(body["error"], "host_vault_error");
+    assert_eq!(body["message"], "host vault is not initialized");
+}
+
+#[tokio::test]
+async fn gmail_oauth_start_api_reopens_initialized_host_vault_after_restart_against_postgres() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+
+    let initialized_app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        Database::connect(Some(&database_url))
+            .await
+            .expect("database connection"),
+    );
+    unlock_test_vault(initialized_app).await;
+
+    let restarted_app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+            (
+                "HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_JSON",
+                r#"{
+                    "installed": {
+                        "client_id": "desktop-client-id.apps.googleusercontent.com",
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "client_secret": "desktop-client-secret",
+                        "redirect_uris": ["http://localhost"]
+                    }
+                }"#,
+            ),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        Database::connect(Some(&database_url))
+            .await
+            .expect("database connection"),
+    );
+
+    let response = restarted_app
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/email-accounts/gmail/oauth/start",
+            json!({
+                "account_id": "gmail-primary",
+                "display_name": "Google Workspace",
+                "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback"
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    let authorization_url = body["authorization_url"]
+        .as_str()
+        .expect("authorization url");
+    assert!(authorization_url.starts_with("https://accounts.google.com/o/oauth2/auth?"));
+    assert!(authorization_url.contains("client_id=desktop-client-id.apps.googleusercontent.com"));
+}
+
+#[tokio::test]
+async fn gmail_oauth_callback_completes_pending_grant_without_api_secret() {
+    let ctx = TestContext::new().await;
+    let vault_dir = tempdir().expect("vault tempdir");
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let vault_home = vault_dir.path().join("vault");
+    let dev_key_path = vault_dir.path().join("dev").join("master.key");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
+            (
+                "HERMES_VAULT_HOME",
+                vault_home.to_str().expect("vault path"),
+            ),
+            (
+                "HERMES_DEV_KEY_PATH",
+                dev_key_path.to_str().expect("dev key path"),
+            ),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+    unlock_test_vault(app.clone()).await;
+
+    let token_server = MockTokenServer::start();
+    let suffix = unique_suffix();
+    let account_id = format!("gmail-callback-{suffix}");
+    let start_response = app
+        .clone()
+        .oneshot(json_request_with_token_and_actor(
+            "/api/v1/email-accounts/gmail/oauth/start",
+            json!({
+                "account_id": account_id,
+                "display_name": "Google Workspace",
+                "client_id": "desktop-client-id",
+                "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback",
+                "app_return_url": "http://127.0.0.1:5174/?hermes_oauth=gmail_connected",
+                "authorization_endpoint": format!("{}/authorize", token_server.base_url()),
+                "token_endpoint": format!("{}/token", token_server.base_url())
+            }),
+            LOCAL_API_TOKEN,
+            "hermes-frontend",
+        ))
+        .await
+        .expect("start response");
+    assert_eq!(start_response.status(), StatusCode::OK);
+    let start_body = json_body(start_response).await;
+    let state = start_body["state"].as_str().expect("state");
+
+    let callback_response = app
+        .oneshot(get_request(&format!(
+            "/api/v1/email-accounts/gmail/oauth/callback?code=authorization-code&state={state}"
+        )))
+        .await
+        .expect("callback response");
+
+    assert_eq!(callback_response.status(), StatusCode::OK);
+    let callback_body = text_body(callback_response).await;
+    assert!(callback_body.contains("Google mail connected"));
+    assert!(callback_body.contains(&account_id));
+    assert!(callback_body.contains("hermes:gmail-oauth-connected"));
+    assert!(callback_body.contains("postMessage"));
+    assert!(callback_body.contains("window.close"));
+    assert!(callback_body.contains("hermes_oauth=gmail_connected"));
+    assert!(!callback_body.contains("gmail-access-token"));
+    assert!(!callback_body.contains("gmail-refresh-token"));
+
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let account = communication_store
+        .provider_account(&account_id)
+        .await
+        .expect("load provider account")
+        .expect("provider account");
+    assert_eq!(account.provider_kind, EmailProviderKind::Gmail);
+    assert_eq!(account.external_account_id, account_id);
+    assert!(account.config.get("access_token").is_none());
+    assert!(account.config.get("refresh_token").is_none());
+
+    let calendar_account_id = format!("google-calendar:{account_id}");
+    let calendar_account = CalendarAccountStore::new(pool.clone())
+        .get(&calendar_account_id)
+        .await
+        .expect("load calendar account")
+        .expect("calendar account");
+    assert_eq!(calendar_account.provider, "google");
+    assert_eq!(calendar_account.account_name, "Google Workspace");
+    assert_eq!(calendar_account.email.as_deref(), Some(account_id.as_str()));
+    assert_eq!(
+        calendar_account.credentials_reference.as_deref(),
+        Some(format!("secret:provider-account:{account_id}:oauth_token").as_str())
+    );
+    assert_eq!(calendar_account.capabilities["mail_account_id"], account_id);
+    assert_eq!(
+        calendar_account.capabilities["connected_services"],
+        json!(["calendar"])
+    );
+
+    let binding = communication_store
+        .provider_account_secret_binding(&account_id, ProviderAccountSecretPurpose::OauthToken)
+        .await
+        .expect("load binding")
+        .expect("secret binding");
+    let secret_store = SecretReferenceStore::new(pool);
+    let reference = secret_store
+        .secret_reference(&binding.secret_ref)
+        .await
+        .expect("load secret reference")
+        .expect("secret reference");
+    assert_eq!(reference.store_kind, SecretStoreKind::HostVault);
+
+    let vault = HostVault::new(HostVaultConfig {
+        home: vault_home,
+        dev_mode: true,
+        dev_key_path,
+    })
+    .expect("host vault");
+    vault.unlock().expect("unlock host vault");
+    let token_bundle = vault
+        .resolve(&reference)
+        .await
+        .expect("resolve token bundle");
+    let token_bundle: serde_json::Value =
+        serde_json::from_str(token_bundle.expose_for_runtime()).expect("token bundle json");
+    assert_eq!(token_bundle["access_token"], "gmail-access-token");
+    assert_eq!(token_bundle["refresh_token"], "gmail-refresh-token");
+}
+
+#[tokio::test]
+async fn gmail_oauth_callback_rejects_unknown_state_without_api_secret() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
+        Database::disabled(),
+    );
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(
+                    "/api/v1/email-accounts/gmail/oauth/callback?code=authorization-code&state=oauth-state",
+                )
+                .body(Body::empty())
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = text_body(response).await;
+    assert!(body.contains("Google mail connection failed"));
+    assert!(body.contains("expired"));
+    assert!(!body.contains("authorization-code"));
+}
+
+#[tokio::test]
+async fn gmail_oauth_callback_rejects_missing_code_without_leaking_secrets() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
+        Database::disabled(),
+    );
+
+    let response = app
+        .oneshot(get_request(
+            "/api/v1/email-accounts/gmail/oauth/callback?state=oauth-state",
+        ))
+        .await
+        .expect("response");
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let body = text_body(response).await;
+    assert!(body.contains("Google mail connection failed"));
+    assert!(body.contains("authorization code"));
+    assert!(!body.contains("access_token"));
+    assert!(!body.contains("refresh_token"));
+}
+
+#[tokio::test]
+async fn gmail_oauth_start_and_complete_still_require_api_secret() {
+    let app = build_router_with_database(
+        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
+        Database::disabled(),
+    );
+
+    let start_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/email-accounts/gmail/oauth/start")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "account_id": "gmail-primary",
+                        "display_name": "Google Workspace",
+                        "client_id": "desktop-client-id",
+                        "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback"
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("start response");
+    assert_eq!(start_response.status(), StatusCode::FORBIDDEN);
+
+    let complete_response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/email-accounts/gmail/oauth/complete")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    json!({
+                        "setup_id": "setup",
+                        "state": "state",
+                        "authorization_code": "code"
+                    })
+                    .to_string(),
+                ))
+                .expect("request"),
+        )
+        .await
+        .expect("complete response");
+    assert_eq!(complete_response.status(), StatusCode::FORBIDDEN);
+}

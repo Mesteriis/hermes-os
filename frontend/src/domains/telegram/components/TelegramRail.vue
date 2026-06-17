@@ -6,12 +6,14 @@ import TelegramAccountManager from './TelegramAccountManager.vue'
 import TelegramCallsPanel from './TelegramCallsPanel.vue'
 import TelegramCommandAuditPanel from './TelegramCommandAuditPanel.vue'
 import TelegramMembersPanel from './TelegramMembersPanel.vue'
-import type { TelegramCapabilitiesResponse, TelegramChat, TelegramChatMember, TelegramMessage, TelegramRuntimeStatus } from '../types/telegram'
+import TelegramReadProgressPanel from './TelegramReadProgressPanel.vue'
+import type { TelegramCapabilitiesResponse, TelegramChat, TelegramMessage, TelegramRuntimeStatus } from '../types/telegram'
 import type { TelegramRailTab } from '../types/telegram'
 import {
   telegramAttachmentHintsForMessages,
   telegramChatIsPinned,
   telegramChatMentionCount,
+  telegramRuntimeCommandTarget,
   telegramChatUnreadCount,
   telegramLinkHintsForMessages,
 } from '../stores/telegram'
@@ -23,7 +25,6 @@ const props = defineProps<{
   selectedTelegramChatDetail: TelegramChat | null
   selectedTelegramRuntimeStatus: TelegramRuntimeStatus | null
   selectedTelegramMessages: TelegramMessage[]
-  chatMembers: TelegramChatMember[]
   capabilities: TelegramCapabilitiesResponse | null
   isInspectorLoading: boolean
   activeRailTab: TelegramRailTab
@@ -91,12 +92,7 @@ function syncTarget(status: TelegramRuntimeStatus | null): string {
 }
 
 function commandTarget(status: TelegramRuntimeStatus | null): string {
-  if (!status?.last_command_status) return '—'
-  return status.last_command_message_id
-    ?? status.last_command_telegram_chat_id
-    ?? status.last_command_provider_chat_id
-    ?? status.last_command_id
-    ?? '—'
+  return telegramRuntimeCommandTarget(status) ?? '—'
 }
 
 function runtimeBlockers(status: TelegramRuntimeStatus | null): string {
@@ -155,6 +151,10 @@ function runtimeBlockers(status: TelegramRuntimeStatus | null): string {
             <div><dt>{{ t('Command target') }}</dt><dd>{{ commandTarget(selectedTelegramRuntimeStatus) }}</dd></div>
           </dl>
         </article>
+        <TelegramReadProgressPanel
+          :selectedChat="selectedTelegramChatDetail"
+          :selectedMessages="selectedTelegramMessages"
+        />
         <TelegramCallsPanel :selectedAccountId="selectedTelegramChat?.account_id ?? null" />
         <TelegramCommandAuditPanel
           :selectedAccountId="selectedTelegramChat?.account_id ?? null"
@@ -167,7 +167,6 @@ function runtimeBlockers(status: TelegramRuntimeStatus | null): string {
           :telegramChatId="selectedTelegramChat?.telegram_chat_id ?? null"
           :accountId="selectedTelegramChat?.account_id ?? null"
           :providerChatId="selectedTelegramChat?.provider_chat_id ?? null"
-          :chatMembers="chatMembers"
           :capabilities="capabilities"
         />
       </div>

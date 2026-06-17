@@ -12,6 +12,9 @@ use super::models::messages::{
 };
 use super::rows::{row_to_telegram_provider_write_command, row_to_telegram_reaction};
 
+const REACTION_PROVIDER_MISMATCH_ERROR: &str =
+    "Provider observed a different reaction state than requested";
+
 fn stable_short_hash(input: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(input.as_bytes());
@@ -252,6 +255,63 @@ pub async fn reconcile_reaction_commands_from_provider_message_state(
             _ => false,
         };
         if !should_reconcile {
+            let expected_is_chosen = match command.command_kind.as_str() {
+                "react" => Some(true),
+                "unreact" => Some(false),
+                _ => None,
+            };
+            let Some(expected_is_chosen) = expected_is_chosen else {
+                continue;
+            };
+
+            let provider_state = json!({
+                "provider_chat_id": provider_chat_id,
+                "provider_message_id": provider_message_id,
+                "reaction_emoji": reaction_emoji,
+                "expected_is_chosen": expected_is_chosen,
+                "observed_is_chosen": is_chosen,
+                "chosen_reactions": chosen_reactions,
+                "observed_via": observed_via,
+            });
+            let result_payload = json!({
+                "source": observed_via,
+                "provider_chat_id": provider_chat_id,
+                "provider_message_id": provider_message_id,
+                "reaction_emoji": reaction_emoji,
+                "expected_is_chosen": expected_is_chosen,
+                "observed_is_chosen": is_chosen,
+                "chosen_reactions": chosen_reactions,
+                "provider_observed_at": observed_at,
+                "mismatch": true,
+            });
+            let row = sqlx::query(
+                r#"
+                UPDATE telegram_provider_write_commands
+                SET status = 'failed',
+                    result_payload = $3,
+                    last_error = $4,
+                    provider_observed_at = $2,
+                    provider_state = $5,
+                    reconciliation_status = 'mismatch',
+                    reconciled_at = $2,
+                    completed_at = NULL,
+                    locked_at = NULL,
+                    locked_by = NULL,
+                    next_attempt_at = NULL,
+                    dead_lettered_at = NULL,
+                    updated_at = $2
+                WHERE command_id = $1
+                RETURNING *
+                "#,
+            )
+            .bind(&command.command_id)
+            .bind(observed_at)
+            .bind(&result_payload)
+            .bind(REACTION_PROVIDER_MISMATCH_ERROR)
+            .bind(&provider_state)
+            .fetch_one(pool)
+            .await?;
+            reconciled.push(row_to_telegram_provider_write_command(row)?);
             continue;
         }
 

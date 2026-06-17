@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { telegramMediaTypeForFile } from './useTelegramMediaUploadQuery'
+import { describe, expect, it, vi } from 'vitest'
+import { primeTelegramUploadCommandQueues, telegramMediaTypeForFile } from './useTelegramMediaUploadQuery'
 
 describe('telegramMediaTypeForFile', () => {
   it('maps common desktop files to supported Telegram upload kinds', () => {
@@ -8,5 +8,48 @@ describe('telegramMediaTypeForFile', () => {
     expect(telegramMediaTypeForFile({ name: 'voice.ogg', type: 'audio/ogg' } as File)).toBe('audio')
     expect(telegramMediaTypeForFile({ name: 'fun.gif', type: 'image/gif' } as File)).toBe('animation')
     expect(telegramMediaTypeForFile({ name: 'archive.zip', type: 'application/zip' } as File)).toBe('document')
+  })
+
+  it('primes current command queues with a synthetic send_media row after upload success', () => {
+    const commandsKey = ['telegram', 'commands', 'account-1', 20]
+    const commands: Array<Record<string, unknown>> = []
+    const setQueryData = vi.fn()
+    const queryClient = {
+      getQueriesData: vi.fn().mockReturnValue([[commandsKey, commands]]),
+      setQueryData
+    }
+
+    primeTelegramUploadCommandQueues(
+      queryClient,
+      {
+        command_id: 'cmd-upload-1',
+        account_id: 'account-1',
+        provider_chat_id: 'chat-1',
+        attachment_id: 'att-1',
+        blob_id: 'blob-1',
+        media_type: 'document',
+        status: 'queued',
+        reconciliation_status: 'not_observed'
+      },
+      'upload-note.txt',
+      'hello'
+    )
+
+    expect(setQueryData).toHaveBeenCalledOnce()
+    expect(setQueryData.mock.calls[0][0]).toEqual(commandsKey)
+    expect(setQueryData.mock.calls[0][1][0]).toMatchObject({
+      command_id: 'cmd-upload-1',
+      account_id: 'account-1',
+      command_kind: 'send_media',
+      provider_chat_id: 'chat-1',
+      status: 'queued',
+      reconciliation_status: 'not_observed'
+    })
+    expect(setQueryData.mock.calls[0][1][0].payload).toMatchObject({
+      attachment_id: 'att-1',
+      blob_id: 'blob-1',
+      filename: 'upload-note.txt',
+      caption: 'hello'
+    })
   })
 })

@@ -4,6 +4,7 @@ import { isRecord, stringValue } from '../../communications/queries/realtimePatc
 export const TELEGRAM_TYPING_TTL_MS = 7000
 
 export type TelegramEventPayload = {
+  account_id?: unknown
   provider_chat_id?: unknown
   provider_message_id?: unknown
   delivery_state?: unknown
@@ -20,17 +21,43 @@ export type TelegramEventPayload = {
   tdlib_file_id?: unknown
   download_state?: unknown
   local_path?: unknown
+  provider_attachment_id?: unknown
+  expected_size_bytes?: unknown
+  downloaded_size_bytes?: unknown
+  is_downloading_active?: unknown
+  is_downloading_completed?: unknown
+  error?: unknown
   attachment_id?: unknown
   blob_id?: unknown
   scan_status?: unknown
   command_id?: unknown
+  command_kind?: unknown
+  retry_count?: unknown
+  max_retries?: unknown
+  last_error?: unknown
+  result_payload?: unknown
   next_attempt_at?: unknown
   last_attempt_at?: unknown
   provider_observed_at?: unknown
+  provider_state?: unknown
   reconciliation_status?: unknown
   reconciled_at?: unknown
   dead_lettered_at?: unknown
+  completed_at?: unknown
+  idempotency_key?: unknown
+  target_ref?: unknown
+  capability_state?: unknown
+  action_class?: unknown
+  confirmation_decision?: unknown
+  audit_metadata?: unknown
+  actor_id?: unknown
+  happened_at?: unknown
+  created_at?: unknown
+  updated_at?: unknown
   action?: unknown
+  list_kind?: unknown
+  provider_folder_id?: unknown
+  order?: unknown
   message_id?: unknown
   is_pinned?: unknown
   is_archived?: unknown
@@ -41,6 +68,8 @@ export type TelegramEventPayload = {
   topic?: unknown
   chat?: unknown
   message?: unknown
+  items?: unknown
+  payload?: unknown
 }
 
 export type TelegramStoredEventEnvelope = {

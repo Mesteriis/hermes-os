@@ -1,5 +1,8 @@
 use crate::app::{ApiError, AppState};
-use crate::domains::api_support::event_store;
+use crate::domains::api_support::{
+    TelegramCapabilitiesResponse, communication_ingestion_store, event_store,
+};
+use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::client::{TelegramStore, telegram_chat_id};
 use crate::integrations::telegram::runtime::TelegramRuntimeEventBridgeContext;
 use crate::platform::config::AppConfig;
@@ -40,6 +43,46 @@ pub(super) async fn publish_telegram_event(
 
     let _ = state.event_bus.broadcast(event);
     Ok(())
+}
+
+pub(super) async fn ensure_telegram_account_operation_allowed(
+    state: &AppState,
+    account_id: &str,
+    operation: &str,
+) -> Result<(), ApiError> {
+    let account = communication_ingestion_store(state)?
+        .provider_account(account_id)
+        .await?
+        .ok_or_else(|| {
+            ApiError::Telegram(TelegramError::InvalidRequest(format!(
+                "Telegram account `{account_id}` is not configured"
+            )))
+        })?;
+    if !account.provider_kind.is_telegram() {
+        return Err(ApiError::Telegram(TelegramError::InvalidRequest(format!(
+            "account `{}` is not a Telegram provider account",
+            account.account_id
+        ))));
+    }
+
+    let capabilities = TelegramCapabilitiesResponse::current_for_account(&state.config, &account);
+    let capability = capabilities
+        .capabilities
+        .iter()
+        .find(|item| item.operation == operation)
+        .ok_or_else(|| {
+            ApiError::Telegram(TelegramError::InvalidRequest(format!(
+                "Telegram capability `{operation}` is not defined"
+            )))
+        })?;
+
+    if matches!(capability.status.as_str(), "available" | "degraded") {
+        return Ok(());
+    }
+
+    Err(ApiError::Telegram(TelegramError::InvalidRequest(
+        capability.reason.clone(),
+    )))
 }
 
 pub(super) async fn telegram_message_snapshot_payload(

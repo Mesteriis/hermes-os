@@ -27,7 +27,7 @@ describe('realtime bootstrap', () => {
         onStatus,
         createClient: (options) => {
           capturedOptions = options
-          return { connect, disconnect: vi.fn() }
+          return { connect, disconnect: vi.fn(), reconnect: vi.fn() }
         }
       }
     )
@@ -68,7 +68,8 @@ describe('realtime bootstrap', () => {
           createdOptions.push(options)
           return {
             connect: () => connectedUrls.push(options.url),
-            disconnect: vi.fn()
+            disconnect: vi.fn(),
+            reconnect: vi.fn()
           }
         }
       }
@@ -88,6 +89,50 @@ describe('realtime bootstrap', () => {
       'ws://127.0.0.1:8080/api/events/ws',
       'http://127.0.0.1:8080/api/events/stream'
     ])
+  })
+
+  it('allows manual reconnect to prefer the primary WebSocket transport again', () => {
+    const createdOptions: RealtimeClientOptions[] = []
+    const connectedUrls: string[] = []
+    const disconnectedUrls: string[] = []
+
+    const client = initializeRealtime(
+      {
+        apiBaseUrl: 'http://127.0.0.1:8080',
+        apiSecret: 'test-secret',
+        sseUrl: 'http://127.0.0.1:8080/api/events/stream',
+        webSocketUrl: 'ws://127.0.0.1:8080/api/events/ws',
+        realtimeTransport: 'websocket'
+      },
+      { invalidateQueries: vi.fn() },
+      {
+        createClient: (options) => {
+          createdOptions.push(options)
+          return {
+            connect: () => connectedUrls.push(options.url),
+            disconnect: () => disconnectedUrls.push(options.url),
+            reconnect: vi.fn()
+          }
+        }
+      }
+    )
+
+    ;(createdOptions[0] as WebSocketClientOptions).onStatus?.({
+      transport: 'websocket',
+      state: 'disconnected',
+      error: 'WebSocket reconnect attempts exhausted'
+    })
+
+    expect(connectedUrls).toEqual([
+      'ws://127.0.0.1:8080/api/events/ws',
+      'http://127.0.0.1:8080/api/events/stream'
+    ])
+
+    client.reconnect()
+
+    expect(disconnectedUrls).toContain('http://127.0.0.1:8080/api/events/stream')
+    expect(disconnectedUrls).toContain('ws://127.0.0.1:8080/api/events/ws')
+    expect(connectedUrls.at(-1)).toBe('ws://127.0.0.1:8080/api/events/ws')
   })
 
   it('loads and persists the replay cursor', () => {
@@ -115,7 +160,7 @@ describe('realtime bootstrap', () => {
       queryClient,
       (options) => {
         capturedOptions = options
-        return { connect, disconnect: vi.fn() }
+        return { connect, disconnect: vi.fn(), reconnect: vi.fn() }
       }
     )
 
@@ -123,6 +168,46 @@ describe('realtime bootstrap', () => {
     expect(options.lastEventId).toBe('41')
     options.onMessage?.({ id: '42', event: 'event', data: '{}' })
     expect(storage.setItem).toHaveBeenCalledWith('hermes.realtime.lastEventId', '42')
+  })
+
+  it('reports lagged realtime gaps without advancing the replay cursor', () => {
+    const connect = vi.fn()
+    const queryClient = { invalidateQueries: vi.fn() }
+    const storage = {
+      getItem: vi.fn().mockReturnValue('41'),
+      setItem: vi.fn(),
+      removeItem: vi.fn(),
+      clear: vi.fn(),
+      key: vi.fn(),
+      length: 1
+    }
+    vi.stubGlobal('localStorage', storage)
+    const onLaggedObserved = vi.fn()
+    let capturedOptions: RealtimeClientOptions | null = null
+
+    initializeRealtime(
+      {
+        apiBaseUrl: 'http://127.0.0.1:8080',
+        apiSecret: 'test-secret',
+        sseUrl: 'http://127.0.0.1:8080/api/events/stream',
+        webSocketUrl: 'ws://127.0.0.1:8080/api/events/ws',
+        realtimeTransport: 'sse'
+      },
+      queryClient,
+      {
+        onLaggedObserved,
+        createClient: (options) => {
+          capturedOptions = options
+          return { connect, disconnect: vi.fn(), reconnect: vi.fn() }
+        }
+      }
+    )
+
+    const options = capturedOptions as unknown as SseClientOptions
+    options.onMessage?.({ id: '41', event: 'lagged', data: JSON.stringify({ skipped: 3 }) })
+
+    expect(onLaggedObserved).toHaveBeenCalledWith(3)
+    expect(storage.setItem).not.toHaveBeenCalled()
   })
 
   it('does not rewind the persisted replay cursor when an older event arrives', () => {
@@ -150,7 +235,7 @@ describe('realtime bootstrap', () => {
       queryClient,
       (options) => {
         capturedOptions = options
-        return { connect, disconnect: vi.fn() }
+        return { connect, disconnect: vi.fn(), reconnect: vi.fn() }
       }
     )
 
@@ -161,6 +246,29 @@ describe('realtime bootstrap', () => {
     options.onMessage?.({ id: '51', event: 'event', data: '{}' })
     expect(storage.setItem).toHaveBeenCalledOnce()
     expect(storage.setItem).toHaveBeenCalledWith('hermes.realtime.lastEventId', '51')
+  })
+
+  it('invalidates broad communication and telegram queries when realtime reports a replay gap', () => {
+    const queryClient = { invalidateQueries: vi.fn() }
+
+    handleRealtimeEvent(
+      {
+        id: '52',
+        event: 'lagged',
+        data: JSON.stringify({ skipped: 4 })
+      },
+      queryClient
+    )
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['communications-mail-list']
+    })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'messages']
+    })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'runtime']
+    })
   })
 
   it('invalidates targeted mail queries for AI state events', () => {

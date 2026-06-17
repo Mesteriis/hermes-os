@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import type { MessageAnalyzeResponse } from '../../../communications/types/communications'
 import type { TelegramAttachmentHint, TelegramChat, TelegramMessage, TelegramOperationCapability, TelegramCapabilitiesResponse } from '../../types/telegram'
 import { telegramMessageAttachmentHints } from '../../stores/telegram'
+import { telegramAttachmentReadiness } from '../../stores/telegramMediaSearch'
 import { telegramMessageMentionLabel, telegramMessageMentionProjection } from '../../stores/telegramMentionProjection'
+import { telegramCanMarkMessageRead, telegramThreadReadProgress } from '../../stores/telegramReadProgress'
 import TelegramMessageReferencePanel from './TelegramMessageReferencePanel.vue'
 import TelegramMessageReactions from './TelegramMessageReactions.vue'
 
@@ -29,6 +31,7 @@ const emit = defineEmits<{
   restoreMessage: [message: TelegramMessage]
   replyMessage: [message: TelegramMessage]
   forwardMessage: [message: TelegramMessage]
+  markReadMessage: [message: TelegramMessage]
   togglePinMessage: [message: TelegramMessage]
   addReaction: [payload: { message: TelegramMessage; emoji: string }]
   removeReaction: [payload: { message: TelegramMessage; emoji: string }]
@@ -145,6 +148,24 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+function attachmentReadiness(attachment: TelegramAttachmentHint) {
+  return telegramAttachmentReadiness(attachment)
+}
+
+const providerReadProgress = computed(() =>
+  telegramThreadReadProgress(props.selectedTelegramChat, props.filteredMessages)
+)
+
+function isProviderReadBoundary(message: TelegramMessage): boolean {
+  return providerReadProgress.value.boundaryAfterMessageId === message.message_id
+}
+
+function canMarkReadMessage(message: TelegramMessage): boolean {
+  const status = capability('messages.mark_read')?.status
+  if (status !== 'available' && status !== 'degraded') return false
+  return telegramCanMarkMessageRead(props.selectedTelegramChat, props.filteredMessages, message)
+}
 </script>
 
 <template>
@@ -245,12 +266,13 @@ function formatBytes(bytes: number): string {
               <span><Icon icon="tabler:file" width="18" height="18" /></span>
               <div>
                 <strong>{{ attachment.fileName }}</strong>
-                <small>{{ attachment.sizeBytes == null ? attachment.downloadState : `${formatBytes(attachment.sizeBytes)} · ${attachment.downloadState}` }}</small>
+                <small>{{ attachment.sizeBytes == null ? attachmentReadiness(attachment).label : `${formatBytes(attachment.sizeBytes)} · ${attachmentReadiness(attachment).label}` }}</small>
+                <small>{{ attachmentReadiness(attachment).detail }}</small>
               </div>
               <button
                 type="button"
-                :disabled="isTelegramActionSubmitting || attachment.tdlibFileId === null"
-                :title="attachment.tdlibFileId === null ? t('Download requires TDLib file metadata') : t('Download media')"
+                :disabled="isTelegramActionSubmitting || !attachmentReadiness(attachment).can_request_download"
+                :title="attachmentReadiness(attachment).can_request_download ? t(attachmentReadiness(attachment).action_label) : attachmentReadiness(attachment).detail"
                 @click="emit('downloadMedia', attachment, message)"
               >
                 <Icon icon="tabler:download" width="16" height="16" />
@@ -289,6 +311,16 @@ function formatBytes(bytes: number): string {
             </button>
             <button v-if="isCapabilityVisible('messages.forward')" type="button" class="btn-icon-only" :title="capabilityTitle('messages.forward', t('Forward'))" :disabled="!canForward()" @click.stop="emit('forwardMessage', message)">
               <Icon icon="tabler:arrow-forward-up" width="14" height="14" />
+            </button>
+            <button
+              v-if="isCapabilityVisible('messages.mark_read')"
+              type="button"
+              class="btn-icon-only"
+              :title="capabilityTitle('messages.mark_read', t('Mark read'))"
+              :disabled="!canMarkReadMessage(message)"
+              @click.stop="emit('markReadMessage', message)"
+            >
+              <Icon icon="tabler:mail-opened" width="14" height="14" />
             </button>
             <button
               v-if="isCapabilityVisible('messages.pin')"
@@ -370,6 +402,13 @@ function formatBytes(bytes: number): string {
             @openMessage="emit('openSearchMessage', $event)"
           />
         </div>
+        <div
+          v-if="isProviderReadBoundary(message)"
+          class="telegram-read-progress-divider"
+          :title="providerReadProgress.lastReadProviderMessageId ?? undefined"
+        >
+          <span>{{ t('Read through here') }}</span>
+        </div>
       </article>
     </template>
   </div>
@@ -437,6 +476,7 @@ function formatBytes(bytes: number): string {
   display: flex;
   gap: 8px;
   margin-bottom: 4px;
+  flex-wrap: wrap;
 }
 .telegram-message-row.outbound {
   flex-direction: row-reverse;
@@ -460,6 +500,26 @@ function formatBytes(bytes: number): string {
   border-radius: 12px;
   font-size: 12px;
   line-height: 1.4;
+}
+.telegram-read-progress-divider {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 10px;
+  color: var(--color-text-secondary, #7b8190);
+  font-size: 10px;
+  font-weight: 600;
+}
+.telegram-read-progress-divider::before,
+.telegram-read-progress-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: color-mix(in srgb, var(--color-border, #d7dbe4) 85%, transparent);
+}
+.telegram-read-progress-divider span {
+  white-space: nowrap;
 }
 .bubble.inbound {
   background: var(--color-surface, #fff);

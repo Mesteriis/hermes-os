@@ -25,8 +25,11 @@ try {
 	const realtimeStatus = useRealtimeStatusStore(pinia)
 	initializeApiClient(config)
 	realtimeClient = initializeRealtime(config, queryClient, {
+		onEventObserved: realtimeStatus.observeRealtimeEvent,
+		onLaggedObserved: realtimeStatus.observeRealtimeLag,
 		onStatus: realtimeStatus.setRealtimeStatus
 	})
+	realtimeStatus.setReconnectHandler(() => realtimeClient?.reconnect())
 } catch (error) {
 	document.body.innerHTML = `<main class="startup-error"><h1>Hermes Hub cannot start</h1><p>${escapeHtml(error instanceof Error ? error.message : 'Unknown startup error')}</p></main>`
 	throw error

@@ -3,6 +3,7 @@ import type {
   TelegramMessageVersion,
   TelegramProviderWriteCommand,
 } from '../../types/telegram'
+import { telegramCommandAuditState } from '../../stores/telegramCommandAudit'
 
 function textLength(value: string | null | undefined): number | null {
   return typeof value === 'string' ? value.length : null
@@ -51,9 +52,6 @@ export function summarizeTelegramTombstoneState(tombstone: TelegramMessageTombst
 }
 
 export function summarizeTelegramCommandEvidence(command: TelegramProviderWriteCommand): string {
-  return [
-    command.action_class,
-    command.capability_state,
-    command.confirmation_decision,
-  ].join(' · ')
+  const auditState = telegramCommandAuditState(command)
+  return `${auditState.label} · ${auditState.detail}`
 }

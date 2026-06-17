@@ -153,7 +153,6 @@ impl TelegramCapabilitiesResponse {
                 "third_party_plugin_execution",
                 "session_import_export",
                 "proxy_profiles",
-                "forum_topics",
                 "chat_export",
                 "bot_live_runtime",
             ],
@@ -215,12 +214,60 @@ impl TelegramCapabilitiesResponse {
                         "Bot accounts do not use the TDLib participant lifecycle runtime."
                             .to_owned();
                 }
+                "dialogs.folder_add" | "dialogs.folder_remove" | "dialogs.folder_reassign"
+                    if is_bot =>
+                {
+                    capability.status = TelegramCapabilityState::Unsupported.as_str().to_owned();
+                    capability.reason =
+                        "Bot accounts do not use the TDLib user dialog-folder runtime.".to_owned();
+                }
+                "topics.list" | "topics.create" | "topics.close" if is_bot => {
+                    capability.status = TelegramCapabilityState::Unsupported.as_str().to_owned();
+                    capability.reason =
+                        "Bot accounts do not use the TDLib forum topic projection/runtime."
+                            .to_owned();
+                }
                 "participants.sync" | "participants.join" | "participants.leave"
                     if runtime_kind != "tdlib_qr_authorized" =>
                 {
                     capability.status = TelegramCapabilityState::Blocked.as_str().to_owned();
                     capability.reason = format!(
                         "Account `{}` must use tdlib_qr_authorized runtime before participant lifecycle commands are available.",
+                        scope.account_id
+                    );
+                }
+                "dialogs.folder_add" | "dialogs.folder_remove" | "dialogs.folder_reassign"
+                    if runtime_kind != "tdlib_qr_authorized" =>
+                {
+                    capability.status = TelegramCapabilityState::Blocked.as_str().to_owned();
+                    capability.reason = format!(
+                        "Account `{}` must use tdlib_qr_authorized runtime before Telegram folder provider-write commands are available.",
+                        scope.account_id
+                    );
+                }
+                "dialogs.folder_add" => {
+                    capability.status = TelegramCapabilityState::Available.as_str().to_owned();
+                    capability.reason = "Adding a chat to a Telegram folder uses the durable provider-write outbox and TDLib chat-position reconciliation for the target folder.".to_owned();
+                }
+                "dialogs.folder_remove" => {
+                    capability.status = TelegramCapabilityState::Available.as_str().to_owned();
+                    capability.reason = "Removing a chat from a Telegram folder uses the durable provider-write outbox plus TDLib folder-edit reconciliation when the provider confirms removal.".to_owned();
+                }
+                "dialogs.folder_reassign" => {
+                    capability.status = TelegramCapabilityState::Available.as_str().to_owned();
+                    capability.reason = "Reassigning Telegram folder membership computes a durable add/remove command set from the current TDLib folder projection and queues those provider-write commands atomically from one API action.".to_owned();
+                }
+                "topics.list" if runtime_kind != "tdlib_qr_authorized" => {
+                    capability.status = TelegramCapabilityState::Degraded.as_str().to_owned();
+                    capability.reason = format!(
+                        "Account `{}` can read locally projected forum topics, but live TDLib topic refresh requires tdlib_qr_authorized runtime.",
+                        scope.account_id
+                    );
+                }
+                "topics.create" | "topics.close" if runtime_kind != "tdlib_qr_authorized" => {
+                    capability.status = TelegramCapabilityState::Blocked.as_str().to_owned();
+                    capability.reason = format!(
+                        "Account `{}` must use tdlib_qr_authorized runtime before forum topic write commands are available.",
                         scope.account_id
                     );
                 }

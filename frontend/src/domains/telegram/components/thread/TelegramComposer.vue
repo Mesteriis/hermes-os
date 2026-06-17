@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import TelegramSendDryRunPanel from './TelegramSendDryRunPanel.vue'
+import TelegramUploadQueueStatus from './TelegramUploadQueueStatus.vue'
 import {
   telegramComposerMediaCapabilityHint,
   telegramComposerVoiceCapabilityHint
@@ -61,6 +62,10 @@ function onMediaFileSelected(event: Event) {
 
 <template>
   <div class="telegram-composer-wrapper">
+  <TelegramUploadQueueStatus
+    :selectedAccountId="selectedAccountId"
+    :selectedProviderChatId="selectedProviderChatId"
+  />
   <div v-if="replyTo" class="telegram-reply-banner">
     <Icon icon="tabler:corner-up-left" width="14" height="14" />
     <span class="telegram-reply-banner__sender">{{ replyTo.sender_display_name ?? replyTo.sender }}</span>

@@ -1,5 +1,6 @@
 import type {
   TelegramChat,
+  TelegramChatGroupFilter,
   TelegramMediaItem,
   TelegramMediaSearchResponse,
   TelegramMessage,
@@ -12,6 +13,12 @@ import type {
 import type { TelegramTopicListResponse } from '../types/telegramTopics'
 import { isRecord, storedEventEnvelope, stringValue } from '../../communications/queries/realtimePatchShared'
 import { patchTelegramTopicList } from './realtimeTelegramTopicPatches'
+import { patchTelegramCommandList } from './realtimeTelegramCommandPatches'
+import {
+  isTelegramMediaDownloadEvent,
+  patchTelegramMediaSearch,
+  patchTelegramMessageMediaDownloadState,
+} from './realtimeTelegramMediaPatches'
 import {
   TELEGRAM_TYPING_TTL_MS,
   type TelegramEventPayload,
@@ -104,6 +111,16 @@ export function applyTelegramRealtimePatch(
     }
   }
 
+  for (const [queryKey, data] of getQueriesData<TelegramChatGroupFilter[]>({
+    queryKey: ['telegram', 'folders']
+  })) {
+    const updated = patchFolderFilters(queryKey, data, eventType, payload, metadata)
+    if (updated !== data) {
+      setQueryData(queryKey, updated)
+      patched = true
+    }
+  }
+
   for (const [queryKey, data] of getQueriesData<TelegramMessageSearchResponse>({
     queryKey: ['telegram', 'search', 'messages']
   })) {
@@ -117,7 +134,7 @@ export function applyTelegramRealtimePatch(
   for (const [queryKey, data] of getQueriesData<TelegramMediaSearchResponse>({
     queryKey: ['telegram', 'search', 'media']
   })) {
-    const updated = patchMediaSearch(queryKey, data, eventType, snapshot)
+    const updated = patchTelegramMediaSearch(queryKey, data, eventType, payload, snapshot)
     if (updated !== data) {
       setQueryData(queryKey, updated)
       patched = true
@@ -127,7 +144,7 @@ export function applyTelegramRealtimePatch(
   for (const [queryKey, data] of getQueriesData<TelegramProviderWriteCommand[]>({
     queryKey: ['telegram', 'commands']
   })) {
-    const updated = patchCommandList(queryKey, data, eventType, payload)
+    const updated = patchTelegramCommandList(queryKey, data, eventType, payload)
     if (updated !== data) {
       setQueryData(queryKey, updated)
       patched = true
@@ -177,6 +194,15 @@ function patchMessageList(
 ): TelegramMessage[] | undefined {
   if (!messages) return messages
 
+  if (isTelegramMediaDownloadEvent(eventType)) {
+    const nextMessages = messages.map((message) =>
+      patchTelegramMessageMediaDownloadState(message, eventType, payload, snapshot)
+    )
+    return nextMessages.some((message, index) => message !== messages[index])
+      ? nextMessages
+      : messages
+  }
+
   const targetMessageId = subjectId ?? snapshot?.message_id ?? null
   if (!targetMessageId) return messages
   const [accountId, providerChatId, limit] = messageQueryScope(queryKey)
@@ -225,7 +251,6 @@ function patchMessageList(
     }
 
     if (eventType === 'telegram.media.downloaded' && snapshot) return snapshot
-
     if (eventType === 'telegram.reaction.changed') {
       const reactionEmoji = stringValue(payload?.reaction_emoji)
       if (!reactionEmoji) return message
@@ -320,11 +345,42 @@ function patchRuntimeStatus(
     ...status,
     last_command_id: stringValue(payload.command_id),
     last_command_status: stringValue(payload.status),
+    last_command_kind: stringValue(payload.command_kind),
     last_command_provider_chat_id: stringValue(payload.provider_chat_id),
     last_command_message_id: stringValue(payload.message_id),
     last_command_telegram_chat_id: stringValue(payload.telegram_chat_id),
     updated_at: new Date().toISOString(),
   }
+}
+
+function patchFolderFilters(
+  queryKey: readonly unknown[],
+  filters: TelegramChatGroupFilter[] | undefined,
+  eventType: string,
+  payload: TelegramEventPayload | undefined,
+  metadata: Record<string, unknown> | undefined
+): TelegramChatGroupFilter[] | undefined {
+  if (!filters || !payload) return filters
+  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'folders') return filters
+  const queryAccountId = typeof queryKey[2] === 'string' ? queryKey[2] : 'all'
+  const eventAccountId = stringValue(payload.account_id) ?? stringValue(metadata?.account_id)
+  if (queryAccountId !== 'all' && eventAccountId && queryAccountId !== eventAccountId) {
+    return filters
+  }
+  if (eventType !== 'telegram.folders.updated') return filters
+  const items = payload.items
+  if (!Array.isArray(items)) return filters
+  return items
+    .filter((item): item is TelegramChatGroupFilter => isRecord(item))
+    .map((item) => ({
+      id: stringValue(item.id) ?? 'local:all',
+      label: stringValue(item.label) ?? 'All',
+      source: (stringValue(item.source) === 'telegram' ? 'telegram' : 'local'),
+      count: typeof item.count === 'number' ? item.count : 0,
+      icon: stringValue(item.icon) ?? 'tabler:folder',
+      provider_folder_id:
+        typeof item.provider_folder_id === 'number' ? item.provider_folder_id : null,
+    }))
 }
 
 function patchChatList(
@@ -542,109 +598,6 @@ function patchMessageSearch(
     limit
   )
   return { ...response, items: inserted, total: Math.max(response.total, inserted.length) }
-}
-
-function patchMediaSearch(
-  queryKey: readonly unknown[],
-  response: TelegramMediaSearchResponse | undefined,
-  eventType: string,
-  snapshot: TelegramMessage | null
-): TelegramMediaSearchResponse | undefined {
-  if (!response || eventType !== 'telegram.media.downloaded' || !snapshot) return response
-  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'search' || queryKey[2] !== 'media') return response
-
-  const query = typeof queryKey[3] === 'string' ? queryKey[3].trim().toLowerCase() : ''
-  const accountId = typeof queryKey[4] === 'string' && queryKey[4] !== 'all' ? queryKey[4] : null
-  const providerChatId = typeof queryKey[5] === 'string' && queryKey[5] !== 'all' ? queryKey[5] : null
-  const kindFilter = typeof queryKey[6] === 'string' && queryKey[6] !== 'all' ? queryKey[6] : null
-  const limit = typeof queryKey[7] === 'number' ? queryKey[7] : null
-
-  if (!matchesMessageScope(snapshot, accountId, providerChatId)) return response
-
-  const nextItemsById = new Map(
-    response.items.map((item) => [`${item.message_id}:${item.file_name}`, item] as const)
-  )
-  for (const item of telegramMediaItemsFromMessageSnapshot(snapshot)) {
-    if (kindFilter && item.kind !== kindFilter) continue
-    if (query && !matchesMediaQuery(item, query)) continue
-    nextItemsById.set(`${item.message_id}:${item.file_name}`, item)
-  }
-
-  const nextItems = Array.from(nextItemsById.values()).sort(
-    (left, right) => (right.occurred_at ?? '').localeCompare(left.occurred_at ?? '')
-  )
-  return { ...response, items: typeof limit === 'number' ? nextItems.slice(0, limit) : nextItems }
-}
-
-function telegramMediaItemsFromMessageSnapshot(message: TelegramMessage): TelegramMediaItem[] {
-  const rawAttachments = message.metadata?.attachments ?? message.metadata?.files
-  if (!Array.isArray(rawAttachments)) return []
-  return rawAttachments.flatMap((attachment): TelegramMediaItem[] => {
-    if (!isRecord(attachment)) return []
-    const fileName = stringValue(attachment.filename) ?? stringValue(attachment.file_name)
-    const kind = stringValue(attachment.attachment_type) ?? stringValue(attachment.kind) ?? 'file'
-    if (!fileName || !message.provider_chat_id) return []
-    return [{
-      message_id: message.message_id,
-      provider_message_id: message.provider_message_id,
-      provider_chat_id: message.provider_chat_id,
-      file_name: fileName,
-      kind,
-      mime_type: stringValue(attachment.content_type) ?? stringValue(attachment.mime_type),
-      size_bytes: typeof attachment.size === 'number'
-        ? attachment.size
-        : typeof attachment.size_bytes === 'number' ? attachment.size_bytes : null,
-      occurred_at: message.occurred_at,
-      download_state: stringValue(attachment.download_state) ?? 'unknown',
-      tdlib_file_id: typeof attachment.tdlib_file_id === 'number' ? attachment.tdlib_file_id : null,
-      provider_attachment_id: stringValue(attachment.attachment_id) ?? stringValue(attachment.provider_attachment_id),
-      local_path: stringValue(attachment.local_path),
-    }]
-  })
-}
-
-function matchesMediaQuery(item: TelegramMediaItem, query: string): boolean {
-  return [item.file_name, item.kind, item.provider_message_id, item.mime_type ?? '']
-    .join(' ').toLowerCase().includes(query)
-}
-
-function patchCommandList(
-  queryKey: readonly unknown[],
-  commands: TelegramProviderWriteCommand[] | undefined,
-  eventType: string,
-  payload: TelegramEventPayload | undefined
-): TelegramProviderWriteCommand[] | undefined {
-  if (
-    !commands ||
-    (eventType !== 'telegram.command.status_changed' && eventType !== 'telegram.command.reconciled') ||
-    !payload
-  ) return commands
-  if (queryKey[0] !== 'telegram' || queryKey[1] !== 'commands') return commands
-
-  const queryAccountId = typeof queryKey[2] === 'string' && queryKey[2] !== 'none' ? queryKey[2] : null
-  const commandId = stringValue(payload.command_id)
-  const newStatus = stringValue(payload.status)
-  if (!commandId || !newStatus) return commands
-
-  const matchIndex = commands.findIndex((cmd) => cmd.command_id === commandId)
-  if (matchIndex < 0) return commands
-  if (queryAccountId && commands[matchIndex].account_id !== queryAccountId) return commands
-
-  return commands.map((cmd, i) =>
-    i === matchIndex
-      ? {
-          ...cmd,
-          status: newStatus as TelegramProviderWriteCommand['status'],
-          next_attempt_at: stringValue(payload.next_attempt_at) ?? cmd.next_attempt_at,
-          last_attempt_at: stringValue(payload.last_attempt_at) ?? cmd.last_attempt_at,
-          provider_observed_at: stringValue(payload.provider_observed_at) ?? cmd.provider_observed_at,
-          reconciliation_status: stringValue(payload.reconciliation_status) ?? cmd.reconciliation_status,
-          reconciled_at: stringValue(payload.reconciled_at) ?? cmd.reconciled_at,
-          dead_lettered_at: stringValue(payload.dead_lettered_at) ?? cmd.dead_lettered_at,
-          updated_at: new Date().toISOString(),
-        }
-      : cmd
-  )
 }
 
 function patchReactionDetail(

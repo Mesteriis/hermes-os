@@ -105,6 +105,30 @@ pub(crate) fn tdlib_get_chat_request(chat_id: i64, extra: &str) -> Value {
     })
 }
 
+pub(crate) fn tdlib_get_basic_group_request(basic_group_id: i64, extra: &str) -> Value {
+    json!({
+        "@type": "getBasicGroup",
+        "basic_group_id": basic_group_id,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_get_basic_group_full_info_request(basic_group_id: i64, extra: &str) -> Value {
+    json!({
+        "@type": "getBasicGroupFullInfo",
+        "basic_group_id": basic_group_id,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_get_chat_folder_request(chat_folder_id: i64, extra: &str) -> Value {
+    json!({
+        "@type": "getChatFolder",
+        "chat_folder_id": chat_folder_id,
+        "@extra": extra.trim()
+    })
+}
+
 pub(crate) fn tdlib_get_chat_history_request(
     chat_id: i64,
     from_message_id: Option<i64>,
@@ -443,6 +467,22 @@ pub(crate) fn tdlib_toggle_chat_marked_as_unread_request(
     })
 }
 
+pub(crate) fn tdlib_view_messages_request(
+    chat_id: i64,
+    message_ids: &[i64],
+    force_read: bool,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "viewMessages",
+        "chat_id": chat_id,
+        "message_ids": message_ids,
+        "source": null,
+        "force_read": force_read,
+        "@extra": extra.trim()
+    })
+}
+
 pub(crate) fn tdlib_add_chat_to_list_request(chat_id: i64, archived: bool, extra: &str) -> Value {
     let chat_list_type = if archived {
         "chatListArchive"
@@ -455,6 +495,22 @@ pub(crate) fn tdlib_add_chat_to_list_request(chat_id: i64, archived: bool, extra
         "chat_id": chat_id,
         "chat_list": {
             "@type": chat_list_type
+        },
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_add_chat_to_folder_request(
+    chat_id: i64,
+    chat_folder_id: i64,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "addChatToList",
+        "chat_id": chat_id,
+        "chat_list": {
+            "@type": "chatListFolder",
+            "chat_folder_id": chat_folder_id
         },
         "@extra": extra.trim()
     })
@@ -549,19 +605,87 @@ pub(crate) fn tdlib_get_forum_topics_request(chat_id: i64, limit: i32, extra: &s
     })
 }
 
-pub(crate) fn tdlib_get_supergroup_members_request(
+pub(crate) fn tdlib_create_forum_topic_request(
+    chat_id: i64,
+    title: &str,
+    extra: &str,
+) -> Result<Value, TelegramError> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(TelegramError::InvalidRequest(
+            "forum topic title must not be empty".to_owned(),
+        ));
+    }
+
+    Ok(json!({
+        "@type": "createForumTopic",
+        "chat_id": chat_id,
+        "name": title,
+        "icon_custom_emoji_id": 0,
+        "@extra": extra.trim()
+    }))
+}
+
+pub(crate) fn tdlib_toggle_forum_topic_is_closed_request(
+    chat_id: i64,
+    message_thread_id: i64,
+    is_closed: bool,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "toggleForumTopicIsClosed",
+        "chat_id": chat_id,
+        "message_thread_id": message_thread_id,
+        "is_closed": is_closed,
+        "@extra": extra.trim()
+    })
+}
+
+fn tdlib_get_supergroup_members_request_with_filter(
     supergroup_id: i64,
+    filter_type: &str,
+    offset: i32,
     limit: i32,
     extra: &str,
 ) -> Value {
     json!({
         "@type": "getSupergroupMembers",
         "supergroup_id": supergroup_id,
-        "filter": { "@type": "supergroupMembersFilterRecent" },
-        "offset": 0,
+        "filter": { "@type": filter_type.trim() },
+        "offset": offset.max(0),
         "limit": tdlib_page_limit(limit),
         "@extra": extra.trim()
     })
+}
+
+pub(crate) fn tdlib_get_supergroup_members_request(
+    supergroup_id: i64,
+    offset: i32,
+    limit: i32,
+    extra: &str,
+) -> Value {
+    tdlib_get_supergroup_members_request_with_filter(
+        supergroup_id,
+        "supergroupMembersFilterRecent",
+        offset,
+        limit,
+        extra,
+    )
+}
+
+pub(crate) fn tdlib_get_supergroup_administrators_request(
+    supergroup_id: i64,
+    offset: i32,
+    limit: i32,
+    extra: &str,
+) -> Value {
+    tdlib_get_supergroup_members_request_with_filter(
+        supergroup_id,
+        "supergroupMembersFilterAdministrators",
+        offset,
+        limit,
+        extra,
+    )
 }
 
 fn tdlib_page_limit(limit: i32) -> i32 {

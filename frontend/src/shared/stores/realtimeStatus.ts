@@ -25,6 +25,10 @@ export type RealtimeStatusSnapshot = {
 	attempt: number | null
 	maxAttempts: number | null
 	error: string | null
+	lastEventId: string | null
+	lastEventAt: string | null
+	lastLaggedSkipped: number | null
+	lastLaggedAt: string | null
 	updatedAt: string | null
 }
 
@@ -34,14 +38,27 @@ const initialStatus: RealtimeStatusSnapshot = {
 	attempt: null,
 	maxAttempts: null,
 	error: null,
+	lastEventId: null,
+	lastEventAt: null,
+	lastLaggedSkipped: null,
+	lastLaggedAt: null,
 	updatedAt: null
 }
 
 export const useRealtimeStatusStore = defineStore('realtimeStatus', () => {
 	const status = ref<RealtimeStatusSnapshot>({ ...initialStatus })
+	let reconnectHandler: (() => void) | null = null
 
 	const isRealtimeDegraded = computed<boolean>(() => {
-		return status.value.state === 'reconnecting' || status.value.transport === 'long_poll'
+		return (
+			status.value.state === 'reconnecting' ||
+			status.value.transport === 'long_poll' ||
+			status.value.lastLaggedSkipped !== null
+		)
+	})
+
+	const canTriggerReconnect = computed<boolean>(() => {
+		return status.value.state === 'disconnected' || isRealtimeDegraded.value
 	})
 
 	const realtimeStatusLabel = computed<string>(() => {
@@ -79,6 +96,27 @@ export const useRealtimeStatusStore = defineStore('realtimeStatus', () => {
 		return base
 	})
 
+	const realtimeRecoveryDetail = computed<string>(() => {
+		const cursor = status.value.lastEventId
+		const laggedSkipped = status.value.lastLaggedSkipped
+		if (laggedSkipped !== null) {
+			const cursorLabel = cursor ?? 'unknown'
+			return `Replay gap detected after cursor ${cursorLabel}. Skipped ${laggedSkipped} event${laggedSkipped === 1 ? '' : 's'}. Reconnect to recover missed updates.`
+		}
+		if (!cursor) {
+			return 'Waiting for first replay cursor'
+		}
+
+		const lastEventAt = status.value.lastEventAt ? formatRecoveryTimestamp(status.value.lastEventAt) : 'unknown'
+		if (status.value.state === 'disconnected') {
+			return `Offline recovery will resume from cursor ${cursor}. Last event ${lastEventAt}`
+		}
+		if (isRealtimeDegraded.value) {
+			return `Recovery cursor ${cursor}. Last event ${lastEventAt}`
+		}
+		return `Replay cursor ${cursor}. Last event ${lastEventAt}`
+	})
+
 	function setRealtimeStatus(update: RealtimeStatusUpdate): void {
 		status.value = {
 			transport: update.transport,
@@ -86,6 +124,39 @@ export const useRealtimeStatusStore = defineStore('realtimeStatus', () => {
 			attempt: update.attempt ?? null,
 			maxAttempts: update.maxAttempts ?? null,
 			error: update.error?.trim() || null,
+			lastEventId: status.value.lastEventId,
+			lastEventAt: status.value.lastEventAt,
+			lastLaggedSkipped:
+				update.state === 'connected' && update.transport !== 'long_poll'
+					? null
+					: status.value.lastLaggedSkipped,
+			lastLaggedAt:
+				update.state === 'connected' && update.transport !== 'long_poll'
+					? null
+					: status.value.lastLaggedAt,
+			updatedAt: new Date().toISOString()
+		}
+	}
+
+	function observeRealtimeEvent(eventId: string): void {
+		const cursor = eventId.trim()
+		if (!cursor) return
+
+		status.value = {
+			...status.value,
+			lastEventId: cursor,
+			lastEventAt: new Date().toISOString(),
+			updatedAt: new Date().toISOString()
+		}
+	}
+
+	function observeRealtimeLag(skipped: number): void {
+		if (!Number.isFinite(skipped) || skipped <= 0) return
+
+		status.value = {
+			...status.value,
+			lastLaggedSkipped: Math.floor(skipped),
+			lastLaggedAt: new Date().toISOString(),
 			updatedAt: new Date().toISOString()
 		}
 	}
@@ -94,13 +165,33 @@ export const useRealtimeStatusStore = defineStore('realtimeStatus', () => {
 		status.value = { ...initialStatus }
 	}
 
+	function setReconnectHandler(handler: (() => void) | null): void {
+		reconnectHandler = handler
+	}
+
+	function requestReconnect(): void {
+		reconnectHandler?.()
+	}
+
 	return {
 		status,
 		isRealtimeDegraded,
+		canTriggerReconnect,
 		realtimeStatusLabel,
 		realtimeStatusTone,
 		realtimeStatusDetail,
+		realtimeRecoveryDetail,
 		setRealtimeStatus,
-		resetRealtimeStatus
+		observeRealtimeEvent,
+		observeRealtimeLag,
+		resetRealtimeStatus,
+		setReconnectHandler,
+		requestReconnect
 	}
 })
+
+function formatRecoveryTimestamp(value: string): string {
+	const date = new Date(value)
+	if (Number.isNaN(date.getTime())) return value
+	return date.toISOString()
+}

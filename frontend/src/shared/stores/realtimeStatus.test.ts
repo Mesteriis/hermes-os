@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useRealtimeStatusStore } from './realtimeStatus'
 
@@ -41,5 +41,62 @@ describe('realtime status store', () => {
 			'Realtime reconnecting: SSE connection failed with HTTP 503'
 		)
 		expect(store.realtimeStatusTone).toBe('warning')
+	})
+
+	it('tracks replay cursor progress for offline recovery diagnostics', () => {
+		const store = useRealtimeStatusStore()
+
+		expect(store.realtimeRecoveryDetail).toBe('Waiting for first replay cursor')
+
+		store.observeRealtimeEvent('51')
+		expect(store.status.lastEventId).toBe('51')
+		expect(store.status.lastEventAt).toBeTruthy()
+		expect(store.realtimeRecoveryDetail).toContain('Replay cursor 51.')
+
+		store.setRealtimeStatus({
+			transport: 'sse',
+			state: 'disconnected',
+			error: 'stream closed'
+		})
+		expect(store.realtimeRecoveryDetail).toContain(
+			'Offline recovery will resume from cursor 51.'
+		)
+		expect(store.canTriggerReconnect).toBe(true)
+	})
+
+	it('surfaces replay-gap diagnostics when the transport reports skipped realtime events', () => {
+		const store = useRealtimeStatusStore()
+
+		store.observeRealtimeEvent('51')
+		store.observeRealtimeLag(7)
+
+		expect(store.isRealtimeDegraded).toBe(true)
+		expect(store.canTriggerReconnect).toBe(true)
+		expect(store.realtimeRecoveryDetail).toContain('Replay gap detected after cursor 51.')
+		expect(store.realtimeRecoveryDetail).toContain('Skipped 7 events.')
+
+		store.setRealtimeStatus({
+			transport: 'websocket',
+			state: 'connected'
+		})
+		expect(store.isRealtimeDegraded).toBe(false)
+		expect(store.realtimeRecoveryDetail).toContain('Replay cursor 51.')
+	})
+
+	it('exposes a manual reconnect control only for degraded or disconnected transports', () => {
+		const store = useRealtimeStatusStore()
+		const reconnect = vi.fn()
+
+		store.setReconnectHandler(reconnect)
+		expect(store.canTriggerReconnect).toBe(false)
+
+		store.requestReconnect()
+		expect(reconnect).toHaveBeenCalledTimes(1)
+
+		store.setRealtimeStatus({
+			transport: 'long_poll',
+			state: 'fallback'
+		})
+		expect(store.canTriggerReconnect).toBe(true)
 	})
 })

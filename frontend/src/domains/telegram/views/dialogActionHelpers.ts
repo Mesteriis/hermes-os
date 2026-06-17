@@ -1,10 +1,19 @@
-import type { TelegramChat, TelegramMediaItem, TelegramMessage, TelegramProviderKind } from '../types/telegram'
+import type {
+  TelegramCapabilitiesResponse,
+  TelegramChat,
+  TelegramMediaItem,
+  TelegramMessage,
+  TelegramProviderKind,
+} from '../types/telegram'
+import { telegramChatFolderIds } from '../folderMembership'
+import { telegramLatestReadableProviderMessageId } from '../stores/telegramReadProgress'
 
 type TelegramChatActionMutation = {
   mutateAsync: (args: {
     telegramChatId: string
     accountId: string
     providerChatId: string
+    lastReadInboxProviderMessageId?: string
   }) => Promise<unknown>
 }
 
@@ -18,6 +27,32 @@ type TelegramForwardMessageMutation = {
   }) => Promise<{ provider_chat_id: string; status: string }>
 }
 
+type TelegramMessageReadMutation = {
+  mutateAsync: (args: {
+    message_id: string
+    account_id: string
+    provider_chat_id: string
+  }) => Promise<{ status: string }>
+}
+
+type TelegramChatFolderMutation = {
+  mutateAsync: (args: {
+    telegramChatId: string
+    accountId: string
+    providerChatId: string
+    providerFolderId: number
+  }) => Promise<{ status: string }>
+}
+
+type TelegramChatFolderReassignMutation = {
+  mutateAsync: (args: {
+    telegramChatId: string
+    accountId: string
+    providerChatId: string
+    targetProviderFolderIds: number[]
+  }) => Promise<{ status: string }>
+}
+
 type TelegramChatToggleActionParams = {
   chat: TelegramChat
   isActive: boolean
@@ -28,6 +63,9 @@ type TelegramChatToggleActionParams = {
   setSubmitting: (value: boolean) => void
   setActionMessage: (value: string) => void
   setError: (value: string) => void
+  activateVariables?: {
+    lastReadInboxProviderMessageId?: string
+  }
 }
 
 type TelegramForwardMessageActionParams = {
@@ -41,6 +79,15 @@ type TelegramForwardMessageActionParams = {
   setSelectedChatId: (value: string) => void
 }
 
+type TelegramMessageReadActionParams = {
+  chat: TelegramChat
+  message: TelegramMessage
+  mutation: TelegramMessageReadMutation
+  setSubmitting: (value: boolean) => void
+  setActionMessage: (value: string) => void
+  setError: (value: string) => void
+}
+
 type TelegramSearchNavigationCallbacks = {
   setError: (value: string) => void
   selectChat: (chat: TelegramChat) => void
@@ -48,6 +95,24 @@ type TelegramSearchNavigationCallbacks = {
   clearFocusedMessage: () => void
   setActiveThreadTab: (tab: 'messages') => void
   setSearchQuery: (value: string) => void
+}
+
+type TelegramChatFolderActionParams = {
+  chat: TelegramChat
+  providerFolderId: number
+  mutation: TelegramChatFolderMutation
+  setSubmitting: (value: boolean) => void
+  setActionMessage: (value: string) => void
+  setError: (value: string) => void
+}
+
+type TelegramChatFolderReassignActionParams = {
+  chat: TelegramChat
+  targetProviderFolderIds: number[]
+  mutation: TelegramChatFolderReassignMutation
+  setSubmitting: (value: boolean) => void
+  setActionMessage: (value: string) => void
+  setError: (value: string) => void
 }
 
 export function isTelegramChatPinned(chat: TelegramChat): boolean {
@@ -77,6 +142,7 @@ export async function runTelegramChatToggleAction({
   setSubmitting,
   setActionMessage,
   setError,
+  activateVariables,
 }: TelegramChatToggleActionParams): Promise<void> {
   setSubmitting(true)
   setActionMessage('')
@@ -86,6 +152,7 @@ export async function runTelegramChatToggleAction({
       telegramChatId: chat.telegram_chat_id,
       accountId: chat.account_id,
       providerChatId: chat.provider_chat_id,
+      ...(!isActive ? activateVariables : undefined),
     })
     setActionMessage(isActive ? deactivateMessage : activateMessage)
   } catch (error) {
@@ -97,12 +164,14 @@ export async function runTelegramChatToggleAction({
 
 export async function runTelegramChatReadToggleAction(
   chat: TelegramChat,
+  messages: TelegramMessage[],
   markReadMutation: TelegramChatActionMutation,
   markUnreadMutation: TelegramChatActionMutation,
   setSubmitting: (value: boolean) => void,
   setActionMessage: (value: string) => void,
   setError: (value: string) => void,
 ): Promise<void> {
+  const lastReadInboxProviderMessageId = telegramLatestReadableProviderMessageId(chat, messages)
   await runTelegramChatToggleAction({
     chat,
     isActive: telegramChatUnreadCountValue(chat) === 0,
@@ -113,6 +182,9 @@ export async function runTelegramChatReadToggleAction(
     setSubmitting,
     setActionMessage,
     setError,
+    activateVariables: lastReadInboxProviderMessageId
+      ? { lastReadInboxProviderMessageId }
+      : undefined,
   })
 }
 
@@ -149,6 +221,123 @@ export async function runTelegramForwardMessageAction({
   } finally {
     setSubmitting(false)
   }
+}
+
+export async function runTelegramMessageReadAction({
+  chat,
+  message,
+  mutation,
+  setSubmitting,
+  setActionMessage,
+  setError,
+}: TelegramMessageReadActionParams): Promise<void> {
+  setSubmitting(true)
+  setActionMessage('')
+  setError('')
+  try {
+    const result = await mutation.mutateAsync({
+      message_id: message.message_id,
+      account_id: message.account_id,
+      provider_chat_id: message.provider_chat_id ?? chat.provider_chat_id,
+    })
+    setActionMessage(`Message mark-read ${result.status}`)
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error))
+  } finally {
+    setSubmitting(false)
+  }
+}
+
+export function telegramCapabilityEnabled(
+  capabilities: TelegramCapabilitiesResponse | null | undefined,
+  operation: string
+): boolean {
+  const status = capabilities?.capabilities.find((item) => item.operation === operation)?.status
+  return status === 'available' || status === 'degraded'
+}
+
+export function telegramCapabilityReason(
+  capabilities: TelegramCapabilitiesResponse | null | undefined,
+  operation: string,
+  fallback: string
+): string {
+  return capabilities?.capabilities.find((item) => item.operation === operation)?.reason ?? fallback
+}
+
+export async function runTelegramAddChatToFolderAction({
+  chat,
+  providerFolderId,
+  mutation,
+  setSubmitting,
+  setActionMessage,
+  setError,
+}: TelegramChatFolderActionParams): Promise<void> {
+  setSubmitting(true)
+  setActionMessage('')
+  setError('')
+  try {
+    const result = await mutation.mutateAsync({
+      telegramChatId: chat.telegram_chat_id,
+      accountId: chat.account_id,
+      providerChatId: chat.provider_chat_id,
+      providerFolderId,
+    })
+    setActionMessage(`Telegram folder command ${result.status}`)
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error))
+  } finally {
+    setSubmitting(false)
+  }
+}
+
+export async function runTelegramReassignChatFoldersAction({
+  chat,
+  targetProviderFolderIds,
+  mutation,
+  setSubmitting,
+  setActionMessage,
+  setError,
+}: TelegramChatFolderReassignActionParams): Promise<void> {
+  setSubmitting(true)
+  setActionMessage('')
+  setError('')
+  try {
+    const result = await mutation.mutateAsync({
+      telegramChatId: chat.telegram_chat_id,
+      accountId: chat.account_id,
+      providerChatId: chat.provider_chat_id,
+      targetProviderFolderIds,
+    })
+    setActionMessage(`Telegram folder reassignment ${result.status}`)
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error))
+  } finally {
+    setSubmitting(false)
+  }
+}
+
+export function telegramChatHasFolder(chat: TelegramChat, providerFolderId: number): boolean {
+  const folderIds = telegramChatFolderIds(chat)
+  if (folderIds.includes(providerFolderId)) {
+    return true
+  }
+  return chat.metadata.provider_folder_id === providerFolderId
+}
+
+export function telegramChatNeedsFolderReassign(chat: TelegramChat, providerFolderId: number): boolean {
+  const folderIds = telegramChatFolderIds(chat)
+  return folderIds.length !== 1 || folderIds[0] !== providerFolderId
+}
+
+export function hasProjectedTelegramMessagesForChat(
+  messages: TelegramMessage[],
+  chat: TelegramChat
+): boolean {
+  return messages.some(
+    (message) =>
+      message.account_id === chat.account_id &&
+      message.provider_chat_id === chat.provider_chat_id
+  )
 }
 
 export function findTelegramChatForMessage(

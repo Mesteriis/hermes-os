@@ -4,7 +4,11 @@ import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { TelegramProviderWriteCommand } from '../types/telegram'
 import { useTelegramCommandRetryMutation, useTelegramCommandsQuery } from '../queries/useTelegramLifecycleQuery'
-import { telegramCommandAuditState, telegramCommandRetrySummary } from '../stores/telegramCommandAudit'
+import {
+  telegramCommandAuditState,
+  telegramCommandRetrySummary,
+  telegramCommandSubject
+} from '../stores/telegramCommandAudit'
 
 const { t } = useI18n()
 
@@ -15,13 +19,26 @@ const props = defineProps<{
 
 const searchQuery = ref('')
 const currentChatOnly = ref(true)
-const commandsQuery = useTelegramCommandsQuery(computed(() => props.selectedAccountId), 20)
+const commandsQuery = useTelegramCommandsQuery(
+  computed(() => props.selectedAccountId),
+  20,
+  true,
+  {
+    providerChatId: computed(() =>
+      currentChatOnly.value ? props.selectedProviderChatId : null
+    ),
+  }
+)
 const retryMutation = useTelegramCommandRetryMutation()
 const commands = computed(() => commandsQuery.data.value ?? [])
 const filteredCommands = computed(() => {
   const query = searchQuery.value.trim().toLowerCase()
   return commands.value.filter((command) => {
-    if (currentChatOnly.value && props.selectedProviderChatId && command.provider_chat_id !== props.selectedProviderChatId) {
+    if (
+      currentChatOnly.value &&
+      props.selectedProviderChatId &&
+      command.provider_chat_id !== props.selectedProviderChatId
+    ) {
       return false
     }
     if (!query) return true
@@ -53,10 +70,6 @@ function formatDate(value: string | null | undefined): string {
 
 function commandTitle(command: TelegramProviderWriteCommand): string {
   return [command.command_kind, command.status].join(' · ')
-}
-
-function commandSubject(command: TelegramProviderWriteCommand): string {
-  return command.provider_message_id ?? command.provider_chat_id
 }
 
 function commandStateClass(command: TelegramProviderWriteCommand): string {
@@ -113,7 +126,7 @@ function canRetry(command: TelegramProviderWriteCommand): boolean {
           <strong>{{ commandTitle(command) }}</strong>
           <small>{{ formatDate(command.happened_at) }}</small>
         </div>
-        <p>{{ commandSubject(command) }}</p>
+        <p>{{ telegramCommandSubject(command) }}</p>
         <div class="telegram-command-audit__badges">
           <span class="telegram-command-audit__state" :class="commandStateClass(command)">
             {{ t(telegramCommandAuditState(command).label) }}

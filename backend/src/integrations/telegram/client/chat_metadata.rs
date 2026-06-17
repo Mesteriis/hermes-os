@@ -76,6 +76,9 @@ pub(super) fn tdlib_chat_projection_metadata(
             owner_provider_user_id,
         );
     }
+    if let Some(basic_group_id) = tdlib_basic_group_id(chat_type) {
+        project_basic_group_metadata(&mut metadata, tdlib_chat_type, basic_group_id);
+    }
     if tdlib_chat_type != "chatTypeSupergroup" {
         return metadata;
     }
@@ -158,11 +161,32 @@ fn project_supergroup_metadata(
     }
 }
 
+fn project_basic_group_metadata(metadata: &mut Value, tdlib_chat_type: &str, basic_group_id: i64) {
+    let Some(metadata_map) = metadata.as_object_mut() else {
+        return;
+    };
+    metadata_map.insert(
+        "tdlib_chat_type".to_owned(),
+        Value::String(tdlib_chat_type.to_owned()),
+    );
+    metadata_map.insert(
+        "tdlib_basic_group_id".to_owned(),
+        Value::Number(serde_json::Number::from(basic_group_id)),
+    );
+    metadata_map.insert("is_basic_group".to_owned(), Value::Bool(true));
+}
+
 fn tdlib_private_user_id(chat_type: &serde_json::Map<String, Value>) -> Option<String> {
     chat_type
         .get("user_id")
         .and_then(Value::as_i64)
         .map(|value| value.to_string())
+}
+
+fn tdlib_basic_group_id(chat_type: &serde_json::Map<String, Value>) -> Option<i64> {
+    (chat_type.get("@type").and_then(Value::as_str) == Some("chatTypeBasicGroup"))
+        .then(|| chat_type.get("basic_group_id").and_then(Value::as_i64))
+        .flatten()
 }
 
 fn normalized_telegram_user_id(external_account_id: &str) -> Option<String> {
@@ -462,5 +486,31 @@ mod tests {
         assert_eq!(metadata["tdlib_private_user_id"], "888");
         assert_eq!(metadata.get("is_saved_messages"), None);
         assert_eq!(metadata.get("saved_messages_source"), None);
+    }
+
+    #[test]
+    fn tdlib_chat_projection_metadata_preserves_basic_group_identity() {
+        let snapshot = TelegramTdlibChatSnapshot {
+            provider_chat_id: "999".to_owned(),
+            chat_kind: TelegramChatKind::Group,
+            title: "Basic Group".to_owned(),
+            username: None,
+            last_message_at: None,
+            raw: json!({
+                "@type": "chat",
+                "id": 999,
+                "type": {
+                    "@type": "chatTypeBasicGroup",
+                    "basic_group_id": 321
+                },
+                "title": "Basic Group"
+            }),
+        };
+
+        let metadata = tdlib_chat_projection_metadata(&snapshot, "raw-telegram-chat-999", "42");
+
+        assert_eq!(metadata["tdlib_chat_type"], "chatTypeBasicGroup");
+        assert_eq!(metadata["tdlib_basic_group_id"], 321);
+        assert_eq!(metadata["is_basic_group"], true);
     }
 }

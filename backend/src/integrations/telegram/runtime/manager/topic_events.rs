@@ -2,12 +2,18 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 
+use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 use crate::integrations::telegram::client::models::topics::{NewTelegramTopic, TelegramTopic};
 use crate::integrations::telegram::client::{TelegramError, TelegramStore};
-use crate::integrations::telegram::tdjson::TelegramTdlibTopicUpdateSnapshot;
+use crate::integrations::telegram::tdjson::{
+    TelegramTdlibTopicSnapshot, TelegramTdlibTopicUpdateSnapshot,
+};
 use crate::platform::events::bus::telegram_event_types;
 use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
 
+use super::realtime_events::{
+    TelegramRuntimeEventBridgeContext, publish_command_reconciled_events,
+};
 use super::topics::telegram_topic_id;
 
 pub(super) async fn publish_topic_event(
@@ -20,8 +26,16 @@ pub(super) async fn publish_topic_event(
         return;
     };
 
+    let observed_at = Utc::now();
     let store = TelegramStore::new(pool.clone());
-    let topic = match upsert_topic_update(&store, account_id, snapshot).await {
+    let topic = match upsert_topic_snapshot(
+        &store,
+        account_id,
+        &snapshot.provider_chat_id,
+        &snapshot.topic,
+    )
+    .await
+    {
         Ok(Some(topic)) => topic,
         Ok(None) => return,
         Err(error) => {
@@ -30,7 +44,29 @@ pub(super) async fn publish_topic_event(
         }
     };
 
-    let Ok(event) = topic_updated_event(account_id, &topic, Utc::now()) else {
+    let reconciled = match reconcile_topic_commands_from_provider_state(
+        pool,
+        account_id,
+        &snapshot.provider_chat_id,
+        snapshot.topic.provider_topic_id,
+        snapshot.topic.is_closed,
+        observed_at,
+        "tdlib.updateForumTopicInfo",
+    )
+    .await
+    {
+        Ok(commands) => commands,
+        Err(error) => {
+            tracing::warn!(error = %error, topic_id = %topic.topic_id, "Telegram runtime event bridge: failed to reconcile topic commands");
+            Vec::new()
+        }
+    };
+    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    for command in reconciled {
+        publish_command_reconciled_events(Some(&context), &command, "updateForumTopicInfo").await;
+    }
+
+    let Ok(event) = topic_updated_event(account_id, &topic, observed_at) else {
         return;
     };
 
@@ -42,33 +78,121 @@ pub(super) async fn publish_topic_event(
     let _ = event_bus.broadcast(event);
 }
 
-async fn upsert_topic_update(
+pub(super) async fn upsert_topic_snapshot(
     store: &TelegramStore,
     account_id: &str,
-    snapshot: &TelegramTdlibTopicUpdateSnapshot,
+    provider_chat_id: &str,
+    snapshot: &TelegramTdlibTopicSnapshot,
 ) -> Result<Option<TelegramTopic>, TelegramError> {
-    let Some(chat) = store
-        .telegram_chat(account_id, &snapshot.provider_chat_id)
-        .await?
-    else {
+    let Some(chat) = store.telegram_chat(account_id, provider_chat_id).await? else {
         return Ok(None);
     };
 
     let topic = NewTelegramTopic {
-        topic_id: telegram_topic_id(&chat.telegram_chat_id, snapshot.topic.provider_topic_id),
-        telegram_chat_id: chat.telegram_chat_id,
+        topic_id: telegram_topic_id(&chat.telegram_chat_id, snapshot.provider_topic_id),
+        telegram_chat_id: chat.telegram_chat_id.clone(),
         account_id: chat.account_id,
-        provider_topic_id: snapshot.topic.provider_topic_id,
-        provider_chat_id: snapshot.provider_chat_id.clone(),
-        title: snapshot.topic.title.clone(),
-        icon_emoji: snapshot.topic.icon_emoji.clone(),
-        is_pinned: snapshot.topic.is_pinned,
-        is_closed: snapshot.topic.is_closed,
+        provider_topic_id: snapshot.provider_topic_id,
+        provider_chat_id: provider_chat_id.to_owned(),
+        title: snapshot.title.clone(),
+        icon_emoji: snapshot.icon_emoji.clone(),
+        is_pinned: snapshot.is_pinned,
+        is_closed: snapshot.is_closed,
     };
 
     crate::integrations::telegram::client::topics::upsert_topic(store.pool(), &topic)
         .await
         .map(Some)
+}
+
+async fn reconcile_topic_commands_from_provider_state(
+    pool: &PgPool,
+    account_id: &str,
+    provider_chat_id: &str,
+    provider_topic_id: i64,
+    is_closed: bool,
+    observed_at: DateTime<Utc>,
+    observed_via: &str,
+) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
+    let command_kind = if is_closed {
+        "topic_close"
+    } else {
+        "topic_reopen"
+    };
+    let rows = sqlx::query(
+        r#"
+        SELECT *
+        FROM telegram_provider_write_commands
+        WHERE account_id = $1
+          AND provider_chat_id = $2
+          AND command_kind = $3
+          AND status IN ('queued', 'retrying', 'executing')
+          AND confirmation_decision IN ('confirmed', 'not_required')
+          AND capability_state IN ('available', 'degraded')
+          AND payload->>'provider_topic_id' = $4
+        ORDER BY created_at ASC, command_id ASC
+        "#,
+    )
+    .bind(account_id)
+    .bind(provider_chat_id)
+    .bind(command_kind)
+    .bind(provider_topic_id.to_string())
+    .fetch_all(pool)
+    .await?;
+
+    let mut reconciled = Vec::new();
+    for row in rows {
+        let command =
+            crate::integrations::telegram::client::rows::row_to_telegram_provider_write_command(
+                row,
+            )?;
+        let provider_state = json!({
+            "provider_chat_id": provider_chat_id,
+            "provider_topic_id": provider_topic_id,
+            "is_closed": is_closed,
+            "observed_via": observed_via,
+        });
+        let result_payload = json!({
+            "source": observed_via,
+            "provider_chat_id": provider_chat_id,
+            "provider_topic_id": provider_topic_id,
+            "is_closed": is_closed,
+            "provider_observed_at": observed_at,
+        });
+        let row = sqlx::query(
+            r#"
+            UPDATE telegram_provider_write_commands
+            SET status = 'completed',
+                result_payload = $3,
+                last_error = NULL,
+                provider_observed_at = $2,
+                provider_state = $4,
+                reconciliation_status = 'observed',
+                reconciled_at = $2,
+                completed_at = $2,
+                locked_at = NULL,
+                locked_by = NULL,
+                next_attempt_at = NULL,
+                dead_lettered_at = NULL,
+                updated_at = $2
+            WHERE command_id = $1
+            RETURNING *
+            "#,
+        )
+        .bind(&command.command_id)
+        .bind(observed_at)
+        .bind(&result_payload)
+        .bind(&provider_state)
+        .fetch_one(pool)
+        .await?;
+        reconciled.push(
+            crate::integrations::telegram::client::rows::row_to_telegram_provider_write_command(
+                row,
+            )?,
+        );
+    }
+
+    Ok(reconciled)
 }
 
 fn topic_updated_event(
@@ -118,8 +242,16 @@ fn topic_updated_event(
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
+    use testkit::context::TestContext;
 
     use super::*;
+    use crate::domains::mail::core::{
+        CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
+    };
+    use crate::integrations::telegram::client::lifecycle::insert_command;
+    use crate::integrations::telegram::client::models::{
+        NewTelegramChat, TelegramChatKind, TelegramSyncState,
+    };
 
     #[test]
     fn topic_updated_event_contains_sanitized_projection_payload() {
@@ -150,5 +282,123 @@ mod tests {
         assert_eq!(event.subject["id"], "telegram_topic:v1:test");
         assert_eq!(event.payload["topic"]["title"], "Release notes");
         assert_eq!(event.payload["topic"]["is_pinned"], true);
+    }
+
+    #[tokio::test]
+    async fn publish_topic_event_reconciles_topic_close_and_appends_runtime_events() {
+        let ctx = TestContext::new().await;
+        let pool = ctx.pool().clone();
+        let account_id = "acct-1";
+        let provider_chat_id = "chat-1";
+        let event_bus = EventBus::new();
+
+        CommunicationIngestionStore::new(pool.clone())
+            .upsert_provider_account(&NewProviderAccount::new(
+                account_id,
+                EmailProviderKind::TelegramUser,
+                "Topic Runtime Account",
+                "telegram-ext-acct-1",
+            ))
+            .await
+            .expect("seed provider account");
+
+        let chat = TelegramStore::new(pool.clone())
+            .upsert_chat(&NewTelegramChat {
+                account_id: account_id.to_owned(),
+                provider_chat_id: provider_chat_id.to_owned(),
+                chat_kind: TelegramChatKind::Group,
+                title: "Forum Chat".to_owned(),
+                username: None,
+                sync_state: TelegramSyncState::Synced,
+                last_message_at: None,
+                metadata: json!({}),
+            })
+            .await
+            .expect("seed chat");
+
+        let command_id = "cmd-topic-close-1";
+        insert_command(
+            &pool,
+            command_id,
+            account_id,
+            "topic_close",
+            "topic_close:42:seed",
+            provider_chat_id,
+            None,
+            "available",
+            "provider_write",
+            "confirmed",
+            "hermes-frontend",
+            json!({
+                "provider_topic_id": 42,
+                "is_closed": true
+            }),
+            json!({
+                "telegram_chat_id": chat.telegram_chat_id,
+                "provider_chat_id": provider_chat_id,
+                "provider_topic_id": 42
+            }),
+            json!({"source": "test"}),
+        )
+        .await
+        .expect("seed topic close command");
+
+        let snapshot = TelegramTdlibTopicUpdateSnapshot {
+            provider_chat_id: provider_chat_id.to_owned(),
+            topic: TelegramTdlibTopicSnapshot {
+                provider_topic_id: 42,
+                title: "Release Notes".to_owned(),
+                icon_emoji: None,
+                is_pinned: false,
+                is_closed: true,
+                unread_count: 0,
+                last_message_at: None,
+            },
+        };
+
+        publish_topic_event(&Some(pool.clone()), &event_bus, account_id, &snapshot).await;
+
+        let rows: Vec<(String, serde_json::Value, serde_json::Value)> = sqlx::query_as(
+            r#"
+            SELECT event_type, subject, payload
+            FROM event_log
+            WHERE event_type IN (
+                'telegram.command.status_changed',
+                'telegram.command.reconciled',
+                'telegram.topic.updated'
+            )
+            ORDER BY position ASC
+            "#,
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("topic runtime events");
+
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].0, telegram_event_types::COMMAND_STATUS_CHANGED);
+        assert_eq!(rows[0].1["id"], json!(command_id));
+        assert_eq!(rows[0].2["status"], json!("completed"));
+        assert_eq!(rows[1].0, telegram_event_types::COMMAND_RECONCILED);
+        assert_eq!(rows[1].1["id"], json!(command_id));
+        assert_eq!(rows[1].2["reconciliation_status"], json!("observed"));
+        assert_eq!(rows[2].0, telegram_event_types::TOPIC_UPDATED);
+        assert_eq!(rows[2].1["provider_topic_id"], json!(42));
+        assert_eq!(rows[2].2["topic"]["is_closed"], json!(true));
+
+        let command_status: Option<(String, String)> = sqlx::query_as(
+            r#"
+            SELECT status, reconciliation_status
+            FROM telegram_provider_write_commands
+            WHERE command_id = $1
+            "#,
+        )
+        .bind(command_id)
+        .fetch_optional(&pool)
+        .await
+        .expect("command status");
+        assert_eq!(
+            command_status,
+            Some(("completed".to_owned(), "observed".to_owned()))
+        );
     }
 }
