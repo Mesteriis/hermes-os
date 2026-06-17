@@ -8,6 +8,7 @@ import type {
 } from '../sse'
 import type { FrontendConfig } from '../config/env'
 import { applyMailRealtimePatch } from '../../domains/communications/queries/realtimeMailPatches'
+import { applyTelegramParticipantRealtimePatch } from '../../domains/telegram/queries/realtimeTelegramParticipantPatches'
 import { applyTelegramRealtimePatch } from '../../domains/telegram/queries/realtimeTelegramPatches'
 
 export type RealtimeClient = {
@@ -176,6 +177,7 @@ export function handleRealtimeEvent(
 
 	applyMailRealtimePatch(event.data, queryClient)
 	applyTelegramRealtimePatch(event.data, queryClient)
+	applyTelegramParticipantRealtimePatch(event.data, queryClient)
 
 	for (const queryKey of queryKeysForRealtimeEvent(event)) {
 		void queryClient.invalidateQueries({ queryKey })
@@ -230,6 +232,15 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 	}
 	if (eventType.startsWith('telegram.message.')) {
 		return [['telegram', 'messages'], ['telegram', 'chats']]
+	}
+	if (eventType.startsWith('telegram.typing.')) {
+		return [['telegram', 'chats'], ['telegram', 'runtime']]
+	}
+	if (eventType.startsWith('telegram.topic.')) {
+		return [['telegram', 'topics'], ['telegram', 'topic-search'], ['telegram', 'topic-messages']]
+	}
+	if (eventType.startsWith('telegram.participant.')) {
+		return [['telegram', 'chat-members'], ['telegram', 'chats']]
 	}
 	if (eventType.startsWith('telegram.media.')) {
 		return [['telegram', 'messages'], ['telegram', 'search', 'media']]

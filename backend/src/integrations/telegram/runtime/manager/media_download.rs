@@ -29,6 +29,7 @@ impl TelegramRuntimeManager {
                         context.secret_resolver,
                         context.config,
                         &account,
+                        context.event_bridge.clone(),
                     )
                     .await?;
                 let file = request_actor_download_file(

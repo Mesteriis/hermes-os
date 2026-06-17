@@ -1,6 +1,7 @@
 mod attachments;
 mod drafts;
 mod folders;
+mod imports;
 mod outbox;
 mod personas;
 mod read_receipts;
@@ -11,6 +12,7 @@ mod threads;
 pub(crate) use attachments::*;
 pub(crate) use drafts::*;
 pub(crate) use folders::*;
+pub(crate) use imports::*;
 pub(crate) use outbox::*;
 pub(crate) use personas::*;
 pub(crate) use read_receipts::*;

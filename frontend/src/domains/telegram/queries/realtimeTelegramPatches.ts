@@ -9,8 +9,11 @@ import type {
   TelegramReactionListResponse,
   TelegramRuntimeStatus
 } from '../types/telegram'
+import type { TelegramTopicListResponse } from '../types/telegramTopics'
 import { isRecord, storedEventEnvelope, stringValue } from '../../communications/queries/realtimePatchShared'
+import { patchTelegramTopicList } from './realtimeTelegramTopicPatches'
 import {
+  TELEGRAM_TYPING_TTL_MS,
   type TelegramEventPayload,
   type TelegramStoredEventEnvelope,
   chatQueryScope,
@@ -47,6 +50,7 @@ export function applyTelegramRealtimePatch(
   const eventType = stringValue(envelope?.event?.event_type)
   if (!eventType || !eventType.startsWith('telegram.')) return false
 
+  const occurredAt = stringValue(envelope?.event?.occurred_at)
   const subjectId = eventSubjectId(envelope?.event?.subject)
   const payload = isRecord(envelope?.event?.payload)
     ? (envelope?.event?.payload as TelegramEventPayload)
@@ -83,7 +87,7 @@ export function applyTelegramRealtimePatch(
     queryKey: ['telegram', 'chats']
   })) {
     if (isTelegramPinnedMessagesQueryKey(queryKey)) continue
-    const updated = patchChatList(queryKey, data, eventType, payload, chatSnapshot)
+    const updated = patchChatList(queryKey, data, eventType, payload, chatSnapshot, occurredAt)
     if (updated !== data) {
       setQueryData(queryKey, updated)
       patched = true
@@ -93,7 +97,7 @@ export function applyTelegramRealtimePatch(
   for (const [queryKey, data] of getQueriesData<TelegramChat | null>({
     queryKey: ['telegram', 'chat-detail']
   })) {
-    const updated = patchChatDetail(queryKey, data, eventType, payload, chatSnapshot)
+    const updated = patchChatDetail(queryKey, data, eventType, payload, chatSnapshot, occurredAt)
     if (updated !== data) {
       setQueryData(queryKey, updated)
       patched = true
@@ -134,6 +138,16 @@ export function applyTelegramRealtimePatch(
     queryKey: ['telegram', 'message-reactions']
   })) {
     const updated = patchReactionDetail(queryKey, data, eventType, subjectId, payload)
+    if (updated !== data) {
+      setQueryData(queryKey, updated)
+      patched = true
+    }
+  }
+
+  for (const [queryKey, data] of getQueriesData<TelegramTopicListResponse>({
+    queryKey: ['telegram']
+  })) {
+    const updated = patchTelegramTopicList(queryKey, data, eventType, payload)
     if (updated !== data) {
       setQueryData(queryKey, updated)
       patched = true
@@ -318,9 +332,19 @@ function patchChatList(
   chats: TelegramChat[] | undefined,
   eventType: string,
   payload: TelegramEventPayload | undefined,
-  snapshot: TelegramChat | null
+  snapshot: TelegramChat | null,
+  occurredAt: string | null
 ): TelegramChat[] | undefined {
   if (!chats || !payload) return chats
+
+  if (eventType === 'telegram.typing.changed') {
+    const [accountId] = chatQueryScope(queryKey)
+    const nextChats = chats.map((chat) => {
+      if (accountId && chat.account_id !== accountId) return chat
+      return matchesTypingChat(chat, payload) ? patchTypingChat(chat, payload, occurredAt) : chat
+    })
+    return nextChats.some((chat, i) => chat !== chats[i]) ? nextChats : chats
+  }
 
   // Chat flag events: surgical metadata toggle, no snapshot required
   if (
@@ -375,10 +399,15 @@ function patchChatDetail(
   chat: TelegramChat | null | undefined,
   eventType: string,
   payload: TelegramEventPayload | undefined,
-  snapshot: TelegramChat | null
+  snapshot: TelegramChat | null,
+  occurredAt: string | null
 ): TelegramChat | null | undefined {
   if (!chat || !payload) return chat
   if (queryKey[0] !== 'telegram' || queryKey[1] !== 'chat-detail') return chat
+
+  if (eventType === 'telegram.typing.changed') {
+    return matchesTypingChat(chat, payload) ? patchTypingChat(chat, payload, occurredAt) : chat
+  }
 
   if (
     eventType === 'telegram.chat.pinned' ||
@@ -407,6 +436,38 @@ function patchChatDetail(
     || eventType === 'telegram.message.visibility_restored'
   if (!supportsRealtimeChatPatch || queryKey[2] !== snapshot.telegram_chat_id) return chat
   return snapshot
+}
+
+function matchesTypingChat(chat: TelegramChat, payload: TelegramEventPayload): boolean {
+  const telegramChatId = stringValue(payload.telegram_chat_id)
+  const providerChatId = stringValue(payload.provider_chat_id)
+  if (telegramChatId) return chat.telegram_chat_id === telegramChatId
+  if (providerChatId) return chat.provider_chat_id === providerChatId
+  return false
+}
+
+function patchTypingChat(chat: TelegramChat, payload: TelegramEventPayload, occurredAt: string | null): TelegramChat {
+  const senderId = stringValue(payload.sender_id)
+  const action = stringValue(payload.action)
+  const providerThreadId = stringValue(payload.provider_thread_id)
+  const isActive = payload.is_active === true
+  const startedAtMs = occurredAt ? Date.parse(occurredAt) : NaN
+  const expiresAt = new Date((Number.isFinite(startedAtMs) ? startedAtMs : Date.now()) + TELEGRAM_TYPING_TTL_MS).toISOString()
+  return {
+    ...chat,
+    metadata: {
+      ...chat.metadata,
+      active_typing: isActive
+        ? {
+            sender_id: senderId,
+            action,
+            provider_thread_id: providerThreadId,
+            is_active: true,
+            expires_at: expiresAt,
+          }
+        : null,
+    },
+  }
 }
 
 function isTelegramPinnedMessagesQueryKey(queryKey: readonly unknown[]): boolean {
@@ -553,7 +614,11 @@ function patchCommandList(
   eventType: string,
   payload: TelegramEventPayload | undefined
 ): TelegramProviderWriteCommand[] | undefined {
-  if (!commands || eventType !== 'telegram.command.status_changed' || !payload) return commands
+  if (
+    !commands ||
+    (eventType !== 'telegram.command.status_changed' && eventType !== 'telegram.command.reconciled') ||
+    !payload
+  ) return commands
   if (queryKey[0] !== 'telegram' || queryKey[1] !== 'commands') return commands
 
   const queryAccountId = typeof queryKey[2] === 'string' && queryKey[2] !== 'none' ? queryKey[2] : null
@@ -567,7 +632,17 @@ function patchCommandList(
 
   return commands.map((cmd, i) =>
     i === matchIndex
-      ? { ...cmd, status: newStatus as TelegramProviderWriteCommand['status'], updated_at: new Date().toISOString() }
+      ? {
+          ...cmd,
+          status: newStatus as TelegramProviderWriteCommand['status'],
+          next_attempt_at: stringValue(payload.next_attempt_at) ?? cmd.next_attempt_at,
+          last_attempt_at: stringValue(payload.last_attempt_at) ?? cmd.last_attempt_at,
+          provider_observed_at: stringValue(payload.provider_observed_at) ?? cmd.provider_observed_at,
+          reconciliation_status: stringValue(payload.reconciliation_status) ?? cmd.reconciliation_status,
+          reconciled_at: stringValue(payload.reconciled_at) ?? cmd.reconciled_at,
+          dead_lettered_at: stringValue(payload.dead_lettered_at) ?? cmd.dead_lettered_at,
+          updated_at: new Date().toISOString(),
+        }
       : cmd
   )
 }

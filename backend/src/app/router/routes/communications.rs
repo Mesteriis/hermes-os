@@ -147,6 +147,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_v1_attachment_search),
         )
         .route(
+            "/api/v1/communications/attachments/import",
+            post(post_v1_attachment_import),
+        )
+        .route(
             "/api/v1/communications/attachments/{attachment_id}/translate",
             post(post_v1_translate_attachment),
         )

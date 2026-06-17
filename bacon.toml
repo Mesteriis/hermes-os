@@ -1,0 +1,5 @@
+[jobs.backend-dev]
+command = ["cargo", "run", "--manifest-path", "backend/Cargo.toml"]
+watch = ["backend/src", "backend/migrations", "backend/Cargo.toml", "backend/Cargo.lock"]
+allow_warnings = true
+show_command_error_code = true

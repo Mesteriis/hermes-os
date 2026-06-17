@@ -147,6 +147,26 @@ pub struct TelegramReplyRequest {
     pub text: String,
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct TelegramForwardRequest {
+    pub command_id: String,
+    pub account_id: String,
+    pub provider_chat_id: String,
+    pub from_provider_chat_id: String,
+    pub from_provider_message_id: String,
+}
+
+impl TelegramForwardRequest {
+    pub(crate) fn validate(&self) -> Result<(), TelegramError> {
+        validate_non_empty("command_id", &self.command_id)?;
+        validate_non_empty("account_id", &self.account_id)?;
+        validate_non_empty("provider_chat_id", &self.provider_chat_id)?;
+        validate_non_empty("from_provider_chat_id", &self.from_provider_chat_id)?;
+        validate_non_empty("from_provider_message_id", &self.from_provider_message_id)?;
+        Ok(())
+    }
+}
+
 impl TelegramReplyRequest {
     pub(crate) fn validate(&self) -> Result<(), TelegramError> {
         validate_non_empty("command_id", &self.command_id)?;
@@ -369,6 +389,15 @@ pub struct TelegramProviderWriteCommand {
     pub audit_metadata: serde_json::Value,
     pub actor_id: String,
     pub happened_at: DateTime<Utc>,
+    pub next_attempt_at: Option<DateTime<Utc>>,
+    pub last_attempt_at: Option<DateTime<Utc>>,
+    pub locked_at: Option<DateTime<Utc>>,
+    pub locked_by: Option<String>,
+    pub provider_observed_at: Option<DateTime<Utc>>,
+    pub provider_state: serde_json::Value,
+    pub reconciliation_status: String,
+    pub reconciled_at: Option<DateTime<Utc>>,
+    pub dead_lettered_at: Option<DateTime<Utc>>,
     pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

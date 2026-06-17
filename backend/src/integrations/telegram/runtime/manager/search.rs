@@ -1,12 +1,9 @@
-use crate::domains::mail::core::CommunicationIngestionStore;
-use crate::integrations::telegram::client::{TelegramError, TelegramStore};
-use crate::platform::config::AppConfig;
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::integrations::telegram::client::TelegramError;
 
 use super::super::commands::{request_actor_search_chat_messages, request_actor_search_messages};
 use super::super::status::account_runtime_kind;
-use super::TelegramRuntimeManager;
 use super::account::load_active_account;
+use super::{TelegramRuntimeManager, TelegramRuntimeOperationContext};
 
 pub struct TelegramProviderSearchRequest {
     pub account_id: String,
@@ -20,20 +17,19 @@ impl TelegramRuntimeManager {
     ///
     /// Returns ingested message IDs. Falls back to Ok(vec![]) for fixture mode or when no
     /// active actor is available.
-    pub async fn search_provider_messages(
+    pub(crate) async fn search_provider_messages<S>(
         &self,
-        communication_store: &CommunicationIngestionStore,
-        telegram_store: &TelegramStore,
-        secret_store: &SecretReferenceStore,
-        secret_resolver: &(impl SecretResolver + Sync + ?Sized),
-        config: &AppConfig,
+        context: &TelegramRuntimeOperationContext<'_, S>,
         request: &TelegramProviderSearchRequest,
-    ) -> Result<Vec<String>, TelegramError> {
+    ) -> Result<Vec<String>, TelegramError>
+    where
+        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+    {
         if request.query.trim().is_empty() {
             return Ok(vec![]);
         }
 
-        let account = load_active_account(communication_store, &request.account_id).await?;
+        let account = load_active_account(context.communication_store, &request.account_id).await?;
         let runtime_kind = account_runtime_kind(&account);
 
         if runtime_kind != "tdlib_qr_authorized" {
@@ -42,11 +38,12 @@ impl TelegramRuntimeManager {
 
         let command_tx = match self
             .ensure_tdlib_actor(
-                communication_store,
-                secret_store,
-                secret_resolver,
-                config,
+                context.communication_store,
+                context.secret_store,
+                context.secret_resolver,
+                context.config,
                 &account,
+                context.event_bridge.clone(),
             )
             .await
         {
@@ -81,7 +78,8 @@ impl TelegramRuntimeManager {
 
         let mut message_ids = Vec::with_capacity(snapshots.len());
         for snapshot in &snapshots {
-            match telegram_store
+            match context
+                .telegram_store
                 .ingest_tdlib_message_snapshot(&request.account_id, snapshot, &import_batch_id)
                 .await
             {

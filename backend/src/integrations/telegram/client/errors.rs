@@ -1,6 +1,7 @@
 use crate::domains::decisions::DecisionStoreError;
 use crate::domains::mail::core::CommunicationIngestionError;
 use crate::domains::mail::messages::MessageProjectionError;
+use crate::domains::mail::storage::MailStorageError;
 use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::platform::secrets::{DatabaseEncryptedVaultError, SecretReferenceError};
 use crate::vault::HostVaultError;
@@ -36,6 +37,9 @@ pub enum TelegramError {
 
     #[error(transparent)]
     MessageProjection(#[from] MessageProjectionError),
+
+    #[error(transparent)]
+    MailStorage(#[from] MailStorageError),
 
     #[error(transparent)]
     Decision(#[from] DecisionStoreError),

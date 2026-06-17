@@ -11,6 +11,14 @@ use super::super::models::{
 };
 use super::super::projection::project_raw_telegram_message;
 use super::super::store::TelegramStore;
+use super::message_metadata::{
+    derive_mention_metadata, derive_tdlib_attachment_metadata, derive_tdlib_media_album_metadata,
+    derive_tdlib_structured_evidence, telegram_public_message_link,
+};
+use super::reaction_metadata::{
+    derive_tdlib_chosen_reaction_emojis, derive_tdlib_provider_reactions,
+    derive_tdlib_reaction_summary_metadata,
+};
 
 impl TelegramStore {
     pub async fn ingest_fixture_message(
@@ -46,6 +54,30 @@ impl TelegramStore {
         let chat = self.upsert_chat(&chat).await?;
 
         let mention_metadata = derive_mention_metadata(&message.text, tdlib_raw.as_ref());
+        let public_message_link =
+            telegram_public_message_link(chat.username.as_deref(), &message.provider_message_id);
+        let tdlib_media_album = tdlib_raw
+            .as_ref()
+            .and_then(|raw| derive_tdlib_media_album_metadata(raw, &message.provider_chat_id));
+        let tdlib_attachments = tdlib_raw
+            .as_ref()
+            .map(derive_tdlib_attachment_metadata)
+            .unwrap_or_default();
+        let tdlib_structured_evidence = tdlib_raw
+            .as_ref()
+            .map(derive_tdlib_structured_evidence)
+            .unwrap_or_default();
+        let tdlib_reaction_summary = tdlib_raw
+            .as_ref()
+            .and_then(derive_tdlib_reaction_summary_metadata);
+        let tdlib_provider_reactions = tdlib_raw
+            .as_ref()
+            .map(derive_tdlib_provider_reactions)
+            .unwrap_or_default();
+        let tdlib_chosen_reactions = tdlib_raw
+            .as_ref()
+            .map(derive_tdlib_chosen_reaction_emojis)
+            .unwrap_or_default();
         let mut payload = json!({
             "provider_chat_id": message.provider_chat_id,
             "chat_title": message.chat_title,
@@ -58,8 +90,30 @@ impl TelegramStore {
             "mentions": mention_metadata.mentions,
             "mentions_detected_by": mention_metadata.detected_by,
         });
-        if let (Some(payload), Some(tdlib_raw)) = (payload.as_object_mut(), tdlib_raw) {
-            payload.insert("tdlib_raw".to_owned(), tdlib_raw);
+        if let Some(payload) = payload.as_object_mut() {
+            if let Some(link) = public_message_link {
+                payload.insert("message_link".to_owned(), Value::String(link));
+                payload.insert(
+                    "message_link_kind".to_owned(),
+                    Value::String("public_t_me".to_owned()),
+                );
+            }
+            if let Some((album_id, album_key)) = tdlib_media_album {
+                payload.insert("media_album_id".to_owned(), Value::String(album_id));
+                payload.insert("media_album_key".to_owned(), Value::String(album_key));
+            }
+            if !tdlib_attachments.is_empty() {
+                payload.insert("attachments".to_owned(), Value::Array(tdlib_attachments));
+            }
+            if let Some(reaction_summary) = tdlib_reaction_summary {
+                payload.insert("reaction_summary".to_owned(), reaction_summary);
+            }
+            for (key, value) in tdlib_structured_evidence {
+                payload.insert(key, value);
+            }
+            if let Some(tdlib_raw) = tdlib_raw {
+                payload.insert("tdlib_raw".to_owned(), tdlib_raw);
+            }
         }
         let raw_record_id = telegram_raw_record_id(
             &message.account_id,
@@ -87,6 +141,24 @@ impl TelegramStore {
         let projected =
             project_raw_telegram_message(&MessageProjectionStore::new(self.pool.clone()), &raw)
                 .await?;
+        if !tdlib_provider_reactions.is_empty() || !tdlib_chosen_reactions.is_empty() {
+            super::super::reactions::sync_provider_reactions(
+                &self.pool,
+                super::super::reactions::TelegramReactionMessageRef {
+                    message_id: &projected.message_id,
+                    account_id: &message.account_id,
+                    provider_chat_id: &message.provider_chat_id,
+                    provider_message_id: &message.provider_message_id,
+                },
+                &tdlib_provider_reactions,
+                super::super::participants::telegram_self_provider_member_id(
+                    &provider_account.external_account_id,
+                )
+                .as_deref(),
+                &tdlib_chosen_reactions,
+            )
+            .await?;
+        }
         self.recompute_chat_unread_count(&chat.telegram_chat_id)
             .await?;
         self.refresh_message_intelligence_candidates(&projected.message_id)
@@ -97,89 +169,4 @@ impl TelegramStore {
             message_id: projected.message_id,
         })
     }
-}
-
-struct MentionMetadata {
-    count: i64,
-    mentions: Vec<String>,
-    detected_by: &'static str,
-}
-
-fn derive_mention_metadata(text: &str, tdlib_raw: Option<&Value>) -> MentionMetadata {
-    let text_mentions = extract_text_mentions(text);
-    let entity_count = tdlib_raw.map(tdlib_mention_entity_count).unwrap_or(0);
-
-    if entity_count > 0 {
-        MentionMetadata {
-            count: entity_count,
-            mentions: text_mentions,
-            detected_by: "tdlib_entities",
-        }
-    } else {
-        MentionMetadata {
-            count: i64::try_from(text_mentions.len()).unwrap_or(0),
-            mentions: text_mentions,
-            detected_by: "text_regex",
-        }
-    }
-}
-
-fn extract_text_mentions(text: &str) -> Vec<String> {
-    let mut mentions = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut index = 0usize;
-    while index < chars.len() {
-        if chars[index] != '@' {
-            index += 1;
-            continue;
-        }
-        let mut end = index + 1;
-        while end < chars.len() && is_telegram_mention_char(chars[end]) {
-            end += 1;
-        }
-        if end.saturating_sub(index) >= 3 {
-            let mention: String = chars[index..end].iter().collect();
-            if !mentions.iter().any(|existing| existing == &mention) {
-                mentions.push(mention);
-            }
-        }
-        index = end;
-    }
-    mentions
-}
-
-fn is_telegram_mention_char(value: char) -> bool {
-    value.is_ascii_alphanumeric() || value == '_'
-}
-
-fn tdlib_mention_entity_count(raw: &Value) -> i64 {
-    tdlib_formatted_text_entities(raw)
-        .into_iter()
-        .flat_map(|entities| entities.iter())
-        .filter(|entity| {
-            matches!(
-                entity
-                    .get("type")
-                    .and_then(|value| value.get("@type"))
-                    .and_then(Value::as_str),
-                Some("textEntityTypeMention" | "textEntityTypeMentionName")
-            )
-        })
-        .count() as i64
-}
-
-fn tdlib_formatted_text_entities(raw: &Value) -> Vec<&Vec<Value>> {
-    let mut entities = Vec::new();
-    if let Some(content) = raw.get("content") {
-        for key in ["text", "caption"] {
-            if let Some(array) = content
-                .get(key)
-                .and_then(|value| value.get("entities"))
-                .and_then(Value::as_array)
-            {
-                entities.push(array);
-            }
-        }
-    }
-    entities
 }

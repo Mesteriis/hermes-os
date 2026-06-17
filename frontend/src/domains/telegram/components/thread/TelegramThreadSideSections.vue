@@ -8,9 +8,11 @@ import type {
   TelegramMessage,
   TelegramThreadTab
 } from '../../types/telegram'
-import { mergeTelegramAttachmentHints } from '../../stores/telegram'
+import { mergeTelegramAttachmentHints, telegramMediaAlbumGroupsForMessages } from '../../stores/telegram'
+import { telegramTopicProviderLabel, telegramTopicStateLabel } from '../../stores/telegramTopicProjection'
+import TelegramAttachmentSearchPanel from './TelegramAttachmentSearchPanel.vue'
 import TelegramMediaViewer from './TelegramMediaViewer.vue'
-import { useTelegramTopicsQuery } from '../../queries/useTelegramQuery'
+import { useTelegramTopicsQuery, useTelegramTopicSearchQuery } from '../../queries/useTelegramQuery'
 
 const { t } = useI18n()
 
@@ -22,6 +24,7 @@ const emit = defineEmits<{
 
 const props = defineProps<{
   activeThreadTab: TelegramThreadTab
+  accountId: string | null | undefined
   telegramChatId: string | null | undefined
   chronologicalMessages: TelegramMessage[]
   fileHints: TelegramAttachmentHint[]
@@ -33,14 +36,25 @@ const props = defineProps<{
   telegramMessageTime: (message: TelegramMessage) => string
 }>()
 
+const topicSearchQuery = ref('')
 const { data: topicsData, isLoading: topicsLoading } = useTelegramTopicsQuery(
   computed(() => props.telegramChatId)
+)
+const { data: topicSearchData } = useTelegramTopicSearchQuery(
+  computed(() => props.telegramChatId),
+  topicSearchQuery
+)
+const displayedTopics = computed(() =>
+  topicSearchQuery.value.trim() ? (topicSearchData.value?.items ?? []) : (topicsData.value?.items ?? [])
 )
 
 const activeViewerAttachment = ref<TelegramAttachmentHint | null>(null)
 
 const mergedFileHints = computed(() =>
   mergeTelegramAttachmentHints(props.mediaGalleryItems, props.fileHints)
+)
+const mediaAlbumGroups = computed(() =>
+  telegramMediaAlbumGroupsForMessages(props.chronologicalMessages)
 )
 
 function senderName(message: TelegramMessage): string {
@@ -87,15 +101,44 @@ function formatBytes(bytes: number): string {
 function openViewer(attachment: TelegramAttachmentHint) {
   activeViewerAttachment.value = attachment
 }
+
+function attachmentIcon(attachment: TelegramAttachmentHint): string {
+  if (attachment.kind === 'photo') return 'tabler:photo'
+  if (attachment.kind === 'video' || attachment.kind === 'animation' || attachment.kind === 'video_note') return 'tabler:video'
+  if (attachment.kind === 'audio' || attachment.kind === 'voice') return 'tabler:wave-sine'
+  if (attachment.kind === 'sticker') return 'tabler:sticker'
+  return 'tabler:file-description'
+}
 </script>
 
 <template>
   <div class="chat-body telegram-thread-body">
     <template v-if="activeThreadTab === 'files'">
+      <TelegramAttachmentSearchPanel :accountId="accountId" />
       <div v-if="mediaGalleryItems.length === 0 && fileHints.length === 0" class="empty-panel fill">
         {{ t('No files in selected Telegram history.') }}
       </div>
       <div v-else class="telegram-file-list">
+        <article
+          v-for="album in mediaAlbumGroups"
+          :key="album.albumKey"
+          class="telegram-file-card telegram-media-album-card"
+        >
+          <span>
+            <Icon icon="tabler:layout-grid" width="20" height="20" />
+          </span>
+          <div>
+            <strong>{{ t('Media album') }} {{ album.albumId }}</strong>
+            <small>{{ album.messages.length }} {{ t('messages') }} · {{ album.attachmentCount }} {{ t('attachments') }}</small>
+          </div>
+          <button
+            type="button"
+            :title="t('Open message')"
+            @click="emit('openMessage', album.messages[0])"
+          >
+            <Icon icon="tabler:arrow-up-right" width="17" height="17" />
+          </button>
+        </article>
         <div
           v-for="attachment in mergedFileHints"
           :key="attachment.id"
@@ -103,7 +146,7 @@ function openViewer(attachment: TelegramAttachmentHint) {
         >
           <span>
             <Icon
-              :icon="attachment.kind === 'photo' ? 'tabler:photo' : attachment.kind === 'video' ? 'tabler:video' : attachment.kind === 'audio' || attachment.kind === 'voice' ? 'tabler:wave-sine' : 'tabler:file-description'"
+              :icon="attachmentIcon(attachment)"
               width="20"
               height="20"
             />
@@ -241,15 +284,23 @@ function openViewer(attachment: TelegramAttachmentHint) {
     </template>
 
     <template v-else-if="activeThreadTab === 'topics'">
-      <div v-if="topicsLoading" class="empty-panel fill">
+      <div class="telegram-topic-search-bar">
+        <input
+          v-model="topicSearchQuery"
+          type="search"
+          :placeholder="t('Search topics…')"
+          class="telegram-topic-search-input"
+        />
+      </div>
+      <div v-if="topicsLoading && !topicSearchQuery.trim()" class="empty-panel fill">
         {{ t('Loading topics…') }}
       </div>
-      <div v-else-if="!topicsData || topicsData.items.length === 0" class="empty-panel fill">
-        {{ t('No forum topics found for this chat.') }}
+      <div v-else-if="displayedTopics.length === 0" class="empty-panel fill">
+        {{ topicSearchQuery.trim() ? t('No topics match your search.') : t('No forum topics found for this chat.') }}
       </div>
       <div v-else class="telegram-topic-list">
         <article
-          v-for="topic in topicsData.items"
+          v-for="topic in displayedTopics"
           :key="topic.topic_id"
           class="telegram-topic-card"
           @click="emit('selectTopic', topic.topic_id)"
@@ -260,7 +311,8 @@ function openViewer(attachment: TelegramAttachmentHint) {
           </span>
           <div class="telegram-topic-card__body">
             <strong>{{ topic.title }}</strong>
-            <small v-if="topic.is_closed">{{ t('Closed') }}</small>
+            <small>{{ telegramTopicStateLabel(topic) }}</small>
+            <small>{{ telegramTopicProviderLabel(topic) }}</small>
           </div>
           <span v-if="topic.unread_count > 0" class="telegram-topic-card__badge">{{ topic.unread_count }}</span>
           <Icon v-if="topic.is_pinned" icon="tabler:pin" width="13" height="13" class="telegram-topic-card__pin" />
@@ -276,6 +328,7 @@ function openViewer(attachment: TelegramAttachmentHint) {
   <TelegramMediaViewer
     :attachment="activeViewerAttachment"
     @close="activeViewerAttachment = null"
+    @downloadMedia="(attachment) => emit('downloadMedia', attachment, messageForAttachment(attachment) ?? undefined)"
   />
 </template>
 
@@ -454,6 +507,9 @@ function openViewer(attachment: TelegramAttachmentHint) {
 .telegram-timeline-row-action:hover {
   background: var(--color-primary-subtle, #e3f2fd);
 }
+.telegram-topic-search-bar { padding: 6px 8px 2px; }
+.telegram-topic-search-input { width: 100%; padding: 5px 8px; border: 1px solid var(--color-border, #ddd); border-radius: 4px; font-size: 12px; background: var(--color-bg, #fff); color: var(--color-text, #333); }
+.telegram-topic-search-input:focus { outline: none; border-color: var(--color-primary, #2196f3); }
 .telegram-topic-list {
   display: flex;
   flex-direction: column;

@@ -1,0 +1,13 @@
+{
+  "id": "msg-claim-next-kilocode-mqgkt1at",
+  "from": "orchestrator-loop",
+  "to": "shared",
+  "type": "task_claim",
+  "timestamp": "2026-06-16T11:45:56.693Z",
+  "task_id": "next-kilocode",
+  "payload": {
+    "vendor": "kilocode",
+    "priority": "low"
+  },
+  "requires_response": true
+}

@@ -6,9 +6,11 @@ import Icon from '../../../shared/ui/Icon.vue'
 import type { TelegramChat, TelegramMessage } from '../types/telegram'
 import {
   telegramChatIsPinned,
+  telegramChatIsSavedMessages,
   telegramChatMentionCountValue,
   telegramChatUnreadCount,
   telegramChatPreview,
+  telegramChatTypingLabel,
   telegramMessageAttachmentHints
 } from '../stores/telegram'
 
@@ -55,6 +57,7 @@ function chatTime(chat: TelegramChat): string {
 }
 
 function chatIcon(chat: TelegramChat): string {
+  if (telegramChatIsSavedMessages(chat)) return 'tabler:bookmark'
   if (chat.chat_kind === 'bot' || chat.title.toLowerCase().includes('bot')) return 'tabler:robot'
   if (chat.chat_kind === 'channel') return 'tabler:speakerphone'
   if (chat.chat_kind === 'private') return 'tabler:user'
@@ -103,16 +106,17 @@ function hasAttachment(chat: TelegramChat): boolean {
           @click="emit('selectChat', telegramChats[vitem.index])"
         >
           <span class="telegram-avatar" :data-kind="telegramChats[vitem.index].chat_kind">
-            <Icon v-if="telegramChats[vitem.index].chat_kind === 'group' || telegramChats[vitem.index].chat_kind === 'channel'" :icon="chatIcon(telegramChats[vitem.index])" width="19" height="19" />
+            <Icon v-if="telegramChatIsSavedMessages(telegramChats[vitem.index]) || telegramChats[vitem.index].chat_kind === 'group' || telegramChats[vitem.index].chat_kind === 'channel'" :icon="chatIcon(telegramChats[vitem.index])" width="19" height="19" />
             <span v-else>{{ chatInitials(telegramChats[vitem.index]) }}</span>
           </span>
           <span class="telegram-chat-copy">
             <span class="telegram-chat-title-line">
               <strong>{{ telegramChats[vitem.index].title }}</strong>
+              <Icon v-if="telegramChatIsSavedMessages(telegramChats[vitem.index])" icon="tabler:bookmark" width="13" height="13" />
               <Icon v-if="telegramChatIsPinned(telegramChats[vitem.index])" icon="tabler:pin" width="13" height="13" />
               <Icon v-if="isMuted(telegramChats[vitem.index])" icon="tabler:bell-off" width="13" height="13" />
             </span>
-            <small>{{ telegramChatPreview(telegramChats[vitem.index], telegramMessages) }}</small>
+            <small :class="{ typing: telegramChatTypingLabel(telegramChats[vitem.index]) }">{{ telegramChatPreview(telegramChats[vitem.index], telegramMessages) }}</small>
             <span class="telegram-chat-state">
               <em>{{ telegramChats[vitem.index].sync_state }}</em>
               <Icon v-if="hasAttachment(telegramChats[vitem.index])" icon="tabler:paperclip" width="13" height="13" />
@@ -249,6 +253,10 @@ function hasAttachment(chat: TelegramChat): boolean {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-top: 2px;
+}
+.telegram-chat-copy small.typing {
+  color: var(--color-primary, #0066cc);
+  font-style: italic;
 }
 .telegram-chat-state {
   display: flex;

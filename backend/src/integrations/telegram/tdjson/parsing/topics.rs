@@ -24,7 +24,22 @@ fn parse_forum_topic(topic: &Value) -> Result<TelegramTdlibTopicSnapshot, Telegr
     let info = topic
         .get("info")
         .ok_or_else(|| TelegramError::TdlibRuntime("forumTopic missing `info` field".to_owned()))?;
+    let mut snapshot = parse_forum_topic_info(info)?;
+    snapshot.unread_count = topic
+        .get("unread_count")
+        .and_then(Value::as_i64)
+        .unwrap_or(0);
+    snapshot.last_message_at = topic
+        .get("last_message")
+        .and_then(|m| m.get("date"))
+        .map(tdlib_unix_datetime_value)
+        .transpose()?;
+    Ok(snapshot)
+}
 
+pub(crate) fn parse_forum_topic_info(
+    info: &Value,
+) -> Result<TelegramTdlibTopicSnapshot, TelegramError> {
     let provider_topic_id = info
         .get("message_thread_id")
         .map(tdlib_i64_value)
@@ -58,24 +73,13 @@ fn parse_forum_topic(topic: &Value) -> Result<TelegramTdlibTopicSnapshot, Telegr
         .and_then(Value::as_bool)
         .unwrap_or(false);
 
-    let unread_count = topic
-        .get("unread_count")
-        .and_then(Value::as_i64)
-        .unwrap_or(0);
-
-    let last_message_at = topic
-        .get("last_message")
-        .and_then(|m| m.get("date"))
-        .map(tdlib_unix_datetime_value)
-        .transpose()?;
-
     Ok(TelegramTdlibTopicSnapshot {
         provider_topic_id,
         title,
         icon_emoji,
         is_pinned,
         is_closed,
-        unread_count,
-        last_message_at,
+        unread_count: 0,
+        last_message_at: None,
     })
 }

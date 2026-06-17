@@ -62,11 +62,23 @@ pub mod telegram_event_types {
     pub const CHAT_ARCHIVED: &str = "telegram.chat.archived";
     pub const CHAT_MUTED: &str = "telegram.chat.muted";
 
+    pub const TYPING_CHANGED: &str = "telegram.typing.changed";
+
     pub const TOPIC_UPDATED: &str = "telegram.topic.updated";
 
+    pub const PARTICIPANT_UPDATED: &str = "telegram.participant.updated";
+
+    pub const MEDIA_DOWNLOAD_STARTED: &str = "telegram.media.download.started";
+    pub const MEDIA_DOWNLOAD_PROGRESS: &str = "telegram.media.download.progress";
+    pub const MEDIA_DOWNLOAD_FAILED: &str = "telegram.media.download.failed";
     pub const MEDIA_DOWNLOADED: &str = "telegram.media.downloaded";
+    pub const MEDIA_UPLOAD_STARTED: &str = "telegram.media.upload.started";
+    pub const MEDIA_UPLOAD_PROGRESS: &str = "telegram.media.upload.progress";
+    pub const MEDIA_UPLOAD_FAILED: &str = "telegram.media.upload.failed";
+    pub const MEDIA_UPLOAD_COMPLETED: &str = "telegram.media.upload.completed";
 
     pub const COMMAND_STATUS_CHANGED: &str = "telegram.command.status_changed";
+    pub const COMMAND_RECONCILED: &str = "telegram.command.reconciled";
 }
 
 /// Sanitize an event payload to never include secrets or raw message bodies.

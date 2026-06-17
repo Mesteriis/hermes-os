@@ -8,13 +8,18 @@ import {
   fetchTelegramChatDetail,
   fetchTelegramFolders,
   fetchTelegramChatMembers,
+  joinTelegramChat,
+  leaveTelegramChat,
   logoutTelegramAccount,
   markTelegramChatRead,
   markTelegramChatUnread,
   muteTelegramChat,
   pinTelegramChat,
   removeTelegramAccount,
+  restartTelegramRuntime,
   setupTelegramAccount,
+  stopTelegramRuntime,
+  syncTelegramChatMembers,
   unarchiveTelegramChat,
   unmuteTelegramChat,
   unpinTelegramChat,
@@ -24,6 +29,40 @@ describe('telegram dialog action API', () => {
   beforeEach(() => {
     ApiClient.resetForTests()
     ApiClient.init('http://127.0.0.1:8080', 'test-secret')
+  })
+
+  it('posts runtime restart requests for a selected telegram account', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ account_id: 'acc-1', runtime_kind: 'fixture', status: 'running', blockers: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await restartTelegramRuntime({ account_id: 'acc-1' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/runtime/restart')
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ account_id: 'acc-1' })
+  })
+
+  it('posts runtime stop requests for a selected telegram account', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ account_id: 'acc-1', runtime_kind: 'fixture', status: 'stopped', blockers: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await stopTelegramRuntime({ account_id: 'acc-1' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/runtime/stop')
+    expect(fetchMock.mock.calls[0][1].method).toBe('POST')
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ account_id: 'acc-1' })
   })
 
   afterEach(() => {
@@ -41,7 +80,13 @@ describe('telegram dialog action API', () => {
         })
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ items: [] }), {
+        new Response(JSON.stringify({ items: [], next_cursor: null }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ telegram_chat_id: 'tgchat-1', synced_count: 0, items: [] }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         })
@@ -49,13 +94,16 @@ describe('telegram dialog action API', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     await fetchTelegramChatDetail('tgchat-1')
-    await fetchTelegramChatMembers('tgchat-1', 25)
+    await fetchTelegramChatMembers('tgchat-1', 25, 'owner', 'admin', '50')
+    await syncTelegramChatMembers('tgchat-1')
 
-    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
     expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/chats/tgchat-1')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/telegram/chats/tgchat-1/members?limit=25')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/telegram/chats/tgchat-1/members?limit=25&query=owner&role=admin&cursor=50')
+    expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/telegram/chats/tgchat-1/members/sync')
     expect(fetchMock.mock.calls[0][1].method).toBe('GET')
     expect(fetchMock.mock.calls[1][1].method).toBe('GET')
+    expect(fetchMock.mock.calls[2][1].method).toBe('POST')
   })
 
   it('loads projection-backed telegram folders for the selected account', async () => {
@@ -211,6 +259,50 @@ describe('telegram dialog action API', () => {
     expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/telegram/chats/tgchat-1/unarchive')
     expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/telegram/chats/tgchat-1/mute')
     expect(fetchMock.mock.calls[3][0]).toContain('/api/v1/telegram/chats/tgchat-1/unmute')
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init.method).toBe('POST')
+      expect(JSON.parse(init.body as string)).toEqual({
+        account_id: 'acc-1',
+        provider_chat_id: 'provider-chat-1',
+      })
+    }
+  })
+
+  it('posts participant join and leave lifecycle requests through command routes', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          telegram_chat_id: null,
+          provider_chat_id: 'provider-chat-1',
+          action: 'join',
+          status: 'queued',
+          command_id: 'cmd-join',
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          telegram_chat_id: 'tgchat-1',
+          provider_chat_id: 'provider-chat-1',
+          action: 'leave',
+          status: 'queued',
+          command_id: 'cmd-leave',
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await joinTelegramChat({ account_id: 'acc-1', provider_chat_id: 'provider-chat-1' })
+    await leaveTelegramChat('tgchat-1', { account_id: 'acc-1', provider_chat_id: 'provider-chat-1' })
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/chats/join')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/telegram/chats/tgchat-1/leave')
     for (const [, init] of fetchMock.mock.calls) {
       expect(init.method).toBe('POST')
       expect(JSON.parse(init.body as string)).toEqual({

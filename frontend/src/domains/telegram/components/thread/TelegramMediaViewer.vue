@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import type { TelegramAttachmentHint } from '../../types/telegram'
+import { useTelegramAttachmentPreviewQuery } from '../../queries/useTelegramAttachmentPreviewQuery'
 
 const { t } = useI18n()
 
@@ -12,12 +13,21 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  downloadMedia: [attachment: TelegramAttachmentHint]
 }>()
+
+const previewAttachmentId = computed(() => props.attachment?.providerAttachmentId || null)
+const attachmentPreviewQuery = useTelegramAttachmentPreviewQuery(
+  previewAttachmentId,
+  computed(() => Boolean(props.attachment?.localPath && props.attachment?.providerAttachmentId))
+)
+const attachmentPreview = computed(() => attachmentPreviewQuery.data.value ?? null)
+const isAttachmentPreviewError = computed(() => attachmentPreviewQuery.isError.value)
 
 const previewKind = computed(() => {
   const kind = props.attachment?.kind
-  if (kind === 'photo') return 'image'
-  if (kind === 'video') return 'video'
+  if (kind === 'photo' || kind === 'sticker') return 'image'
+  if (kind === 'video' || kind === 'animation' || kind === 'video_note') return 'video'
   if (kind === 'audio' || kind === 'voice') return 'audio'
   return 'file'
 })
@@ -44,8 +54,22 @@ function formatBytes(bytes: number | null): string {
       </header>
 
       <div class="telegram-media-viewer__body">
+        <div
+          v-if="attachmentPreview?.preview_kind === 'text'"
+          class="telegram-media-viewer__text-preview"
+        >
+          <pre>{{ attachmentPreview.text }}</pre>
+          <small v-if="attachmentPreview.truncated">
+            {{ t('Preview truncated to safe byte limit.') }}
+          </small>
+        </div>
         <img
-          v-if="previewKind === 'image' && attachment.localPath"
+          v-else-if="attachmentPreview?.preview_kind === 'image' && attachmentPreview.data_url"
+          :src="attachmentPreview.data_url"
+          :alt="attachment.fileName"
+        />
+        <img
+          v-else-if="previewKind === 'image' && attachment.localPath"
           :src="attachment.localPath"
           :alt="attachment.fileName"
         />
@@ -63,12 +87,24 @@ function formatBytes(bytes: number | null): string {
           <Icon icon="tabler:file-search" width="28" height="28" />
           <p>{{ t('Preview is available after the Telegram media file is downloaded locally.') }}</p>
           <small>{{ t('Current state:') }} {{ attachment.downloadState }}</small>
+          <small v-if="isAttachmentPreviewError">
+            {{ t('Safe preview is unavailable for this attachment.') }}
+          </small>
         </div>
       </div>
 
       <footer class="telegram-media-viewer__footer">
         <span>{{ t('Attachment ID') }}: {{ attachment.providerAttachmentId || t('Unavailable') }}</span>
         <span>{{ t('Message ID') }}: {{ attachment.messageId }}</span>
+        <button
+          type="button"
+          :disabled="attachment.tdlibFileId === null"
+          :title="attachment.tdlibFileId === null ? t('Download requires TDLib file metadata') : t('Download media')"
+          @click="emit('downloadMedia', attachment)"
+        >
+          <Icon icon="tabler:download" width="15" height="15" />
+          {{ t('Download') }}
+        </button>
       </footer>
     </section>
   </div>
@@ -111,6 +147,21 @@ function formatBytes(bytes: number | null): string {
   color: var(--color-text-secondary, #777);
   flex-wrap: wrap;
 }
+.telegram-media-viewer__footer button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--color-border, #d6dce3);
+  border-radius: 8px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #333);
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.telegram-media-viewer__footer button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
 .telegram-media-viewer__header h3,
 .telegram-media-viewer__header p {
   margin: 0;
@@ -152,6 +203,27 @@ function formatBytes(bytes: number | null): string {
 }
 .telegram-media-viewer__body audio {
   width: min(520px, 100%);
+}
+.telegram-media-viewer__text-preview {
+  width: min(720px, 100%);
+  max-height: 62vh;
+  overflow: auto;
+  padding: 14px;
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 10px;
+  background: var(--color-bg, #fafafa);
+}
+.telegram-media-viewer__text-preview pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  color: var(--color-text, #333);
+}
+.telegram-media-viewer__text-preview small {
+  display: block;
+  margin-top: 10px;
+  color: var(--color-text-secondary, #777);
 }
 .telegram-media-viewer__empty {
   display: flex;

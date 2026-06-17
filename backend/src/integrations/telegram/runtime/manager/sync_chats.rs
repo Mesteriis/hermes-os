@@ -1,30 +1,27 @@
-use crate::domains::mail::core::CommunicationIngestionStore;
-use crate::integrations::telegram::client::{TelegramError, TelegramStore};
-use crate::platform::config::AppConfig;
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::integrations::telegram::client::TelegramError;
 
 use super::super::commands::request_actor_chats;
 use super::super::models::{TelegramChatSyncRequest, TelegramChatSyncResponse};
 use super::super::status::account_runtime_kind;
-use super::TelegramRuntimeManager;
 use super::account::load_active_account;
+use super::{TelegramRuntimeManager, TelegramRuntimeOperationContext};
 
 impl TelegramRuntimeManager {
-    pub async fn sync_chats(
+    pub(crate) async fn sync_chats<S>(
         &self,
-        communication_store: &CommunicationIngestionStore,
-        telegram_store: &TelegramStore,
-        secret_store: &SecretReferenceStore,
-        secret_resolver: &(impl SecretResolver + Sync + ?Sized),
-        config: &AppConfig,
+        context: &TelegramRuntimeOperationContext<'_, S>,
         request: &TelegramChatSyncRequest,
-    ) -> Result<TelegramChatSyncResponse, TelegramError> {
+    ) -> Result<TelegramChatSyncResponse, TelegramError>
+    where
+        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+    {
         request.validate()?;
-        let account = load_active_account(communication_store, &request.account_id).await?;
+        let account = load_active_account(context.communication_store, &request.account_id).await?;
         let runtime_kind = account_runtime_kind(&account);
         match runtime_kind.as_str() {
             "fixture" => {
-                let items = telegram_store
+                let items = context
+                    .telegram_store
                     .list_chats(Some(&account.account_id), request.limit.unwrap_or(50))
                     .await?;
                 Ok(TelegramChatSyncResponse {
@@ -38,21 +35,24 @@ impl TelegramRuntimeManager {
             "tdlib_qr_authorized" => {
                 let command_tx = self
                     .ensure_tdlib_actor(
-                        communication_store,
-                        secret_store,
-                        secret_resolver,
-                        config,
+                        context.communication_store,
+                        context.secret_store,
+                        context.secret_resolver,
+                        context.config,
                         &account,
+                        context.event_bridge.clone(),
                     )
                     .await?;
                 let snapshots =
                     request_actor_chats(command_tx, request.limit.unwrap_or(50) as i32).await?;
                 for snapshot in &snapshots {
-                    telegram_store
+                    context
+                        .telegram_store
                         .ingest_tdlib_chat_snapshot(&account.account_id, snapshot)
                         .await?;
                 }
-                let items = telegram_store
+                let items = context
+                    .telegram_store
                     .list_chats(Some(&account.account_id), request.limit.unwrap_or(50))
                     .await?;
                 Ok(TelegramChatSyncResponse {

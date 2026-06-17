@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
+import TelegramMessageSourceEvidencePanel from './TelegramMessageSourceEvidencePanel.vue'
 import type {
   TelegramMessage,
   TelegramMessageReferenceSummary,
@@ -13,6 +14,11 @@ import {
   summarizeTelegramTombstoneState,
   summarizeTelegramVersionDelta,
 } from './referenceEvidence'
+import {
+  hasTelegramSourceEvidence,
+  matchesTelegramReferenceQuery,
+  matchesTelegramSourceEvidence,
+} from './telegramReferenceMetadataEvidence'
 import {
   useTelegramCommandsQuery,
   useTelegramMessageReactionsQuery,
@@ -68,6 +74,8 @@ const versions = computed(() => versionsQuery.data.value?.versions ?? [])
 const tombstones = computed(() => tombstonesQuery.data.value?.tombstones ?? [])
 const reactions = computed(() => reactionsQuery.data.value?.reactions ?? [])
 const reactionSummary = computed(() => reactionsQuery.data.value?.summary ?? null)
+const hasSourceEvidence = computed(() => hasTelegramSourceEvidence(props.currentMessage, t))
+const isSourceEvidenceMatch = computed(() => matchesTelegramSourceEvidence(props.currentMessage, t, referenceSearchQuery.value))
 const relatedCommands = computed(() => {
   const commands = commandsQuery.data.value ?? []
   const directMatches = commands.filter((command) => command.provider_message_id === props.currentMessage.provider_message_id)
@@ -89,13 +97,7 @@ const isLoading = computed(
 )
 
 function matchesReferenceQuery(...values: Array<string | null | undefined>): boolean {
-  const query = referenceSearchQuery.value.trim().toLowerCase()
-  if (!query) return true
-  return values
-    .filter((value): value is string => Boolean(value))
-    .join(' ')
-    .toLowerCase()
-    .includes(query)
+  return matchesTelegramReferenceQuery(referenceSearchQuery.value, ...values)
 }
 
 const filteredReplyToItems = computed(() =>
@@ -290,7 +292,8 @@ function versionPreviousBody(currentIndex: number): string | null {
         versions.length === 0 &&
         tombstones.length === 0 &&
         reactions.length === 0 &&
-        relatedCommands.length === 0
+        relatedCommands.length === 0 &&
+        !hasSourceEvidence
       "
       class="telegram-reference-panel__empty"
     >
@@ -306,22 +309,13 @@ function versionPreviousBody(currentIndex: number): string | null {
         />
       </label>
 
-      <div
-        v-if="reactionSummary && reactionSummary.reactions.length > 0"
-        class="telegram-reference-panel__group"
-      >
-        <strong>{{ t('Reactions') }}</strong>
-        <div class="telegram-reference-panel__chips">
-          <span
-            v-for="group in reactionSummary.reactions"
-            :key="group.reaction_emoji"
-            class="telegram-reference-panel__chip"
-            :title="group.senders.join(', ')"
-          >
-            {{ group.reaction_emoji }} {{ group.count }}
-          </span>
-        </div>
-      </div>
+      <TelegramMessageSourceEvidencePanel
+        :message-id="messageId"
+        :is-open="isOpen"
+        :current-message="currentMessage"
+        :reaction-summary="reactionSummary"
+        :reference-query="referenceSearchQuery"
+      />
 
       <div v-if="filteredReplyToItems.length > 0" class="telegram-reference-panel__group">
         <strong>{{ t('Replies To') }}</strong>
@@ -437,7 +431,8 @@ function versionPreviousBody(currentIndex: number): string | null {
           filteredForwards.length === 0 &&
           filteredVersions.length === 0 &&
           filteredTombstones.length === 0 &&
-          filteredCommands.length === 0
+          filteredCommands.length === 0 &&
+          !isSourceEvidenceMatch
         "
         class="telegram-reference-panel__empty"
       >
@@ -486,18 +481,6 @@ function versionPreviousBody(currentIndex: number): string | null {
 .telegram-reference-panel__group strong {
   font-size: 11px;
   color: var(--color-text, #333);
-}
-.telegram-reference-panel__chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.telegram-reference-panel__chip {
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: var(--color-surface, #fff);
-  border: 1px solid var(--color-border, #e0e0e0);
-  font-size: 11px;
 }
 .telegram-reference-panel__item {
   display: flex;

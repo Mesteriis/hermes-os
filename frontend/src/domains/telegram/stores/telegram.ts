@@ -58,7 +58,24 @@ export function telegramChatIsBot(chat: TelegramChat): boolean {
   return chat.chat_kind === 'bot'
 }
 
+export function telegramChatIsSavedMessages(chat: TelegramChat): boolean {
+  return metaBoolean(chat.metadata, 'is_saved_messages')
+}
+
+export function telegramChatTypingLabel(chat: TelegramChat, nowMs = Date.now()): string {
+  const activeTyping = chat.metadata.active_typing
+  if (!activeTyping || typeof activeTyping !== 'object') return ''
+  const record = activeTyping as Record<string, unknown>
+  if (record.is_active !== true) return ''
+  const expiresAt = typeof record.expires_at === 'string' ? Date.parse(record.expires_at) : NaN
+  if (Number.isFinite(expiresAt) && expiresAt <= nowMs) return ''
+  const senderId = typeof record.sender_id === 'string' ? record.sender_id : ''
+  return senderId ? `${senderId} typing...` : 'typing...'
+}
+
 export function telegramChatPreview(chat: TelegramChat, messages: TelegramMessage[]): string {
+  const typing = telegramChatTypingLabel(chat)
+  if (typing) return typing
   const relevant = messages
     .filter((m) => m.provider_chat_id === chat.provider_chat_id)
     .sort((left, right) => {
@@ -90,6 +107,18 @@ export function telegramChatFilterCounts(
     { filter: 'projects', count: projects },
     { filter: 'bots', count: bots },
     { filter: 'archived', count: archived }
+  ]
+}
+
+export function telegramFilterTabs(t: (key: string) => string): Array<{ id: TelegramChatFilter; label: string }> {
+  return [
+    { id: 'all', label: t('All Chats') },
+    { id: 'unread', label: t('Unread') },
+    { id: 'mentions', label: t('Mentions') },
+    { id: 'pinned', label: t('Pinned') },
+    { id: 'projects', label: t('Projects') },
+    { id: 'bots', label: t('Bots') },
+    { id: 'archived', label: t('Archived') }
   ]
 }
 
@@ -217,6 +246,46 @@ export function telegramAttachmentHintsForMessages(
     }
   }
   return hints
+}
+
+export function telegramMediaAlbumGroupsForMessages(messages: TelegramMessage[]): Array<{
+  albumKey: string
+  albumId: string
+  messages: TelegramMessage[]
+  attachmentCount: number
+  occurredAt: string | null
+}> {
+  const groups = new Map<string, {
+    albumKey: string
+    albumId: string
+    messages: TelegramMessage[]
+    attachmentCount: number
+    occurredAt: string | null
+  }>()
+
+  for (const message of messages) {
+    const albumKey = metaString(message.metadata, 'media_album_key')
+    const albumId = metaString(message.metadata, 'media_album_id')
+    if (!albumKey || !albumId) continue
+    const current = groups.get(albumKey) ?? {
+      albumKey,
+      albumId,
+      messages: [],
+      attachmentCount: 0,
+      occurredAt: message.occurred_at ?? message.projected_at ?? null,
+    }
+    current.messages.push(message)
+    current.attachmentCount += telegramMessageAttachmentHints(message).length
+    const occurredAt = message.occurred_at ?? message.projected_at ?? null
+    if (occurredAt && (!current.occurredAt || occurredAt < current.occurredAt)) {
+      current.occurredAt = occurredAt
+    }
+    groups.set(albumKey, current)
+  }
+
+  return Array.from(groups.values())
+    .filter((group) => group.messages.length > 1 || group.attachmentCount > 1)
+    .sort((left, right) => (right.occurredAt ?? '').localeCompare(left.occurredAt ?? ''))
 }
 
 export function telegramVoiceAttachmentHintsForMessages(

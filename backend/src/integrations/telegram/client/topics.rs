@@ -98,6 +98,32 @@ pub async fn get_topic(
     row.map(row_to_telegram_topic).transpose()
 }
 
+pub async fn search_topics(
+    pool: &PgPool,
+    telegram_chat_id: &str,
+    query: &str,
+    limit: i64,
+) -> Result<Vec<TelegramTopic>, TelegramError> {
+    let pattern = format!("%{}%", query.trim().to_lowercase());
+    let rows = sqlx::query(
+        r"
+        SELECT * FROM telegram_topics
+        WHERE telegram_chat_id = $1
+          AND lower(title) LIKE $2
+        ORDER BY is_pinned DESC, last_message_at DESC NULLS LAST, updated_at DESC
+        LIMIT $3
+        ",
+    )
+    .bind(telegram_chat_id)
+    .bind(&pattern)
+    .bind(limit)
+    .fetch_all(pool)
+    .await
+    .map_err(TelegramError::from)?;
+
+    rows.into_iter().map(row_to_telegram_topic).collect()
+}
+
 pub async fn list_topic_message_ids(
     pool: &PgPool,
     topic_id: &str,

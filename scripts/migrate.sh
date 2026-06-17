@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=./lib/env.sh
+source "$SCRIPT_DIR/lib/env.sh"
+# shellcheck source=./lib/postgres.sh
+source "$SCRIPT_DIR/lib/postgres.sh"
+
+load_hermes_env
+ensure_command cargo
+postgres_up
+
+info "Running backend-managed SQLx migrations"
+HERMES_LOG_FORMAT=plain cargo run --manifest-path "$REPO_ROOT/backend/Cargo.toml" --bin hermes_migrate
+success "Migrations applied successfully"

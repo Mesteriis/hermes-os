@@ -7,9 +7,11 @@ import {
   fetchTelegramMessageTombstones,
   fetchTelegramMessageVersions,
   fetchTelegramReactions,
+  forwardTelegramMessage,
   pinTelegramMessage,
   fetchTelegramReplyChain,
   removeTelegramReaction,
+  retryTelegramCommand,
   restoreTelegramMessageVisibility,
 } from './telegramLifecycle'
 
@@ -52,6 +54,33 @@ describe('telegram lifecycle reference API', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/messages/msg-1/forward-chain')
+  })
+
+  it('sends forward commands with a generated command id', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ status: 'sent' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await forwardTelegramMessage({
+      message_id: 'msg-forward-1',
+      account_id: 'acct-1',
+      provider_chat_id: 'target-chat',
+      from_provider_chat_id: 'source-chat',
+      from_provider_message_id: 'source-chat:42',
+    })
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/messages/msg-forward-1/forward')
+    const [, init] = fetchMock.mock.calls[0]
+    const body = JSON.parse(String(init?.body))
+    expect(body.command_id).toMatch(/^cmd_/)
+    expect(body.provider_chat_id).toBe('target-chat')
+    expect(body.from_provider_chat_id).toBe('source-chat')
+    expect(body.from_provider_message_id).toBe('source-chat:42')
   })
 
   it('fetches message versions and tombstones by message id', async () => {
@@ -100,6 +129,23 @@ describe('telegram lifecycle reference API', () => {
 
     expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/commands?account_id=acct-1&limit=25')
     expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/telegram/messages/msg-1/reactions')
+  })
+
+  it('sends manual retry through the provider command outbox endpoint', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ command_id: 'cmd-retry-1', status: 'retrying' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    await retryTelegramCommand('cmd-retry-1')
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/telegram/commands/cmd-retry-1/retry')
+    const [, init] = fetchMock.mock.calls[0]
+    expect(init?.method).toBe('POST')
   })
 
   it('sends restore visibility with a generated command id', async () => {

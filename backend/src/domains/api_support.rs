@@ -9,6 +9,9 @@ pub(crate) mod query_parsing;
 pub(crate) mod review_commands;
 pub(crate) mod review_lists;
 pub(crate) mod stores;
+pub(crate) mod telegram_capabilities;
+pub(crate) mod telegram_capability_catalog;
+pub(crate) mod telegram_capability_catalog_extended;
 
 pub(crate) use automation_calls::*;
 pub(crate) use communications::*;
@@ -19,6 +22,7 @@ pub(crate) use query_parsing::*;
 pub(crate) use review_commands::*;
 pub(crate) use review_lists::*;
 pub(crate) use stores::*;
+pub(crate) use telegram_capabilities::*;
 
 use std::io;
 

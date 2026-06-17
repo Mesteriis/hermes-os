@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=./lib/common.sh
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=./lib/env.sh
+source "$SCRIPT_DIR/lib/env.sh"
+# shellcheck source=./lib/postgres.sh
+source "$SCRIPT_DIR/lib/postgres.sh"
+
+load_hermes_env
+ensure_frontend_dependencies
+ensure_bacon_available
+ensure_command cargo
+ensure_command curl
+postgres_up
+
+require_port_free "$HERMES_BACKEND_PORT" "Backend"
+require_port_free "$HERMES_FRONTEND_PORT" "Frontend"
+
+ensure_dir "$LOG_ROOT"
+flow_id="dev-$(timestamp_compact_utc)-$$"
+session_log="$LOG_ROOT/$flow_id"
+ensure_dir "$session_log"
+live_log="$session_log/live.log"
+current_log_link="$LOG_ROOT/current"
+rm -f "$current_log_link"
+ln -s "$session_log" "$current_log_link"
+
+child_pids=()
+pipe_paths=()
+logger_pids=()
+RUN_SERVICE_PID=""
+
+cleanup() {
+	local status="$?"
+	local pid
+	trap - EXIT INT TERM
+	for pid in "${child_pids[@]:-}"; do
+		kill "$pid" 2>/dev/null || true
+	done
+	for pid in "${child_pids[@]:-}"; do
+		wait "$pid" 2>/dev/null || true
+	done
+	for pid in "${logger_pids[@]:-}"; do
+		kill "$pid" 2>/dev/null || true
+	done
+	for pid in "${logger_pids[@]:-}"; do
+		wait "$pid" 2>/dev/null || true
+	done
+	local pipe_path
+	for pipe_path in "${pipe_paths[@]:-}"; do
+		rm -f "$pipe_path"
+	done
+	exit "$status"
+}
+trap cleanup EXIT INT TERM
+
+run_service() {
+	local service="$1"
+	local color="$2"
+	shift 2
+	local stdout_pipe="$session_log/$service.stdout.pipe"
+	local stderr_pipe="$session_log/$service.stderr.pipe"
+	local log_file="$session_log/$service.jsonl"
+	mkfifo "$stdout_pipe" "$stderr_pipe"
+	pipe_paths+=("$stdout_pipe" "$stderr_pipe")
+
+	"$@" >"$stdout_pipe" 2>"$stderr_pipe" &
+	local service_pid="$!"
+	child_pids+=("$service_pid")
+
+	stream_service_pipe "$stdout_pipe" "$service" "$service_pid" "info" "$flow_id" "$color" "$log_file" "$live_log" &
+	logger_pids+=("$!")
+	stream_service_pipe "$stderr_pipe" "$service" "$service_pid" "warn" "$flow_id" "$color" "$log_file" "$live_log" &
+	logger_pids+=("$!")
+
+	RUN_SERVICE_PID="$service_pid"
+}
+
+export DATABASE_URL
+export HERMES_LOCAL_API_SECRET
+export HERMES_DEV_MODE
+export HERMES_VAULT_HOME
+export HERMES_DEV_KEY_PATH
+export HERMES_SECRET_VAULT_KEY
+export HERMES_HTTP_ADDR="$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT"
+export HERMES_FLOW_ID="$flow_id"
+export HERMES_LOG_FORMAT="json"
+export RUST_LOG="${RUST_LOG:-info}"
+export VITE_HERMES_API_BASE_URL="http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT"
+export VITE_HERMES_LOCAL_API_SECRET="$HERMES_LOCAL_API_SECRET"
+
+run_service backend "$color_cyan" bash -lc "cd '$REPO_ROOT' && exec bacon --headless backend-dev"
+backend_pid="$RUN_SERVICE_PID"
+run_service frontend "$color_green" bash -lc "cd '$REPO_ROOT/frontend' && exec pnpm dev --host '$HERMES_FRONTEND_BIND' --port '$HERMES_FRONTEND_PORT' --strictPort"
+frontend_pid="$RUN_SERVICE_PID"
+
+wait_for_http "http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT/healthz" "Backend healthz"
+wait_for_http "http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT/readyz" "Backend readyz"
+wait_for_http "http://$HERMES_FRONTEND_BIND:$HERMES_FRONTEND_PORT" "Frontend Vite"
+
+run_service tauri "$color_yellow" bash -lc "cd '$REPO_ROOT/frontend' && exec pnpm tauri dev"
+tauri_pid="$RUN_SERVICE_PID"
+
+info "Flow ID: $flow_id"
+info "Logs: $session_log"
+info "Live log: $current_log_link/live.log"
+printf '%s\n' "PostgreSQL:"
+postgres_status
+printf '%s\n' "Backend:  http://$HERMES_BACKEND_BIND:$HERMES_BACKEND_PORT (pid $backend_pid)"
+printf '%s\n' "Frontend: http://$HERMES_FRONTEND_BIND:$HERMES_FRONTEND_PORT (pid $frontend_pid)"
+printf '%s\n' "Tauri:    desktop dev shell (pid $tauri_pid)"
+
+wait "$tauri_pid"

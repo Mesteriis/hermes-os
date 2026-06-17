@@ -10,6 +10,12 @@ pub(crate) fn mail_attachment_id(message_id: &str, provider_attachment_id: &str)
     encoded
 }
 
+pub(crate) fn communication_attachment_import_id(seed: &str) -> String {
+    let mut encoded = String::from("att-import:v1:");
+    append_id_component(&mut encoded, seed);
+    encoded
+}
+
 fn append_id_component(encoded: &mut String, value: &str) {
     encoded.push_str(&value.len().to_string());
     encoded.push(':');

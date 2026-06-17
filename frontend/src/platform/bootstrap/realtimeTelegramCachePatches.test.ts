@@ -2,6 +2,69 @@ import { describe, expect, it, vi } from 'vitest'
 import { handleRealtimeEvent } from './realtime'
 
 describe('telegram realtime cache patch handling', () => {
+  it('patches cached telegram chats for typing changed events', () => {
+    const chatsKey = ['telegram', 'chats', 'account-1', 50]
+    const chatDetailKey = ['telegram', 'chat-detail', 'tgchat-1']
+    const chat = {
+      telegram_chat_id: 'tgchat-1',
+      account_id: 'account-1',
+      provider_chat_id: 'chat-1',
+      chat_kind: 'private',
+      title: 'Chat',
+      username: null,
+      sync_state: 'synced',
+      last_message_at: null,
+      metadata: {},
+      created_at: '2026-06-16T09:00:00Z',
+      updated_at: '2026-06-16T09:00:00Z'
+    }
+    const setQueryData = vi.fn((queryKey, updater) => {
+      if (typeof updater !== 'function') return updater
+      if (JSON.stringify(queryKey) === JSON.stringify(chatsKey)) return updater([chat])
+      if (JSON.stringify(queryKey) === JSON.stringify(chatDetailKey)) return updater(chat)
+      return updater(undefined)
+    })
+    const queryClient = {
+      invalidateQueries: vi.fn(),
+      getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
+        const key = JSON.stringify(queryKey)
+        if (key === JSON.stringify(['telegram', 'chats'])) return [[chatsKey, [chat]]]
+        if (key === JSON.stringify(['telegram', 'chat-detail'])) return [[chatDetailKey, chat]]
+        return []
+      }),
+      setQueryData
+    }
+
+    handleRealtimeEvent(
+      {
+        id: 'tg-56',
+        event: 'event',
+        data: JSON.stringify({
+          event: {
+            event_type: 'telegram.typing.changed',
+            occurred_at: '2026-06-16T09:00:00.000Z',
+            payload: {
+              telegram_chat_id: 'tgchat-1',
+              provider_chat_id: 'chat-1',
+              sender_id: 'user:777',
+              action: 'chatActionTyping',
+              is_active: true
+            }
+          }
+        })
+      },
+      queryClient
+    )
+
+    expect(setQueryData.mock.results[0]?.value[0].metadata.active_typing).toMatchObject({
+      sender_id: 'user:777',
+      action: 'chatActionTyping',
+      is_active: true,
+      expires_at: '2026-06-16T09:00:07.000Z'
+    })
+    expect(setQueryData.mock.results[1]?.value.metadata.active_typing.sender_id).toBe('user:777')
+  })
+
   it('patches cached telegram message reaction summary for telegram reaction events', () => {
     const messageKey = ['telegram', 'messages', 'account-1', 'chat-1', 50]
     const messages = [

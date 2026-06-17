@@ -1,34 +1,49 @@
-use std::sync::mpsc;
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::time::Duration;
 
 use serde_json::json;
+use tokio::sync::mpsc::UnboundedSender;
 
 use crate::integrations::telegram::client::{TelegramError, TelegramQrLoginStartRequest};
-use crate::integrations::telegram::tdjson;
+use crate::integrations::telegram::tdjson::{self, TdJsonClient};
 use crate::platform::config::AppConfig;
 
-use super::super::state::TelegramRuntimeCommand;
+use super::super::state::{TelegramRuntimeCommand, TelegramRuntimeEvent};
 use super::authorization::{prepare_tdlib_client, wait_for_tdlib_ready};
 use super::chats::actor_load_chats;
 use super::download::actor_download_file;
 use super::edit::{
-    actor_delete_message, actor_edit_message, actor_pin_message, actor_set_reaction,
+    actor_delete_message, actor_edit_message, actor_join_chat, actor_leave_chat, actor_pin_message,
+    actor_set_reaction, actor_toggle_chat_archive, actor_toggle_chat_mute,
+    actor_toggle_chat_unread,
 };
 use super::history::actor_sync_history;
+use super::participants::actor_get_supergroup_members;
 use super::search::{actor_search_chat_messages, actor_search_messages};
-use super::send::{actor_send_reply, actor_send_text};
+use super::send::{actor_send_forward, actor_send_media, actor_send_reply, actor_send_text};
 use super::topics::actor_get_forum_topics;
 
 pub(super) fn drive_tdlib_actor(
     config: AppConfig,
     start_request: TelegramQrLoginStartRequest,
     command_rx: mpsc::Receiver<TelegramRuntimeCommand>,
+    runtime_event_tx: Option<UnboundedSender<TelegramRuntimeEvent>>,
 ) -> Result<(), TelegramError> {
     let library = tdjson::TdJsonLibrary::load(config.tdjson_path())?;
     let client = library.create_client()?;
     prepare_tdlib_client(&client, &start_request)?;
     wait_for_tdlib_ready(&client, &start_request)?;
 
-    while let Ok(command) = command_rx.recv() {
+    loop {
+        let command = match command_rx.recv_timeout(Duration::from_millis(250)) {
+            Ok(command) => command,
+            Err(RecvTimeoutError::Timeout) => {
+                drain_unsolicited_tdlib_events(&client, runtime_event_tx.as_ref())?;
+                continue;
+            }
+            Err(RecvTimeoutError::Disconnected) => break,
+        };
+
         match command {
             TelegramRuntimeCommand::LoadChats { limit, reply_tx } => {
                 let _ = reply_tx.send(actor_load_chats(&client, limit));
@@ -50,6 +65,9 @@ pub(super) fn drive_tdlib_actor(
             }
             TelegramRuntimeCommand::SendText { request, reply_tx } => {
                 let _ = reply_tx.send(actor_send_text(&client, &request));
+            }
+            TelegramRuntimeCommand::SendMedia { request, reply_tx } => {
+                let _ = reply_tx.send(actor_send_media(&client, &request));
             }
             TelegramRuntimeCommand::DownloadFile {
                 file_id,
@@ -120,6 +138,59 @@ pub(super) fn drive_tdlib_actor(
                     &command_id,
                 ));
             }
+            TelegramRuntimeCommand::ToggleChatUnread {
+                provider_chat_id,
+                is_marked_as_unread,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_toggle_chat_unread(
+                    &client,
+                    &provider_chat_id,
+                    is_marked_as_unread,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::ToggleChatArchive {
+                provider_chat_id,
+                archived,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_toggle_chat_archive(
+                    &client,
+                    &provider_chat_id,
+                    archived,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::ToggleChatMute {
+                provider_chat_id,
+                muted,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_toggle_chat_mute(
+                    &client,
+                    &provider_chat_id,
+                    muted,
+                    &command_id,
+                ));
+            }
+            TelegramRuntimeCommand::JoinChat {
+                provider_chat_id,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_join_chat(&client, &provider_chat_id, &command_id));
+            }
+            TelegramRuntimeCommand::LeaveChat {
+                provider_chat_id,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_leave_chat(&client, &provider_chat_id, &command_id));
+            }
             TelegramRuntimeCommand::ReplyMessage {
                 provider_chat_id,
                 reply_to_provider_message_id,
@@ -135,12 +206,34 @@ pub(super) fn drive_tdlib_actor(
                     &command_id,
                 ));
             }
+            TelegramRuntimeCommand::ForwardMessage {
+                provider_chat_id,
+                from_provider_chat_id,
+                from_provider_message_id,
+                command_id,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_send_forward(
+                    &client,
+                    &provider_chat_id,
+                    &from_provider_chat_id,
+                    &from_provider_message_id,
+                    &command_id,
+                ));
+            }
             TelegramRuntimeCommand::GetForumTopics {
                 provider_chat_id,
                 limit,
                 reply_tx,
             } => {
                 let _ = reply_tx.send(actor_get_forum_topics(&client, &provider_chat_id, limit));
+            }
+            TelegramRuntimeCommand::GetSupergroupMembers {
+                supergroup_id,
+                limit,
+                reply_tx,
+            } => {
+                let _ = reply_tx.send(actor_get_supergroup_members(&client, supergroup_id, limit));
             }
             TelegramRuntimeCommand::SearchMessages {
                 query,
@@ -163,8 +256,64 @@ pub(super) fn drive_tdlib_actor(
                 ));
             }
         }
+        drain_unsolicited_tdlib_events(&client, runtime_event_tx.as_ref())?;
     }
 
     let _ = client.send_json(&json!({ "@type": "close" }));
+    Ok(())
+}
+
+fn drain_unsolicited_tdlib_events(
+    client: &TdJsonClient,
+    runtime_event_tx: Option<&UnboundedSender<TelegramRuntimeEvent>>,
+) -> Result<(), TelegramError> {
+    let Some(runtime_event_tx) = runtime_event_tx else {
+        return Ok(());
+    };
+
+    while let Some(event) = client.receive_json(0.0)? {
+        if let Some(snapshot) = tdjson::parse_tdlib_new_message_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageCreated(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_message_content_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageContentUpdated(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_message_edited_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageEdited(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_message_pinned_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessagePinnedUpdated(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_message_delete_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageDeleted(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_message_interaction_info_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::MessageInteractionInfoUpdated(
+                snapshot,
+            ));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_typing_snapshot(&event) {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::TypingChanged(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_topic_update_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::TopicUpdated(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_chat_unread_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::ChatUnreadUpdated(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_chat_marked_as_unread_snapshot(&event)? {
+            let _ =
+                runtime_event_tx.send(TelegramRuntimeEvent::ChatMarkedAsUnreadUpdated(snapshot));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_chat_notification_settings_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::ChatNotificationSettingsUpdated(
+                snapshot,
+            ));
+        }
+        if let Some(snapshot) = tdjson::parse_tdlib_chat_position_snapshot(&event)? {
+            let _ = runtime_event_tx.send(TelegramRuntimeEvent::ChatPositionUpdated(snapshot));
+        }
+    }
+
     Ok(())
 }

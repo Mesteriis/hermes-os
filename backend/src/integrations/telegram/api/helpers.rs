@@ -1,6 +1,7 @@
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::event_store;
 use crate::integrations::telegram::client::{TelegramStore, telegram_chat_id};
+use crate::integrations::telegram::runtime::TelegramRuntimeEventBridgeContext;
 use crate::platform::config::AppConfig;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::secrets::SecretReferenceStore;
@@ -19,6 +20,12 @@ pub(super) fn telegram_secret_store(state: &AppState) -> Result<SecretReferenceS
         return Err(ApiError::DatabaseNotConfigured);
     };
     Ok(SecretReferenceStore::new(pool.clone()))
+}
+
+pub(super) fn telegram_runtime_event_bridge_context(
+    state: &AppState,
+) -> TelegramRuntimeEventBridgeContext {
+    TelegramRuntimeEventBridgeContext::new(state.database.pool().cloned(), state.event_bus.clone())
 }
 
 pub(super) async fn publish_telegram_event(

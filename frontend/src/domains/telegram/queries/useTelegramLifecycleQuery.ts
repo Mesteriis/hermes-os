@@ -1,10 +1,11 @@
-import { useQuery } from '@tanstack/vue-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
   fetchTelegramCommands,
   fetchTelegramMessageTombstones,
   fetchTelegramMessageVersions,
   fetchTelegramReactions,
+  retryTelegramCommand,
 } from '../api/telegramLifecycle'
 import type {
   TelegramMessageTombstoneListResponse,
@@ -58,5 +59,16 @@ export function useTelegramCommandsQuery(
       return response.items
     },
     enabled: computed(() => Boolean(toValue(accountId)) && Boolean(toValue(enabled))),
+  })
+}
+
+export function useTelegramCommandRetryMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: retryTelegramCommand,
+    onSuccess: (command) => {
+      queryClient.invalidateQueries({ queryKey: ['telegram', 'commands', command.account_id] })
+      queryClient.invalidateQueries({ queryKey: ['telegram', 'commands'] })
+    },
   })
 }

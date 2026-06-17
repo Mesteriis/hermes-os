@@ -28,6 +28,14 @@ export type TelegramReplyRequest = {
   text: string
 }
 
+export type TelegramForwardRequest = {
+  command_id: string
+  account_id: string
+  provider_chat_id: string
+  from_provider_chat_id: string
+  from_provider_message_id: string
+}
+
 export type TelegramDeleteRequest = {
   command_id: string
   account_id: string

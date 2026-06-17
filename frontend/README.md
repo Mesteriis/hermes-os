@@ -33,42 +33,41 @@ pnpm tauri init --ci --app-name "Hermes Hub" --window-title "Hermes Hub" --front
 ## Commands
 
 ```sh
-pnpm install
-pnpm lint:ts
-pnpm build
-pnpm dev
-pnpm tauri dev
-pnpm tauri build
+make dev
+make logs
+make build
+make migrate
+make clean
+make clean-vault
 ```
 
-From the repository root, the same checks are available through Make:
+`make dev` is the supported desktop development loop. It starts PostgreSQL in
+Docker, runs the backend via repo-local `bacon`, starts this Vue 3 + Vite
+frontend natively, and then launches `pnpm tauri dev` against the already-running Vite server at
+`http://127.0.0.1:5174`.
+
+The active session also exposes an aggregated plain-text log at:
 
 ```sh
-make frontend-install
-make frontend-dev
-make frontend-lint
-make frontend-check
-make frontend-build
-make tdlib-macos-resource
-make backend-sidecar-macos
-make frontend-tauri-dev
-make frontend-tauri-build
+make logs
 ```
 
-For the normal full-stack development loop, use `make dev` from the repository root. It starts PostgreSQL, the backend auto-restart watcher, and this frontend with Vite HMR. The default frontend URL is `http://127.0.0.1:5174`; override it with `HERMES_FRONTEND_PORT` in `docker/.env` when needed.
+`make build` is the supported release packaging entrypoint. It builds the
+frontend, builds the backend release binary, prepares bundled Google OAuth,
+TDLib and backend sidecar resources internally, and then runs `pnpm tauri
+build`.
 
 ## Bundled TDLib Runtime
 
 macOS release builds package the Telegram TDLib JSON runtime from
 `frontend/src-tauri/resources/tdlib/`. Generated `libtdjson.dylib` files are not
-committed; prepare the resource before `tauri build`:
+committed; `make build` prepares the resource automatically before `tauri build`:
 
 ```sh
-make tdlib-macos-resource
-make frontend-tauri-build
+make build
 ```
 
-`make tdlib-macos-resource` copies `libtdjson.dylib` from, in order:
+The internal build step copies `libtdjson.dylib` from, in order:
 
 1. `HERMES_TDJSON_SOURCE`
 2. `HERMES_TDJSON_PATH`
@@ -79,7 +78,7 @@ make frontend-tauri-build
 Release CI can build TDLib from source instead of relying on a system install:
 
 ```sh
-HERMES_TDLIB_BUILD_FROM_SOURCE=1 make tdlib-macos-resource
+HERMES_TDLIB_BUILD_FROM_SOURCE=1 make build
 ```
 
 The backend still accepts `HERMES_TDJSON_PATH` as a development override, but a
@@ -99,30 +98,24 @@ the packaged app should not create their own Google Cloud project. Release build
 copy the downloaded Desktop app JSON into the Tauri resource bundle:
 
 ```sh
-make google-oauth-resource
-make frontend-tauri-build
+make build
 ```
 
-`make google-oauth-resource` reads `HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH` from
+The internal build step reads `HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH` from
 `docker/.env`, or `HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_SOURCE` from the shell, and
 copies the file to `frontend/src-tauri/resources/google-oauth/client_secret.json`.
-That generated resource is ignored by Git. The packaged launcher passes the
-bundled resource path to the backend sidecar as
+That generated resource is ignored by Git. The packaged launcher passes the bundled resource path to the backend sidecar as
 `HERMES_GOOGLE_OAUTH_CLIENT_CONFIG_PATH`.
 
 ## Bundled Backend Sidecar
 
 macOS release builds package the Rust backend as a Tauri sidecar from
 `frontend/src-tauri/binaries/`. Generated sidecar binaries are not committed;
-prepare the current host binary before `tauri build`:
+`make build` prepares the current host binary before `tauri build`:
 
 ```sh
-make backend-sidecar-macos
-make frontend-tauri-build
+make build
 ```
-
-`make frontend-tauri-build` runs `google-oauth-resource`,
-`backend-sidecar-macos` and `tdlib-macos-resource` before invoking Tauri.
 
 ## Architecture
 
@@ -149,17 +142,14 @@ Data flow: API → TanStack Query → Component (direct) or API → Pinia Store 
 
 Requests use `X-Hermes-Secret: <secret>` via the centralized `ApiClient` (see `src/platform/api/ApiClient.ts`).
 
-Validate frontend changes with:
+Validate frontend packaging changes with:
 
 ```sh
-pnpm lint:ts
-pnpm build
+make build
 ```
 
-From the repository root, the full validation path is:
+For the normal full-stack desktop workflow:
 
 ```sh
-make frontend-check
-make frontend-build
-make validate
+make dev
 ```

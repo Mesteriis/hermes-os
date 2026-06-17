@@ -2,6 +2,7 @@
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { TelegramChat, TelegramMediaItem, TelegramMessage } from '../types/telegram'
+import { telegramMediaReadiness } from '../stores/telegramMediaSearch'
 
 const { t } = useI18n()
 
@@ -12,6 +13,8 @@ const props = defineProps<{
   total: number
   mediaItems: TelegramMediaItem[]
   isLoading: boolean
+  sourceLabel: string
+  mediaSourceLabel: string
 }>()
 
 const emit = defineEmits<{
@@ -41,7 +44,7 @@ function mediaLabel(item: TelegramMediaItem): string {
 }
 
 function totalResultsCount(): number {
-  return props.chats.length + props.total
+  return props.chats.length + props.total + props.mediaItems.length
 }
 </script>
 
@@ -56,6 +59,7 @@ function totalResultsCount(): number {
         {{ totalResultsCount() }} {{ t('results') }}
       </span>
     </header>
+    <p class="telegram-search-results__source">{{ t(sourceLabel) }}</p>
 
     <div v-if="isLoading" class="empty-panel fill">
       {{ t('Searching Telegram workspace...') }}
@@ -114,6 +118,9 @@ function totalResultsCount(): number {
       <section v-if="mediaItems.length > 0" class="telegram-search-results__section">
         <header>
           <h3>{{ t('Media In Current Chat') }}</h3>
+          <p v-if="mediaSourceLabel" class="telegram-search-results__media-source">
+            {{ t(mediaSourceLabel) }}
+          </p>
         </header>
         <div class="telegram-search-results__media-grid">
           <button
@@ -129,6 +136,7 @@ function totalResultsCount(): number {
             <div>
               <strong>{{ item.file_name }}</strong>
               <small>{{ mediaLabel(item) }} · {{ item.download_state }}</small>
+              <small>{{ telegramMediaReadiness(item).label }} · {{ telegramMediaReadiness(item).detail }}</small>
               <small>{{ formatDate(item.occurred_at) }}</small>
             </div>
           </button>
@@ -162,10 +170,19 @@ function totalResultsCount(): number {
 }
 .telegram-search-results__header p,
 .telegram-search-results__count,
+.telegram-search-results__source,
+.telegram-search-results__media-source,
 .telegram-search-results__message small,
 .telegram-search-results__media-card small {
   color: var(--color-text-secondary, #777);
   font-size: 11px;
+}
+.telegram-search-results__source {
+  margin: 0;
+  padding: 8px 16px 0;
+}
+.telegram-search-results__media-source {
+  margin: 4px 0 0;
 }
 .telegram-search-results__body {
   display: flex;

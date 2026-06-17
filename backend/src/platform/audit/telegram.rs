@@ -127,6 +127,50 @@ impl NewApiAuditRecord {
         )
     }
 
+    pub fn telegram_media_upload(
+        actor_id: impl Into<String>,
+        command_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_chat_id: impl Into<String>,
+        attachment_id: Option<&str>,
+        blob_id: Option<&str>,
+        media_type: Option<&str>,
+    ) -> Self {
+        let command_id = command_id.into();
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::ProviderWrite,
+            "telegram.media.upload",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.into());
+        insert_non_empty(metadata_object, "provider_chat_id", provider_chat_id.into());
+        insert_optional(
+            metadata_object,
+            "attachment_id",
+            attachment_id.map(ToOwned::to_owned),
+        );
+        insert_optional(metadata_object, "blob_id", blob_id.map(ToOwned::to_owned));
+        insert_optional(
+            metadata_object,
+            "media_type",
+            media_type.map(ToOwned::to_owned),
+        );
+
+        Self::new(
+            actor_id,
+            "telegram.media.upload",
+            "POST",
+            "/api/v1/telegram/media/upload",
+            "telegram_media_upload_command",
+            Some(command_id),
+            metadata,
+        )
+    }
+
     pub fn telegram_account_logout(
         actor_id: impl Into<String>,
         account_id: impl Into<String>,
@@ -164,6 +208,72 @@ impl NewApiAuditRecord {
                 provider_kind: provider_kind.into(),
                 lifecycle_state: lifecycle_state.into(),
             },
+        )
+    }
+
+    pub fn telegram_runtime_stop(
+        actor_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_kind: impl Into<String>,
+        runtime_kind: impl Into<String>,
+        status: impl Into<String>,
+    ) -> Self {
+        let account_id = account_id.into();
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::LocalWrite,
+            "telegram.runtime.stop",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.clone());
+        insert_non_empty(metadata_object, "provider_kind", provider_kind.into());
+        insert_non_empty(metadata_object, "runtime_kind", runtime_kind.into());
+        insert_non_empty(metadata_object, "status", status.into());
+
+        Self::new(
+            actor_id,
+            "telegram.runtime.stop",
+            "POST",
+            "/api/v1/telegram/runtime/stop",
+            "communication_provider_account",
+            Some(account_id),
+            metadata,
+        )
+    }
+
+    pub fn telegram_runtime_restart(
+        actor_id: impl Into<String>,
+        account_id: impl Into<String>,
+        provider_kind: impl Into<String>,
+        runtime_kind: impl Into<String>,
+        status: impl Into<String>,
+    ) -> Self {
+        let account_id = account_id.into();
+        let mut metadata = CapabilityDecision::explicit_user_allowed(
+            CapabilityActionClass::LocalWrite,
+            "telegram.runtime.restart",
+            "explicit_user_confirmation",
+        )
+        .audit_metadata();
+        let metadata_object = metadata
+            .as_object_mut()
+            .expect("capability decision metadata must be an object");
+        insert_non_empty(metadata_object, "account_id", account_id.clone());
+        insert_non_empty(metadata_object, "provider_kind", provider_kind.into());
+        insert_non_empty(metadata_object, "runtime_kind", runtime_kind.into());
+        insert_non_empty(metadata_object, "status", status.into());
+
+        Self::new(
+            actor_id,
+            "telegram.runtime.restart",
+            "POST",
+            "/api/v1/telegram/runtime/restart",
+            "communication_provider_account",
+            Some(account_id),
+            metadata,
         )
     }
 

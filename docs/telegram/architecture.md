@@ -1,6 +1,6 @@
 # Telegram Architecture
 
-Статус: архитектурная ревизия и целевая спецификация на 2026-06-15.
+Статус: архитектурная ревизия и целевая спецификация на 2026-06-17.
 
 ## Позиция
 
@@ -76,7 +76,7 @@ Telegram runtime event
 | API routes | `backend/src/integrations/telegram/api/` | Account, capability, runtime, QR, chat, message and media endpoints |
 | Runtime manager | `backend/src/integrations/telegram/runtime/` | Fixture and TDLib account actor orchestration |
 | Client/store | `backend/src/integrations/telegram/client/` | Account metadata, chat projection, message ingestion, queries, attachment anchors |
-| TDLib boundary | `backend/src/integrations/telegram/tdjson/` | JSON request builders, parsing, QR login, native TDLib loading |
+| TDLib boundary | `backend/src/integrations/telegram/tdjson/` | JSON request builders, parsing, QR login, native TDLib loading; contract tests are split by environment, request builders, parsing snapshots and QR-login flows |
 | Source records | `backend/src/domains/mail/core/` compatibility boundary | Raw provider records and provider accounts |
 | Projection | `backend/src/domains/mail/messages/` compatibility boundary | Canonical `communication_messages` projection |
 | Media storage | `backend/src/domains/mail/storage/` compatibility boundary | Local blob and attachment metadata/scanner boundary |
@@ -114,7 +114,7 @@ tdlib_qr_authorized
 | Fixture runtime | Deterministic local/test validation | implemented |
 | TDLib user runtime | QR-authorized live user account | partial |
 | Bot API runtime | Bot account runtime | missing |
-| Offline command runtime | durable local command replay | missing |
+| Offline command runtime | durable local command replay | partial |
 | Media capture runtime | voice/video/call capture boundary | missing |
 
 ## Account Boundary
@@ -203,6 +203,12 @@ provider message edited
   -> diff metadata
   -> telegram.message.updated
 
+provider message pin state observed
+  -> provider pin-state event
+  -> projected message metadata refresh
+  -> message pin command reconciliation
+  -> telegram.message.updated
+
 provider/local delete observed
   -> raw delete evidence
   -> tombstone row
@@ -229,6 +235,86 @@ local restore visibility
 - optional forward_source;
 - optional edit_version;
 - optional tombstone state.
+
+## Provider Command Outbox
+
+Telegram provider writes must use the provider command path. UI components do
+not call TDLib/Bot API upload or write primitives directly.
+
+Current durable outbox foundation:
+
+```text
+API command route
+  -> telegram_provider_write_commands
+  -> atomic claim/lock
+  -> runtime actor dispatch
+  -> provider-observed state
+  -> Communication projection refresh
+  -> telegram.command.status_changed / telegram.command.reconciled
+```
+
+Command rows currently carry:
+
+- status including `queued`, `executing`, `completed`, `failed`, `retrying`,
+  `cancelled` and `dead_letter`;
+- retry counters and due timestamps;
+- execution lock owner/timestamp;
+- provider-observed state and reconciliation status;
+- result payload and redacted audit metadata.
+
+Current provider-observed reconciliation coverage includes:
+
+- send/reply/forward/media upload from returned TDLib message snapshots;
+- edit from TDLib `updateMessageContent` when the observed provider body text
+  matches the queued command payload;
+- delete from TDLib `updateDeleteMessages` provider tombstone observation;
+- self `join` from TDLib member-roster presence;
+- self `join` / `leave` from explicit TDLib service-message evidence;
+- self `react` / `unreact` from TDLib message `interaction_info.reactions`
+  chosen emoji state, including unsolicited `updateMessageInteractionInfo`
+  runtime updates;
+- `mark_read` / `mark_unread` from TDLib `updateChatIsMarkedAsUnread`;
+- `pin` / `unpin` from TDLib `updateChatPosition` main/archive list pin state;
+- `archive` / `unarchive` from TDLib `updateChatPosition` main/archive list presence;
+- exact-shape `mute` / `unmute` from TDLib `updateChatNotificationSettings`.
+
+Folder labels/mutations, custom mute shapes, silent/admin participant
+lifecycle, edit/topic writes, non-self reaction removal parity and Bot API
+writes still need stronger provider-observed reconciliation before they can be
+marked `completed`. Provider-observed edit source evidence currently lands in
+append-only `telegram_message_versions` rows plus realtime/event-log payloads;
+the raw `telegram_message` communication record remains append-only by
+`provider_record_id`.
+
+Media upload follows the same provider-command boundary:
+
+```text
+Communication attachment import
+  -> local blob + communication_attachment_imports
+Telegram media upload API
+  -> send_media command
+Outbox executor
+  -> TDLib sendMessage media request from local blob path
+  -> provider-observed message snapshot
+  -> Communication projection refresh
+```
+
+UI must pass `attachment_id` or `blob_id`; it must not upload directly to TDLib
+or Bot API.
+
+`completed` is reserved for provider-observed state. A successful TDLib ACK is
+not enough for completion unless the actor returns a concrete provider message
+snapshot. ACK-only writes remain `executing/awaiting_provider` until a later
+provider reconciliation pass observes the target state.
+For participant lifecycle, TDLib member sync is a provider-observed source:
+when `getSupergroupMembers` returns the selected account's own active
+`user:<telegram_id>` roster row, matching self `join` commands may be marked
+`completed` and emit `telegram.command.reconciled`. The current recent roster
+page is not an authoritative absence proof. TDLib history sync is also a
+provider-observed source when explicit `messageChatAddMembers` or
+`messageChatDeleteMember` service messages name the selected account; those
+events can reconcile matching self `join`/`leave` commands. Silent/admin
+membership state changes still require a stronger provider observation path.
 
 ## Dialog / Chat Model
 
@@ -320,6 +406,7 @@ Current compatibility issue:
 ```text
 MailStorageStore
 communication_mail_blobs
+communication_attachment_imports
 ```
 
 This is an implementation compatibility label. Target architecture should expose
@@ -344,8 +431,8 @@ Search layers:
 5. media search;
 6. dialog/member/topic search.
 
-Current implementation has layers 1-3 partially. Provider search and media search
-are missing.
+Current implementation has layers 1-5 partially. Richer provider media filters,
+remote preview parity and provider member search remain missing.
 
 ## Realtime Architecture
 
@@ -380,8 +467,24 @@ telegram.chat.archived
 telegram.chat.muted
 telegram.topic.updated
 telegram.media.downloaded
+telegram.media.upload.started
+telegram.media.upload.completed
+telegram.media.upload.failed
 telegram.command.status_changed
 ```
+
+Current topic realtime implementation covers provider-observed
+`updateForumTopicInfo` updates from TDLib. The runtime bridge resolves the
+projected chat, upserts the existing topic projection, emits sanitized
+`telegram.topic.updated` and lets the frontend patch topic list/search caches
+before replay invalidation. This is not a topic write-command model.
+
+Current provider-observed unread implementation covers TDLib
+`updateChatReadInbox` and `updateChatUnreadMentionCount`. The runtime bridge
+resolves the projected chat, updates chat metadata counters, emits sanitized
+`telegram.chat.updated` with a projected chat snapshot and lets the frontend
+reuse the existing chat list/detail patch path. This is not full message-level
+read receipt history.
 
 Events must never include:
 
@@ -413,6 +516,28 @@ Manual text send currently exists. Target command model must support:
 - join/leave;
 - admin actions if ever scoped.
 
+Provider participant state is projection data owned by Telegram as a
+Communication Channel. `telegram_chat_participants` stores TDLib-observed
+member roster evidence for supergroups/channels, including provider member id,
+role/status/admin/owner state, permissions and raw TDLib payload metadata. It
+does not create Persona, Organization, Memory, Knowledge, Obligation or
+Decision records. Message-sender aggregation is allowed only as an explicit
+read fallback (`source=message_heuristic`) when provider roster rows do not
+exist for a chat.
+
+Join/leave are provider-write commands, not direct projection mutations:
+
+```text
+POST /telegram/chats/join or /telegram/chats/{id}/leave
+  -> telegram_provider_write_commands(command_kind=join|leave)
+  -> TDLib joinChat/leaveChat dispatch by active actor
+  -> awaiting_provider after TDLib ACK
+  -> join completed only when TDLib roster sync observes active self membership
+  -> join/leave may also complete when TDLib history sync ingests explicit
+     self-targeted participant service-message evidence
+  -> silent/admin membership changes still await stronger provider evidence
+```
+
 Each command should have:
 
 - command_id;
@@ -425,6 +550,15 @@ Each command should have:
 - retry/degraded state;
 - per-target result rows;
 - sanitized realtime events.
+
+Runtime manager methods that need stores, secret resolution, config and runtime
+event bridge state should accept the shared Telegram runtime context structs
+instead of long repeated argument lists:
+
+- `TelegramRuntimeStartContext` for runtime start/restart actor lifecycle;
+- `TelegramRuntimeOperationContext` for sync, send, search and topic refresh;
+- `TelegramMediaDownloadContext` and `TelegramMemberSyncContext` for scoped
+  media/member slices that need additional boundaries.
 
 ## Calls / Voice / STT
 

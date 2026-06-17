@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import TelegramAccountManager from './TelegramAccountManager.vue'
 import TelegramCallsPanel from './TelegramCallsPanel.vue'
 import TelegramCommandAuditPanel from './TelegramCommandAuditPanel.vue'
-import type { TelegramChat, TelegramChatMember, TelegramMessage, TelegramRuntimeStatus } from '../types/telegram'
+import TelegramMembersPanel from './TelegramMembersPanel.vue'
+import type { TelegramCapabilitiesResponse, TelegramChat, TelegramChatMember, TelegramMessage, TelegramRuntimeStatus } from '../types/telegram'
 import type { TelegramRailTab } from '../types/telegram'
 import {
   telegramAttachmentHintsForMessages,
@@ -23,6 +24,7 @@ const props = defineProps<{
   selectedTelegramRuntimeStatus: TelegramRuntimeStatus | null
   selectedTelegramMessages: TelegramMessage[]
   chatMembers: TelegramChatMember[]
+  capabilities: TelegramCapabilitiesResponse | null
   isInspectorLoading: boolean
   activeRailTab: TelegramRailTab
 }>()
@@ -32,18 +34,7 @@ const emit = defineEmits<{
   'close': []
 }>()
 
-const memberSearchQuery = ref('')
 const selectedAccountId = computed(() => props.selectedTelegramChat?.account_id)
-const filteredChatMembers = computed(() => {
-  const query = memberSearchQuery.value.trim().toLowerCase()
-  if (!query) return props.chatMembers
-  return props.chatMembers.filter((member) =>
-    [member.sender_display_name ?? '', member.sender_id]
-      .join(' ')
-      .toLowerCase()
-      .includes(query)
-  )
-})
 
 function detailValue(chat: TelegramChat | null, key: string): string {
   if (!chat) return '—'
@@ -52,6 +43,15 @@ function detailValue(chat: TelegramChat | null, key: string): string {
   if (typeof value === 'number') return value.toLocaleString('en-US')
   if (typeof value === 'boolean') return value ? 'yes' : 'no'
   return '—'
+}
+
+function permissionsSummary(chat: TelegramChat | null): string {
+  const permissions = chat?.metadata?.tdlib_permissions
+  if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) return '—'
+  const entries = Object.entries(permissions)
+    .filter(([, value]) => typeof value === 'boolean')
+    .map(([key, value]) => `${key.replace(/^can_/, '')}:${value ? 'yes' : 'no'}`)
+  return entries.length ? entries.join(' · ') : '—'
 }
 
 function formatDate(value: string | null | undefined): string {
@@ -64,10 +64,6 @@ function formatDate(value: string | null | undefined): string {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date)
-}
-
-function memberName(member: TelegramChatMember): string {
-  return member.sender_display_name ?? member.sender_id
 }
 
 function syncSummary(status: TelegramRuntimeStatus | null): string {
@@ -86,6 +82,21 @@ function commandSummary(status: TelegramRuntimeStatus | null): string {
   const parts = [status.last_command_status]
   if (status.last_command_id) parts.push(status.last_command_id)
   return parts.join(' · ')
+}
+
+function syncTarget(status: TelegramRuntimeStatus | null): string {
+  if (!status?.last_sync_scope) return '—'
+  if (status.last_sync_scope === 'chats') return t('workspace')
+  return status.last_sync_provider_chat_id ?? '—'
+}
+
+function commandTarget(status: TelegramRuntimeStatus | null): string {
+  if (!status?.last_command_status) return '—'
+  return status.last_command_message_id
+    ?? status.last_command_telegram_chat_id
+    ?? status.last_command_provider_chat_id
+    ?? status.last_command_id
+    ?? '—'
 }
 
 function runtimeBlockers(status: TelegramRuntimeStatus | null): string {
@@ -139,7 +150,9 @@ function runtimeBlockers(status: TelegramRuntimeStatus | null): string {
             <div><dt>{{ t('Unread') }}</dt><dd>{{ selectedTelegramChatDetail ? telegramChatUnreadCount(selectedTelegramChatDetail) : 0 }}</dd></div>
             <div><dt>{{ t('Mentions') }}</dt><dd>{{ selectedTelegramChatDetail ? telegramChatMentionCount(selectedTelegramChatDetail, selectedTelegramMessages) : 0 }}</dd></div>
             <div><dt>{{ t('Last sync') }}</dt><dd>{{ syncSummary(selectedTelegramRuntimeStatus) }}</dd></div>
+            <div><dt>{{ t('Sync target') }}</dt><dd>{{ syncTarget(selectedTelegramRuntimeStatus) }}</dd></div>
             <div><dt>{{ t('Last command') }}</dt><dd>{{ commandSummary(selectedTelegramRuntimeStatus) }}</dd></div>
+            <div><dt>{{ t('Command target') }}</dt><dd>{{ commandTarget(selectedTelegramRuntimeStatus) }}</dd></div>
           </dl>
         </article>
         <TelegramCallsPanel :selectedAccountId="selectedTelegramChat?.account_id ?? null" />
@@ -150,30 +163,13 @@ function runtimeBlockers(status: TelegramRuntimeStatus | null): string {
       </div>
 
       <div v-else-if="activeRailTab === 'members'" class="telegram-rail-section">
-        <label v-if="chatMembers.length > 0" class="telegram-member-search">
-          <Icon icon="tabler:search" width="15" height="15" />
-          <input
-            v-model="memberSearchQuery"
-            type="search"
-            :placeholder="t('Search projected members')"
-          />
-        </label>
-        <div v-if="chatMembers.length === 0" class="telegram-inspector-placeholder">
-          {{ t('Members will appear after selected-chat history is synced.') }}
-        </div>
-        <div v-else-if="filteredChatMembers.length === 0" class="telegram-inspector-placeholder">
-          {{ t('No projected members match this search.') }}
-        </div>
-        <article v-for="member in filteredChatMembers" :key="member.sender_id" class="telegram-rail-card telegram-member-card">
-          <div>
-            <strong>{{ memberName(member) }}</strong>
-            <p>{{ member.sender_id }}</p>
-          </div>
-          <div class="telegram-member-side">
-            <b>{{ member.message_count }}</b>
-            <small>{{ formatDate(member.last_message_at) }}</small>
-          </div>
-        </article>
+        <TelegramMembersPanel
+          :telegramChatId="selectedTelegramChat?.telegram_chat_id ?? null"
+          :accountId="selectedTelegramChat?.account_id ?? null"
+          :providerChatId="selectedTelegramChat?.provider_chat_id ?? null"
+          :chatMembers="chatMembers"
+          :capabilities="capabilities"
+        />
       </div>
 
       <div v-else class="telegram-rail-section">
@@ -183,6 +179,12 @@ function runtimeBlockers(status: TelegramRuntimeStatus | null): string {
             <div><dt>ID</dt><dd>{{ selectedTelegramChatDetail?.provider_chat_id ?? '—' }}</dd></div>
             <div><dt>{{ t('Type') }}</dt><dd>{{ selectedTelegramChatDetail?.chat_kind ?? '—' }}</dd></div>
             <div><dt>Username</dt><dd>{{ selectedTelegramChatDetail?.username ?? '—' }}</dd></div>
+            <div><dt>{{ t('TDLib chat type') }}</dt><dd>{{ detailValue(selectedTelegramChatDetail, 'tdlib_chat_type') }}</dd></div>
+            <div><dt>{{ t('Supergroup ID') }}</dt><dd>{{ detailValue(selectedTelegramChatDetail, 'tdlib_supergroup_id') }}</dd></div>
+            <div><dt>{{ t('Supergroup') }}</dt><dd>{{ detailValue(selectedTelegramChatDetail, 'is_supergroup') }}</dd></div>
+            <div><dt>{{ t('Forum') }}</dt><dd>{{ detailValue(selectedTelegramChatDetail, 'is_forum') }}</dd></div>
+            <div><dt>{{ t('Channel supergroup') }}</dt><dd>{{ detailValue(selectedTelegramChatDetail, 'is_channel_supergroup') }}</dd></div>
+            <div><dt>{{ t('Permissions') }}</dt><dd>{{ permissionsSummary(selectedTelegramChatDetail) }}</dd></div>
             <div><dt>{{ t('State') }}</dt><dd>{{ selectedTelegramChatDetail?.sync_state ?? '—' }}</dd></div>
             <div><dt>{{ t('Runtime') }}</dt><dd>{{ selectedTelegramRuntimeStatus?.status ?? '—' }}</dd></div>
             <div><dt>TDLib path</dt><dd>{{ selectedTelegramRuntimeStatus?.tdjson_path ?? '—' }}</dd></div>
@@ -315,42 +317,6 @@ function runtimeBlockers(status: TelegramRuntimeStatus | null): string {
   margin: 0;
   text-align: right;
   color: var(--color-text, #333);
-}
-.telegram-member-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border, #e0e0e0);
-  border-radius: 999px;
-  background: var(--color-surface, #fff);
-  color: var(--color-text-secondary, #777);
-}
-.telegram-member-search input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  font: inherit;
-  color: var(--color-text, #333);
-  outline: none;
-}
-.telegram-member-card {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-}
-.telegram-member-card strong {
-  display: block;
-  font-size: 13px;
-}
-.telegram-member-card p,
-.telegram-member-side small {
-  margin: 2px 0 0;
-  font-size: 11px;
-  color: var(--color-text-secondary, #777);
-}
-.telegram-member-side {
-  text-align: right;
 }
 .telegram-call-placeholder {
   margin: 2px 0 0;

@@ -78,6 +78,12 @@ pub(super) fn telegram_error_parts(error: TelegramError) -> ErrorParts {
             "telegram_projection_error",
             "Telegram message projection failed",
         ),
+        TelegramError::MailStorage(error) => internal(
+            error,
+            "Telegram mail storage operation failed",
+            "telegram_mail_storage_error",
+            "Telegram attachment storage operation failed",
+        ),
         TelegramError::Decision(error) => internal(
             error,
             "Telegram decision candidate refresh failed",

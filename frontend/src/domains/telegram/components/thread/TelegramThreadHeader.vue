@@ -9,7 +9,7 @@ import type {
   TelegramRuntimeStatus,
   TelegramThreadTab
 } from '../../types/telegram'
-import { telegramChatMentionCountValue } from '../../stores/telegram'
+import { telegramChatIsSavedMessages, telegramChatMentionCountValue, telegramChatTypingLabel } from '../../stores/telegram'
 
 const { t } = useI18n()
 
@@ -35,6 +35,7 @@ const emit = defineEmits<{
 }>()
 
 function memberSummary(chat: TelegramChat): string {
+  if (telegramChatIsSavedMessages(chat)) return t('Saved Messages')
   const memberCount = chat.metadata.member_count ?? chat.metadata.members_count
   const onlineCount = chat.metadata.online_count ?? chat.metadata.online_members_count
   if (typeof memberCount === 'number' && typeof onlineCount === 'number') {
@@ -78,6 +79,47 @@ function unreadCount(chat: TelegramChat): number {
 function mentionCount(chat: TelegramChat): number {
   return telegramChatMentionCountValue(chat)
 }
+
+function typingLabel(chat: TelegramChat): string {
+  return telegramChatTypingLabel(chat)
+}
+
+function syncStateMatchesChat(
+  status: TelegramRuntimeStatus | null,
+  chat: TelegramChat
+): boolean {
+  if (!status?.last_sync_scope) return false
+  if (status.last_sync_scope === 'chats') return true
+  return status.last_sync_provider_chat_id === chat.provider_chat_id
+}
+
+function syncStateLabel(
+  status: TelegramRuntimeStatus | null,
+  chat: TelegramChat
+): string {
+  if (!syncStateMatchesChat(status, chat)) return ''
+  const parts = [status?.last_sync_scope ?? t('sync')]
+  if (typeof status?.last_synced_count === 'number') parts.push(String(status.last_synced_count))
+  if (status?.last_sync_status) parts.push(status.last_sync_status)
+  return parts.join(' · ')
+}
+
+function commandStateMatchesChat(
+  status: TelegramRuntimeStatus | null,
+  chat: TelegramChat
+): boolean {
+  return Boolean(status?.last_command_status && status.last_command_provider_chat_id === chat.provider_chat_id)
+}
+
+function commandStateLabel(
+  status: TelegramRuntimeStatus | null,
+  chat: TelegramChat
+): string {
+  if (!commandStateMatchesChat(status, chat)) return ''
+  const parts = [status?.last_command_status ?? t('command')]
+  if (status?.last_command_message_id) parts.push(status.last_command_message_id)
+  return parts.join(' · ')
+}
 </script>
 
 <template>
@@ -95,6 +137,21 @@ function mentionCount(chat: TelegramChat): number {
           </span>
           <span v-if="mentionCount(selectedTelegramChat) > 0" class="telegram-thread-stat telegram-thread-stat-mention">
             @{{ mentionCount(selectedTelegramChat) }} {{ t('mentions') }}
+          </span>
+          <span v-if="typingLabel(selectedTelegramChat)" class="telegram-thread-stat telegram-thread-stat-typing">
+            {{ typingLabel(selectedTelegramChat) }}
+          </span>
+          <span
+            v-if="syncStateMatchesChat(selectedTelegramRuntimeStatus, selectedTelegramChat)"
+            class="telegram-thread-stat telegram-thread-stat-sync"
+          >
+            {{ syncStateLabel(selectedTelegramRuntimeStatus, selectedTelegramChat) }}
+          </span>
+          <span
+            v-if="commandStateMatchesChat(selectedTelegramRuntimeStatus, selectedTelegramChat)"
+            class="telegram-thread-stat telegram-thread-stat-command"
+          >
+            {{ commandStateLabel(selectedTelegramRuntimeStatus, selectedTelegramChat) }}
           </span>
         </div>
       </div>
@@ -228,6 +285,18 @@ function mentionCount(chat: TelegramChat): number {
 .telegram-thread-stat-mention {
   background: #fff4e5;
   color: #9a5b00;
+}
+.telegram-thread-stat-sync {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+.telegram-thread-stat-command {
+  background: #ede7f6;
+  color: #512da8;
+}
+.telegram-thread-stat-typing {
+  background: #e0f2fe;
+  color: #075985;
 }
 .telegram-avatar.large {
   width: 36px;

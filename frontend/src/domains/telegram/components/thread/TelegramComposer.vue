@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import TelegramSendDryRunPanel from './TelegramSendDryRunPanel.vue'
-import type { TelegramMessage } from '../../types/telegram'
+import {
+  telegramComposerMediaCapabilityHint,
+  telegramComposerVoiceCapabilityHint
+} from '../../stores/telegramComposerCapabilities'
+import type { TelegramCapabilitiesResponse, TelegramMessage } from '../../types/telegram'
 
 const { t } = useI18n()
 
@@ -12,18 +16,24 @@ const props = defineProps<{
   isTelegramActionSubmitting: boolean
   selectedAccountId: string | null
   selectedProviderChatId: string | null
+  capabilities?: TelegramCapabilitiesResponse | null
   replyTo?: TelegramMessage | null
 }>()
 
 const emit = defineEmits<{
   'update:text': [value: string]
   sendMessage: []
+  uploadMedia: [file: File]
   syncHistory: []
   clearReply: []
 }>()
 
 const isEmojiTrayOpen = ref(false)
 const isSendMenuOpen = ref(false)
+const fileInput = ref<HTMLInputElement | null>(null)
+const mediaCapabilityHint = computed(() => telegramComposerMediaCapabilityHint(props.capabilities))
+const voiceCapabilityHint = computed(() => telegramComposerVoiceCapabilityHint(props.capabilities))
+const canUploadMedia = computed(() => mediaCapabilityHint.value.status === 'available')
 
 function appendEmoji(value: string) {
   emit('update:text', `${props.text}${value}`)
@@ -33,6 +43,19 @@ function appendEmoji(value: string) {
 function submitManualSend() {
   isSendMenuOpen.value = false
   emit('sendMessage')
+}
+
+function openMediaPicker() {
+  if (!canUploadMedia.value || props.isTelegramActionSubmitting) return
+  fileInput.value?.click()
+}
+
+function onMediaFileSelected(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  emit('uploadMedia', file)
 }
 </script>
 
@@ -47,7 +70,20 @@ function submitManualSend() {
     </button>
   </div>
   <form class="telegram-compose-bar" @submit.prevent="submitManualSend">
-    <button type="button" disabled :title="t('Attachment upload is not available in this slice')">
+    <input
+      ref="fileInput"
+      type="file"
+      class="telegram-media-input"
+      :aria-label="t('Attach media')"
+      @change="onMediaFileSelected"
+    />
+    <button
+      type="button"
+      :disabled="isTelegramActionSubmitting || !canUploadMedia"
+      :title="mediaCapabilityHint.title"
+      :aria-label="mediaCapabilityHint.summary"
+      @click="openMediaPicker"
+    >
       <Icon icon="tabler:paperclip" width="18" height="18" />
     </button>
     <textarea
@@ -72,7 +108,7 @@ function submitManualSend() {
         </button>
       </div>
     </div>
-    <button type="button" disabled :title="t('Voice messages require media runtime')">
+    <button type="button" disabled :title="voiceCapabilityHint.title" :aria-label="voiceCapabilityHint.summary">
       <Icon icon="tabler:microphone" width="18" height="18" />
     </button>
     <button
@@ -115,6 +151,10 @@ function submitManualSend() {
       </div>
     </div>
   </form>
+  <div class="telegram-composer-capabilities" aria-live="polite">
+    <span>{{ mediaCapabilityHint.summary }}</span>
+    <span>{{ voiceCapabilityHint.summary }}</span>
+  </div>
   </div>
 </template>
 
@@ -159,6 +199,9 @@ function submitManualSend() {
 }
 .telegram-compose-bar button.send:disabled {
   opacity: 0.5;
+}
+.telegram-media-input {
+  display: none;
 }
 .telegram-compose-menu {
   position: relative;
@@ -207,6 +250,22 @@ function submitManualSend() {
 .telegram-composer-wrapper {
   display: flex;
   flex-direction: column;
+}
+.telegram-composer-capabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 5px 14px 7px;
+  border-top: 1px solid var(--color-border, #e0e0e0);
+  background: var(--color-surface, #fff);
+  color: var(--color-text-secondary, #777);
+  font-size: 10px;
+}
+.telegram-composer-capabilities span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .telegram-reply-banner {
   display: flex;

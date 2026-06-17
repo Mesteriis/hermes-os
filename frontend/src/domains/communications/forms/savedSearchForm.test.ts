@@ -9,6 +9,7 @@ import {
   parseSavedSearchQuery,
   resolveSavedSearchEffectiveQuery,
   savedSearchDeleteDialogCopy,
+  savedSearchChannelOptions,
   savedSearchFilterChips,
   savedSearchFormSchema,
   savedSearchFormToInput,
@@ -74,6 +75,14 @@ describe('saved search form', () => {
       channel_kind: null,
       is_smart_folder: true
     })
+  })
+
+  it('offers Telegram as a first-class saved-search channel kind', () => {
+    expect(savedSearchChannelOptions).toEqual(
+      expect.arrayContaining([
+        { label: 'Telegram', value: 'telegram' }
+      ])
+    )
   })
 
   it('builds delete confirmation copy for saved searches and smart folders', () => {

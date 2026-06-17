@@ -1,6 +1,8 @@
 import type { TelegramChat, TelegramMessage } from '../types/telegram'
 import { isRecord, stringValue } from '../../communications/queries/realtimePatchShared'
 
+export const TELEGRAM_TYPING_TTL_MS = 7000
+
 export type TelegramEventPayload = {
   provider_chat_id?: unknown
   provider_message_id?: unknown
@@ -22,12 +24,21 @@ export type TelegramEventPayload = {
   blob_id?: unknown
   scan_status?: unknown
   command_id?: unknown
+  next_attempt_at?: unknown
+  last_attempt_at?: unknown
+  provider_observed_at?: unknown
+  reconciliation_status?: unknown
+  reconciled_at?: unknown
+  dead_lettered_at?: unknown
   action?: unknown
   message_id?: unknown
   is_pinned?: unknown
   is_archived?: unknown
   is_muted?: unknown
   telegram_chat_id?: unknown
+  provider_thread_id?: unknown
+  sender_id?: unknown
+  topic?: unknown
   chat?: unknown
   message?: unknown
 }
@@ -35,6 +46,7 @@ export type TelegramEventPayload = {
 export type TelegramStoredEventEnvelope = {
   event?: {
     event_type?: unknown
+    occurred_at?: unknown
     metadata?: unknown
     subject?: unknown
     payload?: unknown

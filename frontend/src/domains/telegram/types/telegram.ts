@@ -126,28 +126,17 @@ export type TelegramChatGroupFilterListResponse = {
   items: TelegramChatGroupFilter[]
 }
 
-export type TelegramChatMember = {
-  sender_id: string
-  sender_display_name: string | null
-  message_count: number
-  last_message_at: string | null
-}
+export type {
+  TelegramChatMember,
+  TelegramChatMemberListResponse,
+  TelegramChatMembersSyncResponse
+} from './telegramMembers'
 
-export type TelegramChatMemberListResponse = {
-  items: TelegramChatMember[]
-}
-
-export type TelegramChatActionRequest = {
-  account_id: string
-  provider_chat_id: string
-}
-
-export type TelegramChatActionResponse = {
-  telegram_chat_id: string
-  action: string
-  status: string
-  metadata: Record<string, unknown>
-}
+export type {
+  TelegramChatActionRequest,
+  TelegramChatActionResponse,
+  TelegramChatLifecycleCommandResponse
+} from './telegramChatActions'
 
 // --- Messages ---
 export type TelegramMessage = {
@@ -197,6 +186,9 @@ export type TelegramMediaItem = {
 }
 export type TelegramMediaSearchResponse = {
   query?: string | null
+  source?: 'projection' | 'provider_refresh' | string
+  provider_search_attempted?: boolean
+  provider_search_error?: string | null
   items: TelegramMediaItem[]
 }
 // --- Sync ---
@@ -277,7 +269,7 @@ export type TelegramChatGroupFilter = {
 
 export type TelegramAttachmentHint = {
   id: string
-  kind: 'document' | 'photo' | 'video' | 'audio' | 'voice' | 'file'
+  kind: 'document' | 'photo' | 'video' | 'audio' | 'voice' | 'sticker' | 'animation' | 'video_note' | 'file'
   fileName: string
   mimeType: string | null
   sizeBytes: number | null
@@ -291,6 +283,14 @@ export type TelegramAttachmentHint = {
 
 // --- Additional request/response types for API ---
 export type TelegramRuntimeStartRequest = {
+  account_id: string
+}
+
+export type TelegramRuntimeStopRequest = {
+  account_id: string
+}
+
+export type TelegramRuntimeRestartRequest = {
   account_id: string
 }
 
@@ -407,6 +407,7 @@ export type TelegramCommandKind =
   | 'delete'
   | 'restore_visibility'
   | 'mark_read'
+  | 'mark_unread'
   | 'pin'
   | 'unpin'
   | 'archive'
@@ -421,7 +422,7 @@ export type TelegramCommandKind =
   | 'leave'
   | 'admin_action'
 
-export type TelegramCommandStatus = 'queued' | 'executing' | 'completed' | 'failed' | 'retrying' | 'cancelled'
+export type TelegramCommandStatus = 'queued' | 'executing' | 'completed' | 'failed' | 'retrying' | 'cancelled' | 'dead_letter'
 export type TelegramConfirmationDecision = 'pending' | 'confirmed' | 'rejected' | 'not_required'
 
 export type TelegramLifecycleResponse = {
@@ -439,6 +440,7 @@ export type TelegramLifecycleResponse = {
 export type {
   TelegramDeleteRequest,
   TelegramEditRequest,
+  TelegramForwardRequest,
   TelegramPinRequest,
   TelegramReplyRequest,
   TelegramRestoreVisibilityRequest,
@@ -564,6 +566,15 @@ export type TelegramProviderWriteCommand = {
   audit_metadata: Record<string, unknown>
   actor_id: string
   happened_at: string
+  next_attempt_at: string | null
+  last_attempt_at: string | null
+  locked_at: string | null
+  locked_by: string | null
+  provider_observed_at: string | null
+  provider_state: Record<string, unknown>
+  reconciliation_status: 'not_observed' | 'awaiting_provider' | 'observed' | 'mismatch' | 'not_required' | string
+  reconciled_at: string | null
+  dead_lettered_at: string | null
   completed_at: string | null
   created_at: string
   updated_at: string
@@ -592,8 +603,12 @@ export type TelegramRealtimeEventType =
   | 'telegram.chat.archived'
   | 'telegram.chat.muted'
   | 'telegram.topic.updated'
+  | 'telegram.media.download.started'
+  | 'telegram.media.download.progress'
+  | 'telegram.media.download.failed'
   | 'telegram.media.downloaded'
   | 'telegram.command.status_changed'
+  | 'telegram.command.reconciled'
 
 export type TelegramRealtimeEvent = {
   event_type: TelegramRealtimeEventType

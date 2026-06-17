@@ -8,18 +8,17 @@ import {
   fetchTelegramChats,
   fetchTelegramFolders,
   fetchTelegramMessages,
-  fetchTelegramRuntimeStatus,
   fetchTelegramAccounts,
   fetchTelegramCalls,
   fetchTelegramCallTranscript,
   logoutTelegramAccount,
   removeTelegramAccount,
   setupTelegramAccount,
+  syncTelegramChatMembers,
   syncTelegramChats,
   syncTelegramHistory,
   sendTelegramMessage,
   ingestTelegramFixtureMessage,
-  startTelegramRuntime,
   downloadTelegramMedia,
   pinTelegramChat,
   unpinTelegramChat,
@@ -31,6 +30,8 @@ import {
   markTelegramChatUnread,
   fetchTelegramTopics,
   fetchTelegramTopicMessages,
+  fetchTelegramTopicSearch,
+  forwardTelegramMessage,
   replyToTelegramMessage
 } from '../api/telegram'
 import {
@@ -45,10 +46,10 @@ import type {
   TelegramCapabilitiesResponse,
   TelegramCall,
   TelegramCallTranscript,
-  TelegramRuntimeStatus,
   TelegramAccount,
   TelegramChat,
   TelegramChatGroupFilter,
+  TelegramChatMember,
   TelegramMessage,
   TelegramChatSyncRequest,
   TelegramHistorySyncRequest,
@@ -72,6 +73,7 @@ export const telegramQueryKeys = {
   callTranscript: ['telegram', 'call-transcript'] as const,
   topics: ['telegram', 'topics'] as const,
   topicMessages: ['telegram', 'topic-messages'] as const,
+  topicSearch: ['telegram', 'topic-search'] as const,
 }
 
 // --- Fetch capabilities ---
@@ -196,7 +198,7 @@ export function useTelegramChatMembersQuery(
   telegramChatId: MaybeRefOrGetter<string | null | undefined>,
   limit: MaybeRefOrGetter<number> = 50
 ) {
-  return useQuery<{ sender_id: string; sender_display_name: string | null; message_count: number; last_message_at: string | null }[]>({
+  return useQuery<TelegramChatMember[]>({
     queryKey: computed(() => [
       ...telegramQueryKeys.chatMembers,
       toValue(telegramChatId) ?? 'none',
@@ -209,6 +211,19 @@ export function useTelegramChatMembersQuery(
       return res.items
     },
     enabled: computed(() => Boolean(toValue(telegramChatId))),
+  })
+}
+
+export function useSyncTelegramChatMembersMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (telegramChatId: string) => syncTelegramChatMembers(telegramChatId),
+    onSuccess: (_response, telegramChatId) => {
+      queryClient.invalidateQueries({ queryKey: [...telegramQueryKeys.chatMembers, telegramChatId] })
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chatDetail })
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
+    },
   })
 }
 
@@ -229,19 +244,6 @@ export function useTelegramMessagesQuery(
       return res.items
     },
     enabled: computedTelegramMessagesEnabled(accountId, providerChatId)
-  })
-}
-
-// --- Fetch runtime status for a specific account ---
-export function useTelegramRuntimeStatusQuery(accountId: MaybeRefOrGetter<string | null>) {
-  return useQuery<TelegramRuntimeStatus | null>({
-    queryKey: computedTelegramRuntimeQueryKey(accountId),
-    queryFn: async () => {
-      const value = toValue(accountId)
-      if (!value) return null
-      return fetchTelegramRuntimeStatus(value)
-    },
-    enabled: computedTelegramRuntimeEnabled(accountId)
   })
 }
 
@@ -329,18 +331,6 @@ export function useIngestTelegramFixtureMutation() {
   })
 }
 
-// --- Start runtime mutation ---
-export function useStartTelegramRuntimeMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (request: { account_id: string }) => startTelegramRuntime(request),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.accounts })
-    }
-  })
-}
-
 export function useEditTelegramMessageMutation() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -359,6 +349,18 @@ export function useReplyTelegramMessageMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
+    }
+  })
+}
+
+export function useForwardTelegramMessageMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: forwardTelegramMessage,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
     }
   })
 }
@@ -588,14 +590,6 @@ function computedTelegramMessagesEnabled(
   })
 }
 
-function computedTelegramRuntimeQueryKey(accountId: MaybeRefOrGetter<string | null>) {
-  return computed(() => [...telegramQueryKeys.runtime, toValue(accountId)])
-}
-
-function computedTelegramRuntimeEnabled(accountId: MaybeRefOrGetter<string | null>) {
-  return computed(() => Boolean(toValue(accountId)))
-}
-
 function computedTelegramCallsQueryKey(
   accountId?: MaybeRefOrGetter<string | undefined>,
   limit: MaybeRefOrGetter<number> = 50
@@ -644,5 +638,27 @@ export function useTelegramTopicMessagesQuery(
       return fetchTelegramTopicMessages(tid, toValue(limit))
     },
     enabled: computed(() => Boolean(toValue(topicId))),
+  })
+}
+
+export function useTelegramTopicSearchQuery(
+  telegramChatId: MaybeRefOrGetter<string | null | undefined>,
+  q: MaybeRefOrGetter<string>,
+  limit: MaybeRefOrGetter<number> = 50
+) {
+  return useQuery<TelegramTopicListResponse>({
+    queryKey: computed(() => [
+      ...telegramQueryKeys.topicSearch,
+      toValue(telegramChatId) ?? 'none',
+      toValue(q),
+      toValue(limit),
+    ]),
+    queryFn: async () => {
+      const chatId = toValue(telegramChatId)
+      const query = toValue(q).trim()
+      if (!chatId || !query) return { telegram_chat_id: chatId ?? '', items: [] }
+      return fetchTelegramTopicSearch(chatId, query, toValue(limit))
+    },
+    enabled: computed(() => Boolean(toValue(telegramChatId)) && Boolean(toValue(q).trim())),
   })
 }

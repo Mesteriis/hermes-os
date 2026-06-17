@@ -10,11 +10,11 @@ pub use accounts::{
     TelegramLiveAccountSetupRequest,
 };
 pub use chats::{
-    NewTelegramChat, TelegramChat, TelegramChatGroupFilter, TelegramChatGroupFilterListResponse,
-    TelegramChatKind, TelegramChatMember, TelegramSyncState,
+    NewTelegramChat, NewTelegramChatParticipant, TelegramChat, TelegramChatGroupFilter,
+    TelegramChatGroupFilterListResponse, TelegramChatKind, TelegramChatMember, TelegramSyncState,
 };
 pub use messages::{
-    NewTelegramMessage, TelegramDeliveryState, TelegramManualSendRequest,
+    NewTelegramMessage, TelegramDeliveryState, TelegramForwardRequest, TelegramManualSendRequest,
     TelegramManualSendResponse, TelegramMessage, TelegramMessageIngestResult, TelegramReplyRequest,
 };
 pub use qr_login::{

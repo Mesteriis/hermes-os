@@ -11,7 +11,7 @@ use super::validation::validate_non_empty;
 
 #[derive(Clone)]
 pub struct MailStorageStore {
-    pool: PgPool,
+    pub(crate) pool: PgPool,
 }
 
 impl MailStorageStore {

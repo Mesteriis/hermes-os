@@ -5,6 +5,7 @@ use base64::engine::general_purpose::STANDARD;
 use serde_json::{Value, json};
 
 use crate::integrations::telegram::client::{TelegramError, TelegramQrLoginStartRequest};
+use crate::integrations::telegram::runtime::TelegramMediaSendType;
 
 use super::identifiers::safe_path_segment;
 
@@ -150,6 +151,112 @@ pub(crate) fn tdlib_send_text_message_request(
     }))
 }
 
+pub(crate) fn tdlib_send_media_message_request(
+    chat_id: i64,
+    media_type: TelegramMediaSendType,
+    local_path: &str,
+    caption: Option<&str>,
+    filename: Option<&str>,
+    extra: &str,
+) -> Result<Value, TelegramError> {
+    let local_path = local_path.trim();
+    if local_path.is_empty() {
+        return Err(TelegramError::InvalidRequest(
+            "media local_path must not be empty".to_owned(),
+        ));
+    }
+    let input_file = json!({
+        "@type": "inputFileLocal",
+        "path": local_path
+    });
+    let caption = formatted_caption(caption);
+    let input_message_content = match media_type {
+        TelegramMediaSendType::Photo => json!({
+            "@type": "inputMessagePhoto",
+            "photo": input_file,
+            "thumbnail": null,
+            "added_sticker_file_ids": [],
+            "width": 0,
+            "height": 0,
+            "caption": caption,
+            "show_caption_above_media": false,
+            "self_destruct_type": null,
+            "has_spoiler": false
+        }),
+        TelegramMediaSendType::Video => json!({
+            "@type": "inputMessageVideo",
+            "video": input_file,
+            "thumbnail": null,
+            "added_sticker_file_ids": [],
+            "duration": 0,
+            "width": 0,
+            "height": 0,
+            "supports_streaming": true,
+            "caption": caption,
+            "show_caption_above_media": false,
+            "self_destruct_type": null,
+            "has_spoiler": false
+        }),
+        TelegramMediaSendType::Document => json!({
+            "@type": "inputMessageDocument",
+            "document": input_file,
+            "thumbnail": null,
+            "disable_content_type_detection": false,
+            "caption": caption
+        }),
+        TelegramMediaSendType::Audio => json!({
+            "@type": "inputMessageAudio",
+            "audio": input_file,
+            "album_cover_thumbnail": null,
+            "duration": 0,
+            "title": filename.unwrap_or_default(),
+            "performer": "",
+            "caption": caption
+        }),
+        TelegramMediaSendType::Voice => json!({
+            "@type": "inputMessageVoiceNote",
+            "voice_note": input_file,
+            "duration": 0,
+            "waveform": "",
+            "caption": caption
+        }),
+        TelegramMediaSendType::Sticker => json!({
+            "@type": "inputMessageSticker",
+            "sticker": input_file,
+            "thumbnail": null,
+            "emoji": "",
+            "width": 0,
+            "height": 0
+        }),
+        TelegramMediaSendType::Animation => json!({
+            "@type": "inputMessageAnimation",
+            "animation": input_file,
+            "thumbnail": null,
+            "duration": 0,
+            "width": 0,
+            "height": 0,
+            "caption": caption,
+            "show_caption_above_media": false,
+            "has_spoiler": false
+        }),
+    };
+
+    Ok(json!({
+        "@type": "sendMessage",
+        "chat_id": chat_id,
+        "input_message_content": input_message_content,
+        "@extra": extra.trim()
+    }))
+}
+
+fn formatted_caption(caption: Option<&str>) -> Value {
+    json!({
+        "@type": "formattedText",
+        "text": caption.unwrap_or_default().trim(),
+        "entities": []
+    })
+}
+
 pub(crate) fn tdlib_download_file_request(file_id: i64, priority: i32, extra: &str) -> Value {
     json!({
         "@type": "downloadFile",
@@ -292,6 +399,24 @@ pub(crate) fn tdlib_send_reply_request(
     }))
 }
 
+pub(crate) fn tdlib_send_forward_request(
+    chat_id: i64,
+    from_chat_id: i64,
+    message_id: i64,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "forwardMessages",
+        "chat_id": chat_id,
+        "from_chat_id": from_chat_id,
+        "message_ids": [message_id],
+        "options": null,
+        "send_copy": false,
+        "remove_caption": false,
+        "@extra": extra.trim()
+    })
+}
+
 pub(crate) fn tdlib_unpin_chat_message_request(
     chat_id: i64,
     message_id: i64,
@@ -301,6 +426,79 @@ pub(crate) fn tdlib_unpin_chat_message_request(
         "@type": "unpinChatMessage",
         "chat_id": chat_id,
         "message_id": message_id,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_toggle_chat_marked_as_unread_request(
+    chat_id: i64,
+    is_marked_as_unread: bool,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "toggleChatIsMarkedAsUnread",
+        "chat_id": chat_id,
+        "is_marked_as_unread": is_marked_as_unread,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_add_chat_to_list_request(chat_id: i64, archived: bool, extra: &str) -> Value {
+    let chat_list_type = if archived {
+        "chatListArchive"
+    } else {
+        "chatListMain"
+    };
+
+    json!({
+        "@type": "addChatToList",
+        "chat_id": chat_id,
+        "chat_list": {
+            "@type": chat_list_type
+        },
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_set_chat_mute_request(chat_id: i64, muted: bool, extra: &str) -> Value {
+    json!({
+        "@type": "setChatNotificationSettings",
+        "chat_id": chat_id,
+        "notification_settings": {
+            "@type": "chatNotificationSettings",
+            "use_default_mute_for": !muted,
+            "mute_for": if muted { 31_708_800 } else { 0 },
+            "use_default_sound": true,
+            "sound_id": 0,
+            "use_default_show_preview": true,
+            "show_preview": true,
+            "use_default_mute_stories": true,
+            "mute_stories": false,
+            "use_default_story_sound": true,
+            "story_sound_id": 0,
+            "use_default_show_story_poster": true,
+            "show_story_poster": true,
+            "use_default_disable_pinned_message_notifications": true,
+            "disable_pinned_message_notifications": false,
+            "use_default_disable_mention_notifications": true,
+            "disable_mention_notifications": false
+        },
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_join_chat_request(chat_id: i64, extra: &str) -> Value {
+    json!({
+        "@type": "joinChat",
+        "chat_id": chat_id,
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_leave_chat_request(chat_id: i64, extra: &str) -> Value {
+    json!({
+        "@type": "leaveChat",
+        "chat_id": chat_id,
         "@extra": extra.trim()
     })
 }
@@ -346,6 +544,21 @@ pub(crate) fn tdlib_get_forum_topics_request(chat_id: i64, limit: i32, extra: &s
         "offset_date": 0,
         "offset_message_id": 0,
         "offset_message_thread_id": 0,
+        "limit": tdlib_page_limit(limit),
+        "@extra": extra.trim()
+    })
+}
+
+pub(crate) fn tdlib_get_supergroup_members_request(
+    supergroup_id: i64,
+    limit: i32,
+    extra: &str,
+) -> Value {
+    json!({
+        "@type": "getSupergroupMembers",
+        "supergroup_id": supergroup_id,
+        "filter": { "@type": "supergroupMembersFilterRecent" },
+        "offset": 0,
         "limit": tdlib_page_limit(limit),
         "@extra": extra.trim()
     })

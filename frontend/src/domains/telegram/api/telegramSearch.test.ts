@@ -3,6 +3,7 @@ import { ApiClient } from '../../../platform/api/ApiClient'
 import {
   fetchTelegramPinnedMessages,
   searchTelegramChats,
+  searchTelegramProviderMessages,
   searchTelegramMedia,
   searchTelegramMessages,
 } from './telegramSearch'
@@ -68,16 +69,51 @@ describe('telegram search API', () => {
     expect(init.method).toBe('GET')
   })
 
-  it('builds Telegram media gallery search requests with text and kind filters', async () => {
+  it('builds Telegram provider message search requests with required account scope', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ query: 'invoice', items: [] }), {
+      new Response(JSON.stringify({ query: 'project alpha', items: [], total: 0 }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await searchTelegramMedia({
+    await searchTelegramProviderMessages({
+      q: 'project alpha',
+      account_id: 'telegram-account-1',
+      provider_chat_id: 'chat-42',
+      limit: 25,
+    })
+
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toContain('/api/v1/telegram/search/provider')
+    expect(init.method).toBe('POST')
+    const body = JSON.parse(init.body as string)
+    expect(body).toEqual({
+      q: 'project alpha',
+      account_id: 'telegram-account-1',
+      provider_chat_id: 'chat-42',
+      limit: 25,
+    })
+  })
+
+  it('builds Telegram media gallery search requests with text and kind filters', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({
+        query: 'invoice',
+        source: 'provider_refresh',
+        provider_search_attempted: true,
+        provider_search_error: null,
+        items: []
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const response = await searchTelegramMedia({
       q: 'invoice',
       account_id: 'telegram-account-1',
       provider_chat_id: 'chat-42',
@@ -94,6 +130,8 @@ describe('telegram search API', () => {
     expect(url).toContain('kind=photo')
     expect(url).toContain('limit=80')
     expect(init.method).toBe('GET')
+    expect(response.source).toBe('provider_refresh')
+    expect(response.provider_search_attempted).toBe(true)
   })
 
   it('builds Telegram pinned-message requests for a projected chat', async () => {

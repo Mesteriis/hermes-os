@@ -4,11 +4,13 @@ import type {
   TelegramDeleteRequest,
   TelegramEditRequest,
   TelegramForwardChainResponse,
+  TelegramForwardRequest,
   TelegramLifecycleResponse,
   TelegramManualSendResponse,
   TelegramReplyChainResponse,
   TelegramReplyRequest,
   TelegramPinRequest,
+  TelegramProviderWriteCommand,
   TelegramMessageTombstoneListResponse,
   TelegramMessageVersionListResponse,
   TelegramReactionListResponse,
@@ -137,6 +139,16 @@ export async function fetchTelegramCommands(
   )
 }
 
+export async function retryTelegramCommand(
+  commandId: string
+): Promise<TelegramProviderWriteCommand> {
+  return ApiClient.instance.post<TelegramProviderWriteCommand>(
+    `/api/v1/telegram/commands/${encodeURIComponent(commandId)}/retry`,
+    {},
+    'Telegram command retry failed'
+  )
+}
+
 export async function fetchTelegramReplyChain(
   messageId: string
 ): Promise<TelegramReplyChainResponse> {
@@ -219,5 +231,26 @@ export async function replyToTelegramMessage(params: {
     `/api/v1/telegram/messages/${encodeURIComponent(params.message_id)}/reply`,
     request,
     'Telegram message reply failed'
+  )
+}
+
+export async function forwardTelegramMessage(params: {
+  message_id: string
+  account_id: string
+  provider_chat_id: string
+  from_provider_chat_id: string
+  from_provider_message_id: string
+}): Promise<TelegramManualSendResponse> {
+  const request: TelegramForwardRequest = {
+    command_id: newCommandId(),
+    account_id: params.account_id,
+    provider_chat_id: params.provider_chat_id,
+    from_provider_chat_id: params.from_provider_chat_id,
+    from_provider_message_id: params.from_provider_message_id,
+  }
+  return ApiClient.instance.post<TelegramManualSendResponse>(
+    `/api/v1/telegram/messages/${encodeURIComponent(params.message_id)}/forward`,
+    request,
+    'Telegram message forward failed'
   )
 }

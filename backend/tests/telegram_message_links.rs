@@ -1,0 +1,140 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use axum::body::Body;
+use axum::http::{Request, StatusCode, header};
+use chrono::Utc;
+use serde_json::{Value, json};
+use tower::ServiceExt;
+
+use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::integrations::telegram::client::{
+    NewTelegramChat, NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramStore,
+    TelegramSyncState,
+};
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
+use testkit::context::TestContext;
+
+const LOCAL_API_TOKEN: &str = "telegram-message-link-test-secret";
+
+#[tokio::test]
+async fn telegram_message_ingestion_projects_public_message_link_without_erasing_chat_username() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let account_id = format!("telegram-link-{suffix}");
+    let chat_id = format!("100{suffix}");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    assert_ok(
+        app.clone(),
+        "/api/v1/telegram/accounts/fixture",
+        json!({
+            "account_id": account_id,
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Link Projection",
+            "external_account_id": format!("tg-link-{suffix}"),
+            "tdlib_data_path": format!("docker/data/telegram/link-{suffix}"),
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+
+    let store = TelegramStore::new(pool);
+    let public_chat = store
+        .upsert_chat(&NewTelegramChat {
+            account_id: account_id.clone(),
+            provider_chat_id: chat_id.clone(),
+            chat_kind: TelegramChatKind::Channel,
+            title: "Public Link Channel".to_owned(),
+            username: Some("HermesPublicChannel".to_owned()),
+            sync_state: TelegramSyncState::Synced,
+            last_message_at: None,
+            metadata: json!({"runtime": "tdlib"}),
+        })
+        .await
+        .expect("public chat");
+
+    let result = store
+        .ingest_fixture_message(&NewTelegramMessage {
+            account_id: account_id.clone(),
+            provider_chat_id: chat_id.clone(),
+            provider_message_id: format!("{chat_id}:4242"),
+            chat_kind: TelegramChatKind::Channel,
+            chat_title: public_chat.title,
+            sender_id: "sender-link".to_owned(),
+            sender_display_name: "Link Sender".to_owned(),
+            text: "Public channel message with stable provider permalink.".to_owned(),
+            import_batch_id: format!("telegram-link-fixture-{suffix}"),
+            occurred_at: Utc::now(),
+            delivery_state: TelegramDeliveryState::Received,
+        })
+        .await
+        .expect("message ingest");
+
+    let chats_after_ingest = store
+        .list_chats(Some(&account_id), 10)
+        .await
+        .expect("chat lookup");
+    let chat_after_ingest = chats_after_ingest
+        .iter()
+        .find(|chat| chat.provider_chat_id == chat_id)
+        .expect("chat row");
+    assert_eq!(
+        chat_after_ingest.username.as_deref(),
+        Some("HermesPublicChannel")
+    );
+
+    let message = store
+        .message_by_id(&result.message_id)
+        .await
+        .expect("message lookup")
+        .expect("projected message");
+    assert_eq!(
+        message.metadata["message_link"],
+        json!("https://t.me/HermesPublicChannel/4242")
+    );
+    assert_eq!(message.metadata["message_link_kind"], json!("public_t_me"));
+}
+
+async fn assert_ok<S>(app: S, path: &str, body: Value)
+where
+    S: tower::Service<Request<Body>, Response = axum::response::Response> + Clone,
+    S::Error: std::fmt::Debug,
+    S::Future: Send + 'static,
+{
+    let response = app
+        .oneshot(json_post_request(path, body, LOCAL_API_TOKEN))
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+fn json_post_request(path: &str, body: Value, token: &str) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("x-hermes-secret", token)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .expect("request")
+}
+
+fn unique_suffix() -> String {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock")
+        .as_nanos();
+    format!("{now}")
+}

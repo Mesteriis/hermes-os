@@ -39,6 +39,14 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_runtime_start),
         )
         .route(
+            "/api/v1/telegram/runtime/stop",
+            post(post_telegram_runtime_stop),
+        )
+        .route(
+            "/api/v1/telegram/runtime/restart",
+            post(post_telegram_runtime_restart),
+        )
+        .route(
             "/api/v1/telegram/login/qr/start",
             post(post_telegram_qr_login_start),
         )
@@ -51,6 +59,7 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_qr_login_password),
         )
         .route("/api/v1/telegram/chats", get(get_telegram_chats))
+        .route("/api/v1/telegram/chats/join", post(post_telegram_chat_join))
         .route("/api/v1/telegram/folders", get(get_telegram_folders))
         .route("/api/v1/telegram/chats/search", get(search_telegram_chats))
         .route(
@@ -60,6 +69,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/telegram/chats/{telegram_chat_id}/members",
             get(get_telegram_chat_members),
+        )
+        .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/members/sync",
+            post(post_telegram_chat_members_sync),
         )
         .route(
             "/api/v1/telegram/chats/{telegram_chat_id}/pinned-messages",
@@ -72,6 +85,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/telegram/search/messages",
             get(search_telegram_messages),
+        )
+        .route(
+            "/api/v1/telegram/search/provider",
+            post(search_telegram_messages_provider),
         )
         .route("/api/v1/telegram/search/media", get(search_telegram_media))
         .route(
@@ -107,6 +124,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_chat_mark_unread),
         )
         .route(
+            "/api/v1/telegram/chats/{telegram_chat_id}/leave",
+            post(post_telegram_chat_leave),
+        )
+        .route(
             "/api/v1/telegram/sync/history",
             post(post_telegram_sync_history),
         )
@@ -121,6 +142,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         .route(
             "/api/v1/telegram/media/download",
             post(post_telegram_media_download),
+        )
+        .route(
+            "/api/v1/telegram/media/upload",
+            post(post_telegram_media_upload),
         )
         .route(
             "/api/v1/telegram/messages/{message_id}/edit",
@@ -139,12 +164,20 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_message_reply),
         )
         .route(
+            "/api/v1/telegram/messages/{message_id}/forward",
+            post(post_telegram_message_forward),
+        )
+        .route(
             "/api/v1/telegram/messages/{message_id}/pin",
             post(post_telegram_message_pin),
         )
         .route(
             "/api/v1/telegram/messages/{message_id}/versions",
             get(get_telegram_message_versions),
+        )
+        .route(
+            "/api/v1/telegram/messages/{message_id}/raw",
+            get(get_telegram_message_raw),
         )
         .route(
             "/api/v1/telegram/messages/{message_id}/tombstones",
@@ -166,8 +199,16 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route("/api/v1/telegram/commands", get(get_telegram_commands))
         .route(
+            "/api/v1/telegram/commands/{command_id}/retry",
+            post(post_telegram_command_retry),
+        )
+        .route(
             "/api/v1/telegram/chats/{telegram_chat_id}/topics",
             get(get_telegram_topics),
+        )
+        .route(
+            "/api/v1/telegram/topics/search",
+            get(search_telegram_topics),
         )
         .route(
             "/api/v1/telegram/topics/{topic_id}",

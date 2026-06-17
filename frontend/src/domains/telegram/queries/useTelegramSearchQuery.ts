@@ -5,6 +5,7 @@ import {
   searchTelegramChats,
   searchTelegramMedia,
   searchTelegramMessages,
+  searchTelegramProviderMessages,
 } from '../api/telegramSearch'
 import type {
   TelegramChatSearchResponse,
@@ -42,7 +43,16 @@ export function useTelegramMessageSearchQuery(params: {
   accountId?: MaybeRefOrGetter<string | null | undefined>
   providerChatId?: MaybeRefOrGetter<string | null | undefined>
   limit?: MaybeRefOrGetter<number>
+  providerSearchMode?: MaybeRefOrGetter<boolean>
 }) {
+  const shouldUseProviderSearch = computed(() => {
+    const explicitMode = params.providerSearchMode
+    if (explicitMode !== undefined) {
+      return Boolean(toValue(explicitMode))
+    }
+    const accountId = toValue(params.accountId)
+    return Boolean(accountId)
+  })
   return useQuery<TelegramMessageSearchResponse>({
     queryKey: computed(() => [
       'telegram',
@@ -50,17 +60,34 @@ export function useTelegramMessageSearchQuery(params: {
       'messages',
       toValue(params.q).trim(),
       toValue(params.accountId) ?? 'all',
+      shouldUseProviderSearch.value ? 'provider' : 'local',
       toValue(params.providerChatId) ?? 'all',
       toValue(params.limit) ?? 50,
     ]),
-    queryFn: () =>
-      searchTelegramMessages({
-        q: toValue(params.q),
-        account_id: toValue(params.accountId) ?? undefined,
-        provider_chat_id: toValue(params.providerChatId) ?? undefined,
-        limit: toValue(params.limit) ?? 50,
-      }),
-    enabled: computed(() => toValue(params.q).trim().length >= 2),
+    queryFn: () => {
+      const q = toValue(params.q)
+      const accountId = toValue(params.accountId)?.trim()
+      const providerChatId = toValue(params.providerChatId) ?? undefined
+      const limit = toValue(params.limit) ?? 50
+      if (shouldUseProviderSearch.value && accountId) {
+        return searchTelegramProviderMessages({
+          q,
+          account_id: accountId,
+          provider_chat_id: providerChatId,
+          limit,
+        })
+      }
+      return searchTelegramMessages({
+        q,
+        account_id: accountId,
+        provider_chat_id: providerChatId,
+        limit,
+      })
+    },
+    enabled: computed(() =>
+      toValue(params.q).trim().length >= 2 &&
+      (!shouldUseProviderSearch.value || Boolean(toValue(params.accountId)))
+    ),
   })
 }
 

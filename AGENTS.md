@@ -360,13 +360,16 @@ compatibility.
 Validate Compose configuration:
 
 ```sh
-make compose-config
+docker compose --env-file docker/.env --project-directory docker -f docker/docker-compose.yml config
 ```
 
 Run the full local/CI validation gate:
 
 ```sh
-make validate
+cargo fmt --check --manifest-path backend/Cargo.toml
+cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
+cargo test --manifest-path backend/Cargo.toml
+cd frontend && pnpm build
 ```
 
 Start development services in foreground:
@@ -375,97 +378,45 @@ Start development services in foreground:
 make dev
 ```
 
-Start development services in background:
+Build release artifacts:
 
 ```sh
-make up
+make build
 ```
 
-Open a shell in the development container:
+Run backend-managed SQLx migrations:
 
 ```sh
-make shell
+make migrate
 ```
 
-Open PostgreSQL shell:
+Create backup of PostgreSQL and host vault data:
 
 ```sh
-make db-shell
+make vault-backup
 ```
 
-Start only PostgreSQL for local backend development:
+Restore PostgreSQL and host vault data interactively:
 
 ```sh
-make db-up
+make vault-restore
 ```
 
-Run the local backend:
+Delete local PostgreSQL development data:
 
 ```sh
-make backend-run
+make clean-data
 ```
 
-Run the local backend with `DATABASE_URL` built from `docker/.env`:
+This command is destructive and removes local state under `docker/data/postgres/`.
+
+Delete local host vault data:
 
 ```sh
-make backend-run-dev
+make clean-vault
 ```
 
-Run backend smoke validation against development PostgreSQL:
-
-```sh
-make backend-smoke-dev
-```
-
-Run canonical event log smoke validation against development PostgreSQL:
-
-```sh
-make backend-event-log-smoke-dev
-```
-
-Run replay/projection cursor smoke validation against development PostgreSQL:
-
-```sh
-make backend-projection-smoke-dev
-```
-
-Run only projection runner smoke validation against development PostgreSQL:
-
-```sh
-make backend-projection-runner-smoke-dev
-```
-
-Run event HTTP API smoke validation against development PostgreSQL:
-
-```sh
-make backend-events-api-smoke-dev
-```
-
-View logs:
-
-```sh
-make logs
-```
-
-Stop services:
-
-```sh
-make down
-```
-
-Stop only PostgreSQL:
-
-```sh
-make db-down
-```
-
-Delete local Docker development data:
-
-```sh
-make reset-data CONFIRM=yes
-```
-
-This command is destructive and removes local state under `docker/data/`.
+This command is destructive and removes local state under `HERMES_HOST_VAULT_HOME`.
 
 ## 11. Reporting Format
 

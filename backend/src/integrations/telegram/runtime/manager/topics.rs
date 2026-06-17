@@ -1,15 +1,12 @@
-use crate::domains::mail::core::CommunicationIngestionStore;
 use crate::integrations::telegram::client::models::topics::NewTelegramTopic;
 use crate::integrations::telegram::client::{TelegramError, TelegramStore};
-use crate::platform::config::AppConfig;
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 
 use super::super::commands::request_actor_get_forum_topics;
 use super::super::status::account_runtime_kind;
-use super::TelegramRuntimeManager;
 use super::account::load_active_account;
+use super::{TelegramRuntimeManager, TelegramRuntimeOperationContext};
 
-fn telegram_topic_id(telegram_chat_id: &str, provider_topic_id: i64) -> String {
+pub(super) fn telegram_topic_id(telegram_chat_id: &str, provider_topic_id: i64) -> String {
     use sha2::{Digest, Sha256};
     let input = format!("{telegram_chat_id}\0{provider_topic_id}");
     let mut hasher = Sha256::new();
@@ -22,23 +19,23 @@ impl TelegramRuntimeManager {
     ///
     /// Returns the number of topics upserted. If the account has no active TDLib actor or runs
     /// in fixture mode, returns Ok(0) without error so the API can still serve DB rows.
-    pub async fn sync_forum_topics(
+    pub(crate) async fn sync_forum_topics<S>(
         &self,
-        communication_store: &CommunicationIngestionStore,
-        telegram_store: &TelegramStore,
-        secret_store: &SecretReferenceStore,
-        secret_resolver: &(impl SecretResolver + Sync + ?Sized),
-        config: &AppConfig,
+        context: &TelegramRuntimeOperationContext<'_, S>,
         telegram_chat_id: &str,
-    ) -> Result<usize, TelegramError> {
-        let chat = telegram_store
+    ) -> Result<usize, TelegramError>
+    where
+        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+    {
+        let chat = context
+            .telegram_store
             .telegram_chat_by_id(telegram_chat_id)
             .await?
             .ok_or(TelegramError::InvalidRequest(format!(
                 "chat {telegram_chat_id} not found"
             )))?;
 
-        let account = load_active_account(communication_store, &chat.account_id).await?;
+        let account = load_active_account(context.communication_store, &chat.account_id).await?;
         let runtime_kind = account_runtime_kind(&account);
 
         if runtime_kind != "tdlib_qr_authorized" {
@@ -47,11 +44,12 @@ impl TelegramRuntimeManager {
 
         let command_tx = match self
             .ensure_tdlib_actor(
-                communication_store,
-                secret_store,
-                secret_resolver,
-                config,
+                context.communication_store,
+                context.secret_store,
+                context.secret_resolver,
+                context.config,
                 &account,
+                context.event_bridge.clone(),
             )
             .await
         {
@@ -83,7 +81,7 @@ impl TelegramRuntimeManager {
                 is_closed: snapshot.is_closed,
             };
             crate::integrations::telegram::client::topics::upsert_topic(
-                telegram_store.pool(),
+                context.telegram_store.pool(),
                 &new_topic,
             )
             .await?;

@@ -25,6 +25,19 @@ pub(crate) struct TelegramTdlibChatSnapshot {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibChatMemberSnapshot {
+    pub(crate) provider_member_id: String,
+    pub(crate) display_name: Option<String>,
+    pub(crate) username: Option<String>,
+    pub(crate) role: String,
+    pub(crate) status: String,
+    pub(crate) is_admin: bool,
+    pub(crate) is_owner: bool,
+    pub(crate) permissions: Value,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct TelegramTdlibMessageSnapshot {
     pub(crate) provider_chat_id: String,
     pub(crate) provider_message_id: String,
@@ -33,6 +46,53 @@ pub(crate) struct TelegramTdlibMessageSnapshot {
     pub(crate) text: String,
     pub(crate) occurred_at: DateTime<Utc>,
     pub(crate) delivery_state: TelegramDeliveryState,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibMessageDeleteSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) provider_message_ids: Vec<String>,
+    pub(crate) is_permanent: bool,
+    pub(crate) from_cache: bool,
+    pub(crate) source_event: String,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibMessageInteractionInfoSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) provider_message_id: String,
+    pub(crate) source_event: String,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibMessageContentSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) provider_message_id: String,
+    pub(crate) text: String,
+    pub(crate) new_content: Value,
+    pub(crate) source_event: String,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibMessageEditedSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) provider_message_id: String,
+    pub(crate) edit_timestamp: DateTime<Utc>,
+    pub(crate) reply_markup: Option<Value>,
+    pub(crate) source_event: String,
+    pub(crate) raw: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct TelegramTdlibMessagePinnedSnapshot {
+    pub(crate) provider_chat_id: String,
+    pub(crate) provider_message_id: String,
+    pub(crate) is_pinned: bool,
+    pub(crate) source_event: String,
     pub(crate) raw: Value,
 }
 

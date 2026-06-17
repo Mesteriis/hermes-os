@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { useReplyTelegramMessageMutation, useSendTelegramMessageMutation } from './useTelegramQuery'
+import { useTelegramMediaUploadMutation } from './useTelegramMediaUploadQuery'
 import type { TelegramChat, TelegramMessage } from '../types/telegram'
 
 export function useTelegramSendActions(
@@ -17,6 +18,7 @@ export function useTelegramSendActions(
   const replyTo = ref<TelegramMessage | null>(null)
   const sendMessageMutation = useSendTelegramMessageMutation()
   const replyMessageMutation = useReplyTelegramMessageMutation()
+  const mediaUploadMutation = useTelegramMediaUploadMutation()
 
   async function sendOrReply() {
     const chat = getSelectedChat()
@@ -54,5 +56,28 @@ export function useTelegramSendActions(
     }
   }
 
-  return { replyTo, sendOrReply }
+  async function uploadMedia(file: File) {
+    const chat = getSelectedChat()
+    if (getIsBusy() || !chat) return
+    callbacks.setActionSubmitting(true)
+    callbacks.setActionMessage('')
+    callbacks.setError('')
+    try {
+      const result = await mediaUploadMutation.mutateAsync({
+        accountId: chat.account_id,
+        providerChatId: chat.provider_chat_id,
+        file,
+        caption: getManualSendText().trim() || undefined
+      })
+      callbacks.setSelectedChatId(result.provider_chat_id)
+      callbacks.setActionMessage(`Telegram media upload ${result.status}`)
+      callbacks.resetSendForm()
+    } catch (err) {
+      callbacks.setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      callbacks.setActionSubmitting(false)
+    }
+  }
+
+  return { replyTo, sendOrReply, uploadMedia }
 }

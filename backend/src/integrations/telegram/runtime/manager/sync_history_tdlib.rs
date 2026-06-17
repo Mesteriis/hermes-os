@@ -1,5 +1,11 @@
 use crate::domains::mail::core::{CommunicationIngestionStore, ProviderAccount};
-use crate::integrations::telegram::client::{TelegramError, TelegramStore};
+use crate::integrations::telegram::client::participants::{
+    reconcile_participant_commands_from_message_evidence, tdlib_self_membership_lifecycle,
+};
+use crate::integrations::telegram::client::{
+    TelegramError, TelegramStore, derive_tdlib_chosen_reaction_emojis,
+    reconcile_reaction_commands_from_provider_message_state,
+};
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 
@@ -9,6 +15,9 @@ use super::super::models::{
     TelegramHistorySyncMode, TelegramHistorySyncRequest, TelegramHistorySyncResponse,
 };
 use super::TelegramRuntimeManager;
+use super::realtime_events::{
+    TelegramRuntimeEventBridgeContext, publish_command_reconciled_events,
+};
 
 pub(in crate::integrations::telegram::runtime::manager) struct TdlibHistorySyncContext<
     'a,
@@ -22,6 +31,8 @@ pub(in crate::integrations::telegram::runtime::manager) struct TdlibHistorySyncC
     pub(in crate::integrations::telegram::runtime::manager) config: &'a AppConfig,
     pub(in crate::integrations::telegram::runtime::manager) account: &'a ProviderAccount,
     pub(in crate::integrations::telegram::runtime::manager) runtime_kind: String,
+    pub(in crate::integrations::telegram::runtime::manager) event_bridge:
+        Option<TelegramRuntimeEventBridgeContext>,
 }
 
 impl TelegramRuntimeManager {
@@ -44,6 +55,7 @@ impl TelegramRuntimeManager {
                 context.secret_resolver,
                 context.config,
                 context.account,
+                context.event_bridge.clone(),
             )
             .await?;
         let snapshots = request_actor_history(
@@ -72,6 +84,46 @@ impl TelegramRuntimeManager {
                     &import_batch_id,
                 )
                 .await?;
+            if let Some(lifecycle) =
+                tdlib_self_membership_lifecycle(&context.account.external_account_id, &snapshot.raw)
+            {
+                let commands = reconcile_participant_commands_from_message_evidence(
+                    context.telegram_store.pool(),
+                    &context.account.account_id,
+                    &snapshot.provider_chat_id,
+                    &snapshot.provider_message_id,
+                    snapshot.occurred_at,
+                    &lifecycle,
+                )
+                .await?;
+                for command in commands {
+                    publish_command_reconciled_events(
+                        context.event_bridge.as_ref(),
+                        &command,
+                        &lifecycle.observed_via,
+                    )
+                    .await;
+                }
+            }
+            let chosen_reactions = derive_tdlib_chosen_reaction_emojis(&snapshot.raw);
+            let commands = reconcile_reaction_commands_from_provider_message_state(
+                context.telegram_store.pool(),
+                &context.account.account_id,
+                &snapshot.provider_chat_id,
+                &snapshot.provider_message_id,
+                &chosen_reactions,
+                snapshot.occurred_at,
+                "tdlib.interaction_info.reactions",
+            )
+            .await?;
+            for command in commands {
+                publish_command_reconciled_events(
+                    context.event_bridge.as_ref(),
+                    &command,
+                    "tdlib.interaction_info.reactions",
+                )
+                .await;
+            }
         }
         let items = context
             .telegram_store

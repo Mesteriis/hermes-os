@@ -4,12 +4,12 @@ use tokio::task;
 
 use crate::integrations::telegram::client::{TelegramError, TelegramManualSendRequest};
 use crate::integrations::telegram::tdjson::{
-    TelegramTdlibChatSnapshot, TelegramTdlibFileSnapshot, TelegramTdlibMessageSnapshot,
-    TelegramTdlibTopicSnapshot,
+    TelegramTdlibChatMemberSnapshot, TelegramTdlibChatSnapshot, TelegramTdlibFileSnapshot,
+    TelegramTdlibMessageSnapshot, TelegramTdlibTopicSnapshot,
 };
 
 use super::TDJSON_COMMAND_TIMEOUT;
-use super::models::TelegramHistorySyncMode;
+use super::models::{TelegramHistorySyncMode, TelegramMediaSendRequest};
 use super::state::TelegramRuntimeCommand;
 
 pub(super) async fn request_actor_chats(
@@ -84,6 +84,27 @@ pub(super) async fn request_actor_send(
         reply_rx
             .recv_timeout(TDJSON_COMMAND_TIMEOUT)
             .map_err(|_| TelegramError::TdlibRuntime("Telegram TDLib send timed out".to_owned()))?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_send_media(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    request: TelegramMediaSendRequest,
+) -> Result<TelegramTdlibMessageSnapshot, TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::SendMedia { request, reply_tx })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting media send commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib media send timed out".to_owned())
+        })?
     })
     .await
     .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
@@ -237,6 +258,36 @@ pub(super) async fn request_actor_reply(
     .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
 }
 
+pub(super) async fn request_actor_forward(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    from_provider_chat_id: String,
+    from_provider_message_id: String,
+    command_id: String,
+) -> Result<TelegramTdlibMessageSnapshot, TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::ForwardMessage {
+                provider_chat_id,
+                from_provider_chat_id,
+                from_provider_message_id,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting forward commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib forward timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
 pub(super) async fn request_actor_pin_message(
     command_tx: Sender<TelegramRuntimeCommand>,
     provider_chat_id: String,
@@ -262,6 +313,142 @@ pub(super) async fn request_actor_pin_message(
         reply_rx
             .recv_timeout(TDJSON_COMMAND_TIMEOUT)
             .map_err(|_| TelegramError::TdlibRuntime("Telegram TDLib pin timed out".to_owned()))?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_toggle_chat_unread(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    is_marked_as_unread: bool,
+    command_id: String,
+) -> Result<(), TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::ToggleChatUnread {
+                provider_chat_id,
+                is_marked_as_unread,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting chat unread commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib chat unread command timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_toggle_chat_archive(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    archived: bool,
+    command_id: String,
+) -> Result<(), TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::ToggleChatArchive {
+                provider_chat_id,
+                archived,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting chat archive commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib chat archive command timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_toggle_chat_mute(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    muted: bool,
+    command_id: String,
+) -> Result<(), TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::ToggleChatMute {
+                provider_chat_id,
+                muted,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting chat mute commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib chat mute command timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_join_chat(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    command_id: String,
+) -> Result<(), TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::JoinChat {
+                provider_chat_id,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting chat join commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib chat join command timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_leave_chat(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    provider_chat_id: String,
+    command_id: String,
+) -> Result<(), TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::LeaveChat {
+                provider_chat_id,
+                command_id,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting chat leave commands".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib chat leave command timed out".to_owned())
+        })?
     })
     .await
     .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
@@ -341,6 +528,32 @@ pub(super) async fn request_actor_get_forum_topics(
             })?;
         reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
             TelegramError::TdlibRuntime("Telegram TDLib forum topics timed out".to_owned())
+        })?
+    })
+    .await
+    .map_err(|error| TelegramError::TdlibRuntime(format!("Telegram actor task failed: {error}")))?
+}
+
+pub(super) async fn request_actor_get_supergroup_members(
+    command_tx: Sender<TelegramRuntimeCommand>,
+    supergroup_id: i64,
+    limit: i32,
+) -> Result<Vec<TelegramTdlibChatMemberSnapshot>, TelegramError> {
+    task::spawn_blocking(move || {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        command_tx
+            .send(TelegramRuntimeCommand::GetSupergroupMembers {
+                supergroup_id,
+                limit,
+                reply_tx,
+            })
+            .map_err(|_| {
+                TelegramError::TdlibRuntime(
+                    "Telegram TDLib actor is not accepting member roster requests".to_owned(),
+                )
+            })?;
+        reply_rx.recv_timeout(TDJSON_COMMAND_TIMEOUT).map_err(|_| {
+            TelegramError::TdlibRuntime("Telegram TDLib member roster timed out".to_owned())
         })?
     })
     .await

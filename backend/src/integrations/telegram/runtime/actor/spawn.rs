@@ -5,8 +5,9 @@ use crate::domains::mail::core::ProviderAccount;
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson;
 use crate::platform::config::AppConfig;
+use tokio::sync::mpsc::UnboundedSender;
 
-use super::super::state::TelegramRuntimeCommand;
+use super::super::state::{TelegramRuntimeCommand, TelegramRuntimeEvent};
 use super::driver::drive_tdlib_actor;
 use super::start_request::tdlib_start_request_from_account;
 use super::support::short_thread_suffix;
@@ -15,6 +16,7 @@ pub(in crate::integrations::telegram::runtime) fn spawn_tdlib_actor(
     config: AppConfig,
     account: ProviderAccount,
     session_encryption_key: Option<String>,
+    runtime_event_tx: Option<UnboundedSender<TelegramRuntimeEvent>>,
 ) -> Result<Sender<TelegramRuntimeCommand>, TelegramError> {
     if !tdjson::runtime_available(config.tdjson_path()) {
         return Err(TelegramError::TdlibRuntimeUnavailable(
@@ -31,7 +33,9 @@ pub(in crate::integrations::telegram::runtime) fn spawn_tdlib_actor(
     thread::Builder::new()
         .name(thread_name)
         .spawn(move || {
-            if let Err(error) = drive_tdlib_actor(config, start_request, command_rx) {
+            if let Err(error) =
+                drive_tdlib_actor(config, start_request, command_rx, runtime_event_tx)
+            {
                 tracing::warn!(error = %error, "Telegram TDLib actor stopped");
             }
         })

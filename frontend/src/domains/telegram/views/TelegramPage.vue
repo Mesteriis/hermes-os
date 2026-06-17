@@ -9,25 +9,10 @@ import TelegramCommandHeader from '../components/TelegramCommandHeader.vue'
 import TelegramMessageThread from '../components/TelegramMessageThread.vue'
 import TelegramRail from '../components/TelegramRail.vue'
 import TelegramStatusMessages from '../components/TelegramStatusMessages.vue'
-import {
-  filterTelegramChats,
-  filterTelegramChatsByGroup,
-  telegramChatFilterCounts,
-  telegramMessageTime,
-  telegramMessagesChronological
-} from '../stores/telegram'
+import { filterTelegramChats, filterTelegramChatsByGroup, telegramChatFilterCounts, telegramFilterTabs, telegramMessageTime, telegramMessagesChronological } from '../stores/telegram'
 import { useTelegramStore } from '../stores/telegram'
-import {
-  formatTelegramDateTime,
-  isTelegramChatArchived,
-  isTelegramChatMuted,
-  isTelegramChatPinned,
-  openTelegramSearchChatInThread,
-  openTelegramSearchMediaInThread,
-  openTelegramSearchMessageInThread,
-  runTelegramChatReadToggleAction,
-  runTelegramChatToggleAction
-} from './dialogActionHelpers'
+import { telegramMediaSearchSourceLabel } from '../stores/telegramMediaSearch'
+import { formatTelegramDateTime, isTelegramChatArchived, isTelegramChatMuted, isTelegramChatPinned, openTelegramSearchChatInThread, openTelegramSearchMediaInThread, openTelegramSearchMessageInThread, runTelegramChatReadToggleAction, runTelegramForwardMessageAction, runTelegramChatToggleAction } from './dialogActionHelpers'
 import type { TelegramAttachmentHint, TelegramChat, TelegramMediaItem, TelegramMessage } from '../types/telegram'
 import {
   telegramQueryKeys,
@@ -36,6 +21,7 @@ import {
   useDeleteTelegramMessageMutation,
   useDownloadTelegramMediaMutation,
   useEditTelegramMessageMutation,
+  useForwardTelegramMessageMutation,
   useMarkReadTelegramChatMutation,
   useMarkUnreadTelegramChatMutation,
   useMuteTelegramChatMutation,
@@ -43,7 +29,6 @@ import {
   usePinTelegramMessageMutation,
   useRemoveTelegramReactionMutation,
   useRestoreTelegramMessageMutation,
-  useStartTelegramRuntimeMutation,
   useSyncTelegramChatsMutation,
   useSyncTelegramHistoryMutation,
   useTelegramAccountsQuery,
@@ -53,16 +38,18 @@ import {
   useTelegramChatMembersQuery,
   useTelegramChatsQuery,
   useTelegramMessagesQuery,
-  useTelegramRuntimeStatusQuery,
   useUnarchiveTelegramChatMutation,
   useUnmuteTelegramChatMutation,
   useUnpinTelegramChatMutation
 } from '../queries/useTelegramQuery'
+import { useRestartTelegramRuntimeMutation, useStartTelegramRuntimeMutation, useStopTelegramRuntimeMutation, useTelegramRuntimeStatusQuery } from '../queries/useTelegramRuntimeQuery'
 import { useTelegramFolderFilters } from '../queries/useTelegramFolderFilters'
 import { useTelegramDialogSearchQuery, useTelegramMediaSearchQuery, useTelegramMessageSearchQuery } from '../queries/useTelegramSearchQuery'
-import * as telegramApi from '../api/telegram'
+import { telegramOldestTdlibMessageId } from '../api/telegramWorkspace'
+import { useRealtimeStatusStore } from '../../../shared/stores/realtimeStatus'
 const { t } = useI18n()
 const store = useTelegramStore()
+const realtimeStatus = useRealtimeStatusStore()
 const queryClient = useQueryClient()
 const { data: globalCapabilities } = useTelegramCapabilitiesQuery()
 const { data: accounts } = useTelegramAccountsQuery()
@@ -103,6 +90,7 @@ const telegramDialogSearchResults = computed(() => telegramDialogSearchQuery.dat
 const telegramSearchResults = computed(() => telegramMessageSearchQuery.data.value?.items ?? [])
 const telegramSearchTotal = computed(() => telegramMessageSearchQuery.data.value?.total ?? 0)
 const telegramMediaGalleryItems = computed(() => telegramMediaSearchQuery.data.value?.items ?? [])
+const mediaSearchSourceLabel = computed(() => telegramMediaSearchSourceLabel(telegramMediaSearchQuery.data.value))
 const isWorkspaceSearchLoading = computed(
   () =>
     telegramDialogSearchQuery.isLoading.value ||
@@ -149,7 +137,7 @@ watch(
 )
 const syncChatsMutation = useSyncTelegramChatsMutation()
 const syncHistoryMutation = useSyncTelegramHistoryMutation()
-const { replyTo, sendOrReply } = useTelegramSendActions(
+const { replyTo, sendOrReply, uploadMedia } = useTelegramSendActions(
   () => selectedTelegramChat.value,
   () => store.isTelegramBusy,
   () => store.telegramManualSendText,
@@ -162,7 +150,10 @@ const { replyTo, sendOrReply } = useTelegramSendActions(
   }
 )
 const startRuntimeMutation = useStartTelegramRuntimeMutation()
+const stopRuntimeMutation = useStopTelegramRuntimeMutation()
+const restartRuntimeMutation = useRestartTelegramRuntimeMutation()
 const editMessageMutation = useEditTelegramMessageMutation()
+const forwardMessageMutation = useForwardTelegramMessageMutation()
 const deleteMessageMutation = useDeleteTelegramMessageMutation()
 const restoreMessageMutation = useRestoreTelegramMessageMutation()
 const pinMessageMutation = usePinTelegramMessageMutation()
@@ -183,15 +174,7 @@ const runtimeLabel = computed(() => {
   }
   return selectedRuntimeStatus.value.status
 })
-const filterTabs = computed(() => [
-  { id: 'all' as const, label: 'All Chats' },
-  { id: 'unread' as const, label: 'Unread' },
-  { id: 'mentions' as const, label: 'Mentions' },
-  { id: 'pinned' as const, label: 'Pinned' },
-  { id: 'projects' as const, label: 'Projects' },
-  { id: 'bots' as const, label: 'Bots' },
-  { id: 'archived' as const, label: 'Archived' }
-])
+const filterTabs = computed(() => telegramFilterTabs(t))
 
 function selectTelegramChat(chat: TelegramChat) {
   store.clearTelegramFocusedMessage()
@@ -236,13 +219,14 @@ function hasProjectedMessagesForChat(chat: TelegramChat): boolean {
       message.provider_chat_id === chat.provider_chat_id
   )
 }
-async function startTelegramRuntime() {
+async function setTelegramRuntime(action: 'start' | 'stop' | 'restart') {
   if (store.isTelegramBusy || !selectedAccountId.value) return
   store.setTelegramActionSubmitting(true)
   store.setTelegramActionMessage('')
   store.setTelegramError('')
   try {
-    const status = await startRuntimeMutation.mutateAsync({ account_id: selectedAccountId.value })
+    const mutation = action === 'start' ? startRuntimeMutation : action === 'stop' ? stopRuntimeMutation : restartRuntimeMutation
+    const status = await mutation.mutateAsync({ account_id: selectedAccountId.value })
     store.setTelegramActionMessage(`Telegram runtime ${status.status}`)
   } catch (err) {
     store.setTelegramError(err instanceof Error ? err.message : String(err))
@@ -286,7 +270,7 @@ async function syncSelectedTelegramHistory() {
 }
 async function syncOlderTelegramHistory() {
   if (store.isTelegramBusy || !selectedTelegramChat.value) return
-  const fromMessageId = telegramApi.telegramOldestTdlibMessageId(selectedTelegramMessages.value)
+  const fromMessageId = telegramOldestTdlibMessageId(selectedTelegramMessages.value)
   if (fromMessageId === null) {
     await autoSyncTelegramHistory(selectedTelegramChat.value)
     return
@@ -390,6 +374,15 @@ async function togglePinnedTelegramMessage(message: TelegramMessage) {
   } finally {
     store.setTelegramActionSubmitting(false)
   }
+}
+async function forwardTelegramMessage(message: TelegramMessage) {
+  if (store.isTelegramBusy || !selectedTelegramChat.value) return
+  await runTelegramForwardMessageAction({
+    chat: selectedTelegramChat.value, message, mutation: forwardMessageMutation,
+    sourceChatUnavailableMessage: t('Telegram source chat is not available for forwarding.'),
+    setSubmitting: store.setTelegramActionSubmitting, setActionMessage: store.setTelegramActionMessage, setError: store.setTelegramError,
+    setSelectedChatId: (id) => { store.selectedTelegramChatId = id },
+  })
 }
 async function addReactionToMessage(payload: { message: TelegramMessage; emoji: string }) {
   if (store.isTelegramBusy || !selectedTelegramChat.value) return
@@ -593,11 +586,13 @@ function openTelegramAccountSetup() {
       :isInspectorOpen="store.isTelegramInspectorOpen"
       @syncChats="void syncTelegramChats()"
       @syncHistory="void syncSelectedTelegramHistory()"
-      @startRuntime="void startTelegramRuntime()"
+      @startRuntime="void setTelegramRuntime('start')"
+      @stopRuntime="void setTelegramRuntime('stop')"
+      @restartRuntime="void setTelegramRuntime('restart')"
       @selectGroupFilter="store.selectTelegramGroupFilter($event)"
       @toggleInspector="store.toggleTelegramInspector()"
     />
-    <TelegramStatusMessages :actionMessage="store.telegramActionMessage" :error="store.telegramError" />
+    <TelegramStatusMessages :actionMessage="store.telegramActionMessage" :error="store.telegramError" :realtimeStatusLabel="realtimeStatus.realtimeStatusLabel" :realtimeStatusDetail="realtimeStatus.realtimeStatusDetail" :realtimeStatusTone="realtimeStatus.realtimeStatusTone" />
     <div
       class="three-pane communications-grid telegram-grid"
       :class="{ 'inspector-open': store.isTelegramInspectorOpen }"
@@ -627,6 +622,7 @@ function openTelegramAccountSetup() {
         :searchResults="telegramSearchResults"
         :searchResultTotal="telegramSearchTotal"
         :mediaGalleryItems="telegramMediaGalleryItems"
+        :mediaSearchSourceLabel="mediaSearchSourceLabel"
         :isWorkspaceSearchLoading="isWorkspaceSearchLoading"
         :focusedTelegramMessage="store.focusedTelegramMessage"
         :replyTo="replyTo"
@@ -637,10 +633,12 @@ function openTelegramAccountSetup() {
         @syncHistory="void syncSelectedTelegramHistory()"
         @syncOlderHistory="void syncOlderTelegramHistory()"
         @sendMessage="void sendTelegramManualMessage()"
+        @uploadMedia="(file) => void uploadMedia(file)"
         @downloadMedia="(attachment, message) => void downloadTelegramMedia(attachment, message)"
         @editMessage="(message) => void editTelegramMessage(message)"
         @deleteMessage="(message) => void deleteTelegramMessage(message)"
         @restoreMessage="(message) => void restoreTelegramMessage(message)"
+        @forwardMessage="(message) => void forwardTelegramMessage(message)"
         @togglePinMessage="(message) => void togglePinnedTelegramMessage(message)"
         @addReaction="(payload) => void addReactionToMessage(payload)"
         @removeReaction="(payload) => void removeReactionFromMessage(payload)"
@@ -666,6 +664,7 @@ function openTelegramAccountSetup() {
         :selectedTelegramRuntimeStatus="selectedRuntimeStatus ?? null"
         :selectedTelegramMessages="selectedTelegramMessages"
         :chatMembers="selectedChatMembersQuery.data.value ?? []"
+        :capabilities="capabilities"
         :isInspectorLoading="selectedChatDetailQuery.isLoading.value || selectedChatMembersQuery.isLoading.value"
         :activeRailTab="store.activeRailTab"
         @update:activeRailTab="store.activeRailTab = $event"

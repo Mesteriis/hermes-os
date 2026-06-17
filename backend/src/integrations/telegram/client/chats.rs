@@ -5,6 +5,7 @@ use crate::domains::mail::core::{CommunicationIngestionStore, NewRawCommunicatio
 use crate::integrations::telegram::tdjson::TelegramTdlibChatSnapshot;
 
 use super::TELEGRAM_CHAT_RECORD_KIND;
+use super::chat_metadata::tdlib_chat_projection_metadata;
 use super::errors::TelegramError;
 use super::identifiers::{stable_hash, telegram_chat_id, telegram_raw_record_id};
 use super::models::{
@@ -37,7 +38,7 @@ impl TelegramStore {
             DO UPDATE SET
                 chat_kind = EXCLUDED.chat_kind,
                 title = EXCLUDED.title,
-                username = EXCLUDED.username,
+                username = COALESCE(EXCLUDED.username, telegram_chats.username),
                 sync_state = EXCLUDED.sync_state,
                 last_message_at = EXCLUDED.last_message_at,
                 metadata = COALESCE(telegram_chats.metadata, '{}'::jsonb) || EXCLUDED.metadata,
@@ -208,6 +209,48 @@ impl TelegramStore {
         self.persist_chat_metadata(telegram_chat_id, metadata).await
     }
 
+    pub async fn apply_provider_unread_counts(
+        &self,
+        telegram_chat_id: &str,
+        unread_count: Option<i64>,
+        unread_mention_count: Option<i64>,
+        last_read_inbox_message_id: Option<&str>,
+        source_event: &str,
+    ) -> Result<serde_json::Value, TelegramError> {
+        let mut metadata = self.chat_metadata_map(telegram_chat_id).await?;
+        if let Some(value) = unread_count {
+            metadata.insert(
+                "unread_count".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(value.max(0))),
+            );
+            metadata.insert(
+                "provider_unread_count".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(value.max(0))),
+            );
+        }
+        if let Some(value) = unread_mention_count {
+            metadata.insert(
+                "mention_count".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(value.max(0))),
+            );
+            metadata.insert(
+                "provider_unread_mention_count".to_owned(),
+                serde_json::Value::Number(serde_json::Number::from(value.max(0))),
+            );
+        }
+        if let Some(value) = last_read_inbox_message_id {
+            metadata.insert(
+                "last_read_inbox_provider_message_id".to_owned(),
+                serde_json::Value::String(value.to_owned()),
+            );
+        }
+        metadata.insert(
+            "unread_count_source".to_owned(),
+            serde_json::Value::String(source_event.to_owned()),
+        );
+        self.persist_chat_metadata(telegram_chat_id, metadata).await
+    }
+
     pub async fn recompute_chat_unread_count(
         &self,
         telegram_chat_id: &str,
@@ -304,7 +347,7 @@ impl TelegramStore {
         row.map(row_to_telegram_chat).transpose()
     }
 
-    async fn chat_metadata_map(
+    pub(super) async fn chat_metadata_map(
         &self,
         telegram_chat_id: &str,
     ) -> Result<serde_json::Map<String, serde_json::Value>, TelegramError> {
@@ -323,7 +366,7 @@ impl TelegramStore {
         Ok(metadata.as_object().cloned().unwrap_or_default())
     }
 
-    async fn persist_chat_metadata(
+    pub(super) async fn persist_chat_metadata(
         &self,
         telegram_chat_id: &str,
         metadata: serde_json::Map<String, serde_json::Value>,
@@ -343,9 +386,21 @@ impl TelegramStore {
     pub async fn list_chat_members(
         &self,
         telegram_chat_id: &str,
+        query: Option<&str>,
+        role: Option<&str>,
         limit: i64,
+        cursor: Option<&str>,
     ) -> Result<Vec<TelegramChatMember>, TelegramError> {
         let limit = validate_chat_list_limit(limit)?;
+        let offset = cursor
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(|value| value.parse::<i64>())
+            .transpose()
+            .map_err(|_| {
+                TelegramError::InvalidRequest("members cursor must be a numeric offset".to_owned())
+            })?
+            .unwrap_or(0);
         let chat = self
             .telegram_chat_by_id(telegram_chat_id)
             .await?
@@ -355,42 +410,28 @@ impl TelegramStore {
                 ))
             })?;
 
-        let rows =
-            sqlx::query_as::<_, (String, Option<String>, i64, Option<chrono::DateTime<Utc>>)>(
-                r#"
-            SELECT
-                sender,
-                MAX(NULLIF(BTRIM(sender_display_name), '')) AS sender_display_name,
-                COUNT(*)::bigint AS message_count,
-                MAX(COALESCE(occurred_at, projected_at)) AS last_message_at
-            FROM communication_messages
-            WHERE account_id = $1
-              AND conversation_id = $2
-              AND channel_kind IN ('telegram_user', 'telegram_bot')
-            GROUP BY sender
-            ORDER BY message_count DESC, last_message_at DESC NULLS LAST, sender ASC
-            LIMIT $3
-            "#,
+        if super::participants::provider_roster_exists(&self.pool, telegram_chat_id).await? {
+            return super::participants::list_provider_chat_members(
+                &self.pool,
+                telegram_chat_id,
+                query,
+                role,
+                limit,
+                offset,
             )
-            .bind(&chat.account_id)
-            .bind(&chat.provider_chat_id)
-            .bind(limit)
-            .fetch_all(&self.pool)
-            .await?;
+            .await;
+        }
 
-        Ok(rows
-            .into_iter()
-            .map(
-                |(sender_id, sender_display_name, message_count, last_message_at)| {
-                    TelegramChatMember {
-                        sender_id,
-                        sender_display_name,
-                        message_count,
-                        last_message_at,
-                    }
-                },
-            )
-            .collect())
+        super::participants::list_message_heuristic_members(
+            &self.pool,
+            &chat.account_id,
+            &chat.provider_chat_id,
+            query,
+            role,
+            limit,
+            offset,
+        )
+        .await
     }
 
     pub(crate) async fn ingest_tdlib_chat_snapshot(
@@ -438,10 +479,11 @@ impl TelegramStore {
             username: snapshot.username.clone(),
             sync_state: TelegramSyncState::Synced,
             last_message_at: snapshot.last_message_at,
-            metadata: json!({
-                "runtime": "tdlib",
-                "raw_record_id": raw_record_id,
-            }),
+            metadata: tdlib_chat_projection_metadata(
+                snapshot,
+                &raw_record_id,
+                &provider_account.external_account_id,
+            ),
         })
         .await
     }

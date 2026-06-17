@@ -91,7 +91,7 @@ Before contributing:
 - [docs/roadmap](docs/roadmap) - план развития до версии 5.0.
 - [docs/research](docs/research) - вопросы исследования и открытые риски.
 - [backend](backend) - Rust backend.
-- [frontend](frontend) - desktop-only SvelteKit frontend packaged in a Tauri shell.
+- [frontend](frontend) - desktop-only Vue 3 + Vite frontend packaged in a Tauri shell.
 - [infrastructure](infrastructure) - self-hosted и локальная инфраструктура.
 - [tools](tools) - будущие developer и data tools.
 - [examples](examples) - будущие спецификации примеров и тестовых сценариев.
@@ -99,117 +99,68 @@ Before contributing:
 ## V1 Local Run
 
 ```sh
-make docker-env
 make dev
 ```
 
-`make dev` starts PostgreSQL, the Rust backend with auto-restart on backend source changes, and the SvelteKit frontend with Vite HMR. The frontend is served on `http://127.0.0.1:5174` by default.
+`make dev` is the single local full-stack entrypoint. It creates `docker/.env`
+from `docker/.env.example` when missing, starts PostgreSQL in Docker, runs the
+Rust backend through repo-local `bacon`, runs the Vue 3 + Vite frontend
+natively, starts the Tauri development shell, and writes structured local logs under
+`.local/dev-logs/`.
 
-Open the Tauri desktop shell with `make frontend-tauri-dev` or the frontend/Tauri command documented in `frontend/README.md`.
+For a stable tail target during one dev session:
+
+```sh
+make logs
+```
 
 ## Разработка
 
-Полная локальная/CI-проверка:
-
-```sh
-make validate
-```
-
-Проверить только backend fmt/clippy/tests:
-
-```sh
-make backend-validate
-```
-
-Запустить backend локально:
-
-```sh
-make backend-run
-```
-
-Проверить AI runtime, pgvector integration и live Ollama:
-
-```sh
-make backend-ai-smoke-dev
-```
-
-Live AI smoke по умолчанию использует локальный тестовый endpoint `http://192.168.1.2:11434`. Для другого smoke endpoint задай `HERMES_AI_SMOKE_OLLAMA_BASE_URL`.
-
-Запустить полный dev loop с PostgreSQL, backend auto-restart и frontend HMR:
+Поддерживаемый публичный command surface intentionally small:
 
 ```sh
 make dev
+make logs
+make build
+make migrate
+make vault-backup
+make vault-restore
+make clean
+make clean-data
+make clean-vault
 ```
 
-Запустить PostgreSQL и backend с `DATABASE_URL` из `docker/.env`:
+`make build` делает native release build backend, frontend и Tauri app, включая
+внутреннюю подготовку bundled resources. `make migrate` поднимает PostgreSQL
+при необходимости и запускает backend-managed SQLx migrations.
+
+`make clean` удаляет `target/`, frontend cache/artifacts, temp files и logs, но
+не удаляет базу. `make clean-data` требует подтверждения и удаляет только
+локальные данные PostgreSQL под `docker/data/postgres/`. `make clean-vault`
+требует подтверждения и удаляет только локальные данные vault под
+`HERMES_HOST_VAULT_HOME`.
+
+Создать timestamped backup PostgreSQL и host vault:
 
 ```sh
-make db-up
-make backend-run-dev
+make vault-backup
 ```
 
-Запустить только backend watcher:
+Backup сохраняется под `backups/YYYY-MM-DD/<timestamp>/` и включает:
+
+- `postgres.sql`
+- `vault/`
+- `manifest.json`
+- `RESTORE.txt`
+
+Восстановить backup интерактивно:
 
 ```sh
-make backend-watch-dev
+make vault-restore
 ```
 
-Пересобрать graph projection из текущих V1 таблиц в локальной dev DB:
-
-```sh
-make backend-graph-project-dev
-```
-
-Команда поднимает PostgreSQL при необходимости, применяет backend migrations, печатает JSON summary и оставляет Postgres запущенным для dev-сессии. Она не подключается к Gmail, iCloud или raw IMAP mailbox.
-
-Снять redacted fixture из iCloud IMAP без мутаций mailbox:
-
-```sh
-HERMES_IMAP_FIXTURE_USERNAME=<icloud-email> \
-HERMES_IMAP_FIXTURE_PASSWORD=<app-password> \
-HERMES_IMAP_FIXTURE_MAX_MESSAGES=10 \
-HERMES_IMAP_FIXTURE_OUTPUT=tmp/email-fixtures/icloud-inbox-redacted.json \
-make backend-email-fixture-export-icloud-dev
-```
-
-Exporter использует read-only IMAP path (`EXAMINE`, `UID SEARCH`, `BODY.PEEK[]`), берет latest-N сообщений, пишет redacted fixture JSON и не импортирует данные в PostgreSQL.
-
-Импортировать redacted fixture в локальную dev DB:
-
-```sh
-make backend-email-fixture-import-dev
-```
-
-По умолчанию команда читает `tmp/email-fixtures/icloud-inbox-redacted.json`, создает локальный fixture account `dev-icloud-fixture`, импортирует raw records и оставляет PostgreSQL запущенным.
-
-Прогнать fixture до сообщений, Persona-compatible identity projection и graph projection:
-
-```sh
-make backend-email-fixture-project-dev
-```
-
-Команда выполняет import, canonical message projection, compatibility identity
-projection, rebuild graph projection и печатает JSON summary. Путь fixture и
-account metadata можно переопределить через `HERMES_EMAIL_FIXTURE_PATH`,
-`HERMES_EMAIL_FIXTURE_ACCOUNT_ID`, `HERMES_EMAIL_FIXTURE_DISPLAY_NAME`,
-`HERMES_EMAIL_FIXTURE_EXTERNAL_ACCOUNT_ID`,
-`HERMES_EMAIL_FIXTURE_IMPORT_BATCH_ID`, `HERMES_EMAIL_FIXTURE_PROVIDER`.
-
-Скачать iCloud/raw IMAP почту в persistent dev cache без mailbox-мутаций:
-
-```sh
-HERMES_EMAIL_SYNC_USERNAME=<imap-login> \
-HERMES_EMAIL_SYNC_PASSWORD=<app-password> \
-HERMES_EMAIL_SYNC_PROVIDER=icloud \
-HERMES_EMAIL_SYNC_MAX_MESSAGES=25 \
-make backend-email-sync-cache-dev
-```
-
-Команда использует read-only IMAP, сохраняет raw `.eml` blobs под
-`docker/data/mail/`, кладет в PostgreSQL только metadata/blob references,
-проецирует canonical messages и Persona-compatible identity records. Повторный
-запуск использует checkpoint, а `make dev` после этого работает с уже
-скачанными локальными данными.
+`make vault-restore` предлагает список доступных backup directories, требует
+подтверждения и затем восстанавливает PostgreSQL dump и host vault snapshot.
 
 `/api/v1/events` и `/api/v1/audit/events` требуют локальный API secret header:
 
@@ -254,72 +205,7 @@ New credential payloads are stored in the host vault; PostgreSQL stores
 non-secret account metadata, secret references and account-to-secret bindings.
 `HERMES_SECRET_VAULT_KEY` remains a legacy migration compatibility variable only.
 
-Frontend/Tauri shell commands:
-
-```sh
-make frontend-install
-make frontend-check
-make frontend-build
-make frontend-tauri-dev
-make frontend-tauri-build
-```
-
 UI scope is desktop/laptop only while ADR-0031 is active; mobile UI is not implemented or validated.
-
-Выполнить smoke test backend + PostgreSQL:
-
-```sh
-make backend-smoke-dev
-```
-
-Проверить storage readiness against PostgreSQL:
-
-```sh
-make backend-storage-smoke-dev
-```
-
-Проверить secret reference storage against PostgreSQL:
-
-```sh
-make backend-secrets-smoke-dev
-```
-
-Проверить event log migration/store against PostgreSQL:
-
-```sh
-make backend-event-log-smoke-dev
-```
-
-Проверить communication ingestion storage against PostgreSQL:
-
-```sh
-make backend-communication-smoke-dev
-```
-
-Проверить replay/projection cursors against PostgreSQL:
-
-```sh
-make backend-projection-smoke-dev
-```
-
-Проверить projection runner checkpoint semantics against PostgreSQL:
-
-```sh
-make backend-projection-runner-smoke-dev
-```
-
-Проверить event HTTP API against PostgreSQL:
-
-```sh
-make backend-events-api-smoke-dev
-```
-
-Создать локальный Docker env и проверить Compose:
-
-```sh
-make docker-env
-make compose-config
-```
 
 ## Главные документы
 

@@ -165,13 +165,14 @@ ordered Timeline evidence.
 
 - проецирует сообщения в `communication_messages`;
 - сохраняет selected audit events;
-- не имеет Telegram-specific realtime contracts;
+- имеет Telegram-specific realtime contracts for message, chat, reaction, sync,
+  typing, topic, media and command-status events;
 - не имеет полноценного first-class Timeline feed для Telegram.
 
 ## Главные незакрытые области
 
 - detailed capability contract;
-- Telegram-specific realtime events;
+- remaining Telegram-specific realtime provider reconciliation;
 - edit/delete/tombstone/version schema;
 - reply/forward/reaction/topic projection;
 - provider-write command model beyond send;

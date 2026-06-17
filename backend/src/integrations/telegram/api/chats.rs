@@ -3,18 +3,22 @@ use axum::extract::{Path, Query, State};
 use chrono::Utc;
 use serde_json::json;
 
-use super::helpers::AUDIT_ACTOR_ID;
-use super::helpers::{publish_telegram_event, telegram_secret_store};
+use super::helpers::{
+    publish_telegram_event, telegram_runtime_event_bridge_context, telegram_secret_store,
+};
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::{
     TelegramChatListResponse, TelegramListQuery, communication_ingestion_store, telegram_store,
 };
 use crate::integrations::telegram::client::{
-    TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramError, lifecycle,
+    TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramError,
 };
 use crate::integrations::telegram::runtime::{TelegramChatSyncRequest, TelegramChatSyncResponse};
 use crate::integrations::telegram::runtime::{
     TelegramHistorySyncRequest, TelegramHistorySyncResponse,
+};
+use crate::integrations::telegram::runtime::{
+    TelegramMemberSyncContext, TelegramRuntimeOperationContext,
 };
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
@@ -36,30 +40,6 @@ fn build_event(
     .payload(payload)
     .build()
     .expect("event envelope must be valid")
-}
-
-fn build_command_event(
-    account_id: &str,
-    command_id: &str,
-    provider_chat_id: &str,
-    telegram_chat_id: &str,
-    action: &str,
-    status: &str,
-    chat: Option<&TelegramChat>,
-) -> NewEventEnvelope {
-    build_event(
-        telegram_event_types::COMMAND_STATUS_CHANGED,
-        account_id,
-        command_id,
-        json!({
-            "command_id": command_id,
-            "action": action,
-            "provider_chat_id": provider_chat_id,
-            "telegram_chat_id": telegram_chat_id,
-            "status": status,
-            "chat": chat,
-        }),
-    )
 }
 
 pub(crate) async fn get_telegram_chats(
@@ -92,11 +72,22 @@ pub(crate) struct TelegramChatDetailResponse {
 #[derive(serde::Serialize)]
 pub(crate) struct TelegramChatMemberListResponse {
     pub(crate) items: Vec<TelegramChatMember>,
+    pub(crate) next_cursor: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
 pub(crate) struct TelegramChatMembersQuery {
+    pub(crate) query: Option<String>,
+    pub(crate) role: Option<String>,
     pub(crate) limit: Option<i64>,
+    pub(crate) cursor: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+pub(crate) struct TelegramChatMembersSyncResponse {
+    pub(crate) telegram_chat_id: String,
+    pub(crate) synced_count: usize,
+    pub(crate) items: Vec<TelegramChatMember>,
 }
 
 pub(crate) async fn get_telegram_chat_detail(
@@ -120,11 +111,82 @@ pub(crate) async fn get_telegram_chat_members(
     Path(telegram_chat_id): Path<String>,
     Query(query): Query<TelegramChatMembersQuery>,
 ) -> Result<Json<TelegramChatMemberListResponse>, ApiError> {
+    let limit = query.limit.unwrap_or(50);
     let items = telegram_store(&state)?
-        .list_chat_members(&telegram_chat_id, query.limit.unwrap_or(50))
+        .list_chat_members(
+            &telegram_chat_id,
+            query.query.as_deref(),
+            query.role.as_deref(),
+            limit,
+            query.cursor.as_deref(),
+        )
+        .await?;
+    let next_cursor = if items.len() >= limit as usize {
+        let offset = query
+            .cursor
+            .as_deref()
+            .unwrap_or("0")
+            .parse::<i64>()
+            .unwrap_or(0)
+            .max(0)
+            + limit;
+        Some(offset.to_string())
+    } else {
+        None
+    };
+
+    Ok(Json(TelegramChatMemberListResponse { items, next_cursor }))
+}
+
+pub(crate) async fn post_telegram_chat_members_sync(
+    State(state): State<AppState>,
+    Path(telegram_chat_id): Path<String>,
+) -> Result<Json<TelegramChatMembersSyncResponse>, ApiError> {
+    let telegram_store = telegram_store(&state)?;
+    let chat = telegram_store
+        .telegram_chat_by_id(&telegram_chat_id)
+        .await?
+        .ok_or_else(|| {
+            ApiError::Telegram(TelegramError::InvalidRequest(format!(
+                "Telegram chat `{telegram_chat_id}` was not found"
+            )))
+        })?;
+    let secret_store = telegram_secret_store(&state)?;
+    let communication_store = communication_ingestion_store(&state)?;
+    let items = state
+        .telegram_runtime
+        .sync_chat_members(
+            TelegramMemberSyncContext {
+                communication_store: &communication_store,
+                telegram_store: &telegram_store,
+                secret_store: &secret_store,
+                secret_resolver: &state.vault,
+                config: &state.config,
+                event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
+            },
+            &telegram_chat_id,
+        )
         .await?;
 
-    Ok(Json(TelegramChatMemberListResponse { items }))
+    for item in &items {
+        let event = build_event(
+            telegram_event_types::PARTICIPANT_UPDATED,
+            &chat.account_id,
+            &telegram_chat_id,
+            json!({
+                "telegram_chat_id": telegram_chat_id,
+                "provider_chat_id": chat.provider_chat_id,
+                "participant": item,
+            }),
+        );
+        publish_telegram_event(&state, event).await?;
+    }
+
+    Ok(Json(TelegramChatMembersSyncResponse {
+        telegram_chat_id,
+        synced_count: items.len(),
+        items,
+    }))
 }
 
 pub(crate) async fn post_telegram_sync_chats(
@@ -141,19 +203,18 @@ pub(crate) async fn post_telegram_sync_chats(
     );
     publish_telegram_event(&state, started).await?;
 
+    let communication_store = communication_ingestion_store(&state)?;
+    let telegram_projection_store = telegram_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
-    let response = match state
-        .telegram_runtime
-        .sync_chats(
-            &communication_ingestion_store(&state)?,
-            &telegram_store(&state)?,
-            &secret_store,
-            &state.vault,
-            &state.config,
-            &request,
-        )
-        .await
-    {
+    let context = TelegramRuntimeOperationContext {
+        communication_store: &communication_store,
+        telegram_store: &telegram_projection_store,
+        secret_store: &secret_store,
+        secret_resolver: &state.vault,
+        config: &state.config,
+        event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
+    };
+    let response = match state.telegram_runtime.sync_chats(&context, &request).await {
         Ok(response) => response,
         Err(error) => {
             let failed = build_event(
@@ -213,17 +274,20 @@ pub(crate) async fn post_telegram_sync_history(
     );
     publish_telegram_event(&state, started).await?;
 
+    let communication_store = communication_ingestion_store(&state)?;
+    let telegram_projection_store = telegram_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
+    let context = TelegramRuntimeOperationContext {
+        communication_store: &communication_store,
+        telegram_store: &telegram_projection_store,
+        secret_store: &secret_store,
+        secret_resolver: &state.vault,
+        config: &state.config,
+        event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
+    };
     let response = match state
         .telegram_runtime
-        .sync_history(
-            &communication_ingestion_store(&state)?,
-            &telegram_store(&state)?,
-            &secret_store,
-            &state.vault,
-            &state.config,
-            &request,
-        )
+        .sync_history(&context, &request)
         .await
     {
         Ok(response) => response,
@@ -275,271 +339,4 @@ pub(crate) async fn post_telegram_sync_history(
     publish_telegram_event(&state, completed).await?;
 
     Ok(Json(response))
-}
-
-// ---------------------------------------------------------------------------
-// Dialog management endpoints (ADR-0091)
-// ---------------------------------------------------------------------------
-
-#[derive(serde::Deserialize)]
-pub(crate) struct TelegramChatActionRequest {
-    pub(crate) account_id: String,
-    pub(crate) provider_chat_id: String,
-}
-
-#[derive(serde::Serialize)]
-pub(crate) struct TelegramChatActionResponse {
-    pub(crate) telegram_chat_id: String,
-    pub(crate) action: String,
-    pub(crate) status: String,
-    pub(crate) metadata: serde_json::Value,
-}
-
-async fn record_dialog_command(
-    state: &AppState,
-    telegram_chat_id: &str,
-    request: &TelegramChatActionRequest,
-    command_kind: &str,
-    action_class: &str,
-) -> Result<String, ApiError> {
-    let store = telegram_store(state)?;
-    let command_id = lifecycle::new_command_id();
-
-    let _cmd = lifecycle::insert_command(
-        store.pool(),
-        &command_id,
-        &request.account_id,
-        command_kind,
-        &format!(
-            "{command_kind}:{}:{}",
-            telegram_chat_id,
-            Utc::now().timestamp_millis()
-        ),
-        &request.provider_chat_id,
-        None,
-        "available",
-        action_class,
-        "confirmed",
-        AUDIT_ACTOR_ID,
-        json!({}),
-        json!({"telegram_chat_id": telegram_chat_id}),
-        json!({}),
-    )
-    .await?;
-
-    let chat = store.telegram_chat_by_id(telegram_chat_id).await?;
-    let command_event = build_command_event(
-        &request.account_id,
-        &command_id,
-        &request.provider_chat_id,
-        telegram_chat_id,
-        command_kind,
-        "queued",
-        chat.as_ref(),
-    );
-    publish_telegram_event(state, command_event).await?;
-
-    Ok(command_id)
-}
-
-pub(crate) async fn post_telegram_chat_pin(
-    State(state): State<AppState>,
-    Path(telegram_chat_id): Path<String>,
-    Json(request): Json<TelegramChatActionRequest>,
-) -> Result<Json<TelegramChatActionResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let metadata = store
-        .set_chat_metadata_bool(&telegram_chat_id, "is_pinned", true)
-        .await?;
-    let _command_id =
-        record_dialog_command(&state, &telegram_chat_id, &request, "pin", "provider_write").await?;
-
-    Ok(Json(TelegramChatActionResponse {
-        telegram_chat_id,
-        action: "pin".to_owned(),
-        status: "pinned".to_owned(),
-        metadata,
-    }))
-}
-
-pub(crate) async fn post_telegram_chat_unpin(
-    State(state): State<AppState>,
-    Path(telegram_chat_id): Path<String>,
-    Json(request): Json<TelegramChatActionRequest>,
-) -> Result<Json<TelegramChatActionResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let metadata = store
-        .set_chat_metadata_bool(&telegram_chat_id, "is_pinned", false)
-        .await?;
-    let _command_id = record_dialog_command(
-        &state,
-        &telegram_chat_id,
-        &request,
-        "unpin",
-        "provider_write",
-    )
-    .await?;
-
-    Ok(Json(TelegramChatActionResponse {
-        telegram_chat_id,
-        action: "unpin".to_owned(),
-        status: "unpinned".to_owned(),
-        metadata,
-    }))
-}
-
-pub(crate) async fn post_telegram_chat_archive(
-    State(state): State<AppState>,
-    Path(telegram_chat_id): Path<String>,
-    Json(request): Json<TelegramChatActionRequest>,
-) -> Result<Json<TelegramChatActionResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let metadata = store
-        .set_chat_metadata_bool(&telegram_chat_id, "is_archived", true)
-        .await?;
-    let _command_id = record_dialog_command(
-        &state,
-        &telegram_chat_id,
-        &request,
-        "archive",
-        "provider_write",
-    )
-    .await?;
-
-    Ok(Json(TelegramChatActionResponse {
-        telegram_chat_id,
-        action: "archive".to_owned(),
-        status: "archived".to_owned(),
-        metadata,
-    }))
-}
-
-pub(crate) async fn post_telegram_chat_unarchive(
-    State(state): State<AppState>,
-    Path(telegram_chat_id): Path<String>,
-    Json(request): Json<TelegramChatActionRequest>,
-) -> Result<Json<TelegramChatActionResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let metadata = store
-        .set_chat_metadata_bool(&telegram_chat_id, "is_archived", false)
-        .await?;
-    let _command_id = record_dialog_command(
-        &state,
-        &telegram_chat_id,
-        &request,
-        "unarchive",
-        "provider_write",
-    )
-    .await?;
-
-    Ok(Json(TelegramChatActionResponse {
-        telegram_chat_id,
-        action: "unarchive".to_owned(),
-        status: "unarchived".to_owned(),
-        metadata,
-    }))
-}
-
-pub(crate) async fn post_telegram_chat_mute(
-    State(state): State<AppState>,
-    Path(telegram_chat_id): Path<String>,
-    Json(request): Json<TelegramChatActionRequest>,
-) -> Result<Json<TelegramChatActionResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let metadata = store
-        .set_chat_metadata_bool(&telegram_chat_id, "is_muted", true)
-        .await?;
-    let _command_id = record_dialog_command(
-        &state,
-        &telegram_chat_id,
-        &request,
-        "mute",
-        "provider_write",
-    )
-    .await?;
-
-    Ok(Json(TelegramChatActionResponse {
-        telegram_chat_id,
-        action: "mute".to_owned(),
-        status: "muted".to_owned(),
-        metadata,
-    }))
-}
-
-pub(crate) async fn post_telegram_chat_unmute(
-    State(state): State<AppState>,
-    Path(telegram_chat_id): Path<String>,
-    Json(request): Json<TelegramChatActionRequest>,
-) -> Result<Json<TelegramChatActionResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let metadata = store
-        .set_chat_metadata_bool(&telegram_chat_id, "is_muted", false)
-        .await?;
-    let _command_id = record_dialog_command(
-        &state,
-        &telegram_chat_id,
-        &request,
-        "unmute",
-        "provider_write",
-    )
-    .await?;
-
-    Ok(Json(TelegramChatActionResponse {
-        telegram_chat_id,
-        action: "unmute".to_owned(),
-        status: "unmuted".to_owned(),
-        metadata,
-    }))
-}
-
-pub(crate) async fn post_telegram_chat_mark_read(
-    State(state): State<AppState>,
-    Path(telegram_chat_id): Path<String>,
-    Json(request): Json<TelegramChatActionRequest>,
-) -> Result<Json<TelegramChatActionResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    store
-        .set_chat_last_read_at(&telegram_chat_id, Some(Utc::now()))
-        .await?;
-    let metadata = store.recompute_chat_unread_count(&telegram_chat_id).await?;
-    let _command_id = record_dialog_command(
-        &state,
-        &telegram_chat_id,
-        &request,
-        "mark_read",
-        "local_write",
-    )
-    .await?;
-
-    Ok(Json(TelegramChatActionResponse {
-        telegram_chat_id,
-        action: "mark_read".to_owned(),
-        status: "read".to_owned(),
-        metadata,
-    }))
-}
-
-pub(crate) async fn post_telegram_chat_mark_unread(
-    State(state): State<AppState>,
-    Path(telegram_chat_id): Path<String>,
-    Json(request): Json<TelegramChatActionRequest>,
-) -> Result<Json<TelegramChatActionResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    store.set_chat_last_read_at(&telegram_chat_id, None).await?;
-    let metadata = store.recompute_chat_unread_count(&telegram_chat_id).await?;
-    let _command_id = record_dialog_command(
-        &state,
-        &telegram_chat_id,
-        &request,
-        "mark_unread",
-        "local_write",
-    )
-    .await?;
-
-    Ok(Json(TelegramChatActionResponse {
-        telegram_chat_id,
-        action: "mark_unread".to_owned(),
-        status: "unread".to_owned(),
-        metadata,
-    }))
 }

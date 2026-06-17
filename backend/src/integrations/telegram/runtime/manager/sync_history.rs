@@ -1,7 +1,4 @@
-use crate::domains::mail::core::CommunicationIngestionStore;
 use crate::integrations::telegram::client::{TelegramError, TelegramStore};
-use crate::platform::config::AppConfig;
-use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 
 use super::super::actor::oldest_tdlib_message_id;
 use super::super::commands::request_actor_history;
@@ -9,34 +6,36 @@ use super::super::models::{
     TelegramHistorySyncMode, TelegramHistorySyncRequest, TelegramHistorySyncResponse,
 };
 use super::super::status::account_runtime_kind;
-use super::TelegramRuntimeManager;
 use super::account::load_active_account;
 use super::sync_history_tdlib::TdlibHistorySyncContext;
+use super::{TelegramRuntimeManager, TelegramRuntimeOperationContext};
 
 impl TelegramRuntimeManager {
-    pub async fn sync_history(
+    pub(crate) async fn sync_history<S>(
         &self,
-        communication_store: &CommunicationIngestionStore,
-        telegram_store: &TelegramStore,
-        secret_store: &SecretReferenceStore,
-        secret_resolver: &(impl SecretResolver + Sync + ?Sized),
-        config: &AppConfig,
+        context: &TelegramRuntimeOperationContext<'_, S>,
         request: &TelegramHistorySyncRequest,
-    ) -> Result<TelegramHistorySyncResponse, TelegramError> {
+    ) -> Result<TelegramHistorySyncResponse, TelegramError>
+    where
+        S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
+    {
         request.validate()?;
-        let account = load_active_account(communication_store, &request.account_id).await?;
+        let account = load_active_account(context.communication_store, &request.account_id).await?;
         let runtime_kind = account_runtime_kind(&account);
         match runtime_kind.as_str() {
-            "fixture" => sync_fixture_history(telegram_store, &account.account_id, request).await,
+            "fixture" => {
+                sync_fixture_history(context.telegram_store, &account.account_id, request).await
+            }
             "tdlib_qr_authorized" => {
                 let context = TdlibHistorySyncContext {
-                    communication_store,
-                    telegram_store,
-                    secret_store,
-                    secret_resolver,
-                    config,
+                    communication_store: context.communication_store,
+                    telegram_store: context.telegram_store,
+                    secret_store: context.secret_store,
+                    secret_resolver: context.secret_resolver,
+                    config: context.config,
                     account: &account,
                     runtime_kind,
+                    event_bridge: context.event_bridge.clone(),
                 };
                 self.sync_tdlib_history(context, request).await
             }

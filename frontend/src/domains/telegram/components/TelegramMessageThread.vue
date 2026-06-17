@@ -19,8 +19,10 @@ import {
   telegramPinnedMessages,
   telegramVoiceAttachmentHintsForMessages
 } from '../stores/telegram'
+import { telegramWorkspaceSearchSourceLabel } from '../stores/telegramSearchProjection'
 import TelegramComposer from './thread/TelegramComposer.vue'
 import TelegramMessageList from './thread/TelegramMessageList.vue'
+import TelegramSavedSearchStrip from './TelegramSavedSearchStrip.vue'
 import TelegramSearchResultsPanel from './TelegramSearchResultsPanel.vue'
 import TelegramSyncPanel from './thread/TelegramSyncPanel.vue'
 import TelegramThreadSideSections from './thread/TelegramThreadSideSections.vue'
@@ -46,6 +48,7 @@ const props = defineProps<{
   searchResults: TelegramMessage[]
   searchResultTotal: number
   mediaGalleryItems: TelegramMediaItem[]
+  mediaSearchSourceLabel: string
   isWorkspaceSearchLoading: boolean
   focusedTelegramMessage?: TelegramMessage | null
   replyTo?: TelegramMessage | null
@@ -59,6 +62,7 @@ const emit = defineEmits<{
   syncHistory: []
   syncOlderHistory: []
   sendMessage: []
+  uploadMedia: [file: File]
   downloadMedia: [attachment: TelegramAttachmentHint, message?: TelegramMessage]
   editMessage: [message: TelegramMessage]
   deleteMessage: [message: TelegramMessage]
@@ -75,6 +79,7 @@ const emit = defineEmits<{
   toggleReadChat: []
   selectTopic: [topicId: string]
   replyMessage: [message: TelegramMessage]
+  forwardMessage: [message: TelegramMessage]
   clearReply: []
 }>()
 
@@ -189,6 +194,11 @@ watch(
         @update:activeThreadTab="emit('update:activeThreadTab', $event)"
       />
 
+      <TelegramSavedSearchStrip
+        :accountId="selectedTelegramChat.account_id"
+        :currentQuery="workspaceSearchQuery"
+      />
+
       <TelegramSearchResultsPanel
         v-if="workspaceSearchQuery.trim()"
         :query="workspaceSearchQuery"
@@ -197,6 +207,8 @@ watch(
         :total="searchResultTotal"
         :mediaItems="mediaGalleryItems"
         :isLoading="isWorkspaceSearchLoading"
+        :sourceLabel="telegramWorkspaceSearchSourceLabel(selectedTelegramRuntimeStatus)"
+        :mediaSourceLabel="mediaSearchSourceLabel"
         @openChat="(chat) => emit('openSearchChat', chat)"
         @openMessage="(message) => emit('openSearchMessage', message)"
         @openMedia="(item) => emit('openSearchMedia', item)"
@@ -217,6 +229,7 @@ watch(
         @deleteMessage="(message) => emit('deleteMessage', message)"
         @restoreMessage="(message) => emit('restoreMessage', message)"
         @replyMessage="(message) => emit('replyMessage', message)"
+        @forwardMessage="(message) => emit('forwardMessage', message)"
         @togglePinMessage="(message) => emit('togglePinMessage', message)"
         @addReaction="(payload) => emit('addReaction', payload)"
         @removeReaction="(payload) => emit('removeReaction', payload)"
@@ -225,6 +238,7 @@ watch(
       <TelegramThreadSideSections
         v-else
         :activeThreadTab="activeThreadTab"
+        :accountId="selectedTelegramChat.account_id"
         :telegramChatId="telegramChatId"
         :chronologicalMessages="chronologicalMessages"
         :fileHints="fileHints"
@@ -245,9 +259,11 @@ watch(
         :isTelegramActionSubmitting="isTelegramActionSubmitting"
         :selectedAccountId="selectedTelegramChat.account_id"
         :selectedProviderChatId="selectedTelegramChat.provider_chat_id"
+        :capabilities="capabilities"
         :replyTo="replyTo"
         @update:text="updateDraftText"
         @sendMessage="emit('sendMessage')"
+        @uploadMedia="(file) => emit('uploadMedia', file)"
         @syncHistory="emit('syncHistory')"
         @clearReply="emit('clearReply')"
       />

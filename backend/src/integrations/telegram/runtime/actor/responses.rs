@@ -37,3 +37,18 @@ pub(super) fn tdlib_provider_chat_id(provider_chat_id: &str) -> Result<i64, Tele
         ))
     })
 }
+
+pub(super) fn tdlib_provider_message_id(provider_message_id: &str) -> Result<i64, TelegramError> {
+    provider_message_id
+        .trim()
+        .rsplit(':')
+        .next()
+        .unwrap_or_default()
+        .parse::<i64>()
+        .map_err(|_| {
+            TelegramError::InvalidRequest(format!(
+                "TDLib provider_message_id `{}` must end with a Telegram numeric message id",
+                provider_message_id.trim()
+            ))
+        })
+}

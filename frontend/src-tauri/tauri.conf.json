@@ -5,9 +5,7 @@
   "identifier": "dev.hermes-hub.desktop",
   "build": {
     "frontendDist": "../dist",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm build"
+    "devUrl": "http://127.0.0.1:5174"
   },
   "app": {
     "windows": [

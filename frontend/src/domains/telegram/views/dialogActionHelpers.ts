@@ -8,6 +8,16 @@ type TelegramChatActionMutation = {
   }) => Promise<unknown>
 }
 
+type TelegramForwardMessageMutation = {
+  mutateAsync: (args: {
+    message_id: string
+    account_id: string
+    provider_chat_id: string
+    from_provider_chat_id: string
+    from_provider_message_id: string
+  }) => Promise<{ provider_chat_id: string; status: string }>
+}
+
 type TelegramChatToggleActionParams = {
   chat: TelegramChat
   isActive: boolean
@@ -18,6 +28,17 @@ type TelegramChatToggleActionParams = {
   setSubmitting: (value: boolean) => void
   setActionMessage: (value: string) => void
   setError: (value: string) => void
+}
+
+type TelegramForwardMessageActionParams = {
+  chat: TelegramChat
+  message: TelegramMessage
+  mutation: TelegramForwardMessageMutation
+  sourceChatUnavailableMessage: string
+  setSubmitting: (value: boolean) => void
+  setActionMessage: (value: string) => void
+  setError: (value: string) => void
+  setSelectedChatId: (value: string) => void
 }
 
 type TelegramSearchNavigationCallbacks = {
@@ -93,6 +114,41 @@ export async function runTelegramChatReadToggleAction(
     setActionMessage,
     setError,
   })
+}
+
+export async function runTelegramForwardMessageAction({
+  chat,
+  message,
+  mutation,
+  sourceChatUnavailableMessage,
+  setSubmitting,
+  setActionMessage,
+  setError,
+  setSelectedChatId,
+}: TelegramForwardMessageActionParams): Promise<void> {
+  const sourceProviderChatId = message.provider_chat_id ?? chat.provider_chat_id
+  if (!sourceProviderChatId) {
+    setError(sourceChatUnavailableMessage)
+    return
+  }
+  setSubmitting(true)
+  setActionMessage('')
+  setError('')
+  try {
+    const result = await mutation.mutateAsync({
+      message_id: message.message_id,
+      account_id: chat.account_id,
+      provider_chat_id: chat.provider_chat_id,
+      from_provider_chat_id: sourceProviderChatId,
+      from_provider_message_id: message.provider_message_id,
+    })
+    setSelectedChatId(result.provider_chat_id)
+    setActionMessage(`Telegram forward ${result.status}`)
+  } catch (error) {
+    setError(error instanceof Error ? error.message : String(error))
+  } finally {
+    setSubmitting(false)
+  }
 }
 
 export function findTelegramChatForMessage(

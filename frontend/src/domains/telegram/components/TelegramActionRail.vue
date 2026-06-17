@@ -17,6 +17,8 @@ const emit = defineEmits<{
   'syncChats': []
   'syncHistory': []
   'startRuntime': []
+  'stopRuntime': []
+  'restartRuntime': []
   'selectGroupFilter': [filter: TelegramChatGroupFilter]
   'toggleInspector': []
 }>()
@@ -45,6 +47,20 @@ const emit = defineEmits<{
         @click="emit('startRuntime')"
       >
         <Icon icon="tabler:player-play" width="16" height="16" />{{ t('Start Runtime') }}
+      </button>
+      <button
+        type="button"
+        :disabled="isTelegramBusy || !hasSelectedTelegramChat"
+        @click="emit('stopRuntime')"
+      >
+        <Icon icon="tabler:player-stop" width="16" height="16" />{{ t('Stop Runtime') }}
+      </button>
+      <button
+        type="button"
+        :disabled="isTelegramBusy || !hasSelectedTelegramChat"
+        @click="emit('restartRuntime')"
+      >
+        <Icon icon="tabler:reload" width="16" height="16" />{{ t('Restart Runtime') }}
       </button>
     </div>
     <div class="telegram-group-filter-strip" :aria-label="t('Chat Groups')">

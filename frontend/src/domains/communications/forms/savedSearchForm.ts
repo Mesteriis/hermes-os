@@ -98,6 +98,7 @@ export const savedSearchFormSchema = z.object({
 export const savedSearchVeeValidationSchema = toTypedSchema(savedSearchFormSchema)
 export const savedSearchChannelOptions: Array<SavedSearchOption> = [
   { label: 'Email', value: 'email' },
+  { label: 'Telegram', value: 'telegram' },
   { label: 'Any channel', value: '' }
 ]
 export const savedSearchMatchModeOptions: Array<SavedSearchOption<SavedSearchMatchMode>> = [

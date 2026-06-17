@@ -1,6 +1,6 @@
 # Telegram Architectural Blockers
 
-Статус: audit blockers на 2026-06-15.
+Статус: audit blockers на 2026-06-17.
 
 Блокеры ниже фиксируют причины, последствия и план решения. Они не являются
 разрешением на реализацию новых крупных подсистем вне Telegram Channel.
@@ -73,32 +73,39 @@ confusing. It may incorrectly imply Telegram belongs to Mail.
 - update docs and code naming around public abstractions first;
 - do not rename tables during documentation/audit phase.
 
-## 5. No Tombstone / Version Schema
+## 5. Partial Tombstone / Version Observation
 
-**Причина**: Current message projection upserts canonical communication rows.
-There is no durable Telegram tombstone table, observed edit-version table or
-deletion-history event model.
+**Причина**: Durable Telegram tombstones and append-only observed message
+versions now exist, including provider-origin delete and edit observations.
+However, raw Telegram message records remain append-only by
+`(account_id, record_kind, provider_record_id)`, so provider-observed edit
+evidence is currently captured in `telegram_message_versions` and realtime
+event payloads instead of a second raw message row.
 
-**Последствия**: Delete, restore visibility, edit history and diff views cannot
-be safely implemented without losing source-evidence semantics.
+**Последствия**: Delete and edit reconciliation now work for observed TDLib
+events, but raw-record-level replay of multiple provider message revisions is
+still incomplete.
 
 **План решения**:
 
-- add ADR before destructive commands;
-- add append-only observed edit-version records;
-- add tombstone/deletion evidence records;
-- preserve raw provider evidence;
+- keep append-only tombstone and version records authoritative for observed
+  delete/edit history;
+- preserve raw provider evidence for the original message row;
+- add a dedicated observed-update evidence layer only if later slices require
+  raw-row-level replay of every provider message revision.
 - expose local visibility separately from provider deletion;
 - emit sanitized realtime events.
 
-## 6. No Telegram Realtime Event Contracts
+## 6. Partial Telegram Realtime Event Contracts
 
-**Причина**: Generic WebSocket/SSE/long-poll transports exist, but Telegram does
-not emit typed event contracts for new messages, edits, deletes, reactions,
-media downloads or sync progress.
+**Причина**: Generic WebSocket/SSE/long-poll transports exist, and Telegram now
+emits typed contracts for sync progress, provider-origin message create/update/
+delete observations, reactions, chat state and media progress. Coverage is
+still incomplete for the full production-grade surface.
 
-**Последствия**: Frontend must reload/query-invalidate manually and cannot
-provide reliable live Telegram UX.
+**Последствия**: Core thread/chat UX can now patch caches from provider-origin
+events, but some Telegram surfaces still fall back to query invalidation or
+stale projections where no dedicated event contract exists yet.
 
 **План решения**:
 
@@ -106,6 +113,8 @@ provide reliable live Telegram UX.
 - never include message bodies/media bytes/secrets;
 - add backend event emission at projection/command boundaries;
 - add frontend cache patch handlers after backend contracts stabilize;
+- extend remaining event gaps only where a concrete projection/UI consumer
+  exists;
 - preserve replay cursor behavior.
 
 ## 7. No Topic / Reaction / Reply / Forward Projection Schema
@@ -128,24 +137,52 @@ fragile if implemented directly against raw JSON.
 - model mention state;
 - migrate UI away from raw-payload guessing.
 
-## 8. Provider-Write Command Model Beyond Send
+## 8. Provider-Write Command Model Result Parity
 
-**Причина**: Manual text send is the only implemented Telegram provider-write
-command. Edit, delete, react, pin, mark read/unread, archive, join/leave and
-admin commands do not share a durable command/outbox model.
+**Причина**: Telegram now has durable provider-write command rows, outbox
+claim/lock fields, retry backoff scheduling, stale execution recovery,
+`dead_letter`, manual retry and provider-observed reconciliation fields. Active
+TDLib executor coverage exists for edit, delete, react/unreact, pin/unpin,
+forward, manual unread toggles, archive/unarchive, mute/unmute and media
+upload/send from local imported blobs. Provider participant roster projection
+now exists for TDLib supergroups/channels, and join/leave commands are queued
+through the same durable outbox and dispatched by active TDLib actors via
+`joinChat`/`leaveChat`. TDLib member sync can now mark matching self `join`
+commands completed when the selected account appears as an active provider
+roster member; this emits command status and reconciliation events. TDLib
+history sync can now also reconcile matching self `join`/`leave` commands from
+explicit `messageChatAddMembers` / `messageChatDeleteMember` service-message
+evidence. TDLib unsolicited `updateChatIsMarkedAsUnread` and
+`updateChatNotificationSettings` now also reconcile matching `mark_read` /
+`mark_unread` and exact-shape `mute` / `unmute` commands from observed chat
+state. TDLib `updateChatPosition` now also reconciles matching `archive` /
+`unarchive` commands from observed main/archive list state and matching
+`pin` / `unpin` commands from observed provider pin state. TDLib
+`updateDeleteMessages` now also records provider tombstones and can reconcile
+matching delete commands, while `updateMessageInteractionInfo` now emits
+provider-origin reaction updates and can reconcile matching self
+`react` / `unreact` commands. Remaining write operations such as admin commands
+and Bot API commands are still incomplete. Media upload still lacks
+Bot API/album/progress parity, and folder labels/mutations, custom mute
+shapes, non-self reaction removal parity, other ACK-only TDLib writes plus
+silent/admin participant lifecycle changes still require provider-observed
+reconciliation workers before they can be marked completed.
 
 **Последствия**: High-risk and destructive actions cannot be retried, audited,
 explained, correlated or rolled back consistently.
 
 **План решения**:
 
-- design account-scoped provider command model;
-- add idempotency keys;
+- extend command coverage to admin actions;
+- extend command coverage to Bot API actions;
 - add per-target result records;
-- require capability decisions;
+- keep manual retry/dead-letter controls tied to provider command rows;
+- reconcile remaining provider-observed outcomes back into projections,
+  especially silent/admin participant lifecycle, edit/reaction/
+  pin/archive/mute/read/unread and topic writes;
 - write sanitized audit metadata;
-- emit command status events;
-- add retry/degraded state.
+- emit command status and command reconciliation events;
+- keep retry/degraded/dead-letter state durable across restarts.
 
 ## 9. Desktop Media Permissions
 
@@ -214,6 +251,25 @@ experience.
 - add Telegram-specific source evidence and confidence metadata;
 - keep AI output review-only unless user/policy confirms;
 - avoid implementing Obligation/Decision/Memory lifecycle inside Telegram.
+
+## 13. Telegram Test File Split Debt
+
+**Причина**: `backend/tests/telegram.rs` remains a large historical integration
+test file above the architecture limit. The outbox slice added new coverage in
+`backend/tests/telegram_outbox.rs` instead of expanding that file, but the
+existing file still needs a focused split before broad Telegram test expansion.
+
+**Последствия**: Future Telegram slices risk slow review, merge conflicts and
+accidental cross-feature coupling if new tests continue to accumulate in the
+legacy monolithic test file.
+
+**План решения**:
+
+- keep new tests in focused Telegram integration test files;
+- extract existing message lifecycle, dialogs, media, topics, runtime and
+  capability tests into separate files;
+- keep shared setup helpers explicit and small;
+- do not add new tests to `backend/tests/telegram.rs`.
 
 ## 13. Attachment Scanner Backend Missing
 

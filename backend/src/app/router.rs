@@ -275,6 +275,18 @@ pub async fn run(config: AppConfig) -> Result<(), AppError> {
 
 pub fn init_tracing() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let log_format = std::env::var("HERMES_LOG_FORMAT").unwrap_or_else(|_| "plain".to_owned());
+
+    if log_format.eq_ignore_ascii_case("json") {
+        let _ = tracing_subscriber::fmt()
+            .json()
+            .with_env_filter(filter)
+            .with_current_span(true)
+            .with_span_list(false)
+            .flatten_event(true)
+            .try_init();
+        return;
+    }
 
     let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
 }

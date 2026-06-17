@@ -7,11 +7,19 @@ use crate::domains::api_support::{
     TelegramMessageListResponse, communication_ingestion_store, telegram_store,
 };
 use crate::integrations::telegram::client::{TelegramTopic, TelegramTopicListResponse};
+use crate::integrations::telegram::runtime::TelegramRuntimeOperationContext;
 
-use super::helpers::telegram_secret_store;
+use super::helpers::{telegram_runtime_event_bridge_context, telegram_secret_store};
 
 #[derive(Deserialize)]
 pub(crate) struct TelegramTopicsQuery {
+    pub(crate) limit: Option<i64>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct TelegramTopicSearchQuery {
+    pub(crate) q: String,
+    pub(crate) telegram_chat_id: String,
     pub(crate) limit: Option<i64>,
 }
 
@@ -38,17 +46,19 @@ pub(crate) async fn get_telegram_topics(
     let store = telegram_store(&state)?;
     let limit = query.limit.unwrap_or(100).clamp(1, 200);
 
+    let communication_store = communication_ingestion_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
+    let context = TelegramRuntimeOperationContext {
+        communication_store: &communication_store,
+        telegram_store: &store,
+        secret_store: &secret_store,
+        secret_resolver: &state.vault,
+        config: &state.config,
+        event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
+    };
     if let Err(error) = state
         .telegram_runtime
-        .sync_forum_topics(
-            &communication_ingestion_store(&state)?,
-            &store,
-            &secret_store,
-            &state.vault,
-            &state.config,
-            &telegram_chat_id,
-        )
+        .sync_forum_topics(&context, &telegram_chat_id)
         .await
     {
         tracing::debug!(
@@ -105,8 +115,47 @@ pub(crate) async fn get_telegram_topic_messages(
         return Ok(Json(TelegramMessageListResponse { items: vec![] }));
     }
 
-    // Fetch full message projections for the matching IDs
     let items = store.messages_by_ids(&message_ids).await?;
 
     Ok(Json(TelegramMessageListResponse { items }))
+}
+
+/// GET /api/v1/telegram/topics/search?q=&telegram_chat_id=&limit=
+pub(crate) async fn search_telegram_topics(
+    State(state): State<AppState>,
+    Query(query): Query<TelegramTopicSearchQuery>,
+) -> Result<Json<TelegramTopicListApiResponse>, ApiError> {
+    let store = telegram_store(&state)?;
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let search_q = query.q.trim().to_owned();
+    let telegram_chat_id = query.telegram_chat_id.trim().to_owned();
+
+    if search_q.is_empty() {
+        return Err(ApiError::Telegram(
+            crate::integrations::telegram::client::TelegramError::InvalidRequest(
+                "search query `q` is required".to_owned(),
+            ),
+        ));
+    }
+
+    if telegram_chat_id.is_empty() {
+        return Err(ApiError::Telegram(
+            crate::integrations::telegram::client::TelegramError::InvalidRequest(
+                "search query `telegram_chat_id` is required".to_owned(),
+            ),
+        ));
+    }
+
+    let items = crate::integrations::telegram::client::topics::search_topics(
+        store.pool(),
+        &telegram_chat_id,
+        &search_q,
+        limit,
+    )
+    .await?;
+
+    Ok(Json(TelegramTopicListApiResponse {
+        telegram_chat_id,
+        items,
+    }))
 }

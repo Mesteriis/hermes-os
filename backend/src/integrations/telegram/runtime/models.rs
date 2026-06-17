@@ -18,6 +18,30 @@ impl TelegramRuntimeStartRequest {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct TelegramRuntimeStopRequest {
+    pub account_id: String,
+}
+
+impl TelegramRuntimeStopRequest {
+    pub(super) fn validate(&self) -> Result<(), TelegramError> {
+        validate_non_empty("account_id", &self.account_id)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub struct TelegramRuntimeRestartRequest {
+    pub account_id: String,
+}
+
+impl TelegramRuntimeRestartRequest {
+    pub(super) fn validate(&self) -> Result<(), TelegramError> {
+        validate_non_empty("account_id", &self.account_id)?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct TelegramChatSyncRequest {
     pub account_id: String,
     pub limit: Option<i64>,
@@ -183,6 +207,75 @@ pub struct TelegramMediaDownloadResponse {
     pub attachment_id: Option<String>,
     pub blob_id: Option<String>,
     pub scan_status: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TelegramMediaSendRequest {
+    pub command_id: String,
+    pub provider_chat_id: String,
+    pub media_type: TelegramMediaSendType,
+    pub local_path: String,
+    pub caption: Option<String>,
+    pub filename: Option<String>,
+}
+
+impl TelegramMediaSendRequest {
+    pub(super) fn validate(&self) -> Result<(), TelegramError> {
+        validate_non_empty("command_id", &self.command_id)?;
+        validate_non_empty("provider_chat_id", &self.provider_chat_id)?;
+        validate_non_empty("local_path", &self.local_path)?;
+        if let Some(caption) = &self.caption {
+            validate_non_empty("caption", caption)?;
+        }
+        if let Some(filename) = &self.filename {
+            validate_non_empty("filename", filename)?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TelegramMediaSendType {
+    Photo,
+    Video,
+    Document,
+    Audio,
+    Voice,
+    Sticker,
+    Animation,
+}
+
+impl TelegramMediaSendType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Photo => "photo",
+            Self::Video => "video",
+            Self::Document => "document",
+            Self::Audio => "audio",
+            Self::Voice => "voice",
+            Self::Sticker => "sticker",
+            Self::Animation => "animation",
+        }
+    }
+}
+
+impl TryFrom<&str> for TelegramMediaSendType {
+    type Error = TelegramError;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value.trim() {
+            "photo" => Ok(Self::Photo),
+            "video" => Ok(Self::Video),
+            "document" => Ok(Self::Document),
+            "audio" => Ok(Self::Audio),
+            "voice" | "voice_note" => Ok(Self::Voice),
+            "sticker" => Ok(Self::Sticker),
+            "animation" | "gif" => Ok(Self::Animation),
+            other => Err(TelegramError::InvalidRequest(format!(
+                "unsupported Telegram media upload type `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

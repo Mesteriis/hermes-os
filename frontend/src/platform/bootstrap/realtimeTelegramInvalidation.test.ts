@@ -89,7 +89,7 @@ describe('telegram realtime invalidation handling', () => {
         event: 'event',
         data: JSON.stringify({
           event: {
-            event_type: 'telegram.media.downloaded',
+            event_type: 'telegram.media.download.progress',
           },
         }),
       },
@@ -102,6 +102,56 @@ describe('telegram realtime invalidation handling', () => {
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['telegram', 'search', 'media'],
+    })
+  })
+
+  it('invalidates telegram chat and runtime queries for typing events', () => {
+    const queryClient = { invalidateQueries: vi.fn() }
+
+    handleRealtimeEvent(
+      {
+        id: 'tg-49',
+        event: 'event',
+        data: JSON.stringify({
+          event: {
+            event_type: 'telegram.typing.changed',
+          },
+        }),
+      },
+      queryClient
+    )
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'chats'],
+    })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'runtime'],
+    })
+  })
+
+  it('invalidates telegram member queries for participant updates', () => {
+    const queryClient = { invalidateQueries: vi.fn() }
+
+    handleRealtimeEvent(
+      {
+        id: 'tg-50',
+        event: 'event',
+        data: JSON.stringify({
+          event: {
+            event_type: 'telegram.participant.updated',
+          },
+        }),
+      },
+      queryClient
+    )
+
+    expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'chat-members'],
+    })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['telegram', 'chats'],
     })
   })
 })

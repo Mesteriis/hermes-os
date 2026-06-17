@@ -46,6 +46,25 @@ export async function searchTelegramMessages(params: {
   )
 }
 
+export async function searchTelegramProviderMessages(params: {
+  q: string
+  account_id: string
+  provider_chat_id?: string
+  limit?: number
+}): Promise<TelegramMessageSearchResponse> {
+  const body = {
+    q: params.q.trim(),
+    account_id: params.account_id.trim(),
+    provider_chat_id: params.provider_chat_id?.trim(),
+    limit: params.limit,
+  }
+  return ApiClient.instance.post<TelegramMessageSearchResponse>(
+    '/api/v1/telegram/search/provider',
+    body,
+    'Telegram provider message search failed'
+  )
+}
+
 export async function searchTelegramMedia(params: {
   q?: string
   account_id?: string

@@ -26,6 +26,33 @@ pub struct TelegramChatMember {
     pub sender_display_name: Option<String>,
     pub message_count: i64,
     pub last_message_at: Option<DateTime<Utc>>,
+    pub source: String,
+    pub provider_member_id: String,
+    pub username: Option<String>,
+    pub role: Option<String>,
+    pub status: Option<String>,
+    pub is_admin: bool,
+    pub is_owner: bool,
+    pub permissions: Value,
+    pub observed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NewTelegramChatParticipant {
+    pub participant_id: String,
+    pub telegram_chat_id: String,
+    pub account_id: String,
+    pub provider_chat_id: String,
+    pub provider_member_id: String,
+    pub display_name: Option<String>,
+    pub username: Option<String>,
+    pub role: String,
+    pub status: String,
+    pub is_admin: bool,
+    pub is_owner: bool,
+    pub permissions: Value,
+    pub raw_payload: Value,
+    pub source: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

@@ -46,6 +46,7 @@ __pycache__/
 .local/
 .superpowers/
 .worktrees/
+backups/
 data/
 docker/.env
 docker/data/**
