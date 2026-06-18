@@ -20,7 +20,7 @@ describe('MailList keyboard multi-select boundary', () => {
     expect(source).toContain("emit('selectVisible', visibleMessageIds.value)")
     expect(source).toContain("emit('clearSelection')")
     expect(source).toContain("emit('toggleSelection', next.message_id, true)")
-    expect(source).not.toContain('fetch(')
+    expect(source).not.toMatch(/\bfetch\s*\(/)
     expect(source).not.toContain('ApiClient')
   })
 })

@@ -39,9 +39,10 @@ async fn telegram_and_whatsapp_capabilities_are_split_under_v1() {
         .expect("telegram capabilities response");
     assert_eq!(telegram.status(), StatusCode::OK);
     let telegram_body = json_body(telegram).await;
-    assert_eq!(telegram_body["version"], json!("1.0"));
+    assert_eq!(telegram_body["version"], json!("2.1"));
     assert_eq!(telegram_body["runtime_mode"], json!("fixture"));
-    assert_has_capability(&telegram_body, "telegram_fixture_runtime");
+    assert!(telegram_body["planned_features"].is_array());
+    assert_has_capability(&telegram_body, "runtime.fixture");
 
     let whatsapp = app
         .oneshot(get_request_with_secret("/api/v1/whatsapp/capabilities"))
@@ -82,7 +83,8 @@ fn assert_has_capability(body: &Value, capability: &str) {
     assert!(
         capabilities
             .iter()
-            .any(|item| item["capability"] == json!(capability)),
+            .any(|item| item["capability"] == json!(capability)
+                || item["operation"] == json!(capability)),
         "{capability}"
     );
 }

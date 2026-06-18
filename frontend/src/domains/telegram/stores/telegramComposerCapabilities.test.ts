@@ -14,6 +14,7 @@ function capabilitiesFixture(): TelegramCapabilitiesResponse {
     tdjson_runtime_available: false,
     qr_login_ready: false,
     bot_runtime_available: false,
+    planned_features: [],
     unsupported_features: [],
     capabilities: [
       {

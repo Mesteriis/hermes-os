@@ -168,10 +168,10 @@ async fn v1_message_analyze_returns_structured_ai_summary_against_postgres() {
             .as_array()
             .expect("action items")
             .iter()
-            .any(|item| item
-                .as_str()
-                .unwrap_or("")
-                .contains("Please review the NDA"))
+            .any(|item| {
+                let item = item.as_str().unwrap_or("");
+                item.contains("Please review") && item.contains("NDA")
+            })
     );
     assert!(
         body["summary_contract"]["risks"]

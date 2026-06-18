@@ -325,6 +325,31 @@ async fn message_lifecycle_status_events_include_command_identity_for_realtime_c
         .expect("edit response");
     assert_eq!(edit_response.status(), StatusCode::OK);
 
+    let edit_diff: Value = sqlx::query_scalar(
+        r#"
+        SELECT raw_diff_payload
+        FROM telegram_message_versions
+        WHERE message_id = $1
+        ORDER BY version_number DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("edit version diff");
+    assert_eq!(
+        edit_diff["previous_preview"],
+        json!("Message lifecycle realtime command payload should stay self-describing.")
+    );
+    assert_eq!(
+        edit_diff["new_preview"],
+        json!("edited from command status event test")
+    );
+    assert!(edit_diff["previous_sha256"].is_string());
+    assert!(edit_diff["new_sha256"].is_string());
+    assert_eq!(edit_diff["changed"], json!(true));
+
     let delete_command_id = format!("delete-status-{suffix}");
     let delete_response = app
         .clone()
@@ -421,7 +446,7 @@ where
 {
     let response = app
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/messages?limit=20"),
+            "/api/v1/telegram/messages?limit=20",
             LOCAL_API_TOKEN,
         ))
         .await

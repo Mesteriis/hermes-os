@@ -15,6 +15,10 @@ Clarifies:
 - ADR-0083 Telegram Live User Client Runtime
 - ADR-0085 Communication Spine and Consistency / Contradiction Engine
 
+Clarified by:
+
+- ADR-0094 Telegram Base Domain Completion Boundary
+
 ## Context
 
 Hermes Hub already has a Telegram foundation: provider account records,
@@ -65,6 +69,8 @@ Capability states:
   adapter, permission, secret, runtime dependency or validation gate.
 - `degraded`: the feature was available but the current account/runtime cannot
   execute it reliably.
+- `planned`: the feature is intentionally deferred to a named initiative and is
+  not part of base Telegram Domain completion.
 - `unsupported`: the feature is intentionally out of current scope or conflicts
   with Hermes policy.
 

@@ -444,8 +444,8 @@ mod tests {
         })
     }
 
-    #[test]
-    fn render_template_substitutes_variables() {
+    #[tokio::test]
+    async fn render_template_substitutes_variables() {
         let tpl = test_template(
             "Hello {{name}}",
             "Hi {{name}},\n\n{{message}}",
@@ -465,8 +465,8 @@ mod tests {
         assert!(rendered.malformed_placeholders.is_empty());
     }
 
-    #[test]
-    fn render_template_reports_missing_and_unresolved_variables() {
+    #[tokio::test]
+    async fn render_template_reports_missing_and_unresolved_variables() {
         let tpl = test_template(
             "Hello {{ name }}",
             "Hi {{  name  }},\n\n{{ message }} {{unknown}} {{ blank }}",
@@ -492,8 +492,8 @@ mod tests {
         assert!(rendered.malformed_placeholders.is_empty());
     }
 
-    #[test]
-    fn render_template_reports_malformed_placeholders() {
+    #[tokio::test]
+    async fn render_template_reports_malformed_placeholders() {
         let tpl = test_template(
             "Hello {{ name",
             "Body {{ }} and {{ project }} {{ first name }}",

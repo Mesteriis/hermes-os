@@ -1,13 +1,13 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::body::{Body, to_bytes};
+use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
-use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::integrations::telegram::client::commands::insert_command;
 use hermes_hub_backend::integrations::telegram::client::participants::reconcile_join_commands_from_provider_roster_with_source;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -67,18 +67,38 @@ async fn telegram_basic_group_roster_reconciliation_records_observed_source() {
     )
     .await;
 
-    let join_body = command_response(
-        app.clone(),
-        "/api/v1/telegram/chats/join",
+    let command_id = format!("cmd-basic-group-reconcile-{suffix}");
+    insert_command(
+        &pool,
+        &command_id,
+        &account_id,
+        "join",
+        &format!("join:manual:{suffix}"),
+        &provider_chat_id,
+        None,
+        "available",
+        "provider_write",
+        "confirmed",
+        "hermes-frontend",
+        json!({
+            "source": "telegram_runtime",
+            "membership_state": "present",
+        }),
         json!({
             "account_id": account_id,
-            "provider_chat_id": provider_chat_id
+            "provider_chat_id": provider_chat_id,
+        }),
+        json!({
+            "source": "telegram_runtime",
         }),
     )
-    .await;
-    let command_id = join_body["command_id"].as_str().expect("command id");
+    .await
+    .expect("seed join command");
 
-    let observed_at = Utc::now();
+    let observed_at = sqlx::query_scalar("SELECT now()")
+        .fetch_one(&pool)
+        .await
+        .expect("observed at");
     let commands = reconcile_join_commands_from_provider_roster_with_source(
         &pool,
         &account_id,
@@ -110,7 +130,7 @@ async fn telegram_basic_group_roster_reconciliation_records_observed_source() {
         WHERE command_id = $1
         "#,
     )
-    .bind(command_id)
+    .bind(&command_id)
     .fetch_one(&pool)
     .await
     .expect("reconciled command row");
@@ -131,20 +151,6 @@ async fn telegram_basic_group_roster_reconciliation_records_observed_source() {
     );
     assert_eq!(provider_state["membership_state"], "present");
     assert_eq!(result_payload["source"], "tdlib.getBasicGroupFullInfo");
-}
-
-async fn command_response<S>(app: S, path: &str, body: Value) -> Value
-where
-    S: tower::Service<Request<Body>, Response = axum::response::Response> + Clone,
-    S::Error: std::fmt::Debug,
-    S::Future: Send + 'static,
-{
-    let response = app
-        .oneshot(json_post(path, body))
-        .await
-        .expect("command response");
-    assert_eq!(response.status(), StatusCode::OK);
-    json_body(response).await
 }
 
 async fn post_ok<S>(app: S, path: &str, body: Value)
@@ -168,13 +174,6 @@ fn json_post(path: &str, body: Value) -> Request<Body> {
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(body.to_string()))
         .expect("request")
-}
-
-async fn json_body(response: axum::response::Response) -> Value {
-    let bytes = to_bytes(response.into_body(), 1_000_000)
-        .await
-        .expect("body bytes");
-    serde_json::from_slice(&bytes).expect("json body")
 }
 
 fn unique_suffix() -> String {

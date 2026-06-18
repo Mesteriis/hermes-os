@@ -79,6 +79,8 @@ impl TelegramRuntimeManager {
                 icon_emoji: snapshot.icon_emoji.clone(),
                 is_pinned: snapshot.is_pinned,
                 is_closed: snapshot.is_closed,
+                unread_count: topic_unread_count(snapshot.unread_count),
+                last_message_at: snapshot.last_message_at,
             };
             crate::integrations::telegram::client::topics::upsert_topic(
                 context.telegram_store.pool(),
@@ -90,4 +92,8 @@ impl TelegramRuntimeManager {
 
         Ok(upserted)
     }
+}
+
+fn topic_unread_count(unread_count: i64) -> i32 {
+    unread_count.clamp(0, i32::MAX as i64) as i32
 }

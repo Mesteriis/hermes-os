@@ -293,9 +293,9 @@ also appended into canonical `event_log`, so they are available through:
 - `GET /api/events/stream?after_position=`;
 - `GET /api/v1/events?after_position=&limit=&wait_seconds=`.
 
-Missing parity:
+Extended parity deferred outside base closure:
 
-- richer provider-observed folder state/mutations beyond the current folder-label projection refresh, missing-folder fallback refresh, and main/archive pin-state observation;
+- richer provider-observed folder state/mutations beyond the current folder-label projection refresh, folder fallback refresh, and main/archive pin-state observation;
 - true message-level read receipt records beyond projected chat counters;
 - custom mute-shape reconciliation beyond the current exact TDLib request contract;
 - richer Telegram media retry/dead-letter UX beyond request/progress/failed/completed events;

@@ -20,7 +20,7 @@ describe('CommunicationsConversationList boundary', () => {
 		expect(source).toContain("selectThread: [thread: MailThreadSummary]")
 		expect(source).toContain("loadMoreThreads: []")
 		expect(source).toContain('hasThreadNextPage')
-		expect(source).not.toContain('fetch(')
+		expect(source).not.toMatch(/\bfetch\s*\(/)
 		expect(source).not.toContain('ApiClient')
 	})
 })

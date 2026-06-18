@@ -12,6 +12,8 @@ pub(crate) mod stores;
 pub(crate) mod telegram_capabilities;
 pub(crate) mod telegram_capability_catalog;
 pub(crate) mod telegram_capability_catalog_extended;
+pub(crate) mod telegram_capability_catalog_foundation;
+pub(crate) mod telegram_capability_catalog_messages;
 
 pub(crate) use automation_calls::*;
 pub(crate) use communications::*;

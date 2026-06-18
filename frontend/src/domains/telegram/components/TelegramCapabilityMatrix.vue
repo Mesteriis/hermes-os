@@ -12,11 +12,13 @@ const props = defineProps<{
 const capabilitiesQuery = useTelegramAccountCapabilitiesQuery(computed(() => props.accountId))
 const accountScope = computed(() => capabilitiesQuery.data.value?.account_scope ?? null)
 const capabilityRows = computed(() => capabilitiesQuery.data.value?.capabilities ?? [])
+const plannedFeatures = computed(() => capabilitiesQuery.data.value?.planned_features ?? [])
 const unsupportedFeatures = computed(() => capabilitiesQuery.data.value?.unsupported_features ?? [])
 
 function tone(status: string): string {
   if (status === 'available') return 'success'
   if (status === 'degraded') return 'warning'
+  if (status === 'planned') return 'planned'
   if (status === 'blocked') return 'danger'
   return 'muted'
 }
@@ -48,7 +50,12 @@ function tone(status: string): string {
         <div><dt>{{ t('Lifecycle') }}</dt><dd>{{ accountScope.lifecycle_state }}</dd></div>
       </dl>
 
-      <div v-if="unsupportedFeatures.length > 0" class="telegram-capability-matrix__unsupported">
+      <div v-if="plannedFeatures.length > 0" class="telegram-capability-matrix__features">
+        <strong>{{ t('Planned Initiatives') }}</strong>
+        <p>{{ plannedFeatures.join(' · ') }}</p>
+      </div>
+
+      <div v-if="unsupportedFeatures.length > 0" class="telegram-capability-matrix__features">
         <strong>{{ t('Unsupported Features') }}</strong>
         <p>{{ unsupportedFeatures.join(' · ') }}</p>
       </div>
@@ -103,7 +110,7 @@ function tone(status: string): string {
   word-break: break-word;
 }
 
-.telegram-capability-matrix__unsupported p,
+.telegram-capability-matrix__features p,
 .telegram-capability-matrix__item p {
   margin: 2px 0 0;
   font-size: 12px;
@@ -145,6 +152,11 @@ function tone(status: string): string {
 .telegram-capability-matrix__item-head span[data-tone='danger'] {
   background: #fdecea;
   color: #b42318;
+}
+
+.telegram-capability-matrix__item-head span[data-tone='planned'] {
+  background: #eef4ff;
+  color: #3538cd;
 }
 
 .telegram-capability-matrix__item-head span[data-tone='muted'] {

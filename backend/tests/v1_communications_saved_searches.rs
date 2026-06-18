@@ -185,11 +185,13 @@ async fn v1_saved_searches_crud_and_events_against_postgres() {
     assert_eq!(response.status(), StatusCode::OK);
     let list = response_json(response).await;
     let items = list["items"].as_array().expect("items");
-    assert_eq!(items.len(), 1);
+    assert_eq!(items.len(), 2);
     assert_eq!(list["has_more"], false);
     assert!(list["next_cursor"].is_null());
     assert_eq!(items[0]["saved_search_id"], saved_search_id);
     assert_eq!(items[0]["message_count"], 1);
+    assert_eq!(items[1]["saved_search_id"], second_saved_search_id);
+    assert_eq!(items[1]["message_count"], 1);
 
     let response = app
         .clone()

@@ -207,6 +207,7 @@ impl NewApiAuditRecord {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn telegram_chat_folder_mutation(
         actor_id: impl Into<String>,
         telegram_chat_id: &str,

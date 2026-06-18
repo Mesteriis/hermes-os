@@ -33,15 +33,18 @@ pub async fn upsert_topic(
         r"
         INSERT INTO telegram_topics (
             topic_id, telegram_chat_id, account_id, provider_topic_id, provider_chat_id,
-            title, icon_emoji, is_pinned, is_closed, created_at, updated_at
+            title, icon_emoji, is_pinned, is_closed, unread_count, last_message_at,
+            created_at, updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
         ON CONFLICT (telegram_chat_id, provider_topic_id)
         DO UPDATE SET
             title        = EXCLUDED.title,
             icon_emoji   = EXCLUDED.icon_emoji,
             is_pinned    = EXCLUDED.is_pinned,
             is_closed    = EXCLUDED.is_closed,
+            unread_count = EXCLUDED.unread_count,
+            last_message_at = EXCLUDED.last_message_at,
             updated_at   = EXCLUDED.updated_at
         RETURNING *
         ",
@@ -55,6 +58,8 @@ pub async fn upsert_topic(
     .bind(&topic.icon_emoji)
     .bind(topic.is_pinned)
     .bind(topic.is_closed)
+    .bind(topic.unread_count)
+    .bind(topic.last_message_at)
     .bind(now)
     .fetch_one(pool)
     .await

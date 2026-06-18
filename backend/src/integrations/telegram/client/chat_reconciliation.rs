@@ -7,6 +7,7 @@ use super::lifecycle::mark_command_reconciled;
 use super::models::messages::TelegramProviderWriteCommand;
 use super::rows::row_to_telegram_provider_write_command;
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn reconcile_dialog_boolean_commands_from_provider_state(
     pool: &PgPool,
     account_id: &str,

@@ -432,7 +432,7 @@ export async function startTelegramQrLogin(
   )
 }
 
-export async function pollTelegramQrLogin(setupId: string): Promise<TelegramQrLoginStatusResponse> {
+export async function getTelegramQrLoginStatus(setupId: string): Promise<TelegramQrLoginStatusResponse> {
   return ApiClient.instance.get<TelegramQrLoginStatusResponse>(
     `/api/v1/telegram/login/qr/${encodeURIComponent(setupId)}`,
     'Telegram QR login status request failed'

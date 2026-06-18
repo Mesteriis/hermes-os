@@ -23,6 +23,6 @@ describe('AttachmentSearchPanel boundary', () => {
     expect(source).toContain('accountId: string | null')
     expect(source).toContain('@submit.prevent="submitSearch"')
     expect(source).not.toContain('../api/communications')
-    expect(source).not.toContain('fetch(')
+    expect(source).not.toMatch(/\bfetch\s*\(/)
   })
 })

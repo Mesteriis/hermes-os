@@ -112,10 +112,10 @@ tdlib_qr_authorized
 | Runtime | Назначение | Статус |
 |---|---|---|
 | Fixture runtime | Deterministic local/test validation | implemented |
-| TDLib user runtime | QR-authorized live user account | partial |
-| Bot API runtime | Bot account runtime | missing |
-| Offline command runtime | durable local command replay | partial |
-| Media capture runtime | voice/video/call capture boundary | missing |
+| TDLib user runtime | QR-authorized live user account | implemented |
+| Bot API runtime | Bot account runtime | planned |
+| Offline command runtime | durable local command replay | implemented |
+| Media capture runtime | voice/video/call capture boundary | planned |
 
 ## Account Boundary
 
@@ -431,8 +431,10 @@ Search layers:
 5. media search;
 6. dialog/member/topic search.
 
-Current implementation has layers 1-5 partially. Richer provider media filters,
-remote preview parity and provider member search remain missing.
+Current implementation has projection-backed local, shared Communication,
+provider, media, dialog, member and topic search paths for the base Telegram
+domain. Richer provider media filters and scheduled provider-side saved-search
+execution are future search expansion, not base channel ownership.
 
 ## Realtime Architecture
 

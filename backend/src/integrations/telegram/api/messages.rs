@@ -54,6 +54,7 @@ pub(super) fn build_event(
     .expect("event envelope must be valid")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_command_event(
     account_id: &str,
     command_id: &str,

@@ -97,10 +97,14 @@ pub(crate) fn parse_communication_message_search_query(
         match_mode: MessageSearchMatchMode::All,
         ..MessageSearchQuery::default()
     };
+    let mut explicit_match_mode_seen = false;
 
     for token in tokenize_query_terms(query) {
         if let Some(match_mode) = parse_match_mode_token(&token) {
-            parsed.match_mode = match_mode;
+            if !explicit_match_mode_seen {
+                parsed.match_mode = match_mode;
+                explicit_match_mode_seen = true;
+            }
             continue;
         }
 

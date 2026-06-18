@@ -92,6 +92,10 @@ async function submitPassword() {
   password.value = ''
 }
 
+async function refreshStatus() {
+  await statusQuery.refetch()
+}
+
 function applySuggested() {
   const status = activeStatus.value
   if (!status) return
@@ -135,6 +139,15 @@ function applySuggested() {
       </label>
 
       <div class="telegram-qr-panel__actions">
+        <button
+          v-if="activeStatus.status === 'waiting_qr_scan' || activeStatus.status === 'waiting_password'"
+          type="button"
+          :disabled="isBusy"
+          @click="void refreshStatus()"
+        >
+          <Icon icon="tabler:refresh" width="16" height="16" />
+          {{ t('Refresh Status') }}
+        </button>
         <button
           v-if="activeStatus.status === 'waiting_password'"
           type="button"

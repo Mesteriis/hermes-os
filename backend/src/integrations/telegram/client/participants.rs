@@ -173,6 +173,7 @@ pub async fn reconcile_join_commands_from_provider_roster_with_source(
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn reconcile_leave_commands_from_provider_roster(
     pool: &PgPool,
     account_id: &str,
@@ -197,6 +198,7 @@ pub async fn reconcile_leave_commands_from_provider_roster(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn reconcile_leave_commands_from_provider_roster_with_source(
     pool: &PgPool,
     account_id: &str,

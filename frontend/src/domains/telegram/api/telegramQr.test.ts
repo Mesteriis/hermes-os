@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient } from '../../../platform/api/ApiClient'
 import {
   cancelTelegramQrLogin,
-  pollTelegramQrLogin,
+  getTelegramQrLoginStatus,
   startTelegramQrLogin,
   submitTelegramQrPassword,
 } from './telegram'
@@ -18,7 +18,7 @@ describe('telegram QR login API', () => {
     ApiClient.resetForTests()
   })
 
-  it('calls start, poll, password and cancel QR routes', async () => {
+  it('calls start, status, password and cancel QR routes', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
@@ -54,7 +54,7 @@ describe('telegram QR login API', () => {
       tdlib_data_path: '/tmp/telegram-demo',
       transcription_enabled: false,
     })
-    await pollTelegramQrLogin('qr-1')
+    await getTelegramQrLoginStatus('qr-1')
     await submitTelegramQrPassword('qr-1', { password: 'secret' })
     await cancelTelegramQrLogin('qr-1')
 

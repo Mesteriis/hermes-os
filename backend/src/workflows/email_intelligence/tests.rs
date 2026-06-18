@@ -170,7 +170,8 @@ fn heuristic_structured_summary_is_bounded_and_deduplicated() {
     assert_eq!(summary.action_items, vec!["Please confirm"]);
     assert_eq!(summary.deadlines, vec!["Deadline reminder"]);
     assert!(summary.event_candidates.is_empty());
-    assert!(summary.persona_candidates.is_empty());
+    assert_eq!(summary.persona_candidates.len(), 1);
+    assert_eq!(summary.persona_candidates[0].title, "sender@example.com");
 }
 
 #[test]

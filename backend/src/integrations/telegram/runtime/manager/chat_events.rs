@@ -339,12 +339,13 @@ async fn apply_chat_unread_update(
 
     let reconciled =
         if let Some(last_read_inbox_message_id) = snapshot.last_read_inbox_message_id.as_deref() {
+            let observed_at = provider_observed_at(store.pool()).await?;
             reconcile_mark_read_commands_from_provider_state(
                 store.pool(),
                 account_id,
                 &snapshot.provider_chat_id,
                 last_read_inbox_message_id,
-                Utc::now(),
+                observed_at,
                 &format!("tdlib.{}", snapshot.source_event),
             )
             .await?
@@ -378,12 +379,13 @@ async fn apply_chat_marked_as_unread_update(
             &snapshot.source_event,
         )
         .await?;
+    let observed_at = provider_observed_at(store.pool()).await?;
     let reconciled = reconcile_marked_as_unread_commands_from_provider_state(
         store.pool(),
         account_id,
         &snapshot.provider_chat_id,
         snapshot.is_marked_as_unread,
-        Utc::now(),
+        observed_at,
         &format!("tdlib.{}", snapshot.source_event),
     )
     .await?;
@@ -414,13 +416,14 @@ async fn apply_chat_notification_settings_update(
             &snapshot.source_event,
         )
         .await?;
+    let observed_at = provider_observed_at(store.pool()).await?;
     let reconciled = reconcile_mute_commands_from_provider_state(
         store.pool(),
         account_id,
         &snapshot.provider_chat_id,
         snapshot.use_default_mute_for,
         snapshot.mute_for,
-        Utc::now(),
+        observed_at,
         &format!("tdlib.{}", snapshot.source_event),
     )
     .await?;
@@ -454,7 +457,7 @@ async fn apply_chat_position_update(
         .apply_provider_chat_position(&chat.telegram_chat_id, &position)
         .await?;
 
-    let observed_at = Utc::now();
+    let observed_at = provider_observed_at(store.pool()).await?;
     let observed_via = format!("tdlib.{}", snapshot.source_event);
     let mut reconciled = Vec::new();
     match (snapshot.list_kind.as_str(), snapshot.order > 0) {
@@ -542,6 +545,13 @@ async fn apply_chat_position_update(
         return Ok(None);
     };
     Ok(Some((chat, reconciled)))
+}
+
+async fn provider_observed_at(pool: &PgPool) -> Result<chrono::DateTime<Utc>, TelegramError> {
+    sqlx::query_scalar("SELECT now()")
+        .fetch_one(pool)
+        .await
+        .map_err(TelegramError::from)
 }
 
 async fn apply_chat_folder_update(

@@ -1,0 +1,41 @@
+# Documentation / Code Alignment Audit (2026-06-18)
+
+This file records confirmed doc/code mismatches and implementation evidence. No code changes were made.
+
+## Implementation Surface Evidence
+
+| Surface | Conclusion | Evidence | Confidence | Status |
+| --- | --- | --- | --- | --- |
+| Backend stack | Rust 2024 backend crate; Axum, SQLx/PostgreSQL, Tantivy, keyring, Tauri-compatible Rust ecosystem. | backend/Cargo.toml:1-7,31-43 | high | observed |
+| Backend domain/module tree | Domains include calendar, decisions, documents, graph, mail, obligations, organizations, persons, projects, relationships, settings, tasks. | find backend/src/domains -maxdepth 2 -type d | high | observed |
+| Engines | Engine modules include automation, consistency, decision, enrichment, memory, obligation, risk, search, timeline, trust. | backend/src/engines/mod.rs:1-12 | high | observed |
+| Frontend stack | Vue 3 + Vite + TypeScript + Pinia + TanStack Query. | frontend/package.json:6-17,22,42,45; frontend/src/main.ts:1-21 | high | observed |
+| API auth | Protected route groups use router-level secret middleware; guard checks `x-hermes-secret` header. | backend/src/app/router/routes/mod.rs:19-38; backend/src/app/guard.rs:15-43 | high | observed |
+| Audit log | api_audit_log is append-only via update/delete prevention triggers. | backend/migrations/0003_create_api_audit_log.sql:1-49 | high | observed |
+| Host vault | Router initializes HostVault; config supports HERMES_VAULT_HOME; secret_references allow host_vault. | backend/src/app/router.rs:39-57; backend/src/platform/config/app_config/core_env.rs:43-50; backend/migrations/0054_add_host_vault_secret_store_kind.sql:4-13 | high | observed |
+| Relationships persistence | relationships and relationship_evidence tables exist with source/target kinds, scores, confidence and review state. | backend/migrations/0060_create_relationships.sql:1-115 | high | observed |
+| Obligations persistence | obligations, obligation_evidence and obligation_task_links tables exist. | backend/migrations/0063_create_obligations.sql:1-143 | high | observed |
+| Decisions persistence | decisions, decision_evidence and decision_impacted_entities tables exist. | backend/migrations/0064_create_decisions.sql:1-127 | high | observed |
+
+## Mismatches
+
+| Claim in docs | Docs evidence | Actual code evidence | Severity | Fix type | Recommended action | Confidence | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Root README still advertises SvelteKit in active status/tech stack while current frontend is Vue 3. | README.md:34 and README.md:72 say SvelteKit; README.md:94 says Vue 3; ADR-0093:77-107 selects Vue 3. | frontend/package.json:22,45 and frontend/src/main.ts:1-21 use Vue 3/Vite/Pinia/TanStack Query. | high | docs-only | Update README status/tech stack to Vue 3; keep historical SvelteKit only in superseded ADR/history. | high | confirmed |
+| CONTRIBUTING references SvelteKit and Make targets that are not in the current Makefile. | CONTRIBUTING.md:15-16 names Rust, SvelteKit and Tauri; CONTRIBUTING.md:20-36 references make docker-env/validate/backend-validate/frontend-check/frontend-build. | Makefile:5-17 exposes only help/dev/logs/build/migrate/vault-backup/vault-restore/clean/clean-data/clean-vault. | high | docs-only | Update contributing setup/validation commands after owner confirms standard targets. | high | confirmed |
+| ADR index missing current ADRs and has ordering drift. | docs/adr/README.md:66-85 skips ADR-0056/0071/0072/0076/0077/0080 and places ADR-0074 before ADR-0057. | docs/adr contains ADR-0056, ADR-0071, ADR-0072, ADR-0076, ADR-0077, ADR-0080 and ADR-0094. | high | docs-only | Regenerate ADR index after status policy decision. | high | confirmed |
+| Engine catalog current implementation evidence is stale. | docs/engines/README.md:40-55 lists search/consistency/decision/obligation as dedicated baselines and says many others are domain-local. | backend/src/engines/mod.rs:1-12 exports automation, consistency, decision, enrichment, memory, obligation, risk, search, timeline and trust. | medium | docs-only | Update implementation-evidence section; keep warning that durable ownership may still be partial. | high | confirmed |
+| ADR-0077 i18n mechanics conflict with Vue 3 implementation. | docs/adr/ADR-0077-i18n-russian-english.md:15-20 says `frontend/src/lib/i18n/` and Svelte writable store. | frontend/src/platform/i18n/en.json, ru.json, index.ts exist; frontend/package.json:45 is Vue. | medium | ADR-needed | Owner decision: update ADR-0077 implementation note or create clarifying ADR. | high | confirmed |
+| Product master frontend baseline says Persons surface while current frontend domain folder is personas. | docs/product/master-spec.md:286-304 lists Persons surface. | frontend/src/domains/personas exists; frontend/src/domains/persons does not appear in sampled domain tree. | low | docs-only | Update baseline wording to Personas, with note that backend routes still include `/persons` compatibility. | high | confirmed |
+| README links future directories that are not present. | README.md:95-97 lists infrastructure, tools and examples. | Current tree has no `infrastructure/`, `tools/` or `examples/` directories. | low | docs-only | Remove, mark future, or create explicit placeholders only if owner wants them. | high | confirmed |
+| Markdown relative links are broken or non-portable in historical docs. | Link scan found 17 missing-looking targets. | README.md:95 -> infrastructure; README.md:96 -> tools; README.md:97 -> examples; docs/refactoring/naming-conflicts-inventory.md:12 -> ../../backend/src/app/router/routes/persons.rs:5; docs/refactoring/naming-conflicts-inventory.md:13 -> ../../backend/src/app/router/routes/persons.rs:6; docs/refactoring/naming-conflicts-inventory.md:14 -> ../../backend/src/app/router/routes/persons.rs:12; docs/refactoring/naming-conflicts-inventory.md:15 -> ../../backend/src/app/router/routes/persons.rs:15; docs/refactoring/naming-conflicts-inventory.md:16 -> ../../backend/src/app/router/routes/persons.rs:8 ... | medium | docs-only | Fix active docs first; historical plan links can be archived or left with Historical status. | medium | confirmed |
+| macOS metadata existed under docs. | First pass found docs/.DS_Store and docs/telegram/.DS_Store. Owner authorized deletion on 2026-06-18. | The files were untracked Apple Desktop Services Store files and were removed in the ownership pass. | low | docs-only | Keep `.DS_Store` out of docs; add ignore/validation later if recurrence becomes a pattern. | high | resolved |
+| Current code keeps `persons`, `person_id`, `contacts`, `health`, `watchlist`, `follow-up` compatibility labels. | AGENTS.md:127-131 and docs/domains/README.md:54-80 explicitly allow compatibility labels. | backend/src/app/router/routes/persons.rs:5-45; migrations 0034 and 0059; backend/src/app/router/routes/tasks.rs:45-46. | medium | user-decision-needed | Do not rename code/routes/tables in docs audit; keep compatibility labels documented until migration ADR. | high | confirmed |
+| Telegram base completion ADR exists in current tree but was untracked at audit start. | git status --short showed `?? docs/adr/ADR-0094-telegram-base-domain-completion-boundary.md`. | docs/adr/README.md:98 references ADR-0094 and file content exists at docs/adr/ADR-0094-telegram-base-domain-completion-boundary.md:1-111. | medium | user-decision-needed | Do not stage/commit unless explicitly requested; audit treats current working tree as evidence. | high | confirmed |
+
+## Compatibility Terms Observed In Code
+
+- `persons`, `person_id`, `/api/v1/persons/*`: compatibility routes and schemas remain current (`backend/src/app/router/routes/persons.rs:5-45`, `backend/migrations/0034_rename_contacts_to_persons.sql:1-37`).
+- `contacts`: historical migration and some derived index vocabulary remain; treat as compatibility/history until migration ADR (`backend/migrations/0034_rename_contacts_to_persons.sql:1-37`, `backend/migrations/0018_create_ai_runtime.sql:60-68`).
+- `health`, `watchlist`, `watchtower`: compatibility/attention surfaces remain in routes and docs (`backend/src/app/router/routes/tasks.rs:45-46`, `docs/domains/README.md:54-80`).
+- `follow-up`: allowed glossary term, not equivalent to Task or Obligation (`docs/foundation/glossary.md:76-80`).

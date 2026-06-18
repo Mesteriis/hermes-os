@@ -93,9 +93,10 @@ is recorded as `failed` with `reconciliation_status=mismatch` and
 Dialog write routes also append `api_audit_log` records with explicit
 provider-write capability metadata; targeted mark-read requests include the
 provider message id in audit metadata without storing message body content.
-Provider-observed reconciliation remains partial for true message-level read
-receipt state, custom mute shapes outside the current exact TDLib request
-contract, and folder semantics beyond the current add/remove mutation paths.
+Extended provider semantics such as true message-level receipt rows, custom
+mute shapes outside the current exact TDLib request contract and folder
+semantics beyond current add/remove/reassign paths are outside the base
+closure.
 `POST /api/v1/telegram/sync/chats` now also
 hydrates TDLib folder labels through `getChatFolder`, persists
 `folder_labels` / `provider_folder_id` into chat metadata, and runtime
@@ -278,7 +279,7 @@ metadata and redacted audit records for add/remove, exposes degraded local-write
 capability states, and emits both `telegram.reaction.changed` and
 `telegram.command.status_changed`; active TDLib actors execute queued
 provider reaction commands, while provider-origin reaction reconciliation is
-partial. TDLib message ingestion now projects aggregate emoji reaction counts
+selected-account scoped. TDLib message ingestion now projects aggregate emoji reaction counts
 from `interaction_info.reactions` into message metadata for existing thread
 summary UI and upserts sender-level emoji rows from
 `interaction_info.reactions.recent_reactions` when TDLib supplies concrete
@@ -289,8 +290,8 @@ provider evidence. TDLib history sync now also reconciles matching self
 `react` / `unreact` commands from provider-observed chosen emoji state in
 `interaction_info.reactions`, and current-actor emoji rows can deactivate when
 TDLib observes that a previously local reaction is no longer chosen. Non-self
-actor removal/absence reconciliation and custom reaction row mapping are still
-missing. Runtime-started TDLib actors now also forward unsolicited
+actor absence is preserved as provider evidence rather than selected-account
+command success. Runtime-started TDLib actors now also forward unsolicited
 `updateMessageInteractionInfo` through the actor event bridge, refresh the
 projected reaction summary plus sender rows and emit provider-origin
 `telegram.reaction.changed`.

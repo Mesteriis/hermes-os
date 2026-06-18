@@ -130,6 +130,26 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
         .as_str()
         .expect("forward message id")
         .to_owned();
+    let leaf_message_id = create_reference_message(
+        app.clone(),
+        &account_id,
+        &chat_id,
+        &format!("reference-leaf-{suffix}"),
+        "Leaf Sender",
+        "Leaf reply should appear through bounded traversal",
+        &suffix,
+    )
+    .await;
+    let final_forward_message_id = create_reference_message(
+        app.clone(),
+        &account_id,
+        &chat_id,
+        &format!("reference-final-forward-{suffix}"),
+        "Final Forward Sender",
+        "Final forward should appear through bounded traversal",
+        &suffix,
+    )
+    .await;
 
     let pool = ctx.pool();
     lifecycle::insert_reply_ref(
@@ -144,16 +164,40 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     )
     .await
     .expect("insert reply ref");
+    lifecycle::insert_reply_ref(
+        pool,
+        &leaf_message_id,
+        &reply_message_id,
+        &account_id,
+        &chat_id,
+        &format!("reference-leaf-{suffix}"),
+        &format!("reference-reply-{suffix}"),
+        false,
+    )
+    .await
+    .expect("insert leaf reply ref");
+    lifecycle::insert_reply_ref(
+        pool,
+        &root_message_id,
+        &leaf_message_id,
+        &account_id,
+        &chat_id,
+        &format!("reference-root-{suffix}"),
+        &format!("reference-leaf-{suffix}"),
+        false,
+    )
+    .await
+    .expect("insert reply cycle ref");
     lifecycle::insert_forward_ref(
         pool,
         &forward_message_id,
         &account_id,
         &chat_id,
         &format!("reference-forward-{suffix}"),
-        Some("origin-chat-1"),
-        Some("origin-message-1"),
-        Some("origin-sender-1"),
-        Some("Original Author"),
+        Some(&chat_id),
+        Some(&format!("reference-root-{suffix}")),
+        Some(&format!("sender-root-{suffix}")),
+        Some("Root Sender"),
         Some(
             chrono::DateTime::parse_from_rfc3339("2026-06-05T11:00:00Z")
                 .expect("timestamp")
@@ -162,6 +206,34 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     )
     .await
     .expect("insert forward ref");
+    lifecycle::insert_forward_ref(
+        pool,
+        &final_forward_message_id,
+        &account_id,
+        &chat_id,
+        &format!("reference-final-forward-{suffix}"),
+        Some(&chat_id),
+        Some(&format!("reference-forward-{suffix}")),
+        Some(&format!("sender-forward-{suffix}")),
+        Some("Forward Sender"),
+        None,
+    )
+    .await
+    .expect("insert final forward ref");
+    lifecycle::insert_forward_ref(
+        pool,
+        &root_message_id,
+        &account_id,
+        &chat_id,
+        &format!("reference-root-{suffix}"),
+        Some(&chat_id),
+        Some(&format!("reference-final-forward-{suffix}")),
+        Some(&format!("sender-final-forward-{suffix}")),
+        Some("Final Forward Sender"),
+        None,
+    )
+    .await
+    .expect("insert forward cycle ref");
 
     let reply_chain_response = app
         .clone()
@@ -200,6 +272,27 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
         root_chain_body["replies"][0]["source_message_summary"]["sender_display_name"],
         json!("Reply Sender")
     );
+    assert_eq!(root_chain_body["replies"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        root_chain_body["replies"][1]["source_message_summary"]["text"],
+        json!("Leaf reply should appear through bounded traversal")
+    );
+
+    let leaf_chain_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/messages/{leaf_message_id}/reply-chain"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("leaf reply chain response");
+    assert_eq!(leaf_chain_response.status(), StatusCode::OK);
+    let leaf_chain_body = json_body(leaf_chain_response).await;
+    assert_eq!(leaf_chain_body["reply_to"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        leaf_chain_body["reply_to"][1]["target_message_summary"]["text"],
+        json!("Root message for reply targets")
+    );
 
     let forward_chain_response = app
         .clone()
@@ -217,8 +310,66 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     );
     assert_eq!(
         forward_chain_body["forwards"][0]["forward_origin_sender_name"],
-        json!("Original Author")
+        json!("Root Sender")
     );
+
+    let final_forward_chain_response = app
+        .clone()
+        .oneshot(get_request_with_token(
+            &format!("/api/v1/telegram/messages/{final_forward_message_id}/forward-chain"),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("final forward chain response");
+    assert_eq!(final_forward_chain_response.status(), StatusCode::OK);
+    let final_forward_chain_body = json_body(final_forward_chain_response).await;
+    assert_eq!(
+        final_forward_chain_body["forwards"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    assert_eq!(
+        final_forward_chain_body["forwards"][1]["source_message_summary"]["text"],
+        json!("Forward body should appear in summaries")
+    );
+}
+
+async fn create_reference_message(
+    app: axum::Router,
+    account_id: &str,
+    provider_chat_id: &str,
+    provider_message_id: &str,
+    sender_display_name: &str,
+    text: &str,
+    suffix: &str,
+) -> String {
+    let response = app
+        .oneshot(json_post_request_with_actor(
+            "/api/v1/telegram/messages",
+            json!({
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+                "provider_message_id": provider_message_id,
+                "chat_kind": "group",
+                "chat_title": "Reference Idempotency Room",
+                "sender_id": format!("sender-{sender_display_name}-{suffix}"),
+                "sender_display_name": sender_display_name,
+                "text": text,
+                "import_batch_id": format!("telegram-reference-idempotent-{suffix}"),
+                "occurred_at": "2026-06-06T12:00:00Z",
+                "delivery_state": "received"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("reference message response");
+    assert_eq!(response.status(), StatusCode::OK);
+    json_body(response).await["message_id"]
+        .as_str()
+        .expect("message id")
+        .to_owned()
 }
 
 #[tokio::test]

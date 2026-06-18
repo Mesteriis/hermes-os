@@ -98,11 +98,17 @@ pub(super) async fn upsert_topic_snapshot(
         icon_emoji: snapshot.icon_emoji.clone(),
         is_pinned: snapshot.is_pinned,
         is_closed: snapshot.is_closed,
+        unread_count: topic_unread_count(snapshot.unread_count),
+        last_message_at: snapshot.last_message_at,
     };
 
     crate::integrations::telegram::client::topics::upsert_topic(store.pool(), &topic)
         .await
         .map(Some)
+}
+
+fn topic_unread_count(unread_count: i64) -> i32 {
+    unread_count.clamp(0, i32::MAX as i64) as i32
 }
 
 async fn reconcile_topic_commands_from_provider_state(
@@ -351,7 +357,7 @@ mod tests {
                 icon_emoji: None,
                 is_pinned: false,
                 is_closed: true,
-                unread_count: 0,
+                unread_count: 7,
                 last_message_at: None,
             },
         };
@@ -384,6 +390,15 @@ mod tests {
         assert_eq!(rows[2].0, telegram_event_types::TOPIC_UPDATED);
         assert_eq!(rows[2].1["provider_topic_id"], json!(42));
         assert_eq!(rows[2].2["topic"]["is_closed"], json!(true));
+        assert_eq!(rows[2].2["topic"]["unread_count"], json!(7));
+
+        let topic_unread_count: i32 = sqlx::query_scalar(
+            "SELECT unread_count FROM telegram_topics WHERE provider_topic_id = 42",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("topic unread count");
+        assert_eq!(topic_unread_count, 7);
 
         let command_status: Option<(String, String)> = sqlx::query_as(
             r#"

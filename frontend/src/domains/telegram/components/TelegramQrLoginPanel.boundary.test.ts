@@ -15,6 +15,6 @@ describe('TelegramQrLoginPanel boundary', () => {
     expect(source).toContain('useSubmitTelegramQrPasswordMutation')
     expect(source).toContain("t('Start QR')")
     expect(source).toContain("t('Apply Suggested Account')")
-    expect(source).not.toContain('fetch(')
+    expect(source).not.toMatch(/\bfetch\s*\(/)
   })
 })

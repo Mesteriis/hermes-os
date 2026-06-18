@@ -10,6 +10,7 @@ pub enum TelegramCapabilityState {
     Available,
     Blocked,
     Degraded,
+    Planned,
     Unsupported,
 }
 
@@ -19,6 +20,7 @@ impl TelegramCapabilityState {
             Self::Available => "available",
             Self::Blocked => "blocked",
             Self::Degraded => "degraded",
+            Self::Planned => "planned",
             Self::Unsupported => "unsupported",
         }
     }
@@ -96,6 +98,7 @@ pub(crate) struct TelegramCapabilitiesResponse {
     pub(crate) qr_login_ready: bool,
     pub(crate) bot_runtime_available: bool,
     pub(crate) capabilities: Vec<TelegramOperationCapability>,
+    pub(crate) planned_features: Vec<&'static str>,
     pub(crate) unsupported_features: Vec<&'static str>,
 }
 
@@ -125,7 +128,7 @@ impl TelegramCapabilitiesResponse {
 
         let capabilities = super::telegram_capability_catalog::telegram_capability_rows(qr_ready);
         let mut response = Self {
-            version: "2.0",
+            version: "2.1",
             runtime_mode: if let Some(scope) = account_scope.as_ref() {
                 match scope.runtime_kind.as_str() {
                     "tdlib_qr_authorized" => "tdlib_qr_authorized",
@@ -144,17 +147,28 @@ impl TelegramCapabilitiesResponse {
             qr_login_ready: qr_ready,
             bot_runtime_available: bot_ok,
             capabilities,
+            planned_features: vec![
+                "bot_runtime",
+                "voice_recording",
+                "voice_send",
+                "video_recording",
+                "live_calls",
+                "session_export",
+                "session_import",
+                "mtproxy",
+                "socks5",
+                "ai_summary",
+                "translation",
+                "bilingual_reply",
+                "ai_review_flows",
+            ],
             unsupported_features: vec![
-                "video_calls",
                 "group_calls",
                 "screen_sharing",
                 "hidden_recording",
                 "telegram_data_fine_tuning",
                 "third_party_plugin_execution",
-                "session_import_export",
-                "proxy_profiles",
                 "chat_export",
-                "bot_live_runtime",
             ],
         };
         response.apply_account_scope_overrides();
@@ -235,6 +249,18 @@ impl TelegramCapabilitiesResponse {
                         "Account `{}` must use tdlib_qr_authorized runtime before participant lifecycle commands are available.",
                         scope.account_id
                     );
+                }
+                "participants.sync" => {
+                    capability.status = TelegramCapabilityState::Available.as_str().to_owned();
+                    capability.reason = "TDLib provider member roster sync uses provider-observed roster snapshots for groups and TDLib chat metadata for private/saved-message chats.".to_owned();
+                }
+                "participants.join" => {
+                    capability.status = TelegramCapabilityState::Available.as_str().to_owned();
+                    capability.reason = "Joining Telegram chats uses the durable provider-write outbox and reconciles completion from provider-observed membership evidence.".to_owned();
+                }
+                "participants.leave" => {
+                    capability.status = TelegramCapabilityState::Available.as_str().to_owned();
+                    capability.reason = "Leaving Telegram chats uses the durable provider-write outbox and reconciles completion from provider-observed membership or exhaustive absence evidence.".to_owned();
                 }
                 "dialogs.folder_add" | "dialogs.folder_remove" | "dialogs.folder_reassign"
                     if runtime_kind != "tdlib_qr_authorized" =>

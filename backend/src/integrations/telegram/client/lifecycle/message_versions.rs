@@ -1,5 +1,6 @@
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use sqlx::PgPool;
 
 use super::ids::new_version_id;
@@ -143,6 +144,61 @@ pub async fn record_provider_edit_observation(
     .await
 }
 
-pub(crate) fn local_edit_diff(text: &str) -> Value {
-    json!({"text_length": text.len()})
+pub(crate) fn local_edit_diff(previous_text: Option<&str>, new_text: &str) -> Value {
+    let previous_text_length = previous_text.map(text_len);
+    let new_text_length = text_len(new_text);
+    let text_length_delta =
+        previous_text_length.map(|previous| new_text_length as i64 - previous as i64);
+
+    json!({
+        "previous_text_length": previous_text_length,
+        "new_text_length": new_text_length,
+        "text_length_delta": text_length_delta,
+        "changed": previous_text != Some(new_text),
+        "previous_preview": previous_text.map(text_preview),
+        "new_preview": text_preview(new_text),
+        "previous_sha256": previous_text.map(sha256_hex),
+        "new_sha256": sha256_hex(new_text),
+    })
+}
+
+fn text_len(text: &str) -> usize {
+    text.chars().count()
+}
+
+fn text_preview(text: &str) -> String {
+    const MAX_PREVIEW_CHARS: usize = 160;
+    text.chars().take(MAX_PREVIEW_CHARS).collect()
+}
+
+fn sha256_hex(text: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(text.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::local_edit_diff;
+    use serde_json::json;
+
+    #[test]
+    fn local_edit_diff_records_previous_and_new_text_metadata() {
+        let diff = local_edit_diff(Some("before body"), "after body!");
+
+        assert_eq!(diff["previous_text_length"], json!(11));
+        assert_eq!(diff["new_text_length"], json!(11));
+        assert_eq!(diff["text_length_delta"], json!(0));
+        assert_eq!(diff["changed"], json!(true));
+        assert_eq!(diff["previous_preview"], json!("before body"));
+        assert_eq!(diff["new_preview"], json!("after body!"));
+        assert_eq!(
+            diff["previous_sha256"]
+                .as_str()
+                .expect("previous hash")
+                .len(),
+            64
+        );
+        assert_eq!(diff["new_sha256"].as_str().expect("new hash").len(), 64);
+    }
 }

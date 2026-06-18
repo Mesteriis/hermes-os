@@ -23,6 +23,6 @@ describe('thread infinite query boundary', () => {
 		expect(source).toContain('useThreadMessagesQuery')
 		expect(source).toContain('fetchThreadMessages(')
 		expect(source).toContain('communications-thread-messages')
-		expect(source).toContain('enabled: computed(() => Boolean(toValue(accountId) && toValue(subject)))')
+		expect(source).toContain('enabled: computed(() => Boolean(toValue(accountId)?.trim() && toValue(subject)?.trim()))')
 	})
 })

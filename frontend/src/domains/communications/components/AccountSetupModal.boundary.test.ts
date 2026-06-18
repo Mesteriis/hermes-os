@@ -10,9 +10,10 @@ describe('AccountSetupModal account setup boundary', () => {
 
 		expect(source).toContain("from 'vee-validate'")
 		expect(source).toContain('../forms/accountSetupForm')
-		expect(source).toContain('../api/accountSetup')
-		expect(source).toContain('setupImapEmailAccount')
-		expect(source).toContain('startGmailOAuthSetup')
+		expect(source).toContain('../queries/useCommunicationsQuery')
+		expect(source).toContain('useSetupImapEmailAccountMutation')
+		expect(source).toContain('useStartGmailOAuthSetupMutation')
+		expect(source).toContain('mutateAsync')
 		expect(source).not.toContain('setTimeout')
 	})
 })

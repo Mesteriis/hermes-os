@@ -1,188 +1,68 @@
-# Hermes Communications — Telegram Channel
+# Hermes Communications - Telegram Channel
 
-Статус: канонический audit/spec набор на 2026-06-15.
+Status: `COMPLETED` base domain, 2026-06-18.
 
-Telegram в Hermes — это **Communication Channel** внутри Communications Domain.
-Telegram не является отдельным продуктом, отдельным мессенджером и не владеет
-Memory, Knowledge, Obligations, Decisions, Projects, Organizations или Personas.
-
-Hermes не проектируется как Telegram-клиент-клон. Telegram поставляет:
-
-- source evidence;
-- provider records;
-- provider commands;
-- локальный desktop workbench;
-- медиа и вложения;
-- realtime-события;
-- identity traces для Personas;
-- материал для Timeline и shared engines.
+Telegram in Hermes is a Communication Channel inside Hermes Communications. It
+does not own Memory, Knowledge, Persona, Organization, Project, Obligation or
+Decision lifecycle. Telegram supplies source evidence, provider commands,
+communication projections, realtime events, identity traces, timeline evidence
+and media evidence for other systems.
 
 ```text
 Telegram Provider
-  -> Raw Records
+  -> Source Evidence
   -> Communication Projection
-  -> Events
-  -> Timeline
+  -> Realtime Events
+  -> Timeline Evidence
   -> Shared Engines
 ```
 
-## Роль в Communications Domain
+## Completed Boundary
 
-Telegram использует те же базовые границы, что и другие каналы коммуникации:
+The base Telegram channel is complete for daily desktop work:
 
-- provider state не является единственным source of truth для Hermes;
-- raw provider records сохраняются как append-only evidence;
-- canonical `communication_messages` являются проекцией;
-- provider writes требуют capability, policy и audit boundary;
-- AI output и derived indexes не заменяют source evidence;
-- realtime является частью канала, а не косметическим обновлением UI.
+- account setup, QR-authorized TDLib user runtime metadata and runtime health;
+- provider-write outbox, command status, retry/dead-letter visibility and
+  provider-observed reconciliation;
+- dialog pin/archive/mute/read/unread/folder commands and realtime patches;
+- message edit/delete/pin/reaction/reply/forward lifecycle evidence;
+- edit versions, tombstones, provider edit/delete evidence and diff metadata;
+- reply and forward attribution with bounded chain traversal and cycle guards;
+- forum topic projection, unread state, realtime topic updates and command
+  reconciliation;
+- provider-refreshed message/media search with projection-backed UI results;
+- media gallery, album metadata, preview/download/upload lifecycle through the
+  shared Communication attachment boundary;
+- frontend server state through TanStack Query composables and shared realtime
+  bootstrap, without component-level fetches.
 
-Текущая реализация находится в:
+Provider ACK is not treated as success. Commands complete only from
+provider-observed state or returned provider snapshots that have been projected
+locally.
 
-```text
-backend/src/integrations/telegram/
-frontend/src/domains/telegram/
-```
+## Deferred Initiatives
 
-Она уже содержит account/runtime/message foundation, но не закрывает production parity Telegram.
+The following are intentionally outside base Telegram and are tracked as
+`planned` capabilities by ADR-0094:
 
-## Ключевые принципы Telegram Channel
+- Bot Runtime;
+- Voice Recording;
+- Voice Send;
+- Video Recording;
+- Live Calls;
+- Session Export;
+- Session Import;
+- MTProxy;
+- SOCKS5;
+- AI Summary;
+- Translation;
+- Bilingual Reply;
+- AI Review Flows.
 
-### Evidence First
+Hidden recording, fine-tuning on private Telegram data and untrusted plugin
+execution remain unsupported.
 
-Любое Telegram-сообщение, действие провайдера, медиафайл или runtime-событие
-должны сохраняться как проверяемое evidence. Производные AI/UX-поля не должны
-заменять исходные данные.
-
-### Capability Gated
-
-Каждая provider-side операция должна иметь capability state до появления в UI:
-
-```text
-available
-blocked
-degraded
-unsupported
-```
-
-Особенно для destructive/high-risk действий:
-
-- delete;
-- edit;
-- pin/unpin;
-- reactions;
-- join/leave;
-- admin actions;
-- call/recording/audio capture;
-- export/session/proxy operations.
-
-### Local First
-
-Личные данные, история, raw evidence, медиа metadata, audit и derived context
-должны оставаться локальными. Provider используется как transport/source boundary.
-
-### Owner Controlled
-
-AI, automation и provider-write commands предлагают действия, но владелец или
-явная policy подтверждают исполнение.
-
-### No Hidden Recording
-
-Любая работа с calls, audio capture, voice/video recording и STT требует явного
-permission boundary. Скрытая запись не поддерживается.
-
-## Связь с Personas
-
-Telegram users, senders, participants, usernames, phone traces и sender metadata
-рассматриваются как identity traces для Personas.
-
-Telegram Channel не создаёт отдельный Contacts/Address Book domain.
-
-Текущая реализация сохраняет:
-
-- `sender_id`;
-- `sender_display_name`;
-- `provider_chat_id`;
-- raw TDLib payload;
-- message metadata.
-
-Более глубокие Persona flows остаются внешними точками интеграции:
-
-- identity resolution;
-- relationship scoring;
-- trust;
-- dossier;
-- communication DNA.
-
-## Связь с Organizations
-
-Telegram groups, channels, bots и organization proxy accounts могут быть evidence
-для Organizations. Telegram не владеет Organization lifecycle.
-
-Будущие integration points:
-
-- group/channel → organization candidate;
-- bot/service account → organization system identity;
-- channel announcements → organization timeline evidence;
-- project group → organization/project relationship evidence.
-
-## Связь с Projects
-
-Telegram messages могут быть evidence для:
-
-- project context;
-- task candidates;
-- decision candidates;
-- meeting/event hints;
-- obligation candidates;
-- document/media references.
-
-Текущая foundation уже может обновлять Decision/task candidates из projected
-Telegram messages, но review lifecycle принадлежит внешним shared engines.
-
-## Связь с Attachments
-
-Telegram media моделируется как Communication attachments.
-
-Правила:
-
-- media bytes не хранятся в PostgreSQL;
-- PostgreSQL хранит metadata, hash, scan state и local refs;
-- blob storage остаётся локальным;
-- scanner boundary общий для всех communication attachments;
-- Telegram не должен зависеть семантически от Mail storage naming.
-
-Текущая реализация использует mail-named compatibility boundary. Это технический
-долг, а не продуктовая модель.
-
-## Связь с Timeline
-
-Telegram messages, account lifecycle events, provider-write audits, sync events,
-edit/delete/reaction events и future call/media events должны становиться
-ordered Timeline evidence.
-
-Текущая реализация:
-
-- проецирует сообщения в `communication_messages`;
-- сохраняет selected audit events;
-- имеет Telegram-specific realtime contracts for message, chat, reaction, sync,
-  typing, topic, media and command-status events;
-- не имеет полноценного first-class Timeline feed для Telegram.
-
-## Главные незакрытые области
-
-- detailed capability contract;
-- remaining Telegram-specific realtime provider reconciliation;
-- edit/delete/tombstone/version schema;
-- reply/forward/reaction/topic projection;
-- provider-write command model beyond send;
-- Telegram media gallery/search/preview UX;
-- voice/video/calls native permission boundary;
-- Bot API runtime;
-- session/proxy bundle management;
-- provider search/export parity.
-
-## Навигация
+## Navigation
 
 - [Architecture](architecture.md)
 - [Modules](modules.md)

@@ -208,7 +208,21 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
             .as_array()
             .expect("unsupported features")
             .iter()
-            .any(|feature| feature == "video_calls")
+            .any(|feature| feature == "hidden_recording")
+    );
+    assert!(
+        capabilities_body["planned_features"]
+            .as_array()
+            .expect("planned features")
+            .iter()
+            .any(|feature| feature == "bot_runtime")
+    );
+    assert!(
+        capabilities_body["planned_features"]
+            .as_array()
+            .expect("planned features")
+            .iter()
+            .any(|feature| feature == "ai_review_flows")
     );
     assert!(
         !capabilities_body["unsupported_features"]

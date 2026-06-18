@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
   cancelTelegramQrLogin,
-  pollTelegramQrLogin,
+  getTelegramQrLoginStatus,
   startTelegramQrLogin,
   submitTelegramQrPassword,
 } from '../api/telegram'
@@ -33,16 +33,9 @@ export function useTelegramQrLoginStatusQuery(
     queryFn: async () => {
       const value = toValue(setupId)
       if (!value) return null
-      return pollTelegramQrLogin(value)
+      return getTelegramQrLoginStatus(value)
     },
     enabled: computed(() => Boolean(toValue(setupId))),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status
-      if (status === 'waiting_qr_scan' || status === 'waiting_password') {
-        return query.state.data?.poll_after_ms ?? 3000
-      }
-      return false
-    },
   })
 }
 

@@ -12,7 +12,7 @@ pub(super) fn push_extended_capabilities(
         "dialogs.mark_unread",
         cat_dialogs,
         if qr_ready {
-            TelegramCapabilityState::Degraded
+            TelegramCapabilityState::Available
         } else {
             TelegramCapabilityState::Unsupported
         },
@@ -61,18 +61,18 @@ pub(super) fn push_extended_capabilities(
     capabilities.push(TelegramOperationCapability::new(
         "media.gallery",
         cat_media,
-        TelegramCapabilityState::Blocked,
+        TelegramCapabilityState::Available,
         TelegramActionClass::Read,
-        "Media gallery and search require dedicated projection and UI.",
+        "Media gallery is backed by projected Telegram attachment metadata plus query-backed media search results.",
         false,
         false,
     ));
     capabilities.push(TelegramOperationCapability::new(
         "media.preview",
         cat_media,
-        TelegramCapabilityState::Degraded,
+        TelegramCapabilityState::Available,
         TelegramActionClass::Read,
-        "Shared Communication attachment preview may work; no Telegram-specific preview surface.",
+        "Telegram media preview uses the shared Communication attachment preview boundary and local downloaded media paths.",
         false,
         false,
     ));
@@ -82,18 +82,45 @@ pub(super) fn push_extended_capabilities(
     capabilities.push(TelegramOperationCapability::new(
         "voice.playback",
         cat_voice,
-        TelegramCapabilityState::Blocked,
+        TelegramCapabilityState::Available,
         TelegramActionClass::Read,
-        "Voice message playback requires dedicated player UI and local blob access.",
+        "Projected Telegram voice/audio attachments play from local downloaded media through the shared media viewer.",
         false,
         false,
     ));
     capabilities.push(TelegramOperationCapability::new(
         "voice.record_send",
         cat_voice,
-        TelegramCapabilityState::Blocked,
+        TelegramCapabilityState::Planned,
         TelegramActionClass::ProviderWrite,
-        "Voice recording/send requires desktop media permission boundary.",
+        "Voice recording/send is deferred to the separate Voice initiative.",
+        true,
+        true,
+    ));
+    capabilities.push(TelegramOperationCapability::new(
+        "voice.record",
+        cat_voice,
+        TelegramCapabilityState::Planned,
+        TelegramActionClass::ProviderWrite,
+        "Voice recording is deferred to the separate Voice initiative.",
+        true,
+        true,
+    ));
+    capabilities.push(TelegramOperationCapability::new(
+        "voice.send",
+        cat_voice,
+        TelegramCapabilityState::Planned,
+        TelegramActionClass::ProviderWrite,
+        "Voice send is deferred to the separate Voice initiative.",
+        true,
+        true,
+    ));
+    capabilities.push(TelegramOperationCapability::new(
+        "video.record",
+        cat_voice,
+        TelegramCapabilityState::Planned,
+        TelegramActionClass::ProviderWrite,
+        "Video recording is deferred to a separate Voice/Calls initiative.",
         true,
         true,
     ));
@@ -109,18 +136,18 @@ pub(super) fn push_extended_capabilities(
     capabilities.push(TelegramOperationCapability::new(
         "calls.live_control",
         cat_voice,
-        TelegramCapabilityState::Blocked,
+        TelegramCapabilityState::Planned,
         TelegramActionClass::ProviderWrite,
-        "Live call control requires native desktop permission ADR.",
+        "Live call control is deferred to the separate Calls initiative.",
         true,
         true,
     ));
     capabilities.push(TelegramOperationCapability::new(
         "calls.transcription_live",
         cat_voice,
-        TelegramCapabilityState::Blocked,
+        TelegramCapabilityState::Planned,
         TelegramActionClass::Read,
-        "Live transcription requires STT provider adapter and model configuration.",
+        "Live call transcription is deferred to the separate Calls/AI initiatives.",
         false,
         true,
     ));
@@ -148,18 +175,22 @@ pub(super) fn push_extended_capabilities(
     capabilities.push(TelegramOperationCapability::new(
         "search.provider",
         cat_search,
-        TelegramCapabilityState::Blocked,
+        if qr_ready {
+            TelegramCapabilityState::Available
+        } else {
+            TelegramCapabilityState::Degraded
+        },
         TelegramActionClass::Read,
-        "Provider-side TDLib search requires dedicated API and UI.",
+        "Provider-side TDLib search refreshes provider results into projection before returning UI-visible results.",
         false,
         false,
     ));
     capabilities.push(TelegramOperationCapability::new(
         "search.media",
         cat_search,
-        TelegramCapabilityState::Blocked,
+        TelegramCapabilityState::Available,
         TelegramActionClass::Read,
-        "Media search requires dedicated media projection and gallery.",
+        "Media search reads projected Telegram attachment metadata and attempts provider refresh when account and query are available.",
         false,
         false,
     ));
@@ -238,18 +269,36 @@ pub(super) fn push_extended_capabilities(
     capabilities.push(TelegramOperationCapability::new(
         "ai.summary",
         cat_ai,
-        TelegramCapabilityState::Blocked,
+        TelegramCapabilityState::Planned,
         TelegramActionClass::Read,
-        "Telegram-specific summary API/UI not yet implemented.",
+        "Telegram-specific summary is deferred to the separate AI Layer initiative.",
         false,
         false,
     ));
     capabilities.push(TelegramOperationCapability::new(
         "ai.translation",
         cat_ai,
-        TelegramCapabilityState::Blocked,
+        TelegramCapabilityState::Planned,
         TelegramActionClass::Read,
-        "Telegram-specific translation route/UI not yet implemented.",
+        "Telegram-specific translation is deferred to the separate AI Layer initiative.",
+        false,
+        false,
+    ));
+    capabilities.push(TelegramOperationCapability::new(
+        "ai.bilingual_reply",
+        cat_ai,
+        TelegramCapabilityState::Planned,
+        TelegramActionClass::Read,
+        "Telegram-specific bilingual reply is deferred to the separate AI Layer initiative.",
+        false,
+        false,
+    ));
+    capabilities.push(TelegramOperationCapability::new(
+        "ai.review_flows",
+        cat_ai,
+        TelegramCapabilityState::Planned,
+        TelegramActionClass::Read,
+        "Telegram-specific AI review flows are deferred to the separate AI Layer initiative.",
         false,
         false,
     ));

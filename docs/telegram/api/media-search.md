@@ -76,8 +76,9 @@ metadata.media_album_key = provider_chat_id + media_album_id
 ```
 
 The Telegram Files tab can group already-loaded selected-chat messages by this
-key. Provider-wide album sync and album-aware media upload/send are still
-missing.
+key. Provider-wide album sync and album-aware media upload/send are deferred to
+future media-send expansion; base media gallery, preview, upload command
+queueing and download lifecycle are complete.
 
 Media download required fields:
 

@@ -32,6 +32,7 @@ fn build_event(
     .expect("event envelope must be valid")
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_command_event(
     account_id: &str,
     command_id: &str,
@@ -173,6 +174,7 @@ async fn record_chat_lifecycle_command(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn record_chat_lifecycle_command_with_payload(
     state: &AppState,
     telegram_chat_id: Option<&str>,

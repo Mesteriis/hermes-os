@@ -2,7 +2,9 @@ use chrono::Utc;
 use serde_json::json;
 use sqlx::PgPool;
 
-use super::message_versions::{insert_message_version, latest_version_number, local_edit_diff};
+use super::message_versions::{
+    insert_message_version, latest_message_version, latest_version_number, local_edit_diff,
+};
 use super::tombstones::insert_tombstone;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::errors::TelegramError;
@@ -19,6 +21,7 @@ pub async fn record_edit(
 ) -> Result<TelegramLifecycleResponse, TelegramError> {
     let now = Utc::now();
     let version_number = latest_version_number(pool, message_id).await? + 1;
+    let previous_body = previous_message_body(pool, message_id).await?;
 
     let _version = insert_message_version(
         pool,
@@ -30,7 +33,7 @@ pub async fn record_edit(
         Some(&request.new_text),
         now,
         None,
-        local_edit_diff(&request.new_text),
+        local_edit_diff(previous_body.as_deref(), &request.new_text),
         json!({"event": "local_edit"}),
     )
     .await?;
@@ -65,6 +68,26 @@ pub async fn record_edit(
         version_number: Some(version_number),
         tombstone_id: None,
     })
+}
+
+async fn previous_message_body(
+    pool: &PgPool,
+    message_id: &str,
+) -> Result<Option<String>, TelegramError> {
+    if let Some(version) = latest_message_version(pool, message_id).await?
+        && version.body_text.is_some()
+    {
+        return Ok(version.body_text);
+    }
+
+    sqlx::query_scalar::<_, Option<String>>(
+        "SELECT body_text FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(message_id)
+    .fetch_optional(pool)
+    .await
+    .map(Option::flatten)
+    .map_err(TelegramError::from)
 }
 
 pub async fn record_delete(

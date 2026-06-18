@@ -18,9 +18,9 @@ describe('BulkActionsBar mail workflow boundary', () => {
     const source = readFileSync(new URL('./BulkActionsBar.vue', import.meta.url), 'utf8')
 
     expect(source).toContain('type BulkActionCommand')
-    expect(source).toContain('label?: string')
-    expect(source).toContain('snooze_until?: string')
-    expect(source).toContain("label: 'Follow up'")
+    expect(source).toContain('BulkMessageActionRequest')
+    expect(source).toContain("command: { action: 'add_label', label: 'Follow up' }")
+    expect(source).toContain("command: { action: 'remove_label', label: 'Follow up' }")
     expect(source).toContain('snooze_until: nextBusinessMorningIso()')
   })
 })

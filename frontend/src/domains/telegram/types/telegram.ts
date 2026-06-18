@@ -35,7 +35,7 @@ export type TelegramAccountLifecycleResponse = {
 }
 
 // --- Capabilities ---
-export type TelegramCapabilityState = 'available' | 'blocked' | 'degraded' | 'unsupported'
+export type TelegramCapabilityState = 'available' | 'blocked' | 'degraded' | 'planned' | 'unsupported'
 export type TelegramActionClass = 'read' | 'local_write' | 'provider_write' | 'destructive' | 'export' | 'secret_access' | 'automation'
 
 export type TelegramOperationCapability = {
@@ -64,6 +64,7 @@ export type TelegramCapabilitiesResponse = {
   qr_login_ready: boolean
   bot_runtime_available: boolean
   capabilities: TelegramOperationCapability[]
+  planned_features: string[]
   unsupported_features: string[]
 }
 

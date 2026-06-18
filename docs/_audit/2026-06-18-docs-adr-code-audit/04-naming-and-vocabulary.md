@@ -1,0 +1,26 @@
+# Naming And Vocabulary Audit (2026-06-18)
+
+Rule: active/canonical docs use glossary vocabulary; implementation docs may use compatibility terms only when explicitly marked; historical docs are not semantically rewritten.
+
+| Term / conflict | Canonical rule | Observed conflict | Evidence | Confidence | Status | Recommended action |
+| --- | --- | --- | --- | --- | --- | --- |
+| Contact / Contacts | Forbidden in active product vocabulary except historical/compatibility references. | Active target is Persona; Contact appears in superseded ADRs, historical plans, migrations and compatibility docs. | docs/foundation/glossary.md:116-121; ADR-0084:19-31; backend/migrations/0034_rename_contacts_to_persons.sql:1-37 | high | confirmed | Mark historical docs; keep code compatibility until migration ADR. |
+| Person / Persons | Compatibility implementation label; active docs should prefer Persona/Personas unless referring to code routes/tables. | `/api/v1/persons/*` and `persons` table still exist. | ADR-0084:123-126; backend/src/app/router/routes/persons.rs:5-45 | high | confirmed | Use Persona in canonical docs; annotate persons/person_id as compatibility. |
+| Persona / Personas | Canonical subject-memory term. | Owner Persona, PersonaType and first-class relationships are required. | docs/foundation/glossary.md:111-121; ADR-0084:52-85 | high | accepted | Use in active product/domain docs. |
+| Mail Domain | Avoid as product/domain identity; email/mail is Communications channel/provider implementation. | docs/mail/* and backend/src/domains/mail implement Communications capability. | docs/foundation/glossary.md:13-18; docs/domains/README.md:54-62; backend/src/domains/mail/ | high | confirmed | Move/rename docs only after owner decision; no code rename now. |
+| Email Channel | Allowed provider/channel shape under Communications. | Email listed as Communication input and channel. | docs/product/master-spec.md:78-103; docs/foundation/glossary.md:13-18 | high | accepted | Use for provider-specific behavior. |
+| Communication / Communications | Canonical ingestion/domain concept. | Primary spine and domain map. | docs/product/master-spec.md:34-49,78-103; docs/foundation/domain-map.md:12 | high | accepted | Use as umbrella term for mail/Telegram/WhatsApp/calls/meetings. |
+| Knowledge / Knowledge Graph / Knowledge item | Knowledge is evidence-backed understanding; Knowledge Graph is relationship/traversal substrate. | Definitions separate Knowledge and Knowledge Graph ownership. | docs/foundation/glossary.md:82-86; docs/foundation/domain-map.md:19,52-54 | high | accepted | Open decision needed on whether Knowledge is first-class domain/lifecycle beyond graph + memory items. |
+| Note / Document / Memory | Note is document-like artifact unless future ADR promotes Notes domain. | Notes boundary explicit. | docs/foundation/glossary.md:39-43,94-98; docs/foundation/domain-map.md:47-50 | high | accepted | Do not create first-class Notes domain without ADR. |
+| Task / Obligation / Follow-Up | Task is actionable lifecycle; Obligation is commitment/duty; Follow-Up is prompt and may become Task or Obligation. | Glossary separates all three. | docs/foundation/glossary.md:76-80,100-104,151-155 | high | accepted | Keep task tracker framing out of active docs. |
+| Decision / Preference / Fact | Decision is durable choice with evidence; Preference/fact are memory/knowledge records, not equivalent decisions. | Decision and Memory glossary entries. | docs/foundation/glossary.md:26-30,88-92 | medium | candidate | Clarify Knowledge/Memory lifecycle if active docs conflate these. |
+| Event / Calendar Event / Canonical Event / Timeline Event | Event term overloaded; glossary distinguishes scheduled calendar events from canonical event-log facts. | Event glossary and domain map. | docs/foundation/glossary.md:70-74; docs/foundation/domain-map.md:16 | high | confirmed | Open decision: adopt explicit event taxonomy. |
+| Agent / Persona(ai_agent) | Agents are software actors and Personas of type ai_agent when represented in graph. | Glossary and ADR-0084 define ai_agent PersonaType. | docs/foundation/glossary.md:7-11; ADR-0084:62-70 | high | accepted | Use Agent for runtime actor, Persona(ai_agent) for graph/world-model record. |
+| SvelteKit / Vue 3 | Vue 3 is current active frontend platform; SvelteKit is historical/superseded. | ADR-0093 supersedes ADR-0003/0078/0079; frontend package uses Vue. | ADR-0093:13-18,77-107; frontend/package.json:22,45 | high | confirmed | Update active docs; preserve SvelteKit only in historical ADR/plans. |
+| CRM / Address book / Task tracker / Calendar app / Knowledge Base | Forbidden product framing. | Explicit non-identity lists. | docs/product/master-spec.md:61-76; docs/foundation/vision.md:35-51 | high | accepted | Use only in “not Hermes” or historical/refactoring contexts. |
+
+## Vocabulary Governance Recommendation
+
+1. Add a short status/governance block to active docs that says whether the document is `canonical`, `implementation-status`, `historical`, or `research`.
+2. Add a compatibility callout template for docs that mention `persons`, `person_id`, `contacts`, `health`, `watchtower`, `follow-up`, `mail`, or SvelteKit.
+3. Do not rename routes, tables, migrations or public APIs during documentation cleanup.

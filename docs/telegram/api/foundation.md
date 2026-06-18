@@ -133,8 +133,9 @@ telegram_api_hash_configured
 runtime_blockers[]
 ```
 
-No runtime restart route is currently missing. Remaining runtime gaps are native
-dependency remediation, Bot API runtime and portable session/proxy controls.
+Runtime restart routes are implemented. Native dependency remediation stays in
+runtime diagnostics, while Bot API runtime and portable session/proxy controls
+are ADR-0094 planned initiatives.
 
 ## QR Login
 

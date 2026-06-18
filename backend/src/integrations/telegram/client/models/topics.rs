@@ -33,6 +33,8 @@ pub struct NewTelegramTopic {
     pub icon_emoji: Option<String>,
     pub is_pinned: bool,
     pub is_closed: bool,
+    pub unread_count: i32,
+    pub last_message_at: Option<DateTime<Utc>>,
 }
 
 pub struct TelegramTopicListResponse {

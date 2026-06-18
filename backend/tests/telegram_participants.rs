@@ -8,6 +8,9 @@ use sqlx::{PgPool, Row};
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::mail::core::{
+    CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
+};
 use hermes_hub_backend::integrations::telegram::client::participants::{
     reconcile_join_commands_from_provider_roster, reconcile_leave_commands_from_provider_roster,
     telegram_self_provider_member_id,
@@ -147,17 +150,11 @@ async fn telegram_join_leave_routes_enqueue_provider_write_commands() {
         database,
     );
 
-    post_ok(
-        app.clone(),
-        "/api/v1/telegram/accounts/fixture",
-        json!({
-            "account_id": account_id,
-            "provider_kind": "telegram_user",
-            "display_name": "Telegram Join Leave",
-            "external_account_id": format!("tg-join-leave-{suffix}"),
-            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
-            "transcription_enabled": false
-        }),
+    seed_tdlib_qr_account(
+        &pool,
+        &account_id,
+        "Telegram Join Leave",
+        &format!("tg-join-leave-{suffix}"),
     )
     .await;
     post_ok(
@@ -244,17 +241,11 @@ async fn telegram_roster_sync_reconciles_join_only_after_self_member_is_observed
         database,
     );
 
-    post_ok(
-        app.clone(),
-        "/api/v1/telegram/accounts/fixture",
-        json!({
-            "account_id": account_id,
-            "provider_kind": "telegram_user",
-            "display_name": "Telegram Join Reconcile",
-            "external_account_id": "telegram:12345",
-            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
-            "transcription_enabled": false
-        }),
+    seed_tdlib_qr_account(
+        &pool,
+        &account_id,
+        "Telegram Join Reconcile",
+        "telegram:12345",
     )
     .await;
     post_ok(
@@ -295,7 +286,10 @@ async fn telegram_roster_sync_reconciles_join_only_after_self_member_is_observed
         None
     );
 
-    let observed_at = Utc::now();
+    let observed_at = sqlx::query_scalar("SELECT now()")
+        .fetch_one(&pool)
+        .await
+        .expect("observed at");
     let commands = reconcile_join_commands_from_provider_roster(
         &pool,
         &account_id,
@@ -373,17 +367,11 @@ async fn telegram_roster_sync_reconciles_leave_when_self_member_is_inactive() {
         database,
     );
 
-    post_ok(
-        app.clone(),
-        "/api/v1/telegram/accounts/fixture",
-        json!({
-            "account_id": account_id,
-            "provider_kind": "telegram_user",
-            "display_name": "Telegram Leave Reconcile",
-            "external_account_id": "telegram:12345",
-            "tdlib_data_path": format!("docker/data/telegram/{suffix}"),
-            "transcription_enabled": false
-        }),
+    seed_tdlib_qr_account(
+        &pool,
+        &account_id,
+        "Telegram Leave Reconcile",
+        "telegram:12345",
     )
     .await;
     post_ok(
@@ -417,7 +405,10 @@ async fn telegram_roster_sync_reconciles_leave_when_self_member_is_inactive() {
     .await;
     let command_id = leave_body["command_id"].as_str().expect("command id");
 
-    let observed_at = Utc::now();
+    let observed_at = sqlx::query_scalar("SELECT now()")
+        .fetch_one(&pool)
+        .await
+        .expect("observed at");
     let commands = reconcile_leave_commands_from_provider_roster(
         &pool,
         &account_id,
@@ -504,6 +495,26 @@ async fn insert_provider_participant(
     .execute(pool)
     .await
     .expect("insert provider participant");
+}
+
+async fn seed_tdlib_qr_account(
+    pool: &PgPool,
+    account_id: &str,
+    display_name: &str,
+    external_account_id: &str,
+) {
+    CommunicationIngestionStore::new(pool.clone())
+        .upsert_provider_account(
+            &NewProviderAccount::new(
+                account_id,
+                CommunicationProviderKind::TelegramUser,
+                display_name.to_owned(),
+                external_account_id.to_owned(),
+            )
+            .config(json!({"runtime": "tdlib_qr_authorized"})),
+        )
+        .await
+        .expect("tdlib qr authorized provider account");
 }
 
 async fn first_chat_id<S>(app: S, account_id: &str) -> String

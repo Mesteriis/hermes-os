@@ -53,10 +53,34 @@ impl<'a> ContactFactory<'a> {
         let person_id = self
             .person_id
             .unwrap_or_else(|| format!("person:{}", Uuid::new_v4()));
+        let email = self
+            .email
+            .unwrap_or_else(|| format!("{}@example.test", Uuid::new_v4()));
+
+        sqlx::query(
+            r#"
+            INSERT INTO persons (
+                person_id,
+                display_name,
+                email_address
+            )
+            VALUES ($1, $2, $3)
+            ON CONFLICT (person_id)
+            DO UPDATE SET
+                display_name = EXCLUDED.display_name,
+                email_address = EXCLUDED.email_address,
+                updated_at = now()
+            "#,
+        )
+        .bind(&person_id)
+        .bind(&self.display_name)
+        .bind(&email)
+        .execute(self.pool)
+        .await?;
 
         // Create identity via upsert
         identity_store
-            .upsert(&person_id, "email", &self.display_name, "testkit")
+            .upsert(&person_id, "email", &email, "testkit")
             .await?;
 
         // Create a default persona
@@ -67,7 +91,7 @@ impl<'a> ContactFactory<'a> {
             context: Some("test".into()),
             default_tone: Some("neutral".into()),
             default_language: Some("en".into()),
-            preferred_channel: self.email,
+            preferred_channel: Some(email),
         };
         persona_store.upsert(&persona).await?;
 
