@@ -1,5 +1,6 @@
 mod builder;
 pub mod bus;
+mod consumers;
 mod cursors;
 mod errors;
 mod migrations;
@@ -10,6 +11,10 @@ mod validation;
 
 pub use self::builder::NewEventEnvelopeBuilder;
 pub use self::bus::EventBus;
+pub use self::consumers::{
+    EventConsumerConfig, EventConsumerRunReport, EventConsumerRunner, EventConsumerStore,
+    EventDeadLetter, EventDeadLetterReviewState,
+};
 pub use self::cursors::ProjectionCursorStore;
 pub use self::errors::{EventEnvelopeError, EventStoreError};
 pub use self::migrations::{MigrationSummary, expected_migration_summary, run_migrations};

@@ -1,0 +1,734 @@
+{
+  "backend": [
+    {
+      "file": "backend/src/domains/api_support/query_parsing/communication.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/api_support/query_parsing/persons.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/api_support/query_parsing/projects.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/api_support/query_parsing/tasks.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/domains/api_support/review_commands.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/api_support/review_commands.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/api_support/review_commands.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/domains/api_support/stores/ai_runtime.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/api_support/stores/domain_stores.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/api_support/telegram_capabilities.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/calendar/handlers/mod.rs",
+      "importedDomain": "documents"
+    },
+    {
+      "file": "backend/src/domains/calendar/handlers/mod.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/calendar/handlers/mod.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/calendar/handlers/mod.rs",
+      "importedDomain": "organizations"
+    },
+    {
+      "file": "backend/src/domains/calendar/handlers/mod.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/calendar/handlers/mod.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/calendar/handlers/mod.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/domains/calendar/meetings/errors.rs",
+      "importedDomain": "decisions"
+    },
+    {
+      "file": "backend/src/domains/calendar/meetings/errors.rs",
+      "importedDomain": "obligations"
+    },
+    {
+      "file": "backend/src/domains/calendar/meetings/outcome_projection.rs",
+      "importedDomain": "decisions"
+    },
+    {
+      "file": "backend/src/domains/calendar/meetings/outcome_projection.rs",
+      "importedDomain": "obligations"
+    },
+    {
+      "file": "backend/src/domains/decisions/errors.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/decisions/graph_projection.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/documents/api/mod.rs",
+      "importedDomain": "calendar"
+    },
+    {
+      "file": "backend/src/domains/documents/api/mod.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/documents/api/mod.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/documents/api/mod.rs",
+      "importedDomain": "organizations"
+    },
+    {
+      "file": "backend/src/domains/documents/api/mod.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/documents/api/mod.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/documents/api/mod.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/domains/documents/attachment_intelligence.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/documents/attachment_intelligence/tests.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/graph/api/mod.rs",
+      "importedDomain": "calendar"
+    },
+    {
+      "file": "backend/src/domains/graph/api/mod.rs",
+      "importedDomain": "documents"
+    },
+    {
+      "file": "backend/src/domains/graph/api/mod.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/graph/api/mod.rs",
+      "importedDomain": "organizations"
+    },
+    {
+      "file": "backend/src/domains/graph/api/mod.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/graph/api/mod.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/graph/api/mod.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/domains/graph/projection/errors.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/graph/projection/evidence.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/graph/projection/helpers.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/graph/projection/projects.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/graph/projection/service.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/mail/background_sync/errors.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/mail/background_sync/provider/projection.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/mail/fixtures/pipeline.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/mail/fixtures/pipeline.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/mod.rs",
+      "importedDomain": "calendar"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/mod.rs",
+      "importedDomain": "documents"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/mod.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/mod.rs",
+      "importedDomain": "organizations"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/mod.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/mod.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/mod.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/workflow_actions/actions/calendar.rs",
+      "importedDomain": "calendar"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/workflow_actions/actions/documents.rs",
+      "importedDomain": "documents"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/workflow_actions/actions/persons.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/mail/handlers/workflow_actions/actions/tasks.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/domains/obligations/errors.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/obligations/graph_projection.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/organizations/core/contact_links.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/organizations/core/errors.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/persons/api/errors.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/persons/api/store/ai_agents.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/persons/api/store/persona_writes.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/persons/core/errors.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/persons/core/roles.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/persons/enrichment/errors.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/persons/enrichment/relationship_materialization.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/persons/handlers/profile/actions.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/persons/intelligence.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/persons/investigator/errors.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/persons/trust/errors.rs",
+      "importedDomain": "obligations"
+    },
+    {
+      "file": "backend/src/domains/persons/trust/obligation_projection.rs",
+      "importedDomain": "obligations"
+    },
+    {
+      "file": "backend/src/domains/projects/api/mod.rs",
+      "importedDomain": "calendar"
+    },
+    {
+      "file": "backend/src/domains/projects/api/mod.rs",
+      "importedDomain": "documents"
+    },
+    {
+      "file": "backend/src/domains/projects/api/mod.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/projects/api/mod.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/projects/api/mod.rs",
+      "importedDomain": "organizations"
+    },
+    {
+      "file": "backend/src/domains/projects/api/mod.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/projects/api/mod.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/domains/projects/core/ids.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/projects/link_reviews/adapters.rs",
+      "importedDomain": "decisions"
+    },
+    {
+      "file": "backend/src/domains/projects/link_reviews/adapters.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/projects/link_reviews/errors.rs",
+      "importedDomain": "decisions"
+    },
+    {
+      "file": "backend/src/domains/projects/link_reviews/errors.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/relationships/errors.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/relationships/graph_projection.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/settings/api/mod.rs",
+      "importedDomain": "calendar"
+    },
+    {
+      "file": "backend/src/domains/settings/api/mod.rs",
+      "importedDomain": "documents"
+    },
+    {
+      "file": "backend/src/domains/settings/api/mod.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/domains/settings/api/mod.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/domains/settings/api/mod.rs",
+      "importedDomain": "organizations"
+    },
+    {
+      "file": "backend/src/domains/settings/api/mod.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/domains/settings/api/mod.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/domains/settings/api/mod.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/domains/tasks/candidates/errors.rs",
+      "importedDomain": "obligations"
+    },
+    {
+      "file": "backend/src/domains/tasks/candidates/extraction.rs",
+      "importedDomain": "obligations"
+    },
+    {
+      "file": "backend/src/domains/tasks/candidates/store/obligation_sync.rs",
+      "importedDomain": "obligations"
+    },
+    {
+      "file": "backend/src/domains/tasks/candidates/store/refresh.rs",
+      "importedDomain": "obligations"
+    },
+    {
+      "file": "backend/src/domains/tasks/core/errors.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/domains/tasks/core/relations.rs",
+      "importedDomain": "relationships"
+    },
+    {
+      "file": "backend/src/integrations/gmail/client/gmail_api.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/gmail/client/imap.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/gmail/client/options.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/api/media.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/api/raw.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/accounts/credential_bindings.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/accounts/fixture_setup.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/accounts/lifecycle.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/accounts/live_credentials.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/accounts/live_setup.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/chats.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/errors.rs",
+      "importedDomain": "decisions"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/errors.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/errors.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/identifiers.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/messages/account_lookup.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/messages/attachments.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/messages/ingestion.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/messages/intelligence.rs",
+      "importedDomain": "decisions"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/messages/intelligence.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/messages/manual_send.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/messages/provider_state.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/messages/tdlib_ingestion.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/models/accounts.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/projection.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/reactions.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/client/vault.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/actor/session.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/actor/spawn.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/actor/start_request.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/manager.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/manager/account.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/manager/chat_events/tests.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/manager/command_executor_media.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/manager/lifecycle.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/manager/participants_runtime_tests.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/manager/sync_history_tdlib.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/manager/tdlib_actor.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/manager/topic_events.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/media.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/telegram/runtime/status.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/api.rs",
+      "importedDomain": "calendar"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/api.rs",
+      "importedDomain": "documents"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/api.rs",
+      "importedDomain": "graph"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/api.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/api.rs",
+      "importedDomain": "organizations"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/api.rs",
+      "importedDomain": "persons"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/api.rs",
+      "importedDomain": "projects"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/api.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/client/errors.rs",
+      "importedDomain": "decisions"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/client/errors.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/client/errors.rs",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/client/models.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/client/projection.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/client/store/accounts.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/client/store/ingestion.rs",
+      "importedDomain": "mail"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/client/store/intelligence.rs",
+      "importedDomain": "decisions"
+    },
+    {
+      "file": "backend/src/integrations/whatsapp/client/store/intelligence.rs",
+      "importedDomain": "tasks"
+    }
+  ],
+  "frontend": [
+    {
+      "file": "frontend/src/domains/organizations/queries/useOrganizationsQuery.ts",
+      "importedDomain": "personas"
+    },
+    {
+      "file": "frontend/src/domains/organizations/views/OrganizationsPage.vue",
+      "importedDomain": "personas"
+    },
+    {
+      "file": "frontend/src/domains/review/stores/review.ts",
+      "importedDomain": "knowledge"
+    },
+    {
+      "file": "frontend/src/domains/review/stores/review.ts",
+      "importedDomain": "personas"
+    },
+    {
+      "file": "frontend/src/domains/review/stores/review.ts",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "frontend/src/domains/review/types/review.ts",
+      "importedDomain": "knowledge"
+    },
+    {
+      "file": "frontend/src/domains/review/types/review.ts",
+      "importedDomain": "personas"
+    },
+    {
+      "file": "frontend/src/domains/review/types/review.ts",
+      "importedDomain": "tasks"
+    },
+    {
+      "file": "frontend/src/domains/telegram/api/telegramAttachmentPreview.ts",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/components/TelegramMessageThread.vue",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/components/TelegramSavedSearchStrip.boundary.test.ts",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/components/TelegramSavedSearchStrip.vue",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/components/thread/TelegramAttachmentSearchPanel.boundary.test.ts",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/components/thread/TelegramAttachmentSearchPanel.vue",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/components/thread/TelegramMessageList.vue",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/queries/realtimeTelegramCommandPatches.ts",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/queries/realtimeTelegramMediaPatches.ts",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/queries/realtimeTelegramParticipantPatches.ts",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/queries/realtimeTelegramPatchShared.ts",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/queries/realtimeTelegramPatches.ts",
+      "importedDomain": "communications"
+    },
+    {
+      "file": "frontend/src/domains/telegram/queries/realtimeTelegramTopicPatches.ts",
+      "importedDomain": "communications"
+    }
+  ]
+}

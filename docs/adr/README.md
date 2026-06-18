@@ -96,3 +96,4 @@ ADR status vocabulary:
 - [ADR-0092 Mail Provider Capability Tiers](ADR-0092-mail-provider-capability-tiers.md)
 - [ADR-0093 Frontend Platform Migration to Vue 3](ADR-0093-frontend-platform-migration-to-vue-3.md)
 - [ADR-0094 Telegram Base Domain Completion Boundary](ADR-0094-telegram-base-domain-completion-boundary.md)
+- [ADR-0095 Event-Driven Domain Communication and DLQ](ADR-0095-event-driven-domain-communication-and-dlq.md)

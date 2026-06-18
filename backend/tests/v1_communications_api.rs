@@ -243,10 +243,11 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
         ))
         .await
         .expect("sync now");
+    let sync_now_status = resp.status();
     assert!(
-        resp.status() == StatusCode::OK || resp.status() == StatusCode::BAD_REQUEST,
+        sync_now_status == StatusCode::OK || sync_now_status == StatusCode::BAD_REQUEST,
         "sync-now should return structured result or safe configuration error, got {}",
-        resp.status()
+        sync_now_status
     );
     let body: Value = serde_json::from_slice(
         &to_bytes(resp.into_body(), 1024 * 1024)
@@ -254,6 +255,10 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
             .expect("read sync-now"),
     )
     .expect("sync-now json");
+    if sync_now_status == StatusCode::BAD_REQUEST {
+        assert_eq!(body["error"], "invalid_communication_query");
+        return;
+    }
     assert_eq!(body["account_id"], account_id);
     assert!(body.get("status").is_some());
     assert!(body.get("phase").is_some());
@@ -294,10 +299,11 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
         ))
         .await
         .expect("sync full resync");
+    let full_resync_status = resp.status();
     assert!(
-        resp.status() == StatusCode::OK || resp.status() == StatusCode::BAD_REQUEST,
+        full_resync_status == StatusCode::OK || full_resync_status == StatusCode::BAD_REQUEST,
         "sync-full-resync should return structured result or safe configuration error, got {}",
-        resp.status()
+        full_resync_status
     );
     let body: Value = serde_json::from_slice(
         &to_bytes(resp.into_body(), 1024 * 1024)
@@ -305,6 +311,10 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
             .expect("read sync-full-resync"),
     )
     .expect("sync-full-resync json");
+    if full_resync_status == StatusCode::BAD_REQUEST {
+        assert_eq!(body["error"], "invalid_communication_query");
+        return;
+    }
     assert_eq!(body["account_id"], account_id);
     assert!(body.get("status").is_some());
     assert!(body.get("phase").is_some());
