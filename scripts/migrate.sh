@@ -15,5 +15,7 @@ ensure_command cargo
 postgres_up
 
 info "Running backend-managed SQLx migrations"
-HERMES_LOG_FORMAT=plain cargo run --manifest-path "$REPO_ROOT/backend/Cargo.toml" --bin hermes_migrate
+CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$CARGO_DEV_TARGET_DIR}" \
+	HERMES_LOG_FORMAT=plain \
+	cargo run --manifest-path "$REPO_ROOT/backend/Cargo.toml" --bin hermes_migrate
 success "Migrations applied successfully"

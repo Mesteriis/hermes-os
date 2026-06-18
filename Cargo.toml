@@ -2,3 +2,10 @@
 resolver = "2"
 members = ["backend", "crates/testkit"]
 exclude = ["frontend/src-tauri"]
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.test]
+debug = "line-tables-only"
+incremental = false

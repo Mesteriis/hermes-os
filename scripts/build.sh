@@ -16,8 +16,11 @@ ensure_command cargo
 ensure_command node
 ensure_command pnpm
 
+backend_target_dir="${CARGO_TARGET_DIR:-$CARGO_BUILD_TARGET_DIR}"
+
 info "Building backend release binary"
-cargo build --manifest-path "$REPO_ROOT/backend/Cargo.toml" --bin hermes-hub-backend --release
+CARGO_TARGET_DIR="$backend_target_dir" \
+	cargo build --manifest-path "$REPO_ROOT/backend/Cargo.toml" --bin hermes-hub-backend --release
 
 info "Building frontend release assets"
 (
@@ -28,7 +31,7 @@ info "Building frontend release assets"
 info "Preparing bundled desktop resources"
 prepare_google_oauth_resource
 prepare_tdlib_macos
-prepare_backend_sidecar_macos
+CARGO_TARGET_DIR="$backend_target_dir" prepare_backend_sidecar_macos
 
 info "Building Tauri release artifacts"
 (
@@ -37,4 +40,3 @@ info "Building Tauri release artifacts"
 )
 
 success "Release build completed"
-

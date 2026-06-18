@@ -126,6 +126,9 @@ make migrate
 make vault-backup
 make vault-restore
 make clean
+make clean-dev
+make clean-validate
+make clean-build
 make clean-data
 make clean-vault
 ```
@@ -134,11 +137,19 @@ make clean-vault
 внутреннюю подготовку bundled resources. `make migrate` поднимает PostgreSQL
 при необходимости и запускает backend-managed SQLx migrations.
 
-`make clean` удаляет `target/`, frontend cache/artifacts, temp files и logs, но
-не удаляет базу. `make clean-data` требует подтверждения и удаляет только
-локальные данные PostgreSQL под `docker/data/postgres/`. `make clean-vault`
-требует подтверждения и удаляет только локальные данные vault под
-`HERMES_HOST_VAULT_HOME`.
+Cargo artifacts are split by workflow:
+
+- `make dev` and `make migrate` use `target/dev`.
+- `make validate` uses `target/validate` with `CARGO_INCREMENTAL=0`.
+- `make build` uses `target/build` for backend release sidecar builds.
+- Tauri still uses `frontend/src-tauri/target`.
+
+`make clean` удаляет все build artifacts, frontend cache/artifacts, temp files
+и logs, но не удаляет базу. `make clean-dev`, `make clean-validate` and
+`make clean-build` clean only the corresponding artifact family. `make clean-data`
+требует подтверждения и удаляет только локальные данные PostgreSQL под
+`docker/data/postgres/`. `make clean-vault` требует подтверждения и удаляет
+только локальные данные vault под `HERMES_HOST_VAULT_HOME`.
 
 Создать timestamped backup PostgreSQL и host vault:
 
