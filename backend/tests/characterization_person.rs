@@ -150,8 +150,7 @@ async fn char_owner_persona_returns_ok() {
     let body = json_body(response).await;
     assert!(
         body.get("persona_id").is_some() || body.get("is_self").is_some(),
-        "Owner response should contain persona fields: {:?}",
-        body
+        "Owner response should contain persona fields: {body:?}",
     );
 }
 
