@@ -86,7 +86,7 @@ async fn char_persons_list_returns_ok() {
     if let Some(items) = body["items"].as_array() {
         assert!(
             items.len() <= 50,
-            "default persons limit should be <= 50, got {}",
+            "default persons limit should be <= 50, got {:?}",
             items.len()
         );
     }
@@ -168,7 +168,7 @@ async fn char_person_search_requires_query() {
     // Expect 400 for empty search
     assert!(
         response.status().is_client_error(),
-        "search without query should return 4xx, got {}",
+        "search without query should return 4xx, got {:?}",
         response.status()
     );
 }
@@ -205,7 +205,7 @@ async fn char_persona_update_accepts_valid_body() {
         .expect("response");
     assert!(
         response.status().is_client_error(),
-        "updating non-existent persona should return 4xx, got {}",
+        "updating non-existent persona should return 4xx, got {:?}",
         response.status()
     );
 }

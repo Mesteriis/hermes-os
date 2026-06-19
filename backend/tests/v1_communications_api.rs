@@ -246,8 +246,7 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     let sync_now_status = resp.status();
     assert!(
         sync_now_status == StatusCode::OK || sync_now_status == StatusCode::BAD_REQUEST,
-        "sync-now should return structured result or safe configuration error, got {}",
-        sync_now_status
+        "sync-now should return structured result or safe configuration error, got {sync_now_status:?}",
     );
     let body: Value = serde_json::from_slice(
         &to_bytes(resp.into_body(), 1024 * 1024)
@@ -342,8 +341,7 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     let full_resync_status = resp.status();
     assert!(
         full_resync_status == StatusCode::OK || full_resync_status == StatusCode::BAD_REQUEST,
-        "sync-full-resync should return structured result or safe configuration error, got {}",
-        full_resync_status
+        "sync-full-resync should return structured result or safe configuration error, got {full_resync_status:?}",
     );
     let body: Value = serde_json::from_slice(
         &to_bytes(resp.into_body(), 1024 * 1024)

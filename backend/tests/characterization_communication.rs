@@ -80,7 +80,7 @@ async fn char_communications_messages_list_returns_ok() {
 
     assert!(
         !response.status().is_server_error(),
-        "GET /api/v1/communications/messages must not return 5xx, got {}",
+        "GET /api/v1/communications/messages must not return 5xx, got {:?}",
         response.status()
     );
 
@@ -107,7 +107,7 @@ async fn char_communications_search_returns_ok() {
 
     assert!(
         !response.status().is_server_error(),
-        "GET /api/v1/communications/search must not return 5xx, got {}",
+        "GET /api/v1/communications/search must not return 5xx, got {:?}",
         response.status()
     );
 }
@@ -126,7 +126,7 @@ async fn char_communications_threads_list_returns_ok() {
 
     assert!(
         !response.status().is_server_error(),
-        "GET /api/v1/communications/threads must not return 5xx, got {}",
+        "GET /api/v1/communications/threads must not return 5xx, got {:?}",
         response.status()
     );
 }
@@ -145,7 +145,7 @@ async fn char_communications_message_states_returns_ok() {
 
     assert!(
         !response.status().is_server_error(),
-        "GET /api/v1/communications/messages/states must not return 5xx, got {}",
+        "GET /api/v1/communications/messages/states must not return 5xx, got {:?}",
         response.status()
     );
 }
@@ -164,7 +164,7 @@ async fn char_communications_drafts_list_returns_ok() {
 
     assert!(
         !response.status().is_server_error(),
-        "GET /api/v1/communications/drafts must not return 5xx, got {}",
+        "GET /api/v1/communications/drafts must not return 5xx, got {:?}",
         response.status()
     );
 }
@@ -210,7 +210,7 @@ async fn char_workflow_actions_endpoint_accepts_valid_body() {
     // Accept either 200 (empty archive succeeds) or 4xx (validation)
     assert!(
         !response.status().is_server_error(),
-        "POST /api/v1/workflow-actions must not return 5xx, got {}",
+        "POST /api/v1/workflow-actions must not return 5xx, got {:?}",
         response.status()
     );
 }
