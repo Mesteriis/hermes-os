@@ -5,6 +5,8 @@ SHELL := /usr/bin/env bash
 CARGO_TARGET_ROOT ?= $(CURDIR)/target
 CARGO_DEV_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/dev
 CARGO_VALIDATE_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/validate
+CARGO_VALIDATE_CLIPPY_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/validate-clippy
+CARGO_VALIDATE_TEST_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/validate-test
 CARGO_BUILD_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/build
 
 .PHONY: help dev logs build migrate validate architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-build frontend-validate vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
@@ -50,10 +52,10 @@ backend-fmt-check:
 	@cargo fmt --check --manifest-path backend/Cargo.toml
 
 backend-clippy:
-	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
+	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_CLIPPY_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
 
 backend-test:
-	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo test --manifest-path backend/Cargo.toml
+	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_TEST_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo test --manifest-path backend/Cargo.toml
 
 backend-validate: backend-fmt-check backend-clippy backend-test
 
@@ -84,6 +86,8 @@ clean-dev:
 
 clean-validate:
 	@rm -rf "$(CARGO_VALIDATE_TARGET_DIR)"
+	@rm -rf "$(CARGO_VALIDATE_CLIPPY_TARGET_DIR)"
+	@rm -rf "$(CARGO_VALIDATE_TEST_TARGET_DIR)"
 
 clean-build:
 	@rm -rf "$(CARGO_BUILD_TARGET_DIR)"
