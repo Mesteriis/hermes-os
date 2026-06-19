@@ -18,19 +18,26 @@ architecture.
 
 ## Working Today
 
-✅ Canonical evidence store (`Observation Platform`)
+✅ Gmail account connection
+✅ IMAP account connection
+✅ Email ingestion and storage
+✅ Telegram message ingestion
 ✅ Review inbox
-✅ Local host vault for provider credentials
-✅ Gmail account setup and ingestion foundation
-✅ Generic IMAP account setup and ingestion foundation
-✅ Telegram fixture and automation foundation
-✅ Semantic embeddings and search foundation
-✅ Desktop frontend on Vue 3 + Vite inside Tauri
+✅ Semantic search infrastructure
 
-🚧 WhatsApp Web fixture and manual companion flows
-🚧 Context packs engine expansion
-🚧 Knowledge graph workflows
-🚧 Broader agent runtime and capability workflows
+## Known Limitations
+
+🚧 Telegram production sync
+🚧 WhatsApp
+🚧 Graph workflows
+
+## Run Today
+
+```sh
+make dev
+```
+
+`make dev` is the single local full-stack entrypoint.
 
 Текущий результат:
 
