@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use super::errors::PersonMemoryError;
+use crate::domains::persons::core::link_persons_entity;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonMemoryCard {
@@ -63,6 +65,33 @@ impl PersonMemoryCardStore {
         .fetch_one(&self.pool)
         .await?;
         row_to_memory_card(row)
+    }
+
+    pub async fn upsert_with_observation(
+        &self,
+        person_id: &str,
+        title: &str,
+        description: &str,
+        source: &str,
+        importance: i16,
+        observation_id: &str,
+    ) -> Result<PersonMemoryCard, PersonMemoryError> {
+        let card = self
+            .upsert(person_id, title, description, source, importance)
+            .await?;
+        link_persons_entity(
+            &self.pool,
+            observation_id,
+            "memory_card",
+            card.id.clone(),
+            None,
+            Some(json!({
+                "person_id": person_id,
+                "importance": card.importance,
+            })),
+        )
+        .await?;
+        Ok(card)
     }
 }
 

@@ -3,8 +3,13 @@ use super::*;
 pub(crate) async fn get_v1_email_accounts(
     State(state): State<AppState>,
 ) -> Result<Json<EmailAccountListResponse>, ApiError> {
-    let accounts = communication_ingestion_store(&state)?
-        .list_provider_accounts()
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let accounts = CommunicationProviderAccountStore::new(pool)
+        .list()
         .await?
         .into_iter()
         .filter(|account| account.provider_kind.is_email())
@@ -75,8 +80,13 @@ pub(crate) async fn post_v1_email_account_import(
         ));
     }
 
-    let account = communication_ingestion_store(&state)?
-        .upsert_provider_account(
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let account = CommunicationProviderAccountStore::new(pool)
+        .upsert(
             &crate::domains::mail::core::NewProviderAccount::new(
                 request.account.account_id,
                 provider_kind,
@@ -126,17 +136,14 @@ pub(crate) async fn post_v1_email_account_logout(
     Path(account_id): Path<String>,
 ) -> Result<Json<EmailAccountLogoutResponse>, ApiError> {
     let account = email_account_or_not_found(&state, &account_id).await?;
-    let mut config = account.config.clone();
-    let config_object = config
-        .as_object_mut()
-        .ok_or(ApiError::InvalidCommunicationQuery(
-            "account config must be an object",
-        ))?;
-    config_object.insert("auth_state".to_owned(), json!("logged_out"));
-    config_object.insert("logged_out_at".to_owned(), json!(Utc::now()));
 
-    let updated_account = communication_ingestion_store(&state)?
-        .update_provider_account_config(&account.account_id, &config)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let updated_account = CommunicationProviderAccountStore::new(pool)
+        .mark_logged_out(&account.account_id)
         .await?
         .ok_or(ApiError::NotFound)?;
     let current_settings = mail_sync_store(&state)
@@ -169,15 +176,18 @@ pub(crate) async fn delete_v1_email_account(
     Path(account_id): Path<String>,
 ) -> Result<Json<EmailAccountDeleteResponse>, ApiError> {
     let account = email_account_or_not_found(&state, &account_id).await?;
-    let store = communication_ingestion_store(&state)?;
-    let usage = store.provider_account_usage(&account.account_id).await?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let store = CommunicationProviderAccountStore::new(pool);
+    let usage = store.usage(&account.account_id).await?;
     if usage.has_retained_evidence() {
         return Err(ApiError::EmailAccountDeleteConflict);
     }
 
-    let deleted = store
-        .delete_provider_account_metadata(&account.account_id)
-        .await?;
+    let deleted = store.delete_metadata(&account.account_id).await?;
 
     Ok(Json(EmailAccountDeleteResponse {
         account_id: account.account_id,

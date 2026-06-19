@@ -5,6 +5,7 @@ mod chat_state;
 mod chats;
 pub mod commands;
 mod errors;
+mod evidence;
 mod identifiers;
 pub mod lifecycle;
 mod messages;

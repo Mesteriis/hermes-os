@@ -62,6 +62,14 @@ pub(super) fn ai_error_parts(error: AiError) -> ErrorParts {
             tracing::error!(error = %error, "AI persona attribution operation failed");
             internal_runtime_error()
         }
+        AiError::ReviewInboxWorkflow(error) => {
+            tracing::error!(error = %error, "AI review inbox mirroring failed");
+            internal_runtime_error()
+        }
+        AiError::ObservationStore(error) => {
+            tracing::error!(error = %error, "AI observation trail operation failed");
+            internal_runtime_error()
+        }
         AiError::Sqlx(error) => {
             tracing::error!(error = %error, "AI database operation failed");
             internal_runtime_error()

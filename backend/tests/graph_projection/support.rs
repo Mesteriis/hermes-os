@@ -38,6 +38,7 @@ pub(crate) struct GraphCounts {
 
 pub(crate) struct ProjectedMessageFixture {
     pub(crate) message_id: String,
+    pub(crate) observation_id: String,
     pub(crate) raw_record_id: String,
     pub(crate) provider_record_id: String,
     pub(crate) subject: String,
@@ -49,6 +50,7 @@ pub(crate) struct ExpectedProjectEdge<'a> {
     pub(crate) relationship_type: &'a str,
     pub(crate) source_kind: &'a str,
     pub(crate) source_id: &'a str,
+    pub(crate) observation_id: Option<&'a str>,
     pub(crate) review_state: &'a str,
     pub(crate) confidence: f64,
 }
@@ -160,6 +162,7 @@ pub(crate) async fn seed_message(
 
     ProjectedMessageFixture {
         message_id: projected.message_id,
+        observation_id: projected.observation_id,
         raw_record_id: projected.raw_record_id,
         provider_record_id: projected.provider_record_id,
         subject: projected.subject,
@@ -262,7 +265,8 @@ pub(crate) async fn assert_project_edge_with_evidence(
             edge.review_state,
             edge.confidence::float8 AS confidence,
             evidence.source_kind,
-            evidence.source_id
+            evidence.source_id,
+            evidence.observation_id
         FROM graph_edges edge
         JOIN graph_evidence evidence ON evidence.edge_id = edge.edge_id
         WHERE edge.source_node_id = $1
@@ -285,10 +289,13 @@ pub(crate) async fn assert_project_edge_with_evidence(
     let confidence: f64 = row.try_get("confidence").expect("confidence");
     let stored_source_kind: String = row.try_get("source_kind").expect("source kind");
     let stored_source_id: String = row.try_get("source_id").expect("source id");
+    let stored_observation_id: Option<String> =
+        row.try_get("observation_id").expect("observation id");
     assert_eq!(review_state, expected.review_state);
     assert!((confidence - expected.confidence).abs() < f64::EPSILON);
     assert_eq!(stored_source_kind, expected.source_kind);
     assert_eq!(stored_source_id, expected.source_id);
+    assert_eq!(stored_observation_id.as_deref(), expected.observation_id);
 }
 
 pub(crate) async fn cleanup_project_graph_fixture(pool: &PgPool, project_id: &str) {
@@ -364,8 +371,10 @@ pub(crate) async fn assert_message_edge_with_evidence(
           AND evidence.source_kind = 'message'
           AND evidence.source_id = $5
           AND evidence.excerpt = $6
-          AND evidence.metadata->>'raw_record_id' = $7
-          AND evidence.metadata->>'provider_record_id' = $8
+          AND evidence.observation_id = $7
+          AND evidence.metadata->>'raw_record_id' = $8
+          AND evidence.metadata->>'observation_id' = $7
+          AND evidence.metadata->>'provider_record_id' = $9
         "#,
     )
     .bind(source_node_kind)
@@ -374,6 +383,7 @@ pub(crate) async fn assert_message_edge_with_evidence(
     .bind(relationship_type)
     .bind(&message.message_id)
     .bind(&message.subject)
+    .bind(&message.observation_id)
     .bind(&message.raw_record_id)
     .bind(&message.provider_record_id)
     .fetch_one(pool)
@@ -434,9 +444,9 @@ async fn message_fixture_by_provider_record_id(
     pool: &PgPool,
     provider_record_id: &str,
 ) -> ProjectedMessageFixture {
-    let row = sqlx::query_as::<_, (String, String, String, String)>(
+    let row = sqlx::query_as::<_, (String, String, String, String, String)>(
         r#"
-        SELECT message_id, raw_record_id, provider_record_id, subject
+        SELECT message_id, observation_id, raw_record_id, provider_record_id, subject
         FROM communication_messages
         WHERE provider_record_id = $1
         "#,
@@ -448,9 +458,10 @@ async fn message_fixture_by_provider_record_id(
 
     ProjectedMessageFixture {
         message_id: row.0,
-        raw_record_id: row.1,
-        provider_record_id: row.2,
-        subject: row.3,
+        observation_id: row.1,
+        raw_record_id: row.2,
+        provider_record_id: row.3,
+        subject: row.4,
     }
 }
 

@@ -5,6 +5,7 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use chrono::{TimeZone, Utc};
 use serde_json::{Value, json};
+use sqlx::Row;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
@@ -107,7 +108,7 @@ async fn decisions_list_returns_global_suggested_review_items() {
 }
 
 #[tokio::test]
-async fn put_decision_review_updates_review_state_without_creating_work() {
+async fn put_decision_review_updates_review_state_with_observation_trail() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!("skipping live decision review API test: HERMES_TEST_DATABASE_URL is not set");
         return;
@@ -140,6 +141,22 @@ async fn put_decision_review_updates_review_state_without_creating_work() {
             .fetch_one(&pool)
             .await
             .expect("stored review state");
+    let link_row = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'decisions'
+           AND entity_kind = 'decision'
+           AND entity_id = $1
+           AND relationship_kind = 'review_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&stored.decision_id)
+    .fetch_one(&pool)
+    .await
+    .expect("decision observation link");
+    let observation_id: String = link_row.try_get("observation_id").expect("observation id");
+    let metadata: Value = link_row.try_get("metadata").expect("link metadata");
     let task_count =
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tasks WHERE source_id = $1")
             .bind(&stored.decision_id)
@@ -154,8 +171,38 @@ async fn put_decision_review_updates_review_state_without_creating_work() {
             .expect("obligation count");
 
     assert_eq!(review_state, "user_confirmed");
+    assert_eq!(metadata["review_state"], "user_confirmed");
     assert_eq!(task_count, 0);
     assert_eq!(obligation_count, 0);
+
+    let observation_row =
+        sqlx::query("SELECT origin_kind, payload FROM observations WHERE observation_id = $1")
+            .bind(&observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("decision observation");
+    let origin_kind: String = observation_row.try_get("origin_kind").expect("origin kind");
+    let payload: Value = observation_row.try_get("payload").expect("payload");
+    assert_eq!(origin_kind, "manual");
+    assert_eq!(payload["decision_id"], json!(stored.decision_id));
+    assert_eq!(payload["review_state"], "user_confirmed");
+
+    let review_item: (String, String, String) = sqlx::query_as(
+        r#"
+        SELECT status, target_entity_kind, entity_id
+        FROM review_items
+        WHERE metadata->>'decision_id' = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&stored.decision_id)
+    .fetch_one(&pool)
+    .await
+    .expect("decision review item");
+    assert_eq!(review_item.0, "promoted");
+    assert_eq!(review_item.1, "decision");
+    assert_eq!(review_item.2, stored.decision_id);
 }
 
 async fn app_and_pool(database_url: &str) -> (axum::Router, PgPool) {

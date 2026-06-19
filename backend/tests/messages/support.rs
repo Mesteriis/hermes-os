@@ -94,6 +94,7 @@ pub fn stored_raw_record_with_payload(payload: Value) -> StoredRawCommunicationR
 
     StoredRawCommunicationRecord {
         raw_record_id: format!("raw_payload_validation_{suffix}"),
+        observation_id: format!("observation:v1:raw-payload-validation-{suffix}"),
         account_id: format!("acct_payload_validation_{suffix}"),
         record_kind: "email_message".to_owned(),
         provider_record_id: format!("provider-payload-validation-{suffix}"),

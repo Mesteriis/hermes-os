@@ -8,6 +8,7 @@ use super::super::validation::{validate_non_empty, validate_object};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct StoredRawCommunicationRecord {
     pub raw_record_id: String,
+    pub observation_id: String,
     pub account_id: String,
     pub record_kind: String,
     pub provider_record_id: String,

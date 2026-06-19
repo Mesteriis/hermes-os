@@ -5,6 +5,7 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use serde_json::Value;
 use serde_json::json;
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -354,6 +355,10 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     assert_eq!(account_body["provider_kind"], json!("whatsapp_web"));
     assert_eq!(account_body["runtime"], json!("fixture"));
     assert_eq!(account_body["session"]["link_state"], json!("fixture"));
+    let session_id = account_body["session"]["session_id"]
+        .as_str()
+        .expect("session id")
+        .to_owned();
 
     let message_response = app
         .clone()
@@ -398,6 +403,39 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     assert_eq!(
         sessions_body["items"][0]["last_sync_at"],
         json!("2026-06-06T13:00:00Z")
+    );
+    let session_observation_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'communications'
+          AND link.entity_kind = 'whatsapp_web_session'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&session_id)
+    .fetch_all(&pool)
+    .await
+    .expect("session observations");
+    assert!(
+        session_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "WHATSAPP_WEB_SESSION"
+                && row.get::<String, _>("relationship_kind") == "upsert"
+        }),
+        "session upsert observation must exist"
+    );
+    assert!(
+        session_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "WHATSAPP_WEB_SESSION"
+                && row.get::<String, _>("relationship_kind") == "sync_progress"
+                && row.get::<Value, _>("payload")["last_sync_at"] == json!("2026-06-06T13:00:00Z")
+        }),
+        "session sync_progress observation must exist"
     );
 
     let messages_response = app

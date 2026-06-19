@@ -38,8 +38,8 @@ pub(crate) async fn post_event_relation(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let relation = EventRelationStore::new(pool)
-        .link(
+    let relation = CalendarCommandService::new(pool)
+        .link_event_relation_manual(
             &event_id,
             &req.entity_type,
             &req.entity_id,

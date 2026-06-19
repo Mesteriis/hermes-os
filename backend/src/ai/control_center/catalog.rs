@@ -1,6 +1,7 @@
 use serde_json::json;
 
 use super::errors::AiControlCenterError;
+use super::evidence::capture_model_catalog_item_observation;
 use super::models::{AiModelCatalogItem, AiProviderAccount};
 use super::presets::curated_models_for;
 use super::rows::row_to_model;
@@ -71,9 +72,11 @@ impl AiControlCenterStore {
     pub(super) async fn seed_models_for_provider(
         &self,
         provider: &AiProviderAccount,
+        actor: &str,
     ) -> Result<(), AiControlCenterError> {
+        let mut transaction = self.pool.begin().await?;
         for model in curated_models_for(provider) {
-            sqlx::query(
+            let row = sqlx::query(
                 r#"
                 INSERT INTO ai_model_catalog (
                     provider_id,
@@ -86,9 +89,10 @@ impl AiControlCenterStore {
                     embedding_dimension,
                     is_available,
                     metadata,
+                    created_at,
                     updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, now())
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, now(), now())
                 ON CONFLICT (provider_id, model_key)
                 DO UPDATE SET
                     display_name = EXCLUDED.display_name,
@@ -100,6 +104,19 @@ impl AiControlCenterStore {
                     is_available = true,
                     metadata = EXCLUDED.metadata,
                     updated_at = now()
+                RETURNING
+                    provider_id,
+                    model_key,
+                    display_name,
+                    category,
+                    privacy,
+                    capabilities,
+                    context_window,
+                    embedding_dimension,
+                    is_available,
+                    metadata,
+                    created_at,
+                    updated_at
                 "#,
             )
             .bind(&provider.provider_id)
@@ -111,9 +128,12 @@ impl AiControlCenterStore {
             .bind(model.context_window)
             .bind(model.embedding_dimension)
             .bind(model.metadata)
-            .execute(&self.pool)
+            .fetch_one(&mut *transaction)
             .await?;
+            let model = row_to_model(row)?;
+            capture_model_catalog_item_observation(&mut transaction, &model, "seed", actor).await?;
         }
+        transaction.commit().await?;
         Ok(())
     }
 }

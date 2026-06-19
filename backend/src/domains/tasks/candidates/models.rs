@@ -8,15 +8,13 @@ use super::ids::task_candidate_id_from_source;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TaskCandidateSourceKind {
-    Message,
-    Document,
+    Observation,
 }
 
 impl TaskCandidateSourceKind {
     pub fn as_str(&self) -> &'static str {
         match self {
-            Self::Message => "message",
-            Self::Document => "document",
+            Self::Observation => "observation",
         }
     }
 }
@@ -84,6 +82,7 @@ pub struct TaskCandidate {
     pub task_candidate_id: String,
     pub source_kind: String,
     pub source_id: String,
+    pub observation_id: Option<String>,
     pub project_id: Option<String>,
     pub title: String,
     pub due_text: Option<String>,
@@ -100,6 +99,7 @@ pub struct TaskCandidate {
 pub(crate) struct CandidatePayload {
     pub(crate) source_kind: TaskCandidateSourceKind,
     pub(crate) source_id: String,
+    pub(crate) observation_id: Option<String>,
     pub(crate) candidate_kind: TaskCandidateKind,
     pub(crate) candidate_metadata: Value,
     pub(crate) project_id: Option<String>,
@@ -112,7 +112,11 @@ pub(crate) struct CandidatePayload {
 
 impl CandidatePayload {
     pub(crate) fn task_candidate_id(&self) -> String {
-        task_candidate_id_from_source(self.source_kind.as_str(), &self.source_id, &self.title)
+        let source_id = self
+            .observation_id
+            .as_deref()
+            .unwrap_or(self.source_id.as_str());
+        task_candidate_id_from_source(self.source_kind.as_str(), source_id, &self.title)
     }
 }
 
@@ -120,8 +124,13 @@ impl CandidatePayload {
 pub(crate) struct StoredCandidateRow {
     pub(crate) source_kind: String,
     pub(crate) source_id: String,
+    pub(crate) observation_id: Option<String>,
     pub(crate) candidate_kind: String,
     pub(crate) candidate_metadata: Value,
     pub(crate) project_id: Option<String>,
     pub(crate) title: String,
+    pub(crate) due_text: Option<String>,
+    pub(crate) assignee_label: Option<String>,
+    pub(crate) confidence: f64,
+    pub(crate) evidence_excerpt: String,
 }

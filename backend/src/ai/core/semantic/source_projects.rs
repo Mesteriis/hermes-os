@@ -40,6 +40,7 @@ pub(super) async fn append_project_sources(
         sources.push(SemanticSource {
             source_kind: SemanticSourceKind::Project,
             source_id: project_id.clone(),
+            observation_id: None,
             title: name.clone(),
             source_text: format!(
                 "{name}\nKind: {kind}\nStatus: {status}\nOwner: {owner}\nKeywords: {keywords}\n\n{description}"

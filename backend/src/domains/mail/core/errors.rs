@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use crate::platform::observations::ObservationStoreError;
 use crate::platform::secrets::{SecretKind, SecretReferenceError, SecretResolutionError};
 
 use super::models::ProviderAccountSecretPurpose;
@@ -8,6 +9,9 @@ use super::models::ProviderAccountSecretPurpose;
 pub enum CommunicationIngestionError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
 
     #[error("unsupported communication provider kind: {0}")]
     UnsupportedProviderKind(String),

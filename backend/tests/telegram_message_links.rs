@@ -4,6 +4,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use chrono::Utc;
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -51,7 +52,7 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
     )
     .await;
 
-    let store = TelegramStore::new(pool);
+    let store = TelegramStore::new(pool.clone());
     let public_chat = store
         .upsert_chat(&NewTelegramChat {
             account_id: account_id.clone(),
@@ -94,6 +95,39 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
     assert_eq!(
         chat_after_ingest.username.as_deref(),
         Some("HermesPublicChannel")
+    );
+    let chat_observation_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'telegram'
+          AND link.entity_kind = 'chat'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&public_chat.telegram_chat_id)
+    .fetch_all(&pool)
+    .await
+    .expect("chat observations");
+    assert!(
+        chat_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_CHAT"
+                && row.get::<String, _>("relationship_kind") == "upsert"
+                && row.get::<Value, _>("payload")["username"] == json!("HermesPublicChannel")
+        }),
+        "chat upsert observation must exist"
+    );
+    assert!(
+        chat_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_CHAT"
+                && row.get::<String, _>("relationship_kind") == "metadata_update"
+        }),
+        "chat metadata_update observation must exist"
     );
 
     let message = store

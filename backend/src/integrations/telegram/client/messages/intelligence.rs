@@ -1,5 +1,6 @@
-use crate::domains::decisions::DecisionStore;
-use crate::domains::tasks::candidates::TaskCandidateStore;
+use crate::workflows::review_inbox::{
+    refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
+};
 
 use super::super::errors::TelegramError;
 use super::super::store::TelegramStore;
@@ -10,12 +11,8 @@ impl TelegramStore {
         message_id: &str,
     ) -> Result<(), TelegramError> {
         let message_ids = vec![message_id.to_owned()];
-        DecisionStore::new(self.pool.clone())
-            .refresh_message_candidates_for_ids(&message_ids)
-            .await?;
-        TaskCandidateStore::new(self.pool.clone())
-            .refresh_message_candidates_for_ids(&message_ids)
-            .await?;
+        refresh_message_decisions_into_review(&self.pool, &message_ids).await?;
+        refresh_message_task_candidates_into_review(&self.pool, &message_ids).await?;
         Ok(())
     }
 }

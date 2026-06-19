@@ -2,6 +2,7 @@ use std::env;
 
 use axum::http::StatusCode;
 use serde_json::json;
+use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
@@ -39,7 +40,7 @@ async fn imap_account_setup_stores_encrypted_secret_in_database_against_postgres
         ResolvedSecret::new("imap vault key").expect("vault key"),
     );
     let service = EmailAccountSetupService::new(
-        communication_store.clone(),
+        database.pool().expect("configured pool").clone(),
         secret_store.clone(),
         vault.clone(),
     );
@@ -170,6 +171,43 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
         account.config["connected_services"],
         json!(["mail", "calendar", "contacts"])
     );
+    let provider_account_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'vault'
+           AND entity_kind = 'communication_provider_account'
+           AND entity_id = $1
+           AND relationship_kind = 'upsert'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider account observation link");
+    let provider_account_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code
+         FROM observations observation
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE observation.observation_id = $1",
+    )
+    .bind(&provider_account_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider account observation");
+    assert_eq!(
+        provider_account_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "local_runtime"
+    );
+    assert_eq!(
+        provider_account_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "COMMUNICATION_PROVIDER_ACCOUNT"
+    );
     assert_eq!(account.config["smtp_host"], "smtp.mail.me.com");
     assert_eq!(account.config["smtp_port"], 587);
     assert_eq!(account.config["smtp_tls"], true);
@@ -198,6 +236,47 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
         smtp_binding.secret_ref,
         "secret:provider-account:icloud-primary:smtp_password"
     );
+    let binding_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'vault'
+           AND entity_kind = 'communication_provider_secret_binding'
+           AND entity_id = $1
+           AND relationship_kind = 'bind'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(format!(
+        "{}:{}",
+        account_id,
+        ProviderAccountSecretPurpose::ImapPassword.as_str()
+    ))
+    .fetch_one(&pool)
+    .await
+    .expect("provider secret binding observation link");
+    let binding_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code
+         FROM observations observation
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE observation.observation_id = $1",
+    )
+    .bind(&binding_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider secret binding observation");
+    assert_eq!(
+        binding_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "local_runtime"
+    );
+    assert_eq!(
+        binding_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "COMMUNICATION_PROVIDER_SECRET_BINDING"
+    );
 
     let smtp_reference = secret_store
         .secret_reference(&smtp_binding.secret_ref)
@@ -223,7 +302,7 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
     );
 
     let calendar_account_id = format!("icloud-calendar:{account_id}");
-    let calendar_account = CalendarAccountStore::new(pool)
+    let calendar_account = CalendarAccountStore::new(pool.clone())
         .get(&calendar_account_id)
         .await
         .expect("load calendar account")
@@ -240,6 +319,43 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
     assert_eq!(
         calendar_account.capabilities["connected_services"],
         json!(["calendar"])
+    );
+    let calendar_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'calendar'
+           AND entity_kind = 'calendar_account'
+           AND entity_id = $1
+           AND relationship_kind = 'linked_provider_upsert'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&calendar_account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar account observation link");
+    let calendar_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code
+         FROM observations observation
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE observation.observation_id = $1",
+    )
+    .bind(&calendar_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar account observation");
+    assert_eq!(
+        calendar_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "local_runtime"
+    );
+    assert_eq!(
+        calendar_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "CALENDAR_ACCOUNT_LINK"
     );
 }
 

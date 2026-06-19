@@ -1,11 +1,12 @@
-use hermes_hub_backend::domains::mail::core::{CommunicationIngestionStore, NewProviderAccount};
+use hermes_hub_backend::domains::mail::core::NewProviderAccount;
+use hermes_hub_backend::vault::CommunicationProviderAccountStore;
 use serde_json::json;
 
 use crate::config::DevEmailSyncConfig;
 use crate::errors::DevEmailSyncError;
 
 pub(super) async fn upsert_dev_provider_account(
-    store: &CommunicationIngestionStore,
+    store: &CommunicationProviderAccountStore,
     config: &DevEmailSyncConfig,
 ) -> Result<(), DevEmailSyncError> {
     let account = NewProviderAccount::new(
@@ -21,7 +22,7 @@ pub(super) async fn upsert_dev_provider_account(
         "mailbox": config.mailbox
     }));
 
-    store.upsert_provider_account(&account).await?;
+    store.upsert(&account).await?;
 
     Ok(())
 }

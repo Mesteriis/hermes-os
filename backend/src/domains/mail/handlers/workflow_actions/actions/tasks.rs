@@ -2,7 +2,7 @@ use sqlx::{Postgres, Transaction};
 
 use crate::app::ApiError;
 use crate::domains::mail::messages::ProjectedMessage;
-use crate::domains::tasks::api::{NewTask, TaskStore};
+use crate::workflows::task_creation::{WorkflowTaskCreateInput, create_task_from_workflow_input};
 
 use super::super::models::{
     WorkflowActionRequest, WorkflowActionResponse, WorkflowActionStatus, WorkflowActionTarget,
@@ -10,8 +10,10 @@ use super::super::models::{
 };
 use super::super::response::base_response;
 use super::super::validation::input_title;
+use sqlx::PgPool;
 
 pub(in crate::domains::mail::handlers::workflow_actions) async fn create_task_response(
+    pool: &PgPool,
     transaction: &mut Transaction<'_, Postgres>,
     command_id: &str,
     event_id: &str,
@@ -21,38 +23,37 @@ pub(in crate::domains::mail::handlers::workflow_actions) async fn create_task_re
 ) -> Result<WorkflowActionResponse, ApiError> {
     let title = input_title(request, message, "New task")?;
     let input = request.input.as_ref();
-    let task = TaskStore::create_in_transaction(
+    let task = create_task_from_workflow_input(
+        pool,
         transaction,
-        &NewTask {
+        WorkflowTaskCreateInput {
             title,
             description: input.and_then(|value| value.body.clone()),
-            source_kind: Some(
-                if message.is_some() {
-                    "communication"
-                } else {
-                    "manual"
-                }
+            provenance_kind: message.map(|_| "observation".to_owned()),
+            provenance_id: message.map(|value| value.observation_id.clone()),
+            source_kind: if message.is_some() {
+                "observation".to_owned()
+            } else {
+                "manual".to_owned()
+            },
+            source_id: message
+                .map(|value| value.observation_id.clone())
+                .unwrap_or_else(|| command_id.to_owned()),
+            source_type: message
+                .map(|_| "observation")
+                .unwrap_or("manual")
                 .to_owned(),
-            ),
-            source_id: Some(
-                message
-                    .map(|value| value.message_id.clone())
-                    .unwrap_or_else(|| command_id.to_owned()),
-            ),
-            source_type: Some(message.map(|_| "message").unwrap_or("manual").to_owned()),
-            project_id: None,
-            hermes_status: Some("new".to_owned()),
-            priority_score: None,
-            area: None,
-            why: None,
             due_at: input.and_then(|value| value.due_at),
-            energy_type: None,
-            confidentiality: Some("private_local".to_owned()),
-            tags: None,
-            linked_person_id: None,
-            linked_organization_id: None,
-            created_from_event_id: Some(event_id.to_owned()),
-            created_by_actor_id: Some(actor_id.to_owned()),
+            created_from_event_id: event_id.to_owned(),
+            created_by_actor_id: actor_id.to_owned(),
+            projection_observation_id: message.map(|value| value.observation_id.clone()),
+            projection_metadata: message.map(|value| {
+                serde_json::json!({
+                    "workflow_action": "create_task",
+                    "message_id": value.message_id,
+                    "created_from_event_id": event_id,
+                })
+            }),
         },
     )
     .await?;

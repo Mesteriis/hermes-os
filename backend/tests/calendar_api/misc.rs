@@ -1,12 +1,15 @@
 use std::env;
 
+use chrono::{Duration, Utc};
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use super::support::{
     LOCAL_API_TOKEN, build_cal_app, delete_request_with_token, get_request_with_token, json_body,
     post_request_with_token, put_request_with_token, unique_suffix, urlencoding_percent_encode,
 };
+use hermes_hub_backend::platform::storage::Database;
 
 async fn get_calendar_endpoint_returns_non_server_error(path: &str) {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
@@ -72,6 +75,10 @@ async fn calendar_sources_list() {
         return;
     };
     let suffix = unique_suffix();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
     let app = build_cal_app(&database_url).await;
     let response = app.clone().oneshot(post_request_with_token(
         "/api/v1/calendar/accounts",
@@ -108,6 +115,30 @@ async fn calendar_sources_list() {
         "src create={}",
         response.status()
     );
+    let body = json_body(response).await;
+    let source_id = body["source_id"].as_str().expect("source_id");
+    let observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'calendar_source'
+          AND entity_id = $1
+          AND relationship_kind = 'create'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(source_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar source observation link");
+    let origin_kind: String =
+        sqlx::query_scalar("SELECT origin_kind FROM observations WHERE observation_id = $1")
+            .bind(&observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("calendar source observation");
+    assert_eq!(origin_kind, "manual");
 
     let response = app
         .oneshot(get_request_with_token(
@@ -132,11 +163,15 @@ async fn cal_post_deadline() {
         eprintln!("skip");
         return;
     };
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
     let app = build_cal_app(&database_url).await;
     let response = app
         .oneshot(post_request_with_token(
             "/api/v1/calendar/deadlines",
-            json!({"title": "Test Deadline", "due_at": "2027-12-31T23:59:59Z", "priority": "high"}),
+            json!({"title": "Test Deadline", "due_at": "2027-12-31T23:59:59Z", "severity": "high"}),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -146,6 +181,29 @@ async fn cal_post_deadline() {
         "deadline post={}",
         response.status()
     );
+    let body = json_body(response).await;
+    let deadline_id = body["id"].as_str().expect("deadline id");
+    let observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'deadline_event'
+          AND entity_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(deadline_id)
+    .fetch_one(&pool)
+    .await
+    .expect("deadline observation link");
+    let origin_kind: String =
+        sqlx::query_scalar("SELECT origin_kind FROM observations WHERE observation_id = $1")
+            .bind(&observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("deadline observation");
+    assert_eq!(origin_kind, "manual");
 }
 
 #[tokio::test]
@@ -154,17 +212,54 @@ async fn cal_post_focus_block() {
         eprintln!("skip");
         return;
     };
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
     let app = build_cal_app(&database_url).await;
-    let response = app.oneshot(post_request_with_token(
-        "/api/v1/calendar/focus-blocks",
-        json!({"title": "Focus Block", "start_at": chrono::Utc::now().to_rfc3339(), "duration_minutes": 90}),
-        LOCAL_API_TOKEN,
-    )).await.expect("response");
+    let start_at = Utc::now() + Duration::hours(2);
+    let end_at = start_at + Duration::minutes(90);
+    let response = app
+        .oneshot(post_request_with_token(
+            "/api/v1/calendar/focus-blocks",
+            json!({
+                "title": "Focus Block",
+                "start_at": start_at.to_rfc3339(),
+                "end_at": end_at.to_rfc3339(),
+                "purpose": "Deep work"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
     assert!(
         !response.status().is_server_error(),
         "focus block post={}",
         response.status()
     );
+    let body = json_body(response).await;
+    let focus_block_id = body["id"].as_str().expect("focus block id");
+    let observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'focus_block'
+          AND entity_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(focus_block_id)
+    .fetch_one(&pool)
+    .await
+    .expect("focus block observation link");
+    let origin_kind: String =
+        sqlx::query_scalar("SELECT origin_kind FROM observations WHERE observation_id = $1")
+            .bind(&observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("focus block observation");
+    assert_eq!(origin_kind, "manual");
 }
 
 #[tokio::test]
@@ -209,13 +304,26 @@ async fn cal_rules_crud() {
         return;
     };
     let suffix = unique_suffix();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
     let app = build_cal_app(&database_url).await;
 
-    let response = app.clone().oneshot(post_request_with_token(
-        "/api/v1/calendar/rules",
-        json!({"name": format!("Rule{suffix}"), "rule_type": "auto_color", "config": {"color": "#00ff00"}}),
-        LOCAL_API_TOKEN,
-    )).await.expect("response");
+    let response = app
+        .clone()
+        .oneshot(post_request_with_token(
+            "/api/v1/calendar/rules",
+            json!({
+                "name": format!("Rule{suffix}"),
+                "description": "Color busy blocks",
+                "dsl": {"color": "#00ff00"},
+                "approval_mode": "suggest_only"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("response");
     if response.status().is_server_error() {
         eprintln!("skip: rule create failed");
         return;
@@ -228,6 +336,21 @@ async fn cal_rules_crud() {
     if rule_id.is_empty() {
         return;
     }
+    let created_observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'calendar_rule'
+          AND entity_id = $1
+          AND relationship_kind = 'create'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&rule_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar rule create observation");
 
     let response = app
         .clone()
@@ -246,6 +369,22 @@ async fn cal_rules_crud() {
         "rule update={}",
         response.status()
     );
+    let updated_observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'calendar_rule'
+          AND entity_id = $1
+          AND relationship_kind = 'update'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&rule_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar rule update observation");
+    assert_ne!(updated_observation_id, created_observation_id);
 
     let response = app
         .oneshot(delete_request_with_token(
@@ -262,6 +401,45 @@ async fn cal_rules_crud() {
         "rule delete={}",
         response.status()
     );
+    let deleted_observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'calendar_rule'
+          AND entity_id = $1
+          AND relationship_kind = 'delete'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&rule_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar rule delete observation");
+    assert_ne!(deleted_observation_id, updated_observation_id);
+    let delete_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code
+         FROM observations observation
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE observation.observation_id = $1",
+    )
+    .bind(&deleted_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar rule delete observation row");
+    assert_eq!(
+        delete_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "manual"
+    );
+    assert_eq!(
+        delete_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "CALENDAR_RULE"
+    );
 }
 
 #[tokio::test]
@@ -270,11 +448,25 @@ async fn cal_import() {
         eprintln!("skip");
         return;
     };
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+    let imported_title = format!("Imported Event {suffix}");
     let app = build_cal_app(&database_url).await;
     let response = app
         .oneshot(post_request_with_token(
             "/api/v1/calendar/import",
-            json!({"format": "ics", "data": "BEGIN:VCALENDAR\nEND:VCALENDAR"}),
+            json!({
+                "ics_data": "BEGIN:VCALENDAR\nEND:VCALENDAR",
+                "events": [{
+                    "title": imported_title,
+                    "start_at": "2027-12-31T10:00:00Z",
+                    "end_at": "2027-12-31T11:00:00Z",
+                    "source_event_id": format!("import-{suffix}")
+                }]
+            }),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -284,6 +476,43 @@ async fn cal_import() {
         "import={}",
         response.status()
     );
+    let body = json_body(response).await;
+    assert_eq!(body["imported"], json!(1));
+    assert_eq!(body["ics_data_received"], json!(true));
+    let row = sqlx::query(
+        "SELECT event_id, observation_id
+         FROM calendar_events
+         WHERE title = $1
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&imported_title)
+    .fetch_one(&pool)
+    .await
+    .expect("imported event row");
+    let event_id: String = row.try_get("event_id").expect("event_id");
+    let observation_id: String = row.try_get("observation_id").expect("observation_id");
+    let origin_kind: String =
+        sqlx::query_scalar("SELECT origin_kind FROM observations WHERE observation_id = $1")
+            .bind(&observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("import observation");
+    assert_eq!(origin_kind, "file_import");
+    let link_count: i64 = sqlx::query_scalar(
+        "SELECT count(*)
+         FROM observation_links
+         WHERE observation_id = $1
+           AND domain = 'calendar'
+           AND entity_kind = 'event'
+           AND entity_id = $2",
+    )
+    .bind(&observation_id)
+    .bind(&event_id)
+    .fetch_one(&pool)
+    .await
+    .expect("import event observation link count");
+    assert_eq!(link_count, 1);
 }
 
 #[tokio::test]
@@ -293,6 +522,10 @@ async fn cal_sync() {
         return;
     };
     let suffix = unique_suffix();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
     let app = build_cal_app(&database_url).await;
 
     let response = app.clone().oneshot(post_request_with_token(
@@ -327,5 +560,43 @@ async fn cal_sync() {
         !response.status().is_server_error(),
         "sync={}",
         response.status()
+    );
+    let observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'calendar_account'
+          AND entity_id = $1
+          AND relationship_kind = 'sync_trigger'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar sync observation link");
+    let observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code
+         FROM observations observation
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE observation.observation_id = $1",
+    )
+    .bind(&observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar sync observation");
+    assert_eq!(
+        observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "manual"
+    );
+    assert_eq!(
+        observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "CALENDAR_ACCOUNT_MUTATION"
     );
 }

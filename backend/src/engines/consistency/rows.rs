@@ -43,7 +43,6 @@ pub(super) fn parse_source_kind(
         "obligation" => Ok(ContradictionSourceKind::Obligation),
         "task" => Ok(ContradictionSourceKind::Task),
         "relationship" => Ok(ContradictionSourceKind::Relationship),
-        "raw_record" => Ok(ContradictionSourceKind::RawRecord),
         _ => Err(ConsistencyError::UnknownSourceKind(value)),
     }
 }

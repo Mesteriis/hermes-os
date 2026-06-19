@@ -1,5 +1,4 @@
 use super::support::*;
-
 // ── Person Roles ────────────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -39,12 +38,11 @@ pub(crate) async fn post_person_role(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonRoleStore::new(pool);
-    let role = store
-        .assign(&person_id, &req.role, None)
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(role))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .assign_role_manual(&person_id, &req.role)
+            .await?,
+    ))
 }
 
 pub(crate) async fn delete_person_role(
@@ -56,11 +54,9 @@ pub(crate) async fn delete_person_role(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonRoleStore::new(pool);
-    let deleted = store
-        .remove(&person_id, &role)
-        .await
-        .map_err(ApiError::from)?;
+    let deleted = crate::domains::persons::service::PersonCommandService::new(pool)
+        .remove_role_manual(&person_id, &role)
+        .await?;
     Ok(Json(json!({"deleted": deleted})))
 }
 
@@ -98,12 +94,11 @@ pub(crate) async fn post_person_persona(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonPersonaStore::new(pool);
-    let persona = store
-        .upsert(&NewPersonPersona { person_id, ..req })
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(persona))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .upsert_person_persona_manual(&NewPersonPersona { person_id, ..req })
+            .await?,
+    ))
 }
 
 pub(crate) async fn delete_person_persona(
@@ -115,7 +110,8 @@ pub(crate) async fn delete_person_persona(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonPersonaStore::new(pool);
-    let deleted = store.delete(&persona_id).await.map_err(ApiError::from)?;
+    let deleted = crate::domains::persons::service::PersonCommandService::new(pool)
+        .delete_person_persona_manual(&_person_id, &persona_id)
+        .await?;
     Ok(Json(json!({"deleted": deleted})))
 }

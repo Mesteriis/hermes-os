@@ -4,10 +4,15 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::Row;
-use sqlx::postgres::{PgPool, PgRow};
+use sqlx::Transaction;
+use sqlx::postgres::{PgPool, PgRow, Postgres};
 use thiserror::Error;
 
+use crate::domains::mail::evidence::{link_mail_entity_in_transaction, merge_metadata};
 use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::platform::observations::{
+    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
+};
 
 mod delivery;
 mod delivery_status;
@@ -148,7 +153,19 @@ impl EmailOutboxStore {
         &self,
         item: &NewEmailOutboxItem,
     ) -> Result<EmailOutboxItem, EmailOutboxError> {
+        self.enqueue_with_observation(item, None, "outbox_status_transition", None)
+            .await
+    }
+
+    pub async fn enqueue_with_observation(
+        &self,
+        item: &NewEmailOutboxItem,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<Value>,
+    ) -> Result<EmailOutboxItem, EmailOutboxError> {
         item.validate()?;
+        let mut transaction = self.pool.begin().await?;
         let sql = outbox_returning_query(
             r#"
             INSERT INTO email_outbox_tracking (
@@ -184,10 +201,34 @@ impl EmailOutboxStore {
             .bind(item.scheduled_send_at)
             .bind(item.undo_deadline_at)
             .bind(&item.metadata)
-            .fetch_one(&self.pool)
+            .fetch_one(&mut *transaction)
             .await?;
 
-        row_to_outbox_item(row)
+        let outbox_item = row_to_outbox_item(row)?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.trim().is_empty()) {
+            let link_metadata = merge_metadata(
+                json!({
+                    "status": outbox_item.status.as_str(),
+                    "draft_id": outbox_item.draft_id,
+                    "scheduled_send_at": outbox_item.scheduled_send_at,
+                    "undo_deadline_at": outbox_item.undo_deadline_at,
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "outbox_item",
+                outbox_item.outbox_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+
+        Ok(outbox_item)
     }
 
     pub async fn list(
@@ -297,7 +338,20 @@ impl EmailOutboxStore {
         outbox_id: &str,
         now: DateTime<Utc>,
     ) -> Result<EmailOutboxItem, EmailOutboxError> {
+        self.undo_with_observation(outbox_id, now, None, "outbox_status_transition", None)
+            .await
+    }
+
+    pub async fn undo_with_observation(
+        &self,
+        outbox_id: &str,
+        now: DateTime<Utc>,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<Value>,
+    ) -> Result<EmailOutboxItem, EmailOutboxError> {
         validate_non_empty("outbox_id", outbox_id)?;
+        let mut transaction = self.pool.begin().await?;
         let sql = outbox_returning_query(
             r#"
             UPDATE email_outbox_tracking
@@ -313,12 +367,38 @@ impl EmailOutboxStore {
         let row = sqlx::query(&sql)
             .bind(outbox_id.trim())
             .bind(now)
-            .fetch_optional(&self.pool)
+            .fetch_optional(&mut *transaction)
             .await?;
 
         match row {
-            Some(row) => row_to_outbox_item(row),
-            None => Err(EmailOutboxError::UndoUnavailable),
+            Some(row) => {
+                let item = row_to_outbox_item(row)?;
+                if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+                    let link_metadata = merge_metadata(
+                        json!({
+                            "operation": "outbox_undo",
+                            "status": item.status.as_str(),
+                        }),
+                        metadata,
+                    );
+                    link_mail_entity_in_transaction(
+                        &mut transaction,
+                        observation_id,
+                        "outbox_item",
+                        item.outbox_id.clone(),
+                        relationship_kind,
+                        link_metadata,
+                        None,
+                    )
+                    .await?;
+                }
+                transaction.commit().await?;
+                Ok(item)
+            }
+            None => {
+                transaction.rollback().await?;
+                Err(EmailOutboxError::UndoUnavailable)
+            }
         }
     }
 
@@ -328,6 +408,7 @@ impl EmailOutboxStore {
         limit: i64,
     ) -> Result<Vec<EmailOutboxItem>, EmailOutboxError> {
         let limit = validate_limit(limit)?;
+        let mut transaction = self.pool.begin().await?;
         let sql = outbox_returning_query(
             r#"
             WITH due AS (
@@ -353,10 +434,25 @@ impl EmailOutboxStore {
         let rows = sqlx::query(&sql)
             .bind(now)
             .bind(limit)
-            .fetch_all(&self.pool)
+            .fetch_all(&mut *transaction)
             .await?;
-
-        rows.into_iter().map(row_to_outbox_item).collect()
+        let items = rows
+            .into_iter()
+            .map(row_to_outbox_item)
+            .collect::<Result<Vec<_>, _>>()?;
+        for item in &items {
+            capture_outbox_transition_observation(
+                &mut transaction,
+                item,
+                "outbox_claim_due",
+                json!({
+                    "status": item.status.as_str(),
+                }),
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok(items)
     }
 
     pub async fn mark_sent(
@@ -391,6 +487,16 @@ impl EmailOutboxStore {
             transaction.rollback().await?;
             return Ok(None);
         };
+        capture_outbox_transition_observation(
+            &mut transaction,
+            &item,
+            "outbox_mark_sent",
+            json!({
+                "status": item.status.as_str(),
+                "provider_message_id": item.provider_message_id,
+            }),
+        )
+        .await?;
         let event = outbox_delivery_event("mail.outbox.sent", &item)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
         transaction.commit().await?;
@@ -430,6 +536,16 @@ impl EmailOutboxStore {
             transaction.rollback().await?;
             return Ok(None);
         };
+        capture_outbox_transition_observation(
+            &mut transaction,
+            &item,
+            "outbox_mark_failed",
+            json!({
+                "status": item.status.as_str(),
+                "last_error": item.last_error,
+            }),
+        )
+        .await?;
         let event = outbox_delivery_event("mail.outbox.failed", &item)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
         transaction.commit().await?;
@@ -479,12 +595,67 @@ impl EmailOutboxStore {
             transaction.rollback().await?;
             return Ok(None);
         };
+        capture_outbox_transition_observation(
+            &mut transaction,
+            &item,
+            "outbox_retry_scheduled",
+            json!({
+                "status": item.status.as_str(),
+                "scheduled_send_at": item.scheduled_send_at,
+                "last_error": item.last_error,
+            }),
+        )
+        .await?;
         let event = outbox_delivery_event("mail.outbox.retry_scheduled", &item)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
         transaction.commit().await?;
 
         Ok(Some(item))
     }
+}
+
+async fn capture_outbox_transition_observation(
+    transaction: &mut Transaction<'_, Postgres>,
+    item: &EmailOutboxItem,
+    operation: &str,
+    metadata: Value,
+) -> Result<(), EmailOutboxError> {
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            "COMMUNICATION_OUTBOX",
+            ObservationOriginKind::LocalRuntime,
+            Utc::now(),
+            json!({
+                "outbox_id": item.outbox_id,
+                "account_id": item.account_id,
+                "status": item.status.as_str(),
+                "scheduled_send_at": item.scheduled_send_at,
+                "undo_deadline_at": item.undo_deadline_at,
+                "send_attempts": item.send_attempts,
+                "provider_message_id": item.provider_message_id,
+                "last_error": item.last_error,
+                "operation": operation,
+            }),
+            format!("outbox://{}/{}", item.outbox_id, operation),
+        )
+        .provenance(json!({
+            "captured_by": "mail.outbox",
+            "operation": operation,
+        })),
+    )
+    .await?;
+    link_mail_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "outbox_item",
+        item.outbox_id.clone(),
+        "outbox_status_transition",
+        metadata,
+        None,
+    )
+    .await?;
+    Ok(())
 }
 
 fn outbox_returning_query(prefix: &str, qualifier: &str) -> String {
@@ -649,6 +820,8 @@ pub enum EmailOutboxError {
 
     #[error(transparent)]
     EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
 
     #[error("invalid outbox item: {0}")]
     Invalid(&'static str),

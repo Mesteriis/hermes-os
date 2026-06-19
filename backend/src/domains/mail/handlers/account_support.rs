@@ -79,8 +79,11 @@ pub(super) async fn email_account_or_not_found(
     state: &AppState,
     account_id: &str,
 ) -> Result<ProviderAccount, ApiError> {
-    let Some(account) = communication_ingestion_store(state)?
-        .provider_account(account_id)
+    let Some(pool) = state.database.pool().cloned() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let Some(account) = CommunicationProviderAccountStore::new(pool)
+        .get(account_id)
         .await?
     else {
         return Err(ApiError::NotFound);
@@ -253,5 +256,9 @@ pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
         }
         MailSyncError::EventEnvelope(error) => ApiError::InvalidEnvelope(error),
         MailSyncError::EventStore(error) => ApiError::Store(error),
+        MailSyncError::ObservationStore(error) => {
+            tracing::error!(error = %error, "mail sync observation store failed");
+            ApiError::InvalidCommunicationQuery("mail sync operation failed")
+        }
     }
 }

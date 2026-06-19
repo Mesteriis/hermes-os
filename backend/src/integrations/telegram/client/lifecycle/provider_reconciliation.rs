@@ -3,6 +3,9 @@ use serde_json::json;
 use sqlx::PgPool;
 
 use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::lifecycle::{
+    mark_command_mismatch, mark_command_reconciled,
+};
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 use crate::integrations::telegram::client::rows::row_to_telegram_provider_write_command;
 
@@ -67,34 +70,17 @@ pub async fn reconcile_edit_commands_from_provider_state(
                 "provider_observed_at": observed_at,
                 "mismatch": true,
             });
-            let row = sqlx::query(
-                r#"
-                UPDATE telegram_provider_write_commands
-                SET status = 'failed',
-                    result_payload = $3,
-                    last_error = $4,
-                    provider_observed_at = $2,
-                    provider_state = $5,
-                    reconciliation_status = 'mismatch',
-                    reconciled_at = $2,
-                    completed_at = NULL,
-                    locked_at = NULL,
-                    locked_by = NULL,
-                    next_attempt_at = NULL,
-                    dead_lettered_at = NULL,
-                    updated_at = $2
-                WHERE command_id = $1
-                RETURNING *
-                "#,
-            )
-            .bind(&command.command_id)
-            .bind(observed_at)
-            .bind(&result_payload)
-            .bind(EDIT_PROVIDER_MISMATCH_ERROR)
-            .bind(&provider_state)
-            .fetch_one(pool)
-            .await?;
-            reconciled.push(row_to_telegram_provider_write_command(row)?);
+            reconciled.push(
+                mark_command_mismatch(
+                    pool,
+                    &command.command_id,
+                    observed_at,
+                    provider_state,
+                    result_payload,
+                    EDIT_PROVIDER_MISMATCH_ERROR,
+                )
+                .await?,
+            );
             continue;
         }
 
@@ -111,33 +97,16 @@ pub async fn reconcile_edit_commands_from_provider_state(
             "body_text": body_text,
             "provider_observed_at": observed_at,
         });
-        let row = sqlx::query(
-            r#"
-            UPDATE telegram_provider_write_commands
-            SET status = 'completed',
-                result_payload = $3,
-                last_error = NULL,
-                provider_observed_at = $2,
-                provider_state = $4,
-                reconciliation_status = 'observed',
-                reconciled_at = $2,
-                completed_at = $2,
-                locked_at = NULL,
-                locked_by = NULL,
-                next_attempt_at = NULL,
-                dead_lettered_at = NULL,
-                updated_at = $2
-            WHERE command_id = $1
-            RETURNING *
-            "#,
-        )
-        .bind(&command.command_id)
-        .bind(observed_at)
-        .bind(&result_payload)
-        .bind(&provider_state)
-        .fetch_one(pool)
-        .await?;
-        reconciled.push(row_to_telegram_provider_write_command(row)?);
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                provider_state,
+                result_payload,
+            )
+            .await?,
+        );
     }
 
     Ok(reconciled)
@@ -200,34 +169,17 @@ pub async fn reconcile_message_pin_commands_from_provider_state(
                 "provider_observed_at": observed_at,
                 "mismatch": true,
             });
-            let row = sqlx::query(
-                r#"
-                UPDATE telegram_provider_write_commands
-                SET status = 'failed',
-                    result_payload = $3,
-                    last_error = $4,
-                    provider_observed_at = $2,
-                    provider_state = $5,
-                    reconciliation_status = 'mismatch',
-                    reconciled_at = $2,
-                    completed_at = NULL,
-                    locked_at = NULL,
-                    locked_by = NULL,
-                    next_attempt_at = NULL,
-                    dead_lettered_at = NULL,
-                    updated_at = $2
-                WHERE command_id = $1
-                RETURNING *
-                "#,
-            )
-            .bind(&command.command_id)
-            .bind(observed_at)
-            .bind(&result_payload)
-            .bind(PIN_PROVIDER_MISMATCH_ERROR)
-            .bind(&provider_state)
-            .fetch_one(pool)
-            .await?;
-            reconciled.push(row_to_telegram_provider_write_command(row)?);
+            reconciled.push(
+                mark_command_mismatch(
+                    pool,
+                    &command.command_id,
+                    observed_at,
+                    provider_state,
+                    result_payload,
+                    PIN_PROVIDER_MISMATCH_ERROR,
+                )
+                .await?,
+            );
             continue;
         }
         let provider_state = json!({
@@ -243,33 +195,16 @@ pub async fn reconcile_message_pin_commands_from_provider_state(
             "is_pinned": is_pinned,
             "provider_observed_at": observed_at,
         });
-        let row = sqlx::query(
-            r#"
-            UPDATE telegram_provider_write_commands
-            SET status = 'completed',
-                result_payload = $3,
-                last_error = NULL,
-                provider_observed_at = $2,
-                provider_state = $4,
-                reconciliation_status = 'observed',
-                reconciled_at = $2,
-                completed_at = $2,
-                locked_at = NULL,
-                locked_by = NULL,
-                next_attempt_at = NULL,
-                dead_lettered_at = NULL,
-                updated_at = $2
-            WHERE command_id = $1
-            RETURNING *
-            "#,
-        )
-        .bind(&command.command_id)
-        .bind(observed_at)
-        .bind(&result_payload)
-        .bind(&provider_state)
-        .fetch_one(pool)
-        .await?;
-        reconciled.push(row_to_telegram_provider_write_command(row)?);
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                provider_state,
+                result_payload,
+            )
+            .await?,
+        );
     }
 
     Ok(reconciled)
@@ -319,33 +254,16 @@ pub async fn reconcile_delete_commands_from_provider_state(
             "is_deleted": true,
             "provider_observed_at": observed_at,
         });
-        let row = sqlx::query(
-            r#"
-            UPDATE telegram_provider_write_commands
-            SET status = 'completed',
-                result_payload = $3,
-                last_error = NULL,
-                provider_observed_at = $2,
-                provider_state = $4,
-                reconciliation_status = 'observed',
-                reconciled_at = $2,
-                completed_at = $2,
-                locked_at = NULL,
-                locked_by = NULL,
-                next_attempt_at = NULL,
-                dead_lettered_at = NULL,
-                updated_at = $2
-            WHERE command_id = $1
-            RETURNING *
-            "#,
-        )
-        .bind(&command.command_id)
-        .bind(observed_at)
-        .bind(&result_payload)
-        .bind(&provider_state)
-        .fetch_one(pool)
-        .await?;
-        reconciled.push(row_to_telegram_provider_write_command(row)?);
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                provider_state,
+                result_payload,
+            )
+            .await?,
+        );
     }
 
     Ok(reconciled)

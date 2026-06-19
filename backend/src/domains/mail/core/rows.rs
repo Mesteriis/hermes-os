@@ -29,6 +29,7 @@ pub(super) fn row_to_raw_record(
 ) -> Result<StoredRawCommunicationRecord, CommunicationIngestionError> {
     Ok(StoredRawCommunicationRecord {
         raw_record_id: row.try_get("raw_record_id")?,
+        observation_id: row.try_get("observation_id")?,
         account_id: row.try_get("account_id")?,
         record_kind: row.try_get("record_kind")?,
         provider_record_id: row.try_get("provider_record_id")?,

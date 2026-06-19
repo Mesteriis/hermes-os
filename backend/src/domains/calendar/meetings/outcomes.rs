@@ -3,6 +3,8 @@ use serde_json::Value;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
+use crate::domains::calendar::evidence::link_calendar_entity_in_transaction;
+
 use super::outcome_projection::project_outcome_domain_record;
 use super::rows::{MEETING_OUTCOME_COLUMNS, row_to_meeting_outcome};
 use super::{MeetingOutcome, MeetingsError};
@@ -28,6 +30,7 @@ impl MeetingOutcomeStore {
         rows.into_iter().map(row_to_meeting_outcome).collect()
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn add(
         &self,
         event_id: &str,
@@ -36,10 +39,36 @@ impl MeetingOutcomeStore {
         description: Option<&str>,
         owner_id: Option<&str>,
         due_date: Option<DateTime<Utc>>,
+        source: Option<&str>,
+    ) -> Result<MeetingOutcome, MeetingsError> {
+        self.add_with_observation(
+            event_id,
+            outcome_type,
+            title,
+            description,
+            owner_id,
+            due_date,
+            source,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn add_with_observation(
+        &self,
+        event_id: &str,
+        outcome_type: &str,
+        title: &str,
+        description: Option<&str>,
+        owner_id: Option<&str>,
+        due_date: Option<DateTime<Utc>>,
+        source: Option<&str>,
+        observation_id: Option<&str>,
     ) -> Result<MeetingOutcome, MeetingsError> {
         let mut transaction = self.pool.begin().await?;
         let query = format!(
-            "INSERT INTO meeting_outcomes (event_id, outcome_type, title, description, owner_person_id, due_date) VALUES ($1,$2,$3,$4,$5,$6) RETURNING {MEETING_OUTCOME_COLUMNS}"
+            "INSERT INTO meeting_outcomes (event_id, outcome_type, title, description, owner_person_id, due_date, source) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING {MEETING_OUTCOME_COLUMNS}"
         );
         let row = sqlx::query(&query)
             .bind(event_id)
@@ -48,6 +77,7 @@ impl MeetingOutcomeStore {
             .bind(description)
             .bind(owner_id)
             .bind(due_date)
+            .bind(source.unwrap_or("manual"))
             .fetch_one(&mut *transaction)
             .await?;
         let mut outcome = row_to_meeting_outcome(row)?;
@@ -66,6 +96,22 @@ impl MeetingOutcomeStore {
             outcome = row_to_meeting_outcome(row)?;
         }
 
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_calendar_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "meeting_outcome",
+                outcome.id.clone(),
+                None,
+                serde_json::json!({
+                    "event_id": event_id,
+                    "outcome_type": outcome.outcome_type,
+                    "linked_entity_id": outcome.linked_entity_id,
+                }),
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(outcome)
     }

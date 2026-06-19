@@ -1,6 +1,11 @@
 use hermes_hub_backend::domains::tasks::candidates::{
-    TaskCandidateReviewCommand, TaskCandidateReviewState,
+    TaskCandidateError, TaskCandidateReviewCommand, TaskCandidateReviewState,
 };
+use hermes_hub_backend::platform::observations::{
+    NewObservation, ObservationOriginKind, ObservationStore,
+};
+use serde_json::json;
+use sqlx::Row;
 
 use super::support::{live_task_candidate_context, seed_message, unique_suffix};
 
@@ -26,13 +31,27 @@ async fn task_candidate_review_confirm_creates_active_task_against_postgres() {
         .refresh_deterministic_candidates(100)
         .await
         .expect("refresh");
-    let task_candidate_id: String = sqlx::query_scalar(
-        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'message'",
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
     )
     .bind(&message_id)
     .fetch_one(&context.pool)
     .await
+    .expect("message observation id");
+    let task_candidate_id: String = sqlx::query_scalar(
+        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'observation'",
+    )
+    .bind(&message_observation_id)
+    .fetch_one(&context.pool)
+    .await
     .expect("candidate id");
+    let candidate_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM task_candidates WHERE task_candidate_id = $1",
+    )
+    .bind(&task_candidate_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("candidate observation id");
 
     let result = context
         .store
@@ -47,20 +66,138 @@ async fn task_candidate_review_confirm_creates_active_task_against_postgres() {
     assert_eq!(result.review_state, TaskCandidateReviewState::UserConfirmed);
     assert_eq!(result.task_candidate_id, task_candidate_id);
 
-    let task_exists: bool = sqlx::query_scalar(
+    let task_row: (String, String, String, String, String, String) = sqlx::query_as(
         r#"
-        SELECT EXISTS (
-            SELECT 1
-            FROM tasks
-            WHERE task_candidate_id = $1
-        )
+        SELECT task_id, provenance_kind, provenance_id, source_kind, source_id, source_type
+        FROM tasks
+        WHERE task_candidate_id = $1
         "#,
     )
     .bind(&task_candidate_id)
     .fetch_one(&context.pool)
     .await
-    .expect("task exists");
-    assert!(task_exists);
+    .expect("task row");
+    assert_eq!(task_row.1, "observation");
+    assert_eq!(task_row.2, candidate_observation_id);
+    assert_eq!(task_row.3, "observation");
+    assert_eq!(task_row.4, task_row.2);
+    assert_eq!(task_row.5, "observation");
+
+    let observation_row: (String, String) = sqlx::query_as(
+        r#"
+        SELECT source_ref, kind.code
+        FROM observations observation
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE observation.observation_id = $1
+        "#,
+    )
+    .bind(&task_row.2)
+    .fetch_one(&context.pool)
+    .await
+    .expect("provenance observation");
+    assert!(!observation_row.0.trim().is_empty());
+    assert_eq!(observation_row.1, "COMMUNICATION_MESSAGE");
+}
+
+#[tokio::test]
+async fn task_candidate_store_review_with_observation_materializes_transition_link_against_postgres()
+ {
+    let Some(context) = live_task_candidate_context().await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let message_id = seed_message(
+        &context,
+        suffix,
+        &format!("confirm-link-{suffix}@example.com"),
+        &[format!("owner-{suffix}@example.com")],
+        &format!("provider-task-candidate-confirm-link-{suffix}"),
+        &format!("Task confirm link {suffix}"),
+        "Action: review this link owner path",
+    )
+    .await;
+
+    let _ = context
+        .store
+        .refresh_deterministic_candidates(100)
+        .await
+        .expect("refresh");
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("message observation id");
+    let task_candidate_id: String = sqlx::query_scalar(
+        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'observation'",
+    )
+    .bind(&message_observation_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("candidate id");
+    let review_observation = ObservationStore::new(context.pool.clone())
+        .capture(
+            &NewObservation::new(
+                "REVIEW_TRANSITION",
+                ObservationOriginKind::Manual,
+                chrono::Utc::now(),
+                json!({
+                    "task_candidate_id": task_candidate_id,
+                    "operation": "task_candidate_review",
+                }),
+                format!("manual://task-candidate-review/{suffix}"),
+            )
+            .provenance(json!({
+                "source": "task_candidates.review.test",
+            })),
+        )
+        .await
+        .expect("capture review observation");
+
+    let result = context
+        .store
+        .set_review_state_with_observation(
+            &TaskCandidateReviewCommand {
+                command_id: format!("task-candidate-confirm-link-{suffix}"),
+                task_candidate_id: task_candidate_id.clone(),
+                review_state: TaskCandidateReviewState::UserConfirmed,
+                actor_id: "tests-reviewer".to_owned(),
+            },
+            &review_observation.observation_id,
+            json!({
+                "source": "task_candidates.review.test",
+            }),
+        )
+        .await
+        .expect("confirm");
+    assert_eq!(result.review_state, TaskCandidateReviewState::UserConfirmed);
+
+    let link_row = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'tasks'
+           AND entity_kind = 'task_candidate'
+           AND entity_id = $1
+           AND relationship_kind = 'review_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&task_candidate_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("task candidate review transition link");
+    let linked_observation_id: String = link_row.try_get("observation_id").expect("observation id");
+    let metadata: serde_json::Value = link_row.try_get("metadata").expect("metadata");
+    assert_eq!(linked_observation_id, review_observation.observation_id);
+    assert_eq!(metadata["review_state"], json!("user_confirmed"));
+    assert_eq!(
+        metadata["event_id"],
+        json!(format!(
+            "task_candidate_review:task-candidate-confirm-link-{suffix}"
+        ))
+    );
 }
 
 #[tokio::test]
@@ -87,13 +224,27 @@ async fn task_candidate_review_confirm_materializes_obligation_candidate_against
         .refresh_deterministic_candidates(100)
         .await
         .expect("refresh");
-    let task_candidate_id: String = sqlx::query_scalar(
-        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'message'",
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
     )
     .bind(&message_id)
     .fetch_one(&context.pool)
     .await
+    .expect("message observation id");
+    let task_candidate_id: String = sqlx::query_scalar(
+        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'observation'",
+    )
+    .bind(&message_observation_id)
+    .fetch_one(&context.pool)
+    .await
     .expect("candidate id");
+    let candidate_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM task_candidates WHERE task_candidate_id = $1",
+    )
+    .bind(&task_candidate_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("candidate observation id");
 
     let result = context
         .store
@@ -143,9 +294,9 @@ async fn task_candidate_review_confirm_materializes_obligation_candidate_against
     assert_eq!(obligation_rows[0].3, "persona:owner");
     assert_eq!(obligation_rows[0].4, "fulfillment_task");
 
-    let evidence_row: (String, String, Option<String>) = sqlx::query_as(
+    let evidence_row: (String, String, Option<String>, Option<String>) = sqlx::query_as(
         r#"
-        SELECT source_kind, source_id, quote
+        SELECT source_kind, source_id, quote, observation_id
         FROM obligation_evidence
         WHERE obligation_id = $1
         "#,
@@ -154,9 +305,10 @@ async fn task_candidate_review_confirm_materializes_obligation_candidate_against
     .fetch_one(&context.pool)
     .await
     .expect("obligation evidence");
-    assert_eq!(evidence_row.0, "communication");
-    assert_eq!(evidence_row.1, message_id);
+    assert_eq!(evidence_row.0, "observation");
+    assert_eq!(evidence_row.1, candidate_observation_id);
     assert_eq!(evidence_row.2.as_deref(), Some(quote.as_str()));
+    assert_eq!(evidence_row.3.as_deref(), Some(evidence_row.1.as_str()));
 }
 
 #[tokio::test]
@@ -183,10 +335,17 @@ async fn obligation_task_candidate_reset_demotes_obligation_review_state_against
         .refresh_deterministic_candidates(100)
         .await
         .expect("refresh");
-    let task_candidate_id: String = sqlx::query_scalar(
-        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'message'",
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
     )
     .bind(&message_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("message observation id");
+    let task_candidate_id: String = sqlx::query_scalar(
+        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'observation'",
+    )
+    .bind(&message_observation_id)
     .fetch_one(&context.pool)
     .await
     .expect("candidate id");
@@ -269,10 +428,17 @@ async fn task_candidate_review_reset_removes_active_task_against_postgres() {
         .refresh_deterministic_candidates(100)
         .await
         .expect("refresh");
-    let task_candidate_id: String = sqlx::query_scalar(
-        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'message'",
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
     )
     .bind(&message_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("message observation id");
+    let task_candidate_id: String = sqlx::query_scalar(
+        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'observation'",
+    )
+    .bind(&message_observation_id)
     .fetch_one(&context.pool)
     .await
     .expect("candidate id");
@@ -307,6 +473,75 @@ async fn task_candidate_review_reset_removes_active_task_against_postgres() {
             .await
             .expect("candidate state");
     assert_eq!(state, "suggested");
+
+    let exists: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks WHERE task_candidate_id = $1)")
+            .bind(&task_candidate_id)
+            .fetch_one(&context.pool)
+            .await
+            .expect("task exists");
+    assert!(!exists);
+}
+
+#[tokio::test]
+async fn task_candidate_review_confirm_rejects_legacy_non_observation_candidate_against_postgres() {
+    let Some(context) = live_task_candidate_context().await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let task_candidate_id = format!("task_candidate:v1:legacy-non-observation:{suffix}");
+
+    sqlx::query(
+        r#"
+        INSERT INTO task_candidates (
+            task_candidate_id,
+            source_kind,
+            source_id,
+            observation_id,
+            candidate_kind,
+            candidate_metadata,
+            title,
+            confidence,
+            review_state,
+            evidence_excerpt
+        )
+        VALUES (
+            $1,
+            'document',
+            $2,
+            NULL,
+            'task',
+            '{}'::jsonb,
+            $3,
+            0.81,
+            'suggested',
+            $4
+        )
+        "#,
+    )
+    .bind(&task_candidate_id)
+    .bind(format!("legacy-document:{suffix}"))
+    .bind(format!("Legacy activation candidate {suffix}"))
+    .bind(format!("Legacy evidence {suffix}"))
+    .execute(&context.pool)
+    .await
+    .expect("insert legacy task candidate");
+
+    let error = context
+        .store
+        .set_review_state(&TaskCandidateReviewCommand {
+            command_id: format!("task-candidate-legacy-confirm-{suffix}"),
+            task_candidate_id: task_candidate_id.clone(),
+            review_state: TaskCandidateReviewState::UserConfirmed,
+            actor_id: "tests-reviewer".to_owned(),
+        })
+        .await
+        .expect_err("legacy non-observation candidate must be rejected");
+
+    assert!(
+        matches!(error, TaskCandidateError::ObservationRequired(_)),
+        "unexpected error: {error}"
+    );
 
     let exists: bool =
         sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM tasks WHERE task_candidate_id = $1)")

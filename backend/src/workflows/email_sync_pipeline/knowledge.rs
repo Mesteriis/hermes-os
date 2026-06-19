@@ -37,7 +37,10 @@ pub(crate) async fn project_message_knowledge(
 
         for participant in participants {
             let person = person_store
-                .upsert_email_person(&participant.email_address)
+                .upsert_email_person_with_observation(
+                    &participant.email_address,
+                    &message.observation_id,
+                )
                 .await?;
             if seen_persons.insert(person.person_id.clone()) {
                 report.upserted_persons += 1;

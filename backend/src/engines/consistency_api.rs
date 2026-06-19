@@ -1,13 +1,14 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
-
-use crate::app::{ApiError, AppState};
-use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
+use serde_json::json;
 
 use super::consistency::{
-    ContradictionObservation, ContradictionObservationStore, ContradictionReviewState,
+    ContradictionObservation, ContradictionObservationStore, ContradictionReviewService,
+    ContradictionReviewState,
 };
+use crate::app::{ApiError, AppState};
+use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 
 const CONTRADICTION_API_ACTOR_ID: &str = "hermes-frontend";
 const DEFAULT_CONTRADICTION_LIMIT: i64 = 50;
@@ -52,7 +53,6 @@ pub(crate) async fn put_v1_contradiction_review(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::contradiction_review_set(
             CONTRADICTION_API_ACTOR_ID,
@@ -60,13 +60,13 @@ pub(crate) async fn put_v1_contradiction_review(
         ))
         .await?;
 
-    let observation = contradiction_store(&state)?
-        .set_review_state(
-            &observation_id,
-            review_state,
-            CONTRADICTION_API_ACTOR_ID,
-            resolution,
-        )
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let observation = ContradictionReviewService::new(pool)
+        .review_manual(&observation_id, review_state, resolution)
         .await?;
 
     Ok(Json(observation))

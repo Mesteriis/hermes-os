@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, Transaction};
 
-use super::errors::TaskCoreError;
+use super::{TaskCoreError, materialize_task_entity_link_in_transaction};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskEvidence {
@@ -63,6 +65,56 @@ impl TaskEvidenceStore {
         quote: Option<&str>,
         confidence: Option<f64>,
     ) -> Result<TaskEvidence, TaskCoreError> {
+        let mut transaction = self.pool.begin().await?;
+        let evidence = Self::add_in_transaction(
+            &mut transaction,
+            task_id,
+            source_type,
+            source_id,
+            quote,
+            confidence,
+        )
+        .await?;
+
+        if evidence.source_type == "observation" {
+            materialize_task_entity_link_in_transaction(
+                &mut transaction,
+                Some(&evidence.source_id),
+                "task_evidence",
+                &evidence.id,
+                None,
+                None,
+                Some(json!({
+                    "task_id": task_id,
+                })),
+            )
+            .await?;
+            materialize_task_entity_link_in_transaction(
+                &mut transaction,
+                Some(&evidence.source_id),
+                "task",
+                task_id,
+                Some("supports"),
+                Some(evidence.confidence),
+                Some(json!({
+                    "task_evidence_id": evidence.id,
+                })),
+            )
+            .await?;
+        }
+
+        transaction.commit().await?;
+        Ok(evidence)
+    }
+
+    async fn add_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        task_id: &str,
+        source_type: &str,
+        source_id: &str,
+        quote: Option<&str>,
+        confidence: Option<f64>,
+    ) -> Result<TaskEvidence, TaskCoreError> {
         let row = sqlx::query(
             r#"
             INSERT INTO task_evidence (task_id, source_type, source_id, quote, confidence)
@@ -76,7 +128,7 @@ impl TaskEvidenceStore {
         .bind(source_id)
         .bind(quote)
         .bind(confidence.unwrap_or(1.0))
-        .fetch_one(&self.pool)
+        .fetch_one(&mut **transaction)
         .await?;
 
         Ok(TaskEvidence {

@@ -1,7 +1,5 @@
 use chrono::Utc;
 
-use crate::domains::mail::core::CommunicationIngestionStore;
-
 use super::super::errors::TelegramError;
 use super::super::identifiers::{telegram_account_runtime, telegram_text_preview_hash};
 use super::super::models::{
@@ -16,10 +14,7 @@ impl TelegramStore {
         request: &TelegramManualSendRequest,
     ) -> Result<TelegramManualSendResponse, TelegramError> {
         request.validate()?;
-        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let provider_account = self
-            .telegram_provider_account(&communication_store, &request.account_id)
-            .await?;
+        let provider_account = self.telegram_provider_account(&request.account_id).await?;
         let runtime_kind = telegram_account_runtime(&provider_account);
         if runtime_kind != "fixture" {
             return Err(TelegramError::InvalidRequest(

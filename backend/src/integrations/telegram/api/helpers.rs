@@ -1,13 +1,12 @@
 use crate::app::{ApiError, AppState};
-use crate::domains::api_support::{
-    TelegramCapabilitiesResponse, communication_ingestion_store, event_store,
-};
+use crate::domains::api_support::{TelegramCapabilitiesResponse, event_store};
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::client::{TelegramStore, telegram_chat_id};
 use crate::integrations::telegram::runtime::TelegramRuntimeEventBridgeContext;
 use crate::platform::config::AppConfig;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::secrets::SecretReferenceStore;
+use crate::vault::CommunicationProviderAccountStore;
 use serde_json::json;
 
 pub(super) const AUDIT_ACTOR_ID: &str = "hermes-frontend";
@@ -50,8 +49,11 @@ pub(super) async fn ensure_telegram_account_operation_allowed(
     account_id: &str,
     operation: &str,
 ) -> Result<(), ApiError> {
-    let account = communication_ingestion_store(state)?
-        .provider_account(account_id)
+    let Some(pool) = state.database.pool().cloned() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let account = CommunicationProviderAccountStore::new(pool)
+        .get(account_id)
         .await?
         .ok_or_else(|| {
             ApiError::Telegram(TelegramError::InvalidRequest(format!(

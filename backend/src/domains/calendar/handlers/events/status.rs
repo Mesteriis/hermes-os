@@ -17,7 +17,7 @@ pub(crate) async fn post_calendar_event_reschedule(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let event = CalendarEventStore::new(pool)
-        .reschedule(&event_id, req.start_at, req.end_at)
+        .reschedule_manual(&event_id, req.start_at, req.end_at)
         .await?;
     Ok(Json(event))
 }
@@ -32,7 +32,11 @@ pub(crate) async fn post_calendar_event_cancel(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     CalendarEventStore::new(pool)
-        .set_status(&event_id, "cancelled")
+        .set_status_manual(
+            &event_id,
+            "cancelled",
+            "calendar_api.post_calendar_event_cancel",
+        )
         .await?;
     Ok(Json(json!({"cancelled": true})))
 }

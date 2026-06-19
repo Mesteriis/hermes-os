@@ -6,11 +6,13 @@ use sqlx::postgres::PgPool;
 
 use crate::domains::mail::accounts::EmailAccountSetupService;
 use crate::domains::mail::core::{
-    CommunicationIngestionStore, EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose,
+    EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose,
 };
 use crate::integrations::gmail::client::GmailApiClient;
 use crate::platform::secrets::SecretReferenceStore;
-use crate::vault::HostVault;
+use crate::vault::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore, HostVault,
+};
 
 use super::smtp_sender::{LiveSmtpTransport, SmtpOutboxEmailSender, SmtpTransport};
 use super::{
@@ -20,7 +22,9 @@ use super::{
 
 #[derive(Clone)]
 pub struct ProviderOutboxEmailSender<T = LiveSmtpTransport> {
-    communication_store: CommunicationIngestionStore,
+    pool: PgPool,
+    provider_account_store: CommunicationProviderAccountStore,
+    provider_secret_binding_store: CommunicationProviderSecretBindingStore,
     secret_store: SecretReferenceStore,
     vault: HostVault,
     smtp_sender: SmtpOutboxEmailSender<HostVault, T>,
@@ -32,7 +36,11 @@ where
 {
     pub fn new(pool: PgPool, vault: HostVault, smtp_transport: T) -> Self {
         Self {
-            communication_store: CommunicationIngestionStore::new(pool.clone()),
+            pool: pool.clone(),
+            provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
+            provider_secret_binding_store: CommunicationProviderSecretBindingStore::new(
+                pool.clone(),
+            ),
             secret_store: SecretReferenceStore::new(pool.clone()),
             vault: vault.clone(),
             smtp_sender: SmtpOutboxEmailSender::new(pool, vault, smtp_transport),
@@ -51,8 +59,8 @@ where
     {
         Box::pin(async move {
             let account = self
-                .communication_store
-                .provider_account(&item.account_id)
+                .provider_account_store
+                .get(&item.account_id)
                 .await
                 .map_err(|error| delivery_error("provider account lookup failed", error))?
                 .ok_or_else(|| {
@@ -80,8 +88,8 @@ where
         account: &ProviderAccount,
     ) -> Result<OutboxSendReceipt, OutboxDeliveryError> {
         let binding = self
-            .communication_store
-            .provider_account_secret_binding(
+            .provider_secret_binding_store
+            .get_for_account(
                 &account.account_id,
                 ProviderAccountSecretPurpose::OauthToken,
             )
@@ -93,7 +101,7 @@ where
                 )
             })?;
         let account_setup = EmailAccountSetupService::new_with_host_vault(
-            self.communication_store.clone(),
+            self.pool.clone(),
             self.secret_store.clone(),
             self.vault.clone(),
         );

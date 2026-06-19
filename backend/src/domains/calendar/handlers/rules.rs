@@ -39,8 +39,8 @@ pub(crate) async fn post_calendar_rule(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let rule = CalendarRuleStore::new(pool)
-        .create(
+    let rule = CalendarCommandService::new(pool)
+        .create_calendar_rule_manual(
             &req.name,
             req.description.as_deref(),
             req.dsl,
@@ -61,8 +61,8 @@ pub(crate) async fn put_calendar_rule(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let rule = CalendarRuleStore::new(pool)
-        .update(&rule_id, &update)
+    let rule = CalendarCommandService::new(pool)
+        .update_calendar_rule_manual(&rule_id, &update)
         .await
         .map_err(ApiError::from)?;
     Ok(Json(rule))
@@ -77,9 +77,8 @@ pub(crate) async fn delete_calendar_rule(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    CalendarRuleStore::new(pool)
-        .delete(&rule_id)
-        .await
-        .map_err(ApiError::from)?;
+    CalendarCommandService::new(pool)
+        .delete_calendar_rule_manual(&rule_id)
+        .await?;
     Ok(Json(json!({"deleted": true})))
 }

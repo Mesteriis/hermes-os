@@ -84,13 +84,13 @@ pub(crate) fn evidence_excerpt(value: &str) -> String {
 }
 
 pub(crate) fn task_candidate_payload_from_obligation(
-    source_kind: TaskCandidateSourceKind,
-    source_id: &str,
+    observation_id: String,
     candidate: &ObligationCandidate,
 ) -> CandidatePayload {
     CandidatePayload {
-        source_kind,
-        source_id: source_id.to_owned(),
+        source_kind: TaskCandidateSourceKind::Observation,
+        source_id: observation_id.clone(),
+        observation_id: Some(observation_id),
         candidate_kind: TaskCandidateKind::ObligationTask,
         candidate_metadata: json!({
             "engine": "obligation",

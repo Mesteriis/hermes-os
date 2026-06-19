@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
@@ -73,6 +74,19 @@ async fn task_candidates_returns_safe_candidate_payload() {
         "Please review this task",
     )
     .await;
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let document_observation_id: String =
+        sqlx::query_scalar("SELECT observation_id FROM documents WHERE document_id = $1")
+            .bind(&document_id)
+            .fetch_one(&pool)
+            .await
+            .expect("document observation id");
     let _ = store
         .refresh_deterministic_candidates(100)
         .await
@@ -102,14 +116,22 @@ async fn task_candidates_returns_safe_candidate_payload() {
 
     let message_payload = items
         .iter()
-        .find(|item| item["source_id"] == json!(message_id))
+        .find(|item| item["source_id"] == json!(message_observation_id))
         .expect("message payload");
     let document_payload = items
         .iter()
-        .find(|item| item["source_id"] == json!(document_id))
+        .find(|item| item["source_id"] == json!(document_observation_id))
         .expect("document payload");
-    assert_eq!(message_payload["source_kind"], "message");
-    assert_eq!(document_payload["source_kind"], "document");
+    assert_eq!(message_payload["source_kind"], "observation");
+    assert_eq!(document_payload["source_kind"], "observation");
+    assert_eq!(
+        message_payload["observation_id"],
+        json!(message_observation_id)
+    );
+    assert_eq!(
+        document_payload["observation_id"],
+        json!(document_observation_id)
+    );
     assert!(message_payload["evidence_excerpt"].is_string());
     assert!(document_payload["evidence_excerpt"].is_string());
     assert!(message_payload.get("candidate_kind").is_none());
@@ -119,7 +141,7 @@ async fn task_candidates_returns_safe_candidate_payload() {
 }
 
 #[tokio::test]
-async fn put_task_candidate_review_confirms_task() {
+async fn put_task_candidate_review_confirms_task_with_observation_trail() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!(
             "skipping live task candidate review API test: HERMES_TEST_DATABASE_URL is not set"
@@ -147,10 +169,17 @@ async fn put_task_candidate_review_confirms_task() {
         .refresh_deterministic_candidates(100)
         .await
         .expect("refresh candidates");
-    let task_candidate_id: String = sqlx::query_scalar(
-        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'message'",
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
     )
     .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let task_candidate_id: String = sqlx::query_scalar(
+        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'observation'",
+    )
+    .bind(&message_observation_id)
     .fetch_one(&pool)
     .await
     .expect("candidate id");
@@ -187,6 +216,65 @@ async fn put_task_candidate_review_confirms_task() {
             "event_id": format!("task_candidate_review:{command_id}"),
         })
     );
+
+    let review_state: String =
+        sqlx::query_scalar("SELECT review_state FROM task_candidates WHERE task_candidate_id = $1")
+            .bind(&task_candidate_id)
+            .fetch_one(&pool)
+            .await
+            .expect("candidate review state");
+    assert_eq!(review_state, "user_confirmed");
+
+    let link_row = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'tasks'
+           AND entity_kind = 'task_candidate'
+           AND entity_id = $1
+           AND relationship_kind = 'review_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&task_candidate_id)
+    .fetch_one(&pool)
+    .await
+    .expect("task candidate observation link");
+    let observation_id: String = link_row.try_get("observation_id").expect("observation id");
+    let metadata: Value = link_row.try_get("metadata").expect("link metadata");
+    assert_eq!(metadata["review_state"], "user_confirmed");
+    assert_eq!(
+        metadata["event_id"],
+        json!(format!("task_candidate_review:{command_id}"))
+    );
+
+    let observation_row =
+        sqlx::query("SELECT origin_kind, payload FROM observations WHERE observation_id = $1")
+            .bind(&observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("task candidate observation");
+    let origin_kind: String = observation_row.try_get("origin_kind").expect("origin kind");
+    let payload: Value = observation_row.try_get("payload").expect("payload");
+    assert_eq!(origin_kind, "manual");
+    assert_eq!(payload["task_candidate_id"], json!(task_candidate_id));
+    assert_eq!(payload["review_state"], "user_confirmed");
+
+    let review_item: (String, String, String) = sqlx::query_as(
+        r#"
+        SELECT status, target_entity_kind, entity_id
+        FROM review_items
+        WHERE metadata->>'task_candidate_id' = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&task_candidate_id)
+    .fetch_one(&pool)
+    .await
+    .expect("task candidate review item");
+    assert_eq!(review_item.0, "promoted");
+    assert_eq!(review_item.1, "task");
+    assert!(!review_item.2.is_empty());
 }
 
 #[tokio::test]

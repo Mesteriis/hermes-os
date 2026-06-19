@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DecisionEvidenceSourceKind {
+    Observation,
     Communication,
     Document,
     Event,
@@ -15,12 +16,12 @@ pub enum DecisionEvidenceSourceKind {
     Project,
     Organization,
     Persona,
-    RawRecord,
 }
 
 impl DecisionEvidenceSourceKind {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Observation => "observation",
             Self::Communication => "communication",
             Self::Document => "document",
             Self::Event => "event",
@@ -33,7 +34,6 @@ impl DecisionEvidenceSourceKind {
             Self::Project => "project",
             Self::Organization => "organization",
             Self::Persona => "persona",
-            Self::RawRecord => "raw_record",
         }
     }
 }

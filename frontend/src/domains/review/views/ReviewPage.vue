@@ -1,43 +1,128 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useReviewStore } from '../stores/review'
 import Icon from '../../../shared/ui/Icon.vue'
+import type { ReviewItem, ReviewItemPromotionRequest } from '../types/review'
 
 const store = useReviewStore()
+const promoteDrafts = ref<Record<string, ReviewItemPromotionRequest>>({})
 
 onMounted(() => {
-  store.loadAll()
+	void loadReviewWorkspace()
 })
 
+async function loadReviewWorkspace() {
+	await store.loadAll()
+	syncPromoteDrafts()
+}
+
 function relationshipPeer(item: import('../../personas/types/persona').Relationship): string {
-  return `${item.source_entity_kind}:${item.source_entity_id} → ${item.target_entity_kind}:${item.target_entity_id}`
+	return `${item.source_entity_kind}:${item.source_entity_id} → ${item.target_entity_kind}:${item.target_entity_id}`
 }
 
 function decisionEntityLabel(item: import('../../tasks/types/task').Decision): string {
-  if (!item.decided_by_entity_kind || !item.decided_by_entity_id) return 'Unknown'
-  return `${item.decided_by_entity_kind}:${item.decided_by_entity_id}`
+	if (!item.decided_by_entity_kind || !item.decided_by_entity_id) return 'Unknown'
+	return `${item.decided_by_entity_kind}:${item.decided_by_entity_id}`
 }
 
 function obligationEntityLabel(item: import('../../tasks/types/task').Obligation): string {
-  return `${item.obligated_entity_kind}:${item.obligated_entity_id}`
+	return `${item.obligated_entity_kind}:${item.obligated_entity_id}`
 }
 
 function formatItemTime(value: string | null): string {
-  if (!value) return ''
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
-  return new Intl.DateTimeFormat('en', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  }).format(date)
+	if (!value) return ''
+	const date = new Date(value)
+	if (Number.isNaN(date.getTime())) return ''
+	return new Intl.DateTimeFormat('en', {
+		month: 'short',
+		day: 'numeric',
+		hour: '2-digit',
+		minute: '2-digit'
+	}).format(date)
 }
 
 async function handleReview(
-  action: import('../types/review').ReviewWorkspaceItemAction
+	action: import('../types/review').ReviewWorkspaceItemAction
 ) {
-  await store.reviewItem(action)
+	await store.reviewItem(action)
+}
+
+async function syncPromoteDrafts() {
+	store.reviewItems.forEach((item: ReviewItem) => {
+		if (promoteDrafts.value[item.review_item_id]) return
+		promoteDrafts.value[item.review_item_id] = deriveDefaultPromotion(item)
+	})
+}
+
+function deriveDefaultPromotion(item: ReviewItem): ReviewItemPromotionRequest {
+	const defaults: Record<string, ReviewItemPromotionRequest> = {
+		new_person: { target_domain: 'persons', target_entity_kind: 'person', target_entity_id: '' },
+		new_organization: {
+			target_domain: 'organizations',
+			target_entity_kind: 'organization',
+			target_entity_id: ''
+		},
+		potential_task: { target_domain: 'tasks', target_entity_kind: 'task', target_entity_id: '' },
+		potential_obligation: {
+			target_domain: 'obligations',
+			target_entity_kind: 'obligation',
+			target_entity_id: ''
+		},
+		potential_decision: {
+			target_domain: 'decisions',
+			target_entity_kind: 'decision',
+			target_entity_id: ''
+		},
+		potential_relationship: {
+			target_domain: 'relationships',
+			target_entity_kind: 'relationship',
+			target_entity_id: ''
+		},
+		potential_project: {
+			target_domain: 'projects',
+			target_entity_kind: 'project',
+			target_entity_id: ''
+		},
+		knowledge_candidate: {
+			target_domain: 'documents',
+			target_entity_kind: 'document',
+			target_entity_id: `document:review-note:${item.review_item_id}`
+		}
+	}
+	return defaults[item.item_kind] ?? { target_domain: '', target_entity_kind: '', target_entity_id: '' }
+}
+
+function canPromote(item: ReviewItem): boolean {
+	const draft = promoteDrafts.value[item.review_item_id]
+	return !!(
+		draft &&
+		draft.target_domain.trim() &&
+		draft.target_entity_kind.trim() &&
+		draft.target_entity_id.trim() &&
+		store.reviewingItemKey !== `review_item_promote:${item.review_item_id}`
+	)
+}
+
+async function handlePromote(item: ReviewItem) {
+	const draft = promoteDrafts.value[item.review_item_id]
+	if (!draft) return
+	await handleReview({
+		kind: 'review_item_promote',
+		item,
+		promotion: { ...draft }
+	})
+}
+
+function reviewItemButtonPrefix(item: ReviewItem): string {
+	return `review_item:${item.review_item_id}`
+}
+
+function canArchive(item: ReviewItem): boolean {
+	return store.reviewingItemKey !== `review_item_archive:${item.review_item_id}`
+}
+
+function reviewItemKindLabel(itemKind: ReviewItem['item_kind']): string {
+	return itemKind
 }
 </script>
 
@@ -49,7 +134,7 @@ async function handleReview(
         <h2 class="view-title">Review Workspace</h2>
         <p class="view-subtitle">Review and confirm suggested items</p>
       </div>
-      <button type="button" class="ghost-button" @click="store.loadAll()">
+        <button type="button" class="ghost-button" @click="loadReviewWorkspace()">
         <Icon icon="tabler:refresh" />
         Refresh
       </button>
@@ -63,6 +148,10 @@ async function handleReview(
 
     <!-- Metrics -->
     <div class="review-metrics">
+      <div class="metric-card">
+        <span class="metric-value">{{ store.reviewItemsCount }}</span>
+        <span class="metric-label">Review Items</span>
+      </div>
       <div class="metric-card">
         <span class="metric-value">{{ store.totalSuggestedCount }}</span>
         <span class="metric-label">Suggested</span>
@@ -87,6 +176,108 @@ async function handleReview(
 
     <!-- Review Board -->
     <div class="review-board">
+      <!-- Canonical Review Items -->
+      <div class="review-panel">
+        <h3 class="panel-title">
+          <Icon icon="tabler:inbox" />
+          Canonical Inbox
+          <span v-if="store.reviewItemsCount > 0" class="panel-badge">
+            {{ store.reviewItemsCount }}
+          </span>
+        </h3>
+        <div v-if="store.reviewItems.length === 0" class="panel-empty">
+          <p>No canonical review items available</p>
+        </div>
+        <div v-else class="panel-items">
+          <div
+            v-for="item in store.reviewItems.filter((r) => r.status === 'new' || r.status === 'in_review')"
+            :key="item.review_item_id"
+            class="review-item review-item--canonical"
+          >
+            <div class="item-info">
+              <p class="item-desc">{{ item.title }}</p>
+              <p class="item-meta">
+                {{ reviewItemKindLabel(item.item_kind) }} · {{ item.summary }}
+              </p>
+              <p class="item-meta">Confidence: {{ item.confidence.toFixed(2) }}</p>
+            </div>
+            <div class="item-actions item-actions--stacked">
+              <div class="action-row">
+                <button
+                  type="button"
+                  class="action-btn confirm"
+                  :disabled="store.reviewingItemKey === reviewItemButtonPrefix(item)"
+                  @click="handleReview({ kind: 'review_item', item, action: 'approve' })"
+                >
+				<Icon icon="tabler:check" /> Approve
+                </button>
+                <button
+                  v-if="item.status === 'new'"
+                  type="button"
+                  class="action-btn"
+                  :disabled="store.reviewingItemKey === reviewItemButtonPrefix(item)"
+                  @click="handleReview({ kind: 'review_item_take', item })"
+                >
+                  <Icon icon="tabler:player-play" /> Take
+                </button>
+                <span v-else class="status-pill">
+                  status: {{ item.status }}
+                </span>
+                <button
+                  type="button"
+                  class="action-btn reject"
+                  :disabled="store.reviewingItemKey === reviewItemButtonPrefix(item)"
+                  @click="handleReview({ kind: 'review_item', item, action: 'dismiss' })"
+                >
+                  <Icon icon="tabler:x" /> Dismiss
+                </button>
+              </div>
+              <div class="action-row">
+                <input
+                  v-model="promoteDrafts[item.review_item_id].target_domain"
+                  type="text"
+                  class="review-input"
+                  placeholder="target_domain"
+                />
+                <input
+                  v-model="promoteDrafts[item.review_item_id].target_entity_kind"
+                  type="text"
+                  class="review-input"
+                  placeholder="entity_kind"
+                />
+                <input
+                  v-model="promoteDrafts[item.review_item_id].target_entity_id"
+                  type="text"
+                  class="review-input"
+                  placeholder="entity_id"
+                />
+              </div>
+              <div class="action-row">
+                <button
+                  type="button"
+                  class="action-btn promote"
+                  :disabled="!canPromote(item)"
+                  @click="handlePromote(item)"
+                >
+                  <Icon icon="tabler:arrow-up-right" /> Promote
+                </button>
+                <button
+                  type="button"
+                  class="action-btn archive"
+                  :disabled="!canArchive(item)"
+                  @click="handleReview({ kind: 'review_item_archive', item })"
+                >
+                  <Icon icon="tabler:archive" /> Archive
+                </button>
+                <span v-if="item.target_domain" class="status-pill">
+                  promoted: {{ item.target_domain }}/{{ item.target_entity_kind }}/{{ item.target_entity_id }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Relationships -->
       <div class="review-panel">
         <h3 class="panel-title">
@@ -440,6 +631,11 @@ async function handleReview(
   flex-shrink: 0;
 }
 
+.item-actions--stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+
 .action-btn {
   display: inline-flex;
   align-items: center;
@@ -466,5 +662,29 @@ async function handleReview(
 .action-btn.reject:hover:not(:disabled) {
   background: hsl(var(--destructive) / 0.1);
   border-color: hsl(var(--destructive));
+}
+
+.action-row {
+  display: flex;
+  gap: 6px;
+}
+
+.review-input {
+  flex: 1;
+  border-radius: 6px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 12px;
+  padding: 6px;
+}
+
+.status-pill {
+  font-size: 11px;
+  color: hsl(var(--muted-foreground));
+}
+
+.action-btn.promote {
+  margin-top: 4px;
 }
 </style>

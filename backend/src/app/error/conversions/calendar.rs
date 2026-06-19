@@ -7,6 +7,7 @@ use crate::domains::calendar::meetings::MeetingsError;
 use crate::domains::calendar::reminders::ReminderError;
 use crate::domains::calendar::rules::CalendarRuleError;
 use crate::domains::calendar::scheduling::SchedulingError;
+use crate::domains::calendar::service::CalendarCommandServiceError;
 
 impl From<CalendarCoreError> for ApiError {
     fn from(error: CalendarCoreError) -> Self {
@@ -90,6 +91,23 @@ impl From<CalendarError> for ApiError {
                 tracing::error!(error = %error, "calendar operation failed");
                 ApiError::InvalidCommunicationQuery("calendar operation failed")
             }
+        }
+    }
+}
+
+impl From<CalendarCommandServiceError> for ApiError {
+    fn from(error: CalendarCommandServiceError) -> Self {
+        match error {
+            CalendarCommandServiceError::ObservationCapture(source) => {
+                tracing::error!(error = %source, "calendar command observation capture failed");
+                ApiError::InvalidCommunicationQuery("calendar command observation capture failed")
+            }
+            CalendarCommandServiceError::Calendar(source) => ApiError::from(source),
+            CalendarCommandServiceError::CalendarCore(source) => ApiError::from(source),
+            CalendarCommandServiceError::Meetings(source) => ApiError::from(source),
+            CalendarCommandServiceError::Reminder(source) => ApiError::from(source),
+            CalendarCommandServiceError::CalendarRule(source) => ApiError::from(source),
+            CalendarCommandServiceError::Scheduling(source) => ApiError::from(source),
         }
     }
 }

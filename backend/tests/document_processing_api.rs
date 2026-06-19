@@ -274,6 +274,40 @@ async fn post_document_processing_job_retry_requeues_failed_job() {
     );
     assert_eq!(audit_record.4, "document_processing_job");
     assert_eq!(audit_record.5.as_deref(), Some(extract_job.job_id.as_str()));
+
+    let retry_observation_link_count: i64 = query_scalar(
+        "SELECT count(*) FROM observation_links
+         WHERE domain = 'documents'
+           AND entity_kind = 'document_processing_job'
+           AND entity_id = $1
+           AND relationship_kind = 'retry_command'",
+    )
+    .bind(&extract_job.job_id)
+    .fetch_one(&pool)
+    .await
+    .expect("document processing retry observation link count");
+    assert_eq!(retry_observation_link_count, 1);
+    let retry_observation_kind: String = query_scalar(
+        r#"
+        SELECT kinds.code
+        FROM observation_links links
+        JOIN observations observation
+          ON observation.observation_id = links.observation_id
+        JOIN observation_kind_definitions kinds
+          ON kinds.kind_definition_id = observation.kind_definition_id
+        WHERE links.domain = 'documents'
+          AND links.entity_kind = 'document_processing_job'
+          AND links.entity_id = $1
+          AND links.relationship_kind = 'retry_command'
+        ORDER BY links.created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&extract_job.job_id)
+    .fetch_one(&pool)
+    .await
+    .expect("document processing retry observation kind");
+    assert_eq!(retry_observation_kind, "DOCUMENT_PROCESSING_JOB_STATUS");
     quiesce_processing_jobs_for_document(&pool, &document_id).await;
 }
 

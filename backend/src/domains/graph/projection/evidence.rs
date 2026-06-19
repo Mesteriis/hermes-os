@@ -7,18 +7,22 @@ use super::models::MessageRow;
 
 pub(super) fn message_evidence(message: &MessageRow) -> NewGraphEvidence {
     NewGraphEvidence::new(GraphEvidenceSourceKind::Message, message.message_id.clone())
+        .observation_id(message.observation_id.clone())
         .excerpt(message.subject.clone())
         .metadata(json!({
             "raw_record_id": message.raw_record_id,
+            "observation_id": message.observation_id,
             "provider_record_id": message.provider_record_id,
         }))
 }
 
 pub(super) fn project_message_evidence(message: &ProjectMatchedMessage) -> NewGraphEvidence {
     NewGraphEvidence::new(GraphEvidenceSourceKind::Message, message.message_id.clone())
+        .observation_id(message.observation_id.clone())
         .excerpt(message.subject.clone())
         .metadata(json!({
             "raw_record_id": message.raw_record_id,
+            "observation_id": message.observation_id,
             "account_id": message.account_id,
             "provider_record_id": message.provider_record_id,
             "occurred_at": message.occurred_at,

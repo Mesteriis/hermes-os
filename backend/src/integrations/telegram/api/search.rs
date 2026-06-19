@@ -3,7 +3,10 @@ use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 
 use crate::app::{ApiError, AppState};
-use crate::domains::api_support::{communication_ingestion_store, telegram_store};
+use crate::domains::api_support::{
+    communication_provider_account_store, communication_provider_secret_binding_store,
+    telegram_store,
+};
 use crate::integrations::telegram::client::models::TelegramChat;
 use crate::integrations::telegram::runtime::{
     TelegramProviderSearchRequest, TelegramRuntimeOperationContext,
@@ -105,10 +108,12 @@ pub(crate) async fn search_telegram_messages(
     }
 
     if let Some(account_id) = &query.account_id {
-        let communication_store = communication_ingestion_store(&state)?;
+        let provider_account_store = communication_provider_account_store(&state)?;
+        let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
         let secret_store = telegram_secret_store(&state)?;
         let context = TelegramRuntimeOperationContext {
-            communication_store: &communication_store,
+            provider_account_store: &provider_account_store,
+            provider_secret_binding_store: &provider_secret_binding_store,
             telegram_store: &store,
             secret_store: &secret_store,
             secret_resolver: &state.vault,
@@ -178,10 +183,12 @@ pub(crate) async fn search_telegram_messages_provider(
         ));
     }
 
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
     let context = TelegramRuntimeOperationContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         telegram_store: &store,
         secret_store: &secret_store,
         secret_resolver: &state.vault,
@@ -289,10 +296,12 @@ pub(crate) async fn search_telegram_media(
     if let (Some(account_id), Some(search_q)) = (query.account_id.as_deref(), search_q) {
         provider_search_attempted = true;
         source = "provider_refresh".to_owned();
-        let communication_store = communication_ingestion_store(&state)?;
+        let provider_account_store = communication_provider_account_store(&state)?;
+        let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
         let secret_store = telegram_secret_store(&state)?;
         let context = TelegramRuntimeOperationContext {
-            communication_store: &communication_store,
+            provider_account_store: &provider_account_store,
+            provider_secret_binding_store: &provider_secret_binding_store,
             telegram_store: &store,
             secret_store: &secret_store,
             secret_resolver: &state.vault,

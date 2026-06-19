@@ -102,6 +102,7 @@ use crate::domains::calendar::rules::{CalendarRuleError, CalendarRuleStore, Rule
 use crate::domains::calendar::scheduling::{
     DeadlineStore, FocusBlockStore, SchedulingError, SmartSchedulingService,
 };
+use crate::domains::calendar::service::{CalendarCommandService, CalendarCommandServiceError};
 use crate::domains::calendar::sync::{export_event_ics, export_event_md};
 use crate::domains::documents::processing::{
     DocumentProcessingError, DocumentProcessingJob, DocumentProcessingRecord,

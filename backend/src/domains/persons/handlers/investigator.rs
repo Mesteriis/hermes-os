@@ -1,5 +1,4 @@
 use super::support::*;
-
 // ── Person Investigator ────────────────────────────────────────────────────
 
 pub(crate) async fn post_person_investigate(
@@ -12,7 +11,13 @@ pub(crate) async fn post_person_investigate(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let (dossier, snapshot) = PersonInvestigator::new(pool)
-        .assemble_and_cache_dossier(&person_id)
+        .assemble_cache_and_record_refresh(
+            &person_id,
+            "investigate",
+            "persons_api.post_person_investigate",
+            "post_person_investigate",
+            format!("persona://{person_id}/investigate"),
+        )
         .await
         .map_err(ApiError::from)?;
     Ok(Json(dossier_snapshot_response(&dossier, &snapshot)))
@@ -28,7 +33,13 @@ pub(crate) async fn get_person_dossier(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let (dossier, snapshot) = PersonInvestigator::new(pool)
-        .assemble_and_cache_dossier(&person_id)
+        .assemble_cache_and_record_refresh(
+            &person_id,
+            "dossier_read_refresh",
+            "persons_api.get_person_dossier",
+            "get_person_dossier",
+            format!("persona://{person_id}/dossier"),
+        )
         .await
         .map_err(ApiError::from)?;
     Ok(Json(dossier_snapshot_response(&dossier, &snapshot)))
@@ -50,10 +61,9 @@ pub(crate) async fn put_person_dossier_review(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let snapshot = PersonInvestigator::new(pool)
-        .review_dossier_snapshot(&person_id, review_state)
-        .await
-        .map_err(ApiError::from)?;
+    let snapshot = crate::domains::persons::service::PersonCommandService::new(pool)
+        .review_dossier_manual(&person_id, review_state)
+        .await?;
     Ok(Json(dossier_snapshot_only_response(&snapshot)))
 }
 

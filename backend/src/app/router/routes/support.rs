@@ -14,6 +14,7 @@ pub(super) use crate::domains::organizations::handlers::*;
 pub(super) use crate::domains::persons::handlers::*;
 pub(super) use crate::domains::projects::api::*;
 pub(super) use crate::domains::relationships::api::*;
+pub(super) use crate::domains::review::api::*;
 pub(super) use crate::domains::settings::api::*;
 pub(super) use crate::domains::tasks::handlers::*;
 pub(super) use crate::engines::automation_api::*;

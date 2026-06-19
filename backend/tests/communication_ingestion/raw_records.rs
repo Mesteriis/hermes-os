@@ -1,4 +1,5 @@
 use crate::support::*;
+use sqlx::Row;
 
 #[tokio::test]
 async fn communication_ingestion_records_raw_sources_idempotently_against_postgres() {
@@ -59,6 +60,7 @@ async fn communication_ingestion_records_raw_sources_idempotently_against_postgr
         .expect("record duplicate raw source");
 
     assert_eq!(duplicate.raw_record_id, first.raw_record_id);
+    assert_eq!(duplicate.observation_id, first.observation_id);
     assert_eq!(duplicate.payload, first.payload);
 
     let count = sqlx::query_scalar::<_, i64>(
@@ -76,6 +78,48 @@ async fn communication_ingestion_records_raw_sources_idempotently_against_postgr
     .await
     .expect("raw record count");
     assert_eq!(count, 1);
+
+    let observation = sqlx::query(
+        r#"
+        SELECT
+            observation.observation_id,
+            kind.code AS kind_code,
+            observation.source_ref,
+            observation.provenance
+        FROM observations observation
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE observation.observation_id = $1
+        "#,
+    )
+    .bind(&first.observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("canonical raw record observation");
+
+    let kind_code: String = observation.try_get("kind_code").expect("kind code");
+    let source_ref: String = observation.try_get("source_ref").expect("source ref");
+    let provenance: serde_json::Value = observation.try_get("provenance").expect("provenance");
+    assert_eq!(kind_code, "COMMUNICATION_MESSAGE");
+    assert_eq!(
+        source_ref,
+        format!("communication://{account_id}/email_message/{provider_record_id}")
+    );
+    assert_eq!(provenance["communication_raw_record"], json!(true));
+    assert_eq!(provenance["raw_record_id"], json!(first.raw_record_id));
+
+    let observation_count = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT count(*)
+        FROM observations
+        WHERE source_ref = $1
+        "#,
+    )
+    .bind(&source_ref)
+    .fetch_one(&pool)
+    .await
+    .expect("raw record observation count");
+    assert_eq!(observation_count, 1);
 
     let mutation = sqlx::query(
         "UPDATE communication_raw_records SET payload = '{}'::jsonb WHERE raw_record_id = $1",

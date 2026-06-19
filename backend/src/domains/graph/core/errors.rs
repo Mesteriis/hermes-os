@@ -8,6 +8,12 @@ pub enum GraphStoreError {
     #[error("{0} must not be empty")]
     EmptyField(&'static str),
 
+    #[error("graph evidence source kind `{source_kind}` requires observation_id")]
+    MissingObservationEvidence { source_kind: &'static str },
+
+    #[error("observation graph evidence must use the same source_id and observation_id")]
+    ObservationSourceMismatch,
+
     #[error("{0} must be a JSON object")]
     InvalidJsonObject(&'static str),
 

@@ -5,11 +5,12 @@ use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
-    RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
+    RelationshipStore,
 };
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
-use super::errors::TaskCoreError;
+use super::{TaskCoreError, materialize_task_entity_link_in_transaction};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskRelation {
@@ -69,12 +70,13 @@ impl TaskRelationStore {
         entity_type: &str,
         entity_id: &str,
         relation_type: &str,
+        source: &str,
     ) -> Result<TaskRelation, TaskCoreError> {
         let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
-            INSERT INTO task_relations (task_id, entity_type, entity_id, relation_type)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO task_relations (task_id, entity_type, entity_id, relation_type, source)
+            VALUES ($1, $2, $3, $4, $5)
             ON CONFLICT DO NOTHING
             RETURNING id::text, task_id, entity_type, entity_id, relation_type,
                       source, confidence::float8 AS confidence, created_at
@@ -84,6 +86,7 @@ impl TaskRelationStore {
         .bind(entity_type)
         .bind(entity_id)
         .bind(relation_type)
+        .bind(source)
         .fetch_one(&mut *transaction)
         .await?;
         let relation = TaskRelation {
@@ -97,10 +100,41 @@ impl TaskRelationStore {
             created_at: row.try_get("created_at")?,
         };
 
+        Self::materialize_observation_link_in_transaction(&mut transaction, &relation).await?;
         Self::materialize_relationship_in_transaction(&mut transaction, &relation).await?;
         transaction.commit().await?;
 
         Ok(relation)
+    }
+
+    async fn materialize_observation_link_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        relation: &TaskRelation,
+    ) -> Result<(), TaskCoreError> {
+        let Some(observation_id) = relation
+            .source
+            .strip_prefix("observation:")
+            .filter(|value| !value.is_empty())
+        else {
+            return Ok(());
+        };
+
+        materialize_task_entity_link_in_transaction(
+            transaction,
+            Some(observation_id),
+            "task_relation",
+            &relation.id,
+            None,
+            None,
+            Some(json!({
+                "task_id": relation.task_id,
+                "entity_type": relation.entity_type,
+                "entity_id": relation.entity_id,
+            })),
+        )
+        .await?;
+
+        Ok(())
     }
 
     async fn materialize_relationship_in_transaction(
@@ -129,19 +163,42 @@ impl TaskRelationStore {
                 "entity_type": relation.entity_type
             }),
         };
-        let evidence = NewRelationshipEvidence::new(
-            RelationshipEvidenceSourceKind::RawRecord,
-            relation.id.clone(),
-        )
-        .excerpt("Task relation was recorded through compatibility task relation data.")
-        .metadata(json!({
-            "compatibility_table": "task_relations",
-            "task_id": relation.task_id,
-            "entity_type": relation.entity_type,
-            "entity_id": relation.entity_id,
-            "relation_type": relation.relation_type,
-            "source": relation.source
-        }));
+        let observation_id = {
+            let observation = ObservationStore::capture_in_transaction(
+                transaction,
+                &NewObservation::new(
+                    "TASK_MUTATION",
+                    ObservationOriginKind::LocalRuntime,
+                    Utc::now(),
+                    json!({
+                        "component": "task_relation",
+                        "task_id": relation.task_id,
+                        "relation_id": relation.id,
+                        "entity_type": relation.entity_type,
+                        "entity_id": relation.entity_id,
+                        "relation_type": relation.relation_type,
+                        "source": relation.source,
+                    }),
+                    format!("task-relation://{}/{}", relation.task_id, relation.id),
+                )
+                .provenance(json!({
+                    "pipeline": "task_relation_materialization",
+                    "relation_id": relation.id,
+                })),
+            )
+            .await?;
+            observation.observation_id
+        };
+        let evidence = NewRelationshipEvidence::observation(observation_id)
+            .excerpt("Task relation was recorded through compatibility task relation data.")
+            .metadata(json!({
+                "compatibility_table": "task_relations",
+                "task_id": relation.task_id,
+                "entity_type": relation.entity_type,
+                "entity_id": relation.entity_id,
+                "relation_type": relation.relation_type,
+                "source": relation.source
+            }));
 
         RelationshipStore::upsert_with_evidence_in_transaction(
             transaction,

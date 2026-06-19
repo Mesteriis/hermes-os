@@ -1,13 +1,71 @@
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 
 use super::ids::new_version_id;
 use crate::integrations::telegram::client::errors::TelegramError;
+use crate::integrations::telegram::client::evidence::link_telegram_entity_in_transaction;
 use crate::integrations::telegram::client::models::TelegramMessage;
 use crate::integrations::telegram::client::models::messages::TelegramMessageVersion;
 use crate::integrations::telegram::client::rows::row_to_telegram_message_version;
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+
+async fn capture_message_version_observation_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    version: &TelegramMessageVersion,
+    relationship_kind: &str,
+    actor: &str,
+) -> Result<(), TelegramError> {
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            "TELEGRAM_MESSAGE_VERSION",
+            ObservationOriginKind::LocalRuntime,
+            version.created_at,
+            json!({
+                "version_id": version.version_id,
+                "message_id": version.message_id,
+                "account_id": version.account_id,
+                "provider_message_id": version.provider_message_id,
+                "provider_chat_id": version.provider_chat_id,
+                "version_number": version.version_number,
+                "body_text": version.body_text,
+                "edit_timestamp": version.edit_timestamp,
+                "source_event": version.source_event,
+                "raw_diff_payload": version.raw_diff_payload,
+                "provenance": version.provenance,
+                "operation": relationship_kind,
+            }),
+            format!(
+                "telegram-message-version://{}/{}",
+                version.version_id, relationship_kind
+            ),
+        )
+        .provenance(json!({
+            "captured_by": actor,
+            "operation": relationship_kind,
+            "provider": "telegram",
+        })),
+    )
+    .await?;
+    link_telegram_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "message_version",
+        version.version_id.clone(),
+        relationship_kind,
+        json!({
+            "message_id": version.message_id,
+            "account_id": version.account_id,
+            "provider_message_id": version.provider_message_id,
+            "provider_chat_id": version.provider_chat_id,
+            "version_number": version.version_number,
+        }),
+    )
+    .await?;
+    Ok(())
+}
 
 #[allow(clippy::too_many_arguments)]
 pub async fn insert_message_version(
@@ -24,13 +82,15 @@ pub async fn insert_message_version(
     provenance: Value,
 ) -> Result<TelegramMessageVersion, TelegramError> {
     let version_id = new_version_id();
-    sqlx::query(
+    let mut transaction = pool.begin().await?;
+    let row = sqlx::query(
         r#"
         INSERT INTO telegram_message_versions
             (version_id, message_id, account_id, provider_message_id, provider_chat_id,
              version_number, body_text, edit_timestamp, source_event,
              raw_diff_payload, provenance)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        RETURNING *
         "#,
     )
     .bind(&version_id)
@@ -44,15 +104,19 @@ pub async fn insert_message_version(
     .bind(source_event)
     .bind(&raw_diff)
     .bind(&provenance)
-    .execute(pool)
+    .fetch_one(&mut *transaction)
     .await?;
 
-    let row = sqlx::query("SELECT * FROM telegram_message_versions WHERE version_id = $1")
-        .bind(&version_id)
-        .fetch_one(pool)
-        .await?;
-
-    row_to_telegram_message_version(row)
+    let version = row_to_telegram_message_version(row)?;
+    capture_message_version_observation_in_transaction(
+        &mut transaction,
+        &version,
+        "insert",
+        "telegram.client.lifecycle.message_versions.insert_message_version",
+    )
+    .await?;
+    transaction.commit().await?;
+    Ok(version)
 }
 
 pub async fn list_message_versions(

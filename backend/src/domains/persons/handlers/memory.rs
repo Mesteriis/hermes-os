@@ -36,22 +36,23 @@ pub(crate) async fn post_person_fact(
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonFactRequest>,
 ) -> Result<Json<crate::domains::persons::memory::PersonFact>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let fact = PersonFactStore::new(pool)
-        .upsert(
-            &person_id,
-            &req.fact_type,
-            &req.value,
-            req.source.as_deref().unwrap_or("manual"),
-            req.confidence.unwrap_or(1.0),
-        )
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(fact))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .upsert_person_fact_manual(
+                &person_id,
+                &req.fact_type,
+                &req.value,
+                requested_source,
+                req.confidence.unwrap_or(1.0),
+            )
+            .await?,
+    ))
 }
 
 // ── Person Memory Cards ─────────────────────────────────────────────────────
@@ -90,22 +91,23 @@ pub(crate) async fn post_person_memory_card(
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonMemoryCardRequest>,
 ) -> Result<Json<crate::domains::persons::memory::PersonMemoryCard>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let card = PersonMemoryCardStore::new(pool)
-        .upsert(
-            &person_id,
-            &req.title,
-            &req.description,
-            req.source.as_deref().unwrap_or("manual"),
-            req.importance.unwrap_or(5),
-        )
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(card))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .upsert_person_memory_card_manual(
+                &person_id,
+                &req.title,
+                &req.description,
+                requested_source,
+                req.importance.unwrap_or(5),
+            )
+            .await?,
+    ))
 }
 
 // ── Person Preferences ──────────────────────────────────────────────────────
@@ -143,21 +145,22 @@ pub(crate) async fn post_person_preference(
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonPreferenceRequest>,
 ) -> Result<Json<crate::domains::persons::memory::PersonPreference>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let pref = PersonPreferenceStore::new(pool)
-        .upsert(
-            &person_id,
-            &req.preference_type,
-            &req.value,
-            req.source.as_deref().unwrap_or("manual"),
-        )
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(pref))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .upsert_person_preference_manual(
+                &person_id,
+                &req.preference_type,
+                &req.value,
+                requested_source,
+            )
+            .await?,
+    ))
 }
 
 // ── Relationship Timeline ───────────────────────────────────────────────────
@@ -199,9 +202,9 @@ pub(crate) async fn post_relationship_event(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let event = RelationshipEventStore::new(pool)
-        .add(&NewRelationshipEvent { person_id, ..req })
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(event))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .add_relationship_event_manual(&NewRelationshipEvent { person_id, ..req })
+            .await?,
+    ))
 }

@@ -1,6 +1,7 @@
 use serde_json::Value;
 
 use super::MessageProjectionStore;
+use crate::domains::mail::evidence::link_mail_entity_in_transaction;
 use crate::domains::mail::messages::errors::MessageProjectionError;
 use crate::domains::mail::messages::models::ProjectedMessage;
 use crate::domains::mail::messages::rows::row_to_projected_message;
@@ -29,7 +30,7 @@ impl MessageProjectionStore {
                 projected_at = now()
             WHERE message_id = $1
             RETURNING
-                message_id, raw_record_id, account_id, provider_record_id,
+                message_id, raw_record_id, observation_id, account_id, provider_record_id,
                 subject, sender, recipients, body_text,
                 occurred_at, projected_at, channel_kind, conversation_id,
                 sender_display_name, delivery_state, message_metadata,
@@ -54,15 +55,34 @@ impl MessageProjectionStore {
         message_id: &str,
         metadata: &Value,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
+        self.set_message_metadata_with_observation(
+            message_id,
+            metadata,
+            None,
+            "message_flag_update",
+            None,
+        )
+        .await
+    }
+
+    pub async fn set_message_metadata_with_observation(
+        &self,
+        message_id: &str,
+        metadata: &Value,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        link_metadata: Option<Value>,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
         validate_non_empty("message_id", message_id)?;
         if !metadata.is_object() {
             return Err(MessageProjectionError::InvalidMessageMetadata);
         }
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"UPDATE communication_messages SET message_metadata = $2, projected_at = now()
             WHERE message_id = $1
             RETURNING
-                message_id, raw_record_id, account_id, provider_record_id,
+                message_id, raw_record_id, observation_id, account_id, provider_record_id,
                 subject, sender, recipients, body_text,
                 occurred_at, projected_at, channel_kind, conversation_id,
                 sender_display_name, delivery_state, message_metadata,
@@ -72,11 +92,25 @@ impl MessageProjectionStore {
         )
         .bind(message_id.trim())
         .bind(metadata)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
         let Some(row) = row else {
             return Err(MessageProjectionError::MessageNotFound);
         };
-        row_to_projected_message(row)
+        let message = row_to_projected_message(row)?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "communication_message",
+                message.message_id.clone(),
+                relationship_kind,
+                serde_json::json!({}),
+                link_metadata,
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok(message)
     }
 }

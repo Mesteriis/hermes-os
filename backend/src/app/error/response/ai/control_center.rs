@@ -33,6 +33,15 @@ pub(super) fn control_center_error_parts(error: AiControlCenterError) -> ErrorPa
             error.to_string(),
             false,
         ),
+        AiControlCenterError::ObservationStore(error) => {
+            tracing::error!(error = %error, "AI control center observation trail operation failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ai_control_center_observation_error",
+                "AI control center observation trail operation failed".to_owned(),
+                false,
+            )
+        }
         AiControlCenterError::SecretReference(error) => {
             tracing::error!(error = %error, "AI control center secret reference operation failed");
             (

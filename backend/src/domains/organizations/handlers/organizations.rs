@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use crate::app::{ApiError, AppState};
 use crate::domains::organizations::api::{Organization, OrganizationStore, OrganizationUpdate};
+use crate::domains::organizations::service::OrganizationCommandService;
 
 use super::support::database_pool;
 
@@ -41,8 +42,8 @@ pub(crate) async fn post_organization(
     Json(req): Json<NewOrganizationRequest>,
 ) -> Result<Json<Organization>, ApiError> {
     let pool = database_pool(&state)?;
-    let org = OrganizationStore::new(pool)
-        .create(&req.display_name, req.org_type.as_deref())
+    let org = OrganizationCommandService::new(pool)
+        .create_organization_manual(&req.display_name, req.org_type.as_deref())
         .await?;
     Ok(Json(org))
 }
@@ -65,8 +66,8 @@ pub(crate) async fn put_organization(
     Json(update): Json<OrganizationUpdate>,
 ) -> Result<Json<Organization>, ApiError> {
     let pool = database_pool(&state)?;
-    let org = OrganizationStore::new(pool)
-        .update(&org_id, &update)
+    let org = OrganizationCommandService::new(pool)
+        .update_organization_manual(&org_id, &update)
         .await?;
     Ok(Json(org))
 }
@@ -110,6 +111,8 @@ pub(crate) async fn post_organization_archive(
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    OrganizationStore::new(pool).archive(&org_id).await?;
+    OrganizationCommandService::new(pool)
+        .archive_organization_manual(&org_id)
+        .await?;
     Ok(Json(json!({"archived": true})))
 }

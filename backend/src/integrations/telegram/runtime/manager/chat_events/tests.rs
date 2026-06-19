@@ -7,7 +7,7 @@ use super::{
     publish_chat_position_event, publish_chat_unread_event,
 };
 use crate::domains::mail::core::EmailProviderKind;
-use crate::domains::mail::core::{CommunicationIngestionStore, NewProviderAccount};
+use crate::domains::mail::core::NewProviderAccount;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::{
     NewTelegramChat, TelegramChatKind, TelegramSyncState,
@@ -19,6 +19,7 @@ use crate::integrations::telegram::tdjson::{
 };
 use crate::platform::events::EventBus;
 use crate::platform::events::bus::telegram_event_types;
+use crate::vault::CommunicationProviderAccountStore;
 
 #[cfg(test)]
 mod archive_reconciliation;
@@ -32,8 +33,8 @@ async fn seed_chat(
     account_id: &str,
     provider_chat_id: &str,
 ) -> Result<TelegramChat, TelegramError> {
-    CommunicationIngestionStore::new(pool.clone())
-        .upsert_provider_account(&NewProviderAccount::new(
+    CommunicationProviderAccountStore::new(pool.clone())
+        .upsert(&NewProviderAccount::new(
             account_id,
             EmailProviderKind::TelegramUser,
             "Runtime Chat Account",

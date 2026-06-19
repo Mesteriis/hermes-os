@@ -1,12 +1,15 @@
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use serde_json::json;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 
 use super::errors::TelegramError;
+use super::evidence::link_telegram_entity_in_transaction;
+use super::lifecycle::mark_command_reconciled;
 use super::models::messages::TelegramProviderWriteCommand;
 use super::models::{NewTelegramChatParticipant, TelegramChatMember};
 use super::rows::row_to_telegram_provider_write_command;
 use super::validation::validate_chat_list_limit;
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
 fn row_to_provider_member(row: sqlx::postgres::PgRow) -> Result<TelegramChatMember, TelegramError> {
     Ok(TelegramChatMember {
@@ -26,11 +29,77 @@ fn row_to_provider_member(row: sqlx::postgres::PgRow) -> Result<TelegramChatMemb
     })
 }
 
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn capture_chat_participant_observation_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    telegram_chat_id: &str,
+    account_id: &str,
+    provider_chat_id: &str,
+    member: &TelegramChatMember,
+    raw_payload: &serde_json::Value,
+    relationship_kind: &str,
+    actor: &str,
+    observed_at: DateTime<Utc>,
+) -> Result<(), TelegramError> {
+    let entity_id = format!("{telegram_chat_id}:{}", member.provider_member_id);
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            "TELEGRAM_CHAT_PARTICIPANT",
+            ObservationOriginKind::LocalRuntime,
+            observed_at,
+            json!({
+                "telegram_chat_id": telegram_chat_id,
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+                "provider_member_id": member.provider_member_id,
+                "display_name": member.sender_display_name,
+                "username": member.username,
+                "role": member.role,
+                "status": member.status,
+                "is_admin": member.is_admin,
+                "is_owner": member.is_owner,
+                "permissions": member.permissions,
+                "source": member.source,
+                "observed_at": member.observed_at,
+                "raw_payload": raw_payload,
+                "operation": relationship_kind,
+            }),
+            format!("telegram-chat-participant://{entity_id}/{relationship_kind}"),
+        )
+        .provenance(json!({
+            "captured_by": actor,
+            "operation": relationship_kind,
+            "provider": "telegram",
+        })),
+    )
+    .await?;
+    link_telegram_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "chat_participant",
+        entity_id,
+        relationship_kind,
+        json!({
+            "telegram_chat_id": telegram_chat_id,
+            "account_id": account_id,
+            "provider_chat_id": provider_chat_id,
+            "provider_member_id": member.provider_member_id,
+            "role": member.role,
+            "status": member.status,
+            "source": member.source,
+        }),
+    )
+    .await?;
+    Ok(())
+}
+
 pub async fn upsert_chat_participant(
     pool: &PgPool,
     participant: &NewTelegramChatParticipant,
 ) -> Result<TelegramChatMember, TelegramError> {
     let now = Utc::now();
+    let mut transaction = pool.begin().await?;
     let row = sqlx::query(
         r#"
         INSERT INTO telegram_chat_participants (
@@ -73,11 +142,25 @@ pub async fn upsert_chat_participant(
     .bind(&participant.raw_payload)
     .bind(&participant.source)
     .bind(now)
-    .fetch_one(pool)
+    .fetch_one(&mut *transaction)
     .await
     .map_err(TelegramError::from)?;
 
-    row_to_provider_member(row)
+    let member = row_to_provider_member(row)?;
+    capture_chat_participant_observation_in_transaction(
+        &mut transaction,
+        &participant.telegram_chat_id,
+        &participant.account_id,
+        &participant.provider_chat_id,
+        &member,
+        &participant.raw_payload,
+        "upsert",
+        "telegram.client.participants.upsert_chat_participant",
+        member.observed_at.unwrap_or(now),
+    )
+    .await?;
+    transaction.commit().await?;
+    Ok(member)
 }
 
 pub fn telegram_self_provider_member_id(external_account_id: &str) -> Option<String> {
@@ -135,20 +218,8 @@ pub async fn reconcile_join_commands_from_provider_roster_with_source(
     });
     let rows = sqlx::query(
         r#"
-        UPDATE telegram_provider_write_commands
-        SET status = 'completed',
-            result_payload = $4,
-            last_error = NULL,
-            provider_observed_at = $3,
-            provider_state = $5,
-            reconciliation_status = 'observed',
-            reconciled_at = $3,
-            completed_at = $3,
-            locked_at = NULL,
-            locked_by = NULL,
-            next_attempt_at = NULL,
-            dead_lettered_at = NULL,
-            updated_at = $3
+        SELECT *
+        FROM telegram_provider_write_commands
         WHERE account_id = $1
           AND provider_chat_id = $2
           AND command_kind = 'join'
@@ -156,21 +227,30 @@ pub async fn reconcile_join_commands_from_provider_roster_with_source(
           AND provider_message_id IS NULL
           AND confirmation_decision IN ('confirmed', 'not_required')
           AND capability_state IN ('available', 'degraded')
-        RETURNING *
+        ORDER BY happened_at ASC
         "#,
     )
     .bind(account_id)
     .bind(provider_chat_id)
-    .bind(observed_at)
-    .bind(&result_payload)
-    .bind(&provider_state)
     .fetch_all(pool)
     .await
     .map_err(TelegramError::from)?;
 
-    rows.into_iter()
-        .map(row_to_telegram_provider_write_command)
-        .collect()
+    let mut reconciled = Vec::new();
+    for row in rows {
+        let command = row_to_telegram_provider_write_command(row)?;
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                provider_state.clone(),
+                result_payload.clone(),
+            )
+            .await?,
+        );
+    }
+    Ok(reconciled)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -229,20 +309,8 @@ pub async fn reconcile_leave_commands_from_provider_roster_with_source(
     });
     let rows = sqlx::query(
         r#"
-        UPDATE telegram_provider_write_commands
-        SET status = 'completed',
-            result_payload = $4,
-            last_error = NULL,
-            provider_observed_at = $3,
-            provider_state = $5,
-            reconciliation_status = 'observed',
-            reconciled_at = $3,
-            completed_at = $3,
-            locked_at = NULL,
-            locked_by = NULL,
-            next_attempt_at = NULL,
-            dead_lettered_at = NULL,
-            updated_at = $3
+        SELECT *
+        FROM telegram_provider_write_commands
         WHERE account_id = $1
           AND provider_chat_id = $2
           AND command_kind = 'leave'
@@ -250,21 +318,30 @@ pub async fn reconcile_leave_commands_from_provider_roster_with_source(
           AND provider_message_id IS NULL
           AND confirmation_decision IN ('confirmed', 'not_required')
           AND capability_state IN ('available', 'degraded')
-        RETURNING *
+        ORDER BY happened_at ASC
         "#,
     )
     .bind(account_id)
     .bind(provider_chat_id)
-    .bind(observed_at)
-    .bind(&result_payload)
-    .bind(&provider_state)
     .fetch_all(pool)
     .await
     .map_err(TelegramError::from)?;
 
-    rows.into_iter()
-        .map(row_to_telegram_provider_write_command)
-        .collect()
+    let mut reconciled = Vec::new();
+    for row in rows {
+        let command = row_to_telegram_provider_write_command(row)?;
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                provider_state.clone(),
+                result_payload.clone(),
+            )
+            .await?,
+        );
+    }
+    Ok(reconciled)
 }
 
 pub async fn reconcile_leave_commands_from_exhaustive_absence(
@@ -376,20 +453,8 @@ pub async fn reconcile_participant_commands_from_message_evidence(
     });
     let rows = sqlx::query(
         r#"
-        UPDATE telegram_provider_write_commands
-        SET status = 'completed',
-            result_payload = $5,
-            last_error = NULL,
-            provider_observed_at = $4,
-            provider_state = $6,
-            reconciliation_status = 'observed',
-            reconciled_at = $4,
-            completed_at = $4,
-            locked_at = NULL,
-            locked_by = NULL,
-            next_attempt_at = NULL,
-            dead_lettered_at = NULL,
-            updated_at = $4
+        SELECT *
+        FROM telegram_provider_write_commands
         WHERE account_id = $1
           AND provider_chat_id = $2
           AND command_kind = $3
@@ -398,22 +463,32 @@ pub async fn reconcile_participant_commands_from_message_evidence(
           AND confirmation_decision IN ('confirmed', 'not_required')
           AND capability_state IN ('available', 'degraded')
           AND happened_at <= $4
-        RETURNING *
+        ORDER BY happened_at ASC
         "#,
     )
     .bind(account_id)
     .bind(provider_chat_id)
     .bind(&lifecycle.command_kind)
     .bind(observed_at)
-    .bind(&result_payload)
-    .bind(&provider_state)
     .fetch_all(pool)
     .await
     .map_err(TelegramError::from)?;
 
-    rows.into_iter()
-        .map(row_to_telegram_provider_write_command)
-        .collect()
+    let mut reconciled = Vec::new();
+    for row in rows {
+        let command = row_to_telegram_provider_write_command(row)?;
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                provider_state.clone(),
+                result_payload.clone(),
+            )
+            .await?,
+        );
+    }
+    Ok(reconciled)
 }
 
 pub async fn provider_roster_exists(
@@ -553,115 +628,4 @@ fn is_numeric_id(value: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    use serde_json::json;
-
-    use super::{
-        TelegramChatMember, inactive_roster_membership_state, tdlib_self_membership_lifecycle,
-        telegram_self_provider_member_id,
-    };
-
-    #[test]
-    fn derives_self_provider_member_id_only_from_numeric_telegram_identity() {
-        assert_eq!(
-            telegram_self_provider_member_id("telegram:12345").as_deref(),
-            Some("user:12345")
-        );
-        assert_eq!(
-            telegram_self_provider_member_id("user:456").as_deref(),
-            Some("user:456")
-        );
-        assert_eq!(telegram_self_provider_member_id("fixture-user"), None);
-        assert_eq!(
-            telegram_self_provider_member_id("telegram:not-numeric"),
-            None
-        );
-    }
-
-    #[test]
-    fn parses_self_leave_and_join_membership_evidence_from_tdlib_service_messages() {
-        let leave = tdlib_self_membership_lifecycle(
-            "telegram:42",
-            &json!({
-                "content": {
-                    "@type": "messageChatDeleteMember",
-                    "user_id": 42
-                }
-            }),
-        )
-        .expect("leave lifecycle");
-        assert_eq!(leave.command_kind, "leave");
-        assert_eq!(leave.provider_member_id, "user:42");
-        assert_eq!(leave.observed_via, "tdlib.messageChatDeleteMember");
-        assert_eq!(leave.membership_state, "left");
-
-        let join = tdlib_self_membership_lifecycle(
-            "telegram:42",
-            &json!({
-                "content": {
-                    "@type": "messageChatAddMembers",
-                    "member_user_ids": [1, 42, 9]
-                }
-            }),
-        )
-        .expect("join lifecycle");
-        assert_eq!(join.command_kind, "join");
-        assert_eq!(join.provider_member_id, "user:42");
-        assert_eq!(join.observed_via, "tdlib.messageChatAddMembers");
-        assert_eq!(join.membership_state, "present");
-    }
-
-    #[test]
-    fn ignores_service_messages_for_other_members_or_unsupported_content() {
-        assert!(
-            tdlib_self_membership_lifecycle(
-                "telegram:42",
-                &json!({
-                    "content": {
-                        "@type": "messageChatDeleteMember",
-                        "user_id": 7
-                    }
-                }),
-            )
-            .is_none()
-        );
-        assert!(
-            tdlib_self_membership_lifecycle(
-                "telegram:42",
-                &json!({
-                    "content": {
-                        "@type": "messageChatJoinByLink"
-                    }
-                }),
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn derives_inactive_roster_membership_state_from_status_or_role() {
-        let member = TelegramChatMember {
-            sender_id: "user:42".to_owned(),
-            sender_display_name: None,
-            message_count: 0,
-            last_message_at: None,
-            source: "tdlib".to_owned(),
-            provider_member_id: "user:42".to_owned(),
-            username: None,
-            role: Some("member".to_owned()),
-            status: Some("left".to_owned()),
-            is_admin: false,
-            is_owner: false,
-            permissions: json!({}),
-            observed_at: None,
-        };
-        assert_eq!(inactive_roster_membership_state(&member), Some("left"));
-
-        let banned = TelegramChatMember {
-            status: Some("administrator".to_owned()),
-            role: Some("banned".to_owned()),
-            ..member
-        };
-        assert_eq!(inactive_roster_membership_state(&banned), Some("banned"));
-    }
-}
+mod tests;

@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use crate::app::{ApiError, AppState};
 use crate::domains::organizations::health::{OrgHealthStore, OrgRisk, OrgRiskStore};
+use crate::domains::organizations::service::OrganizationCommandService;
 
 use super::support::database_pool;
 
@@ -42,9 +43,8 @@ pub(crate) async fn post_org_watchlist_toggle(
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let on = OrgHealthStore::new(pool)
-        .toggle_watchlist(&org_id)
-        .await
-        .map_err(ApiError::from)?;
+    let on = OrganizationCommandService::new(pool)
+        .toggle_watchlist_manual(&org_id)
+        .await?;
     Ok(Json(json!({"watchlist": on})))
 }

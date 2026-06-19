@@ -4,13 +4,26 @@ use super::models::{ImportedCommunicationAttachment, NewCommunicationAttachmentI
 use super::rows::{row_to_imported_attachment, row_to_mail_blob};
 use super::store::MailStorageStore;
 use super::validation::validate_non_empty;
+use crate::domains::mail::evidence::link_mail_entity_in_transaction;
 
 impl MailStorageStore {
     pub async fn upsert_imported_attachment(
         &self,
         import: &NewCommunicationAttachmentImport,
     ) -> Result<ImportedCommunicationAttachment, MailStorageError> {
+        self.upsert_imported_attachment_with_observation(import, None, "attachment_import", None)
+            .await
+    }
+
+    pub async fn upsert_imported_attachment_with_observation(
+        &self,
+        import: &NewCommunicationAttachmentImport,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<ImportedCommunicationAttachment, MailStorageError> {
         let import = import.validate()?;
+        let mut transaction = self.pool.begin().await?;
         sqlx::query(imported_attachment_upsert_sql())
             .bind(&import.attachment_id)
             .bind(&import.account_id)
@@ -28,12 +41,37 @@ impl MailStorageStore {
             .bind(&import.scan_report.summary)
             .bind(&import.scan_report.metadata)
             .bind(&import.metadata)
-            .execute(&self.pool)
+            .execute(&mut *transaction)
             .await?;
 
-        self.imported_attachment_by_id(&import.attachment_id)
-            .await?
-            .ok_or_else(|| MailStorageError::Sqlx(sqlx::Error::RowNotFound))
+        let sql = imported_attachment_select_sql("i.attachment_id = $1");
+        let row = sqlx::query(&sql)
+            .bind(&import.attachment_id)
+            .fetch_optional(&mut *transaction)
+            .await?;
+        let imported = row
+            .map(row_to_imported_attachment)
+            .transpose()?
+            .ok_or_else(|| MailStorageError::Sqlx(sqlx::Error::RowNotFound))?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "attachment_import",
+                imported.attachment_id.clone(),
+                relationship_kind,
+                serde_json::json!({
+                    "blob_id": imported.blob_id,
+                    "scan_status": imported.scan_status.as_str(),
+                    "content_type": imported.content_type,
+                    "sha256": imported.sha256,
+                }),
+                metadata,
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok(imported)
     }
 
     pub async fn imported_attachment_by_id(

@@ -15,6 +15,7 @@ pub struct EmailSyncPipelineReport {
     pub upserted_organizations: usize,
     pub upserted_organization_contact_links: usize,
     pub refreshed_decision_candidates: usize,
+    pub refreshed_knowledge_candidates: usize,
     pub refreshed_task_candidates: usize,
     pub checkpoint_saved: bool,
 }

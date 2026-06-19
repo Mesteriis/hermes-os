@@ -1,7 +1,10 @@
 use sqlx::Row;
+use sqlx::Transaction;
 use sqlx::postgres::PgRow;
+use sqlx::postgres::Postgres;
 
 use super::errors::ConsistencyError;
+use crate::platform::observations::{ObservationStoreError, link_domain_entity_in_transaction};
 
 pub(super) struct ActivePersonFactClaim {
     pub(super) fact_id: String,
@@ -67,6 +70,7 @@ pub(super) fn row_to_channel_message_evidence(
 
 pub(super) struct DocumentEvidence {
     pub(super) document_id: String,
+    pub(super) observation_id: Option<String>,
     pub(super) normalized_text: String,
     pub(super) text: String,
 }
@@ -84,6 +88,7 @@ pub(super) fn row_to_document_evidence(row: PgRow) -> Result<DocumentEvidence, C
 
     Ok(DocumentEvidence {
         document_id: row.try_get("document_id")?,
+        observation_id: row.try_get("observation_id")?,
         normalized_text: text.to_ascii_lowercase(),
         text,
     })
@@ -136,4 +141,25 @@ fn email_addr_spec(value: &str) -> &str {
         return addr.trim();
     }
     value.trim_matches('"')
+}
+
+pub(super) async fn link_consistency_entity_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    observation_id: &str,
+    entity_kind: &str,
+    entity_id: impl Into<String>,
+    relationship_kind: &str,
+    metadata: serde_json::Value,
+) -> Result<(), ObservationStoreError> {
+    link_domain_entity_in_transaction(
+        transaction,
+        observation_id,
+        "consistency",
+        entity_kind,
+        entity_id.into(),
+        Some(relationship_kind),
+        None,
+        Some(metadata),
+    )
+    .await
 }

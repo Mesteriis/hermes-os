@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::domains::mail::service::MailCommandService;
 
 pub(crate) async fn post_v1_reply(
     State(state): State<AppState>,
@@ -160,42 +161,15 @@ pub(crate) async fn post_v1_redirect(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
-    let now = Utc::now();
-    let outbox_id = format!(
-        "outbox:redirect:{}:{}",
-        msg.account_id,
-        now.timestamp_nanos_opt().unwrap_or_default()
-    );
     let recipient_count = to.len() + cc.len() + bcc.len();
-    let outbox = crate::domains::mail::outbox::EmailOutboxStore::new(
-        state
-            .database
-            .pool()
-            .ok_or(ApiError::DatabaseNotConfigured)?
-            .clone(),
-    )
-    .enqueue(&crate::domains::mail::outbox::NewEmailOutboxItem {
-        outbox_id,
-        account_id: msg.account_id.clone(),
-        draft_id: None,
-        to_recipients: to.clone(),
-        cc_recipients: cc,
-        bcc_recipients: bcc,
-        subject: msg.subject,
-        body_text: msg.body_text,
-        body_html: None,
-        status: crate::domains::mail::outbox::EmailOutboxStatus::Queued,
-        scheduled_send_at: None,
-        undo_deadline_at: None,
-        metadata: serde_json::json!({
-            "redirect_mode": "resent",
-            "redirect_of": msg.message_id,
-            "original_sender": msg.sender,
-            "original_provider_record_id": msg.provider_record_id,
-            "resent_at": now,
-        }),
-    })
-    .await?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let outbox = MailCommandService::new(pool)
+        .enqueue_redirect_message(&msg.message_id, to.clone(), cc, bcc)
+        .await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::communication_email_send(

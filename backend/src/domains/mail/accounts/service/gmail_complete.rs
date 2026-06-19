@@ -48,7 +48,8 @@ impl EmailAccountSetupService {
             scope: token.scope,
         };
         let secret_store = self.secret_store()?;
-        let communication_store = self.communication_store()?;
+        let provider_account_store = self.provider_account_store()?;
+        let secret_binding_store = self.provider_secret_binding_store()?;
         let account_config = gmail_account_config(&pending);
         let secret_metadata =
             gmail_secret_metadata(&pending, &external_account_id, &account_config);
@@ -80,8 +81,8 @@ impl EmailAccountSetupService {
                 },
             )
             .await?;
-        communication_store
-            .upsert_provider_account(
+        provider_account_store
+            .upsert(
                 &NewProviderAccount::new(
                     &pending.account_id,
                     EmailProviderKind::Gmail,
@@ -91,8 +92,8 @@ impl EmailAccountSetupService {
                 .config(account_config),
             )
             .await?;
-        communication_store
-            .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+        secret_binding_store
+            .bind(&NewProviderAccountSecretBinding::new(
                 &pending.account_id,
                 ProviderAccountSecretPurpose::OauthToken,
                 &secret_ref,

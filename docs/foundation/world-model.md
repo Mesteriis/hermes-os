@@ -17,11 +17,15 @@ The core entity types are:
 - Obligation;
 - Relationship;
 - Knowledge item;
-- Source record.
+- Observation;
+- Review item.
 
 Provider-specific objects such as Gmail messages, Telegram chats, WhatsApp
-threads and calendar provider records are source records or channel-specific
-representations. They are not separate product domains.
+threads and calendar provider records are captured as Observations or
+channel-specific representations. They are not separate product domains.
+
+Observation is evidence, not truth. If a provider message is deleted, Hermes
+captures a deletion observation and keeps the original observation.
 
 ## Primary Entities
 
@@ -29,7 +33,8 @@ Primary entities are source-of-truth records with domain ownership:
 
 | Entity | Owner | Source-of-truth role |
 |---|---|---|
-| Source record | Provider/integration boundary | Preserved raw evidence. |
+| Observation | Observation Platform | Canonical append-only evidence. |
+| Review item | Review domain | Inbox item for triage, approval, dismissal and promotion. |
 | Event | Event log | Append-only fact that something happened. |
 | Persona | Personas domain | Subject memory anchor. |
 | Organization | Organizations domain | Collective actor memory anchor. |
@@ -58,7 +63,7 @@ Derived objects are rebuildable or generated from primary records:
 - graph views;
 - attention and risk views.
 
-Derived objects must cite source records or primary entities when they influence
+Derived objects must cite observations or primary entities when they influence
 decisions or user-facing explanations.
 
 ## Relationship Model
@@ -92,7 +97,7 @@ Relationships must carry:
 
 The primary sources of truth are:
 
-1. Append-only source records.
+1. Append-only observations.
 2. Canonical events.
 3. Domain entities and relationships with provenance.
 4. Reviewed memory, decisions, obligations and knowledge.
@@ -109,6 +114,10 @@ An engine provides reusable mechanisms:
 - Timeline Engine builds chronological views.
 - Search Engine retrieves source-backed context.
 - Trust Engine computes trust signals.
+- Context Packs Engine builds rebuildable Persona, Meeting, Task, Calendar and
+  Project context packs from explicit sources.
+- Identity Resolution Engine proposes same-subject candidates.
+- Relationship Engine proposes links between entities.
 - Enrichment Engine proposes additional knowledge.
 - Obligation Engine detects and tracks commitments.
 - Risk Engine detects evidence-backed risks.
@@ -135,7 +144,7 @@ Persona and must preserve provenance and permissions.
 
 Knowledge is evidence-backed understanding over the world model. It can be:
 
-- extracted from source records;
+- extracted from observations;
 - manually created;
 - inferred by AI and reviewed;
 - linked through relationships;

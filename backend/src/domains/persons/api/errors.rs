@@ -5,6 +5,9 @@ pub enum PersonProjectionError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 
+    #[error(transparent)]
+    Observation(#[from] crate::platform::observations::ObservationStoreError),
+
     #[error("email address must not be empty")]
     EmptyEmailAddress,
 

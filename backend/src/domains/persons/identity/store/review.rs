@@ -1,6 +1,8 @@
 use chrono::Utc;
+use serde_json::Value;
 
 use crate::platform::events::{EventEnvelope, EventStore};
+use crate::platform::observations::materialize_review_transition_link_in_transaction;
 
 use super::super::constants::{PERSON_IDENTITY_REVIEW_EVENT_TYPE, PERSON_IDENTITY_REVIEW_PREFIX};
 use super::super::errors::PersonIdentityError;
@@ -8,6 +10,7 @@ use super::super::events::{ReviewCommandEvent, ReviewEvent};
 use super::super::models::{
     PersonIdentityReviewCommand, PersonIdentityReviewCommandResult, PersonIdentityReviewState,
 };
+use super::super::upsert::sync_identity_candidate_review_state_to_inbox_in_transaction;
 use super::super::validation::validate_non_empty;
 use super::PersonIdentityStore;
 use super::review_state::{apply_review_state_in_transaction, ensure_candidate_exists};
@@ -17,6 +20,16 @@ impl PersonIdentityStore {
     pub async fn set_review_state(
         &self,
         command: &PersonIdentityReviewCommand,
+    ) -> Result<PersonIdentityReviewCommandResult, PersonIdentityError> {
+        self.set_review_state_with_observation(command, None, None)
+            .await
+    }
+
+    pub async fn set_review_state_with_observation(
+        &self,
+        command: &PersonIdentityReviewCommand,
+        observation_id: Option<&str>,
+        metadata: Option<Value>,
     ) -> Result<PersonIdentityReviewCommandResult, PersonIdentityError> {
         let command_id = validate_non_empty("command_id", &command.command_id)?;
         let identity_candidate_id =
@@ -51,6 +64,34 @@ impl PersonIdentityStore {
             &mut transaction,
             &identity_candidate_id,
             command.review_state,
+        )
+        .await?;
+        sync_identity_candidate_review_state_to_inbox_in_transaction(
+            &mut transaction,
+            &identity_candidate_id,
+            command.review_state,
+        )
+        .await?;
+        materialize_review_transition_link_in_transaction(
+            &mut transaction,
+            observation_id,
+            "persons",
+            "identity_candidate",
+            &identity_candidate_id,
+            "review_state",
+            command.review_state.as_str(),
+            metadata
+                .map(|extra| {
+                    serde_json::json!({
+                        "event_id": event_id,
+                        "context": extra,
+                    })
+                })
+                .or_else(|| {
+                    Some(serde_json::json!({
+                        "event_id": event_id,
+                    }))
+                }),
         )
         .await?;
 
@@ -91,6 +132,12 @@ impl PersonIdentityStore {
         )
         .await?;
         materialize_split_candidate_for_confirmed_merge_in_transaction(
+            &mut transaction,
+            &parsed.identity_candidate_id,
+            parsed.review_state,
+        )
+        .await?;
+        sync_identity_candidate_review_state_to_inbox_in_transaction(
             &mut transaction,
             &parsed.identity_candidate_id,
             parsed.review_state,

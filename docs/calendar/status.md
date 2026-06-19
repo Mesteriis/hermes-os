@@ -18,7 +18,7 @@ or Decisions.
 | 6 | Event Model | 29 полей: title, description, location, start/end, timezone, all_day, recurrence, status, visibility, event_type, importance/readiness, conference_url/provider, preparation_reminder_minutes, travel_buffer_minutes |
 | 7 | Event Types | `event_type` + `classify_event()` — 18 типов через keyword heuristic |
 | 8 | Event Intelligence | `analyze` endpoint: classify, importance, readiness, risks |
-| 9 | Context Pack | `event_context_packs` — summary, participants, docs, tasks, questions, risks, agenda, actions |
+| 9 | Context Pack | `engines/context_packs` owns calendar-derived packs; legacy `event_context_packs` is compatibility-only schema history |
 | 10 | Relationships | `event_relations` — Persona, Organization, Project, Document, Task, Communication, Note, Decision, Obligation, Recording |
 | 11 | Meeting Preparation | UI: клик → prepareEvent() → context pack + brief + agenda |
 | 12 | AI Meeting Brief | `meeting_brief()` — участники, контекст, риски из БД |
@@ -52,7 +52,7 @@ or Decisions.
 | 67–68 | UI | Toolbar + event list + upcoming panel + weekly brief + event detail card + search + new event form |
 | 69 | Actions Catalog | Все действия через API endpoint |
 | 70 | AI Rules | `calendar_rules` — CRUD + approval_mode (suggest_only/ask_before_execute/auto_execute/dry_run) |
-| 71 | Data Domains | 15 типов: CalendarAccount, CalendarSource, CalendarEvent, EventParticipant, EventRelation, EventContextPack, EventAgenda, EventChecklist, MeetingNote, MeetingOutcome, EventRecording, EventTranscript, DeadlineEvent, FocusBlock, CalendarRule |
+| 71 | Data Domains | 15 типов: CalendarAccount, CalendarSource, CalendarEvent, EventParticipant, EventRelation, ContextPack (engine-owned), EventAgenda, EventChecklist, MeetingNote, MeetingOutcome, EventRecording, EventTranscript, DeadlineEvent, FocusBlock, CalendarRule |
 | 73 | Главные фичи | 20/20 покрыто |
 | 74 | Out of scope | Соблюдено — нет multi-user, Calendly-клона, биллинга |
 | 75 | Итог | Соответствует |

@@ -37,6 +37,7 @@ async fn refresh_message_candidates(
         r#"
         SELECT
             message_id,
+            observation_id,
             subject,
             body_text
         FROM communication_messages
@@ -51,13 +52,16 @@ async fn refresh_message_candidates(
     let mut count = 0usize;
     for row in rows {
         let source_id = row.try_get::<String, _>("message_id")?;
+        let observation_id = row.try_get::<Option<String>, _>("observation_id")?;
         let source_text = format!(
             "{}\n{}",
             row.try_get::<String, _>("subject")?,
             row.try_get::<String, _>("body_text")?,
         );
 
-        count += refresh_message_candidate_from_text(pool, &source_id, &source_text).await?;
+        count +=
+            refresh_message_candidate_from_text(pool, &source_id, &observation_id, &source_text)
+                .await?;
     }
 
     Ok(count)
@@ -75,6 +79,7 @@ pub(super) async fn refresh_message_candidates_for_ids(
         r#"
         SELECT
             message_id,
+            observation_id,
             subject,
             body_text
         FROM communication_messages
@@ -89,12 +94,15 @@ pub(super) async fn refresh_message_candidates_for_ids(
     let mut count = 0usize;
     for row in rows {
         let source_id = row.try_get::<String, _>("message_id")?;
+        let observation_id = row.try_get::<Option<String>, _>("observation_id")?;
         let source_text = format!(
             "{}\n{}",
             row.try_get::<String, _>("subject")?,
             row.try_get::<String, _>("body_text")?,
         );
-        count += refresh_message_candidate_from_text(pool, &source_id, &source_text).await?;
+        count +=
+            refresh_message_candidate_from_text(pool, &source_id, &observation_id, &source_text)
+                .await?;
     }
 
     Ok(count)
@@ -103,12 +111,18 @@ pub(super) async fn refresh_message_candidates_for_ids(
 async fn refresh_message_candidate_from_text(
     pool: &PgPool,
     source_id: &str,
+    observation_id: &Option<String>,
     source_text: &str,
 ) -> Result<usize, TaskCandidateError> {
+    let observation_id = observation_id
+        .clone()
+        .ok_or_else(|| TaskCandidateError::ObservationRequired(source_id.to_owned()))?;
+
     if let Some(fragment) = extract_candidate_fragment(source_text) {
         let payload = CandidatePayload {
-            source_kind: TaskCandidateSourceKind::Message,
-            source_id: source_id.to_owned(),
+            source_kind: TaskCandidateSourceKind::Observation,
+            source_id: observation_id.clone(),
+            observation_id: Some(observation_id.clone()),
             candidate_kind: TaskCandidateKind::Task,
             candidate_metadata: json!({}),
             project_id: None,
@@ -132,11 +146,8 @@ async fn refresh_message_candidate_from_text(
 
     let mut count = 0usize;
     for obligation_candidate in extraction.obligations {
-        let payload = task_candidate_payload_from_obligation(
-            TaskCandidateSourceKind::Message,
-            source_id,
-            &obligation_candidate,
-        );
+        let payload =
+            task_candidate_payload_from_obligation(observation_id.clone(), &obligation_candidate);
         upsert_suggested_candidate(pool, &payload).await?;
         count += 1;
     }
@@ -150,13 +161,14 @@ async fn refresh_document_candidates(
 ) -> Result<usize, TaskCandidateError> {
     let rows = sqlx::query(
         r#"
-        SELECT
-            document_id,
-            title,
-            extracted_text
-        FROM documents
-        ORDER BY imported_at DESC, document_id
-        LIMIT $1
+            SELECT
+                document_id,
+                observation_id,
+                title,
+                extracted_text
+            FROM documents
+            ORDER BY imported_at DESC, document_id
+            LIMIT $1
         "#,
     )
     .bind(limit)
@@ -166,13 +178,16 @@ async fn refresh_document_candidates(
     let mut count = 0usize;
     for row in rows {
         let source_id = row.try_get::<String, _>("document_id")?;
+        let observation_id = row.try_get::<Option<String>, _>("observation_id")?;
         let source_text = format!(
             "{}\n{}",
             row.try_get::<String, _>("title")?,
             row.try_get::<String, _>("extracted_text")?,
         );
 
-        count += refresh_document_candidate_from_text(pool, &source_id, &source_text).await?;
+        count +=
+            refresh_document_candidate_from_text(pool, &source_id, observation_id, &source_text)
+                .await?;
     }
 
     Ok(count)
@@ -181,12 +196,17 @@ async fn refresh_document_candidates(
 async fn refresh_document_candidate_from_text(
     pool: &PgPool,
     source_id: &str,
+    observation_id: Option<String>,
     source_text: &str,
 ) -> Result<usize, TaskCandidateError> {
+    let observation_id = observation_id
+        .ok_or_else(|| TaskCandidateError::ObservationRequired(source_id.to_owned()))?;
+
     if let Some(fragment) = extract_candidate_fragment(source_text) {
         let payload = CandidatePayload {
-            source_kind: TaskCandidateSourceKind::Document,
-            source_id: source_id.to_owned(),
+            source_kind: TaskCandidateSourceKind::Observation,
+            source_id: observation_id.clone(),
+            observation_id: Some(observation_id.clone()),
             candidate_kind: TaskCandidateKind::Task,
             candidate_metadata: json!({}),
             project_id: None,
@@ -210,11 +230,8 @@ async fn refresh_document_candidate_from_text(
 
     let mut count = 0usize;
     for obligation_candidate in extraction.obligations {
-        let payload = task_candidate_payload_from_obligation(
-            TaskCandidateSourceKind::Document,
-            source_id,
-            &obligation_candidate,
-        );
+        let payload =
+            task_candidate_payload_from_obligation(observation_id.clone(), &obligation_candidate);
         upsert_suggested_candidate(pool, &payload).await?;
         count += 1;
     }

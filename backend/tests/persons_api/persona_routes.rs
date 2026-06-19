@@ -159,6 +159,27 @@ async fn personas_put_updates_compatibility_projection_against_postgres() {
     );
     assert!(row.try_get::<bool, _>("is_self").unwrap());
 
+    let persona_update_observation: (String, String) = sqlx::query_as(
+        "SELECT link.observation_id, kind.code AS kind_code
+         FROM observation_links link
+         JOIN observations observation
+           ON observation.observation_id = link.observation_id
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE link.domain = 'persons'
+           AND link.entity_kind = 'persona'
+           AND link.entity_id = $1
+           AND link.relationship_kind = 'persona_update'
+         ORDER BY link.created_at DESC
+         LIMIT 1",
+    )
+    .bind(&owner.person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("persona update observation link");
+    assert!(!persona_update_observation.0.is_empty());
+    assert_eq!(persona_update_observation.1, "PERSON_MUTATION");
+
     let previous_is_self: bool =
         sqlx::query_scalar("SELECT is_self FROM persons WHERE person_id = $1")
             .bind(&previous_owner.person_id)

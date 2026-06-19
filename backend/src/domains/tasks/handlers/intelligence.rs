@@ -8,7 +8,7 @@ use crate::app::{ApiError, AppState};
 use crate::domains::tasks::api::{TaskStore, TaskUpdate};
 use crate::domains::tasks::brain::TaskBrainService;
 use crate::domains::tasks::core::{TaskContextPackStore, TaskRelationStore};
-use crate::domains::tasks::intelligence::TaskIntelligenceService;
+use crate::domains::tasks::service::TaskCommandService;
 use crate::domains::tasks::sync::{export_task_json, export_task_md};
 
 use super::support::database_pool;
@@ -18,74 +18,16 @@ pub(crate) async fn post_task_analyze(
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let task = TaskStore::new(pool.clone())
-        .get(&task_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
-    let has_ctx = TaskContextPackStore::new(pool.clone())
-        .get(&task_id)
-        .await
-        .map(|c| c.is_some())
-        .unwrap_or(false);
-    let _has_relations = TaskRelationStore::new(pool.clone())
-        .list(&task_id)
-        .await
-        .map(|r| !r.is_empty())
-        .unwrap_or(false);
-    let is_legal = task.area.as_deref() == Some("legal") || task.area.as_deref() == Some("tax");
-    let is_tax = task.area.as_deref() == Some("tax");
-    let has_contact = task.linked_person_id.is_some();
-    let has_org = task.linked_organization_id.is_some();
-    let priority = TaskIntelligenceService::calculate_priority(
-        task.due_at,
-        has_contact,
-        has_org,
-        task.project_id.is_some(),
-        is_legal,
-        is_tax,
-        false,
-    );
-    let risk = TaskIntelligenceService::calculate_risk(
-        task.due_at
-            .map(|d| (d - Utc::now()).num_hours() < 24)
-            .unwrap_or(false),
-        false,
-        false,
-        false,
-        is_legal,
-        &task.title,
-    );
-    let readiness = TaskIntelligenceService::calculate_readiness(
-        task.description.is_some(),
-        has_ctx,
-        false,
-        task.due_at.is_some(),
-        true,
-        has_contact,
-    );
-    let missing = TaskIntelligenceService::detect_missing_context(
-        task.description.is_some(),
-        has_ctx,
-        task.due_at.is_some(),
-        has_contact,
-        task.project_id.is_some(),
-    );
-    let next_action = TaskIntelligenceService::suggest_next_action(
-        &task.hermes_status,
-        false,
-        false,
-        task.waiting_reason.as_deref(),
-    );
-    let update = TaskUpdate {
-        priority_score: Some(priority),
-        risk_score: Some(risk),
-        readiness_score: Some(readiness),
-        ..Default::default()
-    };
-    TaskStore::new(pool).update(&task_id, &update).await?;
-    Ok(Json(
-        json!({"priority": priority, "risk": risk, "readiness": readiness, "missing_context": missing, "next_action": next_action}),
-    ))
+    let analysis = TaskCommandService::new(pool)
+        .analyze_runtime(&task_id)
+        .await?;
+    Ok(Json(json!({
+        "priority": analysis.priority,
+        "risk": analysis.risk,
+        "readiness": analysis.readiness,
+        "missing_context": analysis.missing_context,
+        "next_action": analysis.next_action
+    })))
 }
 
 #[derive(Deserialize)]

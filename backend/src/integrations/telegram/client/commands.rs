@@ -1,12 +1,116 @@
 use chrono::{DateTime, Duration, Utc};
+use serde_json::json;
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::postgres::Postgres;
+use sqlx::{PgPool, Transaction};
 
 use super::errors::TelegramError;
+use super::evidence::link_telegram_entity_in_transaction;
 use super::models::messages::TelegramProviderWriteCommand;
 use super::rows::row_to_telegram_provider_write_command;
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+
+#[path = "commands/queries.rs"]
+mod queries;
+
+pub use queries::{
+    find_command_by_idempotency, list_commands, list_commands_filtered,
+    list_queued_commands_for_execution,
+};
 
 pub const TELEGRAM_OUTBOX_WORKER_ID: &str = "telegram-outbox-worker";
+const COMMAND_QUEUE_ACTOR: &str = "telegram.client.commands";
+
+async fn capture_command_observation_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    command: &TelegramProviderWriteCommand,
+    kind_code: &str,
+    relationship_kind: &str,
+    actor: &str,
+    observed_at: DateTime<Utc>,
+) -> Result<(), TelegramError> {
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            kind_code,
+            ObservationOriginKind::LocalRuntime,
+            observed_at,
+            json!({
+                "command_id": command.command_id,
+                "account_id": command.account_id,
+                "command_kind": command.command_kind,
+                "idempotency_key": command.idempotency_key,
+                "provider_chat_id": command.provider_chat_id,
+                "provider_message_id": command.provider_message_id,
+                "capability_state": command.capability_state,
+                "action_class": command.action_class,
+                "confirmation_decision": command.confirmation_decision,
+                "status": command.status,
+                "retry_count": command.retry_count,
+                "max_retries": command.max_retries,
+                "last_error": command.last_error,
+                "result_payload": command.result_payload,
+                "target_ref": command.target_ref,
+                "payload": command.payload,
+                "audit_metadata": command.audit_metadata,
+                "actor_id": command.actor_id,
+                "next_attempt_at": command.next_attempt_at,
+                "last_attempt_at": command.last_attempt_at,
+                "locked_at": command.locked_at,
+                "locked_by": command.locked_by,
+                "provider_observed_at": command.provider_observed_at,
+                "provider_state": command.provider_state,
+                "reconciliation_status": command.reconciliation_status,
+                "reconciled_at": command.reconciled_at,
+                "dead_lettered_at": command.dead_lettered_at,
+                "completed_at": command.completed_at,
+                "operation": relationship_kind,
+            }),
+            match kind_code {
+                "TELEGRAM_PROVIDER_WRITE_COMMAND" => {
+                    format!("telegram-provider-command://{}", command.command_id)
+                }
+                _ => format!(
+                    "telegram-provider-command://{}/status/{}",
+                    command.command_id, relationship_kind
+                ),
+            },
+        )
+        .provenance(json!({
+            "captured_by": actor,
+            "operation": relationship_kind,
+            "provider": "telegram",
+        })),
+    )
+    .await?;
+    link_telegram_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "provider_write_command",
+        command.command_id.clone(),
+        relationship_kind,
+        json!({
+            "command_kind": command.command_kind,
+            "status": command.status,
+            "reconciliation_status": command.reconciliation_status,
+            "provider_chat_id": command.provider_chat_id,
+            "provider_message_id": command.provider_message_id,
+        }),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn fetch_command_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    command_id: &str,
+) -> Result<TelegramProviderWriteCommand, TelegramError> {
+    let row = sqlx::query("SELECT * FROM telegram_provider_write_commands WHERE command_id = $1")
+        .bind(command_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+    row_to_telegram_provider_write_command(row)
+}
 
 fn stable_short_hash(input: &str) -> String {
     let mut hasher = Sha256::new();
@@ -40,6 +144,7 @@ pub async fn insert_command(
     target_ref: serde_json::Value,
     audit_metadata: serde_json::Value,
 ) -> Result<TelegramProviderWriteCommand, TelegramError> {
+    let mut transaction = pool.begin().await?;
     sqlx::query(
         r#"
         INSERT INTO telegram_provider_write_commands
@@ -62,15 +167,20 @@ pub async fn insert_command(
     .bind(&payload)
     .bind(&target_ref)
     .bind(&audit_metadata)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await?;
-
-    let row = sqlx::query("SELECT * FROM telegram_provider_write_commands WHERE command_id = $1")
-        .bind(command_id)
-        .fetch_one(pool)
-        .await?;
-
-    row_to_telegram_provider_write_command(row)
+    let command = fetch_command_in_transaction(&mut transaction, command_id).await?;
+    capture_command_observation_in_transaction(
+        &mut transaction,
+        &command,
+        "TELEGRAM_PROVIDER_WRITE_COMMAND",
+        "queued",
+        COMMAND_QUEUE_ACTOR,
+        command.happened_at,
+    )
+    .await?;
+    transaction.commit().await?;
+    Ok(command)
 }
 
 pub async fn update_command_status(
@@ -81,6 +191,7 @@ pub async fn update_command_status(
     last_error: Option<&str>,
     completed_at: Option<chrono::DateTime<Utc>>,
 ) -> Result<(), TelegramError> {
+    let mut transaction = pool.begin().await?;
     sqlx::query(
         r#"
         UPDATE telegram_provider_write_commands
@@ -94,9 +205,19 @@ pub async fn update_command_status(
     .bind(&result_payload)
     .bind(last_error)
     .bind(completed_at)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await?;
-
+    let command = fetch_command_in_transaction(&mut transaction, command_id).await?;
+    capture_command_observation_in_transaction(
+        &mut transaction,
+        &command,
+        "TELEGRAM_PROVIDER_WRITE_COMMAND_STATUS",
+        "status_updated",
+        COMMAND_QUEUE_ACTOR,
+        command.updated_at,
+    )
+    .await?;
+    transaction.commit().await?;
     Ok(())
 }
 
@@ -118,6 +239,7 @@ pub async fn schedule_command_retry(
     next_attempt_at: DateTime<Utc>,
     error_message: &str,
 ) -> Result<(), TelegramError> {
+    let mut transaction = pool.begin().await?;
     sqlx::query(
         r#"
         UPDATE telegram_provider_write_commands
@@ -136,9 +258,19 @@ pub async fn schedule_command_retry(
     .bind(now)
     .bind(next_attempt_at)
     .bind(error_message)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await?;
-
+    let command = fetch_command_in_transaction(&mut transaction, command_id).await?;
+    capture_command_observation_in_transaction(
+        &mut transaction,
+        &command,
+        "TELEGRAM_PROVIDER_WRITE_COMMAND_STATUS",
+        "retry_scheduled",
+        COMMAND_QUEUE_ACTOR,
+        now,
+    )
+    .await?;
+    transaction.commit().await?;
     Ok(())
 }
 
@@ -148,6 +280,7 @@ pub async fn dead_letter_command(
     now: DateTime<Utc>,
     error_message: &str,
 ) -> Result<(), TelegramError> {
+    let mut transaction = pool.begin().await?;
     sqlx::query(
         r#"
         UPDATE telegram_provider_write_commands
@@ -163,9 +296,19 @@ pub async fn dead_letter_command(
     .bind(command_id)
     .bind(now)
     .bind(error_message)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await?;
-
+    let command = fetch_command_in_transaction(&mut transaction, command_id).await?;
+    capture_command_observation_in_transaction(
+        &mut transaction,
+        &command,
+        "TELEGRAM_PROVIDER_WRITE_COMMAND_STATUS",
+        "dead_lettered",
+        COMMAND_QUEUE_ACTOR,
+        now,
+    )
+    .await?;
+    transaction.commit().await?;
     Ok(())
 }
 
@@ -175,6 +318,7 @@ pub async fn mark_command_awaiting_provider(
     now: DateTime<Utc>,
     result_payload: serde_json::Value,
 ) -> Result<(), TelegramError> {
+    let mut transaction = pool.begin().await?;
     sqlx::query(
         r#"
         UPDATE telegram_provider_write_commands
@@ -191,9 +335,19 @@ pub async fn mark_command_awaiting_provider(
     .bind(command_id)
     .bind(now)
     .bind(&result_payload)
-    .execute(pool)
+    .execute(&mut *transaction)
     .await?;
-
+    let command = fetch_command_in_transaction(&mut transaction, command_id).await?;
+    capture_command_observation_in_transaction(
+        &mut transaction,
+        &command,
+        "TELEGRAM_PROVIDER_WRITE_COMMAND_STATUS",
+        "awaiting_provider",
+        COMMAND_QUEUE_ACTOR,
+        now,
+    )
+    .await?;
+    transaction.commit().await?;
     Ok(())
 }
 
@@ -203,8 +357,9 @@ pub async fn mark_command_reconciled(
     now: DateTime<Utc>,
     provider_state: serde_json::Value,
     result_payload: serde_json::Value,
-) -> Result<(), TelegramError> {
-    sqlx::query(
+) -> Result<TelegramProviderWriteCommand, TelegramError> {
+    let mut transaction = pool.begin().await?;
+    let row = sqlx::query(
         r#"
         UPDATE telegram_provider_write_commands
         SET status = 'completed',
@@ -217,18 +372,81 @@ pub async fn mark_command_reconciled(
             completed_at = $2,
             locked_at = NULL,
             locked_by = NULL,
+            next_attempt_at = NULL,
+            dead_lettered_at = NULL,
             updated_at = $2
         WHERE command_id = $1
+        RETURNING *
         "#,
     )
     .bind(command_id)
     .bind(now)
     .bind(&result_payload)
     .bind(&provider_state)
-    .execute(pool)
+    .fetch_one(&mut *transaction)
     .await?;
+    let command = row_to_telegram_provider_write_command(row)?;
+    capture_command_observation_in_transaction(
+        &mut transaction,
+        &command,
+        "TELEGRAM_PROVIDER_WRITE_COMMAND_STATUS",
+        "reconciled",
+        COMMAND_QUEUE_ACTOR,
+        now,
+    )
+    .await?;
+    transaction.commit().await?;
+    Ok(command)
+}
 
-    Ok(())
+pub async fn mark_command_mismatch(
+    pool: &PgPool,
+    command_id: &str,
+    now: DateTime<Utc>,
+    provider_state: serde_json::Value,
+    result_payload: serde_json::Value,
+    error_message: &str,
+) -> Result<TelegramProviderWriteCommand, TelegramError> {
+    let mut transaction = pool.begin().await?;
+    let row = sqlx::query(
+        r#"
+        UPDATE telegram_provider_write_commands
+        SET status = 'failed',
+            result_payload = $3,
+            last_error = $4,
+            provider_observed_at = $2,
+            provider_state = $5,
+            reconciliation_status = 'mismatch',
+            reconciled_at = $2,
+            completed_at = NULL,
+            locked_at = NULL,
+            locked_by = NULL,
+            next_attempt_at = NULL,
+            dead_lettered_at = NULL,
+            updated_at = $2
+        WHERE command_id = $1
+        RETURNING *
+        "#,
+    )
+    .bind(command_id)
+    .bind(now)
+    .bind(&result_payload)
+    .bind(error_message)
+    .bind(&provider_state)
+    .fetch_one(&mut *transaction)
+    .await?;
+    let command = row_to_telegram_provider_write_command(row)?;
+    capture_command_observation_in_transaction(
+        &mut transaction,
+        &command,
+        "TELEGRAM_PROVIDER_WRITE_COMMAND_STATUS",
+        "mismatch",
+        COMMAND_QUEUE_ACTOR,
+        now,
+    )
+    .await?;
+    transaction.commit().await?;
+    Ok(command)
 }
 
 pub async fn manual_retry_command(
@@ -236,6 +454,7 @@ pub async fn manual_retry_command(
     command_id: &str,
     now: DateTime<Utc>,
 ) -> Result<Option<TelegramProviderWriteCommand>, TelegramError> {
+    let mut transaction = pool.begin().await?;
     let row = sqlx::query(
         r#"
         UPDATE telegram_provider_write_commands
@@ -260,69 +479,24 @@ pub async fn manual_retry_command(
     )
     .bind(command_id)
     .bind(now)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *transaction)
     .await?;
-
-    row.map(row_to_telegram_provider_write_command).transpose()
-}
-
-pub async fn find_command_by_idempotency(
-    pool: &PgPool,
-    account_id: &str,
-    idempotency_key: &str,
-) -> Result<Option<TelegramProviderWriteCommand>, TelegramError> {
-    let row = sqlx::query(
-        r#"
-        SELECT * FROM telegram_provider_write_commands
-        WHERE account_id = $1 AND idempotency_key = $2
-        "#,
-    )
-    .bind(account_id)
-    .bind(idempotency_key)
-    .fetch_optional(pool)
-    .await?;
-
-    row.map(row_to_telegram_provider_write_command).transpose()
-}
-
-pub async fn list_commands(
-    pool: &PgPool,
-    account_id: &str,
-    limit: i64,
-) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
-    list_commands_filtered(pool, account_id, None, None, &[], limit).await
-}
-
-pub async fn list_commands_filtered(
-    pool: &PgPool,
-    account_id: &str,
-    provider_chat_id: Option<&str>,
-    provider_message_id: Option<&str>,
-    command_kinds: &[String],
-    limit: i64,
-) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
-    let rows = sqlx::query(
-        r#"
-        SELECT * FROM telegram_provider_write_commands
-        WHERE account_id = $1
-          AND ($2::text IS NULL OR provider_chat_id = $2)
-          AND ($3::text IS NULL OR provider_message_id = $3)
-          AND (cardinality($4::text[]) = 0 OR command_kind = ANY($4::text[]))
-        ORDER BY created_at DESC
-        LIMIT $5
-        "#,
-    )
-    .bind(account_id)
-    .bind(provider_chat_id)
-    .bind(provider_message_id)
-    .bind(command_kinds)
-    .bind(limit)
-    .fetch_all(pool)
-    .await?;
-
-    rows.into_iter()
+    let command = row
         .map(row_to_telegram_provider_write_command)
-        .collect()
+        .transpose()?;
+    if let Some(command) = &command {
+        capture_command_observation_in_transaction(
+            &mut transaction,
+            command,
+            "TELEGRAM_PROVIDER_WRITE_COMMAND_STATUS",
+            "manual_retry",
+            COMMAND_QUEUE_ACTOR,
+            now,
+        )
+        .await?;
+    }
+    transaction.commit().await?;
+    Ok(command)
 }
 
 /// Atomically claim commands eligible for provider execution.
@@ -335,6 +509,7 @@ pub async fn claim_due_commands_for_execution(
     now: DateTime<Utc>,
     limit: i64,
 ) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
+    let mut transaction = pool.begin().await?;
     let rows = sqlx::query(
         r#"
         WITH due AS (
@@ -375,12 +550,25 @@ pub async fn claim_due_commands_for_execution(
     .bind(now)
     .bind(limit)
     .bind(TELEGRAM_OUTBOX_WORKER_ID)
-    .fetch_all(pool)
+    .fetch_all(&mut *transaction)
     .await?;
-
-    rows.into_iter()
+    let commands = rows
+        .into_iter()
         .map(row_to_telegram_provider_write_command)
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    for command in &commands {
+        capture_command_observation_in_transaction(
+            &mut transaction,
+            command,
+            "TELEGRAM_PROVIDER_WRITE_COMMAND_STATUS",
+            "claimed_for_execution",
+            COMMAND_QUEUE_ACTOR,
+            now,
+        )
+        .await?;
+    }
+    transaction.commit().await?;
+    Ok(commands)
 }
 
 pub async fn recover_stale_executing_commands(
@@ -388,6 +576,7 @@ pub async fn recover_stale_executing_commands(
     now: DateTime<Utc>,
     stale_before: DateTime<Utc>,
 ) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
+    let mut transaction = pool.begin().await?;
     let rows = sqlx::query(
         r#"
         UPDATE telegram_provider_write_commands
@@ -416,45 +605,23 @@ pub async fn recover_stale_executing_commands(
     )
     .bind(now)
     .bind(stale_before)
-    .fetch_all(pool)
+    .fetch_all(&mut *transaction)
     .await?;
-
-    rows.into_iter()
+    let commands = rows
+        .into_iter()
         .map(row_to_telegram_provider_write_command)
-        .collect()
-}
-
-/// Compatibility wrapper for existing callers/tests that still need a read-only
-/// view of due queued rows.
-pub async fn list_queued_commands_for_execution(
-    pool: &PgPool,
-    account_id: &str,
-    limit: i64,
-) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
-    let rows = sqlx::query(
-        r#"
-        SELECT * FROM telegram_provider_write_commands
-        WHERE account_id = $1
-          AND status IN ('queued', 'retrying')
-          AND retry_count < max_retries
-          AND (next_attempt_at IS NULL OR next_attempt_at <= now())
-          AND command_kind IN (
-              'send_text', 'send_media', 'reply', 'forward',
-              'edit', 'delete', 'react', 'unreact', 'pin', 'unpin',
-              'mark_read', 'mark_unread', 'archive', 'unarchive',
-              'mute', 'unmute', 'join', 'leave', 'folder_add', 'folder_remove',
-              'admin_action'
-          )
-        ORDER BY COALESCE(next_attempt_at, created_at) ASC, created_at ASC, command_id ASC
-        LIMIT $2
-        "#,
-    )
-    .bind(account_id)
-    .bind(limit)
-    .fetch_all(pool)
-    .await?;
-
-    rows.into_iter()
-        .map(row_to_telegram_provider_write_command)
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    for command in &commands {
+        capture_command_observation_in_transaction(
+            &mut transaction,
+            command,
+            "TELEGRAM_PROVIDER_WRITE_COMMAND_STATUS",
+            "stale_recovered",
+            COMMAND_QUEUE_ACTOR,
+            now,
+        )
+        .await?;
+    }
+    transaction.commit().await?;
+    Ok(commands)
 }

@@ -1,6 +1,7 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -112,6 +113,42 @@ async fn v1_saved_searches_crud_and_events_against_postgres() {
     assert_eq!(created["message_count"], 1);
 
     assert_eq!(event_count(&pool, &saved_search_id).await, 1);
+    let created_link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'saved_search'
+           AND entity_id = $1
+           AND relationship_kind = 'saved_search_upsert'
+         ORDER BY created_at ASC
+         LIMIT 1",
+    )
+    .bind(&saved_search_id)
+    .fetch_one(&pool)
+    .await
+    .expect("saved search create link");
+    let created_observation_id: String = created_link
+        .try_get("observation_id")
+        .expect("saved search create observation id");
+    let created_metadata: Value = created_link.try_get("metadata").expect("created metadata");
+    assert_eq!(created_metadata["operation"], "saved_search_create");
+    let created_observation = sqlx::query(
+        "SELECT origin_kind, payload
+         FROM observations
+         WHERE observation_id = $1",
+    )
+    .bind(&created_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("saved search create observation");
+    let created_origin_kind: String = created_observation
+        .try_get("origin_kind")
+        .expect("created origin kind");
+    let created_payload: Value = created_observation
+        .try_get("payload")
+        .expect("created payload");
+    assert_eq!(created_origin_kind, "manual");
+    assert_eq!(created_payload["operation"], "saved_search_create");
 
     let response = app
         .clone()
@@ -218,6 +255,19 @@ async fn v1_saved_searches_crud_and_events_against_postgres() {
     assert_eq!(updated["is_smart_folder"], false);
     assert_eq!(updated["message_count"], 1);
     assert_eq!(event_count(&pool, &saved_search_id).await, 2);
+    let upsert_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*)
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'saved_search'
+           AND entity_id = $1
+           AND relationship_kind = 'saved_search_upsert'",
+    )
+    .bind(&saved_search_id)
+    .fetch_one(&pool)
+    .await
+    .expect("saved search upsert count");
+    assert_eq!(upsert_count, 2);
 
     let response = app
         .clone()
@@ -232,6 +282,42 @@ async fn v1_saved_searches_crud_and_events_against_postgres() {
     let deleted = response_json(response).await;
     assert_eq!(deleted["deleted"], true);
     assert_eq!(event_count(&pool, &saved_search_id).await, 3);
+    let deleted_link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'saved_search'
+           AND entity_id = $1
+           AND relationship_kind = 'saved_search_delete'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&saved_search_id)
+    .fetch_one(&pool)
+    .await
+    .expect("saved search delete link");
+    let deleted_observation_id: String = deleted_link
+        .try_get("observation_id")
+        .expect("delete observation id");
+    let deleted_metadata: Value = deleted_link.try_get("metadata").expect("delete metadata");
+    assert_eq!(deleted_metadata["operation"], "saved_search_delete");
+    let deleted_observation = sqlx::query(
+        "SELECT origin_kind, payload
+         FROM observations
+         WHERE observation_id = $1",
+    )
+    .bind(&deleted_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("saved search delete observation");
+    let deleted_origin_kind: String = deleted_observation
+        .try_get("origin_kind")
+        .expect("delete origin kind");
+    let deleted_payload: Value = deleted_observation
+        .try_get("payload")
+        .expect("delete payload");
+    assert_eq!(deleted_origin_kind, "manual");
+    assert_eq!(deleted_payload["operation"], "saved_search_delete");
 
     let response = app
         .clone()

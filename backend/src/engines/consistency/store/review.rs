@@ -1,9 +1,14 @@
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, Transaction};
+
+use crate::domains::review::{ReviewInboxStore, ReviewItemKind, ReviewItemStatus};
 
 use super::super::errors::ConsistencyError;
+use super::super::evidence::link_consistency_entity_in_transaction;
 use super::super::models::{ContradictionObservation, ContradictionReviewState};
 use super::super::rows::row_to_observation;
 use super::super::validation::validate_non_empty;
+use super::observations::sync_review_item_in_transaction;
 
 pub(super) async fn set_review_state(
     pool: &PgPool,
@@ -11,9 +16,12 @@ pub(super) async fn set_review_state(
     review_state: ContradictionReviewState,
     reviewed_by: &str,
     resolution: Option<&str>,
+    review_observation_id: Option<&str>,
+    metadata: Option<serde_json::Value>,
 ) -> Result<ContradictionObservation, ConsistencyError> {
     validate_non_empty("observation_id", observation_id)?;
     validate_non_empty("reviewed_by", reviewed_by)?;
+    let mut transaction = pool.begin().await?;
     let row = sqlx::query(
         r#"
         UPDATE contradiction_observations
@@ -48,7 +56,7 @@ pub(super) async fn set_review_state(
     .bind(review_state.as_str())
     .bind(reviewed_by)
     .bind(resolution)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *transaction)
     .await?;
 
     let Some(row) = row else {
@@ -57,5 +65,65 @@ pub(super) async fn set_review_state(
         ));
     };
 
-    row_to_observation(row)
+    let stored = row_to_observation(row)?;
+    sync_review_item_in_transaction(&mut transaction, &stored).await?;
+    sync_review_state_in_transaction(&mut transaction, &stored).await?;
+    if let Some(review_observation_id) = review_observation_id.filter(|value| !value.is_empty()) {
+        let link_metadata = if let Some(extra) = metadata {
+            serde_json::json!({
+                "review_state": stored.review_state.as_str(),
+                "resolution": stored.resolution,
+                "context": extra,
+            })
+        } else {
+            serde_json::json!({
+                "review_state": stored.review_state.as_str(),
+                "resolution": stored.resolution,
+            })
+        };
+        link_consistency_entity_in_transaction(
+            &mut transaction,
+            review_observation_id,
+            "contradiction_observation",
+            stored.observation_id.clone(),
+            "review_transition",
+            link_metadata,
+        )
+        .await?;
+    }
+    transaction.commit().await?;
+    Ok(stored)
+}
+
+pub(crate) async fn sync_review_state_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    contradiction: &ContradictionObservation,
+) -> Result<(), ConsistencyError> {
+    let review_item = ReviewInboxStore::find_latest_by_kind_and_metadata_in_transaction(
+        transaction,
+        ReviewItemKind::ContradictionCandidate,
+        &serde_json::json!({
+            "contradiction_observation_id": contradiction.observation_id,
+        }),
+    )
+    .await?
+    .ok_or_else(|| {
+        crate::domains::review::ReviewInboxError::ReviewItemNotFound(
+            contradiction.observation_id.clone(),
+        )
+    })?;
+
+    let status = match contradiction.review_state {
+        ContradictionReviewState::Suggested => ReviewItemStatus::New,
+        ContradictionReviewState::UserConfirmed => ReviewItemStatus::Approved,
+        ContradictionReviewState::UserRejected => ReviewItemStatus::Dismissed,
+    };
+
+    let _ = ReviewInboxStore::transition_status_in_transaction(
+        transaction,
+        &review_item.review_item_id,
+        status,
+    )
+    .await?;
+    Ok(())
 }

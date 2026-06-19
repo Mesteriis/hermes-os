@@ -2,6 +2,7 @@ use serde_json::json;
 
 use crate::domains::mail::core::{CommunicationIngestionStore, NewRawCommunicationRecord};
 use crate::domains::mail::messages::MessageProjectionStore;
+use crate::vault::CommunicationProviderAccountStore;
 
 use super::WhatsappWebStore;
 use crate::integrations::whatsapp::client::constants::WHATSAPP_WEB_MESSAGE_RECORD_KIND;
@@ -19,8 +20,8 @@ impl WhatsappWebStore {
     ) -> Result<WhatsappWebMessageIngestResult, WhatsappWebError> {
         message.validate()?;
         let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let provider_account = communication_store
-            .provider_account(&message.account_id)
+        let provider_account = CommunicationProviderAccountStore::new(self.pool.clone())
+            .get(&message.account_id)
             .await?
             .ok_or_else(|| {
                 WhatsappWebError::InvalidRequest(format!(

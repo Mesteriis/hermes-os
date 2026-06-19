@@ -3,8 +3,10 @@ use crate::domains::mail::core::CommunicationIngestionError;
 use crate::domains::mail::messages::MessageProjectionError;
 use crate::domains::mail::storage::MailStorageError;
 use crate::domains::tasks::candidates::TaskCandidateError;
+use crate::platform::observations::ObservationStoreError;
 use crate::platform::secrets::{DatabaseEncryptedVaultError, SecretReferenceError};
 use crate::vault::HostVaultError;
+use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TelegramError {
@@ -46,6 +48,12 @@ pub enum TelegramError {
 
     #[error(transparent)]
     TaskCandidate(#[from] TaskCandidateError),
+
+    #[error(transparent)]
+    ReviewInboxWorkflow(#[from] ReviewInboxWorkflowError),
+
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

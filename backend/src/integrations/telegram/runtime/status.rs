@@ -1,24 +1,23 @@
 use chrono::Utc;
 use serde_json::Value;
 
-use crate::domains::mail::core::{
-    CommunicationIngestionStore, CommunicationProviderKind, ProviderAccount,
-};
+use crate::domains::mail::core::{CommunicationProviderKind, ProviderAccount};
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson::TdJsonLibrary;
 use crate::platform::config::AppConfig;
+use crate::vault::CommunicationProviderAccountStore;
 
 use super::models::TelegramRuntimeStatus;
 use super::state::{TelegramRuntimeActorState, TelegramRuntimeState};
 use super::validation::validate_non_empty;
 
 pub(super) async fn load_telegram_account(
-    communication_store: &CommunicationIngestionStore,
+    provider_account_store: &CommunicationProviderAccountStore,
     account_id: &str,
 ) -> Result<ProviderAccount, TelegramError> {
     let account_id = validate_non_empty("account_id", account_id)?;
-    let account = communication_store
-        .provider_account(&account_id)
+    let account = provider_account_store
+        .get(&account_id)
         .await?
         .ok_or_else(|| {
             TelegramError::InvalidRequest(format!(

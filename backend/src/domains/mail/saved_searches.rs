@@ -9,11 +9,13 @@ use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Row, Transaction};
 use thiserror::Error;
 
+use crate::domains::mail::evidence::{link_mail_entity_in_transaction, merge_metadata};
 use crate::domains::mail::messages::{LocalMessageState, WorkflowState};
 use crate::domains::mail::saved_search_counts::{
     count_messages_for_saved_search, load_message_counts_for_saved_searches,
 };
 use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::platform::observations::ObservationStoreError;
 
 const EVENT_TYPE_CREATED: &str = "mail.saved_search.created";
 const EVENT_TYPE_UPDATED: &str = "mail.saved_search.updated";
@@ -197,11 +199,42 @@ impl MailSavedSearchStore {
         &self,
         input: NewMailSavedSearch,
     ) -> Result<MailSavedSearch, MailSavedSearchError> {
+        self.create_with_observation(input, None, "saved_search_upsert", None)
+            .await
+    }
+
+    pub async fn create_with_observation(
+        &self,
+        input: NewMailSavedSearch,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<MailSavedSearch, MailSavedSearchError> {
         let normalized = NormalizedMailSavedSearchInput::from_new(input)?;
         let mut transaction = self.pool.begin().await?;
         let saved_search = insert_saved_search(&mut transaction, &normalized).await?;
         let event = saved_search_event(EVENT_TYPE_CREATED, &saved_search)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            let link_metadata = merge_metadata(
+                json!({
+                    "operation": "saved_search_create",
+                    "name": saved_search.name,
+                    "is_smart_folder": saved_search.is_smart_folder,
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "saved_search",
+                saved_search.saved_search_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(saved_search)
     }
@@ -210,6 +243,18 @@ impl MailSavedSearchStore {
         &self,
         saved_search_id: &str,
         update: UpdateMailSavedSearch,
+    ) -> Result<Option<MailSavedSearch>, MailSavedSearchError> {
+        self.update_with_observation(saved_search_id, update, None, "saved_search_upsert", None)
+            .await
+    }
+
+    pub async fn update_with_observation(
+        &self,
+        saved_search_id: &str,
+        update: UpdateMailSavedSearch,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
     ) -> Result<Option<MailSavedSearch>, MailSavedSearchError> {
         let saved_search_id = normalize_required("saved_search_id", saved_search_id)?;
         let normalized = NormalizedMailSavedSearchUpdate::from_update(update)?;
@@ -222,11 +267,42 @@ impl MailSavedSearchStore {
         };
         let event = saved_search_event(EVENT_TYPE_UPDATED, &saved_search)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            let link_metadata = merge_metadata(
+                json!({
+                    "operation": "saved_search_update",
+                    "name": saved_search.name,
+                    "is_smart_folder": saved_search.is_smart_folder,
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "saved_search",
+                saved_search.saved_search_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(Some(saved_search))
     }
 
     pub async fn delete(&self, saved_search_id: &str) -> Result<bool, MailSavedSearchError> {
+        self.delete_with_observation(saved_search_id, None, "saved_search_delete", None)
+            .await
+    }
+
+    pub async fn delete_with_observation(
+        &self,
+        saved_search_id: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<bool, MailSavedSearchError> {
         let saved_search_id = normalize_required("saved_search_id", saved_search_id)?;
         let mut transaction = self.pool.begin().await?;
         let Some(saved_search) = delete_saved_search(&mut transaction, &saved_search_id).await?
@@ -236,6 +312,24 @@ impl MailSavedSearchStore {
         };
         let event = saved_search_event(EVENT_TYPE_DELETED, &saved_search)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            let link_metadata = merge_metadata(
+                json!({
+                    "operation": "saved_search_delete",
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "saved_search",
+                saved_search.saved_search_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(true)
     }
@@ -631,6 +725,8 @@ fn system_time_nanos() -> u128 {
 pub enum MailSavedSearchError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
     #[error(transparent)]

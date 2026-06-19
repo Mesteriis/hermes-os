@@ -11,6 +11,7 @@ pub(crate) struct CommunicationMessagesResponse {
 pub(crate) struct CommunicationMessageSummaryResponse {
     pub(crate) message_id: String,
     pub(crate) raw_record_id: String,
+    pub(crate) observation_id: String,
     pub(crate) account_id: String,
     pub(crate) provider_record_id: String,
     pub(crate) subject: String,
@@ -34,6 +35,7 @@ impl From<ProjectedMessageSummary> for CommunicationMessageSummaryResponse {
         Self {
             message_id: summary.message.message_id,
             raw_record_id: summary.message.raw_record_id,
+            observation_id: summary.message.observation_id,
             account_id: summary.message.account_id,
             provider_record_id: summary.message.provider_record_id,
             subject: summary.message.subject,
@@ -64,6 +66,7 @@ pub(crate) struct CommunicationMessageDetailResponse {
 pub(crate) struct CommunicationMessageDetailItem {
     pub(crate) message_id: String,
     pub(crate) raw_record_id: String,
+    pub(crate) observation_id: String,
     pub(crate) account_id: String,
     pub(crate) provider_record_id: String,
     pub(crate) subject: String,
@@ -97,6 +100,7 @@ impl CommunicationMessageDetailItem {
         Self {
             message_id: message.message_id,
             raw_record_id: message.raw_record_id,
+            observation_id: message.observation_id,
             account_id: message.account_id,
             provider_record_id: message.provider_record_id,
             subject: message.subject,

@@ -9,6 +9,7 @@ use crate::domains::tasks::core::{
     TaskContextPack, TaskContextPackStore, TaskEvidence, TaskEvidenceStore, TaskRelation,
     TaskRelationStore, TaskSubtask, TaskSubtaskStore,
 };
+use crate::domains::tasks::service::TaskCommandService;
 
 use super::support::database_pool;
 
@@ -72,8 +73,8 @@ pub(crate) async fn get_task_evidence(
 
 #[derive(Deserialize)]
 pub(crate) struct NewEvidenceRequest {
-    source_type: String,
-    source_id: String,
+    source_type: Option<String>,
+    source_id: Option<String>,
     quote: Option<String>,
     confidence: Option<f64>,
 }
@@ -84,16 +85,15 @@ pub(crate) async fn post_task_evidence(
     Json(req): Json<NewEvidenceRequest>,
 ) -> Result<Json<TaskEvidence>, ApiError> {
     let pool = database_pool(&state)?;
-    let evidence = TaskEvidenceStore::new(pool)
-        .add(
+    let evidence = TaskCommandService::new(pool)
+        .add_evidence(
             &task_id,
-            &req.source_type,
-            &req.source_id,
-            req.quote.as_deref(),
+            req.source_type.as_deref(),
+            req.source_id.as_deref(),
+            req.quote,
             req.confidence,
         )
-        .await
-        .map_err(ApiError::from)?;
+        .await?;
     Ok(Json(evidence))
 }
 
@@ -127,15 +127,14 @@ pub(crate) async fn post_task_relation(
     Json(req): Json<NewRelationReq>,
 ) -> Result<Json<TaskRelation>, ApiError> {
     let pool = database_pool(&state)?;
-    let relation = TaskRelationStore::new(pool)
-        .link(
+    let relation = TaskCommandService::new(pool)
+        .add_relation_manual(
             &task_id,
             &req.entity_type,
             &req.entity_id,
             &req.relation_type,
         )
-        .await
-        .map_err(ApiError::from)?;
+        .await?;
     Ok(Json(relation))
 }
 
@@ -162,15 +161,11 @@ pub(crate) async fn post_task_checklist(
     Path(task_id): Path<String>,
     Json(req): Json<SetChecklistReq>,
 ) -> Result<Json<TaskChecklist>, ApiError> {
+    let items = req.items;
     let pool = database_pool(&state)?;
-    let checklist = TaskChecklistStore::new(pool)
-        .set(
-            &task_id,
-            req.items,
-            req.source.as_deref().unwrap_or("manual"),
-        )
-        .await
-        .map_err(ApiError::from)?;
+    let checklist = TaskCommandService::new(pool)
+        .set_checklist_manual(&task_id, items, req.source.as_deref())
+        .await?;
     Ok(Json(checklist))
 }
 
@@ -203,10 +198,9 @@ pub(crate) async fn post_task_subtask(
     Json(req): Json<NewSubtaskReq>,
 ) -> Result<Json<TaskSubtask>, ApiError> {
     let pool = database_pool(&state)?;
-    let subtask = TaskSubtaskStore::new(pool)
-        .add(&task_id, &req.child_task_id, req.sort_order.unwrap_or(0))
-        .await
-        .map_err(ApiError::from)?;
+    let subtask = TaskCommandService::new(pool)
+        .add_subtask_manual(&task_id, &req.child_task_id, req.sort_order.unwrap_or(0))
+        .await?;
     Ok(Json(subtask))
 }
 

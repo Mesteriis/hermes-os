@@ -98,6 +98,41 @@ async fn v1_message_ai_state_transitions_are_durable_and_emit_event_against_post
     assert_eq!(body["message_id"], message_id);
     assert_eq!(body["ai_state"], "PROCESSING");
     assert!(body["updated_at"].is_string());
+    let observation = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code,
+               observation.origin_kind,
+               observation.payload,
+               link.relationship_kind
+        FROM observations observation
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        JOIN observation_links link
+          ON link.observation_id = observation.observation_id
+        WHERE link.domain = 'communications'
+          AND link.entity_kind = 'communication_message'
+          AND link.entity_id = $1
+          AND link.relationship_kind = 'ai_state_transition'
+        ORDER BY observation.captured_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("ai state observation");
+    assert_eq!(
+        observation.try_get::<String, _>("kind_code").unwrap(),
+        "COMMUNICATION_MESSAGE"
+    );
+    assert_eq!(
+        observation.try_get::<String, _>("origin_kind").unwrap(),
+        "manual"
+    );
+    let observation_payload = observation.try_get::<Value, _>("payload").unwrap();
+    assert_eq!(observation_payload["message_id"], message_id);
+    assert_eq!(observation_payload["previous_ai_state"], "NEW");
+    assert_eq!(observation_payload["request"]["ai_state"], "PROCESSING");
 
     let persisted = sqlx::query(
         r#"

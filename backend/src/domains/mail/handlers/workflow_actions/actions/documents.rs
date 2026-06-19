@@ -47,9 +47,23 @@ pub(in crate::domains::mail::handlers::workflow_actions) async fn create_documen
         .or_else(|| message.map(|value| value.body_text.as_str()))
         .unwrap_or(&title);
     let markdown = format!("# {title}\n\n{body}");
-    let document = DocumentImportStore::import_document_in_transaction(
+    let document = DocumentImportStore::import_document_manual_with_observation_in_transaction(
         transaction,
         &NewDocumentImport::markdown(document_id, title, markdown),
+        format!("workflow-action://document/{command_id}"),
+        serde_json::json!({
+            "captured_by": "mail.workflow_actions.create_document_response",
+            "workflow_action": if note_mode { "create_note" } else { "create_document" },
+            "event_id": event_id,
+        }),
+        message.map(|value| value.observation_id.as_str()),
+        Some("workflow_action_projection"),
+        message.map(|value| {
+            serde_json::json!({
+                "workflow_action": if note_mode { "create_note" } else { "create_document" },
+                "message_id": value.message_id,
+            })
+        }),
     )
     .await
     .map_err(|error| {
@@ -87,9 +101,22 @@ pub(in crate::domains::mail::handlers::workflow_actions) async fn link_document_
         .transpose()?
         .unwrap_or_else(|| format!("document:mail-message:{}", message.message_id));
     let markdown = format!("# {title}\n\n{}", message.body_text);
-    let document = DocumentImportStore::import_document_in_transaction(
+    let document = DocumentImportStore::import_document_manual_with_observation_in_transaction(
         transaction,
         &NewDocumentImport::markdown(document_id, title, markdown),
+        format!("workflow-action://link-document/{command_id}"),
+        serde_json::json!({
+            "captured_by": "mail.workflow_actions.link_document_response",
+            "workflow_action": "link_document",
+            "event_id": event_id,
+            "source_message_id": message.message_id,
+        }),
+        Some(message.observation_id.as_str()),
+        Some("workflow_action_projection"),
+        Some(serde_json::json!({
+            "workflow_action": "link_document",
+            "message_id": message.message_id,
+        })),
     )
     .await
     .map_err(|error| {

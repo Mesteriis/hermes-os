@@ -1,7 +1,6 @@
-use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use crate::domains::mail::messages::ProjectedMessage;
+use crate::domains::mail::messages::{MessageProjectionStore, ProjectedMessage};
 
 use super::errors::EmailSyncPipelineError;
 
@@ -44,30 +43,17 @@ pub(crate) async fn upsert_message_participant(
     message: &ProjectedMessage,
     person_id: &str,
     participant: &EmailParticipant,
-) -> Result<bool, sqlx::Error> {
-    let row = sqlx::query(
-        r#"
-        INSERT INTO communication_message_participants (
-            message_id, person_id, email_address, display_name, role, source, confidence
+) -> Result<bool, EmailSyncPipelineError> {
+    let inserted = MessageProjectionStore::new(pool.clone())
+        .upsert_email_participant(
+            message,
+            person_id,
+            &participant.email_address,
+            participant.display_name.as_deref(),
+            participant.role,
         )
-        VALUES ($1, $2, $3, $4, $5, 'email_sync', 1.0)
-        ON CONFLICT (message_id, person_id, role, email_address)
-        DO UPDATE SET
-            display_name = EXCLUDED.display_name,
-            source = EXCLUDED.source,
-            confidence = EXCLUDED.confidence,
-            updated_at = now()
-        RETURNING (xmax = 0) AS inserted
-        "#,
-    )
-    .bind(&message.message_id)
-    .bind(person_id)
-    .bind(&participant.email_address)
-    .bind(participant.display_name.as_deref())
-    .bind(participant.role)
-    .fetch_one(pool)
-    .await?;
-    row.try_get::<bool, _>("inserted")
+        .await?;
+    Ok(inserted)
 }
 
 fn clean_display_name(value: &str) -> Option<String> {

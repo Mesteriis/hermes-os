@@ -2,6 +2,28 @@ use super::support::*;
 
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router
+        .route("/api/v1/review/items", get(get_v1_review_items))
+        .route("/api/v1/review/items", post(post_v1_review_items))
+        .route(
+            "/api/v1/review/items/{review_item_id}/approve",
+            post(post_v1_review_item_approve),
+        )
+        .route(
+            "/api/v1/review/items/{review_item_id}/dismiss",
+            post(post_v1_review_item_dismiss),
+        )
+        .route(
+            "/api/v1/review/items/{review_item_id}/take",
+            post(post_v1_review_item_take),
+        )
+        .route(
+            "/api/v1/review/items/{review_item_id}/archive",
+            post(post_v1_review_item_archive),
+        )
+        .route(
+            "/api/v1/review/items/{review_item_id}/promote",
+            post(post_v1_review_item_promote),
+        )
         .route("/api/v1/obligations", get(get_v1_obligations))
         .route(
             "/api/v1/obligations/{obligation_id}/review",

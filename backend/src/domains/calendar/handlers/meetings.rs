@@ -35,17 +35,18 @@ pub(crate) async fn post_meeting_note(
     Path(event_id): Path<String>,
     Json(req): Json<NewNoteRequest>,
 ) -> Result<Json<crate::domains::calendar::meetings::MeetingNote>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let note = MeetingNoteStore::new(pool)
-        .create(
+    let note = CalendarCommandService::new(pool)
+        .create_meeting_note_manual(
             &event_id,
             &req.content,
             req.format.as_deref(),
-            req.source.as_deref(),
+            requested_source,
         )
         .await
         .map_err(ApiError::from)?;
@@ -94,8 +95,8 @@ pub(crate) async fn post_meeting_outcome(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let outcome = MeetingOutcomeStore::new(pool)
-        .add(
+    let outcome = CalendarCommandService::new(pool)
+        .add_meeting_outcome_manual(
             &event_id,
             &req.outcome_type,
             &req.title,
@@ -118,7 +119,11 @@ pub(crate) async fn post_event_follow_up(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     CalendarEventStore::new(pool.clone())
-        .set_status(&event_id, "needs_follow_up")
+        .set_status_manual(
+            &event_id,
+            "needs_follow_up",
+            "calendar_api.post_event_follow_up",
+        )
         .await?;
     Ok(Json(json!({"follow_up_created": true})))
 }
@@ -174,16 +179,17 @@ pub(crate) async fn post_event_recording(
     Path(event_id): Path<String>,
     Json(req): Json<NewRecordingRequest>,
 ) -> Result<Json<crate::domains::calendar::meetings::EventRecording>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let rec = EventRecordingStore::new(pool)
-        .add(
+    let rec = CalendarCommandService::new(pool)
+        .add_event_recording_manual(
             &event_id,
             req.file_path.as_deref(),
-            req.source.as_deref(),
+            requested_source,
             req.duration_seconds,
         )
         .await

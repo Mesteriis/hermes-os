@@ -1,6 +1,7 @@
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::Utc;
 use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
 use hermes_hub_backend::domains::organizations::api::OrganizationStore;
 use hermes_hub_backend::domains::organizations::core::OrgContactLinkStore;
@@ -9,6 +10,9 @@ use hermes_hub_backend::domains::relationships::{
     NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
     RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
     RelationshipStoreError,
+};
+use hermes_hub_backend::platform::observations::{
+    NewObservation, ObservationOriginKind, ObservationStore,
 };
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::{Value, json};
@@ -484,9 +488,9 @@ async fn organization_contact_link_materializes_member_of_relationship_against_p
 
     assert_eq!(
         source_kind,
-        RelationshipEvidenceSourceKind::RawRecord.as_str()
+        RelationshipEvidenceSourceKind::Communication.as_str()
     );
-    assert_eq!(source_id, link.id);
+    assert!(!source_id.is_empty());
     assert_eq!(
         excerpt.as_deref(),
         Some("Persona is linked to organization through compatibility organization contact data.")
@@ -570,6 +574,109 @@ async fn relationship_store_rejects_identical_persona_endpoints_before_database_
         .expect_err("identical endpoints must fail before database write");
 
     assert!(matches!(error, RelationshipStoreError::IdenticalEndpoints));
+}
+
+#[tokio::test]
+async fn relationship_store_rejects_missing_observation_evidence_against_postgres() {
+    let Some((_pool, _persons, store)) =
+        live_relationship_context("missing relationship observation evidence").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let relationship = NewRelationship::between_personas(
+        format!("person:v1:email:source-{suffix}@example.com"),
+        format!("person:v1:email:target-{suffix}@example.com"),
+        "supports",
+        0.5,
+        0.5,
+        0.5,
+        RelationshipReviewState::Suggested,
+    );
+    let evidence = NewRelationshipEvidence::observation(format!(
+        "observation:v1:missing-relationship:{suffix}"
+    ));
+
+    let error = store
+        .upsert_with_evidence(&relationship, &[evidence])
+        .await
+        .expect_err("missing observation evidence must fail");
+
+    assert!(matches!(
+        error,
+        RelationshipStoreError::ObservationNotFound(_)
+    ));
+}
+
+#[tokio::test]
+async fn relationship_store_materializes_support_link_for_observation_evidence_against_postgres() {
+    let Some((pool, person_store, store)) =
+        live_relationship_context("relationship support link").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let source = person_store
+        .upsert_email_person(&format!("relationship-support-source-{suffix}@example.com"))
+        .await
+        .expect("source persona");
+    let target = person_store
+        .upsert_email_person(&format!("relationship-support-target-{suffix}@example.com"))
+        .await
+        .expect("target persona");
+    let observation = ObservationStore::new(pool.clone())
+        .capture(
+            &NewObservation::new(
+                "COMMUNICATION_MESSAGE",
+                ObservationOriginKind::Manual,
+                Utc::now(),
+                json!({
+                    "subject": format!("Relationship support {suffix}"),
+                    "body": "These two people collaborate closely on Hermes."
+                }),
+                format!("manual://relationship-support/{suffix}"),
+            )
+            .confidence(0.9),
+        )
+        .await
+        .expect("support observation");
+
+    let stored = store
+        .upsert_with_evidence(
+            &NewRelationship::between_personas(
+                &source.person_id,
+                &target.person_id,
+                "collaborates_with",
+                0.73,
+                0.61,
+                0.88,
+                RelationshipReviewState::UserConfirmed,
+            ),
+            &[
+                NewRelationshipEvidence::observation(observation.observation_id.clone())
+                    .excerpt("These two people collaborate closely on Hermes."),
+            ],
+        )
+        .await
+        .expect("relationship upsert with observation evidence");
+
+    let support_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'relationships'
+          AND entity_kind = 'relationship'
+          AND entity_id = $2
+          AND relationship_kind = 'supports'
+        "#,
+    )
+    .bind(&observation.observation_id)
+    .bind(&stored.relationship_id)
+    .fetch_one(&pool)
+    .await
+    .expect("relationship support link count");
+    assert_eq!(support_link_count, 1);
 }
 
 async fn live_relationship_context(

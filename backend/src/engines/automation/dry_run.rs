@@ -8,6 +8,7 @@ use super::constants::{
     AUTOMATION_SEND_DRY_RUN_EVENT_TYPE, AUTOMATION_SOURCE_KIND, AUTOMATION_SOURCE_PROVIDER,
 };
 use super::errors::AutomationError;
+use super::evidence::capture_dry_run_observation;
 use super::ids::sha256_hex;
 use super::models::{TelegramSendDryRunRequest, TelegramSendDryRunResponse};
 use super::policy::evaluate_policy;
@@ -103,9 +104,7 @@ pub(super) async fn dry_run_send(
     }))
     .build()?;
     EventStore::append_in_transaction(&mut transaction, &event).await?;
-    transaction.commit().await?;
-
-    Ok(TelegramSendDryRunResponse {
+    let response = TelegramSendDryRunResponse {
         outbound_message_id,
         policy_id: policy.policy_id,
         template_id: template.template_id,
@@ -115,5 +114,10 @@ pub(super) async fn dry_run_send(
         rendered_preview_hash,
         status: "allowed".to_owned(),
         event_id,
-    })
+    };
+    capture_dry_run_observation(&mut transaction, request, &response, &actor_id, Utc::now())
+        .await?;
+    transaction.commit().await?;
+
+    Ok(response)
 }

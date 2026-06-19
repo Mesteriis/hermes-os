@@ -36,12 +36,12 @@ pub(in crate::domains::mail::handlers::workflow_actions) async fn create_event_r
         ));
     }
     let title = input_title(request, message, "New event")?;
-    let event = CalendarEventStore::create_in_transaction(
+    let event = CalendarEventStore::create_manual_with_observation_in_transaction(
         transaction,
         &NewCalendarEvent {
             source_event_id: Some(event_id.to_owned()),
             account_id: None,
-            source_id: message.map(|value| value.message_id.clone()),
+            source_id: None,
             title,
             description: input.body.clone(),
             location: None,
@@ -58,6 +58,14 @@ pub(in crate::domains::mail::handlers::workflow_actions) async fn create_event_r
             preparation_reminder_minutes: None,
             travel_buffer_minutes: None,
         },
+        "mail.workflow_actions.create_event_response",
+        message.map(|value| value.observation_id.as_str()),
+        message.map(|value| {
+            serde_json::json!({
+                "workflow_action": "create_event",
+                "message_id": value.message_id,
+            })
+        }),
     )
     .await?;
     Ok(base_response(

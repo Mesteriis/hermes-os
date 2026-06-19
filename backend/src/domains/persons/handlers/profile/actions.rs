@@ -9,27 +9,32 @@ pub(crate) async fn post_person_fingerprint(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let msg_store = crate::domains::mail::messages::MessageProjectionStore::new(pool.clone());
-    let messages = msg_store.recent_messages(50).await?;
-    let person_msgs = messages
+    let messages = crate::domains::mail::messages::MessageProjectionStore::new(pool.clone())
+        .recent_messages(50)
+        .await?;
+    let person_messages = messages
         .into_iter()
-        .filter(|m| {
-            m.message.sender.contains(&person_id)
-                || m.message.recipients.iter().any(|r| r.contains(&person_id))
+        .filter(|message| {
+            message.message.sender.contains(&person_id)
+                || message
+                    .message
+                    .recipients
+                    .iter()
+                    .any(|recipient| recipient.contains(&person_id))
         })
-        .map(|m| crate::domains::persons::intelligence::PersonMessage {
-            subject: m.message.subject,
-            body_text: m.message.body_text,
-            occurred_at: m.message.occurred_at,
-        })
+        .map(
+            |message| crate::domains::persons::intelligence::PersonMessage {
+                subject: message.message.subject,
+                body_text: message.message.body_text,
+                occurred_at: message.message.occurred_at,
+            },
+        )
         .collect::<Vec<_>>();
-    let fp =
-        crate::domains::persons::intelligence::PersonIntelligenceService::heuristic_fingerprint(
-            &person_msgs,
-        );
-    let store = crate::domains::persons::enrichment::PersonEnrichmentStore::new(pool);
-    store.enrich_person(&person_id, &fp).await?;
-    Ok(Json(json!({"enriched": true, "fingerprint": fp})))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .fingerprint_person_manual(&person_id, &person_messages)
+            .await?,
+    ))
 }
 
 pub(crate) async fn post_person_favorite(
@@ -41,8 +46,9 @@ pub(crate) async fn post_person_favorite(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::persons::enrichment::PersonEnrichmentStore::new(pool);
-    let fav = store.toggle_favorite(&person_id).await?;
+    let fav = crate::domains::persons::service::PersonCommandService::new(pool)
+        .toggle_favorite_manual(&person_id)
+        .await?;
     Ok(Json(json!({"is_favorite": fav})))
 }
 
@@ -61,7 +67,8 @@ pub(crate) async fn put_person_notes(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::persons::enrichment::PersonEnrichmentStore::new(pool);
-    store.set_notes(&person_id, &req.notes).await?;
+    crate::domains::persons::service::PersonCommandService::new(pool)
+        .set_notes_manual(&person_id, &req.notes)
+        .await?;
     Ok(Json(json!({"saved": true})))
 }

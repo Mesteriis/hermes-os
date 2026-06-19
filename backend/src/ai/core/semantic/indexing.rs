@@ -42,6 +42,7 @@ impl SemanticEmbeddingStore {
             self.upsert_embedding(NewSemanticEmbedding {
                 source_kind: source.source_kind,
                 source_id: &source.source_id,
+                observation_id: source.observation_id.as_deref(),
                 title: &source.title,
                 source_text: &source.source_text,
                 embedding_model,

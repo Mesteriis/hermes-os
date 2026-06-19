@@ -47,7 +47,7 @@ pub(crate) async fn post_calendar_event(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let event = CalendarEventStore::new(pool).create(&req).await?;
+    let event = CalendarEventStore::new(pool).create_manual(&req).await?;
     Ok(Json(event))
 }
 
@@ -78,7 +78,7 @@ pub(crate) async fn put_calendar_event(
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
     let event = CalendarEventStore::new(pool)
-        .update(&event_id, &update)
+        .update_manual(&event_id, &update)
         .await?;
     Ok(Json(event))
 }
@@ -92,6 +92,8 @@ pub(crate) async fn delete_calendar_event(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    CalendarEventStore::new(pool).delete(&event_id).await?;
+    CalendarEventStore::new(pool)
+        .delete_manual(&event_id)
+        .await?;
     Ok(Json(json!({"deleted": true})))
 }

@@ -1,9 +1,12 @@
+use chrono::Utc;
 use serde_json::json;
-use sqlx::Row;
+use sqlx::{Postgres, Row, Transaction};
 
 use super::super::errors::TelegramError;
 use super::super::models::TelegramAttachmentAnchor;
+use super::super::rows::row_to_telegram_message;
 use super::super::store::TelegramStore;
+use super::provider_state::capture_message_projection_observation_in_transaction;
 
 impl TelegramStore {
     pub(crate) async fn attachment_anchor_for_message(
@@ -57,20 +60,11 @@ impl TelegramStore {
         content_type: &str,
         filename: Option<&str>,
     ) -> Result<(), TelegramError> {
-        let metadata = sqlx::query_scalar::<_, serde_json::Value>(
-            r#"
-            SELECT message_metadata
-            FROM communication_messages
-            WHERE message_id = $1
-              AND channel_kind IN ('telegram_user', 'telegram_bot')
-            "#,
-        )
-        .bind(message_id.trim())
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| {
+        let current = self.message_by_id(message_id).await?.ok_or_else(|| {
             TelegramError::InvalidRequest(format!("Telegram message `{message_id}` was not found"))
         })?;
+
+        let metadata = current.metadata.clone();
 
         let mut metadata_object = metadata.as_object().cloned().unwrap_or_default();
         let attachments = metadata_object
@@ -133,17 +127,63 @@ impl TelegramStore {
             }));
         }
 
-        sqlx::query(
+        let updated_metadata = serde_json::Value::Object(metadata_object);
+        let observed_at = Utc::now();
+        let mut transaction: Transaction<'_, Postgres> = self.pool.begin().await?;
+        let row = sqlx::query(
             r#"
             UPDATE communication_messages
-            SET message_metadata = $2::jsonb
+            SET message_metadata = $2::jsonb,
+                projected_at = $3
             WHERE message_id = $1
+            RETURNING
+                message_id,
+                raw_record_id,
+                account_id,
+                provider_record_id,
+                subject,
+                sender,
+                body_text,
+                occurred_at,
+                projected_at,
+                channel_kind,
+                conversation_id,
+                sender_display_name,
+                delivery_state,
+                message_metadata
             "#,
         )
         .bind(message_id.trim())
-        .bind(serde_json::Value::Object(metadata_object))
-        .execute(&self.pool)
+        .bind(&updated_metadata)
+        .bind(observed_at)
+        .fetch_one(&mut *transaction)
         .await?;
+        let updated = row_to_telegram_message(row)?;
+        capture_message_projection_observation_in_transaction(
+            &mut transaction,
+            "COMMUNICATION_ATTACHMENT",
+            &updated,
+            observed_at,
+            "telegram_attachment_download_state_update",
+            json!({
+                "message_id": updated.message_id,
+                "account_id": updated.account_id,
+                "provider_message_id": updated.provider_message_id,
+                "provider_chat_id": updated.provider_chat_id,
+                "attachment_id": provider_attachment_id,
+                "tdlib_file_id": tdlib_file_id,
+                "download_state": download_state,
+                "local_path": local_path,
+                "size_bytes": size_bytes,
+                "content_type": content_type,
+                "filename": filename,
+                "previous_metadata": current.metadata,
+                "message_metadata": updated.metadata,
+            }),
+            "telegram.client.messages.attachments.update_message_attachment_download_state",
+        )
+        .await?;
+        transaction.commit().await?;
 
         Ok(())
     }
@@ -162,6 +202,7 @@ mod tests {
     };
     use crate::domains::mail::messages::MessageProjectionStore;
     use crate::integrations::telegram::client::project_raw_telegram_message;
+    use crate::vault::CommunicationProviderAccountStore;
 
     #[tokio::test]
     async fn update_message_attachment_download_state_patches_projected_metadata() {
@@ -175,8 +216,8 @@ mod tests {
         let provider_chat_id = format!("-100{suffix}");
         let provider_message_id = format!("{provider_chat_id}:7001");
 
-        communication_store
-            .upsert_provider_account(
+        CommunicationProviderAccountStore::new(pool.clone())
+            .upsert(
                 &NewProviderAccount::new(
                     &account_id,
                     CommunicationProviderKind::TelegramUser,
@@ -263,5 +304,34 @@ mod tests {
         assert_eq!(attachments[0]["content_type"], json!("image/jpeg"));
         assert_eq!(attachments[0]["filename"], json!("photo.jpg"));
         assert_eq!(attachments[0]["size"], json!(2048));
+
+        let observation_row = sqlx::query(
+            r#"
+            SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+            FROM observation_links link
+            JOIN observations observation
+              ON observation.observation_id = link.observation_id
+            JOIN observation_kind_definitions kind
+              ON kind.kind_definition_id = observation.kind_definition_id
+            WHERE link.domain = 'communications'
+              AND link.entity_kind = 'communication_message'
+              AND link.entity_id = $1
+              AND link.relationship_kind = 'telegram_attachment_download_state_update'
+            ORDER BY observation.captured_at DESC
+            LIMIT 1
+            "#,
+        )
+        .bind(&projected.message_id)
+        .fetch_one(&pool)
+        .await
+        .expect("attachment download observation");
+        assert_eq!(
+            observation_row.get::<String, _>("kind_code"),
+            "COMMUNICATION_ATTACHMENT"
+        );
+        let payload = observation_row.get::<serde_json::Value, _>("payload");
+        assert_eq!(payload["attachment_id"], json!("attachment-1"));
+        assert_eq!(payload["download_state"], json!("downloaded"));
+        assert_eq!(payload["content_type"], json!("image/jpeg"));
     }
 }

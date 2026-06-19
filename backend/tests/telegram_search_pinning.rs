@@ -587,6 +587,36 @@ async fn telegram_message_pin_route_records_local_projection_command_and_audit()
         realtime_payload["message"]["metadata"]["is_pinned"],
         json!(true)
     );
+    let pin_observation = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'communications'
+          AND link.entity_kind = 'communication_message'
+          AND link.entity_id = $1
+          AND link.relationship_kind = 'telegram_pinned_state_update'
+        ORDER BY observation.captured_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("pin observation");
+    assert_eq!(
+        pin_observation.get::<String, _>("kind_code"),
+        "COMMUNICATION_MESSAGE"
+    );
+    let pin_payload = pin_observation.get::<Value, _>("payload");
+    assert_eq!(pin_payload["is_pinned"], json!(true));
+    assert_eq!(
+        pin_payload["provider_message_id"],
+        json!(provider_message_id)
+    );
     assert!(
         realtime_payload["telegram_chat_id"]
             .as_str()

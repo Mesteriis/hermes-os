@@ -136,6 +136,7 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
+use crate::vault::CommunicationProviderAccountStore;
 use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 
 use crate::app::{ApiError, AppState};
@@ -152,9 +153,12 @@ pub(crate) async fn get_application_settings(
 pub(crate) async fn get_application_settings_accounts(
     State(state): State<AppState>,
 ) -> Result<Json<ApplicationAccountsResponse>, ApiError> {
-    let items = communication_ingestion_store(&state)?
-        .list_provider_accounts()
-        .await?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let items = CommunicationProviderAccountStore::new(pool).list().await?;
 
     Ok(Json(ApplicationAccountsResponse { items }))
 }

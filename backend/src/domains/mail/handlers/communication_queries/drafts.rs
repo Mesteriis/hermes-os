@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::domains::mail::service::{MailCommandService, MailDraftUpsertCommand};
 
 #[derive(Deserialize)]
 pub(crate) struct DraftListQuery {
@@ -71,27 +72,22 @@ pub(crate) async fn post_v1_draft(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::mail::drafts::EmailDraftStore::new(pool);
-    let draft = store
-        .upsert(&crate::domains::mail::drafts::NewEmailDraft {
+    let draft = MailCommandService::new(pool)
+        .upsert_draft(MailDraftUpsertCommand {
             draft_id: req.draft_id,
             account_id: req.account_id,
             persona_id: req.persona_id,
             to_recipients: req.to_recipients,
-            cc_recipients: req.cc_recipients.unwrap_or_default(),
-            bcc_recipients: req.bcc_recipients.unwrap_or_default(),
+            cc_recipients: req.cc_recipients,
+            bcc_recipients: req.bcc_recipients,
             subject: req.subject,
             body_text: req.body_text,
             body_html: req.body_html,
             in_reply_to: req.in_reply_to,
-            references: req.references.unwrap_or_default(),
-            status: req
-                .status
-                .as_deref()
-                .and_then(crate::domains::mail::drafts::DraftStatus::parse)
-                .unwrap_or(crate::domains::mail::drafts::DraftStatus::Draft),
+            references: req.references,
+            status: req.status,
             scheduled_send_at: req.scheduled_send_at,
-            metadata: req.metadata.unwrap_or(serde_json::json!({})),
+            metadata: req.metadata,
         })
         .await?;
     Ok(Json(draft))
@@ -123,7 +119,8 @@ pub(crate) async fn delete_v1_draft(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::mail::drafts::EmailDraftStore::new(pool);
-    let deleted = store.delete(&draft_id).await?;
+    let deleted = MailCommandService::new(pool)
+        .delete_draft(&draft_id)
+        .await?;
     Ok(Json(serde_json::json!({"deleted": deleted})))
 }

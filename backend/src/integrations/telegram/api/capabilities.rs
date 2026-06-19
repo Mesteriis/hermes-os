@@ -2,7 +2,8 @@ use axum::Json;
 use axum::extract::{Path, State};
 
 use crate::app::{ApiError, AppState};
-use crate::domains::api_support::{TelegramCapabilitiesResponse, communication_ingestion_store};
+use crate::domains::api_support::TelegramCapabilitiesResponse;
+use crate::vault::CommunicationProviderAccountStore;
 
 pub(crate) async fn get_telegram_capabilities(
     State(state): State<AppState>,
@@ -14,8 +15,11 @@ pub(crate) async fn get_telegram_account_capabilities(
     State(state): State<AppState>,
     Path(account_id): Path<String>,
 ) -> Result<Json<TelegramCapabilitiesResponse>, ApiError> {
-    let account = communication_ingestion_store(&state)?
-        .provider_account(&account_id)
+    let Some(pool) = state.database.pool().cloned() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let account = CommunicationProviderAccountStore::new(pool)
+        .get(&account_id)
         .await?
         .ok_or_else(|| {
             crate::app::ApiError::Telegram(

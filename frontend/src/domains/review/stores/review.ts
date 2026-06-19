@@ -5,6 +5,7 @@ import type {
 	Decision,
 	Obligation,
 	ContradictionObservation,
+	ReviewItem,
 	ReviewWorkspaceItemAction
 } from '../types/review'
 import { fetchRelationships, reviewRelationship } from '../../personas/api/personas'
@@ -15,12 +16,21 @@ import {
 	reviewObligation
 } from '../../tasks/api/tasks'
 import { fetchContradictions, reviewContradiction } from '../../knowledge/api/knowledge'
+import {
+	fetchReviewItems,
+	approveReviewItem,
+	dismissReviewItem,
+	archiveReviewItem,
+	promoteReviewItem,
+	takeReviewItem
+} from '../api/items'
 
 export const useReviewStore = defineStore('review', () => {
 	const relationships = ref<Relationship[]>([])
 	const decisions = ref<Decision[]>([])
 	const obligations = ref<Obligation[]>([])
 	const contradictions = ref<ContradictionObservation[]>([])
+	const reviewItems = ref<ReviewItem[]>([])
 	const error = ref('')
 	const reviewingItemKey = ref<string | null>(null)
 
@@ -39,12 +49,14 @@ export const useReviewStore = defineStore('review', () => {
 	const contradictionsSuggestedCount = computed(() =>
 		contradictions.value.filter((c) => c.review_state === 'suggested').length
 	)
+	const reviewItemsCount = computed(() => reviewItems.value.filter((r) => r.status === 'new' || r.status === 'in_review').length)
 
 	const totalSuggestedCount = computed(() =>
 		relationsSuggestedCount.value +
 		decisionsSuggestedCount.value +
 		obligationsSuggestedCount.value +
-		contradictionsSuggestedCount.value
+		contradictionsSuggestedCount.value +
+		reviewItemsCount.value
 	)
 
 	async function loadAll() {
@@ -77,6 +89,12 @@ export const useReviewStore = defineStore('review', () => {
 			contradictions.value = conRes.items || []
 		} catch (e) {
 			errors.push(`Contradictions: ${e instanceof Error ? e.message : 'Unknown error'}`)
+		}
+		try {
+			const reviewRes = await fetchReviewItems({ status: 'active', limit: 50 })
+			reviewItems.value = reviewRes.items || []
+		} catch (e) {
+			errors.push(`Review inbox: ${e instanceof Error ? e.message : 'Unknown error'}`)
 		}
 
 		if (errors.length > 0) {
@@ -130,6 +148,31 @@ export const useReviewStore = defineStore('review', () => {
 					}
 					break
 				}
+				case 'review_item': {
+					if (action.action === 'approve') {
+						const updated = await approveReviewItem(action.item.review_item_id)
+						updateReviewItem(updated)
+					} else {
+						const updated = await dismissReviewItem(action.item.review_item_id)
+						updateReviewItem(updated)
+					}
+					break
+				}
+				case 'review_item_archive': {
+					const updated = await archiveReviewItem(action.item.review_item_id)
+					updateReviewItem(updated)
+					break
+				}
+				case 'review_item_take': {
+					const updated = await takeReviewItem(action.item.review_item_id)
+					updateReviewItem(updated)
+					break
+				}
+				case 'review_item_promote': {
+					const updated = await promoteReviewItem(action.item.review_item_id, action.promotion)
+					updateReviewItem(updated)
+					break
+				}
 			}
 			return ''
 		} catch (e) {
@@ -139,11 +182,19 @@ export const useReviewStore = defineStore('review', () => {
 		}
 	}
 
+	function updateReviewItem(updated: ReviewItem) {
+		const idx = reviewItems.value.findIndex((item) => item.review_item_id === updated.review_item_id)
+		if (idx === -1) return
+		reviewItems.value[idx] = updated
+	}
+
 	return {
 		relationships,
 		decisions,
 		obligations,
 		contradictions,
+		reviewItems,
+		reviewItemsCount,
 		error,
 		reviewingItemKey,
 		relationsSuggestedCount,
@@ -166,5 +217,13 @@ function reviewItemKey(action: ReviewWorkspaceItemAction): string {
 			return `obligation:${action.item.obligation_id}`
 		case 'contradiction':
 			return `contradiction:${action.item.observation_id}`
+		case 'review_item':
+			return `review_item:${action.item.review_item_id}`
+		case 'review_item_archive':
+			return `review_item_archive:${action.item.review_item_id}`
+		case 'review_item_take':
+			return `review_item_take:${action.item.review_item_id}`
+		case 'review_item_promote':
+			return `review_item_promote:${action.item.review_item_id}`
 	}
 }

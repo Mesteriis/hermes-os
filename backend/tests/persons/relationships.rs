@@ -23,7 +23,7 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
         .await
         .expect("upsert persona");
 
-    let role = role_store
+    let _role = role_store
         .assign(
             &person.person_id,
             "Technical Advisor",
@@ -50,7 +50,7 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
             source_entity_kind,
             source_entity_id,
             target_entity_kind,
-            target_entity_id,
+            entity_id,
             review_state,
             trust_score::float8 AS trust_score,
             strength_score::float8 AS strength_score,
@@ -60,7 +60,7 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
         WHERE source_entity_kind = 'persona'
           AND source_entity_id = $1
           AND target_entity_kind = 'knowledge'
-          AND target_entity_id = 'person_role:technical_advisor'
+          AND entity_id = 'person_role:technical_advisor'
           AND relationship_type = 'has_role'
         "#,
     )
@@ -92,10 +92,24 @@ async fn person_role_assign_and_remove_materializes_relationship_against_postgre
     .fetch_one(&pool)
     .await
     .expect("role relationship evidence");
-    assert_eq!(evidence.0, "raw_record");
-    assert_eq!(evidence.1, role.id);
+    assert_eq!(evidence.0, "observation");
+    assert!(!evidence.1.is_empty());
     assert_eq!(evidence.2.as_deref(), Some("Technical Advisor"));
     assert_eq!(evidence.3["compatibility_source"], "person_roles");
+    let role_observation_kind: String = sqlx::query_scalar(
+        r#"
+        SELECT kinds.code
+        FROM observations observation
+        JOIN observation_kind_definitions kinds
+          ON kinds.kind_definition_id = observation.kind_definition_id
+        WHERE observation.observation_id = $1
+        "#,
+    )
+    .bind(&evidence.1)
+    .fetch_one(&pool)
+    .await
+    .expect("role observation kind");
+    assert_eq!(role_observation_kind, "PERSON_ROLE");
 
     let removed = role_store
         .remove(&person.person_id, "Technical Advisor")
@@ -163,7 +177,7 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
         SELECT
             relationship_id,
             source_entity_id,
-            target_entity_id,
+            entity_id,
             review_state,
             trust_score::float8 AS trust_score,
             strength_score::float8 AS strength_score,
@@ -173,7 +187,7 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
         WHERE source_entity_kind = 'persona'
           AND source_entity_id = $1
           AND target_entity_kind = 'persona'
-          AND target_entity_id = $2
+          AND entity_id = $2
           AND relationship_type = 'trusts'
         "#,
     )
@@ -206,11 +220,8 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
     .fetch_one(&pool)
     .await
     .expect("trust relationship evidence");
-    assert_eq!(evidence.0, "raw_record");
-    assert_eq!(
-        evidence.1,
-        format!("person_enrichment:{}:trust_score", target.person_id)
-    );
+    assert_eq!(evidence.0, "observation");
+    assert!(!evidence.1.is_empty());
     assert_eq!(evidence.2.as_deref(), Some("trust_score=82"));
     assert_eq!(evidence.3["compatibility_source"], "persons.trust_score");
     assert_eq!(
@@ -226,6 +237,44 @@ async fn person_enrichment_trust_score_materializes_owner_relationship_against_p
         "positive"
     );
     assert_eq!(evidence.3["trust_source_reliability"]["confidence"], 0.82);
+    let trust_observation_kind: String = sqlx::query_scalar(
+        r#"
+        SELECT kinds.code
+        FROM observations observation
+        JOIN observation_kind_definitions kinds
+          ON kinds.kind_definition_id = observation.kind_definition_id
+        WHERE observation.observation_id = $1
+        "#,
+    )
+    .bind(&evidence.1)
+    .fetch_one(&pool)
+    .await
+    .expect("trust observation kind");
+    assert_eq!(trust_observation_kind, "PERSON_TRUST_SIGNAL");
+
+    let review_item: (String, String, String, String) = sqlx::query_as(
+        r#"
+        SELECT
+            review_item.review_item_id,
+            review_item.item_kind,
+            review_item.metadata->>'mirrored_from',
+            review_item.metadata->>'relationship_id'
+        FROM review_items review_item
+        JOIN review_item_evidence evidence
+          ON evidence.review_item_id = review_item.review_item_id
+        WHERE evidence.observation_id = $1
+          AND review_item.item_kind = 'potential_relationship'
+          AND review_item.metadata->>'relationship_id' = $2
+        "#,
+    )
+    .bind(&evidence.1)
+    .bind(&relationship.0)
+    .fetch_one(&pool)
+    .await
+    .expect("relationship review mirror");
+    assert_eq!(review_item.1, "potential_relationship");
+    assert_eq!(review_item.2, "relationships");
+    assert_eq!(review_item.3, relationship.0);
 }
 
 #[tokio::test]
@@ -280,9 +329,23 @@ async fn person_promise_create_materializes_user_confirmed_obligation_without_ta
     .fetch_one(&pool)
     .await
     .expect("obligation evidence");
-    assert_eq!(evidence.0, "raw_record");
-    assert_eq!(evidence.1, promise.id);
+    assert_eq!(evidence.0, "observation");
+    assert!(!evidence.1.is_empty());
     assert_eq!(evidence.2.as_deref(), Some(description.as_str()));
+    let promise_observation_kind: String = sqlx::query_scalar(
+        r#"
+        SELECT kinds.code
+        FROM observations observation
+        JOIN observation_kind_definitions kinds
+          ON kinds.kind_definition_id = observation.kind_definition_id
+        WHERE observation.observation_id = $1
+        "#,
+    )
+    .bind(&evidence.1)
+    .fetch_one(&pool)
+    .await
+    .expect("promise observation kind");
+    assert_eq!(promise_observation_kind, "PERSON_PROMISE");
 
     let task_link_count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM obligation_task_links WHERE obligation_id = $1")

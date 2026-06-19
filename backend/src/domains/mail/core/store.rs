@@ -9,4 +9,8 @@ impl CommunicationIngestionStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
+
+    pub(crate) fn pool(&self) -> PgPool {
+        self.pool.clone()
+    }
 }

@@ -17,6 +17,7 @@ pub(super) fn row_to_message(row: PgRow) -> Result<MessageRow, GraphProjectionEr
     Ok(MessageRow {
         message_id: row.try_get("message_id")?,
         raw_record_id: row.try_get("raw_record_id")?,
+        observation_id: row.try_get("observation_id")?,
         account_id: row.try_get("account_id")?,
         provider_record_id: row.try_get("provider_record_id")?,
         subject: row.try_get("subject")?,
@@ -33,6 +34,7 @@ pub(super) fn row_to_document(row: PgRow) -> Result<DocumentRow, GraphProjection
         document_kind: row.try_get("document_kind")?,
         title: row.try_get("title")?,
         source_fingerprint: row.try_get("source_fingerprint")?,
+        observation_id: row.try_get("observation_id")?,
         imported_at: row.try_get("imported_at")?,
     })
 }

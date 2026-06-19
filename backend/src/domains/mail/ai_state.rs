@@ -8,8 +8,10 @@ use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
 use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::platform::observations::ObservationStoreError;
 
 const EVENT_TYPE_CHANGED: &str = "mail.ai_state.changed";
+use super::evidence::link_mail_entity_in_transaction;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
@@ -109,6 +111,18 @@ impl MailAiStateStore {
         message_id: &str,
         request: MailAiStateTransitionRequest,
     ) -> Result<Option<MailAiStateRecord>, MailAiStateError> {
+        self.transition_with_observation(message_id, request, None, "ai_state_transition", None)
+            .await
+    }
+
+    pub async fn transition_with_observation(
+        &self,
+        message_id: &str,
+        request: MailAiStateTransitionRequest,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<Option<MailAiStateRecord>, MailAiStateError> {
         let message_id = normalize_required("message_id", message_id)?;
         let update = NormalizedMailAiStateTransition::from_request(request)?;
         let mut transaction = self.pool.begin().await?;
@@ -140,6 +154,21 @@ impl MailAiStateStore {
         let record = row_to_ai_state(row)?;
         let event = ai_state_changed_event(&record, previous.ai_state)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "communication_message",
+                record.message_id.clone(),
+                relationship_kind,
+                json!({
+                    "previous_ai_state": previous.ai_state.as_str(),
+                    "ai_state": record.ai_state.as_str(),
+                }),
+                metadata,
+            )
+            .await?;
+        }
         transaction.commit().await?;
 
         Ok(Some(record))
@@ -289,6 +318,8 @@ fn system_time_nanos() -> u128 {
 pub enum MailAiStateError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
     #[error(transparent)]
     EventStore(#[from] crate::platform::events::EventStoreError),
     #[error(transparent)]

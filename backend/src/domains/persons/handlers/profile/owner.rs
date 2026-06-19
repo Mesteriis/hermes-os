@@ -1,5 +1,4 @@
 use super::super::support::*;
-
 #[derive(Serialize)]
 pub(crate) struct OwnerPersonaResponse {
     owner_persona: Option<crate::domains::persons::api::Person>,
@@ -31,8 +30,8 @@ pub(crate) async fn put_owner_persona(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let owner_persona = PersonProjectionStore::new(pool)
-        .set_owner_persona(&req.person_id)
+    let owner_persona = crate::domains::persons::service::PersonCommandService::new(pool)
+        .set_owner_persona_manual(&req.person_id)
         .await?;
     Ok(Json(OwnerPersonaResponse {
         owner_persona: Some(owner_persona),

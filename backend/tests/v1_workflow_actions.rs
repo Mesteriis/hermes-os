@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::{build_router, build_router_with_database};
@@ -92,24 +93,70 @@ async fn workflow_action_endpoint_exists_without_database() {
 }
 
 #[tokio::test]
-async fn v1_put_workflow_state() {
+async fn v1_put_workflow_state_captures_observation_trail() {
     let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!("skip");
         return;
     };
+    let database = Database::connect(Some(&db)).await.expect("database");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = uid();
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &format!("acct-workflow-state-{suffix}"),
+        &format!("provider-workflow-state-{suffix}"),
+        &format!("Workflow state {suffix}"),
+    )
+    .await;
     let r = router(&db).await;
     let response = r
         .oneshot(put(
-            "/api/v1/communications/messages/msg:fake/workflow-state",
-            json!({"state": "reviewed"}),
+            &format!("/api/v1/communications/messages/{message_id}/workflow-state"),
+            json!({"workflow_state": "reviewed"}),
         ))
         .await
         .expect("response");
-    assert!(
-        !response.status().is_server_error(),
-        "workflow state={}",
-        response.status()
-    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["message_id"], json!(message_id));
+    assert_eq!(body["workflow_state"], "reviewed");
+    assert_eq!(body["previous_state"], "new");
+
+    let workflow_state: String = sqlx::query_scalar(
+        "SELECT workflow_state FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("workflow state");
+    assert_eq!(workflow_state, "reviewed");
+
+    let row = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'communication_message'
+           AND entity_id = $1
+           AND relationship_kind = 'workflow_state_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("workflow state observation link");
+    let observation_id: String = row.try_get("observation_id").expect("observation id");
+    let metadata: Value = row.try_get("metadata").expect("metadata");
+    assert_eq!(metadata["previous_state"], "new");
+    assert_eq!(metadata["workflow_state"], "reviewed");
+
+    let origin_kind: String =
+        sqlx::query_scalar("SELECT origin_kind FROM observations WHERE observation_id = $1")
+            .bind(&observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("observation origin");
+    assert_eq!(origin_kind, "manual");
 }
 
 #[tokio::test]
@@ -128,6 +175,13 @@ async fn workflow_action_create_task_is_idempotent_and_records_safe_event() {
         &format!("Workflow action task {suffix}"),
     )
     .await;
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
     let r = router(&db).await;
     let command_id = format!("workflow-action-task-{suffix}");
     let body = json!({
@@ -160,13 +214,54 @@ async fn workflow_action_create_task_is_idempotent_and_records_safe_event() {
     assert_eq!(second_body["target"], first_body["target"]);
 
     let task_count: i64 = sqlx::query_scalar(
-        "SELECT count(*) FROM tasks WHERE source_id = $1 AND source_type = 'message'",
+        "SELECT count(*) FROM tasks WHERE source_id = $1 AND source_type = 'observation' AND source_kind = 'observation'",
     )
-    .bind(&message_id)
+    .bind(&message_observation_id)
     .fetch_one(&pool)
     .await
     .expect("task count");
     assert_eq!(task_count, 1);
+
+    let task_id = first_body["target"]["id"]
+        .as_str()
+        .expect("task id")
+        .to_owned();
+
+    let task_create_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'tasks'
+          AND entity_kind = 'task'
+          AND entity_id = $2
+          AND relationship_kind = 'task_create'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .bind(&task_id)
+    .fetch_one(&pool)
+    .await
+    .expect("task create observation links");
+    assert_eq!(task_create_link_count, 1);
+
+    let workflow_projection_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'tasks'
+          AND entity_kind = 'task'
+          AND entity_id = $2
+          AND relationship_kind = 'workflow_action_projection'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .bind(&task_id)
+    .fetch_one(&pool)
+    .await
+    .expect("task workflow projection observation links");
+    assert_eq!(workflow_projection_link_count, 1);
 
     let event_payload: Value =
         sqlx::query_scalar("SELECT payload FROM event_log WHERE event_id = $1")
@@ -179,6 +274,84 @@ async fn workflow_action_create_task_is_idempotent_and_records_safe_event() {
             .to_string()
             .contains("Body for local trash API")
     );
+}
+
+#[tokio::test]
+async fn workflow_action_create_contact_reuses_message_observation_for_person_projection() {
+    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skip workflow action contact: no DB");
+        return;
+    };
+    let database = Database::connect(Some(&db)).await.expect("database");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = uid();
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &format!("acct-workflow-contact-{suffix}"),
+        &format!("provider-workflow-contact-{suffix}"),
+        &format!("Workflow action contact {suffix}"),
+    )
+    .await;
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let r = router(&db).await;
+    let command_id = format!("workflow-action-contact-{suffix}");
+
+    let response = r
+        .oneshot(post_with_actor(
+            "/api/v1/workflow-actions",
+            json!({
+                "command_id": command_id,
+                "action": "create_contact",
+                "source": { "kind": "communication_message", "id": message_id }
+            }),
+        ))
+        .await
+        .expect("workflow contact response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["target"]["kind"], "person");
+    let person_id = body["target"]["id"].as_str().expect("person id").to_owned();
+
+    let persona_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'persons'
+          AND entity_kind = 'persona'
+          AND entity_id = $2
+          AND relationship_kind = 'workflow_action_projection'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .bind(&person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("persona workflow action observation links");
+    assert_eq!(persona_link_count, 1);
+
+    let identity_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'persons'
+          AND entity_kind = 'identity'
+          AND relationship_kind = 'workflow_action_projection'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("identity workflow action observation links");
+    assert_eq!(identity_link_count, 1);
 }
 
 #[tokio::test]
@@ -219,6 +392,113 @@ async fn workflow_action_create_note_creates_markdown_document() {
             .await
             .expect("document kind");
     assert_eq!(document_kind, "markdown");
+
+    let document_origin_kind: String = sqlx::query_scalar(
+        "SELECT observation.origin_kind
+         FROM documents
+         JOIN observations observation
+           ON observation.observation_id = documents.observation_id
+         WHERE documents.document_id = $1",
+    )
+    .bind(document_id)
+    .fetch_one(&pool)
+    .await
+    .expect("document observation origin kind");
+    assert_eq!(document_origin_kind, "manual");
+
+    let import_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE domain = 'documents'
+          AND entity_kind = 'document'
+          AND entity_id = $1
+          AND relationship_kind = 'import'
+        "#,
+    )
+    .bind(document_id)
+    .fetch_one(&pool)
+    .await
+    .expect("document import links");
+    assert_eq!(import_link_count, 1);
+}
+
+#[tokio::test]
+async fn workflow_action_link_document_reuses_message_observation_for_document_projection() {
+    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skip workflow action link_document: no DB");
+        return;
+    };
+    let database = Database::connect(Some(&db)).await.expect("database");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = uid();
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &format!("acct-workflow-link-doc-{suffix}"),
+        &format!("provider-workflow-link-doc-{suffix}"),
+        &format!("Workflow link document {suffix}"),
+    )
+    .await;
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let r = router(&db).await;
+    let command_id = format!("workflow-action-link-document-{suffix}");
+
+    let response = r
+        .oneshot(post_with_actor(
+            "/api/v1/workflow-actions",
+            json!({
+                "command_id": command_id,
+                "action": "link_document",
+                "source": { "kind": "communication_message", "id": message_id }
+            }),
+        ))
+        .await
+        .expect("workflow link document response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["target"]["kind"], "document");
+    let document_id = body["target"]["id"]
+        .as_str()
+        .expect("document id")
+        .to_owned();
+
+    let source_projection_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'documents'
+          AND entity_kind = 'document'
+          AND entity_id = $2
+          AND relationship_kind = 'workflow_action_projection'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .bind(&document_id)
+    .fetch_one(&pool)
+    .await
+    .expect("workflow document projection links");
+    assert_eq!(source_projection_link_count, 1);
+
+    let document_origin_kind: String = sqlx::query_scalar(
+        "SELECT observation.origin_kind
+         FROM documents
+         JOIN observations observation
+           ON observation.observation_id = documents.observation_id
+         WHERE documents.document_id = $1",
+    )
+    .bind(&document_id)
+    .fetch_one(&pool)
+    .await
+    .expect("linked document observation origin kind");
+    assert_eq!(document_origin_kind, "manual");
 }
 
 #[tokio::test]
@@ -241,6 +521,73 @@ async fn workflow_action_create_event_requires_start_and_end() {
         .expect("workflow event validation response");
 
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn workflow_action_create_event_reuses_message_observation_for_calendar_projection() {
+    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skip workflow action event projection: no DB");
+        return;
+    };
+    let database = Database::connect(Some(&db)).await.expect("database");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = uid();
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &format!("acct-workflow-event-{suffix}"),
+        &format!("provider-workflow-event-{suffix}"),
+        &format!("Workflow action event {suffix}"),
+    )
+    .await;
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let r = router(&db).await;
+
+    let response = r
+        .oneshot(post_with_actor(
+            "/api/v1/workflow-actions",
+            json!({
+                "command_id": format!("workflow-action-event-{suffix}"),
+                "action": "create_event",
+                "source": { "kind": "communication_message", "id": message_id },
+                "input": {
+                    "title": "Follow-up meeting",
+                    "body": "Discuss imported communication context",
+                    "starts_at": "2026-07-01T10:00:00Z",
+                    "ends_at": "2026-07-01T11:00:00Z"
+                }
+            }),
+        ))
+        .await
+        .expect("workflow event response");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["target"]["kind"], "calendar_event");
+    let event_id = body["target"]["id"].as_str().expect("event id").to_owned();
+
+    let projection_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'calendar'
+          AND entity_kind = 'event'
+          AND entity_id = $2
+          AND relationship_kind = 'workflow_action_projection'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .bind(&event_id)
+    .fetch_one(&pool)
+    .await
+    .expect("workflow event projection links");
+    assert_eq!(projection_link_count, 1);
 }
 
 #[tokio::test]

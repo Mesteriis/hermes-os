@@ -9,16 +9,15 @@ mod stores;
 mod token_http;
 
 use reqwest::Client;
+use sqlx::postgres::PgPool;
 
-use crate::domains::mail::core::CommunicationIngestionStore;
 use crate::platform::secrets::SecretReferenceStore;
 
 use super::vault::AccountSecretVault;
 
 #[derive(Clone)]
 pub struct EmailAccountSetupService {
-    pub(in crate::domains::mail::accounts::service) communication_store:
-        Option<CommunicationIngestionStore>,
+    pub(in crate::domains::mail::accounts::service) pool: Option<PgPool>,
     pub(in crate::domains::mail::accounts::service) secret_store: Option<SecretReferenceStore>,
     pub(in crate::domains::mail::accounts::service) vault: AccountSecretVault,
     pub(in crate::domains::mail::accounts::service) http: Client,

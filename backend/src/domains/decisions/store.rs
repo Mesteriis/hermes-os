@@ -1,7 +1,15 @@
+use std::collections::HashSet;
+
+use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
+use crate::workflows::review_mirror::sync_decision_review_state_in_transaction;
+
 use super::errors::DecisionStoreError;
+use super::evidence::{
+    link_decision_review_transition_in_transaction, link_decision_support_in_transaction,
+};
 use super::graph_projection::project_decision_graph_in_transaction;
 use super::ids::{decision_id, evidence_id};
 use super::models::{
@@ -47,6 +55,7 @@ impl DecisionStore {
         evidence: &[NewDecisionEvidence],
         impacted_entities: &[NewDecisionImpactedEntity],
     ) -> Result<Decision, DecisionStoreError> {
+        validate_evidence_observations_exist(transaction, evidence).await?;
         let decision_id = decision_id(decision);
         let row = sqlx::query(
             r#"
@@ -130,13 +139,15 @@ impl DecisionStore {
                     decision_id,
                     source_kind,
                     source_id,
+                    observation_id,
                     quote,
                     confidence,
                     metadata
                 )
-                VALUES ($1, $2, $3, $4, $5, CAST($6 AS NUMERIC(5,4)), $7)
+                VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS NUMERIC(5,4)), $8)
                 ON CONFLICT (decision_id, source_kind, source_id)
                 DO UPDATE SET
+                    observation_id = EXCLUDED.observation_id,
                     quote = EXCLUDED.quote,
                     confidence = EXCLUDED.confidence,
                     metadata = EXCLUDED.metadata
@@ -146,11 +157,26 @@ impl DecisionStore {
             .bind(&decision_id)
             .bind(item.source_kind.as_str())
             .bind(&item.source_id)
+            .bind(item.observation_id.as_deref())
             .bind(&item.quote)
             .bind(item.confidence)
             .bind(&item.metadata)
             .execute(&mut **transaction)
             .await?;
+
+            if let Some(observation_id) = item.observation_id.as_deref() {
+                link_decision_support_in_transaction(
+                    transaction,
+                    observation_id,
+                    decision_id.clone(),
+                    item.confidence,
+                    json!({
+                        "source_kind": item.source_kind.as_str(),
+                        "source_id": item.source_id,
+                    }),
+                )
+                .await?;
+            }
         }
 
         for item in impacted_entities {
@@ -266,7 +292,19 @@ impl DecisionStore {
         decision_id: &str,
         review_state: DecisionReviewState,
     ) -> Result<Decision, DecisionStoreError> {
+        self.set_review_state_with_observation(decision_id, review_state, None, None)
+            .await
+    }
+
+    pub async fn set_review_state_with_observation(
+        &self,
+        decision_id: &str,
+        review_state: DecisionReviewState,
+        observation_id: Option<&str>,
+        metadata: Option<Value>,
+    ) -> Result<Decision, DecisionStoreError> {
         validate_non_empty("decision_id", decision_id)?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             UPDATE decisions
@@ -292,10 +330,61 @@ impl DecisionStore {
         )
         .bind(review_state.as_str())
         .bind(decision_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?
         .ok_or(DecisionStoreError::DecisionNotFound)?;
 
-        row_to_decision(row)
+        let decision = row_to_decision(row)?;
+        link_decision_review_transition_in_transaction(
+            &mut transaction,
+            observation_id,
+            &decision.decision_id,
+            decision.review_state,
+            metadata,
+        )
+        .await?;
+        sync_decision_review_state_in_transaction(&mut transaction, &decision).await?;
+        transaction.commit().await?;
+        Ok(decision)
     }
+}
+
+async fn validate_evidence_observations_exist(
+    transaction: &mut Transaction<'_, Postgres>,
+    evidence: &[NewDecisionEvidence],
+) -> Result<(), DecisionStoreError> {
+    let observation_ids: Vec<String> = evidence
+        .iter()
+        .filter_map(|item| item.observation_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if observation_ids.is_empty() {
+        return Ok(());
+    }
+
+    let stored_observation_ids: HashSet<String> = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT observation_id
+        FROM observations
+        WHERE observation_id = ANY($1)
+        "#,
+    )
+    .bind(&observation_ids)
+    .fetch_all(&mut **transaction)
+    .await?
+    .into_iter()
+    .collect();
+
+    for observation_id in observation_ids {
+        if !stored_observation_ids.contains(&observation_id) {
+            return Err(DecisionStoreError::ObservationNotFound(observation_id));
+        }
+    }
+
+    Ok(())
 }

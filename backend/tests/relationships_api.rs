@@ -147,6 +147,22 @@ async fn put_relationship_review_updates_relationship_and_graph_projection() {
             .fetch_one(&pool)
             .await
             .expect("relationship review state");
+    let link_row = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'relationships'
+           AND entity_kind = 'relationship'
+           AND entity_id = $1
+           AND relationship_kind = 'review_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&stored.relationship_id)
+    .fetch_one(&pool)
+    .await
+    .expect("relationship observation link");
+    let observation_id: String = link_row.try_get("observation_id").expect("observation id");
+    let metadata: Value = link_row.try_get("metadata").expect("link metadata");
     let graph_row = sqlx::query(
         r#"
         SELECT review_state, properties
@@ -166,11 +182,41 @@ async fn put_relationship_review_updates_relationship_and_graph_projection() {
     let graph_properties: Value = graph_row.try_get("properties").expect("graph properties");
 
     assert_eq!(stored_review_state, "user_confirmed");
+    assert_eq!(metadata["review_state"], "user_confirmed");
     assert_eq!(graph_review_state, "user_confirmed");
     assert_eq!(
         graph_properties["relationship_id"],
         json!(stored.relationship_id)
     );
+
+    let observation_row =
+        sqlx::query("SELECT origin_kind, payload FROM observations WHERE observation_id = $1")
+            .bind(&observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("relationship observation");
+    let origin_kind: String = observation_row.try_get("origin_kind").expect("origin kind");
+    let payload: Value = observation_row.try_get("payload").expect("payload");
+    assert_eq!(origin_kind, "manual");
+    assert_eq!(payload["relationship_id"], json!(stored.relationship_id));
+    assert_eq!(payload["review_state"], "user_confirmed");
+
+    let review_item: (String, String, String) = sqlx::query_as(
+        r#"
+        SELECT status, target_entity_kind, entity_id
+        FROM review_items
+        WHERE metadata->>'relationship_id' = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&stored.relationship_id)
+    .fetch_one(&pool)
+    .await
+    .expect("relationship review item");
+    assert_eq!(review_item.0, "promoted");
+    assert_eq!(review_item.1, "relationship");
+    assert_eq!(review_item.2, stored.relationship_id);
 }
 
 async fn app_and_pool(database_url: &str) -> (axum::Router, PgPool) {

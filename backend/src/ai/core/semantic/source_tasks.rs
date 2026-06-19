@@ -27,6 +27,7 @@ pub(super) async fn append_task_sources(
         sources.push(SemanticSource {
             source_kind: SemanticSourceKind::Task,
             source_id: task_id,
+            observation_id: None,
             title: title.clone(),
             source_text: format!("{title}\nStatus: {status}\nSource: {source_kind}:{source_id}"),
             graph_node_id: None,

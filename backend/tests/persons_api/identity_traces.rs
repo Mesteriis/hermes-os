@@ -2,6 +2,7 @@ use axum::http::StatusCode;
 use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use super::support::{
@@ -16,6 +17,10 @@ async fn identity_traces_create_list_and_attach_unattached_trace() {
     };
     let suffix = unique_suffix();
     let app = build_persons_app(&database_url).await;
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
 
     let create = app
         .clone()
@@ -37,6 +42,35 @@ async fn identity_traces_create_list_and_attach_unattached_trace() {
     assert_eq!(create_body["source"], "communication_projection");
     let identity_id = create_body["id"].as_str().expect("identity id").to_owned();
 
+    let observation_row = sqlx::query(
+        "SELECT kind.code AS kind_code, observation.origin_kind
+         FROM observation_links link
+         JOIN observations observation ON observation.observation_id = link.observation_id
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE link.domain = 'persons'
+           AND link.entity_kind = 'identity_trace'
+           AND link.entity_id = $1
+         ORDER BY link.created_at DESC
+         LIMIT 1",
+    )
+    .bind(&identity_id)
+    .fetch_one(&pool)
+    .await
+    .expect("identity trace observation");
+    assert_eq!(
+        observation_row
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "PERSON_RECORD_MUTATION"
+    );
+    assert_eq!(
+        observation_row
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "manual"
+    );
+
     let list = app
         .clone()
         .oneshot(get_request_with_token(
@@ -52,11 +86,7 @@ async fn identity_traces_create_list_and_attach_unattached_trace() {
         && item["person_id"] == Value::Null
         && item["identity_type"] == "message_participant"));
 
-    let database = Database::connect(Some(&database_url))
-        .await
-        .expect("database connection");
-    let pool = database.pool().expect("configured pool").clone();
-    let person_store = PersonProjectionStore::new(pool);
+    let person_store = PersonProjectionStore::new(pool.clone());
     let person = person_store
         .upsert_email_person(&format!("identity-trace-api-{suffix}@example.com"))
         .await
@@ -78,4 +108,34 @@ async fn identity_traces_create_list_and_attach_unattached_trace() {
     assert_eq!(attach_body["id"], identity_id);
     assert_eq!(attach_body["person_id"], person.person_id);
     assert_eq!(attach_body["status"], "active");
+
+    let assignment_observation_row = sqlx::query(
+        "SELECT kind.code AS kind_code, observation.origin_kind
+         FROM observation_links link
+         JOIN observations observation ON observation.observation_id = link.observation_id
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE link.domain = 'persons'
+           AND link.entity_kind = 'identity_trace'
+           AND link.entity_id = $1
+           AND link.relationship_kind = 'trace_assignment'
+         ORDER BY link.created_at DESC
+         LIMIT 1",
+    )
+    .bind(&identity_id)
+    .fetch_one(&pool)
+    .await
+    .expect("identity trace assignment observation");
+    assert_eq!(
+        assignment_observation_row
+            .try_get::<String, _>("kind_code")
+            .expect("assignment kind code"),
+        "PERSON_RECORD_MUTATION"
+    );
+    assert_eq!(
+        assignment_observation_row
+            .try_get::<String, _>("origin_kind")
+            .expect("assignment origin kind"),
+        "manual"
+    );
 }

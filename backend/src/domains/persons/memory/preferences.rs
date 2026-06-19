@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use super::errors::PersonMemoryError;
+use crate::domains::persons::core::link_persons_entity;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonPreference {
@@ -55,6 +57,32 @@ impl PersonPreferenceStore {
                        last_verified_at, created_at, updated_at"
         ).bind(person_id).bind(preference_type).bind(value).bind(source).fetch_one(&self.pool).await?;
         row_to_preference(row)
+    }
+
+    pub async fn upsert_with_observation(
+        &self,
+        person_id: &str,
+        preference_type: &str,
+        value: &str,
+        source: &str,
+        observation_id: &str,
+    ) -> Result<PersonPreference, PersonMemoryError> {
+        let pref = self
+            .upsert(person_id, preference_type, value, source)
+            .await?;
+        link_persons_entity(
+            &self.pool,
+            observation_id,
+            "preference",
+            pref.id.clone(),
+            None,
+            Some(json!({
+                "person_id": person_id,
+                "preference_type": pref.preference_type,
+            })),
+        )
+        .await?;
+        Ok(pref)
     }
 }
 

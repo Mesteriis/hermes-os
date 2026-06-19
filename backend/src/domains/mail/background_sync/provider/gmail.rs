@@ -7,6 +7,7 @@ use crate::domains::mail::accounts::EmailAccountSetupService;
 use crate::domains::mail::core::ProviderAccountSecretPurpose;
 use crate::integrations::gmail::client::GmailApiClient;
 use crate::platform::secrets::SecretReferenceStore;
+use crate::vault::CommunicationProviderSecretBindingStore;
 
 use super::super::errors::ProviderSyncError;
 use super::super::service::MailBackgroundSyncService;
@@ -17,16 +18,15 @@ impl MailBackgroundSyncService {
         &self,
         context: ProviderSyncContext<'_>,
     ) -> Result<ProviderSyncSummary, ProviderSyncError> {
-        let binding = context
-            .communication_store
-            .provider_account_secret_binding(
+        let binding = CommunicationProviderSecretBindingStore::new(self.pool.clone())
+            .get_for_account(
                 &context.account.account_id,
                 ProviderAccountSecretPurpose::OauthToken,
             )
             .await?
             .ok_or(ProviderSyncError::MissingCredential)?;
         let account_setup = EmailAccountSetupService::new_with_host_vault(
-            context.communication_store.clone(),
+            self.pool.clone(),
             SecretReferenceStore::new(self.pool.clone()),
             self.vault.clone(),
         );

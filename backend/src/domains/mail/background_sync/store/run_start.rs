@@ -2,6 +2,7 @@ use serde_json::{Value, json};
 
 use super::super::errors::MailSyncError;
 use super::super::events::sync_run_started_event;
+use super::super::evidence::capture_mail_sync_run_observation;
 use super::super::models::{MailSyncRun, MailSyncSettings, MailSyncTrigger};
 use super::super::rows::row_to_run;
 use super::super::validation::{mail_sync_run_id, validate_account_id};
@@ -68,6 +69,15 @@ impl MailSyncStore {
         match result {
             Ok(row) => {
                 let run = row_to_run(row)?;
+                capture_mail_sync_run_observation(
+                    &mut transaction,
+                    &run,
+                    "COMMUNICATION_MAIL_SYNC_RUN",
+                    "started",
+                    run.started_at,
+                    "mail.background_sync.start_run",
+                )
+                .await?;
                 let event = sync_run_started_event(&run)?;
                 EventStore::append_in_transaction(&mut transaction, &event).await?;
                 transaction.commit().await?;

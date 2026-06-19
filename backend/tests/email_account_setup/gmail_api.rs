@@ -3,6 +3,7 @@ use std::env;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use serde_json::json;
+use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
@@ -325,6 +326,43 @@ async fn gmail_oauth_callback_completes_pending_grant_without_api_secret() {
     assert_eq!(account.external_account_id, account_id);
     assert!(account.config.get("access_token").is_none());
     assert!(account.config.get("refresh_token").is_none());
+    let provider_account_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'vault'
+           AND entity_kind = 'communication_provider_account'
+           AND entity_id = $1
+           AND relationship_kind = 'upsert'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider account observation link");
+    let provider_account_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code
+         FROM observations observation
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE observation.observation_id = $1",
+    )
+    .bind(&provider_account_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider account observation");
+    assert_eq!(
+        provider_account_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "local_runtime"
+    );
+    assert_eq!(
+        provider_account_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "COMMUNICATION_PROVIDER_ACCOUNT"
+    );
 
     let calendar_account_id = format!("google-calendar:{account_id}");
     let calendar_account = CalendarAccountStore::new(pool.clone())
@@ -344,12 +382,90 @@ async fn gmail_oauth_callback_completes_pending_grant_without_api_secret() {
         calendar_account.capabilities["connected_services"],
         json!(["calendar"])
     );
+    let calendar_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'calendar'
+           AND entity_kind = 'calendar_account'
+           AND entity_id = $1
+           AND relationship_kind = 'linked_provider_upsert'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&calendar_account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar account observation link");
+    let calendar_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code
+         FROM observations observation
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE observation.observation_id = $1",
+    )
+    .bind(&calendar_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar account observation");
+    assert_eq!(
+        calendar_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "local_runtime"
+    );
+    assert_eq!(
+        calendar_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "CALENDAR_ACCOUNT_LINK"
+    );
 
     let binding = communication_store
         .provider_account_secret_binding(&account_id, ProviderAccountSecretPurpose::OauthToken)
         .await
         .expect("load binding")
         .expect("secret binding");
+    let binding_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'vault'
+           AND entity_kind = 'communication_provider_secret_binding'
+           AND entity_id = $1
+           AND relationship_kind = 'bind'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(format!(
+        "{}:{}",
+        account_id,
+        ProviderAccountSecretPurpose::OauthToken.as_str()
+    ))
+    .fetch_one(&pool)
+    .await
+    .expect("provider secret binding observation link");
+    let binding_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code
+         FROM observations observation
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE observation.observation_id = $1",
+    )
+    .bind(&binding_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider secret binding observation");
+    assert_eq!(
+        binding_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "local_runtime"
+    );
+    assert_eq!(
+        binding_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "COMMUNICATION_PROVIDER_SECRET_BINDING"
+    );
     let secret_store = SecretReferenceStore::new(pool);
     let reference = secret_store
         .secret_reference(&binding.secret_ref)

@@ -100,6 +100,7 @@ mod tests {
         ProjectedMessage {
             message_id: "msg:1".into(),
             raw_record_id: "raw:1".into(),
+            observation_id: "observation:1".into(),
             account_id: "a:1".into(),
             provider_record_id: "p:1".into(),
             subject: subject.into(),

@@ -1,6 +1,7 @@
 use crate::ai::core::AI_EMBEDDING_DIMENSION;
 
 use super::errors::AiControlCenterError;
+use super::evidence::capture_model_route_observation;
 use super::models::{AiModelRoute, AiModelRouteUpdateRequest};
 use super::rows::row_to_route;
 use super::store::AiControlCenterStore;
@@ -67,6 +68,7 @@ impl AiControlCenterStore {
                 "embedding route requires a 2560-dimension model".to_owned(),
             ));
         }
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO ai_model_routes (capability_slot, provider_id, model_key, updated_at)
@@ -87,9 +89,17 @@ impl AiControlCenterStore {
         .bind(slot.trim())
         .bind(request.provider_id.trim())
         .bind(request.model_key.trim())
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_route(row)
+        let route = row_to_route(row)?;
+        capture_model_route_observation(
+            &mut transaction,
+            &route,
+            "ai_control_center.put_model_route",
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(route)
     }
 }

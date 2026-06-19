@@ -6,7 +6,7 @@ use super::errors::EventStoreError;
 static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
 pub async fn run_migrations(pool: &PgPool) -> Result<(), EventStoreError> {
-    // Keep this wrapper explicit so migration bundle changes remain easy to validate in tests.
+    // Keep this wrapper explicit so compile-time migration bundle file changes remain easy to validate.
     MIGRATOR.run(pool).await?;
     Ok(())
 }

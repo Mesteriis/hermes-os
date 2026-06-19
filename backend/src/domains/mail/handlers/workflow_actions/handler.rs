@@ -47,6 +47,7 @@ pub(crate) async fn post_v1_workflow_action(
         }
         WorkflowActionKind::CreateTask => {
             create_task_response(
+                &pool,
                 &mut transaction,
                 &command_id,
                 &event_id,

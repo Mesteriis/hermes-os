@@ -9,7 +9,7 @@
 | `task_provider_accounts` | 1 | external tracker accounts |
 | `external_task_identities` | 1 | local-to-provider task identity mapping |
 | `provider_status_mappings` | 1 | provider status mapping |
-| `task_context_packs` | 2 | materialized context read models |
+| `context_packs` | 2 | engine-owned derived task context packs; legacy `task_context_packs` is historical schema compatibility only |
 | `task_evidence` | 2 | provenance for extracted or linked tasks |
 | `task_relations` | 2 | links between tasks and world-model entities |
 | `task_checklists` | 2 | checklist items |

@@ -1,5 +1,6 @@
 mod local_state;
 mod metadata;
+mod participants;
 mod queries;
 mod upsert;
 mod workflow;

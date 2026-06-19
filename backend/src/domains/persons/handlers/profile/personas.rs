@@ -1,6 +1,5 @@
 use super::super::support::*;
 use super::models::{PersonaListResponse, PersonaReadModel, persona_read_model};
-
 #[derive(Deserialize)]
 pub(crate) struct PersonaListQuery {
     limit: Option<i64>,
@@ -72,8 +71,8 @@ pub(crate) async fn put_persona(
         .identity
         .as_ref()
         .and_then(|identity| identity.display_name.as_deref());
-    let persona = PersonProjectionStore::new(pool)
-        .update_persona(&persona_id, display_name, req.is_self == Some(true))
+    let persona = crate::domains::persons::service::PersonCommandService::new(pool)
+        .update_persona_manual(&persona_id, display_name, req.is_self == Some(true))
         .await?;
     Ok(Json(persona_read_model(persona)))
 }

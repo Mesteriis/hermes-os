@@ -19,6 +19,7 @@ impl MessageProjectionStore {
             INSERT INTO communication_messages (
                 message_id,
                 raw_record_id,
+                observation_id,
                 account_id,
                 provider_record_id,
                 subject,
@@ -35,6 +36,7 @@ impl MessageProjectionStore {
             SELECT
                 $1,
                 raw_record_id,
+                observation_id,
                 account_id,
                 provider_record_id,
                 $5,
@@ -56,6 +58,7 @@ impl MessageProjectionStore {
             DO UPDATE SET
                 message_id = EXCLUDED.message_id,
                 raw_record_id = EXCLUDED.raw_record_id,
+                observation_id = EXCLUDED.observation_id,
                 subject = EXCLUDED.subject,
                 sender = EXCLUDED.sender,
                 recipients = EXCLUDED.recipients,
@@ -70,6 +73,7 @@ impl MessageProjectionStore {
             RETURNING
                 message_id,
                 raw_record_id,
+                observation_id,
                 account_id,
                 provider_record_id,
                 subject,
@@ -144,6 +148,7 @@ impl MessageProjectionStore {
             INSERT INTO communication_messages (
                 message_id,
                 raw_record_id,
+                observation_id,
                 account_id,
                 provider_record_id,
                 subject,
@@ -160,6 +165,7 @@ impl MessageProjectionStore {
             SELECT
                 $1,
                 raw_record_id,
+                observation_id,
                 account_id,
                 provider_record_id,
                 $5,
@@ -180,6 +186,7 @@ impl MessageProjectionStore {
             DO UPDATE SET
                 message_id = EXCLUDED.message_id,
                 raw_record_id = EXCLUDED.raw_record_id,
+                observation_id = EXCLUDED.observation_id,
                 subject = EXCLUDED.subject,
                 sender = EXCLUDED.sender,
                 recipients = EXCLUDED.recipients,
@@ -194,6 +201,7 @@ impl MessageProjectionStore {
             RETURNING
                 message_id,
                 raw_record_id,
+                observation_id,
                 account_id,
                 provider_record_id,
                 subject,

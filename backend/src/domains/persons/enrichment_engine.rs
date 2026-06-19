@@ -8,6 +8,9 @@ use thiserror::Error;
 use crate::engines::enrichment::{
     EnrichmentEngine, EnrichmentEngineError as SharedEnrichmentEngineError,
 };
+use crate::platform::observations::{
+    ObservationStoreError, materialize_review_transition_link as materialize_review_link,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EnrichmentResult {
@@ -72,16 +75,56 @@ impl EnrichmentResultStore {
     }
 
     pub async fn apply(&self, id: &str) -> Result<(), EnrichmentEngineError> {
+        self.apply_with_observation(id, None, None).await
+    }
+
+    pub async fn apply_with_observation(
+        &self,
+        id: &str,
+        observation_id: Option<&str>,
+        metadata: Option<Value>,
+    ) -> Result<(), EnrichmentEngineError> {
         sqlx::query("UPDATE enrichment_results SET status = 'applied', applied_at = now() WHERE id::text = $1")
             .bind(id).execute(&self.pool).await?;
+        materialize_review_link(
+            &self.pool,
+            observation_id,
+            "persons",
+            "enrichment_result",
+            id,
+            "status",
+            "applied",
+            metadata,
+        )
+        .await?;
         Ok(())
     }
 
     pub async fn reject(&self, id: &str) -> Result<(), EnrichmentEngineError> {
+        self.reject_with_observation(id, None, None).await
+    }
+
+    pub async fn reject_with_observation(
+        &self,
+        id: &str,
+        observation_id: Option<&str>,
+        metadata: Option<Value>,
+    ) -> Result<(), EnrichmentEngineError> {
         sqlx::query("UPDATE enrichment_results SET status = 'rejected' WHERE id::text = $1")
             .bind(id)
             .execute(&self.pool)
             .await?;
+        materialize_review_link(
+            &self.pool,
+            observation_id,
+            "persons",
+            "enrichment_result",
+            id,
+            "status",
+            "rejected",
+            metadata,
+        )
+        .await?;
         Ok(())
     }
 }
@@ -116,6 +159,8 @@ pub enum EnrichmentEngineError {
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
     Shared(#[from] SharedEnrichmentEngineError),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
     #[error("enrichment not found")]
     NotFound,
 }

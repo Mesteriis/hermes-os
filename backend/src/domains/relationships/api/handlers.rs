@@ -1,15 +1,16 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
-
-use crate::app::{ApiError, AppState};
-use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
+use serde_json::json;
 
 use super::super::{
-    Relationship, RelationshipEntityKind, RelationshipReviewState, RelationshipStore,
+    Relationship, RelationshipCommandService, RelationshipEntityKind, RelationshipReviewState,
+    RelationshipStore,
 };
 use super::models::{
     RelationshipListQuery, RelationshipListResponse, RelationshipReviewApiRequest,
 };
+use crate::app::{ApiError, AppState};
+use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 
 const RELATIONSHIP_API_ACTOR_ID: &str = "hermes-frontend";
 const DEFAULT_RELATIONSHIP_LIMIT: i64 = 50;
@@ -60,7 +61,6 @@ pub(crate) async fn put_v1_relationship_review(
 ) -> Result<Json<Relationship>, ApiError> {
     let relationship_id = validate_required_query_value(Some(&relationship_id))?;
     let review_state = parse_review_state(&request.review_state)?;
-
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::relationship_review_set(
             RELATIONSHIP_API_ACTOR_ID,
@@ -68,8 +68,13 @@ pub(crate) async fn put_v1_relationship_review(
         ))
         .await?;
 
-    let relationship = relationship_store(&state)?
-        .set_review_state(&relationship_id, review_state)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let relationship = RelationshipCommandService::new(pool)
+        .review_manual(&relationship_id, review_state)
         .await?;
 
     Ok(Json(relationship))

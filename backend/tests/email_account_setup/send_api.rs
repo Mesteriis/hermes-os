@@ -1,5 +1,6 @@
 use axum::http::StatusCode;
 use serde_json::json;
+use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
@@ -98,6 +99,27 @@ async fn imap_send_api_sends_via_configured_smtp_against_postgres() {
         send_body["accepted_recipients"],
         json!(["recipient@example.com", "copy@example.com"])
     );
+    let provider_message_id = send_body["message_id"]
+        .as_str()
+        .expect("provider message id");
+    let pool = ctx.pool().clone();
+    let link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'provider_send'
+           AND entity_id = $1
+           AND relationship_kind = 'provider_send'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(provider_message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("smtp provider send observation link");
+    let link_metadata: serde_json::Value = link.try_get("metadata").expect("link metadata");
+    assert_eq!(link_metadata["transport"], "smtp");
+    assert_eq!(link_metadata["status"], "sent");
 
     let commands = smtp_server.commands();
     assert!(commands.iter().any(|line| line == "AUTH LOGIN"));

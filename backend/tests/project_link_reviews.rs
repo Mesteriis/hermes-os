@@ -19,8 +19,7 @@ use hermes_hub_backend::domains::projects::link_reviews::{
     ProjectLinkReviewStore, ProjectLinkTargetKind,
 };
 use hermes_hub_backend::domains::relationships::{
-    RelationshipEntityKind, RelationshipEvidenceSourceKind, RelationshipReviewState,
-    RelationshipStore,
+    RelationshipEntityKind, RelationshipReviewState, RelationshipStore,
 };
 use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
 use hermes_hub_backend::platform::storage::Database;
@@ -188,12 +187,25 @@ async fn project_link_review_confirm_materializes_user_confirmed_decision_agains
     .fetch_one(&context.pool)
     .await
     .expect("decision evidence");
-    assert_eq!(evidence.0, "raw_record");
-    assert_eq!(evidence.1, result.event_id);
+    assert_eq!(evidence.0, "observation");
+    assert!(!evidence.1.is_empty());
     assert_eq!(
         evidence.2.as_deref(),
         Some("User confirmed message link to project.")
     );
+
+    let observation_kind: String = sqlx::query_scalar(
+        "SELECT kind.code AS kind_code
+             FROM observations observation
+             JOIN observation_kind_definitions kind
+               ON kind.kind_definition_id = observation.kind_definition_id
+             WHERE observation.observation_id = $1",
+    )
+    .bind(&evidence.1)
+    .fetch_one(&context.pool)
+    .await
+    .expect("project link review decision observation kind");
+    assert_eq!(observation_kind, "PROJECT_LINK_REVIEW");
 }
 
 #[tokio::test]
@@ -231,7 +243,7 @@ async fn project_link_review_confirm_materializes_relationship_against_postgres(
     )
     .await;
     let command_id = format!("link-review-relationship-confirm-{suffix}");
-    let result = context
+    let _result = context
         .review_store
         .set_review_state(&ProjectLinkReviewCommand {
             command_id: command_id.clone(),
@@ -280,15 +292,25 @@ async fn project_link_review_confirm_materializes_relationship_against_postgres(
     .fetch_one(&context.pool)
     .await
     .expect("relationship evidence");
-    assert_eq!(
-        evidence.0,
-        RelationshipEvidenceSourceKind::RawRecord.as_str()
-    );
-    assert_eq!(evidence.1, result.event_id);
+    assert_eq!(evidence.0, "observation");
+    assert!(!evidence.1.is_empty());
     assert_eq!(
         evidence.2.as_deref(),
         Some("User confirmed message link to project.")
     );
+
+    let observation_kind: String = sqlx::query_scalar(
+        "SELECT kind.code AS kind_code
+             FROM observations observation
+             JOIN observation_kind_definitions kind
+               ON kind.kind_definition_id = observation.kind_definition_id
+             WHERE observation.observation_id = $1",
+    )
+    .bind(&evidence.1)
+    .fetch_one(&context.pool)
+    .await
+    .expect("project link review relationship observation kind");
+    assert_eq!(observation_kind, "PROJECT_LINK_REVIEW");
 }
 
 #[tokio::test]
@@ -394,15 +416,36 @@ async fn project_link_review_reset_clears_review_and_demotes_relationship_agains
     .fetch_one(&context.pool)
     .await
     .expect("reset relationship evidence");
-    assert_eq!(
-        reset_evidence.0,
-        RelationshipEvidenceSourceKind::RawRecord.as_str()
-    );
-    assert_eq!(reset_evidence.1, result.event_id);
+    assert_eq!(reset_evidence.0, "observation");
+    assert!(!reset_evidence.1.is_empty());
     assert_eq!(
         reset_evidence.2.as_deref(),
         Some("User reset message link review for project.")
     );
+
+    let review_item: (String, String, String, String) = sqlx::query_as(
+        r#"
+        SELECT
+            review_item.review_item_id,
+            review_item.item_kind,
+            review_item.metadata->>'mirrored_from',
+            review_item.metadata->>'relationship_id'
+        FROM review_items review_item
+        JOIN review_item_evidence evidence
+          ON evidence.review_item_id = review_item.review_item_id
+        WHERE evidence.observation_id = $1
+          AND review_item.item_kind = 'potential_relationship'
+          AND review_item.metadata->>'relationship_id' = $2
+        "#,
+    )
+    .bind(&reset_evidence.1)
+    .bind(&relationship.relationship_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("project link relationship review mirror");
+    assert_eq!(review_item.1, "potential_relationship");
+    assert_eq!(review_item.2, "relationships");
+    assert_eq!(review_item.3, relationship.relationship_id);
 }
 
 #[tokio::test]

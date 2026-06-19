@@ -11,4 +11,5 @@ pub mod identity;
 pub mod intelligence;
 pub mod investigator;
 pub mod memory;
+pub mod service;
 pub mod trust;

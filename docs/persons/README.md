@@ -158,11 +158,11 @@ Persona Intelligence includes:
 
 ## Navigation
 
-- [Refactoring Report](refactoring-report.md) — audit of the old Contact/CRM
-  model and required domain changes.
 - [Architecture](architecture.md) — target Persona Intelligence architecture.
 - [Data Model](data-model.md) — logical model and current persistence
   compatibility notes.
 - [API Reference](api.md) — target API shape and legacy endpoint caveats.
 - [Status](status.md) — documentation and implementation migration status.
 - [Blockers](blockers.md) — architecture blockers for the Persona model.
+- [Implementation Alignment Plan](../refactoring/implementation-alignment-plan.md)
+  — cross-domain gap tracking for canonical architecture alignment.

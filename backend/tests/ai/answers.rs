@@ -94,6 +94,29 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
     );
     assert_eq!(stored.status, "completed");
 
+    let run_observations: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::bigint
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'ai'
+          AND link.entity_kind = 'agent_run'
+          AND link.entity_id = $1
+          AND kind.code IN ('AI_AGENT_RUN', 'AI_AGENT_RUN_STATUS')
+        "#,
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .expect("run observations");
+    assert!(
+        run_observations >= 2,
+        "expected run requested + completed observations"
+    );
+
     let run_attribution = sqlx::query(
         r#"
         SELECT agent_persona_id, owner_persona_id
@@ -174,21 +197,61 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
     assert_eq!(body["status"], json!("completed"));
     assert_eq!(body["created_count"], json!(1));
 
-    let candidate = sqlx::query(
-        "SELECT task_candidate_id, review_state, agent_run_id FROM task_candidates WHERE source_id = $1",
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
     )
     .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let candidate = sqlx::query(
+        r#"
+        SELECT task_candidate_id, review_state, agent_run_id, observation_id
+        FROM task_candidates
+        WHERE source_id = $1
+        "#,
+    )
+    .bind(&message_observation_id)
     .fetch_one(&pool)
     .await
     .expect("candidate");
     assert_eq!(candidate.get::<String, _>("review_state"), "suggested");
     assert!(candidate.get::<Option<String>, _>("agent_run_id").is_some());
+    assert_eq!(
+        candidate
+            .get::<Option<String>, _>("observation_id")
+            .as_deref(),
+        Some(message_observation_id.as_str())
+    );
 
     let active_task_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE source_id = $1")
-            .bind(&message_id)
+            .bind(&message_observation_id)
             .fetch_one(&pool)
             .await
             .expect("active task count");
     assert_eq!(active_task_count, 0);
+
+    let review_item_row = sqlx::query(
+        r#"
+        SELECT item_kind, status, metadata
+        FROM review_items
+        WHERE review_item_id IN (
+            SELECT review_item_id
+            FROM review_item_evidence
+            WHERE observation_id = $1
+        )
+        "#,
+    )
+    .bind(&message_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("review item row");
+    assert_eq!(
+        review_item_row.get::<String, _>("item_kind"),
+        "potential_task"
+    );
+    assert_eq!(review_item_row.get::<String, _>("status"), "new");
+    let metadata = review_item_row.get::<serde_json::Value, _>("metadata");
+    assert_eq!(metadata["mirrored_from"], json!("task_candidates"));
 }

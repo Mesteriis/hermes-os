@@ -1,6 +1,8 @@
 use serde_json::{Value, json};
+use sqlx::Row;
 
 use super::super::errors::AiControlCenterError;
+use super::super::evidence::capture_provider_account_observation;
 use super::super::models::{AiProviderAccount, AiProviderCreateRequest};
 use super::super::presets::default_capabilities;
 use super::super::rows::row_to_provider;
@@ -65,6 +67,7 @@ impl AiControlCenterStore {
             _ => "not_required",
         };
 
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO ai_provider_accounts (
@@ -101,11 +104,20 @@ impl AiControlCenterStore {
         .bind(consent_state)
         .bind(Value::Object(config))
         .bind(json!(capabilities))
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
         let provider = row_to_provider(row)?;
-        self.seed_models_for_provider(&provider).await?;
+        capture_provider_account_observation(
+            &mut transaction,
+            &provider,
+            "create",
+            "ai_control_center.create_provider",
+        )
+        .await?;
+        transaction.commit().await?;
+        self.seed_models_for_provider(&provider, "ai_control_center.create_provider")
+            .await?;
         Ok(provider)
     }
 }

@@ -108,7 +108,7 @@ task_post_test!(
 task_post_test!(
     task_post_subtask,
     "subtasks",
-    json!({"title": "Test subtask", "status": "active"})
+    json!({"child_task_id": "task:fake", "sort_order": 0})
 );
 
 #[tokio::test]

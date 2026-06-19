@@ -19,6 +19,7 @@ use crate::domains::mail::messages::{
 use crate::domains::persons::api::{
     PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
 };
+use crate::vault::CommunicationProviderAccountStore;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EmailFixturePipelineRequest {
@@ -76,8 +77,8 @@ pub async fn import_fixture_email_messages_for_dev(
     pool: PgPool,
     request: &EmailFixturePipelineRequest,
 ) -> Result<EmailFixtureImportPipelineReport, EmailFixturePipelineError> {
-    let communication_store = CommunicationIngestionStore::new(pool);
-    upsert_fixture_provider_account(&communication_store, request).await?;
+    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    upsert_fixture_provider_account(&pool, request).await?;
     let import_report = import_fixture_email_messages_with_records(
         &communication_store,
         &FixtureEmailImportRequest::new(
@@ -101,7 +102,7 @@ pub async fn project_fixture_email_messages(
     request: &EmailFixturePipelineRequest,
 ) -> Result<EmailFixtureProjectionPipelineReport, EmailFixturePipelineError> {
     let communication_store = CommunicationIngestionStore::new(pool.clone());
-    upsert_fixture_provider_account(&communication_store, request).await?;
+    upsert_fixture_provider_account(&pool, request).await?;
     let import_report = import_fixture_email_messages_with_records(
         &communication_store,
         &FixtureEmailImportRequest::new(
@@ -154,7 +155,7 @@ pub async fn project_fixture_email_messages(
 }
 
 async fn upsert_fixture_provider_account(
-    communication_store: &CommunicationIngestionStore,
+    pool: &PgPool,
     request: &EmailFixturePipelineRequest,
 ) -> Result<(), CommunicationIngestionError> {
     let account = NewProviderAccount::new(
@@ -164,8 +165,8 @@ async fn upsert_fixture_provider_account(
         &request.external_account_id,
     )
     .config(provider_config(request.provider_kind));
-    communication_store
-        .upsert_provider_account(&account)
+    CommunicationProviderAccountStore::new(pool.clone())
+        .upsert(&account)
         .await?;
     Ok(())
 }

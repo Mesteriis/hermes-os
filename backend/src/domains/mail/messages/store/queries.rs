@@ -28,6 +28,7 @@ impl MessageProjectionStore {
             SELECT
                 m.message_id,
                 m.raw_record_id,
+                m.observation_id,
                 m.account_id,
                 m.provider_record_id,
                 m.subject,
@@ -56,6 +57,7 @@ impl MessageProjectionStore {
             GROUP BY
                 m.message_id,
                 m.raw_record_id,
+                m.observation_id,
                 m.account_id,
                 m.provider_record_id,
                 m.subject,
@@ -104,6 +106,7 @@ impl MessageProjectionStore {
             SELECT
                 message_id,
                 raw_record_id,
+                observation_id,
                 account_id,
                 provider_record_id,
                 subject,
@@ -191,7 +194,7 @@ impl MessageProjectionStore {
         let mut builder = QueryBuilder::<Postgres>::new(
             r#"
             SELECT
-                m.message_id, m.raw_record_id, m.account_id, m.provider_record_id,
+                m.message_id, m.raw_record_id, m.observation_id, m.account_id, m.provider_record_id,
                 m.subject, m.sender, m.recipients, m.body_text,
                 m.occurred_at, m.projected_at, m.channel_kind, m.conversation_id,
                 m.sender_display_name, m.delivery_state, m.message_metadata,
@@ -239,7 +242,7 @@ impl MessageProjectionStore {
         builder.push(
             r#"
             GROUP BY
-                m.message_id, m.raw_record_id, m.account_id, m.provider_record_id,
+                m.message_id, m.raw_record_id, m.observation_id, m.account_id, m.provider_record_id,
                 m.subject, m.sender, m.recipients, m.body_text,
                 m.occurred_at, m.projected_at, m.channel_kind, m.conversation_id,
                 m.sender_display_name, m.delivery_state, m.message_metadata,

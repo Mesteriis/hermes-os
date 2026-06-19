@@ -24,6 +24,7 @@ use crate::domains::persons::analytics::{AnalyticsError, PersonAnalyticsService}
 use crate::domains::persons::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
 use crate::domains::persons::expertise::{PersonExpertiseError, PersonExpertiseStore};
 use crate::domains::persons::export::{ExportError, ExportFormat, PersonExportService};
+use crate::domains::persons::health::{PersonHealthError, PersonHealthStore};
 use crate::domains::persons::investigator::{InvestigatorError, PersonInvestigator};
 use crate::engines::automation::{
     AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
@@ -37,8 +38,6 @@ use crate::platform::calls::{
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
 use crate::platform::config::AppConfig;
-
-use crate::domains::persons::health::{PersonHealthError, PersonHealthStore};
 
 use crate::domains::persons::trust::{PersonPromiseStore, PersonRiskStore, PersonTrustError};
 
@@ -181,9 +180,13 @@ pub(crate) async fn post_document_processing_job_retry(
         ))
         .await?;
 
-    let result = document_processing_store(&state)?
-        .retry_failed_job(&command)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let result = crate::domains::documents::processing::DocumentProcessingCommandService::new(pool)
+        .retry_failed_job_manual(&command)
         .await?;
-
     Ok(Json(result.into()))
 }

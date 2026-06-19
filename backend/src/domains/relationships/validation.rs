@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use super::errors::RelationshipStoreError;
-use super::models::{NewRelationship, NewRelationshipEvidence};
+use super::models::{NewRelationship, NewRelationshipEvidence, RelationshipEvidenceSourceKind};
 
 pub(super) fn validate_relationship_with_evidence(
     relationship: &NewRelationship,
@@ -53,6 +53,14 @@ fn validate_relationship(relationship: &NewRelationship) -> Result<(), Relations
 
 fn validate_evidence(evidence: &NewRelationshipEvidence) -> Result<(), RelationshipStoreError> {
     validate_non_empty("source_id", &evidence.source_id)?;
+    if let Some(observation_id) = &evidence.observation_id {
+        validate_non_empty("observation_id", observation_id)?;
+    }
+    if evidence.source_kind == RelationshipEvidenceSourceKind::Observation
+        && evidence.observation_id.as_deref() != Some(evidence.source_id.as_str())
+    {
+        return Err(RelationshipStoreError::InvalidObservationEvidenceSource);
+    }
     validate_json_object("evidence metadata", &evidence.metadata)
 }
 

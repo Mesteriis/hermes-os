@@ -40,7 +40,7 @@ impl TelegramRuntimeManager {
                 "chat {telegram_chat_id} not found"
             )))?;
 
-        let account = load_active_account(context.communication_store, &chat.account_id).await?;
+        let account = load_active_account(context.provider_account_store, &chat.account_id).await?;
         let runtime_kind = account_runtime_kind(&account);
         if runtime_kind != "tdlib_qr_authorized" {
             return Ok(Vec::new());
@@ -70,7 +70,7 @@ impl TelegramRuntimeManager {
         if let Some(basic_group_id) = tdlib_basic_group_id(&chat.metadata) {
             let command_tx = self
                 .ensure_tdlib_actor(
-                    context.communication_store,
+                    context.provider_secret_binding_store,
                     context.secret_store,
                     context.secret_resolver,
                     context.config,
@@ -97,7 +97,7 @@ impl TelegramRuntimeManager {
 
         let command_tx = self
             .ensure_tdlib_actor(
-                context.communication_store,
+                context.provider_secret_binding_store,
                 context.secret_store,
                 context.secret_resolver,
                 context.config,

@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use crate::domains::relationships::RelationshipStoreError;
+use crate::platform::observations::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum PersonCoreError {
@@ -9,6 +10,8 @@ pub enum PersonCoreError {
 
     #[error(transparent)]
     Relationship(#[from] RelationshipStoreError),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
 
     #[error("person identity not found")]
     IdentityNotFound,

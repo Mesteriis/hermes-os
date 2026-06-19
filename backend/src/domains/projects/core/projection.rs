@@ -59,6 +59,7 @@ impl ProjectStore {
             SELECT
                 message_id,
                 raw_record_id,
+                observation_id,
                 account_id,
                 provider_record_id,
                 subject,
@@ -100,7 +101,7 @@ impl ProjectStore {
 
         let rows = sqlx::query(
             r#"
-            SELECT document_id, document_kind, title, source_fingerprint, imported_at
+            SELECT document_id, document_kind, title, observation_id, source_fingerprint, imported_at
             FROM documents document
             WHERE document_id = ANY($1)
             ORDER BY imported_at DESC, document_id

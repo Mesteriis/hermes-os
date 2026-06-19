@@ -8,6 +8,9 @@ use sqlx::{PgPool, Postgres, Transaction};
 use thiserror::Error;
 
 use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+
+use super::evidence::link_mail_entity_in_transaction;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum BulkMessageAction {
@@ -135,6 +138,8 @@ impl BulkMessageActionStore {
         let outcome = outcome(action.as_str(), &message_ids, updated_ids.clone());
 
         if !updated_ids.is_empty() {
+            self.capture_observation_trail(&mut transaction, &action, &outcome, &updated_ids)
+                .await?;
             let event = bulk_message_action_event(&action, &outcome, &updated_ids)?;
             EventStore::append_in_transaction(&mut transaction, &event).await?;
         }
@@ -351,6 +356,103 @@ impl BulkMessageActionStore {
         .await
         .map_err(BulkMessageActionError::Sqlx)
     }
+
+    async fn capture_observation_trail(
+        &self,
+        transaction: &mut Transaction<'_, Postgres>,
+        action: &BulkMessageAction,
+        outcome: &BulkMessageActionOutcome,
+        updated_ids: &[String],
+    ) -> Result<(), BulkMessageActionError> {
+        let recorded_at = Utc::now();
+        for message_id in updated_ids {
+            let observation = ObservationStore::capture_in_transaction(
+                transaction,
+                &NewObservation::new(
+                    "COMMUNICATION_MESSAGE",
+                    ObservationOriginKind::Manual,
+                    recorded_at,
+                    bulk_action_observation_payload(action, outcome, message_id),
+                    format!(
+                        "message://{message_id}/bulk/{}/{}",
+                        action.as_str(),
+                        system_time_nanos()
+                    ),
+                )
+                .provenance(json!({
+                    "captured_by": "mail.bulk_actions",
+                    "operation": action.as_str(),
+                    "event_type": action.event_type(),
+                })),
+            )
+            .await?;
+
+            link_mail_entity_in_transaction(
+                transaction,
+                &observation.observation_id,
+                "communication_message",
+                message_id.to_owned(),
+                bulk_action_relationship_kind(action),
+                bulk_action_link_metadata(action),
+                None,
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+}
+
+fn bulk_action_relationship_kind(action: &BulkMessageAction) -> &'static str {
+    match action {
+        BulkMessageAction::MarkRead
+        | BulkMessageAction::MarkUnread
+        | BulkMessageAction::Archive => "workflow_state_transition",
+        BulkMessageAction::Trash | BulkMessageAction::Restore => "local_state_transition",
+        BulkMessageAction::Pin
+        | BulkMessageAction::Unpin
+        | BulkMessageAction::Important
+        | BulkMessageAction::NotImportant
+        | BulkMessageAction::AddLabel(_)
+        | BulkMessageAction::RemoveLabel(_)
+        | BulkMessageAction::Snooze(_) => "message_flag_update",
+    }
+}
+
+fn bulk_action_link_metadata(action: &BulkMessageAction) -> Value {
+    match action {
+        BulkMessageAction::MarkRead => json!({ "workflow_state": "reviewed" }),
+        BulkMessageAction::MarkUnread => json!({ "workflow_state": "new" }),
+        BulkMessageAction::Archive => json!({ "workflow_state": "archived" }),
+        BulkMessageAction::Trash => json!({ "local_state": "trash" }),
+        BulkMessageAction::Restore => json!({ "local_state": "active" }),
+        BulkMessageAction::Pin => json!({ "pinned": true }),
+        BulkMessageAction::Unpin => json!({ "pinned": false }),
+        BulkMessageAction::Important => json!({ "important": true }),
+        BulkMessageAction::NotImportant => json!({ "important": false }),
+        BulkMessageAction::AddLabel(label) => json!({ "label": label.trim(), "action": "add" }),
+        BulkMessageAction::RemoveLabel(label) => {
+            json!({ "label": label.trim(), "action": "remove" })
+        }
+        BulkMessageAction::Snooze(until) => json!({ "snooze_until": until.to_rfc3339() }),
+    }
+}
+
+fn bulk_action_observation_payload(
+    action: &BulkMessageAction,
+    outcome: &BulkMessageActionOutcome,
+    message_id: &str,
+) -> Value {
+    json!({
+        "message_id": message_id,
+        "operation": format!("bulk_{}", action.as_str()),
+        "action": action.as_str(),
+        "action_parameters": action_parameters(action),
+        "requested_count": outcome.requested_count,
+        "matched_count": outcome.matched_count,
+        "updated_count": outcome.updated_count,
+        "not_found": outcome.not_found,
+    })
 }
 
 fn bulk_message_action_event(
@@ -464,6 +566,8 @@ fn outcome(
 pub enum BulkMessageActionError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    ObservationStore(#[from] crate::platform::observations::ObservationStoreError),
     #[error(transparent)]
     EventStore(#[from] crate::platform::events::EventStoreError),
     #[error(transparent)]

@@ -44,6 +44,7 @@ async fn message_projection_upserts_canonical_message_against_postgres() {
         .expect("project message");
 
     assert_eq!(projected.account_id, account_id);
+    assert_eq!(projected.observation_id, raw.observation_id);
     assert_eq!(
         projected.provider_record_id,
         format!("provider-message-{suffix}")
@@ -108,6 +109,7 @@ async fn message_projection_extracts_canonical_fields_from_raw_blob_against_post
         .expect("project message from raw blob");
 
     assert_eq!(projected.account_id, account_id);
+    assert_eq!(projected.observation_id, raw.observation_id);
     assert_eq!(projected.provider_record_id, provider_record_id);
     assert_eq!(projected.subject, "Real MIME");
     assert_eq!(projected.sender, "Alice <alice@example.com>");
@@ -299,6 +301,7 @@ async fn message_projection_derives_message_id_for_direct_upsert_against_postgre
 
     assert_ne!(projected.message_id, arbitrary_message_id);
     assert!(projected.message_id.starts_with("msg:v1:"));
+    assert_eq!(projected.observation_id, raw.observation_id);
 
     let arbitrary_count = sqlx::query_scalar::<_, i64>(
         "SELECT count(*) FROM communication_messages WHERE message_id = $1",

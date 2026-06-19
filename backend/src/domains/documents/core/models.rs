@@ -68,6 +68,7 @@ pub struct ImportedDocumentWithProcessing {
 pub struct ImportedDocument {
     pub document_id: String,
     pub document_kind: String,
+    pub observation_id: String,
     pub title: String,
     pub source_fingerprint: String,
     pub extracted_text: String,

@@ -1,4 +1,4 @@
-use crate::domains::mail::core::{CommunicationIngestionStore, ProviderAccount};
+use crate::domains::mail::core::ProviderAccount;
 use crate::integrations::telegram::client::participants::{
     reconcile_participant_commands_from_message_evidence, tdlib_self_membership_lifecycle,
 };
@@ -8,6 +8,7 @@ use crate::integrations::telegram::client::{
 };
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::vault::{CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore};
 
 use super::super::actor::oldest_tdlib_message_id;
 use super::super::commands::request_actor_history;
@@ -23,8 +24,10 @@ pub(in crate::integrations::telegram::runtime::manager) struct TdlibHistorySyncC
     'a,
     S: SecretResolver + Sync + ?Sized,
 > {
-    pub(in crate::integrations::telegram::runtime::manager) communication_store:
-        &'a CommunicationIngestionStore,
+    pub(in crate::integrations::telegram::runtime::manager) provider_account_store:
+        &'a CommunicationProviderAccountStore,
+    pub(in crate::integrations::telegram::runtime::manager) provider_secret_binding_store:
+        &'a CommunicationProviderSecretBindingStore,
     pub(in crate::integrations::telegram::runtime::manager) telegram_store: &'a TelegramStore,
     pub(in crate::integrations::telegram::runtime::manager) secret_store: &'a SecretReferenceStore,
     pub(in crate::integrations::telegram::runtime::manager) secret_resolver: &'a S,
@@ -50,7 +53,7 @@ impl TelegramRuntimeManager {
         }
         let command_tx = self
             .ensure_tdlib_actor(
-                context.communication_store,
+                context.provider_secret_binding_store,
                 context.secret_store,
                 context.secret_resolver,
                 context.config,

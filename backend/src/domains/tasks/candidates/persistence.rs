@@ -18,19 +18,20 @@ pub(crate) async fn upsert_task_candidate(
         SET
             source_kind = $2,
             source_id = $3,
-            candidate_kind = $4,
-            candidate_metadata = $5,
-            project_id = COALESCE($6, project_id),
-            title = $7,
-            due_text = COALESCE($8, due_text),
-            assignee_label = COALESCE($9, assignee_label),
-            confidence = $10,
+            observation_id = $4,
+            candidate_kind = $5,
+            candidate_metadata = $6,
+            project_id = COALESCE($7, project_id),
+            title = $8,
+            due_text = COALESCE($9, due_text),
+            assignee_label = COALESCE($10, assignee_label),
+            confidence = $11,
             review_state = CASE
                 WHEN review_state IN ('user_confirmed', 'user_rejected')
                     THEN review_state
-                ELSE $11
+                ELSE $12
             END,
-            evidence_excerpt = $12,
+            evidence_excerpt = $13,
             event_id = CASE
                 WHEN review_state IN ('user_confirmed', 'user_rejected')
                     THEN event_id
@@ -48,12 +49,13 @@ pub(crate) async fn upsert_task_candidate(
             END,
             updated_at = now()
         WHERE task_candidate_id = $1
-           OR (source_kind = $2 AND source_id = $3 AND lower(title) = lower($7))
+           OR (source_kind = $2 AND source_id = $3 AND lower(title) = lower($8))
         "#,
     )
     .bind(&task_candidate_id)
     .bind(payload.source_kind.as_str())
     .bind(&payload.source_id)
+    .bind(payload.observation_id.as_deref())
     .bind(payload.candidate_kind.as_str())
     .bind(&payload.candidate_metadata)
     .bind(&payload.project_id)
@@ -76,6 +78,7 @@ pub(crate) async fn upsert_task_candidate(
             task_candidate_id,
             source_kind,
             source_id,
+            observation_id,
             candidate_kind,
             candidate_metadata,
             project_id,
@@ -89,11 +92,12 @@ pub(crate) async fn upsert_task_candidate(
             actor_id,
             reviewed_at
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NULL, NULL, NULL)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL, NULL, NULL)
         ON CONFLICT (source_kind, source_id, lower(title))
         DO UPDATE SET
             source_kind = EXCLUDED.source_kind,
             source_id = EXCLUDED.source_id,
+            observation_id = EXCLUDED.observation_id,
             candidate_kind = EXCLUDED.candidate_kind,
             candidate_metadata = EXCLUDED.candidate_metadata,
             project_id = COALESCE(EXCLUDED.project_id, task_candidates.project_id),
@@ -128,6 +132,7 @@ pub(crate) async fn upsert_task_candidate(
     .bind(task_candidate_id)
     .bind(payload.source_kind.as_str())
     .bind(&payload.source_id)
+    .bind(payload.observation_id.as_deref())
     .bind(payload.candidate_kind.as_str())
     .bind(&payload.candidate_metadata)
     .bind(&payload.project_id)
@@ -152,10 +157,15 @@ pub(crate) async fn row_task_candidate(
         SELECT
             source_kind,
             source_id,
+            observation_id,
             candidate_kind,
             candidate_metadata,
             project_id,
-            title
+            title,
+            due_text,
+            assignee_label,
+            confidence,
+            evidence_excerpt
         FROM task_candidates
         WHERE task_candidate_id = $1
         FOR UPDATE
@@ -169,10 +179,15 @@ pub(crate) async fn row_task_candidate(
     Ok(StoredCandidateRow {
         source_kind: row.try_get("source_kind")?,
         source_id: row.try_get("source_id")?,
+        observation_id: row.try_get("observation_id")?,
         candidate_kind: row.try_get("candidate_kind")?,
         candidate_metadata: row.try_get("candidate_metadata")?,
         project_id: row.try_get("project_id")?,
         title: row.try_get("title")?,
+        due_text: row.try_get("due_text")?,
+        assignee_label: row.try_get("assignee_label")?,
+        confidence: row.try_get("confidence")?,
+        evidence_excerpt: row.try_get("evidence_excerpt")?,
     })
 }
 
@@ -181,6 +196,7 @@ pub(crate) fn row_to_task_candidate(row: PgRow) -> Result<TaskCandidate, TaskCan
         task_candidate_id: row.try_get("task_candidate_id")?,
         source_kind: row.try_get("source_kind")?,
         source_id: row.try_get("source_id")?,
+        observation_id: row.try_get("observation_id")?,
         project_id: row.try_get("project_id")?,
         title: row.try_get("title")?,
         due_text: row.try_get("due_text")?,

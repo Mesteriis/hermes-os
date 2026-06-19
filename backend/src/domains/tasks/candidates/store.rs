@@ -9,6 +9,7 @@ use sqlx::postgres::PgPool;
 use super::errors::TaskCandidateError;
 use super::models::{TaskCandidate, TaskCandidateReviewCommand, TaskCandidateReviewCommandResult};
 use crate::platform::events::EventEnvelope;
+use serde_json::Value;
 
 #[derive(Clone)]
 pub struct TaskCandidateStore {
@@ -32,6 +33,21 @@ impl TaskCandidateStore {
         command: &TaskCandidateReviewCommand,
     ) -> Result<TaskCandidateReviewCommandResult, TaskCandidateError> {
         review::set_review_state(&self.pool, command).await
+    }
+
+    pub async fn set_review_state_with_observation(
+        &self,
+        command: &TaskCandidateReviewCommand,
+        observation_id: &str,
+        metadata: Value,
+    ) -> Result<TaskCandidateReviewCommandResult, TaskCandidateError> {
+        review::set_review_state_with_observation(
+            &self.pool,
+            command,
+            Some(observation_id),
+            Some(metadata),
+        )
+        .await
     }
 
     pub async fn apply_review_event(

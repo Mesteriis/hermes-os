@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use super::errors::PersonMemoryError;
+use crate::domains::persons::core::link_persons_entity;
 use crate::engines::memory::MemoryEngine;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -69,6 +71,33 @@ impl PersonFactStore {
         .fetch_one(&self.pool)
         .await?;
         row_to_fact(row)
+    }
+
+    pub async fn upsert_with_observation(
+        &self,
+        person_id: &str,
+        fact_type: &str,
+        value: &str,
+        source: &str,
+        confidence: f64,
+        observation_id: &str,
+    ) -> Result<PersonFact, PersonMemoryError> {
+        let fact = self
+            .upsert(person_id, fact_type, value, source, confidence)
+            .await?;
+        link_persons_entity(
+            &self.pool,
+            observation_id,
+            "fact",
+            fact.id.clone(),
+            None,
+            Some(json!({
+                "person_id": person_id,
+                "fact_type": fact.fact_type,
+            })),
+        )
+        .await?;
+        Ok(fact)
     }
 
     pub async fn update_confidence(

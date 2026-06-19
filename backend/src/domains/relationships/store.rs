@@ -1,7 +1,14 @@
+use std::collections::HashSet;
+
+use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
-use sqlx::{Postgres, Transaction};
+use sqlx::{Postgres, Row, Transaction};
+
+use crate::platform::observations::materialize_review_transition_link_in_transaction;
+use crate::workflows::review_mirror::sync_relationship_review_state_in_transaction;
 
 use super::errors::RelationshipStoreError;
+use super::evidence::link_relationship_entity_in_transaction;
 use super::graph_projection::project_relationship_graph_in_transaction;
 use super::ids::{evidence_id, relationship_id};
 use super::models::{
@@ -41,6 +48,7 @@ impl RelationshipStore {
         relationship: &NewRelationship,
         evidence: &[NewRelationshipEvidence],
     ) -> Result<Relationship, RelationshipStoreError> {
+        validate_evidence_observations_exist(transaction, evidence).await?;
         let relationship_id = relationship_id(
             relationship.source_entity_kind,
             &relationship.source_entity_id,
@@ -134,12 +142,14 @@ impl RelationshipStore {
                     relationship_id,
                     source_kind,
                     source_id,
+                    observation_id,
                     excerpt,
                     metadata
                 )
-                VALUES ($1, $2, $3, $4, $5, $6)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (relationship_id, source_kind, source_id)
                 DO UPDATE SET
+                    observation_id = EXCLUDED.observation_id,
                     excerpt = EXCLUDED.excerpt,
                     metadata = EXCLUDED.metadata
                 "#,
@@ -148,10 +158,27 @@ impl RelationshipStore {
             .bind(&relationship_id)
             .bind(item.source_kind.as_str())
             .bind(&item.source_id)
+            .bind(item.observation_id.as_deref())
             .bind(&item.excerpt)
             .bind(&item.metadata)
             .execute(&mut **transaction)
             .await?;
+
+            if let Some(observation_id) = item.observation_id.as_deref() {
+                link_relationship_entity_in_transaction(
+                    transaction,
+                    observation_id,
+                    "relationship",
+                    relationship_id.clone(),
+                    Some("supports"),
+                    Some(relationship.confidence),
+                    Some(json!({
+                        "source_kind": item.source_kind.as_str(),
+                        "source_id": item.source_id,
+                    })),
+                )
+                .await?;
+            }
         }
 
         project_relationship_graph_in_transaction(transaction, &stored).await?;
@@ -242,6 +269,17 @@ impl RelationshipStore {
         relationship_id: &str,
         review_state: RelationshipReviewState,
     ) -> Result<Relationship, RelationshipStoreError> {
+        self.set_review_state_with_observation(relationship_id, review_state, None, None)
+            .await
+    }
+
+    pub async fn set_review_state_with_observation(
+        &self,
+        relationship_id: &str,
+        review_state: RelationshipReviewState,
+        observation_id: Option<&str>,
+        metadata: Option<Value>,
+    ) -> Result<Relationship, RelationshipStoreError> {
         validate_non_empty("relationship_id", relationship_id)?;
 
         let mut transaction = self.pool.begin().await?;
@@ -277,9 +315,60 @@ impl RelationshipStore {
         .ok_or(RelationshipStoreError::RelationshipNotFound)?;
 
         let relationship = row_to_relationship(row)?;
+        materialize_review_transition_link_in_transaction(
+            &mut transaction,
+            observation_id,
+            "relationships",
+            "relationship",
+            &relationship.relationship_id,
+            "review_state",
+            relationship.review_state.as_str(),
+            metadata,
+        )
+        .await?;
         project_relationship_graph_in_transaction(&mut transaction, &relationship).await?;
+        sync_relationship_review_state_in_transaction(&mut transaction, &relationship).await?;
         transaction.commit().await?;
 
         Ok(relationship)
     }
+}
+async fn validate_evidence_observations_exist(
+    transaction: &mut Transaction<'_, Postgres>,
+    evidence: &[NewRelationshipEvidence],
+) -> Result<(), RelationshipStoreError> {
+    let observation_ids: Vec<String> = evidence
+        .iter()
+        .filter_map(|item| item.observation_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if observation_ids.is_empty() {
+        return Ok(());
+    }
+
+    let stored_observation_ids: HashSet<String> = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT observation_id
+        FROM observations
+        WHERE observation_id = ANY($1)
+        "#,
+    )
+    .bind(&observation_ids)
+    .fetch_all(&mut **transaction)
+    .await?
+    .into_iter()
+    .collect();
+
+    for observation_id in observation_ids {
+        if !stored_observation_ids.contains(&observation_id) {
+            return Err(RelationshipStoreError::ObservationNotFound(observation_id));
+        }
+    }
+
+    Ok(())
 }

@@ -2,8 +2,9 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
-use axum::http::{Request, StatusCode, header};
+use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
@@ -110,6 +111,46 @@ async fn identity_candidates_returns_safe_candidate_payload() {
     assert_eq!(item["right_person_id"], json!(right.person_id));
     assert!(item["evidence_summary"].is_string());
     assert!(item["confidence"].is_number());
+
+    let review_item: (String, String, String, String) = sqlx::query_as(
+        r#"
+        SELECT
+            review_item.review_item_id,
+            review_item.item_kind,
+            review_item.metadata->>'mirrored_from',
+            review_item.metadata->>'identity_candidate_id'
+        FROM review_items review_item
+        WHERE review_item.metadata->>'identity_candidate_id' = $1
+        ORDER BY review_item.created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&candidate_id)
+    .fetch_one(&pool)
+    .await
+    .expect("identity candidate review item");
+    assert_eq!(review_item.1, "identity_candidate");
+    assert_eq!(review_item.2, "identity_candidates");
+    assert_eq!(review_item.3, candidate_id);
+
+    let observation_kind: String = sqlx::query_scalar(
+        r#"
+        SELECT kind.code AS kind_code
+        FROM review_item_evidence evidence
+        JOIN observations observation
+          ON observation.observation_id = evidence.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE evidence.review_item_id = $1
+        ORDER BY evidence.created_at ASC
+        LIMIT 1
+        "#,
+    )
+    .bind(&review_item.0)
+    .fetch_one(&pool)
+    .await
+    .expect("identity candidate review evidence observation kind");
+    assert_eq!(observation_kind, "PERSON_IDENTITY_CANDIDATE");
 }
 
 #[tokio::test]
@@ -271,6 +312,23 @@ async fn put_identity_candidate_review_confirms_candidate() {
             "event_id": format!("person_identity_review:{command_id}"),
         })
     );
+
+    let review_item: (String, String, String) = sqlx::query_as(
+        r#"
+        SELECT status, target_entity_kind, entity_id
+        FROM review_items
+        WHERE metadata->>'identity_candidate_id' = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&identity_candidate_id)
+    .fetch_one(&pool)
+    .await
+    .expect("identity candidate review item");
+    assert_eq!(review_item.0, "promoted");
+    assert_eq!(review_item.1, "identity_candidate");
+    assert_eq!(review_item.2, identity_candidate_id);
 }
 
 #[tokio::test]
@@ -352,6 +410,124 @@ async fn person_identity_returns_confirmed_links_for_person() {
     assert_eq!(item["review_state"], "user_confirmed");
 }
 
+#[tokio::test]
+async fn person_identity_manual_create_paths_capture_observations_against_postgres() {
+    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!(
+            "skipping live person identity API write test: HERMES_TEST_DATABASE_URL is not set"
+        );
+        return;
+    };
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let suffix = unique_suffix();
+
+    let person_store = PersonProjectionStore::new(pool.clone());
+    let person = person_store
+        .upsert_email_person(&format!("identity-write-{suffix}@example.com"))
+        .await
+        .expect("upsert person");
+    let encoded_person_id = urlencoding_percent_encode(&person.person_id);
+
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database,
+    );
+
+    let trace_response = app
+        .clone()
+        .oneshot(json_post_request_with_token(
+            "/api/v1/identity-traces",
+            json!({
+                "identity_type": "telegram",
+                "identity_value": format!("trace-{suffix}"),
+                "source": "manual"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("trace response");
+    assert_eq!(trace_response.status(), StatusCode::OK);
+    let trace_id = json_body(trace_response).await["id"]
+        .as_str()
+        .expect("trace id")
+        .to_owned();
+    let trace_source: String =
+        sqlx::query_scalar("SELECT source FROM person_identities WHERE id::text = $1")
+            .bind(&trace_id)
+            .fetch_one(&pool)
+            .await
+            .expect("trace source");
+    assert!(trace_source.starts_with("observation:"));
+
+    let identity_response = app
+        .oneshot(json_post_request_with_token(
+            &format!("/api/v1/persons/{encoded_person_id}/identities"),
+            json!({
+                "identity_type": "linkedin",
+                "identity_value": format!("person-{suffix}"),
+                "source": "manual"
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("identity response");
+    assert_eq!(identity_response.status(), StatusCode::OK);
+    let identity_id = json_body(identity_response).await["id"]
+        .as_str()
+        .expect("identity id")
+        .to_owned();
+    let identity_source: String =
+        sqlx::query_scalar("SELECT source FROM person_identities WHERE id::text = $1")
+            .bind(&identity_id)
+            .fetch_one(&pool)
+            .await
+            .expect("identity source");
+    assert!(identity_source.starts_with("observation:"));
+
+    for (source, entity_type, entity_id) in [
+        (trace_source, "identity_trace", trace_id),
+        (identity_source, "identity", identity_id),
+    ] {
+        let observation_id = source
+            .strip_prefix("observation:")
+            .expect("observation prefix");
+        let row = sqlx::query(
+            "SELECT observation_id, origin_kind FROM observations WHERE observation_id = $1",
+        )
+        .bind(observation_id)
+        .fetch_one(&pool)
+        .await
+        .expect("stored observation");
+        assert_eq!(
+            row.try_get::<String, _>("origin_kind")
+                .expect("origin kind"),
+            "manual"
+        );
+
+        let link_count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM observation_links
+             WHERE observation_id = $1
+               AND domain = 'persons'
+               AND entity_kind = $2
+               AND entity_id = $3",
+        )
+        .bind(observation_id)
+        .bind(entity_type)
+        .bind(entity_id)
+        .fetch_one(&pool)
+        .await
+        .expect("observation link count");
+        assert_eq!(link_count, 1);
+    }
+}
+
 #[derive(Clone)]
 struct PersonIdentityApiContext {
     person_store: PersonProjectionStore,
@@ -380,6 +556,16 @@ fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {
 fn json_put_request_with_actor(uri: &str, value: Value, token: &str) -> Request<Body> {
     Request::builder()
         .method("PUT")
+        .uri(uri)
+        .header(header::CONTENT_TYPE, "application/json")
+        .header("x-hermes-secret", token)
+        .body(Body::from(value.to_string()))
+        .expect("request")
+}
+
+fn json_post_request_with_token(uri: &str, value: Value, token: &str) -> Request<Body> {
+    Request::builder()
+        .method(Method::POST)
         .uri(uri)
         .header(header::CONTENT_TYPE, "application/json")
         .header("x-hermes-secret", token)
@@ -464,4 +650,8 @@ fn unique_suffix() -> u128 {
         .duration_since(UNIX_EPOCH)
         .expect("system clock after unix epoch")
         .as_nanos()
+}
+
+fn urlencoding_percent_encode(value: &str) -> String {
+    url::form_urlencoded::byte_serialize(value.as_bytes()).collect()
 }

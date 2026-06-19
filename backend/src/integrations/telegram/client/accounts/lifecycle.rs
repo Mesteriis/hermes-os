@@ -1,7 +1,8 @@
 use chrono::Utc;
 use serde_json::json;
 
-use crate::domains::mail::core::CommunicationIngestionStore;
+use crate::platform::observations::ObservationOriginKind;
+use crate::vault::CommunicationProviderAccountStore;
 
 use super::super::errors::TelegramError;
 use super::super::identifiers::{
@@ -17,8 +18,8 @@ impl TelegramStore {
         &self,
         include_removed: bool,
     ) -> Result<Vec<TelegramAccount>, TelegramError> {
-        let accounts = CommunicationIngestionStore::new(self.pool.clone())
-            .list_provider_accounts()
+        let accounts = CommunicationProviderAccountStore::new(self.pool.clone())
+            .list()
             .await?;
 
         Ok(accounts
@@ -46,10 +47,7 @@ impl TelegramStore {
         account_id: &str,
         lifecycle_state: &'static str,
     ) -> Result<TelegramAccount, TelegramError> {
-        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let account = self
-            .telegram_provider_account(&communication_store, account_id)
-            .await?;
+        let account = self.telegram_provider_account(account_id).await?;
         let current_state = telegram_account_lifecycle_state(&account);
         if current_state == TELEGRAM_ACCOUNT_REMOVED && lifecycle_state != TELEGRAM_ACCOUNT_REMOVED
         {
@@ -79,8 +77,14 @@ impl TelegramStore {
             _ => {}
         }
 
-        let updated = communication_store
-            .update_provider_account_config(&account.account_id, &config)
+        let updated = CommunicationProviderAccountStore::new(self.pool.clone())
+            .update_config_with_origin(
+                &account.account_id,
+                &config,
+                ObservationOriginKind::LocalRuntime,
+                "telegram.accounts.lifecycle.update",
+                lifecycle_state,
+            )
             .await?
             .ok_or_else(|| {
                 TelegramError::InvalidRequest(format!(

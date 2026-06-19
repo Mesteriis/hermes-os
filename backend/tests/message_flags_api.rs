@@ -4,6 +4,7 @@ use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode};
 use chrono::Utc;
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -130,6 +131,41 @@ async fn message_important_endpoint_toggles_metadata_flag() {
         .expect("stored message")
         .expect("message exists");
     assert_eq!(stored.message_metadata["important"], true);
+    let first_link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'communication_message'
+           AND entity_id = $1
+           AND relationship_kind = 'message_flag_update'
+         ORDER BY created_at ASC
+         LIMIT 1",
+    )
+    .bind(&message_id)
+    .fetch_one(ctx.pool())
+    .await
+    .expect("first observation link");
+    let first_observation_id: String = first_link
+        .try_get("observation_id")
+        .expect("first observation id");
+    let first_metadata: Value = first_link.try_get("metadata").expect("first metadata");
+    assert_eq!(first_metadata["important"], true);
+    let first_observation = sqlx::query(
+        "SELECT origin_kind, payload
+         FROM observations
+         WHERE observation_id = $1",
+    )
+    .bind(&first_observation_id)
+    .fetch_one(ctx.pool())
+    .await
+    .expect("first observation");
+    let first_origin_kind: String = first_observation
+        .try_get("origin_kind")
+        .expect("first origin kind");
+    let first_payload: Value = first_observation.try_get("payload").expect("first payload");
+    assert_eq!(first_origin_kind, "manual");
+    assert_eq!(first_payload["operation"], "message_important_toggle");
+    assert_eq!(first_payload["message_id"], message_id);
 
     let response = app
         .oneshot(request(Method::POST, &uri))
@@ -146,6 +182,19 @@ async fn message_important_endpoint_toggles_metadata_flag() {
         .expect("stored message")
         .expect("message exists");
     assert_eq!(stored.message_metadata["important"], false);
+    let links_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*)
+             FROM observation_links
+             WHERE domain = 'communications'
+               AND entity_kind = 'communication_message'
+               AND entity_id = $1
+               AND relationship_kind = 'message_flag_update'",
+    )
+    .bind(&message_id)
+    .fetch_one(ctx.pool())
+    .await
+    .expect("message flag observation count");
+    assert_eq!(links_count, 2);
 }
 
 fn unique_suffix() -> String {

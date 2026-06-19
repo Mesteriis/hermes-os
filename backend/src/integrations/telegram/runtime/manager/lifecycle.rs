@@ -16,16 +16,16 @@ use super::account::load_active_account;
 use super::actor_states::running_actor_state;
 use super::realtime_events::spawn_telegram_runtime_event_bridge;
 use super::{TelegramRuntimeManager, TelegramRuntimeStartContext};
-use crate::domains::mail::core::CommunicationIngestionStore;
+use crate::vault::CommunicationProviderAccountStore;
 
 impl TelegramRuntimeManager {
     pub async fn status_for_account(
         &self,
-        communication_store: &CommunicationIngestionStore,
+        provider_account_store: &CommunicationProviderAccountStore,
         config: &AppConfig,
         account_id: &str,
     ) -> Result<TelegramRuntimeStatus, TelegramError> {
-        let account = load_telegram_account(communication_store, account_id).await?;
+        let account = load_telegram_account(provider_account_store, account_id).await?;
         let actor_state = self.actor_state(&account.account_id)?;
 
         Ok(status_from_account(config, &account, actor_state))
@@ -40,9 +40,10 @@ impl TelegramRuntimeManager {
         S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
     {
         request.validate()?;
-        let account = load_active_account(context.communication_store, &request.account_id).await?;
+        let account =
+            load_active_account(context.provider_account_store, &request.account_id).await?;
         let session_encryption_key = optional_telegram_session_key(
-            context.communication_store,
+            context.provider_secret_binding_store,
             context.secret_store,
             context.secret_resolver,
             &account.account_id,
@@ -111,12 +112,12 @@ impl TelegramRuntimeManager {
 
     pub async fn stop_account_runtime(
         &self,
-        communication_store: &CommunicationIngestionStore,
+        provider_account_store: &CommunicationProviderAccountStore,
         config: &AppConfig,
         request: &TelegramRuntimeStopRequest,
     ) -> Result<TelegramRuntimeStatus, TelegramError> {
         request.validate()?;
-        let account = load_telegram_account(communication_store, &request.account_id).await?;
+        let account = load_telegram_account(provider_account_store, &request.account_id).await?;
         self.stop_account(&account.account_id)?;
 
         Ok(status_from_account(config, &account, None))

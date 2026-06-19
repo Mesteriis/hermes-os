@@ -3,6 +3,8 @@ use thiserror::Error;
 use crate::domains::persons::api::PersonProjectionError;
 use crate::integrations::ai_runtime::AiRuntimeError;
 use crate::platform::events::EventStoreError;
+use crate::platform::observations::ObservationStoreError;
+use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
 #[derive(Debug, Error)]
 pub enum AiError {
@@ -32,6 +34,12 @@ pub enum AiError {
 
     #[error(transparent)]
     PersonProjection(#[from] PersonProjectionError),
+
+    #[error(transparent)]
+    ReviewInboxWorkflow(#[from] ReviewInboxWorkflowError),
+
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
 
     #[error(transparent)]
     Json(#[from] serde_json::Error),

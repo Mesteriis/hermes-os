@@ -145,9 +145,10 @@ pub(crate) async fn post_policy_template(
     State(state): State<AppState>,
     Json(request): Json<PolicyTemplateApiRequest>,
 ) -> Result<Json<AutomationTemplate>, ApiError> {
+    let actor_id = "hermes-frontend";
     Ok(Json(
         automation_store(&state)?
-            .upsert_template(&request.into_template())
+            .upsert_template(&request.into_template(), actor_id)
             .await?,
     ))
 }
@@ -164,9 +165,10 @@ pub(crate) async fn post_policy(
     State(state): State<AppState>,
     Json(request): Json<PolicyApiRequest>,
 ) -> Result<Json<AutomationPolicy>, ApiError> {
+    let actor_id = "hermes-frontend";
     Ok(Json(
         automation_store(&state)?
-            .upsert_policy(&request.into_policy())
+            .upsert_policy(&request.into_policy(), actor_id)
             .await?,
     ))
 }
@@ -234,6 +236,7 @@ pub(crate) fn telegram_send_dry_run_rejection_decision(
         AutomationError::UndeclaredTemplateVariable(_) => "template_variable_undeclared",
         AutomationError::EventEnvelope(_)
         | AutomationError::EventStore(_)
+        | AutomationError::ObservationStore(_)
         | AutomationError::Sqlx(_) => return None,
     };
 

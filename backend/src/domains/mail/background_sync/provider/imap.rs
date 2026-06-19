@@ -3,6 +3,7 @@ use serde_json::Value;
 use crate::domains::mail::core::{ProviderAccountSecretPurpose, ProviderCredentialReader};
 use crate::integrations::gmail::client::{ImapFetchOptions, ImapNetworkClient};
 use crate::platform::secrets::SecretReferenceStore;
+use crate::vault::CommunicationProviderSecretBindingStore;
 
 use super::super::errors::ProviderSyncError;
 use super::super::models::{MailSyncPhase, ProgressMode, ProgressUpdate};
@@ -17,7 +18,7 @@ impl MailBackgroundSyncService {
         config: ImapAccountConfig<'_>,
     ) -> Result<ProviderSyncSummary, ProviderSyncError> {
         let credential_reader = ProviderCredentialReader::new(
-            context.communication_store.clone(),
+            CommunicationProviderSecretBindingStore::new(self.pool.clone()),
             SecretReferenceStore::new(self.pool.clone()),
             &self.vault,
         );

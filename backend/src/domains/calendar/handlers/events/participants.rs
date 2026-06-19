@@ -40,8 +40,8 @@ pub(crate) async fn post_event_participant(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let participant = EventParticipantStore::new(pool)
-        .add(
+    let participant = CalendarCommandService::new(pool)
+        .add_event_participant_manual(
             &event_id,
             &req.email,
             req.display_name.as_deref(),

@@ -10,5 +10,11 @@ mod persona_routes;
 mod read_endpoints;
 #[path = "persons_api/support.rs"]
 mod support;
-#[path = "persons_api/write_endpoints.rs"]
-mod write_endpoints;
+#[path = "persons_api/write_entrypoints_basic.rs"]
+mod write_entrypoints_basic;
+#[path = "persons_api/write_identity_timeline.rs"]
+mod write_identity_timeline;
+#[path = "persons_api/write_memory_observations.rs"]
+mod write_memory_observations;
+#[path = "persons_api/write_review_observations.rs"]
+mod write_review_observations;

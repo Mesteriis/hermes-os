@@ -3,6 +3,8 @@ use thiserror::Error;
 use crate::domains::decisions::DecisionStoreError;
 use crate::domains::relationships::RelationshipStoreError;
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
+use crate::platform::observations::ObservationStoreError;
+use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum ProjectLinkReviewError {
@@ -47,4 +49,10 @@ pub enum ProjectLinkReviewError {
 
     #[error(transparent)]
     Relationship(#[from] RelationshipStoreError),
+
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
+
+    #[error(transparent)]
+    ReviewMirror(#[from] ReviewMirrorError),
 }

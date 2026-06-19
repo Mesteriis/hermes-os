@@ -39,6 +39,7 @@ pub struct SemanticEmbedding {
     pub semantic_embedding_id: String,
     pub source_kind: String,
     pub source_id: String,
+    pub observation_id: Option<String>,
     pub title: String,
     pub source_text: String,
     pub content_hash: String,
@@ -53,6 +54,7 @@ pub struct SemanticEmbedding {
 pub struct NewSemanticEmbedding<'a> {
     pub source_kind: SemanticSourceKind,
     pub source_id: &'a str,
+    pub observation_id: Option<&'a str>,
     pub title: &'a str,
     pub source_text: &'a str,
     pub embedding_model: &'a str,
@@ -64,6 +66,7 @@ pub struct NewSemanticEmbedding<'a> {
 pub struct SemanticSearchResult {
     pub source_kind: String,
     pub source_id: String,
+    pub observation_id: Option<String>,
     pub title: String,
     pub source_text: String,
     pub graph_node_id: Option<String>,
@@ -80,6 +83,7 @@ pub struct SemanticIndexReport {
 pub(super) struct SemanticSource {
     pub(super) source_kind: SemanticSourceKind,
     pub(super) source_id: String,
+    pub(super) observation_id: Option<String>,
     pub(super) title: String,
     pub(super) source_text: String,
     pub(super) graph_node_id: Option<String>,

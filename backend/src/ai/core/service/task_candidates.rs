@@ -12,6 +12,7 @@ use super::super::runs::{AiRunStore, NewAiRun};
 use super::super::types::{AiTaskCandidateRefreshRequest, AiTaskCandidateRefreshResponse};
 use super::core::AiService;
 use super::events::AiRunEvent;
+use crate::workflows::review_inbox::sync_ai_run_task_candidates_to_review;
 
 impl AiService {
     pub async fn refresh_task_candidates(
@@ -68,6 +69,7 @@ impl AiService {
         let created_count = self
             .upsert_ai_task_candidates(&run_id, &drafts, &citations)
             .await?;
+        let _ = sync_ai_run_task_candidates_to_review(&self.pool, &run_id).await?;
         let duration_ms = elapsed_ms(started_at);
         let answer = format!("Created {created_count} suggested task candidate(s).");
         let stored = run_store

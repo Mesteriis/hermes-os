@@ -1,5 +1,6 @@
 use chrono::Utc;
 use serde_json::json;
+use sqlx::Row;
 
 use hermes_hub_backend::domains::mail::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
@@ -114,6 +115,34 @@ async fn telegram_provider_delete_observation_is_idempotent_and_reconciles_delet
         .await
         .expect("list tombstones");
     assert_eq!(tombstones.len(), 1);
+    let tombstone_id = tombstones[0].tombstone_id.clone();
+    let tombstone_observation_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'telegram'
+          AND link.entity_kind = 'message_tombstone'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&tombstone_id)
+    .fetch_all(&pool)
+    .await
+    .expect("tombstone observations");
+    assert!(
+        tombstone_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_MESSAGE_TOMBSTONE"
+                && row.get::<String, _>("relationship_kind") == "provider_delete"
+                && row.get::<serde_json::Value, _>("payload")["reason_class"]
+                    == json!("deleted_by_provider")
+        }),
+        "provider_delete tombstone observation must exist"
+    );
 }
 
 #[tokio::test]
@@ -215,6 +244,32 @@ async fn telegram_provider_edit_observation_is_idempotent_and_reconciles_edit_co
     assert_eq!(reconciled[0].command_id, "tcmd_edit_observed");
     assert_eq!(reconciled[0].status, "completed");
     assert_eq!(reconciled[0].reconciliation_status, "observed");
+    let version_observation_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'telegram'
+          AND link.entity_kind = 'message_version'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&first_version.version_id)
+    .fetch_all(&pool)
+    .await
+    .expect("message version observations");
+    assert!(
+        version_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_MESSAGE_VERSION"
+                && row.get::<String, _>("relationship_kind") == "insert"
+                && row.get::<serde_json::Value, _>("payload")["version_number"] == json!(1)
+        }),
+        "message version observation must exist"
+    );
 }
 
 #[tokio::test]

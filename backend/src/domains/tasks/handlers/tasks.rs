@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use crate::app::{ApiError, AppState};
 use crate::domains::tasks::api::{NewTask, Task, TaskListQuery, TaskStore, TaskUpdate};
+use crate::domains::tasks::service::TaskCommandService;
 
 use super::support::database_pool;
 
@@ -42,7 +43,9 @@ pub(crate) async fn post_task(
     Json(req): Json<NewTask>,
 ) -> Result<Json<Task>, ApiError> {
     let pool = database_pool(&state)?;
-    let task = TaskStore::new(pool).create(&req).await?;
+    let task = TaskCommandService::new(pool)
+        .create_task_manual(&req)
+        .await?;
     Ok(Json(task))
 }
 
@@ -64,7 +67,9 @@ pub(crate) async fn put_task(
     Json(update): Json<TaskUpdate>,
 ) -> Result<Json<Task>, ApiError> {
     let pool = database_pool(&state)?;
-    let task = TaskStore::new(pool).update(&task_id, &update).await?;
+    let task = TaskCommandService::new(pool)
+        .update_task_manual(&task_id, &update)
+        .await?;
     Ok(Json(task))
 }
 
@@ -79,8 +84,8 @@ pub(crate) async fn post_task_status(
     Json(req): Json<TaskStatusRequest>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    TaskStore::new(pool)
-        .set_status(&task_id, &req.status)
+    TaskCommandService::new(pool)
+        .set_status_manual(&task_id, &req.status)
         .await?;
     Ok(Json(json!({"status": req.status})))
 }
@@ -90,6 +95,8 @@ pub(crate) async fn post_task_archive(
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    TaskStore::new(pool).archive(&task_id).await?;
+    TaskCommandService::new(pool)
+        .archive_manual(&task_id)
+        .await?;
     Ok(Json(json!({"archived": true})))
 }

@@ -9,11 +9,11 @@ pub(in crate::domains::persons::enrichment) async fn sync_notes_memory_card_in_t
     transaction: &mut Transaction<'_, Postgres>,
     person_id: &str,
     notes: &str,
+    source: &str,
 ) -> Result<(), PersonEnrichmentError> {
-    let source = format!("persons.notes:{person_id}");
     sqlx::query("DELETE FROM person_memory_cards WHERE person_id = $1 AND source = $2")
         .bind(person_id)
-        .bind(&source)
+        .bind(source)
         .execute(&mut **transaction)
         .await?;
 
@@ -28,7 +28,7 @@ pub(in crate::domains::persons::enrichment) async fn sync_notes_memory_card_in_t
     .bind(person_id)
     .bind(memory_card.title)
     .bind(memory_card.description)
-    .bind(memory_card.source)
+    .bind(source)
     .bind(memory_card.confidence)
     .bind(memory_card.importance)
     .execute(&mut **transaction)
@@ -41,6 +41,7 @@ pub(in crate::domains::persons::enrichment) async fn sync_favorite_preference_in
     transaction: &mut Transaction<'_, Postgres>,
     person_id: &str,
     is_favorite: bool,
+    source: &str,
 ) -> Result<(), PersonEnrichmentError> {
     if let Some(preference) = EnrichmentEngine::persona_favorite_preference(person_id, is_favorite)
     {
@@ -53,7 +54,7 @@ pub(in crate::domains::persons::enrichment) async fn sync_favorite_preference_in
         .bind(person_id)
         .bind(preference.preference_type)
         .bind(preference.value)
-        .bind(preference.source)
+        .bind(source)
         .bind(preference.confidence)
         .execute(&mut **transaction)
         .await?;

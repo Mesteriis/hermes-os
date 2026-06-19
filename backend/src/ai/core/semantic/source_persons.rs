@@ -25,6 +25,7 @@ pub(super) async fn append_person_sources(
         sources.push(SemanticSource {
             source_kind: SemanticSourceKind::Person,
             source_id: person_id,
+            observation_id: None,
             title: display_name.clone(),
             source_text: format!("{display_name}\nEmail: {email_address}"),
             graph_node_id: None,

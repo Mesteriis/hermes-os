@@ -31,6 +31,24 @@ async fn document_import_stores_markdown_text_against_postgres() {
     assert_eq!(imported.document_kind, "markdown");
     assert_eq!(imported.title, "notes.md");
     assert_eq!(imported.extracted_text, "Notes\n\nBudget review notes.");
+
+    let observation_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'documents'
+          AND entity_kind = 'document'
+          AND entity_id = $2
+          AND relationship_kind = 'import'
+        "#,
+    )
+    .bind(&imported.observation_id)
+    .bind(&imported.document_id)
+    .fetch_one(database.pool().expect("configured pool"))
+    .await
+    .expect("document import observation links");
+    assert_eq!(observation_link_count, 1);
 }
 
 #[tokio::test]

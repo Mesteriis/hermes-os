@@ -2,8 +2,16 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sqlx::Row;
+use sqlx::Transaction;
+use sqlx::postgres::Postgres;
 use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
+
+use super::core::{
+    OrgCoreError, OrgDomainStore, OrgIdentityStore, link_email_domain_projection_in_transaction,
+    link_organization_in_transaction,
+};
+use crate::platform::observations::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Organization {
@@ -64,6 +72,39 @@ impl OrganizationStore {
         display_name: &str,
         org_type: Option<&str>,
     ) -> Result<Organization, OrganizationError> {
+        let mut transaction = self.pool.begin().await?;
+        let organization =
+            Self::create_in_transaction(&mut transaction, display_name, org_type).await?;
+        transaction.commit().await?;
+        Ok(organization)
+    }
+
+    pub async fn create_with_observation(
+        &self,
+        display_name: &str,
+        org_type: Option<&str>,
+        observation_id: &str,
+    ) -> Result<Organization, OrganizationError> {
+        let mut transaction = self.pool.begin().await?;
+        let organization =
+            Self::create_in_transaction(&mut transaction, display_name, org_type).await?;
+        link_organization_in_transaction(
+            &mut transaction,
+            observation_id,
+            &organization.organization_id,
+            "create",
+            None,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(organization)
+    }
+
+    async fn create_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        display_name: &str,
+        org_type: Option<&str>,
+    ) -> Result<Organization, OrganizationError> {
         let ts = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()
@@ -85,9 +126,133 @@ impl OrganizationStore {
         .bind(&org_id)
         .bind(display_name)
         .bind(org_type)
+        .fetch_one(&mut **transaction)
+        .await?;
+        row_to_org(row)
+    }
+
+    pub async fn upsert_review_organization(
+        &self,
+        organization_id: &str,
+        display_name: &str,
+        description: Option<&str>,
+    ) -> Result<Organization, OrganizationError> {
+        if organization_id.trim().is_empty() {
+            return Err(OrganizationError::Validation(
+                "organization_id must not be empty".to_owned(),
+            ));
+        }
+        if display_name.trim().is_empty() {
+            return Err(OrganizationError::Validation(
+                "display_name must not be empty".to_owned(),
+            ));
+        }
+
+        let row = sqlx::query(
+            r#"
+            INSERT INTO organizations (
+                organization_id,
+                display_name,
+                org_type,
+                description
+            )
+            VALUES ($1, $2, 'derived', $3)
+            ON CONFLICT (organization_id)
+            DO UPDATE SET
+                display_name = EXCLUDED.display_name,
+                description = EXCLUDED.description,
+                updated_at = now()
+            RETURNING organization_id, display_name, legal_name, org_type, status, country, city,
+                      address, website, industry, description, primary_language, timezone,
+                      trust_score, health_status, priority, notes, tags, org_metadata,
+                      last_interaction_at, interaction_count,
+                      registration_number, country_of_registration, vat, cif, nif, tax_id,
+                      legal_address, registry_source, registry_last_verified,
+                      communication_style, verbosity, formality, secondary_languages,
+                      preferred_tone, official_style_required,
+                      last_health_check, watchlist, created_at, updated_at
+            "#,
+        )
+        .bind(organization_id.trim())
+        .bind(display_name.trim())
+        .bind(description.map(str::trim).filter(|value| !value.is_empty()))
         .fetch_one(&self.pool)
         .await?;
         row_to_org(row)
+    }
+
+    pub async fn upsert_email_domain_organization(
+        &self,
+        domain: &str,
+    ) -> Result<(Organization, bool), OrganizationError> {
+        self.upsert_email_domain_organization_internal(domain, None)
+            .await
+    }
+
+    pub async fn upsert_email_domain_organization_with_observation(
+        &self,
+        domain: &str,
+        observation_id: &str,
+    ) -> Result<(Organization, bool), OrganizationError> {
+        self.upsert_email_domain_organization_internal(domain, Some(observation_id))
+            .await
+    }
+
+    async fn upsert_email_domain_organization_internal(
+        &self,
+        domain: &str,
+        observation_id: Option<&str>,
+    ) -> Result<(Organization, bool), OrganizationError> {
+        let domain = domain.trim().to_ascii_lowercase();
+        if domain.is_empty() {
+            return Err(OrganizationError::Validation(
+                "organization domain must not be empty".to_owned(),
+            ));
+        }
+
+        let organization_id = format!("org:v1:email-domain:{}:{domain}", domain.len());
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
+            r#"
+            INSERT INTO organizations (organization_id, display_name, org_type, website)
+            VALUES ($1, $2, 'company', $3)
+            ON CONFLICT (organization_id)
+            DO UPDATE SET
+                updated_at = now(),
+                last_interaction_at = now(),
+                interaction_count = organizations.interaction_count + 1
+            RETURNING
+                organization_id, display_name, legal_name, org_type, status, country, city,
+                address, website, industry, description, primary_language, timezone,
+                trust_score, health_status, priority, notes, tags, org_metadata,
+                last_interaction_at, interaction_count,
+                registration_number, country_of_registration, vat, cif, nif, tax_id,
+                legal_address, registry_source, registry_last_verified,
+                communication_style, verbosity, formality, secondary_languages,
+                preferred_tone, official_style_required,
+                last_health_check, watchlist, created_at, updated_at,
+                (xmax = 0) AS inserted
+            "#,
+        )
+        .bind(&organization_id)
+        .bind(&domain)
+        .bind(format!("https://{domain}"))
+        .fetch_one(&mut *transaction)
+        .await?;
+        let inserted: bool = row.try_get("inserted")?;
+        let organization = row_to_org(row)?;
+        if let Some(observation_id) = observation_id {
+            Self::link_email_domain_projection_evidence(
+                &mut transaction,
+                observation_id,
+                &organization,
+                &domain,
+                inserted,
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok((organization, inserted))
     }
 
     pub async fn get(
@@ -154,6 +319,39 @@ impl OrganizationStore {
         organization_id: &str,
         update: &OrganizationUpdate,
     ) -> Result<Organization, OrganizationError> {
+        let mut transaction = self.pool.begin().await?;
+        let organization =
+            Self::update_in_transaction(&mut transaction, organization_id, update).await?;
+        transaction.commit().await?;
+        Ok(organization)
+    }
+
+    pub async fn update_with_observation(
+        &self,
+        organization_id: &str,
+        update: &OrganizationUpdate,
+        observation_id: &str,
+    ) -> Result<Organization, OrganizationError> {
+        let mut transaction = self.pool.begin().await?;
+        let organization =
+            Self::update_in_transaction(&mut transaction, organization_id, update).await?;
+        link_organization_in_transaction(
+            &mut transaction,
+            observation_id,
+            &organization.organization_id,
+            "update",
+            None,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(organization)
+    }
+
+    async fn update_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        organization_id: &str,
+        update: &OrganizationUpdate,
+    ) -> Result<Organization, OrganizationError> {
         let row = sqlx::query(
             "UPDATE organizations SET
                 display_name = COALESCE($2, display_name),
@@ -201,19 +399,87 @@ impl OrganizationStore {
         .bind(update.notes.as_deref())
         .bind(update.tags.as_ref())
         .bind(update.org_metadata.as_ref())
-        .fetch_one(&self.pool)
+        .fetch_one(&mut **transaction)
         .await?;
         row_to_org(row)
     }
 
     pub async fn archive(&self, organization_id: &str) -> Result<(), OrganizationError> {
+        let mut transaction = self.pool.begin().await?;
+        Self::archive_in_transaction(&mut transaction, organization_id).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    pub async fn archive_with_observation(
+        &self,
+        organization_id: &str,
+        observation_id: &str,
+    ) -> Result<(), OrganizationError> {
+        let mut transaction = self.pool.begin().await?;
+        Self::archive_in_transaction(&mut transaction, organization_id).await?;
+        link_organization_in_transaction(
+            &mut transaction,
+            observation_id,
+            organization_id,
+            "archive",
+            None,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    async fn archive_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        organization_id: &str,
+    ) -> Result<(), OrganizationError> {
         sqlx::query("UPDATE organizations SET status = 'archived', updated_at = now() WHERE organization_id = $1")
-            .bind(organization_id).execute(&self.pool).await?;
+            .bind(organization_id).execute(&mut **transaction).await?;
         Ok(())
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+impl OrganizationStore {
+    async fn link_email_domain_projection_evidence(
+        transaction: &mut Transaction<'_, Postgres>,
+        observation_id: &str,
+        organization: &Organization,
+        domain: &str,
+        organization_inserted: bool,
+    ) -> Result<(), OrganizationError> {
+        let (organization_domain, domain_inserted) =
+            OrgDomainStore::upsert_email_domain_in_transaction(
+                transaction,
+                &organization.organization_id,
+                domain,
+            )
+            .await?;
+        let organization_identity = OrgIdentityStore::upsert_in_transaction(
+            transaction,
+            &organization.organization_id,
+            "email_domain",
+            domain,
+            "email_sync",
+        )
+        .await?;
+        link_email_domain_projection_in_transaction(
+            transaction,
+            observation_id,
+            &organization.organization_id,
+            organization_inserted,
+            &organization_domain.id,
+            domain,
+            domain_inserted,
+            &organization_identity.id,
+        )
+        .await?;
+
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct OrganizationUpdate {
     pub display_name: Option<String>,
     pub legal_name: Option<String>,
@@ -282,6 +548,12 @@ fn row_to_org(row: PgRow) -> Result<Organization, OrganizationError> {
 pub enum OrganizationError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Core(#[from] OrgCoreError),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
+    #[error("{0}")]
+    Validation(String),
     #[error("organization not found")]
     NotFound,
 }

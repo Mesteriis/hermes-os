@@ -20,6 +20,7 @@ impl GraphProjectionService {
             SELECT
                 message_id,
                 raw_record_id,
+                observation_id,
                 account_id,
                 provider_record_id,
                 subject,
@@ -53,6 +54,7 @@ impl GraphProjectionService {
                 "account_id": message.account_id,
                 "provider_record_id": message.provider_record_id,
                 "raw_record_id": message.raw_record_id,
+                "observation_id": message.observation_id,
                 "occurred_at": message.occurred_at,
             })),
         )

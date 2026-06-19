@@ -6,14 +6,14 @@ use super::interaction_contexts::PersonPersona;
 pub(super) async fn materialize_interaction_preferences_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     persona: &PersonPersona,
+    source: &str,
 ) -> Result<(), PersonCoreError> {
-    let source = interaction_context_source(&persona.persona_id);
     upsert_interaction_preference_in_transaction(
         transaction,
         persona,
         "name",
         Some(persona.name.as_str()),
-        &source,
+        source,
     )
     .await?;
     upsert_interaction_preference_in_transaction(
@@ -21,7 +21,7 @@ pub(super) async fn materialize_interaction_preferences_in_transaction(
         persona,
         "context",
         persona.context.as_deref(),
-        &source,
+        source,
     )
     .await?;
     upsert_interaction_preference_in_transaction(
@@ -29,7 +29,7 @@ pub(super) async fn materialize_interaction_preferences_in_transaction(
         persona,
         "default_tone",
         persona.default_tone.as_deref(),
-        &source,
+        source,
     )
     .await?;
     upsert_interaction_preference_in_transaction(
@@ -37,7 +37,7 @@ pub(super) async fn materialize_interaction_preferences_in_transaction(
         persona,
         "default_language",
         persona.default_language.as_deref(),
-        &source,
+        source,
     )
     .await?;
     upsert_interaction_preference_in_transaction(
@@ -45,7 +45,7 @@ pub(super) async fn materialize_interaction_preferences_in_transaction(
         persona,
         "preferred_channel",
         persona.preferred_channel.as_deref(),
-        &source,
+        source,
     )
     .await?;
 
@@ -55,8 +55,8 @@ pub(super) async fn materialize_interaction_preferences_in_transaction(
 pub(super) async fn delete_interaction_preferences_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     persona: &PersonPersona,
+    source: &str,
 ) -> Result<(), PersonCoreError> {
-    let source = interaction_context_source(&persona.persona_id);
     for field in [
         "name",
         "context",
@@ -73,7 +73,7 @@ pub(super) async fn delete_interaction_preferences_in_transaction(
             &persona.persona_id,
             field,
         ))
-        .bind(&source)
+        .bind(source)
         .execute(&mut **transaction)
         .await?;
     }

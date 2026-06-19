@@ -16,9 +16,11 @@ use crate::domains::persons::identity::PersonIdentityError;
 use crate::domains::projects::core::ProjectStoreError;
 use crate::domains::projects::link_reviews::ProjectLinkReviewError;
 use crate::domains::relationships::RelationshipStoreError;
+use crate::domains::review::ReviewInboxError;
 use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::engines::automation::AutomationError;
 use crate::engines::consistency::ConsistencyError;
+use crate::engines::review_promotion::ReviewPromotionError;
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::whatsapp::client::WhatsappWebError;
 use crate::platform::audit::ApiAuditError;
@@ -41,6 +43,7 @@ pub enum ApiError {
     InvalidProjectLinkReview(&'static str),
     InvalidTaskCandidateQuery(&'static str),
     InvalidTaskCandidateReview(&'static str),
+    InvalidTaskQuery(&'static str),
     InvalidObligationQuery(&'static str),
     InvalidObligationReview(&'static str),
     InvalidDecisionQuery(&'static str),
@@ -49,6 +52,8 @@ pub enum ApiError {
     InvalidRelationshipReview(&'static str),
     InvalidContradictionQuery(&'static str),
     InvalidContradictionReview(&'static str),
+    InvalidReviewQuery(&'static str),
+    InvalidReviewItem(&'static str),
     InvalidPersonIdentityReview(&'static str),
     InvalidDocumentProcessingQuery(&'static str),
     Settings(SettingsError),
@@ -63,6 +68,9 @@ pub enum ApiError {
     RelationshipNotFound,
     Relationship(RelationshipStoreError),
     ContradictionObservationNotFound,
+    ReviewItemNotFound,
+    ReviewInbox(ReviewInboxError),
+    ReviewPromotion(ReviewPromotionError),
     Consistency(ConsistencyError),
     AiRunNotFound,
     Ai(AiError),

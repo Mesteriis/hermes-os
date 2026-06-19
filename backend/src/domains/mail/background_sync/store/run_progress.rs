@@ -1,5 +1,8 @@
+use chrono::Utc;
+
 use super::super::errors::MailSyncError;
 use super::super::events::sync_run_progress_event;
+use super::super::evidence::capture_mail_sync_run_observation;
 use super::super::models::ProgressUpdate;
 use super::super::rows::row_to_run;
 use super::MailSyncStore;
@@ -61,6 +64,15 @@ impl MailSyncStore {
 
         if let Some(row) = row {
             let run = row_to_run(row)?;
+            capture_mail_sync_run_observation(
+                &mut transaction,
+                &run,
+                "COMMUNICATION_MAIL_SYNC_RUN_STATUS",
+                "progress",
+                Utc::now(),
+                "mail.background_sync.update_progress",
+            )
+            .await?;
             let event = sync_run_progress_event(&run)?;
             EventStore::append_in_transaction(&mut transaction, &event).await?;
         }
@@ -74,7 +86,8 @@ impl MailSyncStore {
         run_id: &str,
         error_code: &'static str,
     ) -> Result<(), MailSyncError> {
-        sqlx::query(
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
             r#"
             UPDATE communication_mail_sync_runs
             SET
@@ -85,12 +98,48 @@ impl MailSyncStore {
                 error_message = 'Gmail history expired; restarting full mailbox listing',
                 updated_at = now()
             WHERE run_id = $1
+            RETURNING
+                run_id,
+                account_id,
+                trigger,
+                status,
+                phase,
+                progress_mode,
+                progress_percent,
+                processed_messages,
+                estimated_total_messages,
+                current_batch_size,
+                fetched_messages,
+                projected_messages,
+                upserted_persons,
+                upserted_organizations,
+                checkpoint_before,
+                checkpoint_after,
+                checkpoint_saved,
+                error_code,
+                error_message,
+                started_at,
+                completed_at,
+                next_run_at
             "#,
         )
         .bind(run_id)
         .bind(error_code)
-        .execute(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
+        if let Some(row) = row {
+            let run = row_to_run(row)?;
+            capture_mail_sync_run_observation(
+                &mut transaction,
+                &run,
+                "COMMUNICATION_MAIL_SYNC_RUN_STATUS",
+                "recoverable_full_resync_needed",
+                Utc::now(),
+                "mail.background_sync.mark_recoverable_full_resync",
+            )
+            .await?;
+        }
+        transaction.commit().await?;
 
         Ok(())
     }

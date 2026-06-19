@@ -229,14 +229,6 @@
       "importedDomain": "documents"
     },
     {
-      "file": "backend/src/domains/mail/handlers/workflow_actions/actions/persons.rs",
-      "importedDomain": "persons"
-    },
-    {
-      "file": "backend/src/domains/mail/handlers/workflow_actions/actions/tasks.rs",
-      "importedDomain": "tasks"
-    },
-    {
       "file": "backend/src/domains/obligations/errors.rs",
       "importedDomain": "graph"
     },
@@ -441,10 +433,6 @@
       "importedDomain": "mail"
     },
     {
-      "file": "backend/src/integrations/telegram/client/accounts/lifecycle.rs",
-      "importedDomain": "mail"
-    },
-    {
       "file": "backend/src/integrations/telegram/client/accounts/live_credentials.rs",
       "importedDomain": "mail"
     },
@@ -485,35 +473,11 @@
       "importedDomain": "mail"
     },
     {
-      "file": "backend/src/integrations/telegram/client/messages/intelligence.rs",
-      "importedDomain": "decisions"
-    },
-    {
-      "file": "backend/src/integrations/telegram/client/messages/intelligence.rs",
-      "importedDomain": "tasks"
-    },
-    {
-      "file": "backend/src/integrations/telegram/client/messages/manual_send.rs",
-      "importedDomain": "mail"
-    },
-    {
-      "file": "backend/src/integrations/telegram/client/messages/provider_state.rs",
-      "importedDomain": "mail"
-    },
-    {
-      "file": "backend/src/integrations/telegram/client/messages/tdlib_ingestion.rs",
-      "importedDomain": "mail"
-    },
-    {
       "file": "backend/src/integrations/telegram/client/models/accounts.rs",
       "importedDomain": "mail"
     },
     {
       "file": "backend/src/integrations/telegram/client/projection.rs",
-      "importedDomain": "mail"
-    },
-    {
-      "file": "backend/src/integrations/telegram/client/reactions.rs",
       "importedDomain": "mail"
     },
     {
@@ -546,10 +510,6 @@
     },
     {
       "file": "backend/src/integrations/telegram/runtime/manager/command_executor_media.rs",
-      "importedDomain": "mail"
-    },
-    {
-      "file": "backend/src/integrations/telegram/runtime/manager/lifecycle.rs",
       "importedDomain": "mail"
     },
     {
@@ -635,14 +595,6 @@
     {
       "file": "backend/src/integrations/whatsapp/client/store/ingestion.rs",
       "importedDomain": "mail"
-    },
-    {
-      "file": "backend/src/integrations/whatsapp/client/store/intelligence.rs",
-      "importedDomain": "decisions"
-    },
-    {
-      "file": "backend/src/integrations/whatsapp/client/store/intelligence.rs",
-      "importedDomain": "tasks"
     }
   ],
   "frontend": [

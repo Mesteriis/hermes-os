@@ -1,6 +1,9 @@
 use super::super::errors::AiControlCenterError;
-use super::super::models::{AiPromptActivateRequest, AiPromptTemplate};
-use super::super::rows::row_to_prompt;
+use super::super::evidence::{
+    capture_prompt_template_observation, capture_prompt_version_observation,
+};
+use super::super::models::{AiPromptActivateRequest, AiPromptTemplate, AiPromptVersion};
+use super::super::rows::{row_to_prompt, row_to_prompt_version};
 use super::super::store::AiControlCenterStore;
 use super::super::validation::validate_non_empty;
 
@@ -9,9 +12,11 @@ impl AiControlCenterStore {
         &self,
         prompt_id: &str,
         request: &AiPromptActivateRequest,
+        actor_id: &str,
     ) -> Result<AiPromptTemplate, AiControlCenterError> {
         validate_non_empty("prompt_id", prompt_id)?;
         validate_non_empty("prompt_version_id", &request.prompt_version_id)?;
+        validate_non_empty("actor_id", actor_id)?;
         let prompt = self
             .prompt(prompt_id)
             .await?
@@ -38,11 +43,33 @@ impl AiControlCenterStore {
         .bind(prompt_id.trim())
         .execute(&mut *tx)
         .await?;
-        sqlx::query(
+        let version_row = sqlx::query(
             "UPDATE ai_prompt_template_versions SET status = 'active', updated_at = now() WHERE prompt_version_id = $1",
         )
         .bind(request.prompt_version_id.trim())
         .execute(&mut *tx)
+        .await?;
+        if version_row.rows_affected() == 0 {
+            return Err(AiControlCenterError::PromptVersionNotFound);
+        }
+        let active_version_row = sqlx::query(
+            r#"
+            SELECT
+                prompt_version_id,
+                prompt_id,
+                version_label,
+                body_template,
+                variables,
+                status,
+                created_by_actor_id,
+                created_at,
+                updated_at
+            FROM ai_prompt_template_versions
+            WHERE prompt_version_id = $1
+            "#,
+        )
+        .bind(request.prompt_version_id.trim())
+        .fetch_one(&mut *tx)
         .await?;
         let row = sqlx::query(
             r#"
@@ -68,8 +95,13 @@ impl AiControlCenterStore {
         .bind(request.prompt_version_id.trim())
         .fetch_one(&mut *tx)
         .await?;
+        let active_version: AiPromptVersion = row_to_prompt_version(active_version_row)?;
+        let prompt = row_to_prompt(row)?;
+        capture_prompt_version_observation(&mut tx, &active_version, "activate", actor_id.trim())
+            .await?;
+        capture_prompt_template_observation(&mut tx, &prompt, "activate", actor_id.trim()).await?;
         tx.commit().await?;
 
-        row_to_prompt(row)
+        Ok(prompt)
     }
 }

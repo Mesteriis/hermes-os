@@ -1,12 +1,14 @@
 use std::env;
 
 use serde_json::json;
+use sqlx::Row;
 use tower::ServiceExt;
 
 use super::support::{
     LOCAL_API_TOKEN, build_cal_app, delete_request_with_token, get_request_with_token, json_body,
     post_request_with_token, put_request_with_token, unique_suffix, urlencoding_percent_encode,
 };
+use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn calendar_accounts_crud_against_postgres() {
@@ -15,6 +17,10 @@ async fn calendar_accounts_crud_against_postgres() {
         return;
     };
     let suffix = unique_suffix();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
     let app = build_cal_app(&database_url).await;
     let acct_name = format!("API Cal Acct {suffix}");
 
@@ -34,6 +40,21 @@ async fn calendar_accounts_crud_against_postgres() {
         .expect("account_id")
         .to_owned();
     assert_eq!(created["provider"], json!("google"));
+    let created_observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'calendar_account'
+          AND entity_id = $1
+          AND relationship_kind = 'create'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar account create observation");
 
     let response = app
         .clone()
@@ -74,6 +95,22 @@ async fn calendar_accounts_crud_against_postgres() {
         updated["account_name"],
         json!(format!("Updated {acct_name}"))
     );
+    let updated_observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'calendar_account'
+          AND entity_id = $1
+          AND relationship_kind = 'update'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar account update observation");
+    assert_ne!(updated_observation_id, created_observation_id);
 
     let response = app
         .clone()
@@ -93,6 +130,45 @@ async fn calendar_accounts_crud_against_postgres() {
     );
     let deleted = json_body(response).await;
     assert_eq!(deleted["deleted"], json!(true));
+    let deleted_observation_id: String = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM observation_links
+        WHERE entity_kind = 'calendar_account'
+          AND entity_id = $1
+          AND relationship_kind = 'delete'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&account_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar account delete observation");
+    assert_ne!(deleted_observation_id, updated_observation_id);
+    let delete_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code
+         FROM observations observation
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE observation.observation_id = $1",
+    )
+    .bind(&deleted_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("calendar account delete observation row");
+    assert_eq!(
+        delete_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "manual"
+    );
+    assert_eq!(
+        delete_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "CALENDAR_ACCOUNT_MUTATION"
+    );
 }
 
 #[tokio::test]

@@ -145,8 +145,9 @@ provenance, not a vague label.
 
 ## Source Record
 
-An append-only imported provider record or local artifact preserved before
-canonical projections are built. Source records are primary evidence.
+Legacy term for imported provider records or local artifacts preserved before
+canonical projections are built. New architecture uses Observation Platform as
+the canonical append-only evidence store.
 
 ## Task
 

@@ -74,21 +74,17 @@ pub(crate) async fn post_identity_trace(
     State(state): State<AppState>,
     Json(req): Json<NewIdentityTraceRequest>,
 ) -> Result<Json<PersonIdentity>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonsIdentityStore::new(pool);
-    let identity = store
-        .create_unattached(
-            &req.identity_type,
-            &req.identity_value,
-            req.source.as_deref().unwrap_or("manual"),
-        )
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(identity))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .create_identity_trace_manual(&req.identity_type, &req.identity_value, requested_source)
+            .await?,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -106,12 +102,11 @@ pub(crate) async fn put_identity_trace_assignment(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonsIdentityStore::new(pool);
-    let identity = store
-        .attach_to_persona(&identity_id, &req.person_id)
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(identity))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .assign_identity_trace_manual(&identity_id, &req.person_id)
+            .await?,
+    ))
 }
 
 pub(crate) async fn post_person_identity(
@@ -119,34 +114,35 @@ pub(crate) async fn post_person_identity(
     Path(person_id): Path<String>,
     Json(req): Json<NewPersonIdentityRequest>,
 ) -> Result<Json<PersonIdentity>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonsIdentityStore::new(pool);
-    let identity = store
-        .upsert(
-            &person_id,
-            &req.identity_type,
-            &req.identity_value,
-            req.source.as_deref().unwrap_or("manual"),
-        )
-        .await
-        .map_err(ApiError::from)?;
-    Ok(Json(identity))
+    Ok(Json(
+        crate::domains::persons::service::PersonCommandService::new(pool)
+            .upsert_person_identity_manual(
+                &person_id,
+                &req.identity_type,
+                &req.identity_value,
+                requested_source,
+            )
+            .await?,
+    ))
 }
 
 pub(crate) async fn delete_person_identity(
     State(state): State<AppState>,
-    Path((_person_id, identity_id)): Path<(String, String)>,
+    Path((person_id, identity_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonsIdentityStore::new(pool);
-    let deleted = store.delete(&identity_id).await.map_err(ApiError::from)?;
+    let deleted = crate::domains::persons::service::PersonCommandService::new(pool)
+        .delete_person_identity_manual(&person_id, &identity_id)
+        .await?;
     Ok(Json(json!({"deleted": deleted})))
 }

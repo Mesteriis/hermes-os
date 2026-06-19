@@ -1,8 +1,18 @@
+use chrono::Utc;
+use serde_json::json;
+use sqlx::Row;
 use sqlx::Transaction;
 use sqlx::postgres::{PgPool, Postgres};
 
+use crate::workflows::review_mirror::{
+    sync_identity_candidate_review_state_in_transaction, sync_identity_candidate_to_review,
+    sync_identity_candidate_to_review_in_transaction,
+};
+
 use super::errors::PersonIdentityError;
-use super::models::{PersonIdentityCandidatePayload, PersonIdentityReviewState};
+use super::models::{
+    PersonIdentityCandidateKind, PersonIdentityCandidatePayload, PersonIdentityReviewState,
+};
 
 pub(super) async fn upsert_candidate(
     pool: &PgPool,
@@ -10,7 +20,7 @@ pub(super) async fn upsert_candidate(
     identity_candidate_id: String,
     review_state: PersonIdentityReviewState,
 ) -> Result<(), PersonIdentityError> {
-    sqlx::query(
+    let review_state: String = sqlx::query_scalar(
         r#"
         INSERT INTO person_identity_candidates (
             identity_candidate_id,
@@ -55,6 +65,7 @@ pub(super) async fn upsert_candidate(
                 ELSE NULL
             END,
             updated_at = now()
+        RETURNING review_state
         "#,
     )
     .bind(identity_candidate_id)
@@ -65,8 +76,12 @@ pub(super) async fn upsert_candidate(
     .bind(&payload.evidence_summary)
     .bind(payload.confidence)
     .bind(review_state.as_str())
-    .execute(pool)
+    .fetch_one(pool)
     .await?;
+
+    if review_state == PersonIdentityReviewState::Suggested.as_str() {
+        sync_identity_candidate_to_review(pool, payload).await?;
+    }
 
     Ok(())
 }
@@ -77,7 +92,7 @@ pub(super) async fn upsert_candidate_in_transaction(
     identity_candidate_id: String,
     review_state: PersonIdentityReviewState,
 ) -> Result<(), PersonIdentityError> {
-    sqlx::query(
+    let review_state: String = sqlx::query_scalar(
         r#"
         INSERT INTO person_identity_candidates (
             identity_candidate_id,
@@ -122,6 +137,7 @@ pub(super) async fn upsert_candidate_in_transaction(
                 ELSE NULL
             END,
             updated_at = now()
+        RETURNING review_state
         "#,
     )
     .bind(identity_candidate_id)
@@ -132,8 +148,67 @@ pub(super) async fn upsert_candidate_in_transaction(
     .bind(&payload.evidence_summary)
     .bind(payload.confidence)
     .bind(review_state.as_str())
-    .execute(&mut **transaction)
+    .fetch_one(&mut **transaction)
     .await?;
 
+    if review_state == PersonIdentityReviewState::Suggested.as_str() {
+        sync_identity_candidate_to_review_in_transaction(transaction, payload).await?;
+    }
+
     Ok(())
+}
+
+pub(crate) async fn sync_identity_candidate_review_state_to_inbox_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    identity_candidate_id: &str,
+    review_state: PersonIdentityReviewState,
+) -> Result<(), PersonIdentityError> {
+    let payload = load_identity_candidate_payload(transaction, identity_candidate_id).await?;
+    sync_identity_candidate_review_state_in_transaction(
+        transaction,
+        identity_candidate_id,
+        review_state,
+        &payload,
+    )
+    .await?;
+    Ok(())
+}
+
+async fn load_identity_candidate_payload(
+    transaction: &mut Transaction<'_, Postgres>,
+    identity_candidate_id: &str,
+) -> Result<PersonIdentityCandidatePayload, PersonIdentityError> {
+    let row = sqlx::query(
+        r#"
+        SELECT
+            candidate_kind,
+            left_person_id,
+            right_person_id,
+            email_address,
+            evidence_summary,
+            confidence::float8 AS confidence
+        FROM person_identity_candidates
+        WHERE identity_candidate_id = $1
+        "#,
+    )
+    .bind(identity_candidate_id)
+    .fetch_optional(&mut **transaction)
+    .await?;
+
+    let row = row.ok_or(PersonIdentityError::IdentityCandidateNotFound)?;
+    let candidate_kind = match row.try_get::<String, _>("candidate_kind")?.as_str() {
+        "merge_persons" => PersonIdentityCandidateKind::MergePersons,
+        "attach_email_address" => PersonIdentityCandidateKind::AttachEmailAddress,
+        "split_person" => PersonIdentityCandidateKind::SplitPerson,
+        other => return Err(PersonIdentityError::InvalidCandidateKind(other.to_owned())),
+    };
+
+    Ok(PersonIdentityCandidatePayload {
+        candidate_kind,
+        left_person_id: row.try_get("left_person_id")?,
+        right_person_id: row.try_get("right_person_id")?,
+        email_address: row.try_get("email_address")?,
+        evidence_summary: row.try_get("evidence_summary")?,
+        confidence: row.try_get("confidence")?,
+    })
 }

@@ -2,6 +2,7 @@ mod telegram_support;
 
 use axum::http::StatusCode;
 use serde_json::json;
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -20,6 +21,7 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
     let suffix = unique_suffix();
     let account_id = format!("telegram-lifecycle-actions-{suffix}");
     let chat_id = format!("lifecycle-chat-{suffix}");
@@ -144,4 +146,56 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
             "expected command row for {expected_kind}, got {kinds:?}"
         );
     }
+
+    let reaction_rows = sqlx::query(
+        r#"
+        SELECT reaction_id, is_active
+        FROM telegram_message_reactions
+        WHERE message_id = $1
+          AND sender_id = 'owner'
+          AND reaction_emoji = '👍'
+        "#,
+    )
+    .bind(&message_id)
+    .fetch_all(&pool)
+    .await
+    .expect("reaction rows");
+    assert_eq!(reaction_rows.len(), 1);
+    let reaction_id = reaction_rows[0].get::<String, _>("reaction_id");
+    assert!(!reaction_rows[0].get::<bool, _>("is_active"));
+
+    let reaction_observation_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'telegram'
+          AND link.entity_kind = 'message_reaction'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&reaction_id)
+    .fetch_all(&pool)
+    .await
+    .expect("reaction observations");
+    assert!(
+        reaction_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_MESSAGE_REACTION"
+                && row.get::<String, _>("relationship_kind") == "local_add"
+                && row.get::<serde_json::Value, _>("payload")["is_active"] == json!(true)
+        }),
+        "local_add reaction observation must exist"
+    );
+    assert!(
+        reaction_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_MESSAGE_REACTION"
+                && row.get::<String, _>("relationship_kind") == "local_remove"
+                && row.get::<serde_json::Value, _>("payload")["is_active"] == json!(false)
+        }),
+        "local_remove reaction observation must exist"
+    );
 }

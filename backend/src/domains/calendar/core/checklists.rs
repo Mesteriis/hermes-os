@@ -5,6 +5,7 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 
 use super::errors::CalendarCoreError;
+use super::link_calendar_entity;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EventChecklist {
@@ -48,15 +49,39 @@ impl EventChecklistStore {
         items: Value,
         source: &str,
     ) -> Result<EventChecklist, CalendarCoreError> {
+        self.set_with_observation(event_id, items, source, None)
+            .await
+    }
+
+    pub async fn set_with_observation(
+        &self,
+        event_id: &str,
+        items: Value,
+        source: &str,
+        observation_id: Option<&str>,
+    ) -> Result<EventChecklist, CalendarCoreError> {
         let row = sqlx::query("INSERT INTO event_checklists (event_id, items, source) VALUES ($1,$2,$3) RETURNING id::text, event_id, items, source, created_at, updated_at")
             .bind(event_id).bind(&items).bind(source).fetch_one(&self.pool).await?;
-        Ok(EventChecklist {
+        let checklist = EventChecklist {
             id: row.try_get("id")?,
             event_id: row.try_get("event_id")?,
             items: row.try_get("items")?,
             source: row.try_get("source")?,
             created_at: row.try_get("created_at")?,
             updated_at: row.try_get("updated_at")?,
-        })
+        };
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_calendar_entity(
+                &self.pool,
+                observation_id,
+                "event_checklist",
+                checklist.id.clone(),
+                Some(serde_json::json!({
+                    "event_id": event_id,
+                })),
+            )
+            .await?;
+        }
+        Ok(checklist)
     }
 }

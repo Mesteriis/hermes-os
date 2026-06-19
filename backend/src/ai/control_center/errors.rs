@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+use crate::platform::observations::ObservationStoreError;
 use crate::platform::secrets::SecretReferenceError;
 use crate::vault::HostVaultError;
 
@@ -31,6 +32,9 @@ pub enum AiControlCenterError {
 
     #[error(transparent)]
     HostVault(#[from] HostVaultError),
+
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

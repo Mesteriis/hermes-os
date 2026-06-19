@@ -158,6 +158,40 @@ async fn v1_read_receipt_records_correlation_and_realtime_event_against_postgres
     assert_eq!(payload["receipt_kind"], "read");
     assert!(payload.get("recipient").is_none());
     assert!(payload.get("body_text").is_none());
+    let receipt_link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'read_receipt'
+           AND relationship_kind = 'read_receipt_recorded'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("read receipt observation link");
+    let receipt_observation_id: String = receipt_link
+        .try_get("observation_id")
+        .expect("read receipt observation id");
+    let receipt_metadata: Value = receipt_link.try_get("metadata").expect("receipt metadata");
+    assert_eq!(receipt_metadata["receipt_kind"], "read");
+    let receipt_observation = sqlx::query(
+        "SELECT origin_kind, payload
+         FROM observations
+         WHERE observation_id = $1",
+    )
+    .bind(&receipt_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("read receipt observation");
+    let receipt_origin_kind: String = receipt_observation
+        .try_get("origin_kind")
+        .expect("receipt origin kind");
+    let receipt_payload: Value = receipt_observation
+        .try_get("payload")
+        .expect("receipt payload");
+    assert_eq!(receipt_origin_kind, "local_runtime");
+    assert_eq!(receipt_payload["operation"], "read_receipt_recorded");
 }
 
 #[tokio::test]
@@ -261,6 +295,44 @@ async fn v1_provider_delivery_event_records_delivery_status_against_postgres() {
             .expect("outbox metadata");
     assert_eq!(metadata["delivery_status"]["delivery_status"], "delivered");
     assert_eq!(metadata["delivery_status"]["source_kind"], "gmail_history");
+    let delivery_link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'outbox_item'
+           AND entity_id = $1
+           AND relationship_kind = 'delivery_status_observed'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&outbox_id)
+    .fetch_one(&pool)
+    .await
+    .expect("delivery status observation link");
+    let delivery_observation_id: String = delivery_link
+        .try_get("observation_id")
+        .expect("delivery observation id");
+    let delivery_metadata: Value = delivery_link
+        .try_get("metadata")
+        .expect("delivery metadata");
+    assert_eq!(delivery_metadata["delivery_status"], "delivered");
+    let delivery_observation = sqlx::query(
+        "SELECT origin_kind, payload
+         FROM observations
+         WHERE observation_id = $1",
+    )
+    .bind(&delivery_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("delivery observation");
+    let delivery_origin_kind: String = delivery_observation
+        .try_get("origin_kind")
+        .expect("delivery origin kind");
+    let delivery_payload: Value = delivery_observation
+        .try_get("payload")
+        .expect("delivery payload");
+    assert_eq!(delivery_origin_kind, "local_runtime");
+    assert_eq!(delivery_payload["operation"], "delivery_status_recorded");
 }
 
 #[tokio::test]
@@ -304,6 +376,19 @@ async fn v1_provider_delivery_event_records_read_receipt_against_postgres() {
         body["read_receipt"]["metadata"]["provider_event_kind"],
         "read"
     );
+    let provider_message_link_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*)
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'provider_message'
+           AND entity_id = $1
+           AND relationship_kind = 'read_receipt_observed'",
+    )
+    .bind(&provider_message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider message read receipt links");
+    assert!(provider_message_link_count >= 1);
 }
 
 #[tokio::test]
@@ -390,6 +475,19 @@ async fn v1_delivery_notification_parses_dsn_and_appends_delivery_status_event_a
     assert!(payload.get("recipient").is_none());
     assert!(payload.get("diagnostic_code").is_none());
     assert!(payload.get("raw_message").is_none());
+    let failed_delivery_link = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*)
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'provider_message'
+           AND entity_id = $1
+           AND relationship_kind = 'delivery_status_observed'",
+    )
+    .bind(&provider_message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("provider message delivery status links");
+    assert!(failed_delivery_link >= 1);
 }
 
 #[tokio::test]
@@ -448,6 +546,19 @@ async fn v1_delivery_notification_parses_mdn_into_read_receipt_against_postgres(
     .await
     .expect("read receipt count");
     assert_eq!(read_receipt_count, 1);
+    let mdn_receipt_links = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*)
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'outbox_item'
+           AND entity_id = $1
+           AND relationship_kind = 'read_receipt_observed'",
+    )
+    .bind(&outbox_id)
+    .fetch_one(&pool)
+    .await
+    .expect("mdn outbox read receipt links");
+    assert!(mdn_receipt_links >= 1);
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

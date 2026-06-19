@@ -1,0 +1,44 @@
+use serde_json::Value;
+use sqlx::Transaction;
+use sqlx::postgres::Postgres;
+
+use crate::platform::observations::{ObservationStoreError, link_domain_entity_in_transaction};
+
+pub(crate) async fn link_mail_entity_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    observation_id: &str,
+    entity_kind: &str,
+    entity_id: impl Into<String>,
+    relationship_kind: &str,
+    base_metadata: Value,
+    extra_metadata: Option<Value>,
+) -> Result<(), ObservationStoreError> {
+    let metadata = merge_metadata(base_metadata, extra_metadata);
+    link_domain_entity_in_transaction(
+        transaction,
+        observation_id,
+        "communications",
+        entity_kind,
+        entity_id.into(),
+        Some(relationship_kind),
+        None,
+        Some(metadata),
+    )
+    .await
+}
+
+pub(crate) fn merge_metadata(base_metadata: Value, extra_metadata: Option<Value>) -> Value {
+    match extra_metadata {
+        Some(extra) if base_metadata.is_object() && extra.is_object() => {
+            let mut merged = base_metadata;
+            if let (Some(base), Some(extra)) = (merged.as_object_mut(), extra.as_object()) {
+                for (key, value) in extra {
+                    base.insert(key.clone(), value.clone());
+                }
+            }
+            merged
+        }
+        Some(extra) => extra,
+        None => base_metadata,
+    }
+}

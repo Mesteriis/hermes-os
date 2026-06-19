@@ -4,6 +4,9 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::domains::calendar::core::CalendarCoreError;
+use crate::domains::calendar::core::EventContextPackStore;
+
 pub struct CalendarBrainService;
 
 impl CalendarBrainService {
@@ -76,8 +79,9 @@ impl CalendarBrainService {
         .await?;
 
         // Get context pack
-        let ctx = sqlx::query("SELECT summary, participants_summary, open_questions, risks FROM event_context_packs WHERE event_id=$1 ORDER BY generated_at DESC LIMIT 1")
-            .bind(event_id).fetch_optional(pool).await?;
+        let ctx = EventContextPackStore::new(pool.clone())
+            .get(event_id)
+            .await?;
 
         Ok(json!({
             "event": event.map(|r| json!({
@@ -92,10 +96,10 @@ impl CalendarBrainService {
                 "role": r.try_get::<String, _>("role").unwrap_or_default(),
             })).collect::<Vec<_>>(),
             "context": ctx.map(|r| json!({
-                "summary": r.try_get::<Option<String>, _>("summary").unwrap_or(None),
-                "participants_summary": r.try_get::<Option<String>, _>("participants_summary").unwrap_or(None),
-                "open_questions": r.try_get::<Value, _>("open_questions").unwrap_or(json!([])),
-                "risks": r.try_get::<Value, _>("risks").unwrap_or(json!([])),
+                "summary": r.summary,
+                "participants_summary": r.participants_summary,
+                "open_questions": r.open_questions,
+                "risks": r.risks,
             })),
         }))
     }
@@ -156,6 +160,8 @@ impl CalendarBrainService {
 pub enum CalendarBrainError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    CalendarCore(#[from] CalendarCoreError),
     #[error("not found")]
     NotFound,
 }

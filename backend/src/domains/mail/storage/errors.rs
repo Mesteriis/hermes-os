@@ -1,11 +1,15 @@
 use std::path::PathBuf;
 
+use crate::platform::observations::ObservationStoreError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum MailStorageError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
 
     #[error(transparent)]
     Io(#[from] std::io::Error),

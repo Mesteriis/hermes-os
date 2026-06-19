@@ -173,7 +173,7 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
-use crate::vault::{EntropyEvent, HostVaultError, VaultMode};
+use crate::vault::{CommunicationProviderAccountStore, EntropyEvent, HostVaultError, VaultMode};
 use crate::workflows::email_intelligence::{
     EmailIntelligenceError, EmailIntelligenceService, EmailSummaryContract,
 };

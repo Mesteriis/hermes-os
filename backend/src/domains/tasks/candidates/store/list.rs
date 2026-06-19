@@ -17,6 +17,7 @@ pub(super) async fn list_candidates(
             task_candidate_id,
             source_kind,
             source_id,
+            observation_id,
             project_id,
             title,
             due_text,

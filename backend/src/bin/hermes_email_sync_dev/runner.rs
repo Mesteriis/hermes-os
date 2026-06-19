@@ -3,6 +3,7 @@ use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
 use hermes_hub_backend::domains::mail::sync::imap_mailbox_stream_id;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::vault::CommunicationProviderAccountStore;
 use hermes_hub_backend::workflows::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
 
 use crate::account::upsert_dev_provider_account;
@@ -26,7 +27,8 @@ pub(super) async fn run_dev_email_sync(
         .clone();
 
     let communication_store = CommunicationIngestionStore::new(pool.clone());
-    upsert_dev_provider_account(&communication_store, &config).await?;
+    let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
+    upsert_dev_provider_account(&provider_account_store, &config).await?;
 
     let stream_id = imap_mailbox_stream_id(&config.mailbox);
     let checkpoint_uid =

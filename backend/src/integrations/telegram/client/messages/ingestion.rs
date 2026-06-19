@@ -37,9 +37,7 @@ impl TelegramStore {
     ) -> Result<TelegramMessageIngestResult, TelegramError> {
         message.validate_for_runtime(runtime_kind)?;
         let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let provider_account = self
-            .telegram_provider_account(&communication_store, &message.account_id)
-            .await?;
+        let provider_account = self.telegram_provider_account(&message.account_id).await?;
 
         let chat = NewTelegramChat {
             account_id: message.account_id.clone(),

@@ -64,6 +64,7 @@ pub async fn project_email_sync_batch_with_mail_blobs(
         upserted_organizations: knowledge_report.upserted_organizations,
         upserted_organization_contact_links: knowledge_report.upserted_organization_contact_links,
         refreshed_decision_candidates: candidate_report.refreshed_decision_candidates,
+        refreshed_knowledge_candidates: candidate_report.refreshed_knowledge_candidates,
         refreshed_task_candidates: candidate_report.refreshed_task_candidates,
         checkpoint_saved: import_report.checkpoint_saved,
     })

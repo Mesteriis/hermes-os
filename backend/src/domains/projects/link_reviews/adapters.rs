@@ -2,13 +2,15 @@ use serde_json::{Value, json};
 use sqlx::{Postgres, Transaction};
 
 use crate::domains::decisions::{
-    DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState, DecisionStore,
-    NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
+    DecisionEntityKind, DecisionReviewState, DecisionStore, NewDecision, NewDecisionEvidence,
+    NewDecisionImpactedEntity,
 };
 use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
-    RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
+    RelationshipStore,
 };
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use crate::workflows::review_mirror::sync_relationship_review_state_in_transaction;
 
 use super::errors::ProjectLinkReviewError;
 use super::models::{ProjectLinkReviewState, ProjectLinkTargetKind, ReviewEventApplication};
@@ -100,6 +102,16 @@ impl ProjectLinkReviewStore {
         let rationale =
             format!("User {review_action} a {target_label} link candidate for this project.");
         let metadata = project_link_review_decision_metadata(application);
+        let quote = format!("User {review_action} {target_label} link to project.");
+        let observation = capture_project_link_review_observation(
+            transaction,
+            application,
+            "decision",
+            "project_link_review",
+            &quote,
+            &metadata,
+        )
+        .await?;
         let decision = NewDecision::new(
             title,
             rationale.clone(),
@@ -108,15 +120,10 @@ impl ProjectLinkReviewStore {
         )
         .decided_at(application.reviewed_at)
         .metadata(metadata.clone());
-        let evidence = NewDecisionEvidence::new(
-            DecisionEvidenceSourceKind::RawRecord,
-            application.event_id.to_owned(),
-        )
-        .quote(format!(
-            "User {review_action} {target_label} link to project."
-        ))
-        .confidence(1.0)
-        .metadata(metadata.clone());
+        let evidence = NewDecisionEvidence::observation(observation.observation_id)
+            .quote(quote)
+            .confidence(1.0)
+            .metadata(metadata.clone());
         let target_entity_kind = match application.target_kind {
             ProjectLinkTargetKind::Message => DecisionEntityKind::Communication,
             ProjectLinkTargetKind::Document => DecisionEntityKind::Document,
@@ -191,19 +198,27 @@ impl ProjectLinkReviewStore {
                 format!("User {review_action} {target_label} link to project.")
             }
         };
-        let evidence = NewRelationshipEvidence::new(
-            RelationshipEvidenceSourceKind::RawRecord,
-            application.event_id.to_owned(),
+        let observation = capture_project_link_review_observation(
+            transaction,
+            application,
+            "relationship",
+            "project_link_review",
+            &evidence_excerpt,
+            &metadata,
         )
-        .excerpt(evidence_excerpt)
-        .metadata(metadata);
+        .await?;
+        let observation_id = observation.observation_id.clone();
+        let evidence = NewRelationshipEvidence::observation(observation_id.clone())
+            .excerpt(&evidence_excerpt)
+            .metadata(metadata);
 
-        RelationshipStore::upsert_with_evidence_in_transaction(
+        let stored = RelationshipStore::upsert_with_evidence_in_transaction(
             transaction,
             &relationship,
             &[evidence],
         )
         .await?;
+        sync_relationship_review_state_in_transaction(transaction, &stored).await?;
 
         Ok(())
     }
@@ -232,4 +247,50 @@ fn project_link_review_relationship_metadata(application: &ReviewEventApplicatio
         "actor_id": application.actor_id,
         "reviewed_at": application.reviewed_at.to_rfc3339(),
     })
+}
+
+fn link_review_source_ref(application: &ReviewEventApplication<'_>, component: &str) -> String {
+    format!(
+        "project-link-review://{}/{}?event={}",
+        component, application.target_id, application.event_id
+    )
+}
+
+async fn capture_project_link_review_observation(
+    transaction: &mut Transaction<'_, Postgres>,
+    application: &ReviewEventApplication<'_>,
+    component: &str,
+    domain: &str,
+    evidence: &str,
+    metadata: &Value,
+) -> Result<crate::platform::observations::Observation, ProjectLinkReviewError> {
+    let observation = NewObservation::new(
+        "PROJECT_LINK_REVIEW",
+        ObservationOriginKind::LocalRuntime,
+        application.reviewed_at,
+        json!({
+            "component": component,
+            "domain": domain,
+            "evidence": evidence,
+            "event_id": application.event_id,
+            "project_id": application.project_id,
+            "target_kind": application.target_kind.as_str(),
+            "target_id": application.target_id,
+            "review_state": application.review_state.as_str(),
+            "actor_id": application.actor_id,
+            "metadata": metadata,
+        }),
+        link_review_source_ref(application, component),
+    )
+    .confidence(1.0)
+    .provenance(json!({
+        "domain": "project_link_review",
+        "component": component,
+        "project_id": application.project_id,
+        "event_id": application.event_id,
+    }));
+
+    ObservationStore::capture_in_transaction(transaction, &observation)
+        .await
+        .map_err(ProjectLinkReviewError::from)
 }

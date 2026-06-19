@@ -3,6 +3,7 @@ use crate::domains::mail::folders::{
     FolderMessageActionResponse, FolderMessageListQuery, FolderMessagePage, MailFolder,
     MailFolderListPage, MailFolderListQuery, MailFolderStore, NewMailFolder, UpdateMailFolder,
 };
+use crate::domains::mail::service::MailCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct FoldersQuery {
@@ -40,7 +41,13 @@ pub(crate) async fn post_v1_mail_folder(
     State(state): State<AppState>,
     Json(request): Json<NewMailFolder>,
 ) -> Result<Json<MailFolder>, ApiError> {
-    Ok(Json(folder_store(&state)?.create(request).await?))
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let folder = MailCommandService::new(pool).create_folder(request).await?;
+    Ok(Json(folder))
 }
 
 pub(crate) async fn put_v1_mail_folder(
@@ -48,7 +55,15 @@ pub(crate) async fn put_v1_mail_folder(
     Path(folder_id): Path<String>,
     Json(request): Json<UpdateMailFolder>,
 ) -> Result<Json<MailFolder>, ApiError> {
-    let Some(folder) = folder_store(&state)?.update(&folder_id, request).await? else {
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let Some(folder) = MailCommandService::new(pool)
+        .update_folder(&folder_id, request)
+        .await?
+    else {
         return Err(ApiError::NotFound);
     };
     Ok(Json(folder))
@@ -58,7 +73,14 @@ pub(crate) async fn delete_v1_mail_folder(
     State(state): State<AppState>,
     Path(folder_id): Path<String>,
 ) -> Result<Json<FolderDeleteResponse>, ApiError> {
-    let deleted = folder_store(&state)?.delete(&folder_id).await?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let deleted = MailCommandService::new(pool)
+        .delete_folder(&folder_id)
+        .await?;
     Ok(Json(FolderDeleteResponse { deleted }))
 }
 
@@ -81,8 +103,13 @@ pub(crate) async fn post_v1_copy_message_to_folder(
     State(state): State<AppState>,
     Path((folder_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<FolderMessageActionResponse>, ApiError> {
-    let Some(response) = folder_store(&state)?
-        .copy_message(&folder_id, &message_id)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let Some(response) = MailCommandService::new(pool)
+        .copy_message_to_folder(&folder_id, &message_id)
         .await?
     else {
         return Err(ApiError::NotFound);
@@ -94,8 +121,13 @@ pub(crate) async fn post_v1_move_message_to_folder(
     State(state): State<AppState>,
     Path((folder_id, message_id)): Path<(String, String)>,
 ) -> Result<Json<FolderMessageActionResponse>, ApiError> {
-    let Some(response) = folder_store(&state)?
-        .move_message(&folder_id, &message_id)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let Some(response) = MailCommandService::new(pool)
+        .move_message_to_folder(&folder_id, &message_id)
         .await?
     else {
         return Err(ApiError::NotFound);

@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use crate::app::{ApiError, AppState};
 use crate::domains::organizations::enrichment::{OrgEnrichmentResult, OrgEnrichmentStore};
+use crate::domains::organizations::service::OrganizationCommandService;
 
 use super::support::database_pool;
 
@@ -27,12 +28,11 @@ pub(crate) async fn get_org_enrichment(
 
 pub(crate) async fn post_org_enrich_apply(
     State(state): State<AppState>,
-    Path((_org_id, rid)): Path<(String, String)>,
+    Path((org_id, rid)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    OrgEnrichmentStore::new(pool)
-        .apply(&rid)
-        .await
-        .map_err(ApiError::from)?;
+    OrganizationCommandService::new(pool)
+        .apply_enrichment_manual(&org_id, &rid)
+        .await?;
     Ok(Json(json!({"applied": true})))
 }

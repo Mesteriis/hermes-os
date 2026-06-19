@@ -1,11 +1,14 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
+use serde_json::json;
 
+use super::super::{
+    Obligation, ObligationCommandService, ObligationEntityKind, ObligationReviewState,
+    ObligationStore,
+};
+use super::models::{ObligationListQuery, ObligationListResponse, ObligationReviewApiRequest};
 use crate::app::{ApiError, AppState};
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
-
-use super::super::{Obligation, ObligationEntityKind, ObligationReviewState, ObligationStore};
-use super::models::{ObligationListQuery, ObligationListResponse, ObligationReviewApiRequest};
 
 const OBLIGATION_API_ACTOR_ID: &str = "hermes-frontend";
 const DEFAULT_OBLIGATION_LIMIT: i64 = 50;
@@ -56,7 +59,6 @@ pub(crate) async fn put_v1_obligation_review(
 ) -> Result<Json<Obligation>, ApiError> {
     let obligation_id = validate_required_query_value(Some(&obligation_id))?;
     let review_state = parse_review_state(&request.review_state)?;
-
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::obligation_review_set(
             OBLIGATION_API_ACTOR_ID,
@@ -64,8 +66,13 @@ pub(crate) async fn put_v1_obligation_review(
         ))
         .await?;
 
-    let obligation = obligation_store(&state)?
-        .set_review_state(&obligation_id, review_state)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let obligation = ObligationCommandService::new(pool)
+        .review_manual(&obligation_id, review_state)
         .await?;
 
     Ok(Json(obligation))

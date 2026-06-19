@@ -8,6 +8,7 @@ mod upsert;
 mod validation;
 
 pub use errors::PersonIdentityError;
+pub(crate) use models::PersonIdentityCandidatePayload;
 pub use models::{
     PersonIdentityCandidate, PersonIdentityCandidateKind, PersonIdentityDetail,
     PersonIdentityReviewCommand, PersonIdentityReviewCommandResult, PersonIdentityReviewState,

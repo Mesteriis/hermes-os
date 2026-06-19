@@ -1,21 +1,18 @@
 use crate::domains::mail::core::{
-    CommunicationIngestionStore, ProviderAccountSecretPurpose, ProviderCredentialError,
-    ProviderCredentialReader,
+    ProviderAccountSecretPurpose, ProviderCredentialError, ProviderCredentialReader,
 };
 use crate::integrations::telegram::client::TelegramError;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
+use crate::vault::CommunicationProviderSecretBindingStore;
 
 pub(in crate::integrations::telegram::runtime) async fn optional_telegram_session_key(
-    communication_store: &CommunicationIngestionStore,
+    binding_store: &CommunicationProviderSecretBindingStore,
     secret_store: &SecretReferenceStore,
     secret_resolver: &(impl SecretResolver + Sync + ?Sized),
     account_id: &str,
 ) -> Result<Option<String>, TelegramError> {
-    let credential_reader = ProviderCredentialReader::new(
-        communication_store.clone(),
-        secret_store.clone(),
-        secret_resolver,
-    );
+    let credential_reader =
+        ProviderCredentialReader::new(binding_store.clone(), secret_store.clone(), secret_resolver);
     match credential_reader
         .read(account_id, ProviderAccountSecretPurpose::TelegramSessionKey)
         .await

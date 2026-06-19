@@ -20,7 +20,8 @@ impl TelegramRuntimeManager {
         S: crate::platform::secrets::SecretResolver + Sync + ?Sized,
     {
         request.validate()?;
-        let account = load_active_account(context.communication_store, &request.account_id).await?;
+        let account =
+            load_active_account(context.provider_account_store, &request.account_id).await?;
         let runtime_kind = account_runtime_kind(&account);
         match runtime_kind.as_str() {
             "fixture" => {
@@ -28,7 +29,8 @@ impl TelegramRuntimeManager {
             }
             "tdlib_qr_authorized" => {
                 let context = TdlibHistorySyncContext {
-                    communication_store: context.communication_store,
+                    provider_account_store: context.provider_account_store,
+                    provider_secret_binding_store: context.provider_secret_binding_store,
                     telegram_store: context.telegram_store,
                     secret_store: context.secret_store,
                     secret_resolver: context.secret_resolver,

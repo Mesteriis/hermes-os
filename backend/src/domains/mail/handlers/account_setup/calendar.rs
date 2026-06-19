@@ -12,7 +12,7 @@ pub(super) async fn upsert_google_workspace_calendar_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    CalendarAccountStore::new(pool)
+    crate::vault::CalendarAccountStore::new(pool)
         .upsert_google_workspace_account(
             mail_account_id,
             display_name,
@@ -35,7 +35,7 @@ pub(super) async fn upsert_apple_icloud_calendar_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    CalendarAccountStore::new(pool)
+    crate::vault::CalendarAccountStore::new(pool)
         .upsert_apple_icloud_account(
             mail_account_id,
             display_name,

@@ -4,6 +4,7 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 
 use super::errors::CalendarCoreError;
+use super::link_calendar_entity;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EventRelation {
@@ -53,9 +54,41 @@ impl EventRelationStore {
         entity_id: &str,
         relation_type: &str,
     ) -> Result<EventRelation, CalendarCoreError> {
-        let row = sqlx::query("INSERT INTO event_relations (event_id, entity_type, entity_id, relation_type) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING RETURNING id::text, event_id, entity_type, entity_id, relation_type, source, confidence, created_at")
-            .bind(event_id).bind(entity_type).bind(entity_id).bind(relation_type).fetch_one(&self.pool).await?;
-        Ok(EventRelation {
+        self.link_with_source(event_id, entity_type, entity_id, relation_type, "manual")
+            .await
+    }
+
+    pub async fn link_with_source(
+        &self,
+        event_id: &str,
+        entity_type: &str,
+        entity_id: &str,
+        relation_type: &str,
+        source: &str,
+    ) -> Result<EventRelation, CalendarCoreError> {
+        self.link_with_observation(
+            event_id,
+            entity_type,
+            entity_id,
+            relation_type,
+            source,
+            None,
+        )
+        .await
+    }
+
+    pub async fn link_with_observation(
+        &self,
+        event_id: &str,
+        entity_type: &str,
+        entity_id: &str,
+        relation_type: &str,
+        source: &str,
+        observation_id: Option<&str>,
+    ) -> Result<EventRelation, CalendarCoreError> {
+        let row = sqlx::query("INSERT INTO event_relations (event_id, entity_type, entity_id, relation_type, source) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id::text, event_id, entity_type, entity_id, relation_type, source, confidence, created_at")
+            .bind(event_id).bind(entity_type).bind(entity_id).bind(relation_type).bind(source).fetch_one(&self.pool).await?;
+        let relation = EventRelation {
             id: row.try_get("id")?,
             event_id: row.try_get("event_id")?,
             entity_type: row.try_get("entity_type")?,
@@ -64,6 +97,22 @@ impl EventRelationStore {
             source: row.try_get("source")?,
             confidence: f64::from(row.try_get::<f32, _>("confidence")?),
             created_at: row.try_get("created_at")?,
-        })
+        };
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_calendar_entity(
+                &self.pool,
+                observation_id,
+                "event_relation",
+                relation.id.clone(),
+                Some(serde_json::json!({
+                    "event_id": event_id,
+                    "entity_type": relation.entity_type,
+                    "entity_id": relation.entity_id,
+                    "relation_type": relation.relation_type,
+                })),
+            )
+            .await?;
+        }
+        Ok(relation)
     }
 }

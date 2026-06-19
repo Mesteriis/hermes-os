@@ -41,7 +41,11 @@ impl AiControlCenterStore {
                 _ => ("error", "Unsupported provider kind"),
             },
             AiProviderCommandKind::SyncModels => {
-                self.seed_models_for_provider(&provider).await?;
+                self.seed_models_for_provider(
+                    &provider,
+                    "ai_control_center.provider_command.sync_models",
+                )
+                .await?;
                 ("synced", "Curated model catalog synchronized")
             }
         };

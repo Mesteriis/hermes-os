@@ -1,10 +1,14 @@
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use chrono::Utc;
 use hermes_hub_backend::domains::obligations::{
     NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationEvidenceSourceKind,
     ObligationReviewState, ObligationRiskState, ObligationStatus, ObligationStore,
     ObligationStoreError,
+};
+use hermes_hub_backend::platform::observations::{
+    NewObservation, ObservationOriginKind, ObservationStore,
 };
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::{Value, json};
@@ -306,6 +310,96 @@ async fn obligation_store_rejects_partial_beneficiary_before_database_write() {
         .expect_err("partial beneficiary must fail before database write");
 
     assert!(matches!(error, ObligationStoreError::PartialBeneficiary));
+}
+
+#[tokio::test]
+async fn obligation_store_rejects_missing_observation_evidence_against_postgres() {
+    let Some((_pool, store)) =
+        live_obligation_context("missing obligation observation evidence").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let obligation = NewObligation::new(
+        ObligationEntityKind::Persona,
+        "person:v1:email:owner@example.com",
+        format!("Observation-backed obligation {suffix}"),
+        0.8,
+        ObligationReviewState::Suggested,
+    );
+    let evidence =
+        NewObligationEvidence::observation(format!("observation:v1:missing-obligation:{suffix}"));
+
+    let error = store
+        .upsert_with_evidence(&obligation, &[evidence])
+        .await
+        .expect_err("missing observation evidence must fail");
+
+    assert!(matches!(
+        error,
+        ObligationStoreError::ObservationNotFound(_)
+    ));
+}
+
+#[tokio::test]
+async fn obligation_store_materializes_support_link_for_observation_evidence_against_postgres() {
+    let Some((pool, store)) = live_obligation_context("obligation support link").await else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let observation = ObservationStore::new(pool.clone())
+        .capture(
+            &NewObservation::new(
+                "COMMUNICATION_MESSAGE",
+                ObservationOriginKind::Manual,
+                Utc::now(),
+                json!({
+                    "subject": format!("Obligation support {suffix}"),
+                    "body": "I will send the signed agreement tomorrow."
+                }),
+                format!("manual://obligation-support/{suffix}"),
+            )
+            .confidence(0.92),
+        )
+        .await
+        .expect("support observation");
+
+    let obligation = NewObligation::new(
+        ObligationEntityKind::Persona,
+        format!("person:v1:email:obligation-support-{suffix}@example.com"),
+        format!("Send the signed agreement {suffix}"),
+        0.86,
+        ObligationReviewState::UserConfirmed,
+    );
+    let stored = store
+        .upsert_with_evidence(
+            &obligation,
+            &[
+                NewObligationEvidence::observation(observation.observation_id.clone())
+                    .quote("I will send the signed agreement tomorrow.")
+                    .confidence(0.91),
+            ],
+        )
+        .await
+        .expect("obligation upsert with observation evidence");
+
+    let support_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'obligations'
+          AND entity_kind = 'obligation'
+          AND entity_id = $2
+          AND relationship_kind = 'supports'
+        "#,
+    )
+    .bind(&observation.observation_id)
+    .bind(&stored.obligation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("obligation support link count");
+    assert_eq!(support_link_count, 1);
 }
 
 async fn live_obligation_context(test_name: &str) -> Option<(PgPool, ObligationStore)> {

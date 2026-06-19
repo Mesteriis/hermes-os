@@ -37,6 +37,7 @@ async fn meeting_notes_and_outcomes_against_postgres() {
         })
         .await
         .expect("create event");
+    assert!(event.observation_id.starts_with("observation:v1:"));
 
     let note = note_store
         .create(
@@ -57,10 +58,12 @@ async fn meeting_notes_and_outcomes_against_postgres() {
             Some("Decided to use Rust for backend"),
             None,
             None,
+            Some("manual"),
         )
         .await
         .expect("add outcome");
     assert_eq!(outcome.outcome_type, "decision");
+    assert_eq!(outcome.source, "manual");
 
     let notes = note_store.list(&event.event_id).await.expect("list notes");
     assert_eq!(notes.len(), 1);
@@ -107,6 +110,7 @@ async fn meeting_outcome_decision_creates_suggested_decision_against_postgres() 
             Some("We decided to persist meeting decisions as reviewable domain Decisions."),
             None,
             None,
+            Some("manual"),
         )
         .await
         .expect("add decision outcome");
@@ -131,8 +135,8 @@ async fn meeting_outcome_decision_creates_suggested_decision_against_postgres() 
         "We decided to persist meeting decisions as reviewable domain Decisions."
     );
 
-    let evidence: (String, String, Option<String>) = sqlx::query_as(
-        "SELECT source_kind, source_id, quote FROM decision_evidence WHERE decision_id = $1",
+    let evidence: (String, String, Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT source_kind, source_id, observation_id, quote FROM decision_evidence WHERE decision_id = $1",
     )
     .bind(linked_decision_id)
     .fetch_one(&pool)
@@ -140,14 +144,40 @@ async fn meeting_outcome_decision_creates_suggested_decision_against_postgres() 
     .expect("decision evidence");
     assert_eq!(evidence.0, "event");
     assert_eq!(evidence.1, event.event_id);
+    assert_eq!(evidence.2.as_deref(), Some(event.observation_id.as_str()));
     assert_eq!(
-        evidence.2.as_deref(),
+        evidence.3.as_deref(),
         Some("We decided to persist meeting decisions as reviewable domain Decisions.")
     );
+
+    let review_item: (String, String, String, String) = sqlx::query_as(
+        r#"
+        SELECT
+            review_item.review_item_id,
+            review_item.item_kind,
+            review_item.metadata->>'mirrored_from',
+            review_item.metadata->>'decision_id'
+        FROM review_items review_item
+        JOIN review_item_evidence evidence
+          ON evidence.review_item_id = review_item.review_item_id
+        WHERE evidence.observation_id = $1
+          AND review_item.item_kind = 'potential_decision'
+          AND review_item.metadata->>'decision_id' = $2
+        "#,
+    )
+    .bind(&event.observation_id)
+    .bind(linked_decision_id)
+    .fetch_one(&pool)
+    .await
+    .expect("decision review mirror");
+    assert_eq!(review_item.1, "potential_decision");
+    assert_eq!(review_item.2, "decisions");
+    assert_eq!(review_item.3, linked_decision_id);
 }
 
 #[tokio::test]
-async fn meeting_outcome_promise_creates_suggested_obligation_without_task_link_against_postgres() {
+async fn meeting_outcome_promise_creates_suggested_obligation_and_review_item_without_task_link_against_postgres()
+ {
     let Some(pool) = live_pool().await else {
         return;
     };
@@ -183,6 +213,7 @@ async fn meeting_outcome_promise_creates_suggested_obligation_without_task_link_
             Some("Alex promised to send the follow-up package after the meeting."),
             Some(&owner_person_id),
             Some(due_at),
+            Some("manual"),
         )
         .await
         .expect("add promise outcome");
@@ -207,8 +238,8 @@ async fn meeting_outcome_promise_creates_suggested_obligation_without_task_link_
         Some(due_at.timestamp_micros())
     );
 
-    let evidence: (String, String, Option<String>) = sqlx::query_as(
-        "SELECT source_kind, source_id, quote FROM obligation_evidence WHERE obligation_id = $1",
+    let evidence: (String, String, Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT source_kind, source_id, observation_id, quote FROM obligation_evidence WHERE obligation_id = $1",
     )
     .bind(linked_obligation_id)
     .fetch_one(&pool)
@@ -216,10 +247,35 @@ async fn meeting_outcome_promise_creates_suggested_obligation_without_task_link_
     .expect("obligation evidence");
     assert_eq!(evidence.0, "event");
     assert_eq!(evidence.1, event.event_id);
+    assert_eq!(evidence.2.as_deref(), Some(event.observation_id.as_str()));
     assert_eq!(
-        evidence.2.as_deref(),
+        evidence.3.as_deref(),
         Some("Alex promised to send the follow-up package after the meeting.")
     );
+
+    let review_item: (String, String, String, String) = sqlx::query_as(
+        r#"
+        SELECT
+            review_item.review_item_id,
+            review_item.item_kind,
+            review_item.metadata->>'mirrored_from',
+            review_item.metadata->>'obligation_id'
+        FROM review_items review_item
+        JOIN review_item_evidence evidence
+          ON evidence.review_item_id = review_item.review_item_id
+        WHERE evidence.observation_id = $1
+          AND review_item.item_kind = 'potential_obligation'
+          AND review_item.metadata->>'obligation_id' = $2
+        "#,
+    )
+    .bind(&event.observation_id)
+    .bind(linked_obligation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("obligation review mirror");
+    assert_eq!(review_item.1, "potential_obligation");
+    assert_eq!(review_item.2, "obligations");
+    assert_eq!(review_item.3, linked_obligation_id);
 
     let task_link_count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM obligation_task_links WHERE obligation_id = $1")

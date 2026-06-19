@@ -10,7 +10,8 @@ use super::helpers::{
 };
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::{
-    TelegramListQuery, TelegramMessageListResponse, api_audit_log, communication_ingestion_store,
+    TelegramListQuery, TelegramMessageListResponse, api_audit_log,
+    communication_provider_account_store, communication_provider_secret_binding_store,
     telegram_store,
 };
 use crate::integrations::telegram::client::NewTelegramMessage;
@@ -129,11 +130,13 @@ pub(crate) async fn post_telegram_manual_send(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.send_text")
         .await?;
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let telegram_projection_store = telegram_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
     let context = TelegramRuntimeOperationContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         telegram_store: &telegram_projection_store,
         secret_store: &secret_store,
         secret_resolver: &state.vault,
@@ -198,11 +201,13 @@ pub(crate) async fn post_telegram_message_reply(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.reply")
         .await?;
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let telegram_projection_store = telegram_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
     let context = TelegramRuntimeOperationContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         telegram_store: &telegram_projection_store,
         secret_store: &secret_store,
         secret_resolver: &state.vault,
@@ -269,11 +274,13 @@ pub(crate) async fn post_telegram_message_forward(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.forward")
         .await?;
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let telegram_projection_store = telegram_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
     let context = TelegramRuntimeOperationContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         telegram_store: &telegram_projection_store,
         secret_store: &secret_store,
         secret_resolver: &state.vault,

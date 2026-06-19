@@ -79,5 +79,14 @@ pub(super) fn projection_error_parts(error: PersonProjectionError) -> ErrorParts
                 false,
             )
         }
+        PersonProjectionError::Observation(error) => {
+            tracing::error!(error = %error, "person projection observation operation failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "person_projection_error",
+                "person projection operation failed".to_owned(),
+                false,
+            )
+        }
     }
 }

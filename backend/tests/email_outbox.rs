@@ -1,5 +1,6 @@
 use chrono::{Duration, Utc};
 use serde_json::json;
+use sqlx::Row;
 use testkit::context::TestContext;
 
 use hermes_hub_backend::domains::mail::core::{
@@ -127,6 +128,41 @@ async fn outbox_delivery_worker_marks_sent_and_appends_event_against_postgres() 
     .await
     .expect("sent event count");
     assert_eq!(event_count, 1);
+    let sent_link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'outbox_item'
+           AND entity_id = $1
+           AND relationship_kind = 'outbox_status_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&outbox_id)
+    .fetch_one(&pool)
+    .await
+    .expect("sent observation link");
+    let sent_metadata: serde_json::Value = sent_link.try_get("metadata").expect("sent metadata");
+    assert_eq!(sent_metadata["status"], "sent");
+    let sent_observation_id: String = sent_link
+        .try_get("observation_id")
+        .expect("sent observation id");
+    let sent_observation = sqlx::query(
+        "SELECT origin_kind, payload
+         FROM observations
+         WHERE observation_id = $1",
+    )
+    .bind(&sent_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("sent observation");
+    let sent_origin_kind: String = sent_observation
+        .try_get("origin_kind")
+        .expect("sent origin kind");
+    let sent_payload: serde_json::Value =
+        sent_observation.try_get("payload").expect("sent payload");
+    assert_eq!(sent_origin_kind, "local_runtime");
+    assert_eq!(sent_payload["operation"], "outbox_mark_sent");
 }
 
 #[tokio::test]
@@ -180,6 +216,23 @@ async fn outbox_delivery_worker_marks_failed_and_appends_event_against_postgres(
     .await
     .expect("failed event count");
     assert_eq!(event_count, 1);
+    let failed_link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'outbox_item'
+           AND entity_id = $1
+           AND relationship_kind = 'outbox_status_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&outbox_id)
+    .fetch_one(&pool)
+    .await
+    .expect("failed observation link");
+    let failed_metadata: serde_json::Value =
+        failed_link.try_get("metadata").expect("failed metadata");
+    assert_eq!(failed_metadata["status"], "failed");
 }
 
 #[tokio::test]
@@ -251,6 +304,44 @@ async fn outbox_delivery_worker_schedules_retry_with_backoff_against_postgres() 
     .await
     .expect("retry scheduled event count");
     assert_eq!(event_count, 1);
+    let retry_links = sqlx::query(
+        "SELECT metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'outbox_item'
+           AND entity_id = $1
+           AND relationship_kind = 'outbox_status_transition'
+         ORDER BY created_at ASC",
+    )
+    .bind(&outbox_id)
+    .fetch_all(&pool)
+    .await
+    .expect("retry observation links");
+    let retry_statuses: Vec<String> = retry_links
+        .iter()
+        .map(|row| {
+            row.try_get::<serde_json::Value, _>("metadata")
+                .expect("retry metadata")["status"]
+                .as_str()
+                .expect("retry status")
+                .to_owned()
+        })
+        .collect();
+    assert!(retry_statuses.iter().any(|status| status == "scheduled"));
+    assert!(retry_statuses.iter().any(|status| status == "sending"));
+    let claim_count = sqlx::query_scalar::<_, i64>(
+        "SELECT count(*)
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'outbox_item'
+           AND entity_id = $1
+           AND relationship_kind = 'outbox_status_transition'",
+    )
+    .bind(&outbox_id)
+    .fetch_one(&pool)
+    .await
+    .expect("outbox transition count");
+    assert!(claim_count >= 3);
 }
 
 #[tokio::test]

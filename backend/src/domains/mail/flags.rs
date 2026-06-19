@@ -1,12 +1,10 @@
 use chrono::{DateTime, Utc};
+use serde_json::Value;
 use thiserror::Error;
 
 use crate::domains::mail::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage,
 };
-#[cfg(test)]
-#[allow(unused_imports)]
-use serde_json::Value;
 
 /// Pin/snooze/label operations on messages stored in message_metadata JSONB.
 pub struct MessageFlags;
@@ -67,6 +65,17 @@ impl MessageFlags {
         store: &MessageProjectionStore,
         message_id: &str,
     ) -> Result<bool, MessageFlagsError> {
+        Self::toggle_pin_with_observation(store, message_id, None, "message_flag_update", None)
+            .await
+    }
+
+    pub async fn toggle_pin_with_observation(
+        store: &MessageProjectionStore,
+        message_id: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        link_metadata: Option<Value>,
+    ) -> Result<bool, MessageFlagsError> {
         let msg = store
             .message(message_id)
             .await?
@@ -74,13 +83,38 @@ impl MessageFlags {
         let currently = Self::is_pinned(&msg);
         let mut meta = msg.message_metadata.clone();
         meta[Self::PINNED_KEY] = serde_json::Value::Bool(!currently);
-        store.set_message_metadata(message_id, &meta).await?;
+        store
+            .set_message_metadata_with_observation(
+                message_id,
+                &meta,
+                observation_id,
+                relationship_kind,
+                link_metadata,
+            )
+            .await?;
         Ok(!currently)
     }
 
     pub async fn toggle_important(
         store: &MessageProjectionStore,
         message_id: &str,
+    ) -> Result<bool, MessageFlagsError> {
+        Self::toggle_important_with_observation(
+            store,
+            message_id,
+            None,
+            "message_flag_update",
+            None,
+        )
+        .await
+    }
+
+    pub async fn toggle_important_with_observation(
+        store: &MessageProjectionStore,
+        message_id: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        link_metadata: Option<Value>,
     ) -> Result<bool, MessageFlagsError> {
         let msg = store
             .message(message_id)
@@ -89,7 +123,15 @@ impl MessageFlags {
         let currently = Self::is_important(&msg);
         let mut meta = msg.message_metadata.clone();
         meta[Self::IMPORTANT_KEY] = serde_json::Value::Bool(!currently);
-        store.set_message_metadata(message_id, &meta).await?;
+        store
+            .set_message_metadata_with_observation(
+                message_id,
+                &meta,
+                observation_id,
+                relationship_kind,
+                link_metadata,
+            )
+            .await?;
         Ok(!currently)
     }
 
@@ -98,13 +140,33 @@ impl MessageFlags {
         message_id: &str,
         until: DateTime<Utc>,
     ) -> Result<(), MessageFlagsError> {
+        Self::snooze_with_observation(store, message_id, until, None, "message_flag_update", None)
+            .await
+    }
+
+    pub async fn snooze_with_observation(
+        store: &MessageProjectionStore,
+        message_id: &str,
+        until: DateTime<Utc>,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        link_metadata: Option<Value>,
+    ) -> Result<(), MessageFlagsError> {
         let msg = store
             .message(message_id)
             .await?
             .ok_or(MessageFlagsError::NotFound)?;
         let mut meta = msg.message_metadata.clone();
         meta[Self::SNOOZE_UNTIL_KEY] = serde_json::Value::String(until.to_rfc3339());
-        store.set_message_metadata(message_id, &meta).await?;
+        store
+            .set_message_metadata_with_observation(
+                message_id,
+                &meta,
+                observation_id,
+                relationship_kind,
+                link_metadata,
+            )
+            .await?;
         Ok(())
     }
 
@@ -112,6 +174,25 @@ impl MessageFlags {
         store: &MessageProjectionStore,
         message_id: &str,
         label: &str,
+    ) -> Result<(), MessageFlagsError> {
+        Self::add_label_with_observation(
+            store,
+            message_id,
+            label,
+            None,
+            "message_flag_update",
+            None,
+        )
+        .await
+    }
+
+    pub async fn add_label_with_observation(
+        store: &MessageProjectionStore,
+        message_id: &str,
+        label: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        link_metadata: Option<Value>,
     ) -> Result<(), MessageFlagsError> {
         let msg = store
             .message(message_id)
@@ -123,7 +204,15 @@ impl MessageFlags {
         }
         let mut meta = msg.message_metadata.clone();
         meta[Self::LABELS_KEY] = serde_json::to_value(&labels).unwrap_or_default();
-        store.set_message_metadata(message_id, &meta).await?;
+        store
+            .set_message_metadata_with_observation(
+                message_id,
+                &meta,
+                observation_id,
+                relationship_kind,
+                link_metadata,
+            )
+            .await?;
         Ok(())
     }
 
@@ -131,6 +220,25 @@ impl MessageFlags {
         store: &MessageProjectionStore,
         message_id: &str,
         label: &str,
+    ) -> Result<(), MessageFlagsError> {
+        Self::remove_label_with_observation(
+            store,
+            message_id,
+            label,
+            None,
+            "message_flag_update",
+            None,
+        )
+        .await
+    }
+
+    pub async fn remove_label_with_observation(
+        store: &MessageProjectionStore,
+        message_id: &str,
+        label: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        link_metadata: Option<Value>,
     ) -> Result<(), MessageFlagsError> {
         let msg = store
             .message(message_id)
@@ -140,13 +248,32 @@ impl MessageFlags {
         labels.retain(|l| l != label);
         let mut meta = msg.message_metadata.clone();
         meta[Self::LABELS_KEY] = serde_json::to_value(&labels).unwrap_or_default();
-        store.set_message_metadata(message_id, &meta).await?;
+        store
+            .set_message_metadata_with_observation(
+                message_id,
+                &meta,
+                observation_id,
+                relationship_kind,
+                link_metadata,
+            )
+            .await?;
         Ok(())
     }
 
     pub async fn toggle_mute(
         store: &MessageProjectionStore,
         message_id: &str,
+    ) -> Result<bool, MessageFlagsError> {
+        Self::toggle_mute_with_observation(store, message_id, None, "message_flag_update", None)
+            .await
+    }
+
+    pub async fn toggle_mute_with_observation(
+        store: &MessageProjectionStore,
+        message_id: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        link_metadata: Option<Value>,
     ) -> Result<bool, MessageFlagsError> {
         let msg = store
             .message(message_id)
@@ -155,7 +282,15 @@ impl MessageFlags {
         let currently = Self::is_muted(&msg);
         let mut meta = msg.message_metadata.clone();
         meta[Self::IS_MUTED_KEY] = serde_json::Value::Bool(!currently);
-        store.set_message_metadata(message_id, &meta).await?;
+        store
+            .set_message_metadata_with_observation(
+                message_id,
+                &meta,
+                observation_id,
+                relationship_kind,
+                link_metadata,
+            )
+            .await?;
         Ok(!currently)
     }
 }
@@ -180,6 +315,7 @@ mod tests {
         ProjectedMessage {
             message_id: "m:1".into(),
             raw_record_id: "r:1".into(),
+            observation_id: "observation:1".into(),
             account_id: "a:1".into(),
             provider_record_id: "p:1".into(),
             subject: "S".into(),

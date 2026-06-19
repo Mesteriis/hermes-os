@@ -36,6 +36,9 @@ pub(super) fn automation_error_parts(error: AutomationError) -> ErrorParts {
         AutomationError::EventStore(error) => {
             internal(error, "automation event store operation failed")
         }
+        AutomationError::ObservationStore(error) => {
+            internal(error, "automation observation store operation failed")
+        }
         AutomationError::Sqlx(error) => internal(error, "automation database operation failed"),
     }
 }

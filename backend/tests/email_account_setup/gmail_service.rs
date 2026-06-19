@@ -25,7 +25,7 @@ async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_pos
     );
 
     let service = EmailAccountSetupService::new(
-        communication_store.clone(),
+        database.pool().expect("configured pool").clone(),
         secret_store.clone(),
         vault.clone(),
     );

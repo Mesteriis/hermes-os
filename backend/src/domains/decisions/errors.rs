@@ -2,6 +2,8 @@ use thiserror::Error;
 
 use crate::domains::graph::core::GraphStoreError;
 use crate::engines::decision::DecisionEngineError;
+use crate::platform::observations::ObservationStoreError;
+use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum DecisionStoreError {
@@ -10,6 +12,9 @@ pub enum DecisionStoreError {
 
     #[error(transparent)]
     Graph(#[from] GraphStoreError),
+
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
 
     #[error("{0} must not be empty")]
     EmptyField(&'static str),
@@ -25,6 +30,12 @@ pub enum DecisionStoreError {
 
     #[error("decision evidence is required")]
     MissingEvidence,
+
+    #[error("observation decision evidence must use the same source_id and observation_id")]
+    InvalidObservationEvidenceSource,
+
+    #[error("decision evidence observation was not found: {0}")]
+    ObservationNotFound(String),
 
     #[error("decision was not found")]
     DecisionNotFound,
@@ -46,6 +57,9 @@ pub enum DecisionStoreError {
 
     #[error("unknown decision review state stored in database: {0}")]
     UnknownReviewState(String),
+
+    #[error(transparent)]
+    ReviewMirror(#[from] ReviewMirrorError),
 
     #[error(transparent)]
     DecisionEngine(#[from] DecisionEngineError),

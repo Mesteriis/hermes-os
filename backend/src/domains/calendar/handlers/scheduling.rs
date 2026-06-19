@@ -47,8 +47,8 @@ pub(crate) async fn post_deadline(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let d = DeadlineStore::new(pool)
-        .create(
+    let d = CalendarCommandService::new(pool)
+        .create_deadline_manual(
             &req.title,
             req.due_at,
             req.severity.as_deref(),
@@ -109,8 +109,8 @@ pub(crate) async fn post_focus_block(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let fb = FocusBlockStore::new(pool)
-        .create(
+    let fb = CalendarCommandService::new(pool)
+        .create_focus_block_manual(
             &req.title,
             req.start_at,
             req.end_at,

@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
@@ -103,6 +104,22 @@ async fn v1_custom_folders_copy_move_and_events_against_postgres() {
         .expect("second folder id")
         .to_owned();
     assert_eq!(second_folder["message_count"], 0);
+    let response = app
+        .clone()
+        .oneshot(request(
+            Method::PUT,
+            &format!("/api/v1/communications/folders/{first_folder_id}"),
+            Some(json!({
+                "name": "Clients updated",
+                "color": "#2563eb"
+            })),
+        ))
+        .await
+        .expect("update first folder");
+    assert_eq!(response.status(), StatusCode::OK);
+    let updated_folder = response_json(response).await;
+    assert_eq!(updated_folder["name"], "Clients updated");
+    assert_eq!(updated_folder["color"], "#2563eb");
 
     let response = app
         .clone()
@@ -210,6 +227,18 @@ async fn v1_custom_folders_copy_move_and_events_against_postgres() {
     let second_list = response_json(response).await;
     assert_eq!(second_list["items"].as_array().expect("items").len(), 1);
     assert_eq!(second_list["items"][0]["message_id"], message_id);
+    let response = app
+        .clone()
+        .oneshot(request(
+            Method::DELETE,
+            &format!("/api/v1/communications/folders/{second_folder_id}"),
+            None,
+        ))
+        .await
+        .expect("delete second folder");
+    assert_eq!(response.status(), StatusCode::OK);
+    let deleted = response_json(response).await;
+    assert_eq!(deleted["deleted"], true);
 
     let event_count: i64 = sqlx::query_scalar(
         "SELECT count(*)::BIGINT FROM event_log WHERE subject->>'kind' IN ('mail_folder', 'mail_folder_message')",
@@ -217,7 +246,86 @@ async fn v1_custom_folders_copy_move_and_events_against_postgres() {
     .fetch_one(&pool)
     .await
     .expect("event count");
-    assert_eq!(event_count, 4);
+    assert_eq!(event_count, 6);
+    let folder_links = sqlx::query(
+        "SELECT observation_id, entity_id, relationship_kind, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'mail_folder'
+         ORDER BY created_at ASC",
+    )
+    .fetch_all(&pool)
+    .await
+    .expect("folder observation links");
+    assert_eq!(folder_links.len(), 4);
+    let folder_operations: Vec<String> = folder_links
+        .iter()
+        .map(|row| {
+            row.try_get::<Value, _>("metadata")
+                .expect("folder metadata")["operation"]
+                .as_str()
+                .expect("folder operation")
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(
+        folder_operations,
+        vec![
+            "folder_create".to_owned(),
+            "folder_create".to_owned(),
+            "folder_update".to_owned(),
+            "folder_delete".to_owned()
+        ]
+    );
+    let folder_observation_id: String = folder_links[0]
+        .try_get("observation_id")
+        .expect("folder observation id");
+    let folder_observation = sqlx::query(
+        "SELECT origin_kind, payload
+         FROM observations
+         WHERE observation_id = $1",
+    )
+    .bind(&folder_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("folder observation");
+    let folder_origin_kind: String = folder_observation
+        .try_get("origin_kind")
+        .expect("folder origin kind");
+    let folder_payload: Value = folder_observation
+        .try_get("payload")
+        .expect("folder payload");
+    assert_eq!(folder_origin_kind, "manual");
+    assert_eq!(folder_payload["operation"], "folder_create");
+
+    let message_links = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'communication_message'
+           AND entity_id = $1
+           AND relationship_kind = 'folder_message_transition'
+         ORDER BY created_at ASC",
+    )
+    .bind(&message_id)
+    .fetch_all(&pool)
+    .await
+    .expect("folder message observation links");
+    assert_eq!(message_links.len(), 2);
+    let message_operations: Vec<String> = message_links
+        .iter()
+        .map(|row| {
+            row.try_get::<Value, _>("metadata")
+                .expect("message metadata")["operation"]
+                .as_str()
+                .expect("message operation")
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(
+        message_operations,
+        vec!["copy".to_owned(), "move".to_owned()]
+    );
 }
 
 async fn seed_projected_message(

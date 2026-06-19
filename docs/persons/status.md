@@ -15,7 +15,7 @@ domain target.
 | Architecture | Updated | Persona, Relationship, Memory, Dossier, Self Persona and Timeline Engine use are defined. |
 | Data model | Updated | Target logical model documented with compatibility mapping. |
 | API | Updated | Target `/personas` API shape documented; `/persons` marked legacy compatibility. |
-| Gap analysis | Added | See `refactoring-report.md`. |
+| Gap analysis | Updated | Cross-domain gaps now tracked in `docs/refactoring/implementation-alignment-plan.md` and the root `canonical-evidence-final-report.md`. |
 | ADR | Added | ADR-0084 records the domain decision. |
 
 ## Current Implementation Compatibility

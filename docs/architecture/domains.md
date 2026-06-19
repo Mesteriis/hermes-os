@@ -36,6 +36,7 @@ Agents propose and act through capabilities.
 | Relationships | Durable semantic links, relation type, trust score, strength score, confidence, evidence, review state. | Graph indexes, Trust Engine computation, Timeline rendering. | Hermes is relationship-first; links need a source-of-truth owner. |
 | Decisions | Durable choices, rationale, alternatives, evidence and impacted entities. | Generic notes, Project state, AI summaries. | Hermes must remember why a direction was chosen. |
 | Obligations | Commitments, duties, beneficiaries, status, evidence, review state and links to fulfillment. | Task lifecycle, every reminder, provider delivery state. | A commitment is not the same as a task that may fulfill it. |
+| Review | Review inbox items, approval, dismissal, promotion state and evidence links for candidates. | Domain truth, Radar philosophy, provider state. | Hermes needs one concrete owner-facing inbox for promotion and triage. |
 | Knowledge Graph | Graph nodes, graph edges, graph evidence as projection/traversal substrate. | Relationship semantics when first-class Relationship records exist, raw provider sync, binary storage. | Relationship-aware memory and traversal need a queryable graph substrate. |
 | Agents | Agent identity, run records, capability policy integration, proposed actions, approvals, denials, audit trail. | Domain truth, private data truth, credentials. | Agents need an auditable actor and tool boundary. |
 
@@ -50,8 +51,9 @@ Agents propose and act through capabilities.
 | Meetings | Calendar/Event evidence plus Communication context. | Meeting outputs may become Decisions, Obligations or Tasks. |
 | Notes | Document-like capture artifact. | No current ADR promotes Notes to a first-class domain. |
 | Timeline | Engine/read model. | Chronological views are derived from dated records and events. |
-| Radar | Candidate intake layer and derived inbox. | No durable Radar entity or lifecycle is proven yet. |
-| Generic Observations | Open policy area. | Concrete observations belong to producing engines/domains until accepted. |
+| Radar | Attention vocabulary and read-model language over Review and candidates. | Review is the durable inbox; Radar is not a source-of-truth domain. |
+| Generic Signals / Attention / Evidence domains | Forbidden domain split. | Observation Platform and Review already own the durable evidence and inbox boundaries. |
+| Observations | Platform layer. | Canonical evidence belongs to `platform/observations`, not Vault and not a domain. |
 | Knowledge | Emergent memory layer, not a generic wiki silo today. | Reviewed facts must retain domain/source ownership. |
 
 ## Engine Boundary
@@ -64,6 +66,9 @@ Engines currently recognized by the architecture:
 - Trust Engine;
 - Risk Engine;
 - Enrichment Engine;
+- Context Packs Engine;
+- Identity Resolution Engine;
+- Relationship Candidate Engine;
 - Obligation Engine;
 - Decision candidate engine;
 - Consistency / Contradiction Engine, user-facing alias Polygraph;
@@ -76,6 +81,7 @@ specific ADR defines that storage. They must not silently become domain owners.
 
 Cross-domain relationships are allowed through:
 
+- observation evidence references;
 - source evidence references;
 - canonical events;
 - first-class Relationship records;
@@ -86,7 +92,8 @@ Cross-domain relationships are allowed through:
 
 Direct ownership transfer is not allowed. For example:
 
-- Communications may propose a Task candidate; Tasks own the accepted Task.
+- Observations may support a Task candidate; Tasks own the accepted Task.
+- Review may promote a candidate; the target domain owns the durable entity.
 - A meeting may produce a Decision candidate; Decisions own the durable
   Decision.
 - Telegram may observe a participant; Personas own Persona truth.
@@ -99,9 +106,11 @@ Current backend modules observed during this audit:
 
 - domains: `calendar`, `decisions`, `documents`, `graph`, `mail`,
   `obligations`, `organizations`, `persons`, `projects`, `relationships`,
-  `settings`, `tasks`;
-- engines: `automation`, `consistency`, `decision`, `enrichment`, `memory`,
-  `obligation`, `risk`, `search`, `timeline`, `trust`;
+  `review`, `settings`, `tasks`;
+- engines: `automation`, `consistency`, `context_packs`, `decision`,
+  `enrichment`, `identity_resolution`, `memory`, `obligation`,
+  `relationships`, `risk`, `search`, `timeline`, `trust`;
+- platform: `events`, `observations`;
 - integrations: `gmail`, `telegram`, `whatsapp`, `ollama`, `omniroute`.
 
 This evidence explains the current implementation shape. It does not authorize

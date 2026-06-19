@@ -9,7 +9,9 @@ use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
+use crate::domains::mail::evidence::{link_mail_entity_in_transaction, merge_metadata};
 use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::platform::observations::ObservationStoreError;
 
 const EVENT_TYPE_DRAFT_CREATED: &str = "mail.draft.created";
 const EVENT_TYPE_DRAFT_UPDATED: &str = "mail.draft.updated";
@@ -118,6 +120,17 @@ impl EmailDraftStore {
     }
 
     pub async fn upsert(&self, draft: &NewEmailDraft) -> Result<EmailDraft, EmailDraftError> {
+        self.upsert_with_observation(draft, None, "draft_upsert", None)
+            .await
+    }
+
+    pub async fn upsert_with_observation(
+        &self,
+        draft: &NewEmailDraft,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<Value>,
+    ) -> Result<EmailDraft, EmailDraftError> {
         draft.validate()?;
         let mut transaction = self.pool.begin().await?;
         let existed = draft_exists(&mut transaction, &draft.draft_id).await?;
@@ -151,6 +164,25 @@ impl EmailDraftStore {
         };
         let event = draft_event(event_type, &draft)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            let link_metadata = merge_metadata(
+                json!({
+                    "status": draft.status.as_str(),
+                    "operation": if existed { "draft_update" } else { "draft_create" },
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "draft",
+                draft.draft_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(draft)
     }
@@ -236,6 +268,17 @@ impl EmailDraftStore {
     }
 
     pub async fn delete(&self, draft_id: &str) -> Result<bool, EmailDraftError> {
+        self.delete_with_observation(draft_id, None, "draft_delete", None)
+            .await
+    }
+
+    pub async fn delete_with_observation(
+        &self,
+        draft_id: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<Value>,
+    ) -> Result<bool, EmailDraftError> {
         let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"DELETE FROM email_drafts
@@ -252,6 +295,24 @@ impl EmailDraftStore {
         let draft = row_to_draft(row)?;
         let event = draft_event(EVENT_TYPE_DRAFT_DELETED, &draft)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            let link_metadata = merge_metadata(
+                json!({
+                    "operation": "draft_delete",
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "draft",
+                draft.draft_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(true)
     }
@@ -346,6 +407,8 @@ fn row_to_draft(row: PgRow) -> Result<EmailDraft, EmailDraftError> {
 pub enum EmailDraftError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
     #[error(transparent)]
     EventStore(#[from] crate::platform::events::EventStoreError),
     #[error(transparent)]

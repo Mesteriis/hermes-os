@@ -5,10 +5,15 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::mail::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
+    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
+    NewProviderAccountSecretBinding, NewRawCommunicationRecord, ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::secrets::{
+    NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
+};
 use hermes_hub_backend::platform::storage::Database;
+use sqlx::Row;
 use testkit::context::TestContext;
 
 const TOKEN: &str = "mail-account-management-test-token";
@@ -53,6 +58,7 @@ async fn json_body(response: axum::response::Response) -> Value {
 async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused_account() {
     let ctx = TestContext::new().await;
     let store = CommunicationIngestionStore::new(ctx.pool().clone());
+    let secret_store = SecretReferenceStore::new(ctx.pool().clone());
     store
         .upsert_provider_account(
             &NewProviderAccount::new(
@@ -76,6 +82,23 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
         )
         .await
         .expect("account");
+    secret_store
+        .upsert_secret_reference(&NewSecretReference::new(
+            "secret:fastmail-primary:imap-password",
+            SecretKind::AppPassword,
+            SecretStoreKind::TestDouble,
+            "Fastmail app password",
+        ))
+        .await
+        .expect("secret reference");
+    store
+        .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+            "fastmail-primary",
+            ProviderAccountSecretPurpose::ImapPassword,
+            "secret:fastmail-primary:imap-password",
+        ))
+        .await
+        .expect("bind provider secret");
 
     let app = app(&ctx).await;
 
@@ -138,6 +161,39 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
     assert_eq!(body["account"]["config"]["auth_state"], "logged_out");
     assert_eq!(body["sync_settings"]["sync_enabled"], false);
 
+    let logout_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code, link.relationship_kind, observation.payload
+         FROM observation_links link
+         JOIN observations observation
+           ON observation.observation_id = link.observation_id
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE link.domain = 'vault'
+           AND link.entity_kind = 'communication_provider_account'
+           AND link.entity_id = 'fastmail-primary'
+           AND link.relationship_kind = 'config_update'
+         ORDER BY link.created_at DESC
+         LIMIT 1",
+    )
+    .fetch_one(ctx.pool())
+    .await
+    .expect("logout config observation");
+    assert_eq!(
+        logout_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "local_runtime"
+    );
+    assert_eq!(
+        logout_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "COMMUNICATION_PROVIDER_ACCOUNT_CONFIG_MUTATION"
+    );
+    let logout_payload: Value = logout_observation.try_get("payload").expect("payload");
+    assert_eq!(logout_payload["action"], "logout");
+    assert_eq!(logout_payload["account_id"], "fastmail-primary");
+
     let response = app
         .clone()
         .oneshot(request(
@@ -150,6 +206,70 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
     assert_eq!(body["deleted"], true);
+    assert_eq!(
+        body["unbound_secret_refs"],
+        json!(["secret:fastmail-primary:imap-password"])
+    );
+
+    let account_delete_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code, link.relationship_kind
+         FROM observation_links link
+         JOIN observations observation
+           ON observation.observation_id = link.observation_id
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE link.domain = 'vault'
+           AND link.entity_kind = 'communication_provider_account'
+           AND link.entity_id = 'fastmail-primary'
+           AND link.relationship_kind = 'delete'
+         ORDER BY link.created_at DESC
+         LIMIT 1",
+    )
+    .fetch_one(ctx.pool())
+    .await
+    .expect("provider account delete observation");
+    assert_eq!(
+        account_delete_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "local_runtime"
+    );
+    assert_eq!(
+        account_delete_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "COMMUNICATION_PROVIDER_ACCOUNT_DELETED"
+    );
+
+    let binding_remove_observation = sqlx::query(
+        "SELECT observation.origin_kind, kind.code AS kind_code, link.relationship_kind
+         FROM observation_links link
+         JOIN observations observation
+           ON observation.observation_id = link.observation_id
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE link.domain = 'vault'
+           AND link.entity_kind = 'communication_provider_secret_binding'
+           AND link.entity_id = 'fastmail-primary:imap_password'
+           AND link.relationship_kind = 'remove'
+         ORDER BY link.created_at DESC
+         LIMIT 1",
+    )
+    .fetch_one(ctx.pool())
+    .await
+    .expect("provider secret binding removal observation");
+    assert_eq!(
+        binding_remove_observation
+            .try_get::<String, _>("origin_kind")
+            .expect("origin kind"),
+        "local_runtime"
+    );
+    assert_eq!(
+        binding_remove_observation
+            .try_get::<String, _>("kind_code")
+            .expect("kind code"),
+        "COMMUNICATION_PROVIDER_SECRET_BINDING_REMOVED"
+    );
 
     let response = app
         .oneshot(request(

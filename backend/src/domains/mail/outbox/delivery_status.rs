@@ -1,9 +1,13 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use serde_json::json;
+use sqlx::Transaction;
+use sqlx::postgres::Postgres;
 
 use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
+use super::super::evidence::link_mail_entity_in_transaction;
 use super::{EmailOutboxError, EmailOutboxStore, generate_outbox_event_id, validate_non_empty};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
@@ -109,12 +113,80 @@ impl EmailOutboxStore {
             raw_record_id,
             recorded_at: delivery_status.recorded_at,
         };
+        capture_delivery_status_observation(&mut transaction, &record).await?;
         let event = outbox_delivery_status_event(&record)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
         transaction.commit().await?;
 
         Ok(record)
     }
+}
+
+async fn capture_delivery_status_observation(
+    transaction: &mut Transaction<'_, Postgres>,
+    record: &OutboxDeliveryStatusRecord,
+) -> Result<(), EmailOutboxError> {
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            "COMMUNICATION_DELIVERY_STATUS",
+            ObservationOriginKind::LocalRuntime,
+            record.recorded_at,
+            json!({
+                "account_id": record.account_id,
+                "outbox_id": record.outbox_id,
+                "provider_message_id": record.provider_message_id,
+                "delivery_status": record.delivery_status.as_str(),
+                "smtp_status": record.smtp_status,
+                "source_kind": record.source_kind,
+                "provider_record_id": record.provider_record_id,
+                "raw_record_id": record.raw_record_id,
+                "operation": "delivery_status_recorded",
+            }),
+            format!(
+                "delivery-status://{}/{}",
+                record
+                    .outbox_id
+                    .as_deref()
+                    .unwrap_or(record.provider_message_id.as_str()),
+                record.delivery_status.as_str()
+            ),
+        )
+        .provenance(json!({
+            "captured_by": "mail.outbox.delivery_status",
+            "operation": "delivery_status_recorded",
+        })),
+    )
+    .await?;
+    if let Some(outbox_id) = &record.outbox_id {
+        link_mail_entity_in_transaction(
+            transaction,
+            &observation.observation_id,
+            "outbox_item",
+            outbox_id.clone(),
+            "delivery_status_observed",
+            json!({
+                "delivery_status": record.delivery_status.as_str(),
+                "smtp_status": record.smtp_status,
+            }),
+            None,
+        )
+        .await?;
+    }
+    link_mail_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "provider_message",
+        record.provider_message_id.clone(),
+        "delivery_status_observed",
+        json!({
+            "delivery_status": record.delivery_status.as_str(),
+            "source_kind": record.source_kind,
+        }),
+        None,
+    )
+    .await?;
+    Ok(())
 }
 
 fn normalize_non_empty(field_name: &'static str, value: &str) -> Result<String, EmailOutboxError> {

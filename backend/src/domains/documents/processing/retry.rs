@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
+use crate::domains::documents::processing::evidence::link_document_processing_entity_in_transaction;
 use crate::platform::events::{EventStore, NewEventEnvelope};
 
 use super::constants::{
@@ -17,6 +18,14 @@ impl DocumentProcessingStore {
     pub async fn retry_failed_job(
         &self,
         command: &DocumentProcessingRetryCommand,
+    ) -> Result<DocumentProcessingRetryCommandResult, DocumentProcessingError> {
+        self.retry_failed_job_with_observation(command, None).await
+    }
+
+    pub async fn retry_failed_job_with_observation(
+        &self,
+        command: &DocumentProcessingRetryCommand,
+        observation_id: Option<&str>,
     ) -> Result<DocumentProcessingRetryCommandResult, DocumentProcessingError> {
         let command_id = validate_non_empty("command_id", &command.command_id)?;
         let job_id = validate_non_empty("job_id", &command.job_id)?;
@@ -63,6 +72,19 @@ impl DocumentProcessingStore {
             return Err(DocumentProcessingError::EventStore(error));
         }
         let retried_job = self.requeue_failed_job(&mut transaction, &job_id).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_document_processing_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "document_processing_job",
+                retried_job.job_id.clone(),
+                "retry_command",
+                json!({
+                    "event_id": event_id,
+                }),
+            )
+            .await?;
+        }
         transaction.commit().await?;
 
         Ok(DocumentProcessingRetryCommandResult {

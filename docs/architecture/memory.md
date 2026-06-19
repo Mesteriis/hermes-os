@@ -29,7 +29,7 @@ Memory architecture is responsible for:
 Memory is not one table that owns everything. It is an architecture layer built
 from:
 
-- source records;
+- canonical observations;
 - canonical events;
 - domain records;
 - Relationship records;
@@ -45,6 +45,7 @@ Organizations, Communications, Documents, Tasks, Decisions or Obligations.
 
 ```text
 Source evidence
+  -> canonical observation
   -> canonical event or import record
   -> domain projection
   -> extraction candidate

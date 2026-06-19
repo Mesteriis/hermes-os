@@ -232,7 +232,7 @@ impl GraphStore {
         } else {
             let evidence_rows = sqlx::query(
                 r#"
-                SELECT edge_id, source_kind, source_id, excerpt, metadata
+                SELECT edge_id, source_kind, source_id, observation_id, excerpt, metadata
                 FROM graph_evidence
                 WHERE edge_id = ANY($1)
                 ORDER BY edge_id, source_kind, source_id

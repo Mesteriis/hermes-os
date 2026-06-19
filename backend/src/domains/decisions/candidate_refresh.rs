@@ -31,6 +31,7 @@ impl DecisionStore {
             r#"
             SELECT
                 message_id,
+                observation_id,
                 subject,
                 body_text
             FROM communication_messages
@@ -45,13 +46,14 @@ impl DecisionStore {
         let mut count = 0usize;
         for row in rows {
             let source_id = row.try_get::<String, _>("message_id")?;
+            let observation_id = row.try_get::<Option<String>, _>("observation_id")?;
             let source_text = format!(
                 "{}\n{}",
                 row.try_get::<String, _>("subject")?,
                 row.try_get::<String, _>("body_text")?,
             );
             count += self
-                .refresh_communication_decision_candidates(&source_id, &source_text)
+                .refresh_communication_decision_candidates(&source_id, observation_id, &source_text)
                 .await?;
         }
 
@@ -63,6 +65,7 @@ impl DecisionStore {
             r#"
             SELECT
                 message_id,
+                observation_id,
                 subject,
                 body_text
             FROM communication_messages
@@ -77,13 +80,14 @@ impl DecisionStore {
         let mut count = 0usize;
         for row in rows {
             let source_id = row.try_get::<String, _>("message_id")?;
+            let observation_id = row.try_get::<Option<String>, _>("observation_id")?;
             let source_text = format!(
                 "{}\n{}",
                 row.try_get::<String, _>("subject")?,
                 row.try_get::<String, _>("body_text")?,
             );
             count += self
-                .refresh_communication_decision_candidates(&source_id, &source_text)
+                .refresh_communication_decision_candidates(&source_id, observation_id, &source_text)
                 .await?;
         }
 
@@ -93,6 +97,7 @@ impl DecisionStore {
     async fn refresh_communication_decision_candidates(
         &self,
         source_id: &str,
+        observation_id: Option<String>,
         source_text: &str,
     ) -> Result<usize, DecisionStoreError> {
         let input = DecisionExtractionInput::communication(
@@ -100,7 +105,8 @@ impl DecisionStore {
             source_text,
             DecisionEntityKind::Communication,
             source_id,
-        );
+        )
+        .with_observation_id(observation_id);
         let extraction = DecisionEngine::detect_candidates(&input)?;
         self.persist_decision_extraction(extraction).await
     }
@@ -110,6 +116,7 @@ impl DecisionStore {
             r#"
             SELECT
                 document_id,
+                observation_id,
                 title,
                 extracted_text
             FROM documents
@@ -124,6 +131,7 @@ impl DecisionStore {
         let mut count = 0usize;
         for row in rows {
             let source_id = row.try_get::<String, _>("document_id")?;
+            let observation_id = row.try_get::<Option<String>, _>("observation_id")?;
             let source_text = format!(
                 "{}\n{}",
                 row.try_get::<String, _>("title")?,
@@ -134,7 +142,8 @@ impl DecisionStore {
                 &source_text,
                 DecisionEntityKind::Document,
                 &source_id,
-            );
+            )
+            .with_observation_id(observation_id);
             let extraction = DecisionEngine::detect_candidates(&input)?;
             count += self.persist_decision_extraction(extraction).await?;
         }

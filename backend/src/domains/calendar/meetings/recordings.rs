@@ -1,5 +1,7 @@
 use sqlx::postgres::PgPool;
 
+use crate::domains::calendar::evidence::link_calendar_entity;
+
 use super::rows::{EVENT_RECORDING_COLUMNS, row_to_event_recording};
 use super::{EventRecording, MeetingsError};
 
@@ -30,6 +32,18 @@ impl EventRecordingStore {
         source: Option<&str>,
         duration_seconds: Option<i32>,
     ) -> Result<EventRecording, MeetingsError> {
+        self.add_with_observation(event_id, file_path, source, duration_seconds, None)
+            .await
+    }
+
+    pub async fn add_with_observation(
+        &self,
+        event_id: &str,
+        file_path: Option<&str>,
+        source: Option<&str>,
+        duration_seconds: Option<i32>,
+        observation_id: Option<&str>,
+    ) -> Result<EventRecording, MeetingsError> {
         let query = format!(
             "INSERT INTO event_recordings (event_id, file_path, source, duration_seconds) VALUES ($1,$2,$3,$4) RETURNING {EVENT_RECORDING_COLUMNS}"
         );
@@ -40,6 +54,22 @@ impl EventRecordingStore {
             .bind(duration_seconds)
             .fetch_one(&self.pool)
             .await?;
-        row_to_event_recording(row)
+        let recording = row_to_event_recording(row)?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_calendar_entity(
+                &self.pool,
+                observation_id,
+                "event_recording",
+                recording.id.clone(),
+                None,
+                serde_json::json!({
+                    "event_id": event_id,
+                    "duration_seconds": recording.duration_seconds,
+                }),
+                None,
+            )
+            .await?;
+        }
+        Ok(recording)
     }
 }

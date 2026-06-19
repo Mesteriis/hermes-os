@@ -1,4 +1,5 @@
-use crate::domains::mail::core::{CommunicationIngestionStore, ProviderAccount};
+use crate::domains::mail::core::ProviderAccount;
+use crate::vault::CommunicationProviderAccountStore;
 
 use super::super::errors::TelegramError;
 use super::super::store::TelegramStore;
@@ -6,11 +7,10 @@ use super::super::store::TelegramStore;
 impl TelegramStore {
     pub(in crate::integrations::telegram::client) async fn telegram_provider_account(
         &self,
-        communication_store: &CommunicationIngestionStore,
         account_id: &str,
     ) -> Result<ProviderAccount, TelegramError> {
-        let provider_account = communication_store
-            .provider_account(account_id)
+        let provider_account = CommunicationProviderAccountStore::new(self.pool.clone())
+            .get(account_id)
             .await?
             .ok_or_else(|| {
                 TelegramError::InvalidRequest(format!(

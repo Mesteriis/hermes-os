@@ -2,6 +2,7 @@ use super::*;
 use crate::domains::mail::ai_state::{
     MailAiStateRecord, MailAiStateStore, MailAiStateTransitionRequest,
 };
+use crate::domains::mail::service::MailCommandService;
 
 pub(crate) async fn get_v1_message_ai_state(
     State(state): State<AppState>,
@@ -18,12 +19,14 @@ pub(crate) async fn put_v1_message_ai_state(
     Path(message_id): Path<String>,
     Json(request): Json<MailAiStateTransitionRequest>,
 ) -> Result<Json<MailAiStateRecord>, ApiError> {
-    let Some(record) = ai_state_store(&state)?
-        .transition(&message_id, request)
-        .await?
-    else {
-        return Err(ApiError::NotFound);
-    };
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let record = MailCommandService::new(pool)
+        .transition_message_ai_state(&message_id, request)
+        .await?;
     Ok(Json(record))
 }
 

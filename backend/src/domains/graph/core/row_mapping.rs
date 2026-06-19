@@ -47,6 +47,7 @@ pub(super) fn row_to_evidence_summary(row: PgRow) -> Result<GraphEvidenceSummary
         edge_id: row.try_get("edge_id")?,
         source_kind: parse_evidence_source_kind(row.try_get("source_kind")?)?,
         source_id: row.try_get("source_id")?,
+        observation_id: row.try_get("observation_id")?,
         excerpt: row.try_get("excerpt")?,
         metadata: row.try_get("metadata")?,
     })
@@ -100,10 +101,10 @@ fn parse_evidence_source_kind(value: String) -> Result<GraphEvidenceSourceKind, 
         "contact" | "person" => Ok(GraphEvidenceSourceKind::Person),
         "message" => Ok(GraphEvidenceSourceKind::Message),
         "document" => Ok(GraphEvidenceSourceKind::Document),
-        "raw_record" => Ok(GraphEvidenceSourceKind::RawRecord),
         "relationship" => Ok(GraphEvidenceSourceKind::Relationship),
         "decision" => Ok(GraphEvidenceSourceKind::Decision),
         "obligation" => Ok(GraphEvidenceSourceKind::Obligation),
+        "observation" => Ok(GraphEvidenceSourceKind::Observation),
         _ => Err(GraphStoreError::UnknownEvidenceSourceKind(value)),
     }
 }

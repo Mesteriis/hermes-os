@@ -6,4 +6,5 @@ pub mod handlers;
 pub mod health;
 pub mod investigator;
 pub mod memory;
+pub mod service;
 pub mod workflows;

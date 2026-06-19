@@ -1,6 +1,8 @@
 use thiserror::Error;
 
 use crate::domains::graph::core::GraphStoreError;
+use crate::platform::observations::ObservationStoreError;
+use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum ObligationStoreError {
@@ -9,6 +11,9 @@ pub enum ObligationStoreError {
 
     #[error(transparent)]
     Graph(#[from] GraphStoreError),
+
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
 
     #[error("{0} must not be empty")]
     EmptyField(&'static str),
@@ -21,6 +26,12 @@ pub enum ObligationStoreError {
 
     #[error("obligation evidence is required")]
     MissingEvidence,
+
+    #[error("observation obligation evidence must use the same source_id and observation_id")]
+    InvalidObservationEvidenceSource,
+
+    #[error("obligation evidence observation was not found: {0}")]
+    ObservationNotFound(String),
 
     #[error("obligation was not found")]
     ObligationNotFound,
@@ -42,4 +53,7 @@ pub enum ObligationStoreError {
 
     #[error("unknown obligation risk state stored in database: {0}")]
     UnknownRiskState(String),
+
+    #[error(transparent)]
+    ReviewMirror(#[from] ReviewMirrorError),
 }

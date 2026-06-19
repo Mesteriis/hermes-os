@@ -1,6 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 
 use crate::app::{ApiError, AppState};
 use crate::domains::organizations::core::{
@@ -8,6 +9,7 @@ use crate::domains::organizations::core::{
     OrgDomainStore, OrgIdentityStore, OrganizationAlias, OrganizationDomain, OrganizationIdentity,
     RelatedOrgStore, RelatedOrganization,
 };
+use crate::domains::organizations::service::OrganizationCommandService;
 
 use super::support::database_pool;
 
@@ -40,13 +42,14 @@ pub(crate) async fn post_org_identity(
     Path(org_id): Path<String>,
     Json(req): Json<NewOrgIdentityRequest>,
 ) -> Result<Json<OrganizationIdentity>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = database_pool(&state)?;
-    let identity = OrgIdentityStore::new(pool)
-        .upsert(
+    let identity = OrganizationCommandService::new(pool)
+        .add_identity_manual(
             &org_id,
             &req.identity_type,
             &req.identity_value,
-            req.source.as_deref().unwrap_or("manual"),
+            requested_source,
         )
         .await
         .map_err(ApiError::from)?;
@@ -82,14 +85,10 @@ pub(crate) async fn post_org_alias(
     Path(org_id): Path<String>,
     Json(req): Json<NewOrgAliasRequest>,
 ) -> Result<Json<OrganizationAlias>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = database_pool(&state)?;
-    let alias = OrgAliasStore::new(pool)
-        .add(
-            &org_id,
-            &req.name,
-            &req.alias_type,
-            req.source.as_deref().unwrap_or("manual"),
-        )
+    let alias = OrganizationCommandService::new(pool)
+        .add_alias_manual(&org_id, &req.name, &req.alias_type, requested_source)
         .await
         .map_err(ApiError::from)?;
     Ok(Json(alias))
@@ -142,8 +141,8 @@ pub(crate) async fn post_org_department(
     Json(req): Json<NewOrgDepartmentRequest>,
 ) -> Result<Json<OrgDepartment>, ApiError> {
     let pool = database_pool(&state)?;
-    let dept = OrgDepartmentStore::new(pool)
-        .add(
+    let dept = OrganizationCommandService::new(pool)
+        .add_department_manual(
             &org_id,
             &req.name,
             req.description.as_deref(),
@@ -176,6 +175,7 @@ pub(crate) struct LinkOrgContactRequest {
     person_id: String,
     role: Option<String>,
     department: Option<String>,
+    source: Option<String>,
 }
 
 pub(crate) async fn post_org_contact_link(
@@ -183,13 +183,15 @@ pub(crate) async fn post_org_contact_link(
     Path(org_id): Path<String>,
     Json(req): Json<LinkOrgContactRequest>,
 ) -> Result<Json<OrgContactLink>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = database_pool(&state)?;
-    let link = OrgContactLinkStore::new(pool)
-        .link(
+    let link = OrganizationCommandService::new(pool)
+        .link_contact_manual(
             &org_id,
             &req.person_id,
             req.role.as_deref(),
             req.department.as_deref(),
+            requested_source,
         )
         .await
         .map_err(ApiError::from)?;

@@ -1,7 +1,11 @@
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, Row, Transaction};
 
+use crate::domains::api_support::text_preview;
 use crate::platform::events::{EventEnvelope, EventStore};
+use crate::platform::observations::materialize_review_transition_link_in_transaction;
+use crate::workflows::review_mirror::sync_project_link_review_state_in_transaction;
 
 use super::constants::PROJECT_LINK_REVIEW_EVENT_TYPE;
 use super::errors::ProjectLinkReviewError;
@@ -26,6 +30,16 @@ impl ProjectLinkReviewStore {
     pub async fn set_review_state(
         &self,
         command: &ProjectLinkReviewCommand,
+    ) -> Result<ProjectLinkReviewCommandResult, ProjectLinkReviewError> {
+        self.set_review_state_with_observation(command, None, None)
+            .await
+    }
+
+    pub async fn set_review_state_with_observation(
+        &self,
+        command: &ProjectLinkReviewCommand,
+        observation_id: Option<&str>,
+        metadata: Option<Value>,
     ) -> Result<ProjectLinkReviewCommandResult, ProjectLinkReviewError> {
         let command_id = validate_non_empty("command_id", &command.command_id)?;
         let project_id = validate_non_empty("project_id", &command.project_id)?;
@@ -61,6 +75,46 @@ impl ProjectLinkReviewStore {
                 actor_id: &actor_id,
                 reviewed_at: event.occurred_at,
             },
+        )
+        .await?;
+        let (title, summary, snapshot_observation_id) =
+            candidate_snapshot(&mut transaction, command.target_kind, &target_id).await?;
+        sync_project_link_review_state_in_transaction(
+            &mut transaction,
+            &project_id,
+            command.target_kind,
+            &target_id,
+            command.review_state,
+            &title,
+            &summary,
+            0.72,
+            &snapshot_observation_id,
+        )
+        .await?;
+        materialize_review_transition_link_in_transaction(
+            &mut transaction,
+            observation_id,
+            "projects",
+            "project_link_review",
+            &event_id,
+            "review_state",
+            command.review_state.as_str(),
+            metadata
+                .map(|extra| {
+                    json!({
+                        "project_id": project_id,
+                        "target_kind": command.target_kind.as_str(),
+                        "target_id": target_id,
+                        "context": extra,
+                    })
+                })
+                .or_else(|| {
+                    Some(json!({
+                        "project_id": project_id,
+                        "target_kind": command.target_kind.as_str(),
+                        "target_id": target_id,
+                    }))
+                }),
         )
         .await?;
 
@@ -108,6 +162,20 @@ impl ProjectLinkReviewStore {
                 actor_id: &actor_id,
                 reviewed_at: event.occurred_at,
             },
+        )
+        .await?;
+        let (title, summary, snapshot_observation_id) =
+            candidate_snapshot(&mut transaction, parsed.target_kind, &parsed.target_id).await?;
+        sync_project_link_review_state_in_transaction(
+            &mut transaction,
+            &parsed.project_id,
+            parsed.target_kind,
+            &parsed.target_id,
+            parsed.review_state,
+            &title,
+            &summary,
+            0.72,
+            &snapshot_observation_id,
         )
         .await?;
 
@@ -267,5 +335,51 @@ impl ProjectLinkReviewStore {
         rows.into_iter()
             .map(row_to_project_reviewed_target)
             .collect()
+    }
+}
+
+async fn candidate_snapshot(
+    transaction: &mut Transaction<'_, Postgres>,
+    target_kind: ProjectLinkTargetKind,
+    target_id: &str,
+) -> Result<(String, String, String), ProjectLinkReviewError> {
+    match target_kind {
+        ProjectLinkTargetKind::Message => {
+            let row = sqlx::query(
+                r#"
+                SELECT subject, sender, observation_id
+                FROM communication_messages
+                WHERE message_id = $1
+                "#,
+            )
+            .bind(target_id)
+            .fetch_optional(&mut **transaction)
+            .await?;
+            let row = row.ok_or(ProjectLinkReviewError::TargetNotFound)?;
+            Ok((
+                text_preview(&row.try_get::<String, _>("subject")?, 120),
+                text_preview(&row.try_get::<String, _>("sender")?, 140),
+                row.try_get::<String, _>("observation_id")?,
+            ))
+        }
+        ProjectLinkTargetKind::Document => {
+            let row = sqlx::query(
+                r#"
+                SELECT title, observation_id
+                FROM documents
+                WHERE document_id = $1
+                "#,
+            )
+            .bind(target_id)
+            .fetch_optional(&mut **transaction)
+            .await?;
+            let row = row.ok_or(ProjectLinkReviewError::TargetNotFound)?;
+            let title = text_preview(&row.try_get::<String, _>("title")?, 140);
+            Ok((
+                title.clone(),
+                title,
+                row.try_get::<String, _>("observation_id")?,
+            ))
+        }
     }
 }

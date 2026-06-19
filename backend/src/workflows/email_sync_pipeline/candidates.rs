@@ -1,14 +1,17 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::decisions::DecisionStore;
 use crate::domains::mail::messages::ProjectedMessage;
-use crate::domains::tasks::candidates::TaskCandidateStore;
+use crate::workflows::review_inbox::{
+    refresh_message_decisions_into_review, refresh_message_knowledge_candidates_into_review,
+    refresh_message_task_candidates_into_review,
+};
 
 use super::errors::EmailSyncPipelineError;
 
 #[derive(Default)]
 pub(crate) struct MessageCandidateRefreshReport {
     pub(crate) refreshed_decision_candidates: usize,
+    pub(crate) refreshed_knowledge_candidates: usize,
     pub(crate) refreshed_task_candidates: usize,
 }
 
@@ -24,15 +27,14 @@ pub(crate) async fn refresh_message_context_candidates(
         return Ok(MessageCandidateRefreshReport::default());
     }
 
-    let decision_store = DecisionStore::new(pool.clone());
-    let task_candidate_store = TaskCandidateStore::new(pool.clone());
-
     Ok(MessageCandidateRefreshReport {
-        refreshed_decision_candidates: decision_store
-            .refresh_message_candidates_for_ids(&message_ids)
+        refreshed_decision_candidates: refresh_message_decisions_into_review(pool, &message_ids)
             .await?,
-        refreshed_task_candidates: task_candidate_store
-            .refresh_message_candidates_for_ids(&message_ids)
+        refreshed_knowledge_candidates: refresh_message_knowledge_candidates_into_review(
+            pool, messages,
+        )
+        .await?,
+        refreshed_task_candidates: refresh_message_task_candidates_into_review(pool, &message_ids)
             .await?,
     })
 }

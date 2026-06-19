@@ -2,7 +2,7 @@ use sqlx::{Postgres, Transaction};
 
 use crate::app::ApiError;
 use crate::domains::mail::messages::ProjectedMessage;
-use crate::domains::persons::api::PersonProjectionStore;
+use crate::workflows::workflow_action_person_projection::create_person_projection_in_transaction;
 
 use super::super::models::{
     WorkflowActionRequest, WorkflowActionResponse, WorkflowActionStatus, WorkflowActionTarget,
@@ -32,12 +32,15 @@ pub(in crate::domains::mail::handlers::workflow_actions) async fn create_contact
         .and_then(|value| value.display_name.as_ref())
         .map(|value| value.trim())
         .filter(|value| !value.is_empty());
-    let person = PersonProjectionStore::upsert_email_person_in_transaction(transaction, email)
-        .await
-        .map_err(|error| {
-            tracing::error!(error = %error, "workflow contact upsert failed");
-            ApiError::InvalidCommunicationQuery("workflow contact upsert failed")
-        })?;
+    let person_id = create_person_projection_in_transaction(
+        transaction,
+        command_id,
+        event_id,
+        email,
+        display_name,
+        message,
+    )
+    .await?;
     Ok(base_response(
         command_id,
         event_id,
@@ -45,7 +48,7 @@ pub(in crate::domains::mail::handlers::workflow_actions) async fn create_contact
         WorkflowActionStatus::Created,
         WorkflowActionTarget {
             kind: WorkflowActionTargetKind::Person,
-            id: Some(person.person_id),
+            id: Some(person_id),
         },
         message,
         vec![

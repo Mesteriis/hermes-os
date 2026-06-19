@@ -7,6 +7,7 @@ mod lifecycle;
 mod manifest;
 mod models;
 mod paths;
+mod provider_accounts;
 mod recovery;
 mod secrets;
 mod storage;
@@ -21,6 +22,10 @@ pub use models::{
     SecretEntryContext, VaultMode, VaultStatus,
 };
 pub use paths::{default_dev_key_path, default_vault_home};
+pub use provider_accounts::{
+    CalendarAccountStore, CalendarSourceStore, CommunicationProviderAccountStore,
+    CommunicationProviderSecretBindingStore, TaskProviderStore,
+};
 
 #[derive(Clone)]
 pub struct HostVault {

@@ -6,8 +6,10 @@ use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
+use crate::domains::mail::evidence::{link_mail_entity_in_transaction, merge_metadata};
 use crate::domains::mail::messages::{LocalMessageState, WorkflowState};
 use crate::platform::events::EventStore;
+use crate::platform::observations::ObservationStoreError;
 
 mod cursors;
 mod events;
@@ -196,11 +198,41 @@ impl MailFolderStore {
     }
 
     pub async fn create(&self, input: NewMailFolder) -> Result<MailFolder, MailFolderError> {
+        self.create_with_observation(input, None, "folder_upsert", None)
+            .await
+    }
+
+    pub async fn create_with_observation(
+        &self,
+        input: NewMailFolder,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<MailFolder, MailFolderError> {
         let normalized = NormalizedMailFolderInput::from_new(input)?;
         let mut transaction = self.pool.begin().await?;
         let folder = insert_folder(&mut transaction, &normalized).await?;
         let event = folder_event(EVENT_TYPE_FOLDER_CREATED, &folder)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            let link_metadata = merge_metadata(
+                serde_json::json!({
+                    "operation": "folder_create",
+                    "name": folder.name,
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "mail_folder",
+                folder.folder_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(folder)
     }
@@ -209,6 +241,18 @@ impl MailFolderStore {
         &self,
         folder_id: &str,
         update: UpdateMailFolder,
+    ) -> Result<Option<MailFolder>, MailFolderError> {
+        self.update_with_observation(folder_id, update, None, "folder_upsert", None)
+            .await
+    }
+
+    pub async fn update_with_observation(
+        &self,
+        folder_id: &str,
+        update: UpdateMailFolder,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
     ) -> Result<Option<MailFolder>, MailFolderError> {
         let folder_id = normalize_required("folder_id", folder_id)?;
         let normalized = NormalizedMailFolderUpdate::from_update(update)?;
@@ -219,11 +263,41 @@ impl MailFolderStore {
         };
         let event = folder_event(EVENT_TYPE_FOLDER_UPDATED, &folder)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            let link_metadata = merge_metadata(
+                serde_json::json!({
+                    "operation": "folder_update",
+                    "name": folder.name,
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "mail_folder",
+                folder.folder_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(Some(folder))
     }
 
     pub async fn delete(&self, folder_id: &str) -> Result<bool, MailFolderError> {
+        self.delete_with_observation(folder_id, None, "folder_delete", None)
+            .await
+    }
+
+    pub async fn delete_with_observation(
+        &self,
+        folder_id: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<bool, MailFolderError> {
         let folder_id = normalize_required("folder_id", folder_id)?;
         let mut transaction = self.pool.begin().await?;
         let Some(folder) = delete_folder(&mut transaction, &folder_id).await? else {
@@ -232,6 +306,24 @@ impl MailFolderStore {
         };
         let event = folder_event(EVENT_TYPE_FOLDER_DELETED, &folder)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            let link_metadata = merge_metadata(
+                serde_json::json!({
+                    "operation": "folder_delete",
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "mail_folder",
+                folder_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(true)
     }
@@ -317,8 +409,33 @@ impl MailFolderStore {
         folder_id: &str,
         message_id: &str,
     ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
-        self.apply_message_action(folder_id, message_id, FolderMessageOperation::Copy)
-            .await
+        self.copy_message_with_observation(
+            folder_id,
+            message_id,
+            None,
+            "folder_message_transition",
+            None,
+        )
+        .await
+    }
+
+    pub async fn copy_message_with_observation(
+        &self,
+        folder_id: &str,
+        message_id: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
+        self.apply_message_action_with_observation(
+            folder_id,
+            message_id,
+            FolderMessageOperation::Copy,
+            observation_id,
+            relationship_kind,
+            metadata,
+        )
+        .await
     }
 
     pub async fn move_message(
@@ -326,8 +443,33 @@ impl MailFolderStore {
         folder_id: &str,
         message_id: &str,
     ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
-        self.apply_message_action(folder_id, message_id, FolderMessageOperation::Move)
-            .await
+        self.move_message_with_observation(
+            folder_id,
+            message_id,
+            None,
+            "folder_message_transition",
+            None,
+        )
+        .await
+    }
+
+    pub async fn move_message_with_observation(
+        &self,
+        folder_id: &str,
+        message_id: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
+        self.apply_message_action_with_observation(
+            folder_id,
+            message_id,
+            FolderMessageOperation::Move,
+            observation_id,
+            relationship_kind,
+            metadata,
+        )
+        .await
     }
 
     async fn apply_message_action(
@@ -335,6 +477,26 @@ impl MailFolderStore {
         folder_id: &str,
         message_id: &str,
         operation: FolderMessageOperation,
+    ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
+        self.apply_message_action_with_observation(
+            folder_id,
+            message_id,
+            operation,
+            None,
+            "folder_message_transition",
+            None,
+        )
+        .await
+    }
+
+    async fn apply_message_action_with_observation(
+        &self,
+        folder_id: &str,
+        message_id: &str,
+        operation: FolderMessageOperation,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
     ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
         let folder_id = normalize_required("folder_id", folder_id)?;
         let message_id = normalize_required("message_id", message_id)?;
@@ -375,6 +537,25 @@ impl MailFolderStore {
         };
         let event = folder_message_event(&response)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            let link_metadata = merge_metadata(
+                serde_json::json!({
+                    "folder_id": response.folder_id,
+                    "operation": response.operation.as_str(),
+                }),
+                metadata,
+            );
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "communication_message",
+                response.message_id.clone(),
+                relationship_kind,
+                link_metadata,
+                None,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(Some(response))
     }
@@ -719,6 +900,8 @@ fn system_time_nanos() -> u128 {
 pub enum MailFolderError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
     #[error(transparent)]

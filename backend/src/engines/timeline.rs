@@ -1,10 +1,10 @@
+mod analysis;
 mod cross_domain;
 mod errors;
 mod models;
 mod policy;
 mod projection;
 mod replay;
-mod signals;
 mod summaries;
 mod validation;
 
@@ -43,7 +43,7 @@ impl TimelineEngine {
         entity_id: &str,
         as_of: DateTime<Utc>,
     ) -> Result<TimelineRecencySignal, TimelineEngineError> {
-        signals::recency_signal(events, entity_kind, entity_id, as_of)
+        analysis::recency_signal(events, entity_kind, entity_id, as_of)
     }
 
     pub fn timeline_gaps(
@@ -54,7 +54,7 @@ impl TimelineEngine {
         period_end: DateTime<Utc>,
         max_gap_seconds: i64,
     ) -> Result<Vec<TimelineGap>, TimelineEngineError> {
-        signals::timeline_gaps(
+        analysis::timeline_gaps(
             events,
             entity_kind,
             entity_id,
@@ -70,7 +70,7 @@ impl TimelineEngine {
         entity_kind: &str,
         entity_id: &str,
     ) -> Result<TimelineChangeDiff, TimelineEngineError> {
-        signals::change_diff(previous_events, current_events, entity_kind, entity_id)
+        analysis::change_diff(previous_events, current_events, entity_kind, entity_id)
     }
 
     pub fn cross_domain_timeline(

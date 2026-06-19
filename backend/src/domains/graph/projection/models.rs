@@ -20,6 +20,7 @@ pub(super) struct PersonRow {
 pub(super) struct MessageRow {
     pub(super) message_id: String,
     pub(super) raw_record_id: String,
+    pub(super) observation_id: String,
     pub(super) account_id: String,
     pub(super) provider_record_id: String,
     pub(super) subject: String,
@@ -34,6 +35,7 @@ pub(super) struct DocumentRow {
     pub(super) document_kind: String,
     pub(super) title: String,
     pub(super) source_fingerprint: String,
+    pub(super) observation_id: String,
     pub(super) imported_at: DateTime<Utc>,
 }
 

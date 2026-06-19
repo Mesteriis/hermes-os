@@ -3,7 +3,7 @@ use serde_json::json;
 use sqlx::PgPool;
 
 use super::errors::TelegramError;
-use super::lifecycle::mark_command_reconciled;
+use super::lifecycle::{mark_command_mismatch, mark_command_reconciled};
 use super::models::messages::TelegramProviderWriteCommand;
 use super::rows::row_to_telegram_provider_write_command;
 
@@ -72,69 +72,46 @@ pub(super) async fn reconcile_dialog_boolean_commands_from_provider_state(
                     ("mismatch", json!(true)),
                 ],
             );
-            let refreshed = sqlx::query(
-                r#"
-                UPDATE telegram_provider_write_commands
-                SET status = 'failed',
-                    result_payload = $3,
-                    last_error = $4,
-                    provider_observed_at = $2,
-                    provider_state = $5,
-                    reconciliation_status = 'mismatch',
-                    reconciled_at = $2,
-                    completed_at = NULL,
-                    locked_at = NULL,
-                    locked_by = NULL,
-                    next_attempt_at = NULL,
-                    dead_lettered_at = NULL,
-                    updated_at = $2
-                WHERE command_id = $1
-                RETURNING *
-                "#,
-            )
-            .bind(&command.command_id)
-            .bind(observed_at)
-            .bind(&result_payload)
-            .bind(mismatch_error)
-            .bind(&provider_state)
-            .fetch_one(pool)
-            .await
-            .map_err(TelegramError::from)?;
-            reconciled.push(row_to_telegram_provider_write_command(refreshed)?);
+            reconciled.push(
+                mark_command_mismatch(
+                    pool,
+                    &command.command_id,
+                    observed_at,
+                    provider_state,
+                    result_payload,
+                    mismatch_error,
+                )
+                .await?,
+            );
             continue;
         }
 
-        mark_command_reconciled(
-            pool,
-            &command.command_id,
-            observed_at,
-            dialog_boolean_reconciliation_payload(
-                provider_chat_id,
-                observed_via,
-                observed_state_key,
-                observed_state,
-                observed_state_key,
-                observed_state,
-                extra_provider_state_fields,
-            ),
-            dialog_boolean_reconciliation_payload(
-                provider_chat_id,
-                observed_via,
-                observed_state_key,
-                observed_state,
-                observed_state_key,
-                observed_state,
-                &[("provider_observed_at", json!(observed_at))],
-            ),
-        )
-        .await?;
-        let refreshed =
-            sqlx::query("SELECT * FROM telegram_provider_write_commands WHERE command_id = $1")
-                .bind(&command.command_id)
-                .fetch_one(pool)
-                .await
-                .map_err(TelegramError::from)?;
-        reconciled.push(row_to_telegram_provider_write_command(refreshed)?);
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                dialog_boolean_reconciliation_payload(
+                    provider_chat_id,
+                    observed_via,
+                    observed_state_key,
+                    observed_state,
+                    observed_state_key,
+                    observed_state,
+                    extra_provider_state_fields,
+                ),
+                dialog_boolean_reconciliation_payload(
+                    provider_chat_id,
+                    observed_via,
+                    observed_state_key,
+                    observed_state,
+                    observed_state_key,
+                    observed_state,
+                    &[("provider_observed_at", json!(observed_at))],
+                ),
+            )
+            .await?,
+        );
     }
     Ok(reconciled)
 }

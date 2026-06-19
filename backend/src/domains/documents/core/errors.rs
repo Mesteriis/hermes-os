@@ -5,6 +5,9 @@ pub enum DocumentImportError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 
+    #[error(transparent)]
+    ObservationStore(#[from] crate::platform::observations::ObservationStoreError),
+
     #[error("{0} must not be empty")]
     EmptyField(&'static str),
 

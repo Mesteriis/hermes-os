@@ -15,7 +15,7 @@ pub struct CalendarAccount {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CalendarAccountUpdate {
     pub account_name: Option<String>,
     pub email: Option<String>,
@@ -41,6 +41,7 @@ pub struct CalendarSource {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct CalendarEvent {
     pub event_id: String,
+    pub observation_id: String,
     pub source_event_id: Option<String>,
     pub account_id: Option<String>,
     pub source_id: Option<String>,
@@ -88,7 +89,7 @@ pub struct NewCalendarEvent {
     pub travel_buffer_minutes: Option<i32>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct CalendarEventUpdate {
     pub title: Option<String>,
     pub description: Option<String>,

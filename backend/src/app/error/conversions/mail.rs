@@ -2,6 +2,7 @@ use super::super::types::ApiError;
 use crate::domains::mail::accounts::EmailAccountSetupError;
 use crate::domains::mail::core::CommunicationIngestionError;
 use crate::domains::mail::messages::MessageProjectionError;
+use crate::domains::mail::service::MailCommandServiceError;
 use crate::domains::mail::storage::MailStorageError;
 use crate::workflows::email_intelligence::EmailIntelligenceError;
 
@@ -264,6 +265,36 @@ impl From<crate::domains::mail::attachment_search::AttachmentSearchError> for Ap
                 tracing::error!(error = %error, "attachment search operation failed");
                 ApiError::InvalidCommunicationQuery("attachment search operation failed")
             }
+        }
+    }
+}
+
+impl From<MailCommandServiceError> for ApiError {
+    fn from(error: MailCommandServiceError) -> Self {
+        match error {
+            MailCommandServiceError::ObservationCapture { operation, source } => {
+                tracing::error!(error = %source, operation, "mail command observation capture failed");
+                ApiError::InvalidCommunicationQuery("mail command observation capture failed")
+            }
+            MailCommandServiceError::InvalidRequest(message) => {
+                ApiError::InvalidCommunicationQuery(message)
+            }
+            MailCommandServiceError::Draft(inner) => ApiError::from(inner),
+            MailCommandServiceError::Folder(inner) => ApiError::from(inner),
+            MailCommandServiceError::SavedSearch(inner) => ApiError::from(inner),
+            MailCommandServiceError::Outbox(inner) => ApiError::from(inner),
+            MailCommandServiceError::MailStorage(inner) => ApiError::from(inner),
+            MailCommandServiceError::AttachmentScan(source) => {
+                tracing::warn!(error = %source, "attachment safety scan failed");
+                ApiError::InvalidCommunicationQuery("attachment safety scan failed")
+            }
+            MailCommandServiceError::ProviderSendStore(source) => {
+                tracing::error!(error = %source, "provider send observation persistence failed");
+                ApiError::InvalidCommunicationQuery("provider send observation persistence failed")
+            }
+            MailCommandServiceError::MessageProjection(inner) => ApiError::from(inner),
+            MailCommandServiceError::MailAiState(inner) => ApiError::from(inner),
+            MailCommandServiceError::MessageFlags(inner) => ApiError::from(inner),
         }
     }
 }

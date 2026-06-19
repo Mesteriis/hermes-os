@@ -42,6 +42,13 @@ pub(super) fn parts(error: DocumentProcessingError) -> ErrorParts {
             StatusCode::CONFLICT,
             "document processing retry command conflicts with existing event",
         ),
+        DocumentProcessingError::ObservationStore(error) => {
+            tracing::error!(error = %error, "document processing observation trail failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "document processing observation trail failed",
+            )
+        }
         _ => {
             tracing::error!(error = %error, "document processing store operation failed");
             (

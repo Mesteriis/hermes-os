@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
+use crate::platform::observations::ObservationStoreError;
 
 #[derive(Debug, Error)]
 pub enum DocumentProcessingError {
@@ -42,6 +43,9 @@ pub enum DocumentProcessingError {
 
     #[error(transparent)]
     EventStore(#[from] EventStoreError),
+
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

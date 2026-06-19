@@ -25,6 +25,8 @@ use super::realtime_events::{
 
 mod envelopes;
 mod projection;
+#[cfg(test)]
+mod tests;
 
 use envelopes::{
     append_and_broadcast, message_created_event, message_deleted_event, message_updated_event,

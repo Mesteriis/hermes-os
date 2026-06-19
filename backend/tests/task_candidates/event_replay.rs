@@ -26,10 +26,17 @@ async fn task_candidate_review_event_rebuilds_state_against_postgres() {
         .refresh_deterministic_candidates(100)
         .await
         .expect("refresh");
-    let task_candidate_id: String = sqlx::query_scalar(
-        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'message'",
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
     )
     .bind(&message_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("message observation id");
+    let task_candidate_id: String = sqlx::query_scalar(
+        "SELECT task_candidate_id FROM task_candidates WHERE source_id = $1 AND source_kind = 'observation'",
+    )
+    .bind(&message_observation_id)
     .fetch_one(&context.pool)
     .await
     .expect("candidate id");

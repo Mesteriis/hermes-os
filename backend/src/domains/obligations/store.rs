@@ -1,7 +1,15 @@
+use std::collections::HashSet;
+
+use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
-use sqlx::{Postgres, Transaction};
+use sqlx::{Postgres, Row, Transaction};
+
+use crate::workflows::review_mirror::sync_obligation_review_state_in_transaction;
 
 use super::errors::ObligationStoreError;
+use super::evidence::{
+    link_obligation_review_transition_in_transaction, link_obligation_support_in_transaction,
+};
 use super::graph_projection::project_obligation_graph_in_transaction;
 use super::ids::{evidence_id, obligation_id};
 use super::models::{
@@ -40,6 +48,7 @@ impl ObligationStore {
         obligation: &NewObligation,
         evidence: &[NewObligationEvidence],
     ) -> Result<Obligation, ObligationStoreError> {
+        validate_evidence_observations_exist(transaction, evidence).await?;
         let obligation_id = obligation_id(obligation);
         let row = sqlx::query(
             r#"
@@ -128,13 +137,15 @@ impl ObligationStore {
                     obligation_id,
                     source_kind,
                     source_id,
+                    observation_id,
                     quote,
                     confidence,
                     metadata
                 )
-                VALUES ($1, $2, $3, $4, $5, CAST($6 AS NUMERIC(5,4)), $7)
+                VALUES ($1, $2, $3, $4, $5, $6, CAST($7 AS NUMERIC(5,4)), $8)
                 ON CONFLICT (obligation_id, source_kind, source_id)
                 DO UPDATE SET
+                    observation_id = EXCLUDED.observation_id,
                     quote = EXCLUDED.quote,
                     confidence = EXCLUDED.confidence,
                     metadata = EXCLUDED.metadata
@@ -144,11 +155,26 @@ impl ObligationStore {
             .bind(&obligation_id)
             .bind(item.source_kind.as_str())
             .bind(&item.source_id)
+            .bind(item.observation_id.as_deref())
             .bind(&item.quote)
             .bind(item.confidence)
             .bind(&item.metadata)
             .execute(&mut **transaction)
             .await?;
+
+            if let Some(observation_id) = item.observation_id.as_deref() {
+                link_obligation_support_in_transaction(
+                    transaction,
+                    observation_id,
+                    obligation_id.clone(),
+                    item.confidence,
+                    json!({
+                        "source_kind": item.source_kind.as_str(),
+                        "source_id": item.source_id,
+                    }),
+                )
+                .await?;
+            }
         }
 
         project_obligation_graph_in_transaction(transaction, &stored, evidence).await?;
@@ -239,7 +265,19 @@ impl ObligationStore {
         obligation_id: &str,
         review_state: ObligationReviewState,
     ) -> Result<Obligation, ObligationStoreError> {
+        self.set_review_state_with_observation(obligation_id, review_state, None, None)
+            .await
+    }
+
+    pub async fn set_review_state_with_observation(
+        &self,
+        obligation_id: &str,
+        review_state: ObligationReviewState,
+        observation_id: Option<&str>,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<Obligation, ObligationStoreError> {
         validate_non_empty("obligation_id", obligation_id)?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             UPDATE obligations
@@ -267,10 +305,61 @@ impl ObligationStore {
         )
         .bind(review_state.as_str())
         .bind(obligation_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?
         .ok_or(ObligationStoreError::ObligationNotFound)?;
 
-        row_to_obligation(row)
+        let obligation = row_to_obligation(row)?;
+        sync_obligation_review_state_in_transaction(&mut transaction, &obligation).await?;
+        link_obligation_review_transition_in_transaction(
+            &mut transaction,
+            observation_id,
+            &obligation.obligation_id,
+            obligation.review_state,
+            metadata,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(obligation)
     }
+}
+
+async fn validate_evidence_observations_exist(
+    transaction: &mut Transaction<'_, Postgres>,
+    evidence: &[NewObligationEvidence],
+) -> Result<(), ObligationStoreError> {
+    let observation_ids: Vec<String> = evidence
+        .iter()
+        .filter_map(|item| item.observation_id.as_deref())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if observation_ids.is_empty() {
+        return Ok(());
+    }
+
+    let stored_observation_ids: HashSet<String> = sqlx::query_scalar::<_, String>(
+        r#"
+        SELECT observation_id
+        FROM observations
+        WHERE observation_id = ANY($1)
+        "#,
+    )
+    .bind(&observation_ids)
+    .fetch_all(&mut **transaction)
+    .await?
+    .into_iter()
+    .collect();
+
+    for observation_id in observation_ids {
+        if !stored_observation_ids.contains(&observation_id) {
+            return Err(ObligationStoreError::ObservationNotFound(observation_id));
+        }
+    }
+
+    Ok(())
 }

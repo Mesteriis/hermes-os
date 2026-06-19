@@ -1,5 +1,4 @@
 use super::support::*;
-
 // ── Person Analytics ────────────────────────────────────────────────────────
 
 pub(crate) async fn get_person_analytics(
@@ -133,6 +132,11 @@ pub(crate) async fn put_identity_candidate_review(
 ) -> Result<Json<PersonIdentityReviewApiResponse>, ApiError> {
     let actor_id = "hermes-frontend".to_string();
     let command = request.into_command(identity_candidate_id, actor_id)?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::person_identity_review_set(
@@ -141,8 +145,8 @@ pub(crate) async fn put_identity_candidate_review(
         ))
         .await?;
 
-    let result = person_identity_store(&state)?
-        .set_review_state(&command)
+    let result = crate::domains::persons::service::PersonCommandService::new(pool)
+        .review_identity_candidate_manual(&command)
         .await?;
 
     Ok(Json(result.into()))

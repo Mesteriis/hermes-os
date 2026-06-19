@@ -10,5 +10,5 @@ mod tests;
 
 pub use categories::EmailCategory;
 pub use errors::EmailIntelligenceError;
-pub use models::{EmailAnalysis, EmailSummaryContract};
+pub use models::{EmailAnalysis, EmailKnowledgeCandidate, EmailSummaryContract};
 pub use service::EmailIntelligenceService;

@@ -25,6 +25,19 @@ async fn task_candidate_refresh_creates_message_and_document_candidates_against_
         "Follow up: draft document",
     )
     .await;
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("message observation id");
+    let document_observation_id: String =
+        sqlx::query_scalar("SELECT observation_id FROM documents WHERE document_id = $1")
+            .bind(&document_id)
+            .fetch_one(&context.pool)
+            .await
+            .expect("document observation id");
 
     let refreshed = context
         .store
@@ -40,7 +53,7 @@ async fn task_candidate_refresh_creates_message_and_document_candidates_against_
         WHERE source_id = $1
         "#,
     )
-    .bind(&message_id)
+    .bind(&message_observation_id)
     .fetch_all(&context.pool)
     .await
     .expect("message candidate rows");
@@ -49,8 +62,24 @@ async fn task_candidate_refresh_creates_message_and_document_candidates_against_
         1,
         "should persist deterministic message candidate"
     );
-    assert_eq!(message_rows[0].1, "message");
+    assert_eq!(message_rows[0].1, "observation");
     assert_eq!(message_rows[0].2, "suggested");
+    let message_observation_id: Option<String> = sqlx::query_scalar(
+        r#"
+        SELECT observation_id
+        FROM task_candidates
+        WHERE source_id = $1
+          AND source_kind = 'observation'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("message candidate observation id");
+    assert!(
+        message_observation_id.is_some(),
+        "message candidates must carry canonical observation evidence"
+    );
 
     let document_rows: Vec<(String, String, String)> = sqlx::query_as(
         r#"
@@ -59,7 +88,7 @@ async fn task_candidate_refresh_creates_message_and_document_candidates_against_
         WHERE source_id = $1
         "#,
     )
-    .bind(&document_id)
+    .bind(&document_observation_id)
     .fetch_all(&context.pool)
     .await
     .expect("document candidate rows");
@@ -68,7 +97,7 @@ async fn task_candidate_refresh_creates_message_and_document_candidates_against_
         1,
         "should persist deterministic document candidate"
     );
-    assert_eq!(document_rows[0].1, "document");
+    assert_eq!(document_rows[0].1, "observation");
 }
 
 #[tokio::test]
@@ -95,16 +124,23 @@ async fn task_candidate_refresh_uses_obligation_engine_for_message_commitments_a
         .await
         .expect("refresh");
     assert!(refreshed >= 1);
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("message observation id");
 
     let rows: Vec<(String, String, Option<String>, f64, String)> = sqlx::query_as(
         r#"
         SELECT title, review_state, due_text, confidence, evidence_excerpt
         FROM task_candidates
         WHERE source_id = $1
-          AND source_kind = 'message'
+          AND source_kind = 'observation'
         "#,
     )
-    .bind(&message_id)
+    .bind(&message_observation_id)
     .fetch_all(&context.pool)
     .await
     .expect("message candidate rows");
@@ -158,17 +194,23 @@ async fn task_candidate_refresh_uses_obligation_engine_for_document_commitments_
         .await
         .expect("refresh");
     assert!(refreshed >= 1);
+    let document_observation_id: String =
+        sqlx::query_scalar("SELECT observation_id FROM documents WHERE document_id = $1")
+            .bind(&document_id)
+            .fetch_one(&context.pool)
+            .await
+            .expect("document observation id");
 
     let rows: Vec<(String, String, String, Option<String>, f64, String)> = sqlx::query_as(
         r#"
         SELECT title, review_state, candidate_kind, due_text, confidence, evidence_excerpt
         FROM task_candidates
         WHERE source_id = $1
-          AND source_kind = 'document'
+          AND source_kind = 'observation'
           AND candidate_kind = 'obligation_task'
         "#,
     )
-    .bind(&document_id)
+    .bind(&document_observation_id)
     .fetch_all(&context.pool)
     .await
     .expect("document obligation candidate rows");
@@ -218,6 +260,13 @@ async fn task_candidate_refresh_updates_existing_source_title_candidate_against_
         "Action: Review This Item",
     )
     .await;
+    let observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&context.pool)
+    .await
+    .expect("message observation id");
 
     sqlx::query(
         r#"
@@ -225,6 +274,7 @@ async fn task_candidate_refresh_updates_existing_source_title_candidate_against_
             task_candidate_id,
             source_kind,
             source_id,
+            observation_id,
             candidate_kind,
             candidate_metadata,
             title,
@@ -232,11 +282,12 @@ async fn task_candidate_refresh_updates_existing_source_title_candidate_against_
             review_state,
             evidence_excerpt
         )
-        VALUES ($1, 'message', $2, 'task', '{}'::jsonb, $3, 0.5, 'suggested', $4)
+        VALUES ($1, 'observation', $2, $3, 'task', '{}'::jsonb, $4, 0.5, 'suggested', $5)
         "#,
     )
     .bind(format!("task_candidate:v1:legacy-source-title:{suffix}"))
-    .bind(&message_id)
+    .bind(&observation_id)
+    .bind(&observation_id)
     .bind("action: review this item")
     .bind("legacy evidence")
     .execute(&context.pool)
@@ -254,10 +305,10 @@ async fn task_candidate_refresh_updates_existing_source_title_candidate_against_
         r#"
         SELECT task_candidate_id, title, evidence_excerpt
         FROM task_candidates
-        WHERE source_kind = 'message' AND source_id = $1
+        WHERE source_kind = 'observation' AND source_id = $1
         "#,
     )
-    .bind(&message_id)
+    .bind(&observation_id)
     .fetch_all(&context.pool)
     .await
     .expect("candidate rows");

@@ -6,7 +6,7 @@ use sqlx::postgres::PgPool;
 
 use crate::domains::mail::core::CommunicationIngestionStore;
 use crate::domains::mail::sync::plan_email_sync;
-use crate::vault::HostVault;
+use crate::vault::{CommunicationProviderAccountStore, HostVault};
 
 use super::DEFAULT_GMAIL_API_BASE_URL;
 use super::errors::MailSyncError;
@@ -62,8 +62,8 @@ impl MailBackgroundSyncService {
     ) -> Result<MailSyncRunResponse, MailSyncError> {
         let store = MailSyncStore::new(self.pool.clone());
         let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let account = communication_store
-            .provider_account(account_id)
+        let account = CommunicationProviderAccountStore::new(self.pool.clone())
+            .get(account_id)
             .await?
             .ok_or(MailSyncError::AccountNotFound)?;
         let settings = store.settings_for_account(account_id).await?;
@@ -202,8 +202,8 @@ impl MailBackgroundSyncService {
         account_id: &str,
     ) -> Result<MailSyncRunResponse, MailSyncError> {
         let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let account = communication_store
-            .provider_account(account_id)
+        let account = CommunicationProviderAccountStore::new(self.pool.clone())
+            .get(account_id)
             .await?
             .ok_or(MailSyncError::AccountNotFound)?;
         if let Ok(plan) = plan_email_sync(&account) {

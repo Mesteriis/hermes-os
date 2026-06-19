@@ -1,5 +1,4 @@
 use super::support::*;
-
 // ── Person Enrichment ──────────────────────────────────────────────────────
 
 #[derive(Serialize)]
@@ -25,33 +24,31 @@ pub(crate) async fn get_person_enrichment(
 
 pub(crate) async fn post_person_enrichment_apply(
     State(state): State<AppState>,
-    Path((_person_id, result_id)): Path<(String, String)>,
+    Path((person_id, result_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    EnrichmentResultStore::new(pool)
-        .apply(&result_id)
-        .await
-        .map_err(ApiError::from)?;
+    crate::domains::persons::service::PersonCommandService::new(pool)
+        .apply_enrichment_manual(&person_id, &result_id)
+        .await?;
     Ok(Json(json!({"applied": true})))
 }
 
 pub(crate) async fn post_person_enrichment_reject(
     State(state): State<AppState>,
-    Path((_person_id, result_id)): Path<(String, String)>,
+    Path((person_id, result_id)): Path<(String, String)>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    EnrichmentResultStore::new(pool)
-        .reject(&result_id)
-        .await
-        .map_err(ApiError::from)?;
+    crate::domains::persons::service::PersonCommandService::new(pool)
+        .reject_enrichment_manual(&person_id, &result_id)
+        .await?;
     Ok(Json(json!({"rejected": true})))
 }
 

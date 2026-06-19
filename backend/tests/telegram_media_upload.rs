@@ -52,6 +52,43 @@ async fn telegram_media_upload_imports_attachment_and_queues_provider_command() 
         .expect("attachment id")
         .to_owned();
     let blob_id = imported["blob_id"].as_str().expect("blob id").to_owned();
+    let attachment_observation = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code,
+               observation.origin_kind,
+               observation.payload,
+               link.relationship_kind
+        FROM observations observation
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        JOIN observation_links link
+          ON link.observation_id = observation.observation_id
+        WHERE link.domain = 'communications'
+          AND link.entity_kind = 'attachment_import'
+          AND link.entity_id = $1
+        "#,
+    )
+    .bind(&attachment_id)
+    .fetch_one(&pool)
+    .await
+    .expect("attachment import observation");
+    assert_eq!(
+        attachment_observation.get::<String, _>("kind_code"),
+        "COMMUNICATION_ATTACHMENT"
+    );
+    assert_eq!(
+        attachment_observation.get::<String, _>("origin_kind"),
+        "manual"
+    );
+    assert_eq!(
+        attachment_observation.get::<String, _>("relationship_kind"),
+        "attachment_import"
+    );
+    let attachment_payload = attachment_observation.get::<Value, _>("payload");
+    assert_eq!(attachment_payload["attachment_id"], attachment_id);
+    assert_eq!(attachment_payload["channel_kind"], "telegram_user");
+    assert_eq!(attachment_payload["content_type"], "text/plain");
+    assert_eq!(attachment_payload["filename"], "upload-note.txt");
 
     let command_id = format!("tcmd_media_upload_{suffix}");
     let upload_response = app

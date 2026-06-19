@@ -5,11 +5,12 @@ use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
-    RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
+    RelationshipStore,
 };
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
-use super::OrgCoreError;
+use super::{OrgCoreError, link_entity_in_transaction};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrgContactLink {
@@ -70,12 +71,26 @@ impl OrgContactLinkStore {
         role: Option<&str>,
         dept: Option<&str>,
     ) -> Result<OrgContactLink, OrgCoreError> {
+        self.link_with_observation(org_id, person_id, role, dept, None, None)
+            .await
+    }
+
+    pub async fn link_with_observation(
+        &self,
+        org_id: &str,
+        person_id: &str,
+        role: Option<&str>,
+        dept: Option<&str>,
+        source: Option<&str>,
+        observation_id: Option<&str>,
+    ) -> Result<OrgContactLink, OrgCoreError> {
         let mut transaction = self.pool.begin().await?;
-        let row = sqlx::query("INSERT INTO organization_contact_links (organization_id, person_id, role, department) VALUES ($1,$2,$3,$4) ON CONFLICT (organization_id, person_id, role) DO UPDATE SET department=EXCLUDED.department, updated_at=now() RETURNING id::text, organization_id, person_id, role, department, source, confidence::float8 AS confidence, valid_from, valid_to, is_primary, created_at, updated_at")
+        let row = sqlx::query("INSERT INTO organization_contact_links (organization_id, person_id, role, department, source) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (organization_id, person_id, role) DO UPDATE SET department=EXCLUDED.department, source=EXCLUDED.source, updated_at=now() RETURNING id::text, organization_id, person_id, role, department, source, confidence::float8 AS confidence, valid_from, valid_to, is_primary, created_at, updated_at")
             .bind(org_id)
             .bind(person_id)
             .bind(role)
             .bind(dept)
+            .bind(source.unwrap_or("manual"))
             .fetch_one(&mut *transaction)
             .await?;
         let link = OrgContactLink {
@@ -93,15 +108,102 @@ impl OrgContactLinkStore {
             updated_at: row.try_get("updated_at")?,
         };
 
-        Self::materialize_relationship_in_transaction(&mut transaction, &link).await?;
+        if let Some(observation_id) = observation_id {
+            link_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "contact_link",
+                &link.id,
+                json!({
+                    "organization_id": org_id,
+                    "person_id": link.person_id,
+                    "role": link.role,
+                    "department": link.department,
+                }),
+            )
+            .await?;
+        }
+
+        Self::materialize_relationship_in_transaction(&mut transaction, &link, observation_id)
+            .await?;
         transaction.commit().await?;
 
         Ok(link)
     }
 
+    pub async fn link_email_participant_with_observation(
+        &self,
+        org_id: &str,
+        person_id: &str,
+        observation_id: &str,
+    ) -> Result<bool, OrgCoreError> {
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
+            r#"
+            INSERT INTO organization_contact_links (
+                organization_id,
+                person_id,
+                role,
+                source,
+                confidence
+            )
+            VALUES ($1, $2, 'email_participant', 'email_sync', 1.0)
+            ON CONFLICT (organization_id, person_id, role)
+            DO UPDATE SET
+                source = EXCLUDED.source,
+                confidence = EXCLUDED.confidence,
+                updated_at = now()
+            RETURNING
+                id::text,
+                organization_id,
+                person_id,
+                role,
+                department,
+                source,
+                confidence::float8 AS confidence,
+                valid_from,
+                valid_to,
+                is_primary,
+                created_at,
+                updated_at,
+                (xmax = 0) AS inserted
+            "#,
+        )
+        .bind(org_id)
+        .bind(person_id)
+        .fetch_one(&mut *transaction)
+        .await?;
+        let link = OrgContactLink {
+            id: row.try_get("id")?,
+            organization_id: row.try_get("organization_id")?,
+            person_id: row.try_get("person_id")?,
+            role: row.try_get("role")?,
+            department: row.try_get("department")?,
+            source: row.try_get("source")?,
+            confidence: row.try_get("confidence")?,
+            valid_from: row.try_get("valid_from")?,
+            valid_to: row.try_get("valid_to")?,
+            is_primary: row.try_get("is_primary")?,
+            created_at: row.try_get("created_at")?,
+            updated_at: row.try_get("updated_at")?,
+        };
+        let inserted: bool = row.try_get("inserted")?;
+
+        Self::materialize_relationship_in_transaction(
+            &mut transaction,
+            &link,
+            Some(observation_id),
+        )
+        .await?;
+        transaction.commit().await?;
+
+        Ok(inserted)
+    }
+
     async fn materialize_relationship_in_transaction(
         transaction: &mut Transaction<'_, Postgres>,
         link: &OrgContactLink,
+        observation_id: Option<&str>,
     ) -> Result<(), OrgCoreError> {
         let relationship = NewRelationship {
             source_entity_kind: RelationshipEntityKind::Persona,
@@ -124,21 +226,50 @@ impl OrgContactLinkStore {
                 "is_primary": link.is_primary
             }),
         };
-        let evidence = NewRelationshipEvidence::new(
-            RelationshipEvidenceSourceKind::RawRecord,
-            link.id.clone(),
-        )
-        .excerpt(
-            "Persona is linked to organization through compatibility organization contact data.",
-        )
-        .metadata(json!({
-            "compatibility_table": "organization_contact_links",
-            "organization_id": link.organization_id,
-            "person_id": link.person_id,
-            "role": link.role,
-            "department": link.department,
-            "source": link.source
-        }));
+        let observation_id = match observation_id {
+            Some(observation_id) => observation_id.to_owned(),
+            None => {
+                ObservationStore::capture_in_transaction(
+                    transaction,
+                    &NewObservation::new(
+                        "ORGANIZATION_RECORD_MUTATION",
+                        ObservationOriginKind::LocalRuntime,
+                        Utc::now(),
+                        json!({
+                            "component": "organization_contact_links",
+                            "organization_id": link.organization_id,
+                            "person_id": link.person_id,
+                            "role": link.role,
+                            "department": link.department,
+                            "source": link.source,
+                            "is_primary": link.is_primary,
+                        }),
+                        format!(
+                            "organization-contact-link://{}/{}",
+                            link.organization_id, link.person_id
+                        ),
+                    )
+                    .provenance(json!({
+                        "pipeline": "organization_contact_links",
+                        "link_id": link.id,
+                    })),
+                )
+                .await?
+                .observation_id
+            }
+        };
+        let evidence = NewRelationshipEvidence::observation(observation_id)
+            .excerpt(
+                "Persona is linked to organization through compatibility organization contact data.",
+            )
+            .metadata(json!({
+                "compatibility_table": "organization_contact_links",
+                "organization_id": link.organization_id,
+                "person_id": link.person_id,
+                "role": link.role,
+                "department": link.department,
+                "source": link.source
+            }));
 
         RelationshipStore::upsert_with_evidence_in_transaction(
             transaction,

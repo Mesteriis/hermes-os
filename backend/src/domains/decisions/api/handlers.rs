@@ -1,11 +1,13 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
+use serde_json::json;
 
+use super::super::{
+    Decision, DecisionCommandService, DecisionEntityKind, DecisionReviewState, DecisionStore,
+};
+use super::models::{DecisionListQuery, DecisionListResponse, DecisionReviewApiRequest};
 use crate::app::{ApiError, AppState};
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
-
-use super::super::{Decision, DecisionEntityKind, DecisionReviewState, DecisionStore};
-use super::models::{DecisionListQuery, DecisionListResponse, DecisionReviewApiRequest};
 
 const DECISION_API_ACTOR_ID: &str = "hermes-frontend";
 const DEFAULT_DECISION_LIMIT: i64 = 50;
@@ -56,7 +58,6 @@ pub(crate) async fn put_v1_decision_review(
 ) -> Result<Json<Decision>, ApiError> {
     let decision_id = validate_required_query_value(Some(&decision_id))?;
     let review_state = parse_review_state(&request.review_state)?;
-
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::decision_review_set(
             DECISION_API_ACTOR_ID,
@@ -64,8 +65,13 @@ pub(crate) async fn put_v1_decision_review(
         ))
         .await?;
 
-    let decision = decision_store(&state)?
-        .set_review_state(&decision_id, review_state)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let decision = DecisionCommandService::new(pool)
+        .review_manual(&decision_id, review_state)
         .await?;
 
     Ok(Json(decision))

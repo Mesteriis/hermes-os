@@ -72,6 +72,7 @@ mod tests {
         ProjectedMessage {
             message_id: "m:1".into(),
             raw_record_id: "r:1".into(),
+            observation_id: "observation:1".into(),
             account_id: "personal@ex.com".into(),
             provider_record_id: "p:1".into(),
             subject: subject.into(),

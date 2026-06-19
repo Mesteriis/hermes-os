@@ -4,9 +4,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
+use testkit::factories::contact::ContactFactory;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::{build_router, build_router_with_database};
+use hermes_hub_backend::domains::organizations::enrichment::OrgEnrichmentStore;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
@@ -242,6 +245,60 @@ org_test!(orgs_dossier, "/api/v1/organizations/{}/dossier");
 org_test!(orgs_brief, "/api/v1/organizations/{}/brief");
 org_test!(orgs_context_pack, "/api/v1/organizations/{}/context-pack");
 
+#[tokio::test]
+async fn orgs_enrichment_apply_captures_observation_against_postgres() {
+    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skip");
+        return;
+    };
+    let s = uid();
+    let a = router(&db).await;
+    let oid = mkorg(&a, s).await;
+    let database = Database::connect(Some(&db)).await.expect("db");
+    let pool = database.pool().expect("configured pool").clone();
+    let enrichment = OrgEnrichmentStore::new(pool.clone())
+        .upsert(
+            &oid,
+            "crunchbase",
+            json!({
+                "fact": "Raised seed round"
+            }),
+            0.81,
+        )
+        .await
+        .expect("create org enrichment result");
+
+    let response = a
+        .oneshot(post(
+            &format!(
+                "/api/v1/organizations/{}/enrichment/{}/apply",
+                enc(&oid),
+                enc(&enrichment.id)
+            ),
+            json!({}),
+        ))
+        .await
+        .expect("response");
+    assert!(
+        response.status().is_success(),
+        "apply={}",
+        response.status()
+    );
+
+    let link_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM observation_links
+         WHERE domain = 'organizations'
+           AND entity_kind = 'organization_enrichment_result'
+           AND entity_id = $1
+           AND relationship_kind = 'review_transition'",
+    )
+    .bind(&enrichment.id)
+    .fetch_one(&pool)
+    .await
+    .expect("organization enrichment observation link count");
+    assert_eq!(link_count, 1);
+}
+
 // ── Identity / Alias / Department creation ─────────────────────────────────
 macro_rules! org_post_test {
     ($name:ident, $path:expr, $body:expr) => {
@@ -302,4 +359,338 @@ async fn orgs_watchlist_toggle() {
         .await
         .expect("r");
     assert!(!r.status().is_server_error(), "watchlist={}", r.status());
+}
+
+#[tokio::test]
+async fn organization_manual_entrypoints_capture_observations_against_postgres() {
+    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
+        eprintln!("skip");
+        return;
+    };
+    let app = router(&db).await;
+    let suffix = uid();
+    let oid = mkorg(&app, suffix).await;
+    let pool = Database::connect(Some(&db))
+        .await
+        .expect("db")
+        .pool()
+        .expect("pool")
+        .clone();
+
+    let create_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'organizations'
+           AND entity_kind = 'organization'
+           AND entity_id = $1
+           AND metadata ->> 'action' = 'create'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&oid)
+    .fetch_one(&pool)
+    .await
+    .expect("organization create observation link");
+
+    let identity_response = app
+        .clone()
+        .oneshot(post(
+            &format!("/api/v1/organizations/{}/identities", enc(&oid)),
+            json!({
+                "identity_type": "email_domain",
+                "identity_value": format!("org-{suffix}.example.com"),
+                "source": "manual"
+            }),
+        ))
+        .await
+        .expect("identity response");
+    assert_eq!(identity_response.status(), StatusCode::OK);
+    let identity_id = jb(identity_response).await["id"]
+        .as_str()
+        .expect("identity id")
+        .to_owned();
+    let identity_source: String =
+        sqlx::query_scalar("SELECT source FROM organization_identities WHERE id::text = $1")
+            .bind(&identity_id)
+            .fetch_one(&pool)
+            .await
+            .expect("identity source");
+    assert!(identity_source.starts_with("observation:"));
+    let identity_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'organizations'
+           AND entity_kind = 'identity'
+           AND entity_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&identity_id)
+    .fetch_one(&pool)
+    .await
+    .expect("identity observation link");
+
+    let alias_response = app
+        .clone()
+        .oneshot(post(
+            &format!("/api/v1/organizations/{}/aliases", enc(&oid)),
+            json!({
+                "name": format!("Alias {suffix}"),
+                "alias_type": "former_name",
+                "source": "manual"
+            }),
+        ))
+        .await
+        .expect("alias response");
+    assert_eq!(alias_response.status(), StatusCode::OK);
+    let alias_id = jb(alias_response).await["id"]
+        .as_str()
+        .expect("alias id")
+        .to_owned();
+    let alias_source: String =
+        sqlx::query_scalar("SELECT source FROM organization_aliases WHERE id::text = $1")
+            .bind(&alias_id)
+            .fetch_one(&pool)
+            .await
+            .expect("alias source");
+    assert!(alias_source.starts_with("observation:"));
+    let alias_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'organizations'
+           AND entity_kind = 'alias'
+           AND entity_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&alias_id)
+    .fetch_one(&pool)
+    .await
+    .expect("alias observation link");
+
+    let department_response = app
+        .clone()
+        .oneshot(post(
+            &format!("/api/v1/organizations/{}/departments", enc(&oid)),
+            json!({
+                "name": format!("Engineering {suffix}"),
+                "description": "Core platform"
+            }),
+        ))
+        .await
+        .expect("department response");
+    assert_eq!(department_response.status(), StatusCode::OK);
+    let department_id = jb(department_response).await["id"]
+        .as_str()
+        .expect("department id")
+        .to_owned();
+    let department_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'organizations'
+           AND entity_kind = 'department'
+           AND entity_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&department_id)
+    .fetch_one(&pool)
+    .await
+    .expect("department observation link");
+
+    let contact_person_id = ContactFactory::new(&pool)
+        .with_person_id(format!("person:v1:organization-contact:{suffix}"))
+        .with_name(format!("Organization Contact {suffix}"))
+        .with_email(format!("organization-contact-{suffix}@example.com"))
+        .create()
+        .await
+        .expect("create contact person");
+
+    let contact_response = app
+        .clone()
+        .oneshot(post(
+            &format!("/api/v1/organizations/{}/contacts", enc(&oid)),
+            json!({
+                "person_id": contact_person_id,
+                "role": "cto",
+                "department": "engineering",
+                "source": "manual"
+            }),
+        ))
+        .await
+        .expect("contact response");
+    assert_eq!(contact_response.status(), StatusCode::OK);
+    let contact_id = jb(contact_response).await["id"]
+        .as_str()
+        .expect("contact id")
+        .to_owned();
+    let contact_source: String =
+        sqlx::query_scalar("SELECT source FROM organization_contact_links WHERE id::text = $1")
+            .bind(&contact_id)
+            .fetch_one(&pool)
+            .await
+            .expect("contact source");
+    assert!(contact_source.starts_with("observation:"));
+    let contact_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'organizations'
+           AND entity_kind = 'contact_link'
+           AND entity_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&contact_id)
+    .fetch_one(&pool)
+    .await
+    .expect("contact observation link");
+
+    let update_response = app
+        .clone()
+        .oneshot(put(
+            &format!("/api/v1/organizations/{}", enc(&oid)),
+            json!({
+                "display_name": format!("Updated Org {suffix}"),
+                "description": "Observation-backed update"
+            }),
+        ))
+        .await
+        .expect("update response");
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let update_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'organizations'
+           AND entity_kind = 'organization'
+           AND entity_id = $1
+           AND metadata ->> 'action' = 'update'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&oid)
+    .fetch_one(&pool)
+    .await
+    .expect("organization update observation link");
+
+    let watchlist_response = app
+        .clone()
+        .oneshot(post(
+            &format!("/api/v1/organizations/{}/watchlist", enc(&oid)),
+            json!({}),
+        ))
+        .await
+        .expect("watchlist response");
+    assert_eq!(watchlist_response.status(), StatusCode::OK);
+    let watchlist_source: String = sqlx::query_scalar(
+        "SELECT source FROM organization_preferences WHERE organization_id = $1 AND preference_type = 'ui:watchlist'",
+    )
+    .bind(&oid)
+    .fetch_one(&pool)
+    .await
+    .expect("watchlist source");
+    assert!(watchlist_source.starts_with("observation:"));
+    let watchlist_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'organizations'
+           AND entity_kind = 'watchlist_toggle'
+           AND entity_id = $1
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&oid)
+    .fetch_one(&pool)
+    .await
+    .expect("watchlist observation link");
+
+    let archive_response = app
+        .oneshot(post(
+            &format!("/api/v1/organizations/{}/archive", enc(&oid)),
+            json!({}),
+        ))
+        .await
+        .expect("archive response");
+    assert_eq!(archive_response.status(), StatusCode::OK);
+    let archive_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id
+         FROM observation_links
+         WHERE domain = 'organizations'
+           AND entity_kind = 'organization'
+           AND entity_id = $1
+           AND metadata ->> 'action' = 'archive'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&oid)
+    .fetch_one(&pool)
+    .await
+    .expect("organization archive observation link");
+
+    for observation_id in [
+        create_observation_id.clone(),
+        identity_observation_id.clone(),
+        alias_observation_id.clone(),
+        department_observation_id.clone(),
+        contact_observation_id.clone(),
+        update_observation_id.clone(),
+        watchlist_observation_id.clone(),
+        archive_observation_id.clone(),
+    ] {
+        let row = sqlx::query(
+            "SELECT observation.observation_id, observation.origin_kind, kind.code AS kind_code
+             FROM observations observation
+             JOIN observation_kind_definitions kind
+               ON kind.kind_definition_id = observation.kind_definition_id
+             WHERE observation.observation_id = $1",
+        )
+        .bind(&observation_id)
+        .fetch_one(&pool)
+        .await
+        .expect("stored observation");
+        assert_eq!(
+            row.try_get::<String, _>("origin_kind")
+                .expect("origin kind"),
+            "manual"
+        );
+    }
+
+    for observation_id in [
+        create_observation_id,
+        watchlist_observation_id,
+        update_observation_id,
+        archive_observation_id,
+    ] {
+        let kind_code: String = sqlx::query_scalar(
+            "SELECT kind.code AS kind_code
+                 FROM observations observation
+                 JOIN observation_kind_definitions kind
+                   ON kind.kind_definition_id = observation.kind_definition_id
+                 WHERE observation.observation_id = $1",
+        )
+        .bind(&observation_id)
+        .fetch_one(&pool)
+        .await
+        .expect("organization mutation kind code");
+        assert_eq!(kind_code, "ORGANIZATION_MUTATION");
+    }
+
+    for observation_id in [
+        identity_observation_id,
+        alias_observation_id,
+        department_observation_id,
+        contact_observation_id,
+    ] {
+        let kind_code: String = sqlx::query_scalar(
+            "SELECT kind.code AS kind_code
+                 FROM observations observation
+                 JOIN observation_kind_definitions kind
+                   ON kind.kind_definition_id = observation.kind_definition_id
+                 WHERE observation.observation_id = $1",
+        )
+        .bind(&observation_id)
+        .fetch_one(&pool)
+        .await
+        .expect("organization record mutation kind code");
+        assert_eq!(kind_code, "ORGANIZATION_RECORD_MUTATION");
+    }
 }

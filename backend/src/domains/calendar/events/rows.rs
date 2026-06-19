@@ -6,6 +6,7 @@ use super::models::CalendarEvent;
 pub(super) fn row_to_event(row: PgRow) -> Result<CalendarEvent, sqlx::Error> {
     Ok(CalendarEvent {
         event_id: row.try_get("event_id")?,
+        observation_id: row.try_get("observation_id")?,
         source_event_id: row.try_get("source_event_id")?,
         account_id: row.try_get("account_id")?,
         source_id: row.try_get("source_id")?,

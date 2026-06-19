@@ -16,7 +16,7 @@ pub(crate) async fn get_task_providers(
     State(state): State<AppState>,
 ) -> Result<Json<TaskProvidersResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = TaskProviderStore::new(pool)
+    let items = crate::vault::TaskProviderStore::new(pool)
         .list()
         .await
         .map_err(ApiError::from)?;
@@ -34,7 +34,7 @@ pub(crate) async fn post_task_provider(
     Json(req): Json<NewTaskProviderReq>,
 ) -> Result<Json<TaskProviderAccount>, ApiError> {
     let pool = database_pool(&state)?;
-    let provider = TaskProviderStore::new(pool)
+    let provider = crate::vault::TaskProviderStore::new(pool)
         .create(&req.provider, &req.account_name)
         .await
         .map_err(ApiError::from)?;

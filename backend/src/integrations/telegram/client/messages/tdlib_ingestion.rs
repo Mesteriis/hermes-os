@@ -1,4 +1,3 @@
-use crate::domains::mail::core::CommunicationIngestionStore;
 use crate::integrations::telegram::tdjson::TelegramTdlibMessageSnapshot;
 
 use super::super::errors::TelegramError;
@@ -12,10 +11,7 @@ impl TelegramStore {
         snapshot: &TelegramTdlibMessageSnapshot,
         import_batch_id: &str,
     ) -> Result<TelegramMessageIngestResult, TelegramError> {
-        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let provider_account = self
-            .telegram_provider_account(&communication_store, account_id)
-            .await?;
+        let provider_account = self.telegram_provider_account(account_id).await?;
         let existing_chat = self
             .telegram_chat(&provider_account.account_id, &snapshot.provider_chat_id)
             .await?;

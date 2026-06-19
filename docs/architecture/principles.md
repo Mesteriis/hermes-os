@@ -46,7 +46,7 @@ Boundaries:
 
 - AI summaries are not memory until accepted under domain rules;
 - search indexes and embeddings are derived;
-- provider projections do not replace source records.
+- provider projections do not replace canonical observations.
 
 ### 3. Context First
 

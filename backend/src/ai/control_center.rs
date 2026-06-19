@@ -1,6 +1,7 @@
 mod availability;
 mod catalog;
 mod errors;
+mod evidence;
 mod models;
 mod presets;
 mod prompts;

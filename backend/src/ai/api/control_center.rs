@@ -173,12 +173,13 @@ pub(crate) async fn post_ai_prompt_version(
 
 pub(crate) async fn post_ai_prompt_activate(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(prompt_id): Path<String>,
     Json(request): Json<AiPromptActivateRequest>,
 ) -> Result<Json<AiPromptTemplate>, ApiError> {
     Ok(Json(
         ai_control_center_store(&state)?
-            .activate_prompt_version(&prompt_id, &request)
+            .activate_prompt_version(&prompt_id, &request, &request_actor_id(&headers))
             .await?,
     ))
 }

@@ -24,6 +24,7 @@ use crate::domains::persons::analytics::{AnalyticsError, PersonAnalyticsService}
 use crate::domains::persons::enrichment_engine::{EnrichmentEngineError, EnrichmentResultStore};
 use crate::domains::persons::expertise::{PersonExpertiseError, PersonExpertiseStore};
 use crate::domains::persons::export::{ExportError, ExportFormat, PersonExportService};
+use crate::domains::persons::health::{PersonHealthError, PersonHealthStore};
 use crate::domains::persons::investigator::{InvestigatorError, PersonInvestigator};
 use crate::engines::automation::{
     AutomationError, AutomationPolicy, AutomationStore, AutomationTemplate, NewAutomationPolicy,
@@ -37,8 +38,6 @@ use crate::platform::calls::{
 };
 use crate::platform::capabilities::{CapabilityActionClass, CapabilityDecision};
 use crate::platform::config::AppConfig;
-
-use crate::domains::persons::health::{PersonHealthError, PersonHealthStore};
 
 use crate::domains::persons::trust::{PersonPromiseStore, PersonRiskStore, PersonTrustError};
 
@@ -137,6 +136,7 @@ use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
 use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
+use crate::workflows::review_mirror::ensure_project_link_candidate_review_item;
 
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::*;
@@ -172,10 +172,14 @@ pub(crate) async fn get_project_link_candidates(
 
     let project_store = project_store(&state)?;
     let review_store = project_link_review_store(&state)?;
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
     let mut candidates = Vec::new();
 
     for message in project_store.matching_project_messages(&project_id).await? {
         let graph_node_id = node_id(GraphNodeKind::Message, &message.message_id);
+        let title = text_preview(&message.subject, 120);
         let sender_excerpt = text_preview(&message.sender, 140);
         let review_state = review_store
             .explicit_review(
@@ -187,13 +191,28 @@ pub(crate) async fn get_project_link_candidates(
             .map(|review| review.review_state)
             .unwrap_or(ProjectLinkReviewState::Suggested);
         let occurred_at = message.occurred_at.unwrap_or(message.projected_at);
+        if review_state == ProjectLinkReviewState::Suggested {
+            ensure_project_link_candidate_review_item(
+                pool,
+                &project_id,
+                ProjectLinkTargetKind::Message,
+                &message.message_id,
+                &title,
+                &sender_excerpt,
+                0.72,
+                &message.observation_id,
+                Some(&graph_node_id),
+            )
+            .await
+            .map_err(ProjectLinkReviewError::from)?;
+        }
 
         candidates.push(ProjectLinkCandidate {
             project_id: project_id.clone(),
             target_kind: ProjectLinkTargetKind::Message.as_str().to_owned(),
             target_id: message.message_id,
             graph_node_id,
-            title: text_preview(&message.subject, 120),
+            title,
             subtitle: message.sender,
             source_label: message.account_id,
             occurred_at,
@@ -217,6 +236,21 @@ pub(crate) async fn get_project_link_candidates(
             .await?
             .map(|review| review.review_state)
             .unwrap_or(ProjectLinkReviewState::Suggested);
+        if review_state == ProjectLinkReviewState::Suggested {
+            ensure_project_link_candidate_review_item(
+                pool,
+                &project_id,
+                ProjectLinkTargetKind::Document,
+                &document.document_id,
+                &title,
+                &title,
+                0.72,
+                &document.observation_id,
+                Some(&graph_node_id),
+            )
+            .await
+            .map_err(ProjectLinkReviewError::from)?;
+        }
 
         candidates.push(ProjectLinkCandidate {
             project_id: project_id.clone(),
@@ -255,8 +289,14 @@ pub(crate) async fn put_project_link_review(
         ))
         .await?;
 
-    let result = project_link_review_store(&state)?
-        .set_review_state(&command)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+
+    let result = crate::domains::projects::link_reviews::ProjectLinkReviewService::new(pool)
+        .review_manual(&command)
         .await?;
 
     Ok(Json(result.into()))

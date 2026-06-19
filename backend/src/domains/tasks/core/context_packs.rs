@@ -1,10 +1,13 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use sqlx::Row;
+use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 
 use super::errors::TaskCoreError;
+use crate::engines::context_packs::{
+    ContextPack, ContextPackKind, ContextPackSourceKind, ContextPackStore, NewContextPack,
+    NewContextPackSource,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct TaskContextPack {
@@ -33,38 +36,11 @@ impl TaskContextPackStore {
     }
 
     pub async fn get(&self, task_id: &str) -> Result<Option<TaskContextPack>, TaskCoreError> {
-        let row = sqlx::query(
-            r#"
-            SELECT id::text, task_id, summary, source_summary, open_questions,
-                   blockers, risks, suggested_next_action, generated_at, model,
-                   created_at, updated_at
-            FROM task_context_packs
-            WHERE task_id = $1
-            ORDER BY generated_at DESC
-            LIMIT 1
-            "#,
-        )
-        .bind(task_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        row.map(|row| {
-            Ok(TaskContextPack {
-                id: row.try_get("id")?,
-                task_id: row.try_get("task_id")?,
-                summary: row.try_get("summary")?,
-                source_summary: row.try_get("source_summary")?,
-                open_questions: row.try_get("open_questions")?,
-                blockers: row.try_get("blockers")?,
-                risks: row.try_get("risks")?,
-                suggested_next_action: row.try_get("suggested_next_action")?,
-                generated_at: row.try_get("generated_at")?,
-                model: row.try_get("model")?,
-                created_at: row.try_get("created_at")?,
-                updated_at: row.try_get("updated_at")?,
-            })
-        })
-        .transpose()
+        ContextPackStore::new(self.pool.clone())
+            .get(ContextPackKind::Task, task_id)
+            .await?
+            .map(|pack| task_context_pack_from_engine(pack, task_id))
+            .transpose()
     }
 
     pub async fn upsert(
@@ -76,39 +52,60 @@ impl TaskContextPackStore {
         risks: Value,
         next_action: Option<&str>,
     ) -> Result<TaskContextPack, TaskCoreError> {
-        let row = sqlx::query(
-            r#"
-            INSERT INTO task_context_packs (
-                task_id, summary, open_questions, blockers, risks, suggested_next_action
+        let stored = ContextPackStore::new(self.pool.clone())
+            .upsert_with_sources(
+                &NewContextPack::new(
+                    ContextPackKind::Task,
+                    task_id,
+                    json!({
+                        "summary": summary,
+                        "source_summary": summary,
+                        "open_questions": questions,
+                        "blockers": blockers,
+                        "risks": risks,
+                        "suggested_next_action": next_action,
+                    }),
+                )
+                .metadata(json!({
+                    "owner": "domains.tasks.core.context_packs",
+                })),
+                &[NewContextPackSource::new(ContextPackSourceKind::Task, task_id).role("subject")],
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
-            RETURNING id::text, task_id, summary, source_summary, open_questions,
-                      blockers, risks, suggested_next_action, generated_at, model,
-                      created_at, updated_at
-            "#,
-        )
-        .bind(task_id)
-        .bind(summary)
-        .bind(&questions)
-        .bind(&blockers)
-        .bind(&risks)
-        .bind(next_action)
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(TaskContextPack {
-            id: row.try_get("id")?,
-            task_id: row.try_get("task_id")?,
-            summary: row.try_get("summary")?,
-            source_summary: row.try_get("source_summary")?,
-            open_questions: row.try_get("open_questions")?,
-            blockers: row.try_get("blockers")?,
-            risks: row.try_get("risks")?,
-            suggested_next_action: row.try_get("suggested_next_action")?,
-            generated_at: row.try_get("generated_at")?,
-            model: row.try_get("model")?,
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
-        })
+            .await?;
+        task_context_pack_from_engine(stored, task_id)
     }
+}
+
+fn task_context_pack_from_engine(
+    pack: ContextPack,
+    task_id: &str,
+) -> Result<TaskContextPack, TaskCoreError> {
+    let content = &pack.content;
+    Ok(TaskContextPack {
+        id: pack.context_pack_id,
+        task_id: task_id.to_owned(),
+        summary: optional_string(content, "summary"),
+        source_summary: optional_string(content, "source_summary"),
+        open_questions: content
+            .get("open_questions")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+        blockers: content
+            .get("blockers")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+        risks: content.get("risks").cloned().unwrap_or_else(|| json!([])),
+        suggested_next_action: optional_string(content, "suggested_next_action"),
+        generated_at: pack.built_at,
+        model: optional_string(&pack.metadata, "model"),
+        created_at: pack.built_at,
+        updated_at: pack.updated_at,
+    })
+}
+
+fn optional_string(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
 }

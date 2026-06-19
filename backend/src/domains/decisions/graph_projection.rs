@@ -121,6 +121,8 @@ fn decision_graph_evidence(
         "source_id": first_evidence
             .map(|item| item.source_id.as_str())
             .unwrap_or("unknown"),
+        "observation_id": first_evidence
+            .and_then(|item| item.observation_id.as_deref()),
     }));
 
     if let Some(quote) = first_evidence.and_then(|item| item.quote.as_ref()) {

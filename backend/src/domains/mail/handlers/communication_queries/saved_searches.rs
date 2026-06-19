@@ -3,6 +3,7 @@ use crate::domains::mail::saved_searches::{
     MailSavedSearch, MailSavedSearchListQuery, MailSavedSearchStore, NewMailSavedSearch,
     UpdateMailSavedSearch,
 };
+use crate::domains::mail::service::MailCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct SavedSearchesQuery {
@@ -47,7 +48,15 @@ pub(crate) async fn post_v1_saved_search(
     State(state): State<AppState>,
     Json(request): Json<NewMailSavedSearch>,
 ) -> Result<Json<MailSavedSearch>, ApiError> {
-    Ok(Json(saved_search_store(&state)?.create(request).await?))
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let saved_search = MailCommandService::new(pool)
+        .create_saved_search(request)
+        .await?;
+    Ok(Json(saved_search))
 }
 
 pub(crate) async fn put_v1_saved_search(
@@ -55,8 +64,13 @@ pub(crate) async fn put_v1_saved_search(
     Path(saved_search_id): Path<String>,
     Json(request): Json<UpdateMailSavedSearch>,
 ) -> Result<Json<MailSavedSearch>, ApiError> {
-    let Some(saved_search) = saved_search_store(&state)?
-        .update(&saved_search_id, request)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let Some(saved_search) = MailCommandService::new(pool)
+        .update_saved_search(&saved_search_id, request)
         .await?
     else {
         return Err(ApiError::NotFound);
@@ -68,7 +82,14 @@ pub(crate) async fn delete_v1_saved_search(
     State(state): State<AppState>,
     Path(saved_search_id): Path<String>,
 ) -> Result<Json<SavedSearchDeleteResponse>, ApiError> {
-    let deleted = saved_search_store(&state)?.delete(&saved_search_id).await?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let deleted = MailCommandService::new(pool)
+        .delete_saved_search(&saved_search_id)
+        .await?;
     Ok(Json(SavedSearchDeleteResponse { deleted }))
 }
 

@@ -3,10 +3,12 @@ use sqlx::{Postgres, Row, Transaction};
 
 use crate::domains::persons::intelligence::CommunicationFingerprint;
 use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
-    RelationshipEvidenceSourceKind, RelationshipReviewState, RelationshipStore,
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
+    RelationshipStore,
 };
 use crate::engines::trust::TrustEngine;
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use crate::workflows::review_mirror::sync_relationship_review_state_in_transaction;
 
 use super::errors::PersonEnrichmentError;
 use super::models::EnrichedPerson;
@@ -54,31 +56,60 @@ pub(in crate::domains::persons::enrichment) async fn materialize_trust_relations
         &evidence_excerpt,
         trust_signal.trust_score,
     )?;
-    let evidence = NewRelationshipEvidence::new(
-        RelationshipEvidenceSourceKind::RawRecord,
-        evidence_source_id.clone(),
+    let observation = NewObservation::new(
+        "PERSON_TRUST_SIGNAL",
+        ObservationOriginKind::LocalRuntime,
+        chrono::Utc::now(),
+        json!({
+            "component": "persons_enrichment_relationship",
+            "evidence_source_id": evidence_source_id,
+            "owner_persona_id": owner_persona_id,
+            "person_id": enriched.person_id,
+            "trust_score": trust_signal.trust_score,
+            "strength_score": trust_signal.strength_score,
+            "confidence": trust_signal.confidence,
+            "evidence_excerpt": evidence_excerpt,
+        }),
+        format!(
+            "person-enrichment://{}/relationship/trust",
+            enriched.person_id
+        ),
     )
-    .excerpt(evidence_excerpt)
-    .metadata(json!({
-        "compatibility_source": "persons.trust_score",
-        "source": "person_enrichment",
-        "person_id": enriched.person_id,
-        "trust_score": trust_score,
-        "detected_language": fingerprint.detected_language,
-        "typical_tone": fingerprint.typical_tone,
-        "writing_style": fingerprint.writing_style,
-        "trust_source_reliability": {
-            "signal_type": source_reliability.kind.as_str(),
-            "affected_source": source_reliability.affected_source,
-            "evidence": source_reliability.evidence,
-            "confidence": source_reliability.confidence,
-            "direction": source_reliability.direction.as_str(),
-            "explanation": source_reliability.explanation,
-        },
+    .confidence(1.0)
+    .provenance(json!({
+        "pipeline": "person_enrichment",
+        "source_persona_id": owner_persona_id,
+        "target_persona_id": enriched.person_id,
     }));
+    let observation = ObservationStore::capture_in_transaction(transaction, &observation).await?;
+    let observation_id = observation.observation_id.clone();
+    let evidence = NewRelationshipEvidence::observation(observation_id.clone())
+        .excerpt(&evidence_excerpt)
+        .metadata(json!({
+            "compatibility_source": "persons.trust_score",
+            "source": "person_enrichment",
+            "person_id": enriched.person_id,
+            "trust_score": trust_score,
+            "detected_language": fingerprint.detected_language,
+            "typical_tone": fingerprint.typical_tone,
+            "writing_style": fingerprint.writing_style,
+            "trust_source_reliability": {
+                "signal_type": source_reliability.kind.as_str(),
+                "affected_source": source_reliability.affected_source,
+                "evidence": source_reliability.evidence,
+                "confidence": source_reliability.confidence,
+                "direction": source_reliability.direction.as_str(),
+                "explanation": source_reliability.explanation,
+            },
+        }));
 
-    RelationshipStore::upsert_with_evidence_in_transaction(transaction, &relationship, &[evidence])
-        .await?;
+    let stored = RelationshipStore::upsert_with_evidence_in_transaction(
+        transaction,
+        &relationship,
+        &[evidence],
+    )
+    .await?;
+    sync_relationship_review_state_in_transaction(transaction, &stored).await?;
 
     Ok(())
 }

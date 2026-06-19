@@ -24,6 +24,7 @@ pub(crate) fn row_to_projected_message(
     Ok(ProjectedMessage {
         message_id: row.try_get("message_id")?,
         raw_record_id: row.try_get("raw_record_id")?,
+        observation_id: row.try_get("observation_id")?,
         account_id: row.try_get("account_id")?,
         provider_record_id: row.try_get("provider_record_id")?,
         subject: row.try_get("subject")?,

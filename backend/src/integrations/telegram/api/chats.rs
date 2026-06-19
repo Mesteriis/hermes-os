@@ -9,7 +9,8 @@ use super::helpers::{
 };
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::{
-    TelegramChatListResponse, TelegramListQuery, api_audit_log, communication_ingestion_store,
+    TelegramChatListResponse, TelegramListQuery, api_audit_log,
+    communication_provider_account_store, communication_provider_secret_binding_store,
     telegram_store,
 };
 use crate::integrations::telegram::client::{
@@ -168,12 +169,14 @@ pub(crate) async fn post_telegram_chat_members_sync(
     publish_telegram_event(&state, started).await?;
 
     let secret_store = telegram_secret_store(&state)?;
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let items = match state
         .telegram_runtime
         .sync_chat_members(
             TelegramMemberSyncContext {
-                communication_store: &communication_store,
+                provider_account_store: &provider_account_store,
+                provider_secret_binding_store: &provider_secret_binding_store,
                 telegram_store: &telegram_store,
                 secret_store: &secret_store,
                 secret_resolver: &state.vault,
@@ -258,11 +261,13 @@ pub(crate) async fn post_telegram_sync_chats(
     );
     publish_telegram_event(&state, started).await?;
 
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let telegram_projection_store = telegram_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
     let context = TelegramRuntimeOperationContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         telegram_store: &telegram_projection_store,
         secret_store: &secret_store,
         secret_resolver: &state.vault,
@@ -329,11 +334,13 @@ pub(crate) async fn post_telegram_sync_history(
     );
     publish_telegram_event(&state, started).await?;
 
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let telegram_projection_store = telegram_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
     let context = TelegramRuntimeOperationContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         telegram_store: &telegram_projection_store,
         secret_store: &secret_store,
         secret_resolver: &state.vault,

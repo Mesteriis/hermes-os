@@ -83,6 +83,26 @@ async fn document_processing_retry_failed_job_requeues_job_against_postgres() {
     assert_eq!(persisted.0, "queued");
     assert_eq!(persisted.1, 0);
     assert_eq!(persisted.2, None);
+    let requeue_observations: i64 = query_scalar::<_, i64>(
+        r#"
+        SELECT count(*)::bigint
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'documents'
+          AND link.entity_kind = 'document_processing_job'
+          AND link.entity_id = $1
+          AND kind.code = 'DOCUMENT_PROCESSING_JOB_STATUS'
+          AND link.relationship_kind = 'requeued'
+        "#,
+    )
+    .bind(&extract_job.job_id)
+    .fetch_one(&pool)
+    .await
+    .expect("requeue observations");
+    assert!(requeue_observations >= 1);
     quiesce_processing_jobs_for_document(&pool, &document_id).await;
 }
 

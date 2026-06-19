@@ -11,6 +11,8 @@ async fn provider_credential_reader_resolves_bound_account_secret_against_postgr
 
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let secret_binding_store =
+        hermes_hub_backend::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool);
     let suffix = unique_suffix();
     let account_id = format!("acct_credential_reader_{suffix}");
@@ -47,7 +49,7 @@ async fn provider_credential_reader_resolves_bound_account_secret_against_postgr
         .insert(&secret_ref, "test-only-gmail-runtime-value")
         .expect("insert in-memory runtime value");
 
-    let reader = ProviderCredentialReader::new(communication_store, secret_store, &resolver);
+    let reader = ProviderCredentialReader::new(secret_binding_store, secret_store, &resolver);
     let credential = reader
         .read(&account_id, ProviderAccountSecretPurpose::OauthToken)
         .await
@@ -79,6 +81,8 @@ async fn provider_credential_reader_reports_missing_binding_against_postgres() {
 
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let secret_binding_store =
+        hermes_hub_backend::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool);
     let suffix = unique_suffix();
     let account_id = format!("acct_missing_credential_binding_{suffix}");
@@ -94,7 +98,7 @@ async fn provider_credential_reader_reports_missing_binding_against_postgres() {
         .await
         .expect("store provider account");
 
-    let reader = ProviderCredentialReader::new(communication_store, secret_store, &resolver);
+    let reader = ProviderCredentialReader::new(secret_binding_store, secret_store, &resolver);
     let error = reader
         .read(&account_id, ProviderAccountSecretPurpose::ImapPassword)
         .await
@@ -124,6 +128,8 @@ async fn provider_credential_reader_propagates_resolver_failures_against_postgre
 
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let secret_binding_store =
+        hermes_hub_backend::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool);
     let suffix = unique_suffix();
     let account_id = format!("acct_resolver_failure_{suffix}");
@@ -160,7 +166,7 @@ async fn provider_credential_reader_propagates_resolver_failures_against_postgre
         .insert(&secret_ref, "test-only-imap-runtime-value")
         .expect("insert in-memory runtime value");
 
-    let reader = ProviderCredentialReader::new(communication_store, secret_store, &resolver);
+    let reader = ProviderCredentialReader::new(secret_binding_store, secret_store, &resolver);
     let error = reader
         .read(&account_id, ProviderAccountSecretPurpose::ImapPassword)
         .await
@@ -186,6 +192,8 @@ async fn provider_credential_reader_rejects_incompatible_secret_kind_against_pos
 
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let secret_binding_store =
+        hermes_hub_backend::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool);
     let suffix = unique_suffix();
     let account_id = format!("acct_incompatible_credential_kind_{suffix}");
@@ -219,7 +227,7 @@ async fn provider_credential_reader_rejects_incompatible_secret_kind_against_pos
         .await
         .expect("bind incompatible account secret");
 
-    let reader = ProviderCredentialReader::new(communication_store, secret_store, &resolver);
+    let reader = ProviderCredentialReader::new(secret_binding_store, secret_store, &resolver);
     let error = reader
         .read(&account_id, ProviderAccountSecretPurpose::OauthToken)
         .await

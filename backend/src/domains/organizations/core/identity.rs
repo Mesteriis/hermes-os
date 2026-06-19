@@ -1,10 +1,13 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_json::json;
 use sqlx::Row;
+use sqlx::Transaction;
 use sqlx::postgres::PgPool;
+use sqlx::postgres::Postgres;
 
-use super::OrgCoreError;
+use super::{OrgCoreError, link_entity_in_transaction};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrganizationIdentity {
@@ -32,7 +35,7 @@ impl OrgIdentityStore {
     }
 
     pub async fn list(&self, org_id: &str) -> Result<Vec<OrganizationIdentity>, OrgCoreError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, identity_type, identity_value, source, confidence, last_verified_at, status, metadata, created_at, updated_at FROM organization_identities WHERE organization_id = $1 ORDER BY identity_type")
+        let rows = sqlx::query("SELECT id::text, organization_id, identity_type, identity_value, source, confidence::float8 AS confidence, last_verified_at, status, metadata, created_at, updated_at FROM organization_identities WHERE organization_id = $1 ORDER BY identity_type")
             .bind(org_id)
             .fetch_all(&self.pool)
             .await?;
@@ -63,12 +66,52 @@ impl OrgIdentityStore {
         ivalue: &str,
         source: &str,
     ) -> Result<OrganizationIdentity, OrgCoreError> {
-        let row = sqlx::query("INSERT INTO organization_identities (organization_id, identity_type, identity_value, source) VALUES ($1,$2,$3,$4) ON CONFLICT (identity_type, identity_value) WHERE status='active' DO UPDATE SET updated_at=now() RETURNING id::text, organization_id, identity_type, identity_value, source, confidence, last_verified_at, status, metadata, created_at, updated_at")
+        let mut transaction = self.pool.begin().await?;
+        let identity =
+            Self::upsert_in_transaction(&mut transaction, org_id, itype, ivalue, source).await?;
+        transaction.commit().await?;
+        Ok(identity)
+    }
+
+    pub async fn upsert_with_observation(
+        &self,
+        org_id: &str,
+        itype: &str,
+        ivalue: &str,
+        source: &str,
+        observation_id: &str,
+    ) -> Result<OrganizationIdentity, OrgCoreError> {
+        let mut transaction = self.pool.begin().await?;
+        let identity =
+            Self::upsert_in_transaction(&mut transaction, org_id, itype, ivalue, source).await?;
+        link_entity_in_transaction(
+            &mut transaction,
+            observation_id,
+            "identity",
+            &identity.id,
+            json!({
+                "organization_id": org_id,
+                "identity_type": identity.identity_type,
+            }),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(identity)
+    }
+
+    pub(crate) async fn upsert_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        org_id: &str,
+        itype: &str,
+        ivalue: &str,
+        source: &str,
+    ) -> Result<OrganizationIdentity, OrgCoreError> {
+        let row = sqlx::query("INSERT INTO organization_identities (organization_id, identity_type, identity_value, source) VALUES ($1,$2,$3,$4) ON CONFLICT (identity_type, identity_value) WHERE status='active' DO UPDATE SET updated_at=now() RETURNING id::text, organization_id, identity_type, identity_value, source, confidence::float8 AS confidence, last_verified_at, status, metadata, created_at, updated_at")
             .bind(org_id)
             .bind(itype)
             .bind(ivalue)
             .bind(source)
-            .fetch_one(&self.pool)
+            .fetch_one(&mut **transaction)
             .await?;
 
         Ok(OrganizationIdentity {

@@ -20,6 +20,7 @@ impl SemanticEmbeddingStore {
             SELECT
                 source_kind,
                 source_id,
+                observation_id,
                 title,
                 source_text,
                 graph_node_id,
@@ -59,6 +60,7 @@ impl SemanticEmbeddingStore {
             SELECT
                 source_kind,
                 source_id,
+                observation_id,
                 title,
                 source_text,
                 graph_node_id,

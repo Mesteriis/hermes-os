@@ -3,6 +3,7 @@ use crate::domains::persons::api::PersonProjectionError;
 use crate::domains::persons::core::PersonCoreError;
 use crate::domains::persons::identity::PersonIdentityError;
 use crate::domains::persons::memory::PersonMemoryError;
+use crate::domains::persons::service::PersonCommandServiceError;
 
 impl From<PersonIdentityError> for ApiError {
     fn from(error: PersonIdentityError) -> Self {
@@ -17,6 +18,12 @@ impl From<PersonIdentityError> for ApiError {
             | PersonIdentityError::MissingPayloadField(_)
             | PersonIdentityError::MissingActorId => {
                 Self::InvalidPersonIdentityReview("invalid identity candidate review payload")
+            }
+            PersonIdentityError::Observation(_) => {
+                Self::InvalidPersonIdentityReview("identity candidate evidence observation failed")
+            }
+            PersonIdentityError::ReviewMirror(_) => {
+                Self::InvalidPersonIdentityReview("identity candidate review inbox sync failed")
             }
             _ => Self::PersonIdentity(error),
         }
@@ -64,6 +71,25 @@ impl From<PersonCoreError> for ApiError {
             _ => {
                 tracing::error!(error = %error, "person core operation failed");
                 ApiError::InvalidCommunicationQuery("person core operation failed")
+            }
+        }
+    }
+}
+
+impl From<PersonCommandServiceError> for ApiError {
+    fn from(error: PersonCommandServiceError) -> Self {
+        match error {
+            PersonCommandServiceError::Projection(error) => Self::from(error),
+            PersonCommandServiceError::Core(error) => Self::from(error),
+            PersonCommandServiceError::Enrichment(error) => Self::from(error),
+            PersonCommandServiceError::EnrichmentEngine(error) => Self::from(error),
+            PersonCommandServiceError::Memory(error) => Self::from(error),
+            PersonCommandServiceError::Health(error) => Self::from(error),
+            PersonCommandServiceError::Identity(error) => Self::from(error),
+            PersonCommandServiceError::Investigator(error) => Self::from(error),
+            PersonCommandServiceError::Observation(error) => {
+                tracing::error!(error = %error, "person manual observation capture failed");
+                ApiError::InvalidCommunicationQuery("person manual observation capture failed")
             }
         }
     }

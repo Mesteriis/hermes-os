@@ -1,12 +1,70 @@
+use chrono::Utc;
+use serde_json::json;
 use sqlx::Transaction;
 use sqlx::postgres::Postgres;
 
 use super::constants::DEFAULT_MAX_ATTEMPTS;
 use super::errors::DocumentProcessingError;
+use super::evidence::link_document_processing_entity_in_transaction;
 use super::ids::job_id;
 use super::models::{DocumentProcessingJob, DocumentProcessingStatus, DocumentProcessingStep};
 use super::rows::try_row_to_job;
 use super::store::DocumentProcessingStore;
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+
+async fn capture_job_observation(
+    tx: &mut Transaction<'_, Postgres>,
+    job: &DocumentProcessingJob,
+    kind_code: &str,
+    relationship_kind: &str,
+    actor: &str,
+) -> Result<(), DocumentProcessingError> {
+    let observed_at = job.updated_at;
+    let observation = ObservationStore::capture_in_transaction(
+        tx,
+        &NewObservation::new(
+            kind_code,
+            ObservationOriginKind::LocalRuntime,
+            observed_at,
+            json!({
+                "job_id": job.job_id,
+                "document_id": job.document_id,
+                "step": job.step,
+                "status": job.status,
+                "attempts": job.attempts,
+                "max_attempts": job.max_attempts,
+                "last_error_summary": job.last_error_summary,
+                "queued_at": job.queued_at,
+                "started_at": job.started_at,
+                "finished_at": job.finished_at,
+                "operation": relationship_kind,
+            }),
+            format!(
+                "document-processing-job://{}/{}",
+                job.job_id, relationship_kind
+            ),
+        )
+        .provenance(json!({
+            "captured_by": actor,
+            "operation": relationship_kind,
+        })),
+    )
+    .await?;
+    link_document_processing_entity_in_transaction(
+        tx,
+        &observation.observation_id,
+        "document_processing_job",
+        job.job_id.clone(),
+        relationship_kind,
+        json!({
+            "document_id": job.document_id,
+            "step": job.step,
+            "status": job.status,
+        }),
+    )
+    .await?;
+    Ok(())
+}
 
 impl DocumentProcessingStore {
     pub(super) async fn upsert_job(
@@ -15,6 +73,7 @@ impl DocumentProcessingStore {
         step: DocumentProcessingStep,
     ) -> Result<DocumentProcessingJob, DocumentProcessingError> {
         let job_id = job_id(document_id, step);
+        let mut tx = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO document_processing_jobs (
@@ -69,10 +128,19 @@ impl DocumentProcessingStore {
         .bind(document_id)
         .bind(step.as_str())
         .bind(DEFAULT_MAX_ATTEMPTS)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *tx)
         .await?;
-
-        try_row_to_job(row)
+        let job = try_row_to_job(row)?;
+        capture_job_observation(
+            &mut tx,
+            &job,
+            "DOCUMENT_PROCESSING_JOB",
+            "queued",
+            "documents.processing.upsert_job",
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(job)
     }
 
     pub(super) async fn next_jobs(
@@ -148,8 +216,18 @@ impl DocumentProcessingStore {
         .fetch_optional(&mut **tx)
         .await?;
 
-        row.map(try_row_to_job)
-            .ok_or(DocumentProcessingError::JobNotFound)?
+        let job = row
+            .map(try_row_to_job)
+            .ok_or(DocumentProcessingError::JobNotFound)??;
+        capture_job_observation(
+            tx,
+            &job,
+            "DOCUMENT_PROCESSING_JOB_STATUS",
+            "running",
+            "documents.processing.mark_running",
+        )
+        .await?;
+        Ok(job)
     }
 
     pub(super) async fn job_for_update(
@@ -220,8 +298,18 @@ impl DocumentProcessingStore {
         .fetch_optional(&mut **tx)
         .await?;
 
-        row.map(try_row_to_job)
-            .ok_or(DocumentProcessingError::RetryRequiresFailedJob)?
+        let job = row
+            .map(try_row_to_job)
+            .ok_or(DocumentProcessingError::RetryRequiresFailedJob)??;
+        capture_job_observation(
+            tx,
+            &job,
+            "DOCUMENT_PROCESSING_JOB_STATUS",
+            "requeued",
+            "documents.processing.requeue_failed_job",
+        )
+        .await?;
+        Ok(job)
     }
 
     pub(super) async fn finish_job(
@@ -246,7 +334,15 @@ impl DocumentProcessingStore {
         .bind(last_error_summary)
         .execute(&mut **tx)
         .await?;
-
+        let job = self.job_for_update(tx, &job.job_id).await?;
+        capture_job_observation(
+            tx,
+            &job,
+            "DOCUMENT_PROCESSING_JOB_STATUS",
+            status.as_str(),
+            "documents.processing.finish_job",
+        )
+        .await?;
         Ok(())
     }
 }

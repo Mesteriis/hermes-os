@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 
 use super::super::errors::AiControlCenterError;
+use super::super::evidence::capture_prompt_template_observation;
 use super::super::models::{AiPromptCreateRequest, AiPromptTemplate};
 use super::super::rows::row_to_prompt;
 use super::super::store::AiControlCenterStore;
@@ -58,6 +59,7 @@ impl AiControlCenterStore {
             "metadata",
         )?;
         reject_secret_like_json(&Value::Object(metadata.clone()))?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO ai_prompt_templates (
@@ -89,9 +91,13 @@ impl AiControlCenterStore {
         .bind(request.capability_slot.trim())
         .bind(request.description.as_deref().map(str::trim))
         .bind(Value::Object(metadata))
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_prompt(row)
+        let prompt = row_to_prompt(row)?;
+        capture_prompt_template_observation(&mut transaction, &prompt, "create", actor_id.trim())
+            .await?;
+        transaction.commit().await?;
+        Ok(prompt)
     }
 }

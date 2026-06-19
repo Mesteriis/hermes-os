@@ -22,7 +22,7 @@ pub(crate) fn account_setup_service(
 ) -> Result<EmailAccountSetupService, ApiError> {
     let pool = database_pool(state)?;
     Ok(EmailAccountSetupService::new_with_host_vault(
-        CommunicationIngestionStore::new(pool.clone()),
+        pool.clone(),
         SecretReferenceStore::new(pool),
         state.vault.clone(),
     ))

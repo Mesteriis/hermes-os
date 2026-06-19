@@ -6,6 +6,7 @@ mod helpers;
 mod models;
 mod parsing;
 mod rows;
+mod service;
 mod store;
 mod validation;
 
@@ -17,4 +18,5 @@ pub use models::{
     ContradictionSourceKind, EvidenceClaimExtractionInput, NewContradictionObservation,
     NewEvidenceClaim,
 };
+pub use service::{ContradictionReviewService, ContradictionReviewServiceError};
 pub use store::ContradictionObservationStore;

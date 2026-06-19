@@ -1,10 +1,65 @@
 use chrono::{DateTime, Utc};
+use serde_json::json;
+use sqlx::{Postgres, Transaction};
 
 use super::WhatsappWebStore;
+use super::evidence::link_whatsapp_entity_in_transaction;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::models::{NewWhatsappWebSession, WhatsappWebSession};
 use crate::integrations::whatsapp::client::rows::row_to_whatsapp_web_session;
 use crate::integrations::whatsapp::client::validation::validate_limit;
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+
+async fn capture_whatsapp_session_observation(
+    transaction: &mut Transaction<'_, Postgres>,
+    session: &WhatsappWebSession,
+    relationship_kind: &str,
+    actor: &str,
+    observed_at: DateTime<Utc>,
+) -> Result<(), WhatsappWebError> {
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            "WHATSAPP_WEB_SESSION",
+            ObservationOriginKind::LocalRuntime,
+            observed_at,
+            json!({
+                "session_id": session.session_id,
+                "account_id": session.account_id,
+                "device_name": session.device_name,
+                "companion_runtime": session.companion_runtime,
+                "link_state": session.link_state,
+                "local_state_path": session.local_state_path,
+                "last_sync_at": session.last_sync_at,
+                "metadata": session.metadata,
+                "operation": relationship_kind,
+            }),
+            format!(
+                "whatsapp-web-session://{}/{}",
+                session.session_id, relationship_kind
+            ),
+        )
+        .provenance(json!({
+            "captured_by": actor,
+            "operation": relationship_kind,
+        })),
+    )
+    .await?;
+    link_whatsapp_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "whatsapp_web_session",
+        session.session_id.clone(),
+        relationship_kind,
+        json!({
+            "account_id": session.account_id,
+            "link_state": session.link_state,
+            "companion_runtime": session.companion_runtime,
+        }),
+    )
+    .await?;
+    Ok(())
+}
 
 impl WhatsappWebStore {
     pub async fn upsert_session(
@@ -12,6 +67,7 @@ impl WhatsappWebStore {
         session: &NewWhatsappWebSession,
     ) -> Result<WhatsappWebSession, WhatsappWebError> {
         session.validate()?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO whatsapp_web_sessions (
@@ -42,10 +98,20 @@ impl WhatsappWebStore {
         .bind(session.local_state_path.trim())
         .bind(session.last_sync_at)
         .bind(&session.metadata)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_whatsapp_web_session(row)
+        let stored = row_to_whatsapp_web_session(row)?;
+        capture_whatsapp_session_observation(
+            &mut transaction,
+            &stored,
+            "upsert",
+            "whatsapp.client.store.upsert_session",
+            stored.updated_at,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(stored)
     }
 
     pub async fn list_sessions(
@@ -80,18 +146,35 @@ impl WhatsappWebStore {
         account_id: &str,
         last_sync_at: DateTime<Utc>,
     ) -> Result<(), WhatsappWebError> {
-        sqlx::query(
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
             r#"
             UPDATE whatsapp_web_sessions
             SET last_sync_at = GREATEST(COALESCE(last_sync_at, $2), $2),
                 updated_at = now()
             WHERE account_id = $1
+            RETURNING
+                session_id, account_id, device_name, companion_runtime,
+                link_state, local_state_path, last_sync_at, metadata,
+                created_at, updated_at
             "#,
         )
         .bind(account_id.trim())
         .bind(last_sync_at)
-        .execute(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
+        if let Some(row) = row {
+            let session = row_to_whatsapp_web_session(row)?;
+            capture_whatsapp_session_observation(
+                &mut transaction,
+                &session,
+                "sync_progress",
+                "whatsapp.client.store.update_session_last_sync",
+                session.updated_at,
+            )
+            .await?;
+        }
+        transaction.commit().await?;
         Ok(())
     }
 }

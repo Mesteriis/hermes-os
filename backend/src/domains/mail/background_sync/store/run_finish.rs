@@ -2,6 +2,7 @@ use serde_json::json;
 
 use super::super::errors::MailSyncError;
 use super::super::events::sync_run_finished_event;
+use super::super::evidence::capture_mail_sync_run_observation;
 use super::super::models::{FinishRun, MailSyncRun};
 use super::super::rows::row_to_run;
 use super::MailSyncStore;
@@ -81,6 +82,15 @@ impl MailSyncStore {
         .await?;
 
         let run = row_to_run(row)?;
+        capture_mail_sync_run_observation(
+            &mut transaction,
+            &run,
+            "COMMUNICATION_MAIL_SYNC_RUN_STATUS",
+            &run.status,
+            run.completed_at.unwrap_or(run.started_at),
+            "mail.background_sync.finish_run",
+        )
+        .await?;
         let event = sync_run_finished_event(&run)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
         transaction.commit().await?;

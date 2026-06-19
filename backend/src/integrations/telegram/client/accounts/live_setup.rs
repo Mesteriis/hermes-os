@@ -1,7 +1,8 @@
 use serde_json::{Value, json};
 
-use crate::domains::mail::core::{CommunicationIngestionStore, NewProviderAccount};
+use crate::domains::mail::core::NewProviderAccount;
 use crate::platform::secrets::SecretReferenceStore;
+use crate::vault::CommunicationProviderAccountStore;
 
 use super::super::errors::TelegramError;
 use super::super::models::{TelegramAccountSetupResponse, TelegramLiveAccountSetupRequest};
@@ -24,8 +25,8 @@ impl TelegramStore {
         }
 
         let runtime = live_runtime(request);
-        let stored_account = CommunicationIngestionStore::new(self.pool.clone())
-            .upsert_provider_account(
+        let stored_account = CommunicationProviderAccountStore::new(self.pool.clone())
+            .upsert(
                 &NewProviderAccount::new(
                     &request.account_id,
                     provider_kind,

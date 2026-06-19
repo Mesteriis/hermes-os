@@ -1,5 +1,7 @@
 use super::*;
 use crate::domains::mail::ai_state::{MailAiState, MailAiStateStore, MailAiStateTransitionRequest};
+use crate::domains::mail::service::MailCommandService;
+use crate::workflows::review_inbox::refresh_message_knowledge_candidates_into_review;
 
 #[derive(Deserialize)]
 pub(crate) struct WorkflowStateTransitionApiRequest {
@@ -35,25 +37,11 @@ pub(crate) async fn put_v1_message_workflow_state(
     Json(request): Json<WorkflowStateTransitionApiRequest>,
 ) -> Result<Json<WorkflowStateTransitionApiResponse>, ApiError> {
     let actor_id = "hermes-frontend".to_string();
-    let store = message_store(&state)?;
-
-    let current = store
-        .message(&message_id)
-        .await?
-        .ok_or(ApiError::CommunicationMessageNotFound)?;
 
     let new_state = request
         .workflow_state
         .parse::<WorkflowState>()
         .map_err(|_| ApiError::InvalidCommunicationQuery("invalid workflow state value"))?;
-
-    if !WorkflowState::is_valid_transition(&current.workflow_state, &new_state) {
-        return Err(ApiError::InvalidCommunicationQuery(
-            "invalid workflow state transition",
-        ));
-    }
-
-    let previous_state = current.workflow_state.as_str().to_owned();
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::message_workflow_state_set(
@@ -62,14 +50,19 @@ pub(crate) async fn put_v1_message_workflow_state(
         ))
         .await?;
 
-    let updated = store
-        .transition_workflow_state(&message_id, new_state)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let result = MailCommandService::new(pool)
+        .transition_message_workflow_state(&message_id, new_state, &actor_id)
         .await?;
 
     Ok(Json(WorkflowStateTransitionApiResponse {
-        message_id: updated.message_id,
-        workflow_state: updated.workflow_state.as_str().to_owned(),
-        previous_state,
+        message_id: result.updated.message_id,
+        workflow_state: result.updated.workflow_state.as_str().to_owned(),
+        previous_state: result.previous_state,
     }))
 }
 
@@ -181,6 +174,15 @@ pub(crate) async fn post_v1_message_analyze(
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    let Some(pool) = state.database.pool().cloned() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let _ = refresh_message_knowledge_candidates_into_review(&pool, std::slice::from_ref(&updated))
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, "message knowledge candidate review sync failed");
+            ApiError::InvalidCommunicationQuery("message knowledge candidate review sync failed")
+        })?;
     let evidence = crate::domains::mail::explain::explain_importance(&updated).reasons;
 
     Ok(Json(MessageAnalyzeResponse {

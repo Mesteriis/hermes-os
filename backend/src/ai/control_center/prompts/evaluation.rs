@@ -2,6 +2,7 @@ use chrono::Utc;
 use serde_json::{Value, json};
 
 use super::super::errors::AiControlCenterError;
+use super::super::evidence::capture_prompt_eval_run_observation;
 use super::super::models::{AiPromptEvalRun, AiPromptTestRequest};
 use super::super::rows::row_to_eval_run;
 use super::super::store::AiControlCenterStore;
@@ -38,6 +39,7 @@ impl AiControlCenterStore {
             prompt_id.trim(),
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
         );
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO ai_prompt_eval_runs (
@@ -80,9 +82,12 @@ impl AiControlCenterStore {
         .bind(request.score)
         .bind(request.notes.as_deref().map(str::trim))
         .bind(actor_id.trim())
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_eval_run(row)
+        let eval_run = row_to_eval_run(row)?;
+        capture_prompt_eval_run_observation(&mut transaction, &eval_run, actor_id.trim()).await?;
+        transaction.commit().await?;
+        Ok(eval_run)
     }
 }

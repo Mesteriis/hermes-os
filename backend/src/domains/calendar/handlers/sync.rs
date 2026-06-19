@@ -40,13 +40,21 @@ pub(crate) async fn post_calendar_import(
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.parse::<DateTime<Utc>>().ok())
                 .unwrap_or(start);
+            let source_event_id = evt
+                .get("source_event_id")
+                .and_then(|v| v.as_str())
+                .map(ToOwned::to_owned);
             let _ = CalendarEventStore::new(pool.clone())
-                .create(&NewCalendarEvent {
-                    title: title.to_string(),
-                    start_at: start,
-                    end_at: end,
-                    ..Default::default()
-                })
+                .create_file_import(
+                    &NewCalendarEvent {
+                        source_event_id,
+                        title: title.to_string(),
+                        start_at: start,
+                        end_at: end,
+                        ..Default::default()
+                    },
+                    &format!("calendar-import://event/{imported}"),
+                )
                 .await;
             imported += 1;
         }
@@ -65,14 +73,8 @@ pub(crate) async fn post_calendar_sync(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    CalendarAccountStore::new(pool.clone())
-        .update(
-            &account_id,
-            &CalendarAccountUpdate {
-                sync_status: Some("syncing".into()),
-                ..Default::default()
-            },
-        )
+    CalendarCommandService::new(pool)
+        .trigger_calendar_sync_manual(&account_id)
         .await?;
     Ok(Json(
         json!({"sync_triggered": true, "note": "Provider sync is deferred to future implementation"}),

@@ -1,4 +1,5 @@
 use super::MessageProjectionStore;
+use crate::domains::mail::evidence::link_mail_entity_in_transaction;
 use crate::domains::mail::messages::errors::MessageProjectionError;
 use crate::domains::mail::messages::models::ProjectedMessage;
 use crate::domains::mail::messages::rows::row_to_projected_message;
@@ -10,8 +11,27 @@ impl MessageProjectionStore {
         message_id: &str,
         reason: &str,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
+        self.move_to_local_trash_with_observation(
+            message_id,
+            reason,
+            None,
+            "local_state_transition",
+            None,
+        )
+        .await
+    }
+
+    pub async fn move_to_local_trash_with_observation(
+        &self,
+        message_id: &str,
+        reason: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
         validate_non_empty("message_id", message_id)?;
         validate_non_empty("local_state_reason", reason)?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"UPDATE communication_messages
             SET local_state = 'trash',
@@ -20,7 +40,7 @@ impl MessageProjectionStore {
                 projected_at = now()
             WHERE message_id = $1
             RETURNING
-                message_id, raw_record_id, account_id, provider_record_id,
+                message_id, raw_record_id, observation_id, account_id, provider_record_id,
                 subject, sender, recipients, body_text,
                 occurred_at, projected_at, channel_kind, conversation_id,
                 sender_display_name, delivery_state, message_metadata,
@@ -30,19 +50,53 @@ impl MessageProjectionStore {
         )
         .bind(message_id.trim())
         .bind(reason.trim())
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
         let Some(row) = row else {
             return Err(MessageProjectionError::MessageNotFound);
         };
-        row_to_projected_message(row)
+        let message = row_to_projected_message(row)?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "communication_message",
+                message.message_id.clone(),
+                relationship_kind,
+                serde_json::json!({
+                    "local_state": message.local_state.as_str(),
+                    "source": reason,
+                }),
+                metadata,
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok(message)
     }
 
     pub async fn restore_from_local_trash(
         &self,
         message_id: &str,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
+        self.restore_from_local_trash_with_observation(
+            message_id,
+            None,
+            "local_state_transition",
+            None,
+        )
+        .await
+    }
+
+    pub async fn restore_from_local_trash_with_observation(
+        &self,
+        message_id: &str,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
         validate_non_empty("message_id", message_id)?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"UPDATE communication_messages
             SET local_state = 'active',
@@ -51,7 +105,7 @@ impl MessageProjectionStore {
                 projected_at = now()
             WHERE message_id = $1
             RETURNING
-                message_id, raw_record_id, account_id, provider_record_id,
+                message_id, raw_record_id, observation_id, account_id, provider_record_id,
                 subject, sender, recipients, body_text,
                 occurred_at, projected_at, channel_kind, conversation_id,
                 sender_display_name, delivery_state, message_metadata,
@@ -60,11 +114,27 @@ impl MessageProjectionStore {
                 local_state, local_state_changed_at, local_state_reason"#,
         )
         .bind(message_id.trim())
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
         let Some(row) = row else {
             return Err(MessageProjectionError::MessageNotFound);
         };
-        row_to_projected_message(row)
+        let message = row_to_projected_message(row)?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "communication_message",
+                message.message_id.clone(),
+                relationship_kind,
+                serde_json::json!({
+                    "local_state": message.local_state.as_str(),
+                }),
+                metadata,
+            )
+            .await?;
+        }
+        transaction.commit().await?;
+        Ok(message)
     }
 }

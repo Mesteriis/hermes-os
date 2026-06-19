@@ -1,8 +1,14 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_json::json;
 use sqlx::Row;
+use sqlx::Transaction;
 use sqlx::postgres::PgPool;
+use sqlx::postgres::Postgres;
 use thiserror::Error;
+
+use crate::domains::organizations::core::{OrgCoreError, link_entity_in_transaction};
+use crate::platform::observations::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct OrgHealth {
@@ -66,11 +72,72 @@ impl OrgHealthStore {
             .collect())
     }
     pub async fn toggle_watchlist(&self, org_id: &str) -> Result<bool, OrgHealthError> {
-        let row = sqlx::query("UPDATE organizations SET watchlist = NOT watchlist WHERE organization_id=$1 RETURNING watchlist").bind(org_id).fetch_optional(&self.pool).await?;
-        Ok(row
-            .map(|r: sqlx::postgres::PgRow| r.try_get("watchlist").unwrap_or(false))
-            .unwrap_or(false))
+        self.toggle_watchlist_with_source(org_id, &organization_watchlist_source(org_id))
+            .await
     }
+
+    pub async fn toggle_watchlist_with_source(
+        &self,
+        org_id: &str,
+        source: &str,
+    ) -> Result<bool, OrgHealthError> {
+        let mut transaction = self.pool.begin().await?;
+        let watchlist =
+            Self::toggle_watchlist_in_transaction(&mut transaction, org_id, source).await?;
+        transaction.commit().await?;
+        Ok(watchlist)
+    }
+
+    pub async fn toggle_watchlist_with_observation(
+        &self,
+        org_id: &str,
+        source: &str,
+        observation_id: &str,
+    ) -> Result<bool, OrgHealthError> {
+        let mut transaction = self.pool.begin().await?;
+        let watchlist =
+            Self::toggle_watchlist_in_transaction(&mut transaction, org_id, source).await?;
+        link_entity_in_transaction(
+            &mut transaction,
+            observation_id,
+            "watchlist_toggle",
+            org_id,
+            json!({
+                "watchlist": watchlist
+            }),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(watchlist)
+    }
+
+    async fn toggle_watchlist_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        org_id: &str,
+        source: &str,
+    ) -> Result<bool, OrgHealthError> {
+        let row = sqlx::query("UPDATE organizations SET watchlist = NOT watchlist WHERE organization_id=$1 RETURNING watchlist").bind(org_id).fetch_optional(&mut **transaction).await?;
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let watchlist = row.try_get("watchlist").unwrap_or(false);
+        sqlx::query(
+            "INSERT INTO organization_preferences (organization_id, preference_type, value, source)
+             VALUES ($1, 'ui:watchlist', $2, $3)
+             ON CONFLICT (organization_id, preference_type)
+             DO UPDATE SET value = $2, source = $3, updated_at = now()",
+        )
+        .bind(org_id)
+        .bind(if watchlist { "true" } else { "false" })
+        .bind(source)
+        .execute(&mut **transaction)
+        .await?;
+        Ok(watchlist)
+    }
+}
+
+fn organization_watchlist_source(org_id: &str) -> String {
+    format!("organizations.watchlist:{org_id}")
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -144,4 +211,8 @@ impl OrgRiskStore {
 pub enum OrgHealthError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Core(#[from] OrgCoreError),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
 }

@@ -96,6 +96,7 @@ async fn email_blob_records_for_reprojection(
         r#"
         SELECT
             r.raw_record_id,
+            r.observation_id,
             r.account_id,
             r.record_kind,
             r.provider_record_id,
@@ -129,6 +130,7 @@ async fn email_blob_records_for_reprojection(
         .map(|row| {
             Ok(StoredRawCommunicationRecord {
                 raw_record_id: row.try_get("raw_record_id")?,
+                observation_id: row.try_get("observation_id")?,
                 account_id: row.try_get("account_id")?,
                 record_kind: row.try_get("record_kind")?,
                 provider_record_id: row.try_get("provider_record_id")?,

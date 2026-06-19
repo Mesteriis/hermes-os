@@ -1,5 +1,5 @@
-use crate::domains::calendar::events::CalendarAccountStore;
 use crate::domains::mail::core::EmailProviderKind;
+use crate::vault::CalendarAccountStore;
 
 use super::errors::HostVaultReconciliationError;
 use super::provider_recovery::RecoverableProviderSecret;
@@ -15,7 +15,7 @@ pub(super) async fn restore_linked_calendar_account(
                 return Ok(false);
             }
             calendar_store
-                .upsert_google_workspace_account(
+                .restore_google_workspace_account(
                     &secret.account_id,
                     &secret.display_name,
                     Some(&secret.external_account_id),
@@ -30,7 +30,7 @@ pub(super) async fn restore_linked_calendar_account(
                 return Ok(false);
             }
             calendar_store
-                .upsert_apple_icloud_account(
+                .restore_apple_icloud_account(
                     &secret.account_id,
                     &secret.display_name,
                     Some(&secret.external_account_id),

@@ -7,7 +7,8 @@ use tower::ServiceExt;
 
 use super::support::{
     LOCAL_API_TOKEN, build_persons_app, build_persons_app_with_database, get_request_with_token,
-    json_body, put_request_with_token, unique_suffix, urlencoding_percent_encode,
+    json_body, post_request_with_token, put_request_with_token, unique_suffix,
+    urlencoding_percent_encode,
 };
 
 #[tokio::test]
@@ -71,6 +72,19 @@ async fn person_dossier_get_persists_snapshot_and_review_state_against_postgres(
     let stored_dossier = row.try_get::<Value, _>("dossier").expect("dossier json");
     assert_eq!(stored_dossier["person"]["person_id"], person.person_id);
 
+    let dossier_refresh_link_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM observation_links
+         WHERE domain = 'persons'
+           AND entity_kind = 'dossier_snapshot'
+           AND entity_id = $1
+           AND relationship_kind = 'dossier_refresh'",
+    )
+    .bind(&snapshot_id)
+    .fetch_one(&pool)
+    .await
+    .expect("dossier refresh observation link count");
+    assert_eq!(dossier_refresh_link_count, 1);
+
     let response = app
         .oneshot(put_request_with_token(
             &format!(
@@ -87,6 +101,78 @@ async fn person_dossier_get_persists_snapshot_and_review_state_against_postgres(
     assert_eq!(body["dossier_snapshot_id"], snapshot_id);
     assert_eq!(body["review_state"], "user_confirmed");
     assert!(body["reviewed_at"].is_string());
+
+    let dossier_review_link_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM observation_links
+         WHERE domain = 'persons'
+           AND entity_kind = 'dossier_snapshot'
+           AND entity_id = $1
+           AND relationship_kind = 'review_transition'",
+    )
+    .bind(&snapshot_id)
+    .fetch_one(&pool)
+    .await
+    .expect("dossier review observation link count");
+    assert_eq!(dossier_review_link_count, 1);
+}
+
+#[tokio::test]
+async fn person_investigate_captures_observation_and_links_snapshot_against_postgres() {
+    let Some(database_url) = super::support::live_database_url("person investigate API").await
+    else {
+        return;
+    };
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let pool = database.pool().expect("configured pool").clone();
+    let store = PersonProjectionStore::new(pool.clone());
+    let suffix = unique_suffix();
+    let person = store
+        .upsert_email_person(&format!("investigate-snapshot-{suffix}@example.com"))
+        .await
+        .expect("upsert investigate persona");
+
+    let app = build_persons_app_with_database(&database_url, database);
+
+    let response = app
+        .oneshot(post_request_with_token(
+            &format!(
+                "/api/v1/persons/{}/investigate",
+                urlencoding_percent_encode(&person.person_id)
+            ),
+            json!({ "query": "refresh dossier" }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("investigate response");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = json_body(response).await;
+    let snapshot_id = body["dossier_snapshot_id"]
+        .as_str()
+        .expect("dossier snapshot id")
+        .to_owned();
+
+    let investigation_observation: (String, String) = sqlx::query_as(
+        "SELECT link.observation_id, kind.code AS kind_code
+         FROM observation_links link
+         JOIN observations observation
+           ON observation.observation_id = link.observation_id
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE link.domain = 'persons'
+           AND link.entity_kind = 'dossier_snapshot'
+           AND link.entity_id = $1
+           AND link.relationship_kind = 'dossier_refresh'
+         ORDER BY link.created_at DESC
+         LIMIT 1",
+    )
+    .bind(&snapshot_id)
+    .fetch_one(&pool)
+    .await
+    .expect("investigate observation");
+    assert!(!investigation_observation.0.is_empty());
+    assert_eq!(investigation_observation.1, "PERSON_MUTATION");
 }
 
 #[tokio::test]
@@ -119,7 +205,7 @@ async fn person_owner_get_and_put_uses_owner_persona_against_postgres() {
         .execute(&pool)
         .await
         .expect("clear existing owner persona");
-    let store = PersonProjectionStore::new(pool);
+    let store = PersonProjectionStore::new(pool.clone());
     let suffix = unique_suffix();
     let owner = store
         .upsert_email_person(&format!("owner-api-{suffix}@example.com"))
@@ -158,6 +244,27 @@ async fn person_owner_get_and_put_uses_owner_persona_against_postgres() {
     assert_eq!(body["owner_persona"]["person_id"], owner.person_id);
     assert_eq!(body["owner_persona"]["is_self"], true);
     assert_eq!(body["owner_persona"]["persona_type"], "human");
+
+    let owner_assignment_observation: (String, String) = sqlx::query_as(
+        "SELECT link.observation_id, kind.code AS kind_code
+         FROM observation_links link
+         JOIN observations observation
+           ON observation.observation_id = link.observation_id
+         JOIN observation_kind_definitions kind
+           ON kind.kind_definition_id = observation.kind_definition_id
+         WHERE link.domain = 'persons'
+           AND link.entity_kind = 'persona'
+           AND link.entity_id = $1
+           AND link.relationship_kind = 'owner_assignment'
+         ORDER BY link.created_at DESC
+         LIMIT 1",
+    )
+    .bind(&owner.person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("owner assignment observation");
+    assert!(!owner_assignment_observation.0.is_empty());
+    assert_eq!(owner_assignment_observation.1, "PERSON_MUTATION");
 
     let response = app
         .oneshot(get_request_with_token(

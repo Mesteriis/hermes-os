@@ -40,8 +40,8 @@ pub(crate) async fn post_event_reminder(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let r = CalendarReminderStore::new(pool)
-        .create(
+    let r = CalendarCommandService::new(pool)
+        .create_event_reminder_manual(
             &event_id,
             &req.reminder_type,
             req.minutes_before,
@@ -59,7 +59,7 @@ pub(crate) struct ToggleReminderRequest {
 
 pub(crate) async fn post_event_reminder_toggle(
     State(state): State<AppState>,
-    Path((_event_id, reminder_id)): Path<(String, String)>,
+    Path((event_id, reminder_id)): Path<(String, String)>,
     Json(req): Json<ToggleReminderRequest>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = state
@@ -67,9 +67,8 @@ pub(crate) async fn post_event_reminder_toggle(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    CalendarReminderStore::new(pool)
-        .set_active(&reminder_id, req.active)
-        .await
-        .map_err(ApiError::from)?;
+    CalendarCommandService::new(pool)
+        .toggle_event_reminder_manual(&event_id, &reminder_id, req.active)
+        .await?;
     Ok(Json(json!({"toggled": true, "active": req.active})))
 }

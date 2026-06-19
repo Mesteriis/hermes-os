@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
@@ -47,10 +48,50 @@ async fn contradictions_list_returns_open_reviewable_observations() {
     assert_eq!(item["old_claim"], stored.old_claim);
     assert_eq!(item["new_claim"], stored.new_claim);
     assert_eq!(item["review_state"], "suggested");
+
+    let review_item: (String, String, String) = sqlx::query_as(
+        r#"
+        SELECT item_kind, status, metadata->>'contradiction_observation_id'
+        FROM review_items
+        WHERE metadata->>'contradiction_observation_id' = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&stored.observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("contradiction review item");
+    assert_eq!(review_item.0, "contradiction_candidate");
+    assert_eq!(review_item.1, "new");
+    assert_eq!(review_item.2, stored.observation_id);
+
+    let materialized_link: (String, Value) = sqlx::query_as(
+        r#"
+        SELECT relationship_kind, metadata
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'consistency'
+          AND entity_kind = 'contradiction_observation'
+          AND entity_id = $1
+          AND relationship_kind = 'upsert'
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&stored.observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("contradiction materialized link");
+    assert_eq!(materialized_link.0, "upsert");
+    assert_eq!(
+        materialized_link.1["conflict_type"],
+        json!("direct_contradiction")
+    );
 }
 
 #[tokio::test]
-async fn put_contradiction_review_updates_review_state_without_overwriting_memory() {
+async fn put_contradiction_review_updates_review_state_with_observation_trail() {
     let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
         eprintln!(
             "skipping live contradiction review API test: HERMES_TEST_DATABASE_URL is not set"
@@ -81,6 +122,25 @@ async fn put_contradiction_review_updates_review_state_without_overwriting_memor
     assert_eq!(body["reviewed_by"], "hermes-frontend");
     assert_eq!(body["resolution"], "confirmed from source review");
 
+    let link_row = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'consistency'
+           AND entity_kind = 'contradiction_observation'
+           AND entity_id = $1
+           AND relationship_kind = 'review_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&stored.observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("contradiction observation link");
+    let review_observation_id: String = link_row.try_get("observation_id").expect("observation id");
+    let metadata: Value = link_row.try_get("metadata").expect("link metadata");
+    assert_eq!(metadata["review_state"], "user_confirmed");
+    assert_eq!(metadata["resolution"], "confirmed from source review");
+
     let row: (String, Option<String>, i64) = sqlx::query_as(
         r#"
         SELECT
@@ -104,6 +164,38 @@ async fn put_contradiction_review_updates_review_state_without_overwriting_memor
     assert_eq!(row.0, "user_confirmed");
     assert_eq!(row.1.as_deref(), Some("confirmed from source review"));
     assert_eq!(row.2, 0);
+
+    let observation_row =
+        sqlx::query("SELECT origin_kind, payload FROM observations WHERE observation_id = $1")
+            .bind(&review_observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("review observation");
+    let origin_kind: String = observation_row.try_get("origin_kind").expect("origin kind");
+    let payload: Value = observation_row.try_get("payload").expect("payload");
+    assert_eq!(origin_kind, "manual");
+    assert_eq!(
+        payload["contradiction_observation_id"],
+        json!(stored.observation_id)
+    );
+    assert_eq!(payload["review_state"], "user_confirmed");
+
+    let review_item: (String, String, String) = sqlx::query_as(
+        r#"
+        SELECT item_kind, status, metadata->>'contradiction_observation_id'
+        FROM review_items
+        WHERE metadata->>'contradiction_observation_id' = $1
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&stored.observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("updated contradiction review item");
+    assert_eq!(review_item.0, "contradiction_candidate");
+    assert_eq!(review_item.1, "approved");
+    assert_eq!(review_item.2, stored.observation_id);
 }
 
 async fn app_and_pool(database_url: &str) -> (axum::Router, PgPool) {

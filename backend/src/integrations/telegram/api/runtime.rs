@@ -4,7 +4,10 @@ use serde::Deserialize;
 
 use super::helpers::{AUDIT_ACTOR_ID, telegram_secret_store};
 use crate::app::{ApiError, AppState};
-use crate::domains::api_support::{api_audit_log, communication_ingestion_store};
+use crate::domains::api_support::{
+    api_audit_log, communication_provider_account_store,
+    communication_provider_secret_binding_store,
+};
 use crate::integrations::telegram::runtime::{
     TelegramRuntimeRestartRequest, TelegramRuntimeStartContext, TelegramRuntimeStartRequest,
     TelegramRuntimeStatus, TelegramRuntimeStopRequest,
@@ -24,7 +27,7 @@ pub(crate) async fn get_telegram_runtime_status(
         state
             .telegram_runtime
             .status_for_account(
-                &communication_ingestion_store(&state)?,
+                &communication_provider_account_store(&state)?,
                 &state.config,
                 &query.account_id,
             )
@@ -39,10 +42,12 @@ pub(crate) async fn post_telegram_runtime_start(
     let runtime = state.telegram_runtime.clone();
     let config = state.config.clone();
     let vault = state.vault.clone();
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
     let context = TelegramRuntimeStartContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         secret_store: &secret_store,
         secret_resolver: &vault,
         config: &config,
@@ -60,7 +65,7 @@ pub(crate) async fn post_telegram_runtime_stop(
     let status = state
         .telegram_runtime
         .stop_account_runtime(
-            &communication_ingestion_store(&state)?,
+            &communication_provider_account_store(&state)?,
             &state.config,
             &request,
         )
@@ -86,10 +91,12 @@ pub(crate) async fn post_telegram_runtime_restart(
     let runtime = state.telegram_runtime.clone();
     let config = state.config.clone();
     let vault = state.vault.clone();
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
     let context = TelegramRuntimeStartContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         secret_store: &secret_store,
         secret_resolver: &vault,
         config: &config,

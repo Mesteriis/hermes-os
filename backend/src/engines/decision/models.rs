@@ -12,6 +12,7 @@ pub struct DecisionExtractionInput {
     pub source_kind: DecisionEvidenceSourceKind,
     pub source_id: String,
     pub text: String,
+    pub observation_id: Option<String>,
     pub impacted_entity_kind: DecisionEntityKind,
     pub impacted_entity_id: String,
     pub decided_by_entity_kind: Option<DecisionEntityKind>,
@@ -29,6 +30,7 @@ impl DecisionExtractionInput {
             source_kind: DecisionEvidenceSourceKind::Communication,
             source_id: source_id.into(),
             text: text.into(),
+            observation_id: None,
             impacted_entity_kind,
             impacted_entity_id: impacted_entity_id.into(),
             decided_by_entity_kind: None,
@@ -46,6 +48,7 @@ impl DecisionExtractionInput {
             source_kind: DecisionEvidenceSourceKind::Document,
             source_id: source_id.into(),
             text: text.into(),
+            observation_id: None,
             impacted_entity_kind,
             impacted_entity_id: impacted_entity_id.into(),
             decided_by_entity_kind: None,
@@ -63,10 +66,18 @@ impl DecisionExtractionInput {
         self
     }
 
+    pub fn with_observation_id(mut self, observation_id: Option<String>) -> Self {
+        self.observation_id = observation_id;
+        self
+    }
+
     pub fn validate(&self) -> Result<(), DecisionEngineError> {
         validate_non_empty("source_id", &self.source_id)?;
         validate_non_empty("text", &self.text)?;
         validate_non_empty("impacted_entity_id", &self.impacted_entity_id)?;
+        if let Some(observation_id) = &self.observation_id {
+            validate_non_empty("observation_id", observation_id)?;
+        }
         match (
             self.decided_by_entity_kind,
             self.decided_by_entity_id.as_ref(),
@@ -114,6 +125,7 @@ pub struct DecisionCandidate {
     pub review_state: DecisionReviewState,
     pub evidence_source_kind: DecisionEvidenceSourceKind,
     pub evidence_source_id: String,
+    pub evidence_observation_id: Option<String>,
     pub decided_by_entity_kind: Option<DecisionEntityKind>,
     pub decided_by_entity_id: Option<String>,
     pub impacted_entities: Vec<DecisionImpactedEntityCandidate>,
@@ -144,6 +156,7 @@ impl DecisionCandidate {
 
         let evidence =
             NewDecisionEvidence::new(self.evidence_source_kind, self.evidence_source_id.clone())
+                .with_observation_id(self.evidence_observation_id.clone())
                 .quote(self.quote.clone())
                 .confidence(self.confidence)
                 .metadata(json!({

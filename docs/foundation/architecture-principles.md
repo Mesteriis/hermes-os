@@ -49,7 +49,8 @@ record cannot cite its source, it must be treated as incomplete.
 ## 10. Provider Boundaries Stay Explicit
 
 Gmail, Telegram, WhatsApp, calendars and external task trackers are providers.
-Their quirks stay in adapters and source records, not in the core world model.
+Their quirks stay in adapters and canonical observations, not in the core world
+model.
 
 ## 11. Derived State Is Rebuildable
 

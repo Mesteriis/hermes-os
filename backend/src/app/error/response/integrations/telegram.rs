@@ -96,6 +96,18 @@ pub(super) fn telegram_error_parts(error: TelegramError) -> ErrorParts {
             "telegram_task_candidate_refresh_error",
             "Telegram task candidate refresh failed",
         ),
+        TelegramError::ReviewInboxWorkflow(error) => internal(
+            error,
+            "Telegram review inbox mirroring failed",
+            "telegram_review_inbox_error",
+            "Telegram review inbox mirroring failed",
+        ),
+        TelegramError::ObservationStore(error) => internal(
+            error,
+            "Telegram observation trail operation failed",
+            "telegram_observation_error",
+            "Telegram observation trail operation failed",
+        ),
         TelegramError::Sqlx(error) => internal(
             error,
             "Telegram database operation failed",

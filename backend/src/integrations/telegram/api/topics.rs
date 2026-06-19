@@ -6,7 +6,8 @@ use serde_json::json;
 
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::{
-    TelegramMessageListResponse, api_audit_log, communication_ingestion_store, telegram_store,
+    TelegramMessageListResponse, api_audit_log, communication_provider_account_store,
+    communication_provider_secret_binding_store, telegram_store,
 };
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::{
@@ -105,10 +106,12 @@ pub(crate) async fn get_telegram_topics(
         })?;
     ensure_telegram_account_operation_allowed(&state, &chat.account_id, "topics.list").await?;
 
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let secret_store = telegram_secret_store(&state)?;
     let context = TelegramRuntimeOperationContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         telegram_store: &store,
         secret_store: &secret_store,
         secret_resolver: &state.vault,

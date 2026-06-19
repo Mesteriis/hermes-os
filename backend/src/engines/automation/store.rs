@@ -3,6 +3,7 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 
 use super::errors::AutomationError;
+use super::evidence::{capture_policy_observation, capture_template_observation};
 use super::models::{
     AutomationPolicy, AutomationTemplate, NewAutomationPolicy, NewAutomationTemplate,
     TelegramSendDryRunRequest, TelegramSendDryRunResponse,
@@ -23,8 +24,10 @@ impl AutomationStore {
     pub async fn upsert_template(
         &self,
         template: &NewAutomationTemplate,
+        actor_id: &str,
     ) -> Result<AutomationTemplate, AutomationError> {
         template.validate()?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO automation_templates (
@@ -54,17 +57,29 @@ impl AutomationStore {
         .bind(template.name.trim())
         .bind(template.body_template.trim())
         .bind(json!(template.required_variables))
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_template(row)
+        let stored = row_to_template(row)?;
+        capture_template_observation(
+            &mut transaction,
+            &stored,
+            "upsert",
+            actor_id,
+            stored.updated_at,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(stored)
     }
 
     pub async fn upsert_policy(
         &self,
         policy: &NewAutomationPolicy,
+        actor_id: &str,
     ) -> Result<AutomationPolicy, AutomationError> {
         policy.validate()?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO automation_policies (
@@ -122,10 +137,20 @@ impl AutomationStore {
         .bind(&policy.quiet_hours)
         .bind(policy.expires_at)
         .bind(&policy.conditions)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_policy(row)
+        let stored = row_to_policy(row)?;
+        capture_policy_observation(
+            &mut transaction,
+            &stored,
+            "upsert",
+            actor_id,
+            stored.updated_at,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(stored)
     }
 
     pub async fn list_templates(&self) -> Result<Vec<AutomationTemplate>, AutomationError> {

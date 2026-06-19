@@ -223,6 +223,37 @@ async fn project_link_candidates_return_safe_message_and_document_candidates() {
         message_candidate["evidence_excerpt"],
         json!(format!("reviewer-link-{suffix}@example.com"))
     );
+
+    let review_items: Vec<(String, String, String, String)> = sqlx::query_as(
+        r#"
+        SELECT
+            review_item_id,
+            item_kind,
+            metadata->>'mirrored_from',
+            metadata->>'target_id'
+        FROM review_items
+        WHERE metadata->>'project_id' = $1
+          AND item_kind = 'project_link_candidate'
+        ORDER BY created_at ASC
+        "#,
+    )
+    .bind(&project_id)
+    .fetch_all(&pool)
+    .await
+    .expect("project link candidate review items");
+    assert_eq!(review_items.len(), 2);
+    assert!(
+        review_items
+            .iter()
+            .all(|item| item.1 == "project_link_candidate")
+    );
+    assert!(
+        review_items
+            .iter()
+            .all(|item| item.2 == "project_link_candidates")
+    );
+    assert!(review_items.iter().any(|item| item.3 == message_id));
+    assert!(review_items.iter().any(|item| item.3 == document_id));
 }
 
 #[tokio::test]
@@ -315,6 +346,39 @@ async fn put_project_link_review_updates_review_state() {
     .await
     .expect("review state");
     assert_eq!(persisted_state, "user_confirmed");
+
+    let review_transition_link_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM observation_links
+         WHERE domain = 'projects'
+           AND entity_kind = 'project_link_review'
+           AND entity_id = $1
+           AND relationship_kind = 'review_transition'",
+    )
+    .bind(format!("project_link_review:{command_id}"))
+    .fetch_one(&pool)
+    .await
+    .expect("project link review observation link count");
+    assert_eq!(review_transition_link_count, 1);
+
+    let review_item: (String, String, String) = sqlx::query_as(
+        r#"
+        SELECT status, target_entity_kind, entity_id
+        FROM review_items
+        WHERE metadata->>'project_id' = $1
+          AND metadata->>'target_kind' = 'message'
+          AND metadata->>'target_id' = $2
+        ORDER BY updated_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&project_id)
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("project link review item");
+    assert_eq!(review_item.0, "promoted");
+    assert_eq!(review_item.1, "project_link_candidate");
+    assert_eq!(review_item.2, format!("{project_id}:message:{message_id}"));
 }
 
 #[tokio::test]

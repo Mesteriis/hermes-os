@@ -27,17 +27,15 @@ pub(crate) async fn post_event_checklist(
     Path(event_id): Path<String>,
     Json(req): Json<SetChecklistRequest>,
 ) -> Result<Json<crate::domains::calendar::core::EventChecklist>, ApiError> {
+    let requested_source = req.source.as_deref().unwrap_or("manual");
+    let items = req.items;
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let checklist = EventChecklistStore::new(pool)
-        .set(
-            &event_id,
-            req.items,
-            req.source.as_deref().unwrap_or("manual"),
-        )
+    let checklist = CalendarCommandService::new(pool)
+        .set_event_checklist_manual(&event_id, items, requested_source)
         .await
         .map_err(ApiError::from)?;
     Ok(Json(checklist))

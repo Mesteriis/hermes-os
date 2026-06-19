@@ -19,7 +19,7 @@ pub(crate) async fn get_calendar_accounts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = CalendarAccountStore::new(pool)
+    let items = crate::vault::CalendarAccountStore::new(pool)
         .list(query.provider.as_deref())
         .await?;
     Ok(Json(CalendarAccountsResponse { items }))
@@ -41,8 +41,8 @@ pub(crate) async fn post_calendar_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let acct = CalendarAccountStore::new(pool)
-        .create(&req.provider, &req.account_name, req.email.as_deref())
+    let acct = CalendarCommandService::new(pool)
+        .create_calendar_account_manual(&req.provider, &req.account_name, req.email.as_deref())
         .await?;
     Ok(Json(acct))
 }
@@ -56,7 +56,7 @@ pub(crate) async fn get_calendar_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    CalendarAccountStore::new(pool)
+    crate::vault::CalendarAccountStore::new(pool)
         .get(&account_id)
         .await?
         .map(Json)
@@ -73,8 +73,8 @@ pub(crate) async fn put_calendar_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let acct = CalendarAccountStore::new(pool)
-        .update(&account_id, &update)
+    let acct = CalendarCommandService::new(pool)
+        .update_calendar_account_manual(&account_id, &update)
         .await?;
     Ok(Json(acct))
 }
@@ -88,7 +88,9 @@ pub(crate) async fn delete_calendar_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    CalendarAccountStore::new(pool).delete(&account_id).await?;
+    CalendarCommandService::new(pool)
+        .delete_calendar_account_manual(&account_id)
+        .await?;
     Ok(Json(json!({"deleted": true})))
 }
 
@@ -108,7 +110,7 @@ pub(crate) async fn get_calendar_sources(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = CalendarSourceStore::new(pool)
+    let items = crate::vault::CalendarSourceStore::new(pool)
         .list_by_account(&account_id)
         .await?;
     Ok(Json(CalendarSourcesResponse { items }))
@@ -132,8 +134,8 @@ pub(crate) async fn post_calendar_source(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let src = CalendarSourceStore::new(pool)
-        .create(
+    let src = CalendarCommandService::new(pool)
+        .create_calendar_source_manual(
             &account_id,
             &req.name,
             req.provider_calendar_id.as_deref(),

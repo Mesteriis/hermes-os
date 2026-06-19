@@ -8,6 +8,7 @@ use axum::http::{Request, StatusCode, header};
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Value, json};
+use sqlx::Row;
 use tempfile::tempdir;
 use tower::ServiceExt;
 
@@ -145,6 +146,24 @@ async fn gmail_send_api_uses_gmail_api_when_send_scope_enabled_against_postgres(
         body["accepted_recipients"],
         json!(["recipient@example.com", "copy@example.com"])
     );
+    let provider_message_id = body["message_id"].as_str().expect("provider message id");
+    let link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'provider_send'
+           AND entity_id = $1
+           AND relationship_kind = 'provider_send'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(provider_message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("gmail provider send observation link");
+    let link_metadata: Value = link.try_get("metadata").expect("link metadata");
+    assert_eq!(link_metadata["transport"], "gmail");
+    assert_eq!(link_metadata["status"], "sent");
 
     let requests = gmail_api.requests();
     assert_eq!(requests.len(), 1);

@@ -63,9 +63,8 @@ pub(crate) async fn post_person_watchlist_toggle(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let on = PersonHealthStore::new(pool)
-        .toggle_watchlist(&person_id)
-        .await
-        .map_err(ApiError::from)?;
+    let on = crate::domains::persons::service::PersonCommandService::new(pool)
+        .toggle_watchlist_manual(&person_id)
+        .await?;
     Ok(Json(json!({"watchlist": on})))
 }

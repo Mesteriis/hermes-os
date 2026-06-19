@@ -56,6 +56,7 @@ impl RelationshipEntityKind {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RelationshipEvidenceSourceKind {
+    Observation,
     Communication,
     Document,
     Event,
@@ -67,12 +68,12 @@ pub enum RelationshipEvidenceSourceKind {
     Project,
     Organization,
     Persona,
-    RawRecord,
 }
 
 impl RelationshipEvidenceSourceKind {
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Observation => "observation",
             Self::Communication => "communication",
             Self::Document => "document",
             Self::Event => "event",
@@ -84,7 +85,6 @@ impl RelationshipEvidenceSourceKind {
             Self::Project => "project",
             Self::Organization => "organization",
             Self::Persona => "persona",
-            Self::RawRecord => "raw_record",
         }
     }
 }
@@ -172,6 +172,7 @@ impl NewRelationship {
 pub struct NewRelationshipEvidence {
     pub source_kind: RelationshipEvidenceSourceKind,
     pub source_id: String,
+    pub observation_id: Option<String>,
     pub excerpt: Option<String>,
     pub metadata: Value,
 }
@@ -181,6 +182,18 @@ impl NewRelationshipEvidence {
         Self {
             source_kind,
             source_id: source_id.into(),
+            observation_id: None,
+            excerpt: None,
+            metadata: json!({}),
+        }
+    }
+
+    pub fn observation(observation_id: impl Into<String>) -> Self {
+        let observation_id = observation_id.into();
+        Self {
+            source_kind: RelationshipEvidenceSourceKind::Observation,
+            source_id: observation_id.clone(),
+            observation_id: Some(observation_id),
             excerpt: None,
             metadata: json!({}),
         }

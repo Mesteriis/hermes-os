@@ -7,6 +7,7 @@ fn test_message(subject: &str, body: &str) -> ProjectedMessage {
     ProjectedMessage {
         message_id: "msg:test:1".into(),
         raw_record_id: "raw:1".into(),
+        observation_id: "observation:1".into(),
         account_id: "acct:1".into(),
         provider_record_id: "prov:1".into(),
         subject: subject.into(),

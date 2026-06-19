@@ -291,6 +291,46 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     assert_eq!(skipped_payload["account_id"], account_id);
     assert_eq!(skipped_payload["run_id"], run_id);
     assert_eq!(skipped_payload["status"], "skipped");
+    let sync_observation_kinds: Vec<String> = sqlx::query_scalar(
+        r#"
+        SELECT kind.code AS kind_code
+        FROM observation_links link
+        JOIN observations observation ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'communications'
+          AND link.entity_kind = 'mail_sync_run'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(run_id)
+    .fetch_all(&pool)
+    .await
+    .expect("sync observations");
+    assert_eq!(
+        sync_observation_kinds,
+        vec![
+            "COMMUNICATION_MAIL_SYNC_RUN".to_owned(),
+            "COMMUNICATION_MAIL_SYNC_RUN_STATUS".to_owned(),
+        ]
+    );
+    let skipped_relationship_kind: String = sqlx::query_scalar(
+        r#"
+        SELECT relationship_kind
+        FROM observation_links
+        WHERE domain = 'communications'
+          AND entity_kind = 'mail_sync_run'
+          AND entity_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(run_id)
+    .fetch_one(&pool)
+    .await
+    .expect("skipped sync relationship kind");
+    assert_eq!(skipped_relationship_kind, "skipped");
 
     let resp = r
         .oneshot(pget(

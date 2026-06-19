@@ -1,6 +1,7 @@
 use sqlx::{Postgres, Transaction};
 
 use super::MessageProjectionStore;
+use crate::domains::mail::evidence::link_mail_entity_in_transaction;
 use crate::domains::mail::messages::errors::MessageProjectionError;
 use crate::domains::mail::messages::models::ProjectedMessage;
 use crate::domains::mail::messages::rows::row_to_projected_message;
@@ -13,10 +14,42 @@ impl MessageProjectionStore {
         message_id: &str,
         new_state: WorkflowState,
     ) -> Result<ProjectedMessage, MessageProjectionError> {
+        self.transition_workflow_state_with_observation(
+            message_id,
+            new_state,
+            None,
+            "workflow_state_transition",
+            None,
+        )
+        .await
+    }
+
+    pub async fn transition_workflow_state_with_observation(
+        &self,
+        message_id: &str,
+        new_state: WorkflowState,
+        observation_id: Option<&str>,
+        relationship_kind: &str,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<ProjectedMessage, MessageProjectionError> {
         let mut transaction = self.pool.begin().await?;
         let message =
             Self::transition_workflow_state_in_transaction(&mut transaction, message_id, new_state)
                 .await?;
+        if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
+            link_mail_entity_in_transaction(
+                &mut transaction,
+                observation_id,
+                "communication_message",
+                message.message_id.clone(),
+                relationship_kind,
+                serde_json::json!({
+                    "workflow_state": message.workflow_state.as_str(),
+                }),
+                metadata,
+            )
+            .await?;
+        }
         transaction.commit().await?;
         Ok(message)
     }
@@ -31,7 +64,7 @@ impl MessageProjectionStore {
             r#"UPDATE communication_messages SET workflow_state = $2, projected_at = now()
             WHERE message_id = $1
             RETURNING
-                message_id, raw_record_id, account_id, provider_record_id,
+                message_id, raw_record_id, observation_id, account_id, provider_record_id,
                 subject, sender, recipients, body_text,
                 occurred_at, projected_at, channel_kind, conversation_id,
                 sender_display_name, delivery_state, message_metadata,

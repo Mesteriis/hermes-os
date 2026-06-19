@@ -175,6 +175,7 @@ pub struct ProjectDocumentSummary {
     pub document_id: String,
     pub document_kind: String,
     pub title: String,
+    pub observation_id: String,
     pub imported_at: DateTime<Utc>,
 }
 
@@ -193,6 +194,7 @@ pub(crate) struct ProjectProjectionSource {
 pub(crate) struct ProjectMatchedMessage {
     pub message_id: String,
     pub raw_record_id: String,
+    pub observation_id: String,
     pub account_id: String,
     pub provider_record_id: String,
     pub subject: String,
@@ -208,6 +210,7 @@ pub(crate) struct ProjectMatchedDocument {
     pub document_id: String,
     pub document_kind: String,
     pub title: String,
+    pub observation_id: String,
     pub source_fingerprint: String,
     pub imported_at: DateTime<Utc>,
     pub review_state: ProjectLinkReviewState,

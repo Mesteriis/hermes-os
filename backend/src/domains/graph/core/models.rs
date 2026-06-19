@@ -97,10 +97,10 @@ pub enum GraphEvidenceSourceKind {
     Person,
     Message,
     Document,
-    RawRecord,
     Relationship,
     Decision,
     Obligation,
+    Observation,
 }
 
 impl GraphEvidenceSourceKind {
@@ -109,10 +109,10 @@ impl GraphEvidenceSourceKind {
             Self::Person => "contact",
             Self::Message => "message",
             Self::Document => "document",
-            Self::RawRecord => "raw_record",
             Self::Relationship => "relationship",
             Self::Decision => "decision",
             Self::Obligation => "obligation",
+            Self::Observation => "observation",
         }
     }
 }
@@ -205,6 +205,7 @@ impl NewGraphEdge {
 pub struct NewGraphEvidence {
     pub source_kind: GraphEvidenceSourceKind,
     pub source_id: String,
+    pub observation_id: Option<String>,
     pub excerpt: Option<String>,
     pub metadata: Value,
 }
@@ -214,9 +215,26 @@ impl NewGraphEvidence {
         Self {
             source_kind,
             source_id: source_id.into(),
+            observation_id: None,
             excerpt: None,
             metadata: json!({}),
         }
+    }
+
+    pub fn observation(observation_id: impl Into<String>) -> Self {
+        let observation_id = observation_id.into();
+        Self {
+            source_kind: GraphEvidenceSourceKind::Observation,
+            source_id: observation_id.clone(),
+            observation_id: Some(observation_id),
+            excerpt: None,
+            metadata: json!({}),
+        }
+    }
+
+    pub fn observation_id(mut self, observation_id: impl Into<String>) -> Self {
+        self.observation_id = Some(observation_id.into());
+        self
     }
 
     pub fn excerpt(mut self, excerpt: impl Into<String>) -> Self {
@@ -231,6 +249,19 @@ impl NewGraphEvidence {
 
     pub(super) fn validate(&self) -> Result<(), GraphStoreError> {
         validate_non_empty("source_id", &self.source_id)?;
+        if let Some(observation_id) = &self.observation_id {
+            validate_non_empty("observation_id", observation_id)?;
+        }
+        if self.source_kind == GraphEvidenceSourceKind::Message && self.observation_id.is_none() {
+            return Err(GraphStoreError::MissingObservationEvidence {
+                source_kind: self.source_kind.as_str(),
+            });
+        }
+        if self.source_kind == GraphEvidenceSourceKind::Observation
+            && self.observation_id.as_deref() != Some(self.source_id.as_str())
+        {
+            return Err(GraphStoreError::ObservationSourceMismatch);
+        }
         validate_json_object("evidence metadata", &self.metadata)
     }
 }
@@ -281,6 +312,7 @@ pub struct GraphEvidenceSummary {
     pub edge_id: String,
     pub source_kind: GraphEvidenceSourceKind,
     pub source_id: String,
+    pub observation_id: Option<String>,
     pub excerpt: Option<String>,
     pub metadata: Value,
 }

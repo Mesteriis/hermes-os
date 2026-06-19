@@ -3,22 +3,24 @@
 Status: Candidate architecture position for the 2026-06-18 documentation
 consolidation.
 
-Decision status: Radar is not accepted as a domain today.
+Decision status: Radar is not accepted as a domain today. ADR-0096 assigns the
+durable inbox responsibility to the Review domain.
 
 Scope: architecture analysis only. This document does not create a Radar domain,
 tables, APIs, routes or UI work.
 
 ## Purpose
 
-Radar is the proposed name for a Memory Intake Layer: a place where incoming
-signals, candidates and observations can be reviewed before promotion into
+Radar is attention vocabulary over the intake and review experience: a way to
+talk about what deserves attention, ranking and grouping. Incoming candidates
+and observations are reviewed through the Review domain before promotion into
 owning domains.
 
 Proposed flow:
 
 ```text
 External Sources
-  -> Radar
+  -> Observation Platform
   -> Review
   -> Promotion
   -> Persona / Organization / Task / Project / Document / Knowledge
@@ -29,8 +31,8 @@ External Sources
 Radar should be treated as:
 
 - a workflow;
-- a derived inbox/read model;
-- a review and triage surface;
+- a derived read model over Review;
+- a review and triage vocabulary;
 - a ranking/grouping layer over source-backed candidates.
 
 Radar should not be treated as:
@@ -39,7 +41,8 @@ Radar should not be treated as:
 - a replacement for Tasks;
 - a generic Knowledge store;
 - an Observation warehouse;
-- a hidden automation engine.
+- a hidden automation engine;
+- the durable inbox owner.
 
 ## Responsibility
 
@@ -67,8 +70,8 @@ Radar must not own:
 - accepted Memory or Knowledge;
 - source provider records.
 
-Review state should remain with the concrete candidate or observation unless a
-future ADR defines a rebuildable Radar inbox read model.
+Review state belongs to `domains/review`. Radar may group or rank review items,
+but it does not own lifecycle state.
 
 Promotion must call the owning domain:
 
@@ -111,9 +114,9 @@ signals are not tasks:
 - missing project context;
 - document evidence waiting for classification.
 
-The risk is that Radar becomes a second task tracker, second knowledge base and
-second observation store. Until a durable `Signal` entity and lifecycle are
-proven, Radar remains a workflow/read-model concept.
+The risk is that Radar becomes a second task tracker, second knowledge base,
+second review inbox and second observation store. Per ADR-0096, Radar remains
+attention/read-model vocabulary while Review owns the concrete inbox.
 
 ## Promotion Gate
 

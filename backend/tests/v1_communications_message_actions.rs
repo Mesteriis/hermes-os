@@ -243,6 +243,47 @@ async fn v1_message_analyze_returns_structured_ai_summary_against_postgres() {
         metadata["ai_summary_contract"], body["summary_contract"],
         "analyze response must persist the structured summary contract"
     );
+
+    let observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let knowledge_review_items = sqlx::query(
+        r#"
+        SELECT metadata
+        FROM review_items
+        WHERE item_kind = 'knowledge_candidate'
+          AND review_item_id IN (
+              SELECT review_item_id
+              FROM review_item_evidence
+              WHERE observation_id = $1
+          )
+        ORDER BY metadata->>'candidate_group', title
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_all(&pool)
+    .await
+    .expect("knowledge review items");
+    let mut candidate_groups = knowledge_review_items
+        .into_iter()
+        .map(|row| {
+            let metadata: Value = row.try_get("metadata").expect("metadata");
+            metadata["candidate_group"]
+                .as_str()
+                .expect("candidate group")
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    candidate_groups.sort();
+    candidate_groups.dedup();
+    assert_eq!(
+        candidate_groups,
+        vec!["agreement".to_owned(), "document".to_owned()]
+    );
 }
 
 #[tokio::test]
@@ -318,6 +359,42 @@ async fn v1_bulk_actions_mark_read_and_trash_messages_against_postgres() {
     .await
     .expect("read event count");
     assert_eq!(read_event_count, 1);
+    let workflow_links = sqlx::query(
+        "SELECT observation_id, entity_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'communication_message'
+           AND relationship_kind = 'workflow_state_transition'
+           AND entity_id = ANY($1)
+         ORDER BY entity_id ASC, created_at ASC",
+    )
+    .bind(vec![first_id.clone(), second_id.clone()])
+    .fetch_all(&pool)
+    .await
+    .expect("workflow links");
+    assert_eq!(workflow_links.len(), 2);
+    for row in &workflow_links {
+        let metadata: Value = row.try_get("metadata").expect("workflow metadata");
+        assert_eq!(metadata["workflow_state"], "reviewed");
+        let observation_id: String = row
+            .try_get("observation_id")
+            .expect("workflow observation id");
+        let observation = sqlx::query(
+            "SELECT origin_kind, payload
+             FROM observations
+             WHERE observation_id = $1",
+        )
+        .bind(&observation_id)
+        .fetch_one(&pool)
+        .await
+        .expect("workflow observation");
+        let origin_kind: String = observation
+            .try_get("origin_kind")
+            .expect("workflow origin kind");
+        let payload: Value = observation.try_get("payload").expect("workflow payload");
+        assert_eq!(origin_kind, "manual");
+        assert_eq!(payload["action"], "mark_read");
+    }
 
     let missing_id = format!("msg:missing-{suffix}");
     let response = r
@@ -362,6 +439,143 @@ async fn v1_bulk_actions_mark_read_and_trash_messages_against_postgres() {
     .await
     .expect("deleted event count");
     assert_eq!(deleted_event_count, 1);
+    let trash_link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'communication_message'
+           AND entity_id = $1
+           AND relationship_kind = 'local_state_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(&first_id)
+    .fetch_one(&pool)
+    .await
+    .expect("trash link");
+    let trash_observation_id: String = trash_link
+        .try_get("observation_id")
+        .expect("trash observation id");
+    let trash_metadata: Value = trash_link.try_get("metadata").expect("trash metadata");
+    assert_eq!(trash_metadata["local_state"], "trash");
+    let trash_observation = sqlx::query(
+        "SELECT origin_kind, payload
+         FROM observations
+         WHERE observation_id = $1",
+    )
+    .bind(&trash_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("trash observation");
+    let trash_origin_kind: String = trash_observation
+        .try_get("origin_kind")
+        .expect("trash origin kind");
+    let trash_payload: Value = trash_observation.try_get("payload").expect("trash payload");
+    assert_eq!(trash_origin_kind, "manual");
+    assert_eq!(trash_payload["action"], "trash");
+    assert_eq!(trash_payload["not_found"], json!([missing_id]));
+}
+
+#[tokio::test]
+async fn v1_local_state_endpoints_capture_observation_trail_against_postgres() {
+    let context = TestContext::new().await;
+    let pool = context.pool().clone();
+    let suffix = uid();
+    let account_id = format!("acct-local-state-{suffix}");
+    let message_id = seed_projected_message(
+        pool.clone(),
+        &account_id,
+        &format!("provider-local-state-{suffix}"),
+        "Local state trail",
+    )
+    .await;
+    let r = router(&context.connection_string()).await;
+
+    let mark_read = r
+        .clone()
+        .oneshot(post(
+            &format!("/api/v1/communications/messages/{message_id}/imap-mark-read"),
+            json!({}),
+        ))
+        .await
+        .expect("imap mark read response");
+    assert_eq!(mark_read.status(), StatusCode::OK);
+
+    let trash = r
+        .clone()
+        .oneshot(post(
+            &format!("/api/v1/communications/messages/{message_id}/trash"),
+            json!({}),
+        ))
+        .await
+        .expect("trash response");
+    assert_eq!(trash.status(), StatusCode::OK);
+
+    let restore = r
+        .oneshot(post(
+            &format!("/api/v1/communications/messages/{message_id}/restore"),
+            json!({}),
+        ))
+        .await
+        .expect("restore response");
+    assert_eq!(restore.status(), StatusCode::OK);
+
+    let workflow_rows = sqlx::query(
+        "SELECT metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'communication_message'
+           AND entity_id = $1
+           AND relationship_kind = 'workflow_state_transition'
+         ORDER BY created_at ASC",
+    )
+    .bind(&message_id)
+    .fetch_all(&pool)
+    .await
+    .expect("workflow observation links");
+    assert!(!workflow_rows.is_empty());
+    let workflow_metadata: Value = workflow_rows
+        .last()
+        .expect("workflow row")
+        .try_get("metadata")
+        .expect("workflow metadata");
+    assert_eq!(workflow_metadata["workflow_state"], "reviewed");
+
+    let local_rows = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'communication_message'
+           AND entity_id = $1
+           AND relationship_kind = 'local_state_transition'
+         ORDER BY created_at ASC",
+    )
+    .bind(&message_id)
+    .fetch_all(&pool)
+    .await
+    .expect("local state observation links");
+    assert_eq!(local_rows.len(), 2);
+    let local_states: Vec<String> = local_rows
+        .iter()
+        .map(|row| {
+            row.try_get::<Value, _>("metadata").expect("local metadata")["local_state"]
+                .as_str()
+                .expect("local state")
+                .to_owned()
+        })
+        .collect();
+    assert_eq!(local_states, vec!["trash", "active"]);
+
+    let restore_observation_id: String = local_rows[1]
+        .try_get("observation_id")
+        .expect("restore observation id");
+    let origin_kind: String =
+        sqlx::query_scalar("SELECT origin_kind FROM observations WHERE observation_id = $1")
+            .bind(&restore_observation_id)
+            .fetch_one(&pool)
+            .await
+            .expect("restore observation origin");
+    assert_eq!(origin_kind, "manual");
 }
 
 #[tokio::test]
@@ -533,6 +747,38 @@ async fn v1_redirect_message_enqueues_outbox_redirect_against_postgres() {
     assert_eq!(metadata["redirect_of"], message_id);
     assert_eq!(metadata["redirect_mode"], "resent");
     assert_eq!(metadata["original_sender"], "sender@example.com");
+    let link = sqlx::query(
+        "SELECT observation_id, metadata
+         FROM observation_links
+         WHERE domain = 'communications'
+           AND entity_kind = 'outbox_item'
+           AND entity_id = $1
+           AND relationship_kind = 'outbox_status_transition'
+         ORDER BY created_at DESC
+         LIMIT 1",
+    )
+    .bind(outbox_id)
+    .fetch_one(&pool)
+    .await
+    .expect("redirect outbox observation link");
+    let observation_id: String = link.try_get("observation_id").expect("observation id");
+    let link_metadata: Value = link.try_get("metadata").expect("link metadata");
+    assert_eq!(link_metadata["operation"], "outbox_redirect_enqueue");
+    assert_eq!(link_metadata["status"], "queued");
+    assert_eq!(link_metadata["redirect_of"], message_id);
+    let observation = sqlx::query(
+        "SELECT origin_kind, payload
+         FROM observations
+         WHERE observation_id = $1",
+    )
+    .bind(&observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("redirect outbox observation");
+    let origin_kind: String = observation.try_get("origin_kind").expect("origin kind");
+    let payload: Value = observation.try_get("payload").expect("payload");
+    assert_eq!(origin_kind, "manual");
+    assert_eq!(payload["operation"], "outbox_redirect_enqueue");
 }
 
 async fn response_json(response: axum::response::Response) -> Value {

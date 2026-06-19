@@ -5,7 +5,11 @@ use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
 
+use crate::domains::mail::evidence::link_mail_entity_in_transaction;
 use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::platform::observations::{
+    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
+};
 
 const EVENT_TYPE_RECORDED: &str = "mail.read_receipt.recorded";
 
@@ -86,12 +90,88 @@ impl MailReadReceiptStore {
         )
         .await?;
         let receipt = insert_receipt(&mut transaction, &normalized, outbox_id.as_deref()).await?;
+        capture_read_receipt_observation(&mut transaction, &receipt).await?;
         let event = read_receipt_event(&receipt)?;
         EventStore::append_in_transaction(&mut transaction, &event).await?;
         transaction.commit().await?;
 
         Ok(receipt)
     }
+}
+
+async fn capture_read_receipt_observation(
+    transaction: &mut Transaction<'_, Postgres>,
+    receipt: &MailReadReceipt,
+) -> Result<(), MailReadReceiptError> {
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            "COMMUNICATION_READ_RECEIPT",
+            ObservationOriginKind::LocalRuntime,
+            receipt.read_at,
+            json!({
+                "receipt_id": receipt.receipt_id,
+                "account_id": receipt.account_id,
+                "outbox_id": receipt.outbox_id,
+                "provider_message_id": receipt.provider_message_id,
+                "recipient": receipt.recipient,
+                "receipt_kind": receipt.receipt_kind.as_str(),
+                "read_at": receipt.read_at,
+                "source_kind": receipt.source_kind,
+                "provider_record_id": receipt.provider_record_id,
+                "raw_record_id": receipt.raw_record_id,
+                "operation": "read_receipt_recorded",
+            }),
+            format!("read-receipt://{}", receipt.receipt_id),
+        )
+        .provenance(json!({
+            "captured_by": "mail.read_receipts",
+            "operation": "read_receipt_recorded",
+        })),
+    )
+    .await?;
+    link_mail_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "read_receipt",
+        receipt.receipt_id.clone(),
+        "read_receipt_recorded",
+        json!({
+            "receipt_kind": receipt.receipt_kind.as_str(),
+            "source_kind": receipt.source_kind,
+        }),
+        None,
+    )
+    .await?;
+    if let Some(outbox_id) = &receipt.outbox_id {
+        link_mail_entity_in_transaction(
+            transaction,
+            &observation.observation_id,
+            "outbox_item",
+            outbox_id.clone(),
+            "read_receipt_observed",
+            json!({
+                "receipt_kind": receipt.receipt_kind.as_str(),
+                "source_kind": receipt.source_kind,
+            }),
+            None,
+        )
+        .await?;
+    }
+    link_mail_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "provider_message",
+        receipt.provider_message_id.clone(),
+        "read_receipt_observed",
+        json!({
+            "receipt_kind": receipt.receipt_kind.as_str(),
+            "source_kind": receipt.source_kind,
+        }),
+        None,
+    )
+    .await?;
+    Ok(())
 }
 
 #[derive(Debug)]
@@ -308,6 +388,8 @@ pub enum MailReadReceiptError {
     EventStore(#[from] crate::platform::events::EventStoreError),
     #[error(transparent)]
     EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
     #[error("invalid mail read receipt field: {0}")]
     Invalid(&'static str),
 }

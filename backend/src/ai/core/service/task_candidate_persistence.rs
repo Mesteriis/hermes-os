@@ -27,8 +27,11 @@ impl AiService {
                 .filter(|value| !value.is_empty())
                 .unwrap_or(citation.excerpt.as_str());
             let confidence = draft.confidence.unwrap_or(0.5).clamp(0.0, 1.0);
-            let task_candidate_id =
-                ai_task_candidate_id(&citation.source_kind, &citation.source_id, &title);
+            let observation_id = task_candidate_observation_id(self, citation).await?;
+            let Some(observation_id) = observation_id else {
+                continue;
+            };
+            let task_candidate_id = ai_task_candidate_id("observation", &observation_id, &title);
 
             let result = sqlx::query(
                 r#"
@@ -36,6 +39,7 @@ impl AiService {
                     task_candidate_id,
                     source_kind,
                     source_id,
+                    observation_id,
                     project_id,
                     title,
                     due_text,
@@ -49,10 +53,11 @@ impl AiService {
                     agent_run_id
                 )
                 VALUES (
-                    $1, $2, $3, NULL, $4, $5, $6, $7, 'suggested', $8, NULL, NULL, NULL, $9
+                    $1, $2, $3, $4, NULL, $5, $6, $7, $8, 'suggested', $9, NULL, NULL, NULL, $10
                 )
-                ON CONFLICT (task_candidate_id)
+                ON CONFLICT (source_kind, source_id, lower(title))
                 DO UPDATE SET
+                    observation_id = COALESCE(EXCLUDED.observation_id, task_candidates.observation_id),
                     title = EXCLUDED.title,
                     due_text = COALESCE(EXCLUDED.due_text, task_candidates.due_text),
                     assignee_label = COALESCE(EXCLUDED.assignee_label, task_candidates.assignee_label),
@@ -72,8 +77,9 @@ impl AiService {
                 "#,
             )
             .bind(task_candidate_id)
-            .bind(&citation.source_kind)
-            .bind(&citation.source_id)
+            .bind("observation")
+            .bind(&observation_id)
+            .bind(&observation_id)
             .bind(&title)
             .bind(&draft.due_text)
             .bind(&draft.assignee_label)
@@ -89,5 +95,42 @@ impl AiService {
         }
 
         Ok(created_count)
+    }
+}
+
+async fn task_candidate_observation_id(
+    service: &AiService,
+    citation: &AiCitation,
+) -> Result<Option<String>, AiError> {
+    match citation.source_kind.as_str() {
+        "message" => {
+            let observation_id = sqlx::query_scalar::<_, Option<String>>(
+                r#"
+                SELECT observation_id
+                FROM communication_messages
+                WHERE message_id = $1
+                "#,
+            )
+            .bind(&citation.source_id)
+            .fetch_optional(&service.pool)
+            .await?
+            .flatten();
+            Ok(observation_id)
+        }
+        "document" => {
+            let observation_id = sqlx::query_scalar::<_, Option<String>>(
+                r#"
+                SELECT observation_id
+                FROM documents
+                WHERE document_id = $1
+                "#,
+            )
+            .bind(&citation.source_id)
+            .fetch_optional(&service.pool)
+            .await?
+            .flatten();
+            Ok(observation_id)
+        }
+        _ => Ok(None),
     }
 }

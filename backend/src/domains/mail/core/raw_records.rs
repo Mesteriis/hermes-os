@@ -3,6 +3,9 @@ use super::models::{NewRawCommunicationRecord, StoredRawCommunicationRecord};
 use super::rows::row_to_raw_record;
 use super::store::CommunicationIngestionStore;
 use super::validation::validate_non_empty;
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use chrono::Utc;
+use serde_json::json;
 
 impl CommunicationIngestionStore {
     pub async fn record_raw_source(
@@ -11,10 +14,29 @@ impl CommunicationIngestionStore {
     ) -> Result<StoredRawCommunicationRecord, CommunicationIngestionError> {
         record.validate()?;
 
+        let mut transaction = self.pool.begin().await?;
+        let existing = sqlx::query(raw_record_by_provider_identity_sql())
+            .bind(record.account_id.trim())
+            .bind(record.record_kind.trim())
+            .bind(record.provider_record_id.trim())
+            .fetch_optional(&mut *transaction)
+            .await?;
+        if let Some(row) = existing {
+            let stored = row_to_raw_record(row)?;
+            transaction.commit().await?;
+            return Ok(stored);
+        }
+
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &raw_record_observation(record),
+        )
+        .await?;
         let inserted = sqlx::query(
             r#"
             INSERT INTO communication_raw_records (
                 raw_record_id,
+                observation_id,
                 account_id,
                 record_kind,
                 provider_record_id,
@@ -24,11 +46,12 @@ impl CommunicationIngestionStore {
                 payload,
                 provenance
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             ON CONFLICT (account_id, record_kind, provider_record_id)
             DO NOTHING
             RETURNING
                 raw_record_id,
+                observation_id,
                 account_id,
                 record_kind,
                 provider_record_id,
@@ -41,6 +64,7 @@ impl CommunicationIngestionStore {
             "#,
         )
         .bind(record.raw_record_id.trim())
+        .bind(&observation.observation_id)
         .bind(record.account_id.trim())
         .bind(record.record_kind.trim())
         .bind(record.provider_record_id.trim())
@@ -49,39 +73,25 @@ impl CommunicationIngestionStore {
         .bind(record.occurred_at)
         .bind(&record.payload)
         .bind(&record.provenance)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
 
         if let Some(row) = inserted {
-            return row_to_raw_record(row);
+            let stored = row_to_raw_record(row)?;
+            transaction.commit().await?;
+            return Ok(stored);
         }
 
-        let row = sqlx::query(
-            r#"
-            SELECT
-                raw_record_id,
-                account_id,
-                record_kind,
-                provider_record_id,
-                source_fingerprint,
-                import_batch_id,
-                occurred_at,
-                captured_at,
-                payload,
-                provenance
-            FROM communication_raw_records
-            WHERE account_id = $1
-              AND record_kind = $2
-              AND provider_record_id = $3
-            "#,
-        )
-        .bind(record.account_id.trim())
-        .bind(record.record_kind.trim())
-        .bind(record.provider_record_id.trim())
-        .fetch_one(&self.pool)
-        .await?;
+        let row = sqlx::query(raw_record_by_provider_identity_sql())
+            .bind(record.account_id.trim())
+            .bind(record.record_kind.trim())
+            .bind(record.provider_record_id.trim())
+            .fetch_one(&mut *transaction)
+            .await?;
 
-        row_to_raw_record(row)
+        let stored = row_to_raw_record(row)?;
+        transaction.commit().await?;
+        Ok(stored)
     }
 
     pub async fn raw_record(
@@ -94,6 +104,7 @@ impl CommunicationIngestionStore {
             r#"
             SELECT
                 raw_record_id,
+                observation_id,
                 account_id,
                 record_kind,
                 provider_record_id,
@@ -113,4 +124,57 @@ impl CommunicationIngestionStore {
 
         row.map(row_to_raw_record).transpose()
     }
+}
+
+fn raw_record_by_provider_identity_sql() -> &'static str {
+    r#"
+    SELECT
+        raw_record_id,
+        observation_id,
+        account_id,
+        record_kind,
+        provider_record_id,
+        source_fingerprint,
+        import_batch_id,
+        occurred_at,
+        captured_at,
+        payload,
+        provenance
+    FROM communication_raw_records
+    WHERE account_id = $1
+      AND record_kind = $2
+      AND provider_record_id = $3
+    "#
+}
+
+fn raw_record_observation(record: &NewRawCommunicationRecord) -> NewObservation {
+    let kind_code = if record.record_kind.contains("attachment") {
+        "COMMUNICATION_ATTACHMENT"
+    } else {
+        "COMMUNICATION_MESSAGE"
+    };
+    let observed_at = record.occurred_at.unwrap_or_else(Utc::now);
+    NewObservation::new(
+        kind_code,
+        ObservationOriginKind::VaultSource,
+        observed_at,
+        record.payload.clone(),
+        format!(
+            "communication://{}/{}/{}",
+            record.account_id.trim(),
+            record.record_kind.trim(),
+            record.provider_record_id.trim()
+        ),
+    )
+    .confidence(1.0)
+    .provenance(json!({
+        "communication_raw_record": true,
+        "raw_record_id": record.raw_record_id.trim(),
+        "account_id": record.account_id.trim(),
+        "record_kind": record.record_kind.trim(),
+        "provider_record_id": record.provider_record_id.trim(),
+        "import_batch_id": record.import_batch_id.trim(),
+        "source_fingerprint": record.source_fingerprint.trim(),
+        "raw_provenance": record.provenance
+    }))
 }

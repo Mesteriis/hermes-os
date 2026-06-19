@@ -57,6 +57,7 @@ pub fn detect_decision(
         review_state: DecisionReviewState::Suggested,
         evidence_source_kind: input.source_kind,
         evidence_source_id: input.source_id.clone(),
+        evidence_observation_id: input.observation_id.clone(),
         decided_by_entity_kind: input.decided_by_entity_kind,
         decided_by_entity_id: input.decided_by_entity_id.clone(),
         impacted_entities: vec![DecisionImpactedEntityCandidate {

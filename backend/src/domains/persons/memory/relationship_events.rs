@@ -1,10 +1,12 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use super::errors::PersonMemoryError;
+use crate::domains::persons::core::{link_persons_entity, link_persons_entity_in_transaction};
 use crate::engines::timeline::{TimelineEngine, TimelineEventDraft};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -83,6 +85,115 @@ impl RelationshipEventStore {
         .fetch_one(&self.pool)
         .await?;
         row_to_event(row)
+    }
+
+    pub async fn add_with_observation(
+        &self,
+        event: &NewRelationshipEvent,
+        observation_id: &str,
+    ) -> Result<RelationshipEvent, PersonMemoryError> {
+        let event_record = self.add(event).await?;
+        link_persons_entity(
+            &self.pool,
+            observation_id,
+            "relationship_event",
+            event_record.id.clone(),
+            None,
+            Some(json!({
+                "person_id": event_record.person_id,
+                "event_type": event_record.event_type,
+            })),
+        )
+        .await?;
+        Ok(event_record)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn upsert_email_message_event(
+        &self,
+        observation_id: &str,
+        message_id: &str,
+        occurred_at: DateTime<Utc>,
+        person_id: &str,
+        event_type: &str,
+        title: &str,
+        description: Option<&str>,
+    ) -> Result<bool, PersonMemoryError> {
+        TimelineEngine::validate_event(&TimelineEventDraft {
+            entity_kind: "persona",
+            entity_id: person_id,
+            event_type,
+            title,
+            occurred_at,
+            source: "email_sync",
+        })?;
+
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
+            r#"
+            INSERT INTO relationship_events (
+                person_id,
+                event_type,
+                title,
+                description,
+                occurred_at,
+                source,
+                related_entity_id,
+                related_entity_kind,
+                metadata
+            )
+            SELECT
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                'email_sync',
+                $6,
+                'communication_message',
+                '{}'::jsonb
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM relationship_events
+                WHERE person_id = $1
+                  AND event_type = $2
+                  AND related_entity_id = $6
+                  AND related_entity_kind = 'communication_message'
+            )
+            RETURNING id::text AS event_id
+            "#,
+        )
+        .bind(person_id)
+        .bind(event_type)
+        .bind(title)
+        .bind(description)
+        .bind(occurred_at)
+        .bind(message_id)
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        let Some(row) = row else {
+            transaction.commit().await?;
+            return Ok(false);
+        };
+        let event_id: String = row.try_get("event_id")?;
+        link_persons_entity_in_transaction(
+            &mut transaction,
+            observation_id,
+            "relationship_event",
+            event_id,
+            Some("email_sync_relationship_event"),
+            Some(json!({
+                "person_id": person_id,
+                "event_type": event_type,
+                "related_entity_id": message_id,
+                "related_entity_kind": "communication_message",
+                "source": "email_sync",
+            })),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(true)
     }
 }
 

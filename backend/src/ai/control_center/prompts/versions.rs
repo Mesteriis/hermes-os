@@ -2,6 +2,7 @@ use chrono::Utc;
 use serde_json::json;
 
 use super::super::errors::AiControlCenterError;
+use super::super::evidence::capture_prompt_version_observation;
 use super::super::models::{AiPromptVersion, AiPromptVersionCreateRequest};
 use super::super::rows::row_to_prompt_version;
 use super::super::store::AiControlCenterStore;
@@ -47,6 +48,7 @@ impl AiControlCenterStore {
                     slug_id(&version_label)
                 )
             });
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO ai_prompt_template_versions (
@@ -77,9 +79,13 @@ impl AiControlCenterStore {
         .bind(request.body_template.trim())
         .bind(json!(variables))
         .bind(actor_id.trim())
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_prompt_version(row)
+        let version = row_to_prompt_version(row)?;
+        capture_prompt_version_observation(&mut transaction, &version, "create", actor_id.trim())
+            .await?;
+        transaction.commit().await?;
+        Ok(version)
     }
 }

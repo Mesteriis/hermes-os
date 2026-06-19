@@ -4,6 +4,9 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::domains::tasks::core::TaskContextPackStore;
+use crate::domains::tasks::core::TaskCoreError;
+
 pub struct TaskBrainService;
 
 impl TaskBrainService {
@@ -12,8 +15,7 @@ impl TaskBrainService {
             .bind(task_id).fetch_optional(pool).await?;
         let task = task.ok_or(TaskBrainError::NotFound)?;
 
-        let ctx = sqlx::query("SELECT summary, blockers, risks, suggested_next_action FROM task_context_packs WHERE task_id=$1 ORDER BY generated_at DESC LIMIT 1")
-            .bind(task_id).fetch_optional(pool).await?;
+        let ctx = TaskContextPackStore::new(pool.clone()).get(task_id).await?;
 
         let evidence =
             sqlx::query("SELECT source_type, quote FROM task_evidence WHERE task_id=$1 LIMIT 5")
@@ -30,10 +32,10 @@ impl TaskBrainService {
             "status": task.try_get::<String,_>("hermes_status").unwrap_or_default(),
             "source": task.try_get::<String,_>("source_type").unwrap_or_default(),
             "context": ctx.map(|r| json!({
-                "summary": r.try_get::<Option<String>,_>("summary").unwrap_or(None),
-                "blockers": r.try_get::<Value,_>("blockers").unwrap_or(json!([])),
-                "risks": r.try_get::<Value,_>("risks").unwrap_or(json!([])),
-                "next_action": r.try_get::<Option<String>,_>("suggested_next_action").unwrap_or(None),
+                "summary": r.summary,
+                "blockers": r.blockers,
+                "risks": r.risks,
+                "next_action": r.suggested_next_action,
             })),
             "evidence": evidence.iter().map(|r| json!({
                 "source": r.try_get::<String,_>("source_type").unwrap_or_default(),
@@ -91,6 +93,8 @@ impl TaskBrainService {
 pub enum TaskBrainError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    TaskCore(#[from] TaskCoreError),
     #[error("not found")]
     NotFound,
 }

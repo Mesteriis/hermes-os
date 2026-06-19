@@ -1,6 +1,8 @@
 use thiserror::Error;
 
 use crate::domains::graph::core::GraphStoreError;
+use crate::platform::observations::ObservationStoreError;
+use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum RelationshipStoreError {
@@ -9,6 +11,9 @@ pub enum RelationshipStoreError {
 
     #[error(transparent)]
     Graph(#[from] GraphStoreError),
+
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
 
     #[error("{0} must not be empty")]
     EmptyField(&'static str),
@@ -21,6 +26,12 @@ pub enum RelationshipStoreError {
 
     #[error("relationship evidence is required")]
     MissingEvidence,
+
+    #[error("observation relationship evidence must use the same source_id and observation_id")]
+    InvalidObservationEvidenceSource,
+
+    #[error("relationship evidence observation was not found: {0}")]
+    ObservationNotFound(String),
 
     #[error("relationship was not found")]
     RelationshipNotFound,
@@ -39,4 +50,7 @@ pub enum RelationshipStoreError {
 
     #[error("unknown relationship review state stored in database: {0}")]
     UnknownReviewState(String),
+
+    #[error(transparent)]
+    ReviewMirror(#[from] ReviewMirrorError),
 }

@@ -1,10 +1,12 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgRow};
 
 use super::errors::PersonCoreError;
+use super::link_persons_entity;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PersonIdentity {
@@ -92,6 +94,32 @@ impl PersonsIdentityStore {
         row_to_identity(row)
     }
 
+    pub async fn upsert_with_observation(
+        &self,
+        person_id: &str,
+        identity_type: &str,
+        identity_value: &str,
+        source: &str,
+        observation_id: &str,
+    ) -> Result<PersonIdentity, PersonCoreError> {
+        let identity = self
+            .upsert(person_id, identity_type, identity_value, source)
+            .await?;
+        link_persons_entity(
+            &self.pool,
+            observation_id,
+            "identity",
+            identity.id.clone(),
+            None,
+            Some(json!({
+                "person_id": identity.person_id,
+                "identity_type": identity.identity_type,
+            })),
+        )
+        .await?;
+        Ok(identity)
+    }
+
     pub async fn create_unattached(
         &self,
         identity_type: &str,
@@ -115,6 +143,31 @@ impl PersonsIdentityStore {
         row_to_identity(row)
     }
 
+    pub async fn create_unattached_with_observation(
+        &self,
+        identity_type: &str,
+        identity_value: &str,
+        source: &str,
+        observation_id: &str,
+    ) -> Result<PersonIdentity, PersonCoreError> {
+        let identity = self
+            .create_unattached(identity_type, identity_value, source)
+            .await?;
+        link_persons_entity(
+            &self.pool,
+            observation_id,
+            "identity_trace",
+            identity.id.clone(),
+            None,
+            Some(json!({
+                "identity_type": identity.identity_type,
+                "person_id": identity.person_id,
+            })),
+        )
+        .await?;
+        Ok(identity)
+    }
+
     pub async fn attach_to_persona(
         &self,
         identity_id: &str,
@@ -134,6 +187,28 @@ impl PersonsIdentityStore {
         .await?
         .ok_or(PersonCoreError::IdentityNotFound)?;
         row_to_identity(row)
+    }
+
+    pub async fn attach_to_persona_with_observation(
+        &self,
+        identity_id: &str,
+        person_id: &str,
+        observation_id: &str,
+    ) -> Result<PersonIdentity, PersonCoreError> {
+        let identity = self.attach_to_persona(identity_id, person_id).await?;
+        link_persons_entity(
+            &self.pool,
+            observation_id,
+            "identity_trace",
+            identity.id.clone(),
+            Some("trace_assignment"),
+            Some(json!({
+                "person_id": identity.person_id,
+                "identity_type": identity.identity_type,
+            })),
+        )
+        .await?;
+        Ok(identity)
     }
 
     pub async fn update_status(
@@ -157,6 +232,28 @@ impl PersonsIdentityStore {
             .execute(&self.pool)
             .await?;
         Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn delete_with_observation(
+        &self,
+        person_id: &str,
+        identity_id: &str,
+        observation_id: &str,
+    ) -> Result<bool, PersonCoreError> {
+        let deleted = self.delete(identity_id).await?;
+        link_persons_entity(
+            &self.pool,
+            observation_id,
+            "identity",
+            identity_id.to_owned(),
+            Some("identity_delete"),
+            Some(json!({
+                "person_id": person_id,
+                "deleted": deleted,
+            })),
+        )
+        .await?;
+        Ok(deleted)
     }
 }
 

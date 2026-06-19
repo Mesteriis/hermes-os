@@ -29,7 +29,12 @@ pub(crate) async fn post_event_classify(
         ..Default::default()
     };
     CalendarEventStore::new(pool)
-        .update(&event_id, &update)
+        .update_runtime(
+            &event_id,
+            &update,
+            "calendar_api.post_event_classify",
+            "classify",
+        )
         .await?;
     Ok(Json(json!({"event_type": event_type})))
 }
@@ -94,7 +99,12 @@ pub(crate) async fn post_event_analyze(
         ..Default::default()
     };
     CalendarEventStore::new(pool.clone())
-        .update(&event_id, &update)
+        .update_runtime(
+            &event_id,
+            &update,
+            "calendar_api.post_event_analyze",
+            "analyze",
+        )
         .await?;
 
     Ok(Json(

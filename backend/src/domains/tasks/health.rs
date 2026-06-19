@@ -4,6 +4,8 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::engines::context_packs::{ContextPackKind, ContextPackStore, ContextPackStoreError};
+
 pub struct TaskWatchtowerService;
 
 impl TaskWatchtowerService {
@@ -40,18 +42,28 @@ impl TaskWatchtowerService {
     }
 
     pub async fn without_context(pool: &PgPool) -> Result<Value, TaskHealthError> {
-        let rows = sqlx::query("SELECT t.task_id, t.title, t.hermes_status FROM tasks t LEFT JOIN task_context_packs c ON t.task_id=c.task_id WHERE c.id IS NULL AND t.hermes_status NOT IN ('done','cancelled','archived') ORDER BY t.priority_score DESC NULLS LAST LIMIT 20")
-            .fetch_all(pool).await?;
-        let items: Vec<Value> = rows
-            .iter()
-            .map(|r| {
-                json!({
-                    "task_id": r.try_get::<String,_>("task_id").unwrap_or_default(),
-                    "title": r.try_get::<String,_>("title").unwrap_or_default(),
-                    "status": r.try_get::<String,_>("hermes_status").unwrap_or_default(),
-                })
-            })
-            .collect();
+        let rows = sqlx::query("SELECT task_id, title, hermes_status FROM tasks WHERE hermes_status NOT IN ('done','cancelled','archived') ORDER BY priority_score DESC NULLS LAST LIMIT 50")
+            .fetch_all(pool)
+            .await?;
+        let context_store = ContextPackStore::new(pool.clone());
+        let mut items = Vec::new();
+        for row in rows {
+            let task_id = row.try_get::<String, _>("task_id").unwrap_or_default();
+            let has_context = context_store
+                .exists(ContextPackKind::Task, &task_id)
+                .await?;
+            if has_context {
+                continue;
+            }
+            items.push(json!({
+                "task_id": task_id,
+                "title": row.try_get::<String,_>("title").unwrap_or_default(),
+                "status": row.try_get::<String,_>("hermes_status").unwrap_or_default(),
+            }));
+            if items.len() >= 20 {
+                break;
+            }
+        }
         Ok(json!({"tasks_without_context": items}))
     }
 
@@ -104,4 +116,6 @@ impl TaskWatchtowerService {
 pub enum TaskHealthError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    ContextPack(#[from] ContextPackStoreError),
 }

@@ -1,10 +1,13 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use sqlx::Row;
+use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 
 use super::errors::CalendarCoreError;
+use crate::engines::context_packs::{
+    ContextPack, ContextPackKind, ContextPackSourceKind, ContextPackStore, NewContextPack,
+    NewContextPackSource,
+};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct EventContextPack {
@@ -35,27 +38,11 @@ impl EventContextPackStore {
     }
 
     pub async fn get(&self, event_id: &str) -> Result<Option<EventContextPack>, CalendarCoreError> {
-        let row = sqlx::query("SELECT id::text, event_id, summary, participants_summary, documents, tasks, open_questions, risks, suggested_agenda, suggested_actions, generated_at, model, created_at, updated_at FROM event_context_packs WHERE event_id=$1 ORDER BY generated_at DESC LIMIT 1")
-            .bind(event_id).fetch_optional(&self.pool).await?;
-        row.map(|r| {
-            Ok(EventContextPack {
-                id: r.try_get("id")?,
-                event_id: r.try_get("event_id")?,
-                summary: r.try_get("summary")?,
-                participants_summary: r.try_get("participants_summary")?,
-                documents: r.try_get("documents")?,
-                tasks: r.try_get("tasks")?,
-                open_questions: r.try_get("open_questions")?,
-                risks: r.try_get("risks")?,
-                suggested_agenda: r.try_get("suggested_agenda")?,
-                suggested_actions: r.try_get("suggested_actions")?,
-                generated_at: r.try_get("generated_at")?,
-                model: r.try_get("model")?,
-                created_at: r.try_get("created_at")?,
-                updated_at: r.try_get("updated_at")?,
-            })
-        })
-        .transpose()
+        ContextPackStore::new(self.pool.clone())
+            .get(ContextPackKind::Calendar, event_id)
+            .await?
+            .map(|pack| event_context_pack_from_engine(pack, event_id))
+            .transpose()
     }
 
     pub async fn upsert(
@@ -63,27 +50,33 @@ impl EventContextPackStore {
         event_id: &str,
         pack: &ContextPackInput,
     ) -> Result<EventContextPack, CalendarCoreError> {
-        let row = sqlx::query("INSERT INTO event_context_packs (event_id, summary, participants_summary, documents, tasks, open_questions, risks, suggested_agenda, suggested_actions, model) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT DO NOTHING RETURNING id::text, event_id, summary, participants_summary, documents, tasks, open_questions, risks, suggested_agenda, suggested_actions, generated_at, model, created_at, updated_at")
-            .bind(event_id).bind(pack.summary.as_deref()).bind(pack.participants_summary.as_deref())
-            .bind(&pack.documents).bind(&pack.tasks).bind(&pack.open_questions)
-            .bind(&pack.risks).bind(&pack.suggested_agenda).bind(&pack.suggested_actions)
-            .bind(pack.model.as_deref()).fetch_one(&self.pool).await?;
-        Ok(EventContextPack {
-            id: row.try_get("id")?,
-            event_id: row.try_get("event_id")?,
-            summary: row.try_get("summary")?,
-            participants_summary: row.try_get("participants_summary")?,
-            documents: row.try_get("documents")?,
-            tasks: row.try_get("tasks")?,
-            open_questions: row.try_get("open_questions")?,
-            risks: row.try_get("risks")?,
-            suggested_agenda: row.try_get("suggested_agenda")?,
-            suggested_actions: row.try_get("suggested_actions")?,
-            generated_at: row.try_get("generated_at")?,
-            model: row.try_get("model")?,
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
-        })
+        let stored = ContextPackStore::new(self.pool.clone())
+            .upsert_with_sources(
+                &NewContextPack::new(
+                    ContextPackKind::Calendar,
+                    event_id,
+                    json!({
+                        "summary": pack.summary,
+                        "participants_summary": pack.participants_summary,
+                        "documents": pack.documents,
+                        "tasks": pack.tasks,
+                        "open_questions": pack.open_questions,
+                        "risks": pack.risks,
+                        "suggested_agenda": pack.suggested_agenda,
+                        "suggested_actions": pack.suggested_actions,
+                    }),
+                )
+                .metadata(json!({
+                    "model": pack.model,
+                    "owner": "domains.calendar.core.context_packs",
+                })),
+                &[
+                    NewContextPackSource::new(ContextPackSourceKind::CalendarEvent, event_id)
+                        .role("subject"),
+                ],
+            )
+            .await?;
+        event_context_pack_from_engine(stored, event_id)
     }
 }
 
@@ -98,4 +91,46 @@ pub struct ContextPackInput {
     pub suggested_agenda: Value,
     pub suggested_actions: Value,
     pub model: Option<String>,
+}
+
+fn event_context_pack_from_engine(
+    pack: ContextPack,
+    event_id: &str,
+) -> Result<EventContextPack, CalendarCoreError> {
+    let content = &pack.content;
+    Ok(EventContextPack {
+        id: pack.context_pack_id,
+        event_id: event_id.to_owned(),
+        summary: optional_string(content, "summary"),
+        participants_summary: optional_string(content, "participants_summary"),
+        documents: content
+            .get("documents")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+        tasks: content.get("tasks").cloned().unwrap_or_else(|| json!([])),
+        open_questions: content
+            .get("open_questions")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+        risks: content.get("risks").cloned().unwrap_or_else(|| json!([])),
+        suggested_agenda: content
+            .get("suggested_agenda")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+        suggested_actions: content
+            .get("suggested_actions")
+            .cloned()
+            .unwrap_or_else(|| json!([])),
+        generated_at: pack.built_at,
+        model: optional_string(&pack.metadata, "model"),
+        created_at: pack.built_at,
+        updated_at: pack.updated_at,
+    })
+}
+
+fn optional_string(value: &Value, key: &str) -> Option<String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
 }

@@ -9,6 +9,7 @@ const DEFAULT_GMAIL_API_BASE_URL: &str = "https://www.googleapis.com";
 
 mod errors;
 mod events;
+mod evidence;
 mod models;
 mod provider;
 mod rows;

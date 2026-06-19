@@ -1,6 +1,7 @@
 use serde_json::{Value, json};
 
 use super::super::errors::AiControlCenterError;
+use super::super::evidence::capture_provider_account_observation;
 use super::super::models::{AiProviderAccount, AiProviderPatchRequest};
 use super::super::rows::row_to_provider;
 use super::super::store::AiControlCenterStore;
@@ -58,6 +59,7 @@ impl AiControlCenterStore {
         }
         reject_secret_like_json(&Value::Object(config.clone()))?;
 
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             UPDATE ai_provider_accounts
@@ -85,10 +87,19 @@ impl AiControlCenterStore {
         .bind(display_name)
         .bind(status)
         .bind(Value::Object(config))
-        .fetch_optional(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?
         .ok_or(AiControlCenterError::ProviderNotFound)?;
 
-        row_to_provider(row)
+        let provider = row_to_provider(row)?;
+        capture_provider_account_observation(
+            &mut transaction,
+            &provider,
+            "update",
+            "ai_control_center.update_provider",
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(provider)
     }
 }

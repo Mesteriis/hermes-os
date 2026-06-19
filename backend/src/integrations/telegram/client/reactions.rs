@@ -1,16 +1,19 @@
 use chrono::Utc;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use sqlx::PgPool;
+use sqlx::{PgPool, Postgres, Transaction};
 
 use super::commands::insert_command;
 use super::errors::TelegramError;
+use super::evidence::link_telegram_entity_in_transaction;
+use super::lifecycle::{mark_command_mismatch, mark_command_reconciled};
 use super::messages::reaction_metadata::TdlibProviderReaction;
 use super::models::messages::{
     TelegramCommandKind, TelegramProviderWriteCommand, TelegramReaction, TelegramReactionGroup,
     TelegramReactionRequest, TelegramReactionResponse, TelegramReactionSummary,
 };
 use super::rows::{row_to_telegram_provider_write_command, row_to_telegram_reaction};
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
 const REACTION_PROVIDER_MISMATCH_ERROR: &str =
     "Provider observed a different reaction state than requested";
@@ -50,6 +53,67 @@ struct TelegramSelfReactionSync<'a> {
     observed_at: chrono::DateTime<Utc>,
 }
 
+async fn capture_reaction_observation_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    reaction: &TelegramReaction,
+    relationship_kind: &str,
+    actor: &str,
+) -> Result<(), TelegramError> {
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            "TELEGRAM_MESSAGE_REACTION",
+            ObservationOriginKind::LocalRuntime,
+            reaction.updated_at,
+            json!({
+                "reaction_id": reaction.reaction_id,
+                "message_id": reaction.message_id,
+                "account_id": reaction.account_id,
+                "provider_message_id": reaction.provider_message_id,
+                "provider_chat_id": reaction.provider_chat_id,
+                "sender_id": reaction.sender_id,
+                "sender_display_name": reaction.sender_display_name,
+                "reaction_emoji": reaction.reaction_emoji,
+                "is_active": reaction.is_active,
+                "observed_at": reaction.observed_at,
+                "source_event": reaction.source_event,
+                "provider_actor_id": reaction.provider_actor_id,
+                "metadata": reaction.metadata,
+                "provenance": reaction.provenance,
+                "operation": relationship_kind,
+            }),
+            format!(
+                "telegram-message-reaction://{}/{}",
+                reaction.reaction_id, relationship_kind
+            ),
+        )
+        .provenance(json!({
+            "captured_by": actor,
+            "operation": relationship_kind,
+            "provider": "telegram",
+        })),
+    )
+    .await?;
+    link_telegram_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "message_reaction",
+        reaction.reaction_id.clone(),
+        relationship_kind,
+        json!({
+            "message_id": reaction.message_id,
+            "account_id": reaction.account_id,
+            "provider_message_id": reaction.provider_message_id,
+            "provider_chat_id": reaction.provider_chat_id,
+            "sender_id": reaction.sender_id,
+            "reaction_emoji": reaction.reaction_emoji,
+            "is_active": reaction.is_active,
+        }),
+    )
+    .await?;
+    Ok(())
+}
+
 pub(in crate::integrations::telegram) async fn sync_provider_reactions(
     pool: &PgPool,
     message_ref: TelegramReactionMessageRef<'_>,
@@ -58,13 +122,14 @@ pub(in crate::integrations::telegram) async fn sync_provider_reactions(
     chosen_reactions: &[String],
 ) -> Result<(), TelegramError> {
     let now = Utc::now();
+    let mut transaction = pool.begin().await?;
     for reaction in reactions {
         let reaction_id = provider_reaction_id(
             message_ref.message_id,
             &reaction.sender_id,
             &reaction.reaction_emoji,
         );
-        sqlx::query(
+        let row = sqlx::query(
             r#"
             INSERT INTO telegram_message_reactions
                 (reaction_id, message_id, account_id, provider_message_id, provider_chat_id,
@@ -81,6 +146,7 @@ pub(in crate::integrations::telegram) async fn sync_provider_reactions(
                 metadata = EXCLUDED.metadata,
                 provenance = EXCLUDED.provenance,
                 updated_at = now()
+            RETURNING *
             "#,
         )
         .bind(&reaction_id)
@@ -101,12 +167,20 @@ pub(in crate::integrations::telegram) async fn sync_provider_reactions(
             "runtime": "tdlib",
             "source": "interaction_info.reactions.recent_reactions",
         }))
-        .execute(pool)
+        .fetch_one(&mut *transaction)
+        .await?;
+        let stored = row_to_telegram_reaction(row)?;
+        capture_reaction_observation_in_transaction(
+            &mut transaction,
+            &stored,
+            "provider_sync_activate",
+            "telegram.client.reactions.sync_provider_reactions",
+        )
         .await?;
     }
     if let Some(self_sender_id) = self_sender_id {
         sync_self_provider_reactions(
-            pool,
+            &mut transaction,
             &message_ref,
             TelegramSelfReactionSync {
                 sender_id: self_sender_id,
@@ -116,15 +190,16 @@ pub(in crate::integrations::telegram) async fn sync_provider_reactions(
         )
         .await?;
     }
+    transaction.commit().await?;
     Ok(())
 }
 
 async fn sync_self_provider_reactions(
-    pool: &PgPool,
+    transaction: &mut Transaction<'_, Postgres>,
     message_ref: &TelegramReactionMessageRef<'_>,
     sync: TelegramSelfReactionSync<'_>,
 ) -> Result<(), TelegramError> {
-    sqlx::query(
+    let deactivated_rows = sqlx::query(
         r#"
         UPDATE telegram_message_reactions
         SET is_active = false,
@@ -149,6 +224,7 @@ async fn sync_self_provider_reactions(
               OR reaction_emoji <> ALL($5::text[])
           )
           AND is_active = true
+        RETURNING *
         "#,
     )
     .bind(message_ref.message_id)
@@ -156,13 +232,23 @@ async fn sync_self_provider_reactions(
     .bind(sync.sender_id)
     .bind(sync.observed_at)
     .bind(sync.chosen_reactions)
-    .execute(pool)
+    .fetch_all(&mut **transaction)
     .await?;
+    for row in deactivated_rows {
+        let stored = row_to_telegram_reaction(row)?;
+        capture_reaction_observation_in_transaction(
+            transaction,
+            &stored,
+            "provider_sync_deactivate",
+            "telegram.client.reactions.sync_self_provider_reactions",
+        )
+        .await?;
+    }
 
     for reaction_emoji in sync.chosen_reactions {
         let reaction_id =
             provider_reaction_id(message_ref.message_id, sync.sender_id, reaction_emoji);
-        sqlx::query(
+        let row = sqlx::query(
             r#"
             INSERT INTO telegram_message_reactions
                 (reaction_id, message_id, account_id, provider_message_id, provider_chat_id,
@@ -179,6 +265,7 @@ async fn sync_self_provider_reactions(
                 metadata = EXCLUDED.metadata,
                 provenance = EXCLUDED.provenance,
                 updated_at = now()
+            RETURNING *
             "#,
         )
         .bind(&reaction_id)
@@ -199,7 +286,15 @@ async fn sync_self_provider_reactions(
             "runtime": "tdlib",
             "source": "interaction_info.reactions.reactions",
         }))
-        .execute(pool)
+        .fetch_one(&mut **transaction)
+        .await?;
+        let stored = row_to_telegram_reaction(row)?;
+        capture_reaction_observation_in_transaction(
+            transaction,
+            &stored,
+            "provider_sync_activate",
+            "telegram.client.reactions.sync_self_provider_reactions",
+        )
         .await?;
     }
 
@@ -284,34 +379,17 @@ pub async fn reconcile_reaction_commands_from_provider_message_state(
                 "provider_observed_at": observed_at,
                 "mismatch": true,
             });
-            let row = sqlx::query(
-                r#"
-                UPDATE telegram_provider_write_commands
-                SET status = 'failed',
-                    result_payload = $3,
-                    last_error = $4,
-                    provider_observed_at = $2,
-                    provider_state = $5,
-                    reconciliation_status = 'mismatch',
-                    reconciled_at = $2,
-                    completed_at = NULL,
-                    locked_at = NULL,
-                    locked_by = NULL,
-                    next_attempt_at = NULL,
-                    dead_lettered_at = NULL,
-                    updated_at = $2
-                WHERE command_id = $1
-                RETURNING *
-                "#,
-            )
-            .bind(&command.command_id)
-            .bind(observed_at)
-            .bind(&result_payload)
-            .bind(REACTION_PROVIDER_MISMATCH_ERROR)
-            .bind(&provider_state)
-            .fetch_one(pool)
-            .await?;
-            reconciled.push(row_to_telegram_provider_write_command(row)?);
+            reconciled.push(
+                mark_command_mismatch(
+                    pool,
+                    &command.command_id,
+                    observed_at,
+                    provider_state,
+                    result_payload,
+                    REACTION_PROVIDER_MISMATCH_ERROR,
+                )
+                .await?,
+            );
             continue;
         }
 
@@ -332,33 +410,16 @@ pub async fn reconcile_reaction_commands_from_provider_message_state(
             "chosen_reactions": chosen_reactions,
             "provider_observed_at": observed_at,
         });
-        let row = sqlx::query(
-            r#"
-            UPDATE telegram_provider_write_commands
-            SET status = 'completed',
-                result_payload = $3,
-                last_error = NULL,
-                provider_observed_at = $2,
-                provider_state = $4,
-                reconciliation_status = 'observed',
-                reconciled_at = $2,
-                completed_at = $2,
-                locked_at = NULL,
-                locked_by = NULL,
-                next_attempt_at = NULL,
-                dead_lettered_at = NULL,
-                updated_at = $2
-            WHERE command_id = $1
-            RETURNING *
-            "#,
-        )
-        .bind(&command.command_id)
-        .bind(observed_at)
-        .bind(&result_payload)
-        .bind(&provider_state)
-        .fetch_one(pool)
-        .await?;
-        reconciled.push(row_to_telegram_provider_write_command(row)?);
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                provider_state,
+                result_payload,
+            )
+            .await?,
+        );
     }
 
     Ok(reconciled)
@@ -384,8 +445,8 @@ pub async fn add_reaction(
 ) -> Result<TelegramReactionResponse, TelegramError> {
     let now = Utc::now();
     let reaction_id = new_reaction_id();
-
-    sqlx::query(
+    let mut transaction = pool.begin().await?;
+    let row = sqlx::query(
         r#"
         INSERT INTO telegram_message_reactions
             (reaction_id, message_id, account_id, provider_message_id, provider_chat_id,
@@ -394,6 +455,7 @@ pub async fn add_reaction(
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true, $9, $10)
         ON CONFLICT (message_id, sender_id, reaction_emoji)
         DO UPDATE SET is_active = true, updated_at = now()
+        RETURNING *
         "#,
     )
     .bind(&reaction_id)
@@ -406,8 +468,17 @@ pub async fn add_reaction(
     .bind(&request.reaction_emoji)
     .bind(now)
     .bind(&request.sender_id)
-    .execute(pool)
+    .fetch_one(&mut *transaction)
     .await?;
+    let stored = row_to_telegram_reaction(row)?;
+    capture_reaction_observation_in_transaction(
+        &mut transaction,
+        &stored,
+        "local_add",
+        "telegram.client.reactions.add_reaction",
+    )
+    .await?;
+    transaction.commit().await?;
 
     if let Some(command_id) = request.command_id.as_deref() {
         let idempotency_key = format!(
@@ -453,8 +524,8 @@ pub async fn remove_reaction(
     message_id: &str,
 ) -> Result<TelegramReactionResponse, TelegramError> {
     let now = Utc::now();
-
-    sqlx::query(
+    let mut transaction = pool.begin().await?;
+    let row = sqlx::query(
         r#"
         UPDATE telegram_message_reactions
         SET is_active = false, updated_at = now()
@@ -462,13 +533,25 @@ pub async fn remove_reaction(
           AND sender_id = $2
           AND reaction_emoji = $3
           AND is_active = true
+        RETURNING *
         "#,
     )
     .bind(message_id)
     .bind(&request.sender_id)
     .bind(&request.reaction_emoji)
-    .execute(pool)
+    .fetch_optional(&mut *transaction)
     .await?;
+    if let Some(row) = row {
+        let stored = row_to_telegram_reaction(row)?;
+        capture_reaction_observation_in_transaction(
+            &mut transaction,
+            &stored,
+            "local_remove",
+            "telegram.client.reactions.remove_reaction",
+        )
+        .await?;
+    }
+    transaction.commit().await?;
 
     if let Some(command_id) = request.command_id.as_deref() {
         let idempotency_key = format!(
@@ -563,110 +646,4 @@ pub async fn reaction_summary(
 }
 
 #[cfg(test)]
-mod tests {
-    use sqlx::Row;
-    use testkit::context::TestContext;
-
-    use super::*;
-    use crate::domains::mail::core::{
-        CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
-    };
-    use crate::integrations::telegram::client::models::messages::TelegramReactionRequest;
-
-    #[tokio::test]
-    async fn provider_state_sync_deactivates_absent_self_reactions() {
-        let ctx = TestContext::new().await;
-        let pool = ctx.pool().clone();
-        let account_id = create_telegram_account(&pool, "reaction-sync", "telegram:123").await;
-        let message_id = "msg_reaction_sync";
-        let provider_chat_id = "-100reaction-sync";
-        let provider_message_id = "-100reaction-sync:77";
-        let self_sender_id = "user:123";
-
-        let add_request = TelegramReactionRequest {
-            account_id: account_id.clone(),
-            provider_chat_id: provider_chat_id.to_owned(),
-            provider_message_id: provider_message_id.to_owned(),
-            sender_id: self_sender_id.to_owned(),
-            sender_display_name: Some("Owner".to_owned()),
-            reaction_emoji: "👍".to_owned(),
-            command_id: None,
-        };
-        add_reaction(&pool, &add_request, message_id)
-            .await
-            .expect("add chosen reaction");
-
-        let remove_request = TelegramReactionRequest {
-            reaction_emoji: "🔥".to_owned(),
-            ..add_request.clone()
-        };
-        add_reaction(&pool, &remove_request, message_id)
-            .await
-            .expect("add stale reaction");
-
-        sync_provider_reactions(
-            &pool,
-            TelegramReactionMessageRef {
-                message_id,
-                account_id: &account_id,
-                provider_chat_id,
-                provider_message_id,
-            },
-            &[],
-            Some(self_sender_id),
-            &["👍".to_owned()],
-        )
-        .await
-        .expect("sync provider reactions");
-
-        let rows = sqlx::query(
-            r#"
-            SELECT reaction_emoji, is_active
-            FROM telegram_message_reactions
-            WHERE message_id = $1 AND sender_id = $2
-            ORDER BY reaction_emoji ASC
-            "#,
-        )
-        .bind(message_id)
-        .bind(self_sender_id)
-        .fetch_all(&pool)
-        .await
-        .expect("reaction rows");
-
-        let states = rows
-            .into_iter()
-            .map(|row| {
-                (
-                    row.try_get::<String, _>("reaction_emoji")
-                        .expect("reaction_emoji"),
-                    row.try_get::<bool, _>("is_active").expect("is_active"),
-                )
-            })
-            .collect::<Vec<_>>();
-        assert_eq!(
-            states,
-            vec![("👍".to_owned(), true), ("🔥".to_owned(), false)]
-        );
-    }
-
-    async fn create_telegram_account(
-        pool: &sqlx::PgPool,
-        suffix: &str,
-        external_account_id: &str,
-    ) -> String {
-        let account_id = format!("telegram-reactions-{suffix}");
-        CommunicationIngestionStore::new(pool.clone())
-            .upsert_provider_account(
-                &NewProviderAccount::new(
-                    &account_id,
-                    CommunicationProviderKind::TelegramUser,
-                    format!("Telegram Reactions {suffix}"),
-                    external_account_id.to_owned(),
-                )
-                .config(json!({"runtime": "tdlib_qr_authorized"})),
-            )
-            .await
-            .expect("provider account");
-        account_id
-    }
-}
+mod tests;

@@ -20,7 +20,7 @@ shared engines that consume calendar event records together with other sources.
 |---|---|
 | `event_participants` | Участники с email, role, response_status и совместимым `person_id`, который должен трактоваться как Persona reference |
 | `event_relations` | Связи с entity_type/entity_id (Persona, Organization, Project, Document, ...) |
-| `event_context_packs` | Материализованный контекст (documents, tasks, risks, agenda, actions) |
+| `context_packs` | Engine-owned derived context packs for calendar subjects. Legacy `event_context_packs` remains historical schema compatibility only and must not be used by runtime code. |
 | `event_agendas` | Повестки встреч |
 | `event_checklists` | Чеклисты подготовки |
 

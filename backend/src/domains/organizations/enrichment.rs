@@ -1,9 +1,15 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use serde_json::json;
 use sqlx::Row;
+use sqlx::Transaction;
 use sqlx::postgres::PgPool;
+use sqlx::postgres::Postgres;
 use thiserror::Error;
+
+use crate::domains::organizations::core::{OrgCoreError, link_review_transition_in_transaction};
+use crate::platform::observations::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct OrgEnrichmentResult {
@@ -28,7 +34,7 @@ impl OrgEnrichmentStore {
         Self { pool }
     }
     pub async fn list(&self, org_id: &str) -> Result<Vec<OrgEnrichmentResult>, OrgEnrichmentError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, source, url, data, confidence, status, last_checked_at, applied_at, created_at FROM organization_enrichment_results WHERE organization_id=$1 ORDER BY created_at DESC")
+        let rows = sqlx::query("SELECT id::text, organization_id, source, url, data, confidence::float8 AS confidence, status, last_checked_at, applied_at, created_at FROM organization_enrichment_results WHERE organization_id=$1 ORDER BY created_at DESC")
             .bind(org_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
@@ -54,7 +60,7 @@ impl OrgEnrichmentStore {
         data: Value,
         confidence: f64,
     ) -> Result<OrgEnrichmentResult, OrgEnrichmentError> {
-        let row = sqlx::query("INSERT INTO organization_enrichment_results (organization_id, source, data, confidence) VALUES ($1,$2,$3,$4) RETURNING id::text, organization_id, source, url, data, confidence, status, last_checked_at, applied_at, created_at")
+        let row = sqlx::query("INSERT INTO organization_enrichment_results (organization_id, source, data, confidence) VALUES ($1,$2,$3,$4) RETURNING id::text, organization_id, source, url, data, confidence::float8 AS confidence, status, last_checked_at, applied_at, created_at")
             .bind(org_id).bind(source).bind(&data).bind(confidence).fetch_one(&self.pool).await?;
         Ok(OrgEnrichmentResult {
             id: row.try_get("id")?,
@@ -70,7 +76,29 @@ impl OrgEnrichmentStore {
         })
     }
     pub async fn apply(&self, id: &str) -> Result<(), OrgEnrichmentError> {
-        sqlx::query("UPDATE organization_enrichment_results SET status='applied', applied_at=now() WHERE id::text=$1").bind(id).execute(&self.pool).await?;
+        let mut transaction = self.pool.begin().await?;
+        Self::apply_in_transaction(&mut transaction, id).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+    pub async fn apply_with_observation(
+        &self,
+        id: &str,
+        observation_id: &str,
+    ) -> Result<(), OrgEnrichmentError> {
+        let mut transaction = self.pool.begin().await?;
+        Self::apply_in_transaction(&mut transaction, id).await?;
+        link_review_transition_in_transaction(
+            &mut transaction,
+            observation_id,
+            "organization_enrichment_result",
+            id,
+            json!({
+                "operation": "organization_enrichment_apply"
+            }),
+        )
+        .await?;
+        transaction.commit().await?;
         Ok(())
     }
     pub async fn reject(&self, id: &str) -> Result<(), OrgEnrichmentError> {
@@ -82,12 +110,27 @@ impl OrgEnrichmentStore {
         .await?;
         Ok(())
     }
+
+    async fn apply_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        id: &str,
+    ) -> Result<(), OrgEnrichmentError> {
+        sqlx::query("UPDATE organization_enrichment_results SET status='applied', applied_at=now() WHERE id::text=$1")
+            .bind(id)
+            .execute(&mut **transaction)
+            .await?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Error)]
 pub enum OrgEnrichmentError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Core(#[from] OrgCoreError),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
     #[error("not found")]
     NotFound,
 }

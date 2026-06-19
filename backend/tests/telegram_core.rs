@@ -412,6 +412,88 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
         .as_str()
         .expect("outbound message id");
 
+    let template_observations = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'automation'
+          AND link.entity_kind = 'template'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&template_id)
+    .fetch_all(&pool)
+    .await
+    .expect("template observations");
+    assert!(
+        template_observations.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AUTOMATION_TEMPLATE"
+                && row.get::<String, _>("relationship_kind") == "upsert"
+                && row.get::<Value, _>("payload")["template_id"] == json!(template_id)
+        }),
+        "automation template observation must exist"
+    );
+
+    let policy_observations = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'automation'
+          AND link.entity_kind = 'policy'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&policy_id)
+    .fetch_all(&pool)
+    .await
+    .expect("policy observations");
+    assert!(
+        policy_observations.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AUTOMATION_POLICY"
+                && row.get::<String, _>("relationship_kind") == "upsert"
+                && row.get::<Value, _>("payload")["policy_id"] == json!(policy_id)
+        }),
+        "automation policy observation must exist"
+    );
+
+    let outbound_observations = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'automation'
+          AND link.entity_kind = 'telegram_outbound_message'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(outbound_message_id)
+    .fetch_all(&pool)
+    .await
+    .expect("outbound message observations");
+    assert!(
+        outbound_observations.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_OUTBOUND_MESSAGE"
+                && row.get::<String, _>("relationship_kind") == "dry_run_allowed"
+                && row.get::<Value, _>("payload")["outbound_message_id"]
+                    == json!(outbound_message_id)
+        }),
+        "telegram outbound dry-run observation must exist"
+    );
+
     let audit_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM api_audit_log WHERE operation = 'automation.telegram_send.dry_run' AND actor_id = $1",
     )

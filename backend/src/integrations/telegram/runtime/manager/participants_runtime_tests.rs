@@ -1,8 +1,6 @@
 use super::super::{TelegramMemberSyncContext, TelegramRuntimeEventBridgeContext};
 use super::sync_provider_roster_snapshots;
-use crate::domains::mail::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-};
+use crate::domains::mail::core::{EmailProviderKind, NewProviderAccount};
 use crate::integrations::telegram::client::TelegramChat;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::{
@@ -16,8 +14,9 @@ use crate::platform::config::AppConfig;
 use crate::platform::events::EventBus;
 use crate::platform::events::bus::telegram_event_types;
 use crate::platform::secrets::{InMemorySecretResolver, SecretReferenceStore};
+use crate::vault::CommunicationProviderAccountStore;
 use serde_json::json;
-use sqlx::PgPool;
+use sqlx::{PgPool, Row};
 use testkit::context::TestContext;
 
 async fn seed_chat(
@@ -26,8 +25,8 @@ async fn seed_chat(
     external_account_id: &str,
     provider_chat_id: &str,
 ) -> Result<TelegramChat, TelegramError> {
-    CommunicationIngestionStore::new(pool.clone())
-        .upsert_provider_account(&NewProviderAccount::new(
+    CommunicationProviderAccountStore::new(pool.clone())
+        .upsert(&NewProviderAccount::new(
             account_id,
             EmailProviderKind::TelegramUser,
             "Runtime Participant Account",
@@ -78,7 +77,9 @@ async fn sync_provider_roster_snapshots_appends_join_reconciliation_after_partic
     .await
     .expect("seed join command");
 
-    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
+    let provider_secret_binding_store =
+        crate::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
     let telegram_store = TelegramStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool.clone());
     let secret_resolver = InMemorySecretResolver::new();
@@ -88,7 +89,8 @@ async fn sync_provider_roster_snapshots_appends_join_reconciliation_after_partic
         EventBus::new(),
     ));
     let context = TelegramMemberSyncContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         telegram_store: &telegram_store,
         secret_store: &secret_store,
         secret_resolver: &secret_resolver,
@@ -158,6 +160,33 @@ async fn sync_provider_roster_snapshots_appends_join_reconciliation_after_partic
         command_status,
         Some(("completed".to_owned(), "observed".to_owned()))
     );
+    let participant_observation_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'telegram'
+          AND link.entity_kind = 'chat_participant'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(format!("{}:user:42", chat.telegram_chat_id))
+    .fetch_all(&pool)
+    .await
+    .expect("participant observations");
+    assert!(
+        participant_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_CHAT_PARTICIPANT"
+                && row.get::<String, _>("relationship_kind") == "upsert"
+                && row.get::<serde_json::Value, _>("payload")["provider_member_id"]
+                    == json!("user:42")
+        }),
+        "participant upsert observation must exist"
+    );
 }
 
 #[tokio::test]
@@ -210,7 +239,9 @@ async fn sync_provider_roster_snapshots_appends_leave_reconciliation_after_absen
     .await
     .expect("seed leave command");
 
-    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
+    let provider_secret_binding_store =
+        crate::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
     let telegram_store = TelegramStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool.clone());
     let secret_resolver = InMemorySecretResolver::new();
@@ -220,7 +251,8 @@ async fn sync_provider_roster_snapshots_appends_leave_reconciliation_after_absen
         EventBus::new(),
     ));
     let context = TelegramMemberSyncContext {
-        communication_store: &communication_store,
+        provider_account_store: &provider_account_store,
+        provider_secret_binding_store: &provider_secret_binding_store,
         telegram_store: &telegram_store,
         secret_store: &secret_store,
         secret_resolver: &secret_resolver,
@@ -281,5 +313,39 @@ async fn sync_provider_roster_snapshots_appends_leave_reconciliation_after_absen
     assert_eq!(
         command_status,
         Some(("completed".to_owned(), "observed".to_owned()))
+    );
+    let participant_observation_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'telegram'
+          AND link.entity_kind = 'chat_participant'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(format!("{}:user:42", chat.telegram_chat_id))
+    .fetch_all(&pool)
+    .await
+    .expect("participant observations");
+    assert!(
+        participant_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_CHAT_PARTICIPANT"
+                && row.get::<String, _>("relationship_kind") == "upsert"
+        }),
+        "seed participant upsert observation must exist"
+    );
+    assert!(
+        participant_observation_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "TELEGRAM_CHAT_PARTICIPANT"
+                && row.get::<String, _>("relationship_kind") == "absent_exhaustive"
+                && row.get::<serde_json::Value, _>("payload")["status"]
+                    == json!("absent_exhaustive")
+        }),
+        "participant absent_exhaustive observation must exist"
     );
 }

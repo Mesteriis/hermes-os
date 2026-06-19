@@ -4,6 +4,7 @@ mod owner;
 mod persona_reads;
 mod persona_type;
 mod persona_writes;
+mod review_projection;
 
 use sqlx::postgres::PgPool;
 

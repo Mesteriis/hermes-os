@@ -25,7 +25,7 @@ Polygraph.
 | 13 | Suggested Tasks | `GET /task-candidates` (existing pipeline) |
 | 14 | AI Task Extraction | Существующий `task_candidates` pipeline из messages/documents |
 | 15 | NL Task Creation | `POST /tasks` с NLP-ready полями |
-| 17 | Context Pack | `task_context_packs` — summary, source_summary, open_questions, blockers, risks, suggested_next_action |
+| 17 | Context Pack | `engines/context_packs` owns task-derived packs; legacy `task_context_packs` is compatibility-only schema history |
 | 18 | Task context explanation | `POST /tasks/brain` compatibility route → what, why, status, source, context, evidence |
 | 19 | Task Why | `why` поле на `tasks` |
 | 20 | Next Action | `suggest_next_action()` — template per status: "Review and set priority", "Start working", "Follow up: {reason}", "Resolve blockers", "Archive" |
@@ -50,7 +50,7 @@ Polygraph.
 | 93 | Priority Matrix | Доступен через сортировку по `priority_score` |
 | 100.2 | Task model | 30+ полей на `tasks` |
 | 100.3 | ExternalTaskIdentity | Таблица + API |
-| 100.4 | TaskContextPack | Таблица + API |
+| 100.4 | TaskContextPack | Engine-owned `context_packs` + compatibility facade |
 | 100.5 | TaskRelation | Таблица + API |
 | 100.6 | TaskEvidence | Таблица + API |
 | 100.7 | TaskChecklist | Таблица + API |

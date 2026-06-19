@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::domains::mail::service::{MailCommandService, MailOutboxSendCommand};
 
 pub(crate) async fn post_v1_send(
     State(state): State<AppState>,
@@ -8,9 +9,13 @@ pub(crate) async fn post_v1_send(
         return Err(ApiError::ProviderWriteConfirmationRequired);
     }
 
-    let communication_store = communication_ingestion_store(&state)?;
-    let account = communication_store
-        .provider_account(&req.account_id)
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let account = crate::vault::CommunicationProviderAccountStore::new(pool.clone())
+        .get(&req.account_id)
         .await?
         .ok_or(ApiError::InvalidCommunicationQuery(
             "provider account was not found",
@@ -48,18 +53,13 @@ pub(crate) async fn post_v1_send(
     if matches!(account.provider_kind, EmailProviderKind::Gmail)
         && gmail_send_enabled(&account.config)
     {
-        return send_via_gmail_api(&state, communication_store, &account, email).await;
+        return send_via_gmail_api(&state, &account, email).await;
     }
 
     let smtp_config = crate::domains::mail::outbox::smtp_config_for_provider_account(&account)
         .map_err(outbox_delivery_api_error)?;
-    let pool = state
-        .database
-        .pool()
-        .ok_or(ApiError::DatabaseNotConfigured)?
-        .clone();
     let credential_reader = ProviderCredentialReader::new(
-        communication_store,
+        crate::vault::CommunicationProviderSecretBindingStore::new(pool.clone()),
         SecretReferenceStore::new(pool),
         &state.vault,
     );
@@ -78,10 +78,18 @@ pub(crate) async fn post_v1_send(
             email.to.len() + email.cc.len() + email.bcc.len(),
         ))
         .await?;
-
     let result = crate::domains::mail::send::SmtpClient::new()
         .send(&smtp_config, &credential.secret, &email)
         .await?;
+    MailCommandService::new(
+        state
+            .database
+            .pool()
+            .ok_or(ApiError::DatabaseNotConfigured)?
+            .clone(),
+    )
+    .record_provider_send_sent(&account, &email, "smtp", &result.message_id)
+    .await?;
 
     Ok(Json(SendResponse {
         message_id: result.message_id,
@@ -98,12 +106,16 @@ pub(crate) async fn post_v1_send(
 
 async fn send_via_gmail_api(
     state: &AppState,
-    communication_store: CommunicationIngestionStore,
     account: &ProviderAccount,
     email: crate::domains::mail::send::OutgoingEmail,
 ) -> Result<Json<SendResponse>, ApiError> {
-    let binding = communication_store
-        .provider_account_secret_binding(
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let binding = crate::vault::CommunicationProviderSecretBindingStore::new(pool.clone())
+        .get_for_account(
             &account.account_id,
             ProviderAccountSecretPurpose::OauthToken,
         )
@@ -111,13 +123,8 @@ async fn send_via_gmail_api(
         .ok_or(ApiError::InvalidCommunicationQuery(
             "Gmail OAuth credential is unavailable for this account",
         ))?;
-    let pool = state
-        .database
-        .pool()
-        .ok_or(ApiError::DatabaseNotConfigured)?
-        .clone();
     let account_setup = EmailAccountSetupService::new_with_host_vault(
-        communication_store,
+        pool.clone(),
         SecretReferenceStore::new(pool),
         state.vault.clone(),
     );
@@ -132,7 +139,6 @@ async fn send_via_gmail_api(
             email.to.len() + email.cc.len() + email.bcc.len(),
         ))
         .await?;
-
     let result = crate::integrations::gmail::client::GmailApiClient::new(gmail_api_base_url(
         &account.config,
     ))
@@ -140,6 +146,15 @@ async fn send_via_gmail_api(
     .send_message(&access_token, &email)
     .await
     .map_err(gmail_send_api_error)?;
+    MailCommandService::new(
+        state
+            .database
+            .pool()
+            .ok_or(ApiError::DatabaseNotConfigured)?
+            .clone(),
+    )
+    .record_provider_send_sent(account, &email, "gmail", &result.message_id)
+    .await?;
 
     Ok(Json(SendResponse {
         message_id: result.message_id,
@@ -160,49 +175,23 @@ async fn enqueue_outbox_send(
     email: crate::domains::mail::send::OutgoingEmail,
     req: SendRequest,
 ) -> Result<Json<SendResponse>, ApiError> {
-    let now = Utc::now();
-    let undo_deadline_at = req
-        .undo_send_seconds
-        .filter(|seconds| *seconds > 0)
-        .map(|seconds| now + chrono::Duration::seconds(seconds.clamp(1, 300)));
-    let status = match req.scheduled_send_at {
-        Some(scheduled_send_at) if scheduled_send_at > now => {
-            crate::domains::mail::outbox::EmailOutboxStatus::Scheduled
-        }
-        _ => crate::domains::mail::outbox::EmailOutboxStatus::Queued,
-    };
-    let outbox_id = format!(
-        "outbox:{}:{}",
-        account.account_id,
-        now.timestamp_nanos_opt().unwrap_or_default()
-    );
     let recipient_count = email.to.len() + email.cc.len() + email.bcc.len();
-    let item = crate::domains::mail::outbox::EmailOutboxStore::new(
+    let item = MailCommandService::new(
         state
             .database
             .pool()
             .ok_or(ApiError::DatabaseNotConfigured)?
             .clone(),
     )
-    .enqueue(&crate::domains::mail::outbox::NewEmailOutboxItem {
-        outbox_id,
-        account_id: account.account_id.clone(),
-        draft_id: req.draft_id,
-        to_recipients: email.to.clone(),
-        cc_recipients: email.cc.clone(),
-        bcc_recipients: email.bcc.clone(),
-        subject: email.subject,
-        body_text: email.body_text,
-        body_html: email.body_html,
-        status,
-        scheduled_send_at: req.scheduled_send_at,
-        undo_deadline_at,
-        metadata: json!({
-            "from": email.from,
-            "in_reply_to": email.in_reply_to,
-            "references": email.references
-        }),
-    })
+    .enqueue_outbox_send(
+        account,
+        &email,
+        &MailOutboxSendCommand {
+            draft_id: req.draft_id,
+            scheduled_send_at: req.scheduled_send_at,
+            undo_send_seconds: req.undo_send_seconds,
+        },
+    )
     .await?;
 
     api_audit_log(state)?

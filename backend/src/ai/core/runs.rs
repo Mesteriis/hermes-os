@@ -1,12 +1,15 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::Row;
-use sqlx::postgres::{PgPool, PgRow};
+use sqlx::Transaction;
+use sqlx::postgres::{PgPool, PgRow, Postgres};
 
 use super::errors::AiError;
+use super::evidence::link_ai_entity_in_transaction;
 use super::helpers::{validate_limit, validate_non_empty};
 use super::types::AiCitation;
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
 #[derive(Clone)]
 pub struct AiRunStore {
@@ -20,6 +23,7 @@ impl AiRunStore {
 
     pub async fn start_run(&self, run: &NewAiRun) -> Result<AiAgentRun, AiError> {
         run.validate()?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO ai_agent_runs (
@@ -83,10 +87,21 @@ impl AiRunStore {
         .bind(&run.causation_id)
         .bind(&run.correlation_id)
         .bind(&run.requested_event_id)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_ai_agent_run(row)
+        let stored = row_to_ai_agent_run(row)?;
+        capture_run_observation(
+            &mut transaction,
+            &stored,
+            "AI_AGENT_RUN",
+            "requested",
+            "ai.core.runs.start_run",
+            stored.started_at,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(stored)
     }
 
     pub async fn complete_run(
@@ -98,6 +113,7 @@ impl AiRunStore {
         completed_event_id: &str,
     ) -> Result<AiAgentRun, AiError> {
         let citations = serde_json::to_value(citations)?;
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             UPDATE ai_agent_runs
@@ -119,10 +135,21 @@ impl AiRunStore {
         .bind(citations)
         .bind(completed_event_id)
         .bind(duration_ms)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_ai_agent_run(row)
+        let stored = row_to_ai_agent_run(row)?;
+        capture_run_observation(
+            &mut transaction,
+            &stored,
+            "AI_AGENT_RUN_STATUS",
+            "completed",
+            "ai.core.runs.complete_run",
+            stored.completed_at.unwrap_or(stored.updated_at),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(stored)
     }
 
     pub async fn fail_run(
@@ -132,6 +159,7 @@ impl AiRunStore {
         duration_ms: i64,
         failed_event_id: &str,
     ) -> Result<AiAgentRun, AiError> {
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             UPDATE ai_agent_runs
@@ -150,10 +178,21 @@ impl AiRunStore {
         .bind(error_summary)
         .bind(failed_event_id)
         .bind(duration_ms)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_ai_agent_run(row)
+        let stored = row_to_ai_agent_run(row)?;
+        capture_run_observation(
+            &mut transaction,
+            &stored,
+            "AI_AGENT_RUN_STATUS",
+            "failed",
+            "ai.core.runs.fail_run",
+            stored.completed_at.unwrap_or(stored.updated_at),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(stored)
     }
 
     pub async fn get_run(&self, run_id: &str) -> Result<Option<AiAgentRun>, AiError> {
@@ -188,6 +227,67 @@ impl AiRunStore {
 
         rows.into_iter().map(row_to_ai_agent_run).collect()
     }
+}
+
+async fn capture_run_observation(
+    transaction: &mut Transaction<'_, Postgres>,
+    run: &AiAgentRun,
+    kind_code: &str,
+    relationship_kind: &str,
+    actor: &str,
+    observed_at: DateTime<Utc>,
+) -> Result<(), AiError> {
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            kind_code,
+            ObservationOriginKind::LocalRuntime,
+            observed_at,
+            json!({
+                "run_id": run.run_id,
+                "agent_id": run.agent_id,
+                "status": run.status,
+                "chat_model": run.chat_model,
+                "embedding_model": run.embedding_model,
+                "prompt_template_version": run.prompt_template_version,
+                "model_config": run.model_config,
+                "query": run.query,
+                "answer": run.answer,
+                "citations": run.citations,
+                "error_summary": run.error_summary,
+                "actor_id": run.actor_id,
+                "agent_persona_id": run.agent_persona_id,
+                "owner_persona_id": run.owner_persona_id,
+                "causation_id": run.causation_id,
+                "correlation_id": run.correlation_id,
+                "requested_event_id": run.requested_event_id,
+                "completed_event_id": run.completed_event_id,
+                "failed_event_id": run.failed_event_id,
+                "completed_at": run.completed_at,
+                "duration_ms": run.duration_ms,
+                "operation": relationship_kind,
+            }),
+            format!("ai-agent-run://{}/{}", run.run_id, relationship_kind),
+        )
+        .provenance(json!({
+            "captured_by": actor,
+            "operation": relationship_kind,
+        })),
+    )
+    .await?;
+    link_ai_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "agent_run",
+        run.run_id.clone(),
+        relationship_kind,
+        json!({
+            "agent_id": run.agent_id,
+            "status": run.status,
+        }),
+    )
+    .await?;
+    Ok(())
 }
 
 #[derive(Clone, Debug, PartialEq)]

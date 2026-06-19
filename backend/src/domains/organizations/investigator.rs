@@ -1,4 +1,6 @@
 use crate::domains::organizations::api::OrganizationError;
+use crate::domains::organizations::core::OrgCoreError;
+use crate::platform::observations::ObservationStoreError;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::postgres::PgPool;
@@ -124,7 +126,10 @@ impl From<OrganizationError> for InvestigatorError {
     fn from(e: OrganizationError) -> Self {
         match e {
             OrganizationError::NotFound => InvestigatorError::NotFound,
+            OrganizationError::Validation(message) => InvestigatorError::Validation(message),
             OrganizationError::Sqlx(e) => InvestigatorError::Sqlx(e),
+            OrganizationError::Core(e) => InvestigatorError::Core(e),
+            OrganizationError::Observation(e) => InvestigatorError::Observation(e),
         }
     }
 }
@@ -133,6 +138,12 @@ impl From<OrganizationError> for InvestigatorError {
 pub enum InvestigatorError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Core(#[from] OrgCoreError),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
+    #[error("{0}")]
+    Validation(String),
     #[error("organization not found")]
     NotFound,
 }

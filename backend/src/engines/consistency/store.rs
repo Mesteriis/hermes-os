@@ -47,12 +47,34 @@ impl ContradictionObservationStore {
         reviewed_by: &str,
         resolution: Option<&str>,
     ) -> Result<ContradictionObservation, ConsistencyError> {
+        self.set_review_state_with_observation(
+            observation_id,
+            review_state,
+            reviewed_by,
+            resolution,
+            None,
+            None,
+        )
+        .await
+    }
+
+    pub async fn set_review_state_with_observation(
+        &self,
+        observation_id: &str,
+        review_state: ContradictionReviewState,
+        reviewed_by: &str,
+        resolution: Option<&str>,
+        review_observation_id: Option<&str>,
+        metadata: Option<serde_json::Value>,
+    ) -> Result<ContradictionObservation, ConsistencyError> {
         review::set_review_state(
             &self.pool,
             observation_id,
             review_state,
             reviewed_by,
             resolution,
+            review_observation_id,
+            metadata,
         )
         .await
     }

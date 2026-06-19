@@ -4,6 +4,7 @@ use sqlx::{PgPool, Row};
 
 use super::errors::TelegramError;
 use super::models::TelegramChatMember;
+use super::participants::capture_chat_participant_observation_in_transaction;
 
 fn row_to_provider_member(row: sqlx::postgres::PgRow) -> Result<TelegramChatMember, TelegramError> {
     Ok(TelegramChatMember {
@@ -30,6 +31,15 @@ pub async fn mark_absent_members_from_exhaustive_roster(
     observed_via: &str,
 ) -> Result<Vec<TelegramChatMember>, TelegramError> {
     let observed_at = Utc::now();
+    let permissions_patch = json!({
+        "membership_state": "absent_exhaustive",
+        "observed_via": observed_via,
+    });
+    let raw_payload_patch = json!({
+        "membership_state": "absent_exhaustive",
+        "observed_via": observed_via,
+    });
+    let mut transaction = pool.begin().await?;
     let rows = sqlx::query(
         r#"
         UPDATE telegram_chat_participants
@@ -42,32 +52,49 @@ pub async fn mark_absent_members_from_exhaustive_roster(
           AND source = 'tdlib'
           AND provider_member_id <> ALL($5)
           AND status IS DISTINCT FROM 'absent_exhaustive'
-        RETURNING provider_member_id, display_name, username, role, status, is_admin, is_owner,
-                  permissions, source, observed_at
+        RETURNING account_id, provider_chat_id, provider_member_id, display_name, username, role,
+                  status, is_admin, is_owner, permissions, raw_payload, source, observed_at
         "#,
     )
     .bind(telegram_chat_id)
     .bind(observed_at)
-    .bind(json!({
-        "membership_state": "absent_exhaustive",
-        "observed_via": observed_via,
-    }))
-    .bind(json!({
-        "membership_state": "absent_exhaustive",
-        "observed_via": observed_via,
-    }))
+    .bind(&permissions_patch)
+    .bind(&raw_payload_patch)
     .bind(observed_member_ids)
-    .fetch_all(pool)
+    .fetch_all(&mut *transaction)
     .await
     .map_err(TelegramError::from)?;
 
-    rows.into_iter().map(row_to_provider_member).collect()
+    let mut members = Vec::with_capacity(rows.len());
+    for row in rows {
+        let account_id: String = row.try_get("account_id")?;
+        let provider_chat_id: String = row.try_get("provider_chat_id")?;
+        let raw_payload: serde_json::Value = row.try_get("raw_payload")?;
+        let member = row_to_provider_member(row)?;
+        capture_chat_participant_observation_in_transaction(
+            &mut transaction,
+            telegram_chat_id,
+            &account_id,
+            &provider_chat_id,
+            &member,
+            &raw_payload,
+            "absent_exhaustive",
+            "telegram.client.participant_roster.mark_absent_members_from_exhaustive_roster",
+            member.observed_at.unwrap_or(observed_at),
+        )
+        .await?;
+        members.push(member);
+    }
+    transaction.commit().await?;
+    Ok(members)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::platform::storage::Database;
+    use crate::vault::CommunicationProviderAccountStore;
+    use serde_json::json;
     use testkit::context::TestContext;
 
     #[tokio::test]
@@ -78,31 +105,16 @@ mod tests {
             .expect("database connection");
         let pool = database.pool().expect("pool").clone();
 
-        sqlx::query(
-            r#"
-            INSERT INTO communication_provider_accounts (
-                account_id,
-                provider_kind,
-                display_name,
-                external_account_id,
-                config,
-                created_at,
-                updated_at
+        CommunicationProviderAccountStore::new(pool.clone())
+            .upsert_runtime_account(
+                "acct-1",
+                "telegram_user",
+                "Telegram Test Account",
+                "telegram:1",
+                json!({}),
             )
-            VALUES (
-                'acct-1',
-                'telegram_user',
-                'Telegram Test Account',
-                'telegram:1',
-                '{}'::jsonb,
-                NOW(),
-                NOW()
-            )
-            "#,
-        )
-        .execute(&pool)
-        .await
-        .expect("insert provider account");
+            .await
+            .expect("insert provider account");
 
         sqlx::query(
             r#"

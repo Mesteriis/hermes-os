@@ -85,17 +85,17 @@ pub struct PersonIdentityDetail {
 }
 
 #[derive(Debug)]
-pub(super) struct PersonIdentityCandidatePayload {
-    pub(super) candidate_kind: PersonIdentityCandidateKind,
-    pub(super) left_person_id: String,
-    pub(super) right_person_id: Option<String>,
-    pub(super) email_address: Option<String>,
-    pub(super) evidence_summary: String,
-    pub(super) confidence: f64,
+pub(crate) struct PersonIdentityCandidatePayload {
+    pub(crate) candidate_kind: PersonIdentityCandidateKind,
+    pub(crate) left_person_id: String,
+    pub(crate) right_person_id: Option<String>,
+    pub(crate) email_address: Option<String>,
+    pub(crate) evidence_summary: String,
+    pub(crate) confidence: f64,
 }
 
 impl PersonIdentityCandidatePayload {
-    pub(super) fn identity_candidate_id(&self) -> String {
+    pub(crate) fn identity_candidate_id(&self) -> String {
         let left = self.left_person_id.clone();
         let right = self
             .right_person_id

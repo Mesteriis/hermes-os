@@ -1,6 +1,7 @@
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
 use serde_json::{Value, json};
+use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::ai::control_center::{
@@ -405,6 +406,358 @@ async fn api_provider_create_with_locked_host_vault_does_not_leave_provider_row(
     .await
     .expect("provider exists query");
     assert!(!provider_exists);
+}
+
+#[tokio::test]
+async fn ai_control_center_mutations_record_observation_trail_against_postgres() {
+    let ctx = TestContext::new().await;
+    let pool = ctx.pool().clone();
+    let store = AiControlCenterStore::new(pool.clone());
+    let provider = store
+        .create_provider(&AiProviderCreateRequest {
+            provider_id: Some("provider:api:observation-trail".to_owned()),
+            provider_kind: "api".to_owned(),
+            provider_key: "openai".to_owned(),
+            display_name: "OpenAI Trail".to_owned(),
+            base_url: Some("https://api.openai.com/v1".to_owned()),
+            command_preset: None,
+            config: None,
+            capabilities: None,
+            enabled: Some(true),
+            remote_context_consent: Some(false),
+            api_key: None,
+        })
+        .await
+        .expect("provider");
+    let secret_ref = format!("secret:ai-provider:{}:api_key", provider.provider_id);
+    SecretReferenceStore::new(pool.clone())
+        .upsert_secret_reference(
+            &NewSecretReference::new(
+                &secret_ref,
+                SecretKind::ApiToken,
+                SecretStoreKind::HostVault,
+                "AI provider API key",
+            )
+            .metadata(json!({
+                "provider_id": provider.provider_id,
+                "secret_purpose": "api_key"
+            })),
+        )
+        .await
+        .expect("secret reference");
+    store
+        .bind_api_key_secret(&provider.provider_id, &secret_ref)
+        .await
+        .expect("bind secret");
+    store
+        .update_provider(
+            &provider.provider_id,
+            &hermes_hub_backend::ai::control_center::AiProviderPatchRequest {
+                display_name: Some("OpenAI Trail Updated".to_owned()),
+                base_url: Some("https://api.openai.com/v1".to_owned()),
+                config: Some(json!({"region": "us"})),
+                enabled: Some(true),
+                api_key: None,
+            },
+        )
+        .await
+        .expect("update provider");
+    store
+        .record_consent(
+            &provider.provider_id,
+            &AiProviderConsentRequest { consented: true },
+        )
+        .await
+        .expect("record consent");
+    store
+        .put_model_route(
+            "default_chat",
+            &AiModelRouteUpdateRequest {
+                provider_id: provider.provider_id.clone(),
+                model_key: "gpt-5.5".to_owned(),
+            },
+        )
+        .await
+        .expect("put model route");
+    store
+        .provider_command(
+            &provider.provider_id,
+            hermes_hub_backend::ai::control_center::AiProviderCommandKind::SyncModels,
+        )
+        .await
+        .expect("sync models");
+    let prompt = store
+        .create_prompt(
+            &hermes_hub_backend::ai::control_center::AiPromptCreateRequest {
+                prompt_id: Some("prompt:test:trail".to_owned()),
+                name: "Trail prompt".to_owned(),
+                entity_scope: "global".to_owned(),
+                capability_slot: "default_chat".to_owned(),
+                description: Some("Prompt observation trail".to_owned()),
+                metadata: Some(json!({"team": "core"})),
+            },
+            "hermes-frontend",
+        )
+        .await
+        .expect("create prompt");
+    let version = store
+        .create_prompt_version(
+            &prompt.prompt_id,
+            &hermes_hub_backend::ai::control_center::AiPromptVersionCreateRequest {
+                prompt_version_id: Some("prompt-version:test:trail".to_owned()),
+                version_label: Some("v1".to_owned()),
+                body_template: "Answer {{query}}".to_owned(),
+                variables: vec!["query".to_owned()],
+            },
+            "hermes-frontend",
+        )
+        .await
+        .expect("create prompt version");
+    store
+        .activate_prompt_version(
+            &prompt.prompt_id,
+            &hermes_hub_backend::ai::control_center::AiPromptActivateRequest {
+                prompt_version_id: version.prompt_version_id.clone(),
+            },
+            "hermes-frontend",
+        )
+        .await
+        .expect("activate prompt version");
+    let eval_run = store
+        .test_prompt(
+            &prompt.prompt_id,
+            &hermes_hub_backend::ai::control_center::AiPromptTestRequest {
+                prompt_version_id: version.prompt_version_id.clone(),
+                provider_id: provider.provider_id.clone(),
+                model_key: "gpt-5.5".to_owned(),
+                variables: json!({"query": "hello"}),
+                source_refs: Some(vec![json!({"kind": "observation", "id": "obs:test"})]),
+                score: Some(5),
+                notes: Some("looks good".to_owned()),
+            },
+            "hermes-frontend",
+        )
+        .await
+        .expect("test prompt");
+
+    let provider_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'ai'
+          AND link.entity_kind = 'provider_account'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&provider.provider_id)
+    .fetch_all(&pool)
+    .await
+    .expect("provider observation rows");
+    assert!(
+        provider_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AI_PROVIDER_ACCOUNT"
+                && row.get::<String, _>("relationship_kind") == "create"
+        }),
+        "provider create observation must exist"
+    );
+    assert!(
+        provider_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AI_PROVIDER_ACCOUNT"
+                && row.get::<String, _>("relationship_kind") == "update"
+                && row.get::<Value, _>("payload")["display_name"] == "OpenAI Trail Updated"
+        }),
+        "provider update observation must exist"
+    );
+    assert!(
+        provider_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AI_PROVIDER_ACCOUNT"
+                && row.get::<String, _>("relationship_kind") == "consent_recorded"
+                && row.get::<Value, _>("payload")["consent_state"] == "granted"
+        }),
+        "provider consent observation must exist"
+    );
+    let model_catalog_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'ai'
+          AND link.entity_kind = 'model_catalog_item'
+          AND link.entity_id LIKE $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(format!("{}:%", provider.provider_id))
+    .fetch_all(&pool)
+    .await
+    .expect("model catalog observations");
+    assert!(
+        model_catalog_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AI_MODEL_CATALOG_ITEM"
+                && row.get::<String, _>("relationship_kind") == "seed"
+        }),
+        "model catalog seed observation must exist"
+    );
+
+    let prompt_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'ai'
+          AND link.entity_kind = 'prompt_template'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&prompt.prompt_id)
+    .fetch_all(&pool)
+    .await
+    .expect("prompt observations");
+    assert!(
+        prompt_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AI_PROMPT_TEMPLATE"
+                && row.get::<String, _>("relationship_kind") == "create"
+        }),
+        "prompt create observation must exist"
+    );
+    assert!(
+        prompt_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AI_PROMPT_TEMPLATE"
+                && row.get::<String, _>("relationship_kind") == "activate"
+                && row.get::<Value, _>("payload")["active_version_id"]
+                    == Value::String(version.prompt_version_id.clone())
+        }),
+        "prompt activate observation must exist"
+    );
+
+    let version_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'ai'
+          AND link.entity_kind = 'prompt_template_version'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at ASC
+        "#,
+    )
+    .bind(&version.prompt_version_id)
+    .fetch_all(&pool)
+    .await
+    .expect("prompt version observations");
+    assert!(
+        version_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AI_PROMPT_TEMPLATE_VERSION"
+                && row.get::<String, _>("relationship_kind") == "create"
+        }),
+        "prompt version create observation must exist"
+    );
+    assert!(
+        version_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AI_PROMPT_TEMPLATE_VERSION"
+                && row.get::<String, _>("relationship_kind") == "activate"
+                && row.get::<Value, _>("payload")["status"] == "active"
+        }),
+        "prompt version activate observation must exist"
+    );
+
+    let eval_rows = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'ai'
+          AND link.entity_kind = 'prompt_eval_run'
+          AND link.entity_id = $1
+        "#,
+    )
+    .bind(&eval_run.eval_run_id)
+    .fetch_all(&pool)
+    .await
+    .expect("prompt eval observations");
+    assert!(
+        eval_rows.iter().any(|row| {
+            row.get::<String, _>("kind_code") == "AI_PROMPT_EVAL_RUN"
+                && row.get::<String, _>("relationship_kind") == "test"
+                && row.get::<Value, _>("payload")["provider_id"]
+                    == Value::String(provider.provider_id.clone())
+        }),
+        "prompt eval observation must exist"
+    );
+
+    let binding_id = format!("{}:api_key", provider.provider_id);
+    let binding_row = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'ai'
+          AND link.entity_kind = 'provider_secret_binding'
+          AND link.entity_id = $1
+        ORDER BY observation.captured_at DESC
+        LIMIT 1
+        "#,
+    )
+    .bind(&binding_id)
+    .fetch_one(&pool)
+    .await
+    .expect("binding observation row");
+    assert_eq!(
+        binding_row.get::<String, _>("kind_code"),
+        "AI_PROVIDER_SECRET_BINDING"
+    );
+    assert_eq!(binding_row.get::<String, _>("relationship_kind"), "bind");
+    assert_eq!(
+        binding_row.get::<Value, _>("payload")["secret_ref"],
+        secret_ref
+    );
+
+    let route_row = sqlx::query(
+        r#"
+        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'ai'
+          AND link.entity_kind = 'model_route'
+          AND link.entity_id = 'default_chat'
+        ORDER BY observation.captured_at DESC
+        LIMIT 1
+        "#,
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("route observation row");
+    assert_eq!(route_row.get::<String, _>("kind_code"), "AI_MODEL_ROUTE");
+    assert_eq!(route_row.get::<String, _>("relationship_kind"), "put");
+    assert_eq!(
+        route_row.get::<Value, _>("payload")["provider_id"],
+        provider.provider_id
+    );
+    assert_eq!(route_row.get::<Value, _>("payload")["model_key"], "gpt-5.5");
 }
 
 fn assert_invalid_request_contains(error: AiControlCenterError, expected: &str) {

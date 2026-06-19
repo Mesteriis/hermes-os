@@ -10,6 +10,7 @@ pub(super) fn row_to_imported_document(
     Ok(ImportedDocument {
         document_id: row.try_get("document_id")?,
         document_kind: row.try_get("document_kind")?,
+        observation_id: row.try_get("observation_id")?,
         title: row.try_get("title")?,
         source_fingerprint: row.try_get("source_fingerprint")?,
         extracted_text: row.try_get("extracted_text")?,

@@ -5,6 +5,7 @@ pub mod capabilities;
 pub mod config;
 pub mod events;
 pub mod events_api;
+pub mod observations;
 pub mod projections;
 pub mod secrets;
 pub mod settings;

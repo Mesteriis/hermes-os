@@ -17,6 +17,14 @@ pub(crate) fn message_store(state: &AppState) -> Result<MessageProjectionStore, 
     Ok(MessageProjectionStore::new(database_pool(state)?))
 }
 
+pub(crate) fn observation_store(
+    state: &AppState,
+) -> Result<crate::platform::observations::ObservationStore, ApiError> {
+    Ok(crate::platform::observations::ObservationStore::new(
+        database_pool(state)?,
+    ))
+}
+
 pub(crate) fn mail_storage_store(state: &AppState) -> Result<MailStorageStore, ApiError> {
     Ok(MailStorageStore::new(database_pool(state)?))
 }
@@ -25,6 +33,22 @@ pub(crate) fn communication_ingestion_store(
     state: &AppState,
 ) -> Result<CommunicationIngestionStore, ApiError> {
     Ok(CommunicationIngestionStore::new(database_pool(state)?))
+}
+
+pub(crate) fn communication_provider_account_store(
+    state: &AppState,
+) -> Result<crate::vault::CommunicationProviderAccountStore, ApiError> {
+    Ok(crate::vault::CommunicationProviderAccountStore::new(
+        database_pool(state)?,
+    ))
+}
+
+pub(crate) fn communication_provider_secret_binding_store(
+    state: &AppState,
+) -> Result<crate::vault::CommunicationProviderSecretBindingStore, ApiError> {
+    Ok(crate::vault::CommunicationProviderSecretBindingStore::new(
+        database_pool(state)?,
+    ))
 }
 
 pub(crate) fn project_store(state: &AppState) -> Result<ProjectStore, ApiError> {

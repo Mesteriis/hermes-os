@@ -282,30 +282,25 @@ pub async fn reconcile_mark_read_commands_from_provider_state(
         if target_message_id > observed_message_id {
             continue;
         }
-        super::commands::mark_command_reconciled(
-            pool,
-            &command.command_id,
-            observed_at,
-            json!({
-                "provider_chat_id": provider_chat_id,
-                "last_read_inbox_message_id": last_read_inbox_message_id,
-                "observed_via": observed_via,
-            }),
-            json!({
-                "source": observed_via,
-                "provider_chat_id": provider_chat_id,
-                "last_read_inbox_message_id": last_read_inbox_message_id,
-                "provider_observed_at": observed_at,
-            }),
-        )
-        .await?;
-        let refreshed =
-            sqlx::query("SELECT * FROM telegram_provider_write_commands WHERE command_id = $1")
-                .bind(&command.command_id)
-                .fetch_one(pool)
-                .await
-                .map_err(TelegramError::from)?;
-        reconciled.push(row_to_telegram_provider_write_command(refreshed)?);
+        reconciled.push(
+            super::commands::mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                json!({
+                    "provider_chat_id": provider_chat_id,
+                    "last_read_inbox_message_id": last_read_inbox_message_id,
+                    "observed_via": observed_via,
+                }),
+                json!({
+                    "source": observed_via,
+                    "provider_chat_id": provider_chat_id,
+                    "last_read_inbox_message_id": last_read_inbox_message_id,
+                    "provider_observed_at": observed_at,
+                }),
+            )
+            .await?,
+        );
     }
     Ok(reconciled)
 }
@@ -398,30 +393,25 @@ pub async fn reconcile_folder_add_commands_from_provider_state(
     let mut reconciled = Vec::new();
     for row in rows {
         let command = row_to_telegram_provider_write_command(row)?;
-        mark_command_reconciled(
-            pool,
-            &command.command_id,
-            observed_at,
-            json!({
-                "provider_chat_id": provider_chat_id,
-                "provider_folder_id": provider_folder_id,
-                "observed_via": observed_via,
-            }),
-            json!({
-                "source": observed_via,
-                "provider_chat_id": provider_chat_id,
-                "provider_folder_id": provider_folder_id,
-                "provider_observed_at": observed_at,
-            }),
-        )
-        .await?;
-        let refreshed =
-            sqlx::query("SELECT * FROM telegram_provider_write_commands WHERE command_id = $1")
-                .bind(&command.command_id)
-                .fetch_one(pool)
-                .await
-                .map_err(TelegramError::from)?;
-        reconciled.push(row_to_telegram_provider_write_command(refreshed)?);
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                json!({
+                    "provider_chat_id": provider_chat_id,
+                    "provider_folder_id": provider_folder_id,
+                    "observed_via": observed_via,
+                }),
+                json!({
+                    "source": observed_via,
+                    "provider_chat_id": provider_chat_id,
+                    "provider_folder_id": provider_folder_id,
+                    "provider_observed_at": observed_at,
+                }),
+            )
+            .await?,
+        );
     }
 
     Ok(reconciled)
@@ -461,30 +451,25 @@ pub async fn reconcile_folder_remove_commands_from_provider_state(
     let mut reconciled = Vec::new();
     for row in rows {
         let command = row_to_telegram_provider_write_command(row)?;
-        mark_command_reconciled(
-            pool,
-            &command.command_id,
-            observed_at,
-            json!({
-                "provider_chat_id": provider_chat_id,
-                "provider_folder_id": provider_folder_id,
-                "observed_via": observed_via,
-            }),
-            json!({
-                "source": observed_via,
-                "provider_chat_id": provider_chat_id,
-                "provider_folder_id": provider_folder_id,
-                "provider_observed_at": observed_at,
-            }),
-        )
-        .await?;
-        let refreshed =
-            sqlx::query("SELECT * FROM telegram_provider_write_commands WHERE command_id = $1")
-                .bind(&command.command_id)
-                .fetch_one(pool)
-                .await
-                .map_err(TelegramError::from)?;
-        reconciled.push(row_to_telegram_provider_write_command(refreshed)?);
+        reconciled.push(
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                json!({
+                    "provider_chat_id": provider_chat_id,
+                    "provider_folder_id": provider_folder_id,
+                    "observed_via": observed_via,
+                }),
+                json!({
+                    "source": observed_via,
+                    "provider_chat_id": provider_chat_id,
+                    "provider_folder_id": provider_folder_id,
+                    "provider_observed_at": observed_at,
+                }),
+            )
+            .await?,
+        );
     }
 
     Ok(reconciled)
@@ -513,57 +498,6 @@ pub async fn reconcile_pin_commands_from_provider_state(
         &[],
     )
     .await
-}
-
-async fn reconcile_chat_commands_by_kind(
-    pool: &PgPool,
-    account_id: &str,
-    provider_chat_id: &str,
-    command_kind: &str,
-    observed_at: DateTime<Utc>,
-    provider_state: serde_json::Value,
-    result_payload: serde_json::Value,
-) -> Result<Vec<TelegramProviderWriteCommand>, TelegramError> {
-    let rows = sqlx::query(
-        r#"
-        UPDATE telegram_provider_write_commands
-        SET status = 'completed',
-            result_payload = $5,
-            last_error = NULL,
-            provider_observed_at = $4,
-            provider_state = $6,
-            reconciliation_status = 'observed',
-            reconciled_at = $4,
-            completed_at = $4,
-            locked_at = NULL,
-            locked_by = NULL,
-            next_attempt_at = NULL,
-            dead_lettered_at = NULL,
-            updated_at = $4
-        WHERE account_id = $1
-          AND provider_chat_id = $2
-          AND command_kind = $3
-          AND status IN ('queued', 'retrying', 'executing')
-          AND provider_message_id IS NULL
-          AND confirmation_decision IN ('confirmed', 'not_required')
-          AND capability_state IN ('available', 'degraded')
-          AND happened_at <= $4
-        RETURNING *
-        "#,
-    )
-    .bind(account_id)
-    .bind(provider_chat_id)
-    .bind(command_kind)
-    .bind(observed_at)
-    .bind(&result_payload)
-    .bind(&provider_state)
-    .fetch_all(pool)
-    .await
-    .map_err(TelegramError::from)?;
-
-    rows.into_iter()
-        .map(row_to_telegram_provider_write_command)
-        .collect()
 }
 
 fn telegram_provider_message_numeric_suffix(provider_message_id: &str) -> Option<i64> {

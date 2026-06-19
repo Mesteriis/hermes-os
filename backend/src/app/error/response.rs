@@ -7,6 +7,7 @@ mod mail;
 mod persons;
 mod platform;
 mod review;
+mod tasks;
 
 use axum::Json;
 use axum::http::{HeaderValue, StatusCode, header};
@@ -66,6 +67,8 @@ fn parts(error: ApiError) -> ErrorParts {
         | ApiError::InvalidRelationshipReview(_)
         | ApiError::InvalidContradictionQuery(_)
         | ApiError::InvalidContradictionReview(_)
+        | ApiError::InvalidReviewQuery(_)
+        | ApiError::InvalidReviewItem(_)
         | ApiError::TaskCandidateNotFound
         | ApiError::TaskCandidate(_)
         | ApiError::ObligationNotFound
@@ -75,7 +78,11 @@ fn parts(error: ApiError) -> ErrorParts {
         | ApiError::RelationshipNotFound
         | ApiError::Relationship(_)
         | ApiError::ContradictionObservationNotFound
-        | ApiError::Consistency(_) => review::parts(error),
+        | ApiError::Consistency(_)
+        | ApiError::ReviewItemNotFound
+        | ApiError::ReviewInbox(_)
+        | ApiError::ReviewPromotion(_) => review::parts(error),
+        ApiError::InvalidTaskQuery(_) => tasks::parts(error),
         ApiError::InvalidPersonaQuery(_)
         | ApiError::InvalidPersonIdentityReview(_)
         | ApiError::PersonIdentityNotFound

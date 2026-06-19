@@ -95,7 +95,7 @@ async fn calendar_event_crud_against_postgres() {
         return;
     };
     let acct_store = CalendarAccountStore::new(pool.clone());
-    let event_store = CalendarEventStore::new(pool);
+    let event_store = CalendarEventStore::new(pool.clone());
     let suffix = unique_suffix();
 
     let acct = acct_store
@@ -115,8 +115,24 @@ async fn calendar_event_crud_against_postgres() {
 
     let event = event_store.create(&req).await.expect("create event");
     assert!(event.event_id.starts_with("evt:v1:"));
+    assert!(event.observation_id.starts_with("observation:v1:"));
     assert_eq!(event.title, format!("Test Event {suffix}"));
     assert_eq!(event.status, "scheduled");
+
+    let observation_kind: Option<String> = sqlx::query_scalar(
+        r#"
+        SELECT kind.code
+        FROM observations observation
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE observation.observation_id = $1
+        "#,
+    )
+    .bind(&event.observation_id)
+    .fetch_optional(&pool)
+    .await
+    .expect("calendar event observation");
+    assert_eq!(observation_kind.as_deref(), Some("CALENDAR_EVENT"));
 
     let fetched = event_store
         .get(&event.event_id)

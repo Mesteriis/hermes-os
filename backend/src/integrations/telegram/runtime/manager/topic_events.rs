@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 
+use crate::integrations::telegram::client::lifecycle::mark_command_reconciled;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 use crate::integrations::telegram::client::models::topics::{NewTelegramTopic, TelegramTopic};
 use crate::integrations::telegram::client::{TelegramError, TelegramStore};
@@ -165,36 +166,15 @@ async fn reconcile_topic_commands_from_provider_state(
             "is_closed": is_closed,
             "provider_observed_at": observed_at,
         });
-        let row = sqlx::query(
-            r#"
-            UPDATE telegram_provider_write_commands
-            SET status = 'completed',
-                result_payload = $3,
-                last_error = NULL,
-                provider_observed_at = $2,
-                provider_state = $4,
-                reconciliation_status = 'observed',
-                reconciled_at = $2,
-                completed_at = $2,
-                locked_at = NULL,
-                locked_by = NULL,
-                next_attempt_at = NULL,
-                dead_lettered_at = NULL,
-                updated_at = $2
-            WHERE command_id = $1
-            RETURNING *
-            "#,
-        )
-        .bind(&command.command_id)
-        .bind(observed_at)
-        .bind(&result_payload)
-        .bind(&provider_state)
-        .fetch_one(pool)
-        .await?;
         reconciled.push(
-            crate::integrations::telegram::client::rows::row_to_telegram_provider_write_command(
-                row,
-            )?,
+            mark_command_reconciled(
+                pool,
+                &command.command_id,
+                observed_at,
+                provider_state,
+                result_payload,
+            )
+            .await?,
         );
     }
 
@@ -248,16 +228,16 @@ fn topic_updated_event(
 #[cfg(test)]
 mod tests {
     use chrono::TimeZone;
+    use sqlx::Row;
     use testkit::context::TestContext;
 
     use super::*;
-    use crate::domains::mail::core::{
-        CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
-    };
+    use crate::domains::mail::core::{EmailProviderKind, NewProviderAccount};
     use crate::integrations::telegram::client::lifecycle::insert_command;
     use crate::integrations::telegram::client::models::{
         NewTelegramChat, TelegramChatKind, TelegramSyncState,
     };
+    use crate::vault::CommunicationProviderAccountStore;
 
     #[test]
     fn topic_updated_event_contains_sanitized_projection_payload() {
@@ -298,8 +278,8 @@ mod tests {
         let provider_chat_id = "chat-1";
         let event_bus = EventBus::new();
 
-        CommunicationIngestionStore::new(pool.clone())
-            .upsert_provider_account(&NewProviderAccount::new(
+        CommunicationProviderAccountStore::new(pool.clone())
+            .upsert(&NewProviderAccount::new(
                 account_id,
                 EmailProviderKind::TelegramUser,
                 "Topic Runtime Account",
@@ -414,6 +394,40 @@ mod tests {
         assert_eq!(
             command_status,
             Some(("completed".to_owned(), "observed".to_owned()))
+        );
+
+        let stored_topic_id: String =
+            sqlx::query_scalar("SELECT topic_id FROM telegram_topics WHERE provider_topic_id = 42")
+                .fetch_one(&pool)
+                .await
+                .expect("stored topic id");
+
+        let topic_observation_rows = sqlx::query(
+            r#"
+            SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
+            FROM observation_links link
+            JOIN observations observation
+              ON observation.observation_id = link.observation_id
+            JOIN observation_kind_definitions kind
+              ON kind.kind_definition_id = observation.kind_definition_id
+            WHERE link.domain = 'telegram'
+              AND link.entity_kind = 'topic'
+              AND link.entity_id = $1
+            ORDER BY observation.captured_at ASC
+            "#,
+        )
+        .bind(&stored_topic_id)
+        .fetch_all(&pool)
+        .await
+        .expect("topic observations");
+        assert!(
+            topic_observation_rows.iter().any(|row| {
+                row.get::<String, _>("kind_code") == "TELEGRAM_TOPIC"
+                    && row.get::<String, _>("relationship_kind") == "upsert"
+                    && row.get::<serde_json::Value, _>("payload")["provider_topic_id"] == json!(42)
+                    && row.get::<serde_json::Value, _>("payload")["is_closed"] == json!(true)
+            }),
+            "topic upsert observation must exist"
         );
     }
 }

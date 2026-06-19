@@ -11,7 +11,7 @@ impl GraphProjectionService {
     pub(super) async fn list_documents(&self) -> Result<Vec<DocumentRow>, GraphProjectionError> {
         let rows = sqlx::query(
             r#"
-            SELECT document_id, document_kind, title, source_fingerprint, imported_at
+            SELECT document_id, document_kind, title, source_fingerprint, observation_id, imported_at
             FROM documents
             ORDER BY document_id
             "#,

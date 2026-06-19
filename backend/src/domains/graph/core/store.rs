@@ -150,10 +150,19 @@ impl GraphStore {
             let evidence_id = evidence_id(&edge_id, item.source_kind, &item.source_id);
             sqlx::query(
                 r#"
-                INSERT INTO graph_evidence (evidence_id, edge_id, source_kind, source_id, excerpt, metadata)
-                VALUES ($1, $2, $3, $4, $5, $6)
+                INSERT INTO graph_evidence (
+                    evidence_id,
+                    edge_id,
+                    source_kind,
+                    source_id,
+                    observation_id,
+                    excerpt,
+                    metadata
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
                 ON CONFLICT (edge_id, source_kind, source_id)
                 DO UPDATE SET
+                    observation_id = COALESCE(EXCLUDED.observation_id, graph_evidence.observation_id),
                     excerpt = EXCLUDED.excerpt,
                     metadata = EXCLUDED.metadata
                 "#,
@@ -162,6 +171,7 @@ impl GraphStore {
             .bind(&edge_id)
             .bind(item.source_kind.as_str())
             .bind(&item.source_id)
+            .bind(item.observation_id.as_deref())
             .bind(&item.excerpt)
             .bind(&item.metadata)
             .execute(&mut **transaction)

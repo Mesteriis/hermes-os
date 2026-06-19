@@ -10,4 +10,7 @@ pub enum PersonTrustError {
 
     #[error(transparent)]
     RiskEngine(#[from] crate::engines::risk::RiskEngineError),
+
+    #[error(transparent)]
+    Observation(#[from] crate::platform::observations::ObservationStoreError),
 }

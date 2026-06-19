@@ -1,6 +1,7 @@
 pub mod brain;
 pub mod core;
 pub mod events;
+pub(crate) mod evidence;
 pub mod handlers;
 pub mod health;
 pub mod intelligence;
@@ -8,4 +9,5 @@ pub mod meetings;
 pub mod reminders;
 pub mod rules;
 pub mod scheduling;
+pub mod service;
 pub mod sync;

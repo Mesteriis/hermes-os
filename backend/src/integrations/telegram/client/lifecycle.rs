@@ -22,7 +22,7 @@ pub use self::tombstones::{
 pub use super::commands::{
     claim_due_commands_for_execution, dead_letter_command, find_command_by_idempotency,
     insert_command, list_commands, list_queued_commands_for_execution, manual_retry_command,
-    mark_command_awaiting_provider, mark_command_reconciled, new_command_id,
+    mark_command_awaiting_provider, mark_command_mismatch, mark_command_reconciled, new_command_id,
     recover_stale_executing_commands, retry_command, schedule_command_retry, update_command_status,
 };
 pub use super::reactions::{add_reaction, list_reactions, reaction_summary, remove_reaction};

@@ -17,7 +17,7 @@ impl ProjectStore {
 
         let rows = sqlx::query(
             r#"
-            SELECT document_id, document_kind, title, imported_at
+            SELECT document_id, document_kind, title, observation_id, imported_at
             FROM documents document
             WHERE document_id = ANY($1)
             ORDER BY imported_at DESC, document_id

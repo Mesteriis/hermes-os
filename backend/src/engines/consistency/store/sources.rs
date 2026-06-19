@@ -110,6 +110,7 @@ pub(super) async fn recent_document_evidence(
         r#"
         SELECT
             document_id,
+            observation_id,
             title,
             extracted_text
         FROM documents

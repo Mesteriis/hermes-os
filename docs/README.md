@@ -52,7 +52,7 @@ unless a newer ADR explicitly supersedes them.
 - [Product Development Roadmap](product/development-roadmap.md) - future slices and refactoring plans.
 - [Product Alignment Refactoring Plan](refactoring/product-alignment-plan.md) - current target-vs-implementation gaps and follow-up plans.
 - [Implementation Alignment Plan](refactoring/implementation-alignment-plan.md) - code/module/schema/UI gaps against the canonical model.
-- [Documentation Completion Audit](refactoring/completion-audit.md) - requirement coverage, implementation evidence and remaining refactoring work.
+- [Canonical Evidence Final Report](../canonical-evidence-final-report.md) - active current-period implementation status, progress table and next slices.
 
 Historical roadmap files live under [roadmap](roadmap/). They describe past or
 versioned implementation milestones and may use compatibility terminology.
@@ -151,6 +151,10 @@ Examples:
 - `docs/tasks/status.md`
 - `docs/persons/status.md`
 - `docs/*/api.md`
+
+Root-level current-period status/reporting is centralized in
+`canonical-evidence-final-report.md`. Domain status files remain bounded-context
+implementation notes, not the primary report for the current refactor wave.
 
 If a status document mentions compatibility terms such as `persons`,
 `person_id`, `health`, `watchlist`, historical `contacts` naming or

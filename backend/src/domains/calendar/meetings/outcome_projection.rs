@@ -10,6 +10,9 @@ use crate::domains::obligations::{
     NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationEvidenceSourceKind,
     ObligationReviewState, ObligationStore,
 };
+use crate::workflows::review_mirror::{
+    sync_decision_review_state_in_transaction, sync_obligation_review_state_in_transaction,
+};
 
 pub(super) async fn project_outcome_domain_record(
     transaction: &mut Transaction<'_, Postgres>,
@@ -28,6 +31,7 @@ async fn project_decision_outcome(
 ) -> Result<Option<String>, MeetingsError> {
     let description = outcome.description.as_deref().unwrap_or(&outcome.title);
     let metadata = meeting_outcome_metadata(outcome);
+    let observation_id = event_observation_id(transaction, &outcome.event_id).await?;
     let decision = NewDecision::new(
         outcome.title.clone(),
         description,
@@ -37,6 +41,7 @@ async fn project_decision_outcome(
     .metadata(metadata.clone());
     let evidence =
         NewDecisionEvidence::new(DecisionEvidenceSourceKind::Event, outcome.event_id.clone())
+            .with_observation_id(Some(observation_id.clone()))
             .quote(description)
             .confidence(outcome.confidence)
             .metadata(metadata.clone());
@@ -50,6 +55,7 @@ async fn project_decision_outcome(
         &[impact],
     )
     .await?;
+    sync_decision_review_state_in_transaction(transaction, &stored).await?;
 
     Ok(Some(stored.decision_id))
 }
@@ -61,6 +67,7 @@ async fn project_obligation_outcome(
     let description = outcome.description.as_deref().unwrap_or(&outcome.title);
     let (obligated_entity_kind, obligated_entity_id) = obligated_entity(outcome);
     let metadata = meeting_outcome_metadata(outcome);
+    let observation_id = event_observation_id(transaction, &outcome.event_id).await?;
     let mut obligation = NewObligation::new(
         obligated_entity_kind,
         obligated_entity_id,
@@ -76,14 +83,28 @@ async fn project_obligation_outcome(
         ObligationEvidenceSourceKind::Event,
         outcome.event_id.clone(),
     )
+    .with_observation_id(Some(observation_id.clone()))
     .quote(description)
     .confidence(outcome.confidence)
     .metadata(metadata);
     let stored =
         ObligationStore::upsert_with_evidence_in_transaction(transaction, &obligation, &[evidence])
             .await?;
+    sync_obligation_review_state_in_transaction(transaction, &stored).await?;
 
     Ok(Some(stored.obligation_id))
+}
+
+async fn event_observation_id(
+    transaction: &mut Transaction<'_, Postgres>,
+    event_id: &str,
+) -> Result<String, MeetingsError> {
+    Ok(sqlx::query_scalar::<_, String>(
+        "SELECT observation_id FROM calendar_events WHERE event_id = $1",
+    )
+    .bind(event_id)
+    .fetch_one(&mut **transaction)
+    .await?)
 }
 
 fn obligated_entity(outcome: &MeetingOutcome) -> (ObligationEntityKind, String) {

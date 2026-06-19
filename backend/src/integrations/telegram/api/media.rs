@@ -11,7 +11,8 @@ use super::helpers::{
 };
 use crate::app::{ApiError, AppState};
 use crate::domains::api_support::{
-    api_audit_log, communication_ingestion_store, mail_storage_store, telegram_store,
+    api_audit_log, communication_provider_account_store,
+    communication_provider_secret_binding_store, mail_storage_store, telegram_store,
 };
 use crate::domains::mail::storage::AttachmentSafetyScanStatus;
 use crate::integrations::telegram::client::lifecycle;
@@ -24,6 +25,7 @@ use crate::integrations::telegram::runtime::{
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
+use crate::vault::CommunicationProviderAccountStore;
 
 fn build_event(
     event_type: &str,
@@ -129,9 +131,14 @@ pub(crate) async fn post_telegram_media_upload(
     Json(request): Json<TelegramMediaUploadRequest>,
 ) -> Result<Json<TelegramMediaUploadResponse>, ApiError> {
     let request = validate_media_upload_request(request)?;
-    let communication_store = communication_ingestion_store(&state)?;
-    let account = communication_store
-        .provider_account(&request.account_id)
+    let pool = state
+        .database
+        .pool()
+        .cloned()
+        .ok_or(ApiError::DatabaseNotConfigured)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let account = provider_account_store
+        .get(&request.account_id)
         .await?
         .ok_or_else(|| {
             TelegramError::InvalidRequest(format!(
@@ -164,11 +171,6 @@ pub(crate) async fn post_telegram_media_upload(
 
     let mail_store = mail_storage_store(&state)?;
     let attachment = resolve_upload_attachment(&mail_store, &request).await?;
-    let pool = state
-        .database
-        .pool()
-        .cloned()
-        .ok_or(ApiError::DatabaseNotConfigured)?;
     let audit_metadata = json!({
         "capability": "telegram.media.upload",
         "action_class": "provider_write",
@@ -343,14 +345,16 @@ pub(crate) async fn post_telegram_media_download(
     publish_telegram_event(&state, started).await?;
 
     let secret_store = telegram_secret_store(&state)?;
-    let communication_store = communication_ingestion_store(&state)?;
+    let provider_account_store = communication_provider_account_store(&state)?;
+    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let telegram_store = telegram_store(&state)?;
     let mail_store = mail_storage_store(&state)?;
     let response = match state
         .telegram_runtime
         .download_media(
             TelegramMediaDownloadContext {
-                communication_store: &communication_store,
+                provider_account_store: &provider_account_store,
+                provider_secret_binding_store: &provider_secret_binding_store,
                 telegram_store: &telegram_store,
                 mail_store: &mail_store,
                 secret_store: &secret_store,

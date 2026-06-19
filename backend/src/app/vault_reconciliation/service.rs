@@ -1,11 +1,11 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::calendar::events::CalendarAccountStore;
-use crate::domains::mail::core::{
-    CommunicationIngestionStore, NewProviderAccount, NewProviderAccountSecretBinding,
-};
+use crate::domains::mail::core::{NewProviderAccount, NewProviderAccountSecretBinding};
 use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
-use crate::vault::HostVault;
+use crate::vault::{
+    CalendarAccountStore, CommunicationProviderAccountStore,
+    CommunicationProviderSecretBindingStore, HostVault,
+};
 
 use super::calendar_restore::restore_linked_calendar_account;
 use super::errors::HostVaultReconciliationError;
@@ -19,7 +19,8 @@ pub(super) async fn reconcile_host_vault_manifest(
 ) -> Result<HostVaultReconciliationSummary, HostVaultReconciliationError> {
     let manifest = vault.account_secret_manifest()?;
     let secret_store = SecretReferenceStore::new(pool.clone());
-    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
+    let provider_secret_binding_store = CommunicationProviderSecretBindingStore::new(pool.clone());
     let calendar_store = CalendarAccountStore::new(pool.clone());
     let mut summary = HostVaultReconciliationSummary::default();
 
@@ -29,8 +30,9 @@ pub(super) async fn reconcile_host_vault_manifest(
             continue;
         };
         restore_secret_reference(&secret_store, &recoverable).await?;
-        restore_provider_account(&communication_store, &recoverable, &mut summary).await?;
-        restore_provider_account_secret_binding(&communication_store, &recoverable).await?;
+        restore_provider_account(&provider_account_store, &recoverable, &mut summary).await?;
+        restore_provider_account_secret_binding(&provider_secret_binding_store, &recoverable)
+            .await?;
 
         if restore_linked_calendar_account(&calendar_store, &recoverable).await? {
             summary.restored_calendar_accounts += 1;
@@ -59,16 +61,16 @@ async fn restore_secret_reference(
 }
 
 async fn restore_provider_account(
-    store: &CommunicationIngestionStore,
+    store: &CommunicationProviderAccountStore,
     secret: &RecoverableProviderSecret,
     summary: &mut HostVaultReconciliationSummary,
 ) -> Result<(), HostVaultReconciliationError> {
-    if store.provider_account(&secret.account_id).await?.is_some() {
+    if store.get(&secret.account_id).await?.is_some() {
         return Ok(());
     }
 
     store
-        .upsert_provider_account(
+        .restore(
             &NewProviderAccount::new(
                 &secret.account_id,
                 secret.provider_kind,
@@ -83,11 +85,11 @@ async fn restore_provider_account(
 }
 
 async fn restore_provider_account_secret_binding(
-    store: &CommunicationIngestionStore,
+    store: &CommunicationProviderSecretBindingStore,
     secret: &RecoverableProviderSecret,
 ) -> Result<(), HostVaultReconciliationError> {
     store
-        .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+        .restore(&NewProviderAccountSecretBinding::new(
             &secret.account_id,
             secret.secret_purpose,
             &secret.secret_ref,

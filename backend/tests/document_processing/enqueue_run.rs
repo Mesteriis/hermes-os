@@ -37,6 +37,14 @@ async fn enqueue_for_document_creates_extract_text_and_ocr_jobs() {
             .any(|job| step_name(&job.step) == "extract_text")
     );
     assert!(jobs.iter().any(|job| step_name(&job.step) == "ocr"));
+    let observation_links: i64 = query_scalar::<_, i64>(
+        "SELECT count(*) FROM observation_links WHERE domain = 'documents' AND entity_kind = 'document_processing_job' AND entity_id = ANY($1)",
+    )
+    .bind(jobs.iter().map(|job| job.job_id.clone()).collect::<Vec<_>>())
+    .fetch_one(&pool)
+    .await
+    .expect("document processing observation links");
+    assert!(observation_links >= 2);
     quiesce_processing_jobs_for_document(&pool, &document_id).await;
 }
 
@@ -136,6 +144,32 @@ async fn run_queued_jobs_for_markdown_populates_extracted_text_artifact() {
 
     assert_eq!(extract_status, "succeeded");
     assert_eq!(artifact_count, 1);
+    let extract_job_id: String = query_scalar::<_, String>(
+        "SELECT job_id FROM document_processing_jobs WHERE document_id = $1 AND step = 'extract_text'",
+    )
+    .bind(&document_id)
+    .fetch_one(&pool)
+    .await
+    .expect("extract job id");
+    let status_observations: i64 = query_scalar::<_, i64>(
+        r#"
+        SELECT count(*)::bigint
+        FROM observation_links link
+        JOIN observations observation
+          ON observation.observation_id = link.observation_id
+        JOIN observation_kind_definitions kind
+          ON kind.kind_definition_id = observation.kind_definition_id
+        WHERE link.domain = 'documents'
+          AND link.entity_kind = 'document_processing_job'
+          AND link.entity_id = $1
+          AND kind.code = 'DOCUMENT_PROCESSING_JOB_STATUS'
+        "#,
+    )
+    .bind(&extract_job_id)
+    .fetch_one(&pool)
+    .await
+    .expect("extract status observations");
+    assert!(status_observations >= 2);
 }
 
 #[tokio::test]

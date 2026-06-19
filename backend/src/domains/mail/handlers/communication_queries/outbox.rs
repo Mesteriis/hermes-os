@@ -1,4 +1,5 @@
 use super::super::*;
+use crate::domains::mail::service::MailCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct OutboxListQuery {
@@ -47,7 +48,14 @@ pub(crate) async fn post_v1_outbox_undo(
     State(state): State<AppState>,
     Path(outbox_id): Path<String>,
 ) -> Result<Json<crate::domains::mail::outbox::EmailOutboxItem>, ApiError> {
-    let item = outbox_store(&state)?.undo(&outbox_id, Utc::now()).await?;
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let item = MailCommandService::new(pool)
+        .undo_outbox(&outbox_id)
+        .await?;
 
     Ok(Json(item))
 }

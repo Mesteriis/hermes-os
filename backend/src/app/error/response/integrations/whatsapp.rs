@@ -36,6 +36,18 @@ pub(super) fn whatsapp_web_error_parts(error: WhatsappWebError) -> ErrorParts {
             "whatsapp_web_task_candidate_refresh_error",
             "WhatsApp Web task candidate refresh failed",
         ),
+        WhatsappWebError::ReviewInboxWorkflow(error) => internal(
+            error,
+            "WhatsApp Web review inbox mirroring failed",
+            "whatsapp_web_review_inbox_error",
+            "WhatsApp Web review inbox mirroring failed",
+        ),
+        WhatsappWebError::ObservationStore(error) => internal(
+            error,
+            "WhatsApp Web observation store operation failed",
+            "whatsapp_web_observation_error",
+            "WhatsApp Web store operation failed",
+        ),
         WhatsappWebError::Sqlx(error) => internal(
             error,
             "WhatsApp Web database operation failed",

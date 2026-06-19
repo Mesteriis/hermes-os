@@ -3,9 +3,17 @@
 ## Architectural Thesis
 
 Hermes Hub is a local-first Personal Memory System. Its durable system of record
-combines append-only source records, canonical events, domain entities,
+combines append-only observations, canonical events, domain entities,
 relationships, document artifacts and rebuildable indexes. AI uses these stores
 as context and never becomes the durable memory layer itself.
+
+Target flow from ADR-0096 is:
+
+`External Systems -> Integrations -> Vault -> Observation Platform -> Ingestion -> Domains -> Knowledge -> Review -> Actions`
+
+The append-only event log remains the system spine from ADR-0001. It does not
+replace the Observation Platform boundary; it carries canonical domain and
+workflow events alongside evidence ingestion.
 
 Canonical architecture language lives in:
 
@@ -19,8 +27,8 @@ Canonical architecture language lives in:
 ```mermaid
 flowchart TB
     Sources["External and local sources"] --> Adapters["Provider and import adapters"]
-    Adapters --> SourceRecords["Append-only source records"]
-    SourceRecords --> EventLog["Canonical event log"]
+    Adapters --> Observations["Observation Platform"]
+    Observations --> EventLog["Canonical event log"]
     EventLog --> Projectors["Projectors"]
     Projectors --> Domains["Domain state"]
     Projectors --> Graph["Knowledge graph"]
@@ -29,8 +37,11 @@ flowchart TB
     Graph --> Engines
     Objects --> Engines
     Engines --> Context["Context"]
+    Context --> Review["Review inbox"]
+    Domains --> Review
     Domains --> API["Rust application API"]
     Engines --> API
+    Review --> API
     Context --> API
     API --> Agents["Agent runtime"]
     Agents --> API
@@ -68,6 +79,7 @@ Domains own source-of-truth entities and invariants:
 - Calendar/Events.
 - Decisions.
 - Obligations.
+- Review.
 - Knowledge Graph relationships.
 
 ### Engine Layer
@@ -79,6 +91,9 @@ Engines are reusable mechanisms used by domains:
 - Trust Engine.
 - Search Engine.
 - Enrichment Engine.
+- Context Packs Engine.
+- Identity Resolution Engine.
+- Relationship Candidate Engine.
 - Obligation Engine.
 - Risk Engine.
 - Consistency / Contradiction Engine.
@@ -105,7 +120,7 @@ engines.
 
 ## Durable State Categories
 
-- raw imported source records;
+- canonical observations;
 - canonical event log;
 - normalized domain records;
 - relationship records and graph evidence;

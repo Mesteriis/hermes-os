@@ -1,5 +1,6 @@
 use super::super::types::ApiError;
 use crate::domains::organizations::api::OrganizationError;
+use crate::domains::organizations::service::OrganizationCommandServiceError;
 
 impl From<crate::domains::organizations::core::OrgCoreError> for ApiError {
     fn from(error: crate::domains::organizations::core::OrgCoreError) -> Self {
@@ -65,6 +66,23 @@ impl From<OrganizationError> for ApiError {
                 tracing::error!(error = %error, "organization operation failed");
                 ApiError::InvalidCommunicationQuery("organization operation failed")
             }
+        }
+    }
+}
+
+impl From<OrganizationCommandServiceError> for ApiError {
+    fn from(error: OrganizationCommandServiceError) -> Self {
+        match error {
+            OrganizationCommandServiceError::Observation(source) => {
+                tracing::error!(error = %source, "organization command observation capture failed");
+                ApiError::InvalidCommunicationQuery(
+                    "organization command observation capture failed",
+                )
+            }
+            OrganizationCommandServiceError::Organization(source) => ApiError::from(source),
+            OrganizationCommandServiceError::Core(source) => ApiError::from(source),
+            OrganizationCommandServiceError::Enrichment(source) => ApiError::from(source),
+            OrganizationCommandServiceError::Health(source) => ApiError::from(source),
         }
     }
 }

@@ -6,6 +6,7 @@ use super::message_versions::{
     insert_message_version, latest_message_version, latest_version_number, local_edit_diff,
 };
 use super::tombstones::insert_tombstone;
+use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::errors::TelegramError;
 use crate::integrations::telegram::client::models::messages::{
@@ -215,28 +216,9 @@ pub async fn record_pin_state(
     actor_id: &str,
 ) -> Result<TelegramLifecycleResponse, TelegramError> {
     let now = Utc::now();
-    let updated = sqlx::query(
-        r#"
-        UPDATE communication_messages
-        SET message_metadata = jsonb_set(
-                jsonb_set(
-                    COALESCE(message_metadata, '{}'::jsonb),
-                    '{pinned}',
-                    to_jsonb($2::boolean),
-                    true
-                ),
-                '{is_pinned}',
-                to_jsonb($2::boolean),
-                true
-            )
-        WHERE message_id = $1
-        RETURNING message_metadata
-        "#,
-    )
-    .bind(message_id)
-    .bind(request.is_pinned)
-    .fetch_optional(pool)
-    .await?;
+    let updated = TelegramStore::new(pool.clone())
+        .apply_message_pinned_state(message_id, request.is_pinned, now)
+        .await?;
 
     if updated.is_none() {
         return Err(TelegramError::InvalidRequest(format!(

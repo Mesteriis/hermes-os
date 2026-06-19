@@ -5,6 +5,7 @@ use crate::domains::mail::accounts::EmailAccountSetupError;
 use crate::domains::mail::core::{CommunicationIngestionError, ProviderCredentialError};
 use crate::integrations::gmail::client::EmailProviderNetworkError;
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
+use crate::platform::observations::ObservationStoreError;
 use crate::workflows::email_sync_pipeline::EmailSyncPipelineError;
 
 #[derive(Debug, Error)]
@@ -20,6 +21,9 @@ pub enum MailSyncError {
 
     #[error(transparent)]
     EventStore(#[from] EventStoreError),
+
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
 
     #[error("mail sync account was not found")]
     AccountNotFound,

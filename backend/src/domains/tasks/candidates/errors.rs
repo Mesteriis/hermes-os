@@ -3,6 +3,8 @@ use thiserror::Error;
 use crate::domains::obligations::ObligationStoreError;
 use crate::engines::obligation::ObligationEngineError;
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
+use crate::platform::observations::ObservationStoreError;
+use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum TaskCandidateError {
@@ -33,6 +35,12 @@ pub enum TaskCandidateError {
     #[error("invalid review event type")]
     InvalidEventType,
 
+    #[error("invalid task candidate source kind: {0}")]
+    InvalidSourceKind(String),
+
+    #[error("task candidate requires observation evidence: {0}")]
+    ObservationRequired(String),
+
     #[error(transparent)]
     EventStore(#[from] EventStoreError),
 
@@ -44,6 +52,12 @@ pub enum TaskCandidateError {
 
     #[error(transparent)]
     ObligationStore(#[from] ObligationStoreError),
+
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
+
+    #[error(transparent)]
+    ReviewMirror(#[from] ReviewMirrorError),
 
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),

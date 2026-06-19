@@ -1,15 +1,18 @@
 use chrono::{DateTime, Utc};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::Transaction;
 use sqlx::postgres::{PgPool, Postgres};
 
 use crate::platform::events::{EventEnvelope, EventStore};
+use crate::platform::observations::materialize_review_transition_link_in_transaction;
+use crate::workflows::review_mirror::sync_task_candidate_review_state_in_transaction;
 
 use super::super::constants::{TASK_CANDIDATE_EVENT_PREFIX, TASK_CANDIDATE_REVIEW_EVENT_TYPE};
 use super::super::errors::TaskCandidateError;
 use super::super::events::{ReviewCommandEvent, ReviewEventPayload};
 use super::super::models::{
-    TaskCandidateReviewCommand, TaskCandidateReviewCommandResult, TaskCandidateReviewState,
+    StoredCandidateRow, TaskCandidateReviewCommand, TaskCandidateReviewCommandResult,
+    TaskCandidateReviewState,
 };
 use super::super::persistence::row_task_candidate;
 use super::super::validation::validate_non_empty;
@@ -19,6 +22,15 @@ use super::task_activation::upsert_task_in_transaction;
 pub(super) async fn set_review_state(
     pool: &PgPool,
     command: &TaskCandidateReviewCommand,
+) -> Result<TaskCandidateReviewCommandResult, TaskCandidateError> {
+    set_review_state_with_observation(pool, command, None, None).await
+}
+
+pub(super) async fn set_review_state_with_observation(
+    pool: &PgPool,
+    command: &TaskCandidateReviewCommand,
+    observation_id: Option<&str>,
+    metadata: Option<Value>,
 ) -> Result<TaskCandidateReviewCommandResult, TaskCandidateError> {
     let command_id = validate_non_empty("command_id", &command.command_id)?;
     let task_candidate_id = validate_non_empty("task_candidate_id", &command.task_candidate_id)?;
@@ -44,6 +56,26 @@ pub(super) async fn set_review_state(
         &event_id,
         &actor_id,
         event.occurred_at,
+    )
+    .await?;
+    let metadata = match metadata {
+        Some(extra) => Some(json!({
+            "event_id": event_id,
+            "context": extra,
+        })),
+        None => Some(json!({
+            "event_id": event_id,
+        })),
+    };
+    materialize_review_transition_link_in_transaction(
+        &mut transaction,
+        observation_id,
+        "tasks",
+        "task_candidate",
+        &task_candidate_id,
+        "review_state",
+        command.review_state.as_str(),
+        metadata,
     )
     .await?;
 
@@ -145,6 +177,14 @@ async fn apply_review_state_in_transaction(
             .await?;
         }
     }
+
+    sync_task_candidate_review_state_in_transaction(
+        transaction,
+        task_candidate_id,
+        &candidate,
+        review_state,
+    )
+    .await?;
 
     Ok(())
 }

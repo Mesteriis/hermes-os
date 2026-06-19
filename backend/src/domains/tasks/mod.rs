@@ -6,4 +6,5 @@ pub mod handlers;
 pub mod health;
 pub mod intelligence;
 pub mod rules;
+pub mod service;
 pub mod sync;

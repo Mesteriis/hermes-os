@@ -1,14 +1,17 @@
 use chrono::{DateTime, Utc};
 use serde_json::json;
+use sqlx::{Postgres, Transaction};
 
 use crate::domains::mail::core::{CommunicationIngestionStore, NewRawCommunicationRecord};
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatFolderSnapshot, TelegramTdlibChatSnapshot,
 };
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
 use super::TELEGRAM_CHAT_RECORD_KIND;
 use super::chat_metadata::tdlib_chat_projection_metadata;
 use super::errors::TelegramError;
+use super::evidence::link_telegram_entity_in_transaction;
 use super::identifiers::{stable_hash, telegram_chat_id, telegram_raw_record_id};
 use super::models::{
     NewTelegramChat, TelegramChat, TelegramChatGroupFilter, TelegramChatMember, TelegramSyncState,
@@ -17,10 +20,71 @@ use super::rows::row_to_telegram_chat;
 use super::store::TelegramStore;
 use super::validation::validate_chat_list_limit;
 
+#[path = "chats/metadata_flags.rs"]
+mod metadata_flags;
+
+async fn capture_chat_observation_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    chat: &TelegramChat,
+    relationship_kind: &str,
+    actor: &str,
+    observed_at: DateTime<Utc>,
+) -> Result<(), TelegramError> {
+    let observation = ObservationStore::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            "TELEGRAM_CHAT",
+            ObservationOriginKind::LocalRuntime,
+            observed_at,
+            json!({
+                "telegram_chat_id": chat.telegram_chat_id,
+                "account_id": chat.account_id,
+                "provider_chat_id": chat.provider_chat_id,
+                "chat_kind": chat.chat_kind,
+                "title": chat.title,
+                "username": chat.username,
+                "sync_state": chat.sync_state,
+                "last_message_at": chat.last_message_at,
+                "metadata": chat.metadata,
+                "operation": relationship_kind,
+            }),
+            match relationship_kind {
+                "upsert" => format!("telegram-chat://{}", chat.telegram_chat_id),
+                _ => format!(
+                    "telegram-chat://{}/{}",
+                    chat.telegram_chat_id, relationship_kind
+                ),
+            },
+        )
+        .provenance(json!({
+            "captured_by": actor,
+            "operation": relationship_kind,
+            "provider": "telegram",
+        })),
+    )
+    .await?;
+    link_telegram_entity_in_transaction(
+        transaction,
+        &observation.observation_id,
+        "chat",
+        chat.telegram_chat_id.clone(),
+        relationship_kind,
+        json!({
+            "account_id": chat.account_id,
+            "provider_chat_id": chat.provider_chat_id,
+            "chat_kind": chat.chat_kind,
+            "sync_state": chat.sync_state,
+        }),
+    )
+    .await?;
+    Ok(())
+}
+
 impl TelegramStore {
     pub async fn upsert_chat(&self, chat: &NewTelegramChat) -> Result<TelegramChat, TelegramError> {
         chat.validate()?;
         let telegram_chat_id = telegram_chat_id(&chat.account_id, &chat.provider_chat_id);
+        let mut transaction = self.pool.begin().await?;
         let row = sqlx::query(
             r#"
             INSERT INTO telegram_chats (
@@ -73,10 +137,20 @@ impl TelegramStore {
         .bind(chat.sync_state.as_str())
         .bind(chat.last_message_at)
         .bind(&chat.metadata)
-        .fetch_one(&self.pool)
+        .fetch_one(&mut *transaction)
         .await?;
 
-        row_to_telegram_chat(row)
+        let stored = row_to_telegram_chat(row)?;
+        capture_chat_observation_in_transaction(
+            &mut transaction,
+            &stored,
+            "upsert",
+            "telegram.client.chats.upsert_chat",
+            stored.updated_at,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(stored)
     }
 
     pub async fn list_chats(
@@ -334,160 +408,6 @@ impl TelegramStore {
         Ok(updated)
     }
 
-    pub async fn set_chat_metadata_bool(
-        &self,
-        telegram_chat_id: &str,
-        key: &str,
-        value: bool,
-    ) -> Result<serde_json::Value, TelegramError> {
-        let mut metadata = self.chat_metadata_map(telegram_chat_id).await?;
-        metadata.insert(key.to_owned(), serde_json::Value::Bool(value));
-        self.persist_chat_metadata(telegram_chat_id, metadata).await
-    }
-
-    pub async fn set_chat_metadata_number(
-        &self,
-        telegram_chat_id: &str,
-        key: &str,
-        value: i64,
-    ) -> Result<serde_json::Value, TelegramError> {
-        let mut metadata = self.chat_metadata_map(telegram_chat_id).await?;
-        metadata.insert(
-            key.to_owned(),
-            serde_json::Value::Number(serde_json::Number::from(value.max(0))),
-        );
-        self.persist_chat_metadata(telegram_chat_id, metadata).await
-    }
-
-    pub async fn set_chat_last_read_at(
-        &self,
-        telegram_chat_id: &str,
-        last_read_at: Option<DateTime<Utc>>,
-    ) -> Result<serde_json::Value, TelegramError> {
-        let mut metadata = self.chat_metadata_map(telegram_chat_id).await?;
-        match last_read_at {
-            Some(value) => {
-                metadata.insert(
-                    "last_read_at".to_owned(),
-                    serde_json::Value::String(value.to_rfc3339()),
-                );
-            }
-            None => {
-                metadata.remove("last_read_at");
-            }
-        }
-        self.persist_chat_metadata(telegram_chat_id, metadata).await
-    }
-
-    pub async fn apply_provider_unread_counts(
-        &self,
-        telegram_chat_id: &str,
-        unread_count: Option<i64>,
-        unread_mention_count: Option<i64>,
-        last_read_inbox_message_id: Option<&str>,
-        source_event: &str,
-    ) -> Result<serde_json::Value, TelegramError> {
-        let mut metadata = self.chat_metadata_map(telegram_chat_id).await?;
-        if let Some(value) = unread_count {
-            metadata.insert(
-                "unread_count".to_owned(),
-                serde_json::Value::Number(serde_json::Number::from(value.max(0))),
-            );
-            metadata.insert(
-                "provider_unread_count".to_owned(),
-                serde_json::Value::Number(serde_json::Number::from(value.max(0))),
-            );
-        }
-        if let Some(value) = unread_mention_count {
-            metadata.insert(
-                "mention_count".to_owned(),
-                serde_json::Value::Number(serde_json::Number::from(value.max(0))),
-            );
-            metadata.insert(
-                "provider_unread_mention_count".to_owned(),
-                serde_json::Value::Number(serde_json::Number::from(value.max(0))),
-            );
-        }
-        if let Some(value) = last_read_inbox_message_id {
-            metadata.insert(
-                "last_read_inbox_provider_message_id".to_owned(),
-                serde_json::Value::String(value.to_owned()),
-            );
-        }
-        metadata.insert(
-            "unread_count_source".to_owned(),
-            serde_json::Value::String(source_event.to_owned()),
-        );
-        self.persist_chat_metadata(telegram_chat_id, metadata).await
-    }
-
-    pub async fn recompute_chat_unread_count(
-        &self,
-        telegram_chat_id: &str,
-    ) -> Result<serde_json::Value, TelegramError> {
-        let chat = self
-            .telegram_chat_by_id(telegram_chat_id)
-            .await?
-            .ok_or_else(|| {
-                TelegramError::InvalidRequest(format!(
-                    "Telegram chat `{telegram_chat_id}` was not found"
-                ))
-            })?;
-        let mut metadata = self.chat_metadata_map(telegram_chat_id).await?;
-        let last_read_at = metadata
-            .get("last_read_at")
-            .and_then(serde_json::Value::as_str)
-            .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
-            .map(|value| value.with_timezone(&Utc));
-        let unread_count = sqlx::query_scalar::<_, i64>(
-            r#"
-            SELECT COUNT(*)::bigint
-            FROM communication_messages
-            WHERE account_id = $1
-              AND conversation_id = $2
-              AND channel_kind IN ('telegram_user', 'telegram_bot')
-              AND delivery_state = 'received'
-              AND ($3::timestamptz IS NULL OR COALESCE(occurred_at, projected_at) > $3)
-            "#,
-        )
-        .bind(&chat.account_id)
-        .bind(&chat.provider_chat_id)
-        .bind(last_read_at)
-        .fetch_one(&self.pool)
-        .await?;
-        let mention_count = sqlx::query_scalar::<_, i64>(
-            r#"
-            SELECT COALESCE(SUM(
-                CASE
-                    WHEN jsonb_typeof(message_metadata->'mention_count') = 'number'
-                        THEN (message_metadata->>'mention_count')::bigint
-                    ELSE 0
-                END
-            ), 0)::bigint
-            FROM communication_messages
-            WHERE account_id = $1
-              AND conversation_id = $2
-              AND channel_kind IN ('telegram_user', 'telegram_bot')
-              AND delivery_state = 'received'
-              AND ($3::timestamptz IS NULL OR COALESCE(occurred_at, projected_at) > $3)
-            "#,
-        )
-        .bind(&chat.account_id)
-        .bind(&chat.provider_chat_id)
-        .bind(last_read_at)
-        .fetch_one(&self.pool)
-        .await?;
-        metadata.insert(
-            "unread_count".to_owned(),
-            serde_json::Value::Number(serde_json::Number::from(unread_count.max(0))),
-        );
-        metadata.insert(
-            "mention_count".to_owned(),
-            serde_json::Value::Number(serde_json::Number::from(mention_count.max(0))),
-        );
-        self.persist_chat_metadata(telegram_chat_id, metadata).await
-    }
-
     pub async fn telegram_chat_by_id(
         &self,
         telegram_chat_id: &str,
@@ -542,13 +462,42 @@ impl TelegramStore {
         metadata: serde_json::Map<String, serde_json::Value>,
     ) -> Result<serde_json::Value, TelegramError> {
         let metadata = serde_json::Value::Object(metadata);
-        sqlx::query(
-            "UPDATE telegram_chats SET metadata = $2, updated_at = now() WHERE telegram_chat_id = $1",
+        let mut transaction = self.pool.begin().await?;
+        let row = sqlx::query(
+            r#"
+            UPDATE telegram_chats
+            SET metadata = $2, updated_at = now()
+            WHERE telegram_chat_id = $1
+            RETURNING
+                telegram_chat_id,
+                account_id,
+                provider_chat_id,
+                chat_kind,
+                title,
+                username,
+                sync_state,
+                last_message_at,
+                metadata,
+                created_at,
+                updated_at
+            "#,
         )
         .bind(telegram_chat_id)
         .bind(&metadata)
-        .execute(&self.pool)
+        .fetch_optional(&mut *transaction)
         .await?;
+        if let Some(row) = row {
+            let stored = row_to_telegram_chat(row)?;
+            capture_chat_observation_in_transaction(
+                &mut transaction,
+                &stored,
+                "metadata_update",
+                "telegram.client.chats.persist_chat_metadata",
+                stored.updated_at,
+            )
+            .await?;
+        }
+        transaction.commit().await?;
 
         Ok(metadata)
     }
@@ -610,9 +559,7 @@ impl TelegramStore {
         snapshot: &TelegramTdlibChatSnapshot,
     ) -> Result<TelegramChat, TelegramError> {
         let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let provider_account = self
-            .telegram_provider_account(&communication_store, account_id)
-            .await?;
+        let provider_account = self.telegram_provider_account(account_id).await?;
         let raw_record_id = telegram_raw_record_id(
             &provider_account.account_id,
             TELEGRAM_CHAT_RECORD_KIND,

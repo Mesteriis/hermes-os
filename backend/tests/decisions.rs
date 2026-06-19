@@ -319,6 +319,41 @@ async fn decision_store_refresh_persists_explicit_message_decision_candidate_aga
     assert_eq!(evidence_row.0, "communication");
     assert_eq!(evidence_row.1, message_id);
     assert_eq!(evidence_row.2.as_deref(), Some(quote.as_str()));
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
+    let stored_observation_id: Option<String> =
+        sqlx::query_scalar("SELECT observation_id FROM decision_evidence WHERE decision_id = $1")
+            .bind(&decision.decision_id)
+            .fetch_one(&pool)
+            .await
+            .expect("stored observation id");
+    assert_eq!(
+        stored_observation_id.as_deref(),
+        Some(message_observation_id.as_str())
+    );
+
+    let support_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'decisions'
+          AND entity_kind = 'decision'
+          AND entity_id = $2
+          AND relationship_kind = 'supports'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .bind(&decision.decision_id)
+    .fetch_one(&pool)
+    .await
+    .expect("decision support link count");
+    assert_eq!(support_link_count, 1);
 }
 
 #[tokio::test]
@@ -372,6 +407,40 @@ async fn decision_store_refresh_persists_explicit_document_decision_candidate_ag
     assert_eq!(evidence_row.0, "document");
     assert_eq!(evidence_row.1, document_id);
     assert_eq!(evidence_row.2.as_deref(), Some(quote.as_str()));
+    let document_observation_id: String =
+        sqlx::query_scalar("SELECT observation_id FROM documents WHERE document_id = $1")
+            .bind(&document_id)
+            .fetch_one(&pool)
+            .await
+            .expect("document observation id");
+    let stored_observation_id: Option<String> =
+        sqlx::query_scalar("SELECT observation_id FROM decision_evidence WHERE decision_id = $1")
+            .bind(&decision.decision_id)
+            .fetch_one(&pool)
+            .await
+            .expect("stored observation id");
+    assert_eq!(
+        stored_observation_id.as_deref(),
+        Some(document_observation_id.as_str())
+    );
+
+    let support_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'decisions'
+          AND entity_kind = 'decision'
+          AND entity_id = $2
+          AND relationship_kind = 'supports'
+        "#,
+    )
+    .bind(&document_observation_id)
+    .bind(&decision.decision_id)
+    .fetch_one(&pool)
+    .await
+    .expect("document decision support link count");
+    assert_eq!(support_link_count, 1);
 }
 
 #[tokio::test]
@@ -493,6 +562,31 @@ async fn decision_store_rejects_partial_decider_before_database_write() {
         .expect_err("partial decider must fail before database write");
 
     assert!(matches!(error, DecisionStoreError::PartialDecider));
+}
+
+#[tokio::test]
+async fn decision_store_rejects_missing_observation_evidence_against_postgres() {
+    let Some((_pool, store)) = live_decision_context("missing decision observation evidence").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let decision = NewDecision::new(
+        format!("Observation-backed decision {suffix}"),
+        "Decision evidence must point to an existing observation.",
+        0.8,
+        DecisionReviewState::Suggested,
+    );
+    let evidence =
+        NewDecisionEvidence::observation(format!("observation:v1:missing-decision:{suffix}"));
+    let impact = NewDecisionImpactedEntity::new(DecisionEntityKind::Project, "project:v1:hermes");
+
+    let error = store
+        .upsert_with_evidence(&decision, &[evidence], &[impact])
+        .await
+        .expect_err("missing observation evidence must fail");
+
+    assert!(matches!(error, DecisionStoreError::ObservationNotFound(_)));
 }
 
 async fn live_decision_context(test_name: &str) -> Option<(PgPool, DecisionStore)> {

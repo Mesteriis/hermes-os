@@ -9,5 +9,6 @@ pub mod organizations;
 pub mod persons;
 pub mod projects;
 pub mod relationships;
+pub mod review;
 pub mod settings;
 pub mod tasks;

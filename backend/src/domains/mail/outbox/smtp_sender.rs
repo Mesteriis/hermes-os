@@ -5,13 +5,13 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 
 use crate::domains::mail::core::{
-    CommunicationIngestionStore, EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose,
-    ProviderCredentialReader,
+    EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose, ProviderCredentialReader,
 };
 use crate::domains::mail::send::{
     EmailSendError, OutgoingEmail, SendResult, SmtpClient, SmtpConfig,
 };
 use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore, SecretResolver};
+use crate::vault::{CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore};
 
 use super::{EmailOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt};
 
@@ -40,7 +40,8 @@ impl SmtpTransport for LiveSmtpTransport {
 
 #[derive(Clone)]
 pub struct SmtpOutboxEmailSender<R, T = LiveSmtpTransport> {
-    communication_store: CommunicationIngestionStore,
+    provider_account_store: CommunicationProviderAccountStore,
+    provider_secret_binding_store: CommunicationProviderSecretBindingStore,
     secret_store: SecretReferenceStore,
     resolver: R,
     transport: T,
@@ -53,7 +54,10 @@ where
 {
     pub fn new(pool: PgPool, resolver: R, transport: T) -> Self {
         Self {
-            communication_store: CommunicationIngestionStore::new(pool.clone()),
+            provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
+            provider_secret_binding_store: CommunicationProviderSecretBindingStore::new(
+                pool.clone(),
+            ),
             secret_store: SecretReferenceStore::new(pool),
             resolver,
             transport,
@@ -73,8 +77,8 @@ where
     {
         Box::pin(async move {
             let account = self
-                .communication_store
-                .provider_account(&item.account_id)
+                .provider_account_store
+                .get(&item.account_id)
                 .await
                 .map_err(|error| delivery_error("provider account lookup failed", error))?
                 .ok_or_else(|| {
@@ -82,7 +86,7 @@ where
                 })?;
             let smtp_config = smtp_config_for_provider_account(&account)?;
             let credential_reader = ProviderCredentialReader::new(
-                self.communication_store.clone(),
+                self.provider_secret_binding_store.clone(),
                 self.secret_store.clone(),
                 &self.resolver,
             );

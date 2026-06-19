@@ -31,6 +31,8 @@ pub(super) fn parts(error: ApiError) -> ErrorParts {
         ApiError::InvalidContradictionReview(message) => {
             bad_request("invalid_contradiction_review", message)
         }
+        ApiError::InvalidReviewQuery(message) => bad_request("invalid_review_query", message),
+        ApiError::InvalidReviewItem(message) => bad_request("invalid_review_item", message),
         ApiError::TaskCandidateNotFound => {
             not_found("task_candidate_not_found", "task candidate was not found")
         }
@@ -73,6 +75,17 @@ pub(super) fn parts(error: ApiError) -> ErrorParts {
                 "consistency engine operation failed".to_owned(),
                 false,
             )
+        }
+        ApiError::ReviewItemNotFound => {
+            not_found("review_item_not_found", "review item was not found")
+        }
+        ApiError::ReviewInbox(error) => internal_store(
+            error,
+            "review inbox store operation failed",
+            "review_inbox_store_error",
+        ),
+        ApiError::ReviewPromotion(error) => {
+            internal_store(error, "review promotion failed", "review_promotion_error")
         }
         _ => unreachable!("review response mapper received non-review ApiError"),
     }

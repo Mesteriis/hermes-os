@@ -96,7 +96,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
 
     let projected = sqlx::query(
         r#"
-        SELECT message_id, subject, sender, recipients, body_text
+        SELECT message_id, observation_id, subject, sender, recipients, body_text
         FROM communication_messages
         WHERE account_id = $1
           AND provider_record_id = $2
@@ -108,6 +108,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .await
     .expect("projected message");
     let message_id: String = projected.try_get("message_id").expect("message id");
+    let observation_id: String = projected.try_get("observation_id").expect("observation id");
     let subject: String = projected.try_get("subject").expect("subject");
     let sender: String = projected.try_get("sender").expect("sender");
     let recipients: serde_json::Value = projected.try_get("recipients").expect("recipients");
@@ -136,6 +137,38 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .expect("person email identities");
     assert_eq!(identity_count, 2);
 
+    let persona_observation_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'persons'
+          AND entity_kind = 'persona'
+          AND relationship_kind = 'email_sync_projection'
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("persona observation links");
+    assert_eq!(persona_observation_link_count, 2);
+
+    let identity_observation_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'persons'
+          AND entity_kind = 'identity'
+          AND relationship_kind = 'email_sync_projection'
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("identity observation links");
+    assert_eq!(identity_observation_link_count, 2);
+
     let participant_count: i64 = sqlx::query_scalar(
         r#"
         SELECT count(*)::BIGINT
@@ -158,6 +191,22 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .expect("message participants");
     assert_eq!(participant_count, 2);
 
+    let participant_observation_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'communications'
+          AND entity_kind = 'message_participant'
+          AND relationship_kind = 'email_sync_participant'
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message participant observation links");
+    assert_eq!(participant_observation_link_count, 2);
+
     let relationship_count: i64 = sqlx::query_scalar(
         r#"
         SELECT count(*)::BIGINT
@@ -177,6 +226,22 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .await
     .expect("relationship events");
     assert_eq!(relationship_count, 2);
+
+    let relationship_event_observation_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'persons'
+          AND entity_kind = 'relationship_event'
+          AND relationship_kind = 'email_sync_relationship_event'
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("relationship event observation links");
+    assert_eq!(relationship_event_observation_link_count, 2);
 
     let organization_link_count: i64 = sqlx::query_scalar(
         r#"
@@ -202,7 +267,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
         JOIN relationship_evidence evidence
           ON evidence.relationship_id = relationship.relationship_id
         JOIN organization_domains domain
-          ON domain.organization_id = relationship.target_entity_id
+          ON domain.organization_id = relationship.entity_id
         JOIN person_identities identity
           ON identity.person_id = relationship.source_entity_id
         WHERE relationship.source_entity_kind = 'persona'
@@ -224,6 +289,54 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     .await
     .expect("organization relationships");
     assert_eq!(organization_relationship_count, 2);
+
+    let organization_projection_observation_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'organizations'
+          AND entity_kind = 'organization'
+          AND relationship_kind = 'email_sync_projection'
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("organization observation links");
+    assert_eq!(organization_projection_observation_link_count, 2);
+
+    let organization_domain_projection_observation_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'organizations'
+          AND entity_kind = 'organization_domain'
+          AND relationship_kind = 'email_sync_projection'
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("organization domain observation links");
+    assert_eq!(organization_domain_projection_observation_link_count, 2);
+
+    let organization_identity_projection_observation_link_count: i64 = sqlx::query_scalar(
+        r#"
+        SELECT count(*)::BIGINT
+        FROM observation_links
+        WHERE observation_id = $1
+          AND domain = 'organizations'
+          AND entity_kind = 'organization_identity'
+          AND relationship_kind = 'email_sync_projection'
+        "#,
+    )
+    .bind(&observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("organization identity observation links");
+    assert_eq!(organization_identity_projection_observation_link_count, 2);
 }
 
 #[tokio::test]
@@ -297,6 +410,7 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
 
     assert_eq!(report.projected_messages, 1);
     assert_eq!(report.refreshed_decision_candidates, 1);
+    assert_eq!(report.refreshed_knowledge_candidates, 2);
     assert_eq!(report.refreshed_task_candidates, 1);
 
     let message_id: String = sqlx::query_scalar(
@@ -312,6 +426,13 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
     .fetch_one(&pool)
     .await
     .expect("projected message id");
+    let message_observation_id: String = sqlx::query_scalar(
+        "SELECT observation_id FROM communication_messages WHERE message_id = $1",
+    )
+    .bind(&message_id)
+    .fetch_one(&pool)
+    .await
+    .expect("message observation id");
 
     let decision_row: (String, String, String, String) = sqlx::query_as(
         r#"
@@ -331,15 +452,89 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
     assert_eq!(decision_row.2, decision_rationale);
     assert_eq!(decision_row.3, "suggested");
 
+    let mirrored_decision_review_row = sqlx::query(
+        r#"
+        SELECT item_kind, status, metadata
+        FROM review_items
+        WHERE review_item_id IN (
+            SELECT review_item_id
+            FROM review_item_evidence
+            WHERE observation_id = $1
+        )
+          AND metadata->>'mirrored_from' = 'decisions'
+        "#,
+    )
+    .bind(&message_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("mirrored decision review row");
+    assert_eq!(
+        mirrored_decision_review_row
+            .try_get::<String, _>("item_kind")
+            .expect("item kind"),
+        "potential_decision"
+    );
+    assert_eq!(
+        mirrored_decision_review_row
+            .try_get::<String, _>("status")
+            .expect("status"),
+        "new"
+    );
+    let mirrored_decision_metadata: serde_json::Value = mirrored_decision_review_row
+        .try_get("metadata")
+        .expect("metadata");
+    assert_eq!(
+        mirrored_decision_metadata["mirrored_from"],
+        json!("decisions")
+    );
+    assert_eq!(
+        mirrored_decision_metadata["decision_id"],
+        json!(decision_row.0)
+    );
+
+    let mirrored_knowledge_rows = sqlx::query(
+        r#"
+        SELECT item_kind, status, metadata
+        FROM review_items
+        WHERE review_item_id IN (
+            SELECT review_item_id
+            FROM review_item_evidence
+            WHERE observation_id = $1
+        )
+          AND item_kind = 'knowledge_candidate'
+        ORDER BY metadata->>'candidate_group', title
+        "#,
+    )
+    .bind(&message_observation_id)
+    .fetch_all(&pool)
+    .await
+    .expect("mirrored knowledge review rows");
+    assert_eq!(mirrored_knowledge_rows.len(), 2);
+    let mirrored_groups = mirrored_knowledge_rows
+        .iter()
+        .map(|row| {
+            let metadata: serde_json::Value = row.try_get("metadata").expect("metadata");
+            assert_eq!(row.try_get::<String, _>("status").expect("status"), "new");
+            metadata["candidate_group"]
+                .as_str()
+                .expect("candidate group")
+                .to_owned()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        mirrored_groups,
+        vec!["agreement".to_owned(), "document".to_owned()]
+    );
+
     let task_candidate_row: (String, String, String, Option<String>) = sqlx::query_as(
         r#"
         SELECT title, candidate_kind, review_state, due_text
         FROM task_candidates
-        WHERE source_kind = 'message'
+        WHERE source_kind = 'observation'
           AND source_id = $1
         "#,
     )
-    .bind(&message_id)
+    .bind(&message_observation_id)
     .fetch_one(&pool)
     .await
     .expect("obligation task candidate");
@@ -347,6 +542,41 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
     assert_eq!(task_candidate_row.1, "obligation_task");
     assert_eq!(task_candidate_row.2, "suggested");
     assert_eq!(task_candidate_row.3.as_deref(), Some("Friday 5pm"));
+
+    let mirrored_review_row = sqlx::query(
+        r#"
+        SELECT item_kind, status, metadata
+        FROM review_items
+        WHERE review_item_id IN (
+            SELECT review_item_id
+            FROM review_item_evidence
+            WHERE observation_id = $1
+        )
+        "#,
+    )
+    .bind(&message_observation_id)
+    .fetch_one(&pool)
+    .await
+    .expect("mirrored review row");
+    assert_eq!(
+        mirrored_review_row
+            .try_get::<String, _>("item_kind")
+            .expect("item kind"),
+        "potential_task"
+    );
+    assert_eq!(
+        mirrored_review_row
+            .try_get::<String, _>("status")
+            .expect("status"),
+        "new"
+    );
+    let mirrored_metadata: serde_json::Value =
+        mirrored_review_row.try_get("metadata").expect("metadata");
+    assert_eq!(mirrored_metadata["mirrored_from"], json!("task_candidates"));
+    assert_eq!(
+        mirrored_metadata["candidate_kind"],
+        json!("obligation_task")
+    );
 
     let task_count =
         sqlx::query_scalar::<_, i64>("SELECT count(*) FROM tasks WHERE source_id = $1")

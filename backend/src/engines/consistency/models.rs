@@ -19,7 +19,6 @@ pub enum ContradictionSourceKind {
     Obligation,
     Task,
     Relationship,
-    RawRecord,
 }
 
 impl ContradictionSourceKind {
@@ -34,7 +33,6 @@ impl ContradictionSourceKind {
             Self::Obligation => "obligation",
             Self::Task => "task",
             Self::Relationship => "relationship",
-            Self::RawRecord => "raw_record",
         }
     }
 }

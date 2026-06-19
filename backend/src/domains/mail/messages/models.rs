@@ -60,6 +60,7 @@ impl NewProjectedMessage {
 pub struct ProjectedMessage {
     pub message_id: String,
     pub raw_record_id: String,
+    pub observation_id: String,
     pub account_id: String,
     pub provider_record_id: String,
     pub subject: String,

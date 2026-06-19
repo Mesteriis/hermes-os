@@ -16,6 +16,7 @@ use older names.
 | Calendar/Events | scheduled events, meetings, attendees, calendar source identity | global Timeline Engine ownership |
 | Decisions | durable choices and rationale with evidence | generic notes or AI summaries |
 | Obligations | commitments and duties with evidence | every task or every follow-up |
+| Review | inbox items, approval, dismissal and promotion state | domain truth, provider state, Radar vocabulary |
 | Knowledge Graph | relationship records, graph evidence, traversal model | raw binary storage, provider sync |
 | Agents | tool-mediated workflows and audit trails | source-of-truth domain state |
 
@@ -28,6 +29,9 @@ Engines are separate from domains:
 - Trust Engine;
 - Search Engine;
 - Enrichment Engine;
+- Context Packs Engine;
+- Identity Resolution Engine;
+- Relationship Candidate Engine;
 - Obligation Engine;
 - Risk Engine;
 - Consistency / Contradiction Engine.
@@ -37,9 +41,10 @@ Domains call engines. Engines do not own domain entities.
 ## Cross-Domain Rules
 
 - Provider-specific source data enters through Communications, Calendar or other
-  provider boundaries.
-- Canonical events and source records preserve what happened.
+  provider boundaries and becomes canonical observations when used as evidence.
+- Canonical events and observations preserve what happened.
 - Domains create or update their own source-of-truth entities.
+- Review owns inbox, approval, dismissal and promotion state for candidates.
 - Relationships connect entities across domains with provenance.
 - Engines build derived views, suggestions, scores and context.
 - Agents use domain APIs and engines through permissions and audit.
@@ -57,9 +62,10 @@ separate generic wiki silo.
 
 ```mermaid
 flowchart LR
-    Sources["Provider and local sources"] --> Communications
-    Sources --> Documents
-    Sources --> Calendar["Calendar/Events"]
+    Sources["Provider and local sources"] --> Observations["Observation Platform"]
+    Observations --> Communications
+    Observations --> Documents
+    Observations --> Calendar["Calendar/Events"]
 
     Communications --> Events["Canonical Events"]
     Documents --> Events
@@ -77,6 +83,9 @@ flowchart LR
     Tasks --> Graph
     Decisions --> Graph
     Obligations --> Graph
+
+    Domains["Domains"] --> Review
+    Observations --> Review
 
     Graph --> Engines
     Events --> Engines

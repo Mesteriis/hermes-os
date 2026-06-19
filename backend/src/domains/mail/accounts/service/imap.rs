@@ -22,7 +22,8 @@ impl EmailAccountSetupService {
         let secret_metadata = imap_secret_metadata(&request, &account_config);
 
         let secret_store = self.secret_store()?;
-        let communication_store = self.communication_store()?;
+        let provider_account_store = self.provider_account_store()?;
+        let secret_binding_store = self.provider_secret_binding_store()?;
         secret_store
             .upsert_secret_reference(
                 &NewSecretReference::new(
@@ -59,8 +60,8 @@ impl EmailAccountSetupService {
                 .metadata(secret_metadata.clone()),
             )
             .await?;
-        communication_store
-            .upsert_provider_account(
+        provider_account_store
+            .upsert(
                 &NewProviderAccount::new(
                     &request.account_id,
                     request.provider_kind,
@@ -70,8 +71,8 @@ impl EmailAccountSetupService {
                 .config(account_config),
             )
             .await?;
-        communication_store
-            .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+        secret_binding_store
+            .bind(&NewProviderAccountSecretBinding::new(
                 &request.account_id,
                 ProviderAccountSecretPurpose::ImapPassword,
                 &secret_ref,
@@ -91,8 +92,8 @@ impl EmailAccountSetupService {
                 },
             )
             .await?;
-        communication_store
-            .bind_provider_account_secret(&NewProviderAccountSecretBinding::new(
+        secret_binding_store
+            .bind(&NewProviderAccountSecretBinding::new(
                 &request.account_id,
                 ProviderAccountSecretPurpose::SmtpPassword,
                 &smtp_secret_ref,

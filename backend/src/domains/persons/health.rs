@@ -1,8 +1,12 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
+use serde_json::json;
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 use thiserror::Error;
+
+use crate::domains::persons::core::link_persons_entity_in_transaction;
+use crate::platform::observations::ObservationStoreError;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct PersonHealth {
@@ -108,19 +112,62 @@ impl PersonHealthStore {
     }
 
     pub async fn toggle_watchlist(&self, person_id: &str) -> Result<bool, PersonHealthError> {
+        self.toggle_watchlist_with_source(person_id, &person_watchlist_source(person_id))
+            .await
+    }
+
+    pub async fn toggle_watchlist_with_source(
+        &self,
+        person_id: &str,
+        source: &str,
+    ) -> Result<bool, PersonHealthError> {
         let mut transaction = self.pool.begin().await?;
+        let watchlist =
+            Self::toggle_watchlist_in_transaction(&mut transaction, person_id, source).await?;
+        transaction.commit().await?;
+        Ok(watchlist)
+    }
+
+    pub async fn toggle_watchlist_with_observation(
+        &self,
+        person_id: &str,
+        source: &str,
+        observation_id: &str,
+    ) -> Result<bool, PersonHealthError> {
+        let mut transaction = self.pool.begin().await?;
+        let watchlist =
+            Self::toggle_watchlist_in_transaction(&mut transaction, person_id, source).await?;
+        link_persons_entity_in_transaction(
+            &mut transaction,
+            observation_id,
+            "watchlist_toggle",
+            person_id,
+            None,
+            Some(json!({
+                "watchlist": watchlist
+            })),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(watchlist)
+    }
+
+    async fn toggle_watchlist_in_transaction(
+        transaction: &mut Transaction<'_, Postgres>,
+        person_id: &str,
+        source: &str,
+    ) -> Result<bool, PersonHealthError> {
         let row = sqlx::query(
             "UPDATE persons SET watchlist = NOT watchlist WHERE person_id = $1 RETURNING watchlist",
         )
         .bind(person_id)
-        .fetch_optional(&mut *transaction)
+        .fetch_optional(&mut **transaction)
         .await?;
         let Some(row) = row else {
             return Ok(false);
         };
         let watchlist = row.try_get("watchlist").unwrap_or(false);
-        sync_watchlist_preference_in_transaction(&mut transaction, person_id, watchlist).await?;
-        transaction.commit().await?;
+        sync_watchlist_preference_in_transaction(transaction, person_id, watchlist, source).await?;
         Ok(watchlist)
     }
 }
@@ -129,6 +176,7 @@ async fn sync_watchlist_preference_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     person_id: &str,
     watchlist: bool,
+    source: &str,
 ) -> Result<(), PersonHealthError> {
     if watchlist {
         sqlx::query(
@@ -138,7 +186,7 @@ async fn sync_watchlist_preference_in_transaction(
              DO UPDATE SET value = 'true', source = $2, confidence = 1.0, updated_at = now()",
         )
         .bind(person_id)
-        .bind(person_watchlist_source(person_id))
+        .bind(source)
         .execute(&mut **transaction)
         .await?;
         return Ok(());
@@ -161,4 +209,6 @@ fn person_watchlist_source(person_id: &str) -> String {
 pub enum PersonHealthError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+    #[error(transparent)]
+    Observation(#[from] ObservationStoreError),
 }
