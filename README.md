@@ -16,6 +16,22 @@ CRM, task tracker, calendar app или note-taking app. Центральная �
 Репозиторий перешел от foundation phase к рабочей canonical evidence
 architecture.
 
+## Working Today
+
+✅ Canonical evidence store (`Observation Platform`)
+✅ Review inbox
+✅ Local host vault for provider credentials
+✅ Gmail account setup and ingestion foundation
+✅ Generic IMAP account setup and ingestion foundation
+✅ Telegram fixture and automation foundation
+✅ Semantic embeddings and search foundation
+✅ Desktop frontend on Vue 3 + Vite inside Tauri
+
+🚧 WhatsApp Web fixture and manual companion flows
+🚧 Context packs engine expansion
+🚧 Knowledge graph workflows
+🚧 Broader agent runtime and capability workflows
+
 Текущий результат:
 
 - продуктовая и архитектурная документация
@@ -32,7 +48,7 @@ architecture.
   provider tests keep read-only paths where required
 - persistent local mail blob/attachment metadata foundation
 - V1 status API for desktop shell bootstrapping
-- desktop-only SvelteKit/Tauri status and account setup shell
+- desktop frontend on Vue 3 + Vite packaged in the Tauri shell
 - Docker Compose окружение для локальной разработки
 - local Ollama AI runtime boundary
 - pgvector semantic embeddings with `halfvec(2560)`
