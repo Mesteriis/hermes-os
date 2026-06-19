@@ -314,7 +314,7 @@ pub(super) async fn capture_model_catalog_item_observation(
                 "metadata": model.metadata,
                 "action": relationship_kind,
             }),
-            format!("ai-model-catalog://{}", entity_id),
+            format!("ai-model-catalog://{entity_id}"),
         )
         .provenance(json!({
             "captured_by": actor,

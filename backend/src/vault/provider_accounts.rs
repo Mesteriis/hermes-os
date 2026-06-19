@@ -949,8 +949,7 @@ impl CommunicationProviderAccountStore {
                         "action": "remove_provider_account_secret_binding",
                     }),
                     format!(
-                        "communication-provider-account://{}/secret-binding/{}/delete",
-                        removed_account_id, secret_purpose
+                        "communication-provider-account://{removed_account_id}/secret-binding/{secret_purpose}/delete"
                     ),
                 )
                 .provenance(json!({

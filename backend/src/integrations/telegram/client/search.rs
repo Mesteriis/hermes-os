@@ -57,7 +57,7 @@ impl TelegramStore {
         limit: i64,
     ) -> Result<Vec<TelegramMessage>, TelegramError> {
         let limit = super::validation::validate_message_list_limit(limit)?;
-        let like_pattern = format!("%{}%", query);
+        let like_pattern = format!("%{query}%");
         let account_id = account_id.map(str::trim).filter(|v| !v.is_empty());
         let provider_chat_id = provider_chat_id.map(str::trim).filter(|v| !v.is_empty());
 
@@ -93,7 +93,7 @@ impl TelegramStore {
         query: &str,
         limit: i64,
     ) -> Result<Vec<TelegramChat>, TelegramError> {
-        let like_pattern = format!("%{}%", query);
+        let like_pattern = format!("%{query}%");
         let account_id = account_id.map(str::trim).filter(|v| !v.is_empty());
 
         let rows = sqlx::query(
