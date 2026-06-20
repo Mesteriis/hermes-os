@@ -49,6 +49,7 @@ impl TelegramStore {
         let result = self.ingest_fixture_message(&message).await?;
 
         Ok(TelegramManualSendResponse {
+            raw: Some(result.raw),
             raw_record_id: result.raw_record_id,
             message_id: result.message_id,
             account_id: request.account_id.trim().to_owned(),

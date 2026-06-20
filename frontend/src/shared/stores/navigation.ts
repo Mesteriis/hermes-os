@@ -30,13 +30,35 @@ export type CommunicationSectionId =
 
 export type SidebarViewId = PrimaryNavId | 'telegram' | 'whatsapp' | 'settings' | 'organizations'
 export type AppViewId = PrimaryNavId | 'settings' | 'organizations'
-type RouteViewId = AppViewId | 'telegram' | 'whatsapp'
+type RouteViewId = AppViewId
+type RouteSectionQuery = string | null | Array<string | null> | undefined
+
+const communicationSectionIds: CommunicationSectionId[] = [
+  'unified',
+  'inbox',
+  'waiting',
+  'needs_reply',
+  'mentions',
+  'mail',
+  'telegram',
+  'whatsapp',
+  'calls',
+  'meetings'
+]
 
 function communicationSectionViewId(sectionId: CommunicationSectionId): SidebarViewId {
   if (sectionId === 'telegram' || sectionId === 'whatsapp') {
     return sectionId
   }
   return 'communications'
+}
+
+function communicationSectionFromQuery(section: RouteSectionQuery): CommunicationSectionId | null {
+  const value = Array.isArray(section) ? section[0] : section
+  if (!value) return null
+  return communicationSectionIds.includes(value as CommunicationSectionId)
+    ? value as CommunicationSectionId
+    : null
 }
 
 type ViewCopy = {
@@ -99,25 +121,17 @@ export const useNavigationStore = defineStore('navigation', () => {
   function navigateToCommunicationSection(sectionId: CommunicationSectionId): void {
     currentView.value = 'communications'
     activeCommunicationSection.value = sectionId
-
-    const routeViewId = communicationSectionViewId(sectionId)
-    router.push(`/${routeViewId}`)
+    router.push({ name: 'communications', query: { section: sectionId } })
   }
 
-  function syncFromRoute(viewId: RouteViewId): void {
-    if (viewId === 'telegram' || viewId === 'whatsapp') {
-      currentView.value = 'communications'
-      activeCommunicationSection.value = viewId
-      return
-    }
-
+  function syncFromRoute(viewId: RouteViewId, sectionQuery?: RouteSectionQuery): void {
     currentView.value = viewId
     if (viewId !== 'communications') {
       activeSidebarRailGroupId.value = null
       return
     }
 
-    activeCommunicationSection.value = 'unified'
+    activeCommunicationSection.value = communicationSectionFromQuery(sectionQuery) ?? 'unified'
   }
 
   function toggleUserMenu(): void {

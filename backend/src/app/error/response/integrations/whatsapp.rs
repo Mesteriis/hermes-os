@@ -18,17 +18,11 @@ pub(super) fn whatsapp_web_error_parts(error: WhatsappWebError) -> ErrorParts {
             "whatsapp_web_provider_account_store_error",
             "WhatsApp Web provider account store operation failed",
         ),
-        WhatsappWebError::CommunicationProjection(error) => internal(
+        WhatsappWebError::CommunicationMessagePort(error) => internal(
             error,
-            "WhatsApp Web communication projection failed",
-            "whatsapp_web_projection_error",
-            "WhatsApp Web communication projection failed",
-        ),
-        WhatsappWebError::ReviewInboxWorkflow(error) => internal(
-            error,
-            "WhatsApp Web review inbox mirroring failed",
-            "whatsapp_web_review_inbox_error",
-            "WhatsApp Web review inbox mirroring failed",
+            "WhatsApp Web communication message port operation failed",
+            "whatsapp_web_message_port_error",
+            "WhatsApp Web message read model operation failed",
         ),
         WhatsappWebError::ObservationStore(error) => internal(
             error,

@@ -10,9 +10,11 @@ use super::models::messages::{
     TelegramReplyChainResponse, TelegramReplyRef,
 };
 use super::rows::{row_to_telegram_forward_ref, row_to_telegram_reply_ref};
+use crate::platform::communications::ProviderChannelMessageStore;
 
 const MAX_REFERENCE_CHAIN_DEPTH: usize = 16;
 const MAX_REFERENCE_CHAIN_EDGES: usize = 128;
+const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
 fn stable_short_hash(input: &str) -> String {
     let mut hasher = Sha256::new();
@@ -340,19 +342,13 @@ async fn local_forward_origin_message_id(
     let Some(origin_provider_message_id) = item.forward_origin_message_id.as_deref() else {
         return Ok(None);
     };
-    let message_id = sqlx::query_scalar::<_, String>(
-        r#"
-        SELECT message_id
-        FROM communication_messages
-        WHERE account_id = $1 AND provider_record_id = $2
-        LIMIT 1
-        "#,
-    )
-    .bind(&item.account_id)
-    .bind(origin_provider_message_id)
-    .fetch_optional(pool)
-    .await?;
-    Ok(message_id)
+    Ok(ProviderChannelMessageStore::new(pool.clone())
+        .message_id_by_provider_record_id(
+            &item.account_id,
+            origin_provider_message_id,
+            TELEGRAM_CHANNEL_KINDS,
+        )
+        .await?)
 }
 
 async fn reference_message_summaries(
@@ -362,64 +358,27 @@ async fn reference_message_summaries(
     if message_ids.is_empty() {
         return Ok(HashMap::new());
     }
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<String>,
-            String,
-            String,
-            Option<String>,
-            String,
-            Option<chrono::DateTime<Utc>>,
-        ),
-    >(
-        r#"
-        SELECT
-            message_id,
-            provider_record_id,
-            conversation_id,
-            subject,
-            sender,
-            sender_display_name,
-            body_text,
-            occurred_at
-        FROM communication_messages
-        WHERE message_id = ANY($1)
-        "#,
-    )
-    .bind(&message_ids)
-    .fetch_all(pool)
-    .await?;
+    let message_ids: Vec<String> = message_ids.into_iter().map(ToOwned::to_owned).collect();
+    let summaries = ProviderChannelMessageStore::new(pool.clone())
+        .reference_summaries(&message_ids)
+        .await?;
 
-    Ok(rows
+    Ok(summaries
         .into_iter()
-        .map(
-            |(
-                message_id,
-                provider_message_id,
-                provider_chat_id,
-                chat_title,
-                sender,
-                sender_display_name,
-                text,
-                occurred_at,
-            )| {
-                (
-                    message_id.clone(),
-                    TelegramMessageReferenceSummary {
-                        message_id,
-                        provider_message_id,
-                        provider_chat_id,
-                        chat_title,
-                        sender,
-                        sender_display_name,
-                        text,
-                        occurred_at,
-                    },
-                )
-            },
-        )
+        .map(|summary| {
+            (
+                summary.message_id.clone(),
+                TelegramMessageReferenceSummary {
+                    message_id: summary.message_id,
+                    provider_message_id: summary.provider_record_id,
+                    provider_chat_id: summary.conversation_id,
+                    chat_title: summary.subject,
+                    sender: summary.sender,
+                    sender_display_name: summary.sender_display_name,
+                    text: summary.body_text,
+                    occurred_at: summary.occurred_at,
+                },
+            )
+        })
         .collect())
 }

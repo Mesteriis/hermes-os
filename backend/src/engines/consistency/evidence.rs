@@ -143,7 +143,7 @@ fn email_addr_spec(value: &str) -> &str {
     value.trim_matches('"')
 }
 
-pub(super) async fn link_consistency_entity_in_transaction(
+pub(crate) async fn link_consistency_entity_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     observation_id: &str,
     entity_kind: &str,

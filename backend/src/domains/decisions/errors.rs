@@ -1,8 +1,7 @@
 use thiserror::Error;
 
-use crate::engines::decision::DecisionEngineError;
+use crate::domains::decisions::DecisionEngineError;
 use crate::platform::observations::ObservationStoreError;
-use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum DecisionStoreError {
@@ -53,9 +52,6 @@ pub enum DecisionStoreError {
 
     #[error("unknown decision review state stored in database: {0}")]
     UnknownReviewState(String),
-
-    #[error(transparent)]
-    ReviewMirror(#[from] ReviewMirrorError),
 
     #[error(transparent)]
     DecisionEngine(#[from] DecisionEngineError),

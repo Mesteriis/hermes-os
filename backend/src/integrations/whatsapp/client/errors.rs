@@ -1,8 +1,7 @@
 use thiserror::Error;
 
+use crate::platform::communications::ProviderCommunicationMessagePortError;
 use crate::platform::observations::ObservationStoreError;
-use crate::workflows::provider_communication_projection::ProviderCommunicationProjectionError;
-use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
 #[derive(Debug, Error)]
 pub enum WhatsappWebError {
@@ -13,10 +12,7 @@ pub enum WhatsappWebError {
     ProviderAccountStore(String),
 
     #[error(transparent)]
-    CommunicationProjection(#[from] ProviderCommunicationProjectionError),
-
-    #[error(transparent)]
-    ReviewInboxWorkflow(#[from] ReviewInboxWorkflowError),
+    CommunicationMessagePort(#[from] ProviderCommunicationMessagePortError),
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),

@@ -1,7 +1,6 @@
 use thiserror::Error;
 
 use crate::platform::observations::ObservationStoreError;
-use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum RelationshipStoreError {
@@ -46,7 +45,4 @@ pub enum RelationshipStoreError {
 
     #[error("unknown relationship review state stored in database: {0}")]
     UnknownReviewState(String),
-
-    #[error(transparent)]
-    ReviewMirror(#[from] ReviewMirrorError),
 }

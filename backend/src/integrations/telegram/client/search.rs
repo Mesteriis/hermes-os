@@ -2,8 +2,11 @@ use sqlx::PgPool;
 
 use super::errors::TelegramError;
 use super::models::{TelegramChat, TelegramMessage};
-use super::rows::{row_to_telegram_chat, row_to_telegram_message};
+use super::rows::{provider_channel_message_to_telegram_message, row_to_telegram_chat};
 use super::store::TelegramStore;
+use crate::platform::communications::ProviderChannelMessageStore;
+
+const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
 impl TelegramStore {
     pub async fn pinned_messages(
@@ -21,32 +24,17 @@ impl TelegramStore {
                 ))
             })?;
 
-        let rows = sqlx::query(
-            r#"
-            SELECT
-                message_id, raw_record_id, account_id, provider_record_id,
-                subject, sender, body_text, occurred_at, projected_at,
-                channel_kind, conversation_id, sender_display_name,
-                delivery_state, message_metadata
-            FROM communication_messages
-            WHERE channel_kind IN ('telegram_user', 'telegram_bot')
-              AND account_id = $1
-              AND conversation_id = $2
-              AND (
-                COALESCE(message_metadata->>'is_pinned', 'false') = 'true'
-                OR COALESCE(message_metadata->>'pinned', 'false') = 'true'
-              )
-            ORDER BY COALESCE(occurred_at, projected_at) DESC
-            LIMIT $3
-            "#,
-        )
-        .bind(&chat.account_id)
-        .bind(&chat.provider_chat_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await?;
-
-        rows.into_iter().map(row_to_telegram_message).collect()
+        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+            .pinned_messages(
+                &chat.account_id,
+                &chat.provider_chat_id,
+                TELEGRAM_CHANNEL_KINDS,
+                limit,
+            )
+            .await?
+            .into_iter()
+            .map(provider_channel_message_to_telegram_message)
+            .collect())
     }
 
     pub async fn search_messages(
@@ -57,34 +45,21 @@ impl TelegramStore {
         limit: i64,
     ) -> Result<Vec<TelegramMessage>, TelegramError> {
         let limit = super::validation::validate_message_list_limit(limit)?;
-        let like_pattern = format!("%{query}%");
         let account_id = account_id.map(str::trim).filter(|v| !v.is_empty());
         let provider_chat_id = provider_chat_id.map(str::trim).filter(|v| !v.is_empty());
 
-        let rows = sqlx::query(
-            r#"
-            SELECT
-                message_id, raw_record_id, account_id, provider_record_id,
-                subject, sender, body_text, occurred_at, projected_at,
-                channel_kind, conversation_id, sender_display_name,
-                delivery_state, message_metadata
-            FROM communication_messages
-            WHERE channel_kind IN ('telegram_user', 'telegram_bot')
-              AND body_text ILIKE $1
-              AND ($2::text IS NULL OR account_id = $2)
-              AND ($3::text IS NULL OR conversation_id = $3)
-            ORDER BY COALESCE(occurred_at, projected_at) DESC
-            LIMIT $4
-            "#,
-        )
-        .bind(&like_pattern)
-        .bind(account_id)
-        .bind(provider_chat_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await?;
-
-        rows.into_iter().map(row_to_telegram_message).collect()
+        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+            .search_messages(
+                account_id,
+                provider_chat_id,
+                query,
+                TELEGRAM_CHANNEL_KINDS,
+                limit,
+            )
+            .await?
+            .into_iter()
+            .map(provider_channel_message_to_telegram_message)
+            .collect())
     }
 
     pub async fn search_chats(

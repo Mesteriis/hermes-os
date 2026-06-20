@@ -551,7 +551,7 @@ async function runTelegramQuickAction(action: 'create_note' | 'create_task' | 'c
 function openTelegramAccountSetup() { store.closeTelegramMenus(); store.openTelegramInspector('about') }
 </script>
 <template>
-  <section class="telegram-page communications-page">
+  <section class="telegram-runtime-panel communications-page">
     <TelegramCommandHeader
       :runtimeLabel="selectedRuntimeStatus?.status ?? capabilities?.account_scope?.runtime_kind ?? capabilities?.runtime_mode ?? t('Runtime Status')"
       :searchQuery="store.telegramSearchQuery"
@@ -680,7 +680,7 @@ function openTelegramAccountSetup() { store.closeTelegramMenus(); store.openTele
 </template>
 
 <style scoped>
-.telegram-page {
+.telegram-runtime-panel {
   display: flex;
   flex-direction: column;
   height: 100%;

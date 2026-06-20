@@ -1,6 +1,8 @@
 use sqlx::Row;
 
-use crate::engines::decision::{DecisionEngine, DecisionExtractionInput, DecisionExtractionResult};
+use crate::domains::decisions::{
+    DecisionEngine, DecisionExtractionInput, DecisionExtractionResult,
+};
 
 use super::errors::DecisionStoreError;
 use super::models::DecisionEntityKind;

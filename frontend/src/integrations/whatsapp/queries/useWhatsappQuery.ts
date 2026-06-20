@@ -19,7 +19,7 @@ export function useWhatsappCapabilitiesQuery() {
 
 export function useWhatsappSessionsQuery(accountId?: string, limit = 50) {
   return useQuery<WhatsappWebSession[]>({
-    queryKey: ['integrations', 'whatsapp', 'sessions', accountId ?? 'all', limit],
+    queryKey: ['communications', 'whatsapp', 'sessions', accountId ?? 'all', limit],
     queryFn: async () => {
       const res = await fetchWhatsappWebSessions(accountId, limit)
       return res.items

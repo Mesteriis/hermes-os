@@ -104,6 +104,19 @@ const mailCommandServiceOwner = 'backend/src/domains/communications/service.rs';
 const emailSyncPipelineOrganizationOwner = 'backend/src/workflows/email_sync_pipeline/organizations.rs';
 const emailSyncPipelineParticipantsOwner = 'backend/src/workflows/email_sync_pipeline/participants.rs';
 const emailSyncPipelineRelationshipsOwner = 'backend/src/workflows/email_sync_pipeline/relationships.rs';
+const allowedIntegrationCommunicationSqlTables = new Set([
+	'communication_raw_records',
+	'communication_raw_payloads'
+]);
+const allowedFrontendIntegrationCacheKeys = new Set([
+	'capabilities',
+	'account-capabilities',
+	'accounts',
+	'runtime',
+	'commands',
+	'qr-login-status',
+	'automation'
+]);
 
 const sharedBackendDomainModules = new Set();
 const businessBackendDomains = new Set([
@@ -338,6 +351,13 @@ function backendBoundaryViolations(relativePath, source) {
 				message: `${relativePath}: domain "${domainMatch[1]}" imports integration "${importedIntegration}"; depend on platform contracts or provider command ports instead`
 			});
 		}
+		for (const importedWorkflow of importedWorkflowModules) {
+			violations.push({
+				file: relativePath,
+				importedWorkflow,
+				message: `${relativePath}: domain "${domainMatch[1]}" imports workflow "${importedWorkflow}"; publish/consume events or use domain-owned ports instead`
+			});
+		}
 		for (const importedAppModule of importedAppModules) {
 			violations.push({
 				file: relativePath,
@@ -353,6 +373,16 @@ function backendBoundaryViolations(relativePath, source) {
 				file: relativePath,
 				importedIntegration,
 				message: `${relativePath}: workflow imports integration "${importedIntegration}"; coordinate providers through platform ports/events instead`
+			});
+		}
+	}
+
+	if (integrationMatch !== null) {
+		for (const importedWorkflow of importedWorkflowModules) {
+			violations.push({
+				file: relativePath,
+				importedWorkflow,
+				message: `${relativePath}: integration "${integrationMatch[1]}" imports workflow "${importedWorkflow}"; publish provider events or depend on platform contracts instead`
 			});
 		}
 	}
@@ -392,6 +422,13 @@ function backendBoundaryViolations(relativePath, source) {
 	}
 
 	if (engineMatch !== null) {
+		for (const importedDomain of importedDomains) {
+			violations.push({
+				file: relativePath,
+				importedDomain,
+				message: `${relativePath}: engine imports domain "${importedDomain}"; engines must return neutral candidates/projections through platform contracts`
+			});
+		}
 		for (const importedIntegration of importedIntegrations) {
 			violations.push({
 				file: relativePath,
@@ -402,6 +439,21 @@ function backendBoundaryViolations(relativePath, source) {
 	}
 
 	return violations;
+}
+
+function integrationCommunicationBusinessSqlFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('backend/src/integrations/')) return [];
+	const errors = [];
+	const sqlTablePattern =
+		/\b(?:FROM|JOIN|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(communication_[a-zA-Z0-9_]*)\b/gi;
+	for (const match of source.matchAll(sqlTablePattern)) {
+		const tableName = match[1];
+		if (allowedIntegrationCommunicationSqlTables.has(tableName)) continue;
+		errors.push(
+			`${relativePath}: integration code must not read or mutate business communication table "${tableName}"; use Communications query/command ports or provider-neutral platform raw records`
+		);
+	}
+	return errors;
 }
 
 function resolveFrontendImport(relativePath, specifier) {
@@ -1517,6 +1569,12 @@ async function checkLayerBoundaries() {
 	for (const file of backendFiles) {
 		const source = await readFile(path.join(repoRoot, file), 'utf8');
 		backendViolations.push(...backendBoundaryViolations(file, source));
+		backendViolations.push(
+			...integrationCommunicationBusinessSqlFailuresForSource(file, source).map((message) => ({
+				file,
+				message
+			}))
+		);
 	}
 
 	for (const file of frontendFiles) {
@@ -1532,22 +1590,30 @@ async function checkLayerBoundaries() {
 async function frontendProviderBusinessCacheRootFailures() {
 	const frontendFiles = await collectFiles('frontend/src', new Set(['.ts', '.vue']));
 	const errors = [];
+	for (const file of frontendFiles) {
+		const source = await readFile(path.join(repoRoot, file), 'utf8');
+		errors.push(...frontendProviderBusinessCacheRootFailuresForSource(file, source));
+	}
+	return errors;
+}
+
+function frontendProviderBusinessCacheRootFailuresForSource(relativePath, source) {
+	const errors = [];
 	const forbiddenRootPattern =
 		/\b(?:queryKey|invalidateQueries|setQueryData|getQueryData|removeQueries|refetchQueries|cancelQueries)\b[\s\S]{0,180}?\[\s*['"](telegram|whatsapp|mail)['"]/g;
 	const forbiddenIntegrationBusinessRootPattern =
-		/\[\s*['"]integrations['"]\s*,\s*['"](telegram|whatsapp|mail)['"]\s*,\s*['"](messages|chats|conversations|folders|chat-detail|chat-members|search|message-reactions|topics|topic-messages|topic-search|calls|call-transcript)['"]/g;
-	for (const file of frontendFiles) {
-		const source = await readFile(path.join(repoRoot, file), 'utf8');
-		for (const match of source.matchAll(forbiddenRootPattern)) {
-			errors.push(
-				`${file}: provider business query/cache root "${match[1]}" is forbidden; use ["communications", ...] for business data or ["integrations", "${match[1]}", "runtime", ...] for provider runtime state`
-			);
-		}
-		for (const match of source.matchAll(forbiddenIntegrationBusinessRootPattern)) {
-			errors.push(
-				`${file}: provider business query/cache key ["integrations", "${match[1]}", "${match[2]}"] is forbidden; use ["communications", "${match[1]}", "${match[2]}", ...] for business data`
-			);
-		}
+		/\[\s*['"]integrations['"]\s*,\s*['"](telegram|whatsapp|mail)['"]\s*,\s*['"]([^'"]+)['"]/g;
+	for (const match of source.matchAll(forbiddenRootPattern)) {
+		errors.push(
+			`${relativePath}: provider business query/cache root "${match[1]}" is forbidden; use ["communications", ...] for business data or ["integrations", "${match[1]}", "runtime", ...] for provider runtime state`
+		);
+	}
+	for (const match of source.matchAll(forbiddenIntegrationBusinessRootPattern)) {
+		const cacheKey = match[2];
+		if (allowedFrontendIntegrationCacheKeys.has(cacheKey)) continue;
+		errors.push(
+			`${relativePath}: provider query/cache key ["integrations", "${match[1]}", "${cacheKey}"] is forbidden by the integration cache allowlist; use ["communications", ...] for business/read-model data`
+		);
 	}
 	return errors;
 }
@@ -1602,6 +1668,20 @@ function runSelfTests() {
 		).length === 1
 	);
 	assertSelfTest(
+		'domain-to-workflow backend import fails',
+		backendBoundaryViolations(
+			'backend/src/domains/communications/ingestion.rs',
+			'use crate::workflows::email_intelligence::EmailIntelligenceService;'
+		).length === 1
+	);
+	assertSelfTest(
+		'integration-to-workflow backend import fails',
+		backendBoundaryViolations(
+			'backend/src/integrations/telegram/client/messages/ingestion.rs',
+			'use crate::workflows::provider_communication_projection::record_and_project_telegram_message;'
+		).length === 1
+	);
+	assertSelfTest(
 		'workflow-to-integration backend import fails',
 		backendBoundaryViolations(
 			'backend/src/workflows/mail_background_sync/provider.rs',
@@ -1628,6 +1708,41 @@ function runSelfTests() {
 			'backend/src/engines/search/index.rs',
 			'use crate::integrations::telegram::client::TelegramStore;'
 		).length === 1
+	);
+	assertSelfTest(
+		'engine-to-domain backend import fails',
+		backendBoundaryViolations(
+			'backend/src/engines/decision/models.rs',
+			'use crate::domains::decisions::DecisionReviewState;'
+		).length === 1
+	);
+	assertSelfTest(
+		'integration communication business SQL fails',
+		integrationCommunicationBusinessSqlFailuresForSource(
+			'backend/src/integrations/telegram/client/messages/provider_state.rs',
+			'UPDATE communication_messages SET delivery_state = $1 WHERE message_id = $2'
+		).length === 1
+	);
+	assertSelfTest(
+		'integration raw communication SQL passes',
+		integrationCommunicationBusinessSqlFailuresForSource(
+			'backend/src/integrations/telegram/client/messages/raw_records.rs',
+			'INSERT INTO communication_raw_records (raw_record_id) VALUES ($1)'
+		).length === 0
+	);
+	assertSelfTest(
+		'frontend integration business read-model query key fails',
+		frontendProviderBusinessCacheRootFailuresForSource(
+			'frontend/src/integrations/telegram/queries/useTelegramLifecycleQuery.ts',
+			"queryKey: ['integrations', 'telegram', 'message-versions', messageId]"
+		).length === 1
+	);
+	assertSelfTest(
+		'frontend integration commands query key passes',
+		frontendProviderBusinessCacheRootFailuresForSource(
+			'frontend/src/integrations/telegram/queries/useTelegramLifecycleQuery.ts',
+			"queryKey: ['integrations', 'telegram', 'commands', accountId]"
+		).length === 0
 	);
 	assertSelfTest(
 		'same backend domain import passes',

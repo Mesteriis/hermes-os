@@ -5,7 +5,6 @@ use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::platform::observations::materialize_review_transition_link_in_transaction;
-use crate::workflows::review_mirror::sync_relationship_review_state_in_transaction;
 
 use super::errors::RelationshipStoreError;
 use super::evidence::link_relationship_entity_in_transaction;
@@ -323,7 +322,6 @@ impl RelationshipStore {
             metadata,
         )
         .await?;
-        sync_relationship_review_state_in_transaction(&mut transaction, &relationship).await?;
         transaction.commit().await?;
 
         Ok(relationship)

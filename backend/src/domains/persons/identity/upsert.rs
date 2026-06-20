@@ -4,11 +4,6 @@ use sqlx::Row;
 use sqlx::Transaction;
 use sqlx::postgres::{PgPool, Postgres};
 
-use crate::workflows::review_mirror::{
-    sync_identity_candidate_review_state_in_transaction, sync_identity_candidate_to_review,
-    sync_identity_candidate_to_review_in_transaction,
-};
-
 use super::errors::PersonIdentityError;
 use super::models::{
     PersonIdentityCandidateKind, PersonIdentityCandidatePayload, PersonIdentityReviewState,
@@ -79,10 +74,6 @@ pub(super) async fn upsert_candidate(
     .fetch_one(pool)
     .await?;
 
-    if review_state == PersonIdentityReviewState::Suggested.as_str() {
-        sync_identity_candidate_to_review(pool, payload).await?;
-    }
-
     Ok(())
 }
 
@@ -151,10 +142,6 @@ pub(super) async fn upsert_candidate_in_transaction(
     .fetch_one(&mut **transaction)
     .await?;
 
-    if review_state == PersonIdentityReviewState::Suggested.as_str() {
-        sync_identity_candidate_to_review_in_transaction(transaction, payload).await?;
-    }
-
     Ok(())
 }
 
@@ -163,14 +150,7 @@ pub(crate) async fn sync_identity_candidate_review_state_to_inbox_in_transaction
     identity_candidate_id: &str,
     review_state: PersonIdentityReviewState,
 ) -> Result<(), PersonIdentityError> {
-    let payload = load_identity_candidate_payload(transaction, identity_candidate_id).await?;
-    sync_identity_candidate_review_state_in_transaction(
-        transaction,
-        identity_candidate_id,
-        review_state,
-        &payload,
-    )
-    .await?;
+    let _ = (transaction, identity_candidate_id, review_state);
     Ok(())
 }
 

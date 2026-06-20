@@ -12,8 +12,8 @@ use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocum
 use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
 use hermes_hub_backend::domains::projects::core::{ProjectStore, project_graph_node_id};
 use hermes_hub_backend::domains::projects::link_reviews::ProjectLinkReviewStore;
-use hermes_hub_backend::engines::graph_projection::GraphProjectionService;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::graph_projection::GraphProjectionService;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;

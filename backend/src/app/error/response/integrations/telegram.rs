@@ -57,11 +57,11 @@ pub(super) fn telegram_error_parts(error: TelegramError) -> ErrorParts {
             "telegram_media_storage_error",
             "Telegram media storage operation failed",
         ),
-        TelegramError::CommunicationProjection(error) => internal(
+        TelegramError::CommunicationMessagePort(error) => internal(
             error,
-            "Telegram communication projection operation failed",
-            "telegram_projection_error",
-            "Telegram communication projection failed",
+            "Telegram communication message port operation failed",
+            "telegram_message_port_error",
+            "Telegram message read model operation failed",
         ),
         TelegramError::SecretReference(error) => internal(
             error,
@@ -84,12 +84,6 @@ pub(super) fn telegram_error_parts(error: TelegramError) -> ErrorParts {
                 false,
             )
         }
-        TelegramError::ReviewInboxWorkflow(error) => internal(
-            error,
-            "Telegram review inbox mirroring failed",
-            "telegram_review_inbox_error",
-            "Telegram review inbox mirroring failed",
-        ),
         TelegramError::ObservationStore(error) => internal(
             error,
             "Telegram observation trail operation failed",

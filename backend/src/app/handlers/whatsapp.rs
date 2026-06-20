@@ -137,6 +137,10 @@ use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
 use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
+use crate::workflows::provider_communication_projection::record_and_project_whatsapp_web_message;
+use crate::workflows::review_inbox::{
+    refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
+};
 
 use crate::app::api_support::*;
 use crate::app::{ApiError, AppState};
@@ -173,11 +177,20 @@ pub(crate) async fn post_whatsapp_fixture_message(
     State(state): State<AppState>,
     Json(request): Json<NewWhatsappWebMessage>,
 ) -> Result<Json<WhatsappWebMessageIngestResult>, ApiError> {
-    Ok(Json(
-        whatsapp_web_store(&state)?
-            .ingest_fixture_message(&request)
-            .await?,
-    ))
+    let observed = whatsapp_web_store(&state)?
+        .ingest_fixture_message(&request)
+        .await?;
+    let Some(pool) = state.database.pool().cloned() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let projected = record_and_project_whatsapp_web_message(pool.clone(), observed.raw).await?;
+    let message_ids = vec![projected.message_id.clone()];
+    refresh_message_decisions_into_review(&pool, &message_ids).await?;
+    refresh_message_task_candidates_into_review(&pool, &message_ids).await?;
+    Ok(Json(WhatsappWebMessageIngestResult {
+        raw_record_id: projected.raw_record_id,
+        message_id: projected.message_id,
+    }))
 }
 
 pub(crate) async fn get_whatsapp_messages(

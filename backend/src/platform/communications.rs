@@ -9,10 +9,18 @@ use thiserror::Error;
 
 use crate::platform::secrets::{ResolvedSecret, SecretKind, SecretReference};
 
+mod channel_messages;
 mod email_sync;
 pub mod rfc822;
 
+pub use channel_messages::{
+    ProviderChannelMessage, ProviderChannelMessageStore, ProviderCommunicationMessagePortError,
+    ProviderHeuristicMember, ProviderMessageAttachmentAnchor,
+    ProviderMessageProjectionObservationContext, ProviderMessageReferenceSummary,
+};
 pub use email_sync::{EmailSyncPlanError, imap_mailbox_stream_id, plan_email_sync};
+
+pub const DEFAULT_MAIL_SYNC_BLOB_ROOT: &str = "docker/data/mail";
 
 #[derive(Debug, Error)]
 pub enum CommunicationContractError {

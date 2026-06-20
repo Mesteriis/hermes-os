@@ -1,11 +1,11 @@
 use thiserror::Error;
 
 use crate::domains::communications::core::CommunicationIngestionError;
-use crate::engines::graph_projection::GraphProjectionError;
 use crate::platform::communications::EmailProviderSyncError;
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::observations::ObservationStoreError;
 use crate::workflows::email_sync_pipeline::EmailSyncPipelineError;
+use crate::workflows::graph_projection::GraphProjectionError;
 
 #[derive(Debug, Error)]
 pub enum MailSyncError {

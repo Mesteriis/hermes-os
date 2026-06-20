@@ -1,13 +1,12 @@
 use serde_json::{Value, json};
 
 use crate::platform::communications::NewRawCommunicationRecord;
-use crate::workflows::provider_communication_projection::record_and_project_telegram_message;
 
 use super::super::TELEGRAM_MESSAGE_RECORD_KIND;
 use super::super::errors::TelegramError;
-use super::super::identifiers::telegram_raw_record_id;
+use super::super::identifiers::{stable_hash, telegram_raw_record_id};
 use super::super::models::{
-    NewTelegramChat, NewTelegramMessage, TelegramMessageIngestResult, TelegramSyncState,
+    NewTelegramChat, NewTelegramMessage, TelegramObservedMessage, TelegramSyncState,
 };
 use super::super::store::TelegramStore;
 use super::message_metadata::{
@@ -23,8 +22,8 @@ impl TelegramStore {
     pub async fn ingest_fixture_message(
         &self,
         message: &NewTelegramMessage,
-    ) -> Result<TelegramMessageIngestResult, TelegramError> {
-        self.ingest_message_with_runtime(message, "fixture", None)
+    ) -> Result<TelegramObservedMessage, TelegramError> {
+        self.observe_message_with_runtime(message, "fixture", None)
             .await
     }
 
@@ -33,7 +32,17 @@ impl TelegramStore {
         message: &NewTelegramMessage,
         runtime_kind: &str,
         tdlib_raw: Option<Value>,
-    ) -> Result<TelegramMessageIngestResult, TelegramError> {
+    ) -> Result<TelegramObservedMessage, TelegramError> {
+        self.observe_message_with_runtime(message, runtime_kind, tdlib_raw)
+            .await
+    }
+
+    pub(in crate::integrations::telegram::client::messages) async fn observe_message_with_runtime(
+        &self,
+        message: &NewTelegramMessage,
+        runtime_kind: &str,
+        tdlib_raw: Option<Value>,
+    ) -> Result<TelegramObservedMessage, TelegramError> {
         message.validate_for_runtime(runtime_kind)?;
         let provider_account = self.telegram_provider_account(&message.account_id).await?;
 
@@ -133,33 +142,29 @@ impl TelegramStore {
             "account_id": message.account_id,
             "provider_chat_id": message.provider_chat_id,
         }));
-        let projected = record_and_project_telegram_message(self.pool.clone(), raw).await?;
-        if !tdlib_provider_reactions.is_empty() || !tdlib_chosen_reactions.is_empty() {
-            super::super::reactions::sync_provider_reactions(
-                &self.pool,
-                super::super::reactions::TelegramReactionMessageRef {
-                    message_id: &projected.message_id,
-                    account_id: &message.account_id,
-                    provider_chat_id: &message.provider_chat_id,
-                    provider_message_id: &message.provider_message_id,
-                },
-                &tdlib_provider_reactions,
-                super::super::participants::telegram_self_provider_member_id(
-                    &provider_account.external_account_id,
-                )
-                .as_deref(),
-                &tdlib_chosen_reactions,
-            )
-            .await?;
-        }
-        self.recompute_chat_unread_count(&chat.telegram_chat_id)
-            .await?;
-        self.refresh_message_intelligence_candidates(&projected.message_id)
-            .await?;
+        let _ = (
+            provider_account.external_account_id,
+            tdlib_provider_reactions,
+            tdlib_chosen_reactions,
+        );
 
-        Ok(TelegramMessageIngestResult {
-            raw_record_id: projected.raw_record_id,
-            message_id: projected.message_id,
+        let message_id = format!(
+            "message:v4:telegram:{}",
+            stable_hash(
+                [
+                    message.account_id.as_str(),
+                    message.provider_message_id.as_str()
+                ]
+                .join("\0")
+                .as_bytes()
+            )
+        );
+
+        Ok(TelegramObservedMessage {
+            raw_record_id,
+            message_id,
+            raw,
+            telegram_chat_id: chat.telegram_chat_id,
         })
     }
 }

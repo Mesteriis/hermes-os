@@ -9,7 +9,10 @@ use super::models::messages::TelegramProviderWriteCommand;
 use super::models::{NewTelegramChatParticipant, TelegramChatMember};
 use super::rows::row_to_telegram_provider_write_command;
 use super::validation::validate_chat_list_limit;
+use crate::platform::communications::ProviderChannelMessageStore;
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+
+const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
 fn row_to_provider_member(row: sqlx::postgres::PgRow) -> Result<TelegramChatMember, TelegramError> {
     Ok(TelegramChatMember {
@@ -628,56 +631,34 @@ pub async fn list_message_heuristic_members(
 
     let limit = validate_chat_list_limit(limit)?;
     let query = normalized_query(query);
-    let pattern = query.as_ref().map(|value| format!("%{value}%"));
-    let rows = sqlx::query_as::<_, (String, Option<String>, i64, Option<chrono::DateTime<Utc>>)>(
-        r#"
-        SELECT
-            sender,
-            MAX(NULLIF(BTRIM(sender_display_name), '')) AS sender_display_name,
-            COUNT(*)::bigint AS message_count,
-            MAX(COALESCE(occurred_at, projected_at)) AS last_message_at
-        FROM communication_messages
-        WHERE account_id = $1
-          AND conversation_id = $2
-          AND channel_kind IN ('telegram_user', 'telegram_bot')
-          AND (
-              $3::TEXT IS NULL
-              OR lower(sender) LIKE $3
-              OR lower(coalesce(sender_display_name, '')) LIKE $3
-          )
-        GROUP BY sender
-        ORDER BY message_count DESC, last_message_at DESC NULLS LAST, sender ASC
-        LIMIT $4 OFFSET $5
-        "#,
-    )
-    .bind(account_id)
-    .bind(provider_chat_id)
-    .bind(pattern.as_deref())
-    .bind(limit)
-    .bind(offset.max(0))
-    .fetch_all(pool)
-    .await
-    .map_err(TelegramError::from)?;
-
-    Ok(rows
-        .into_iter()
-        .map(
-            |(sender_id, sender_display_name, message_count, last_message_at)| TelegramChatMember {
-                sender_id: sender_id.clone(),
-                sender_display_name,
-                message_count,
-                last_message_at,
-                source: "message_heuristic".to_owned(),
-                provider_member_id: sender_id,
-                username: None,
-                role: None,
-                status: None,
-                is_admin: false,
-                is_owner: false,
-                permissions: json!({}),
-                observed_at: last_message_at,
-            },
+    let members = ProviderChannelMessageStore::new(pool.clone())
+        .heuristic_members(
+            account_id,
+            provider_chat_id,
+            query.as_deref(),
+            TELEGRAM_CHANNEL_KINDS,
+            limit,
+            offset,
         )
+        .await?;
+
+    Ok(members
+        .into_iter()
+        .map(|member| TelegramChatMember {
+            sender_id: member.sender_id.clone(),
+            sender_display_name: member.sender_display_name,
+            message_count: member.message_count,
+            last_message_at: member.last_message_at,
+            source: "message_heuristic".to_owned(),
+            provider_member_id: member.sender_id,
+            username: None,
+            role: None,
+            status: None,
+            is_admin: false,
+            is_owner: false,
+            permissions: json!({}),
+            observed_at: member.last_message_at,
+        })
         .collect())
 }
 

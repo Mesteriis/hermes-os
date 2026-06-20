@@ -1,7 +1,7 @@
 use crate::integrations::telegram::tdjson::TelegramTdlibMessageSnapshot;
 
 use super::super::errors::TelegramError;
-use super::super::models::{NewTelegramMessage, TelegramChatKind, TelegramMessageIngestResult};
+use super::super::models::{NewTelegramMessage, TelegramChatKind, TelegramObservedMessage};
 use super::super::store::TelegramStore;
 
 impl TelegramStore {
@@ -10,7 +10,7 @@ impl TelegramStore {
         account_id: &str,
         snapshot: &TelegramTdlibMessageSnapshot,
         import_batch_id: &str,
-    ) -> Result<TelegramMessageIngestResult, TelegramError> {
+    ) -> Result<TelegramObservedMessage, TelegramError> {
         let provider_account = self.telegram_provider_account(account_id).await?;
         let existing_chat = self
             .telegram_chat(&provider_account.account_id, &snapshot.provider_chat_id)

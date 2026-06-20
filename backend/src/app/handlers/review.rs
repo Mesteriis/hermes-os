@@ -1,13 +1,16 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::app::{ApiError, AppState};
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxService, ReviewInboxStore, ReviewItem,
     ReviewItemKind, ReviewItemStatus, ReviewPromotionTarget,
 };
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use crate::workflows::review_promotion::ReviewPromotionService;
 
 const DEFAULT_REVIEW_LIMIT: i64 = 50;
 const MIN_REVIEW_LIMIT: i64 = 1;
@@ -147,12 +150,44 @@ pub(crate) async fn post_v1_review_item_promote(
         request.target_entity_kind,
         request.target_entity_id,
     );
-    let item = review_service(&state)?
-        .promote_from_manual(
+    let Some(pool) = state.database.pool() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let observation = ObservationStore::new(pool.clone())
+        .capture(
+            &NewObservation::new(
+                "REVIEW_TRANSITION",
+                ObservationOriginKind::Manual,
+                Utc::now(),
+                json!({
+                    "review_item_id": review_item_id,
+                    "operation": "review_item_promote",
+                    "target_domain": target.target_domain,
+                    "target_entity_kind": target.target_entity_kind,
+                    "target_entity_id": target.target_entity_id,
+                }),
+                format!("review-item://{review_item_id}/promote"),
+            )
+            .provenance(json!({
+                "captured_by": "review_api.post_v1_review_item_promote",
+                "endpoint": "post_v1_review_item_promote",
+            })),
+        )
+        .await
+        .map_err(|error| {
+            tracing::error!(error = %error, "review item promote observation capture failed");
+            ApiError::InvalidReviewQuery("review item promote observation capture failed")
+        })?;
+
+    let item = ReviewPromotionService::new(pool.clone())
+        .promote_with_observation(
             &review_item_id,
             target,
-            "review_api.post_v1_review_item_promote",
-            "post_v1_review_item_promote",
+            Some(&observation.observation_id),
+            Some(json!({
+                "captured_by": "review_api.post_v1_review_item_promote",
+                "endpoint": "post_v1_review_item_promote",
+            })),
         )
         .await?;
     Ok(Json(item))

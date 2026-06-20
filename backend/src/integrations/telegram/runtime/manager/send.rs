@@ -45,6 +45,7 @@ impl TelegramRuntimeManager {
                     .ingest_tdlib_message_snapshot(&account.account_id, &snapshot, &import_batch_id)
                     .await?;
                 Ok(TelegramManualSendResponse {
+                    raw: Some(result.raw),
                     raw_record_id: result.raw_record_id,
                     message_id: result.message_id,
                     account_id: account.account_id,
@@ -109,6 +110,7 @@ impl TelegramRuntimeManager {
                     .ingest_tdlib_message_snapshot(&account.account_id, &snapshot, &import_batch_id)
                     .await?;
                 Ok(TelegramManualSendResponse {
+                    raw: Some(result.raw),
                     raw_record_id: result.raw_record_id,
                     message_id: result.message_id,
                     account_id: account.account_id,
@@ -173,6 +175,7 @@ impl TelegramRuntimeManager {
                     .ingest_tdlib_message_snapshot(&account.account_id, &snapshot, &import_batch_id)
                     .await?;
                 Ok(TelegramManualSendResponse {
+                    raw: Some(result.raw),
                     raw_record_id: result.raw_record_id,
                     message_id: result.message_id,
                     account_id: account.account_id,

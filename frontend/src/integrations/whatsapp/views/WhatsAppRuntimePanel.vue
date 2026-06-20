@@ -90,7 +90,7 @@ function openAccountDrawer() {
 </script>
 
 <template>
-  <section class="whatsapp-page communications-page">
+  <section class="whatsapp-runtime-panel communications-page">
     <div class="view-header">
       <div class="view-title-with-icon">
         <span class="hero-mark small">

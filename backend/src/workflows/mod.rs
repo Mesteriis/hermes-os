@@ -1,6 +1,8 @@
+pub mod consistency_review;
 pub mod email_fixture_pipeline;
 pub mod email_intelligence;
 pub mod email_sync_pipeline;
+pub mod graph_projection;
 pub mod mail_background_sync;
 pub mod provider_communication_projection;
 pub mod review_inbox;

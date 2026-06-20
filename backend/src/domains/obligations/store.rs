@@ -4,8 +4,6 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::workflows::review_mirror::sync_obligation_review_state_in_transaction;
-
 use super::errors::ObligationStoreError;
 use super::evidence::{
     link_obligation_review_transition_in_transaction, link_obligation_support_in_transaction,
@@ -307,7 +305,6 @@ impl ObligationStore {
         .ok_or(ObligationStoreError::ObligationNotFound)?;
 
         let obligation = row_to_obligation(row)?;
-        sync_obligation_review_state_in_transaction(&mut transaction, &obligation).await?;
         link_obligation_review_transition_in_transaction(
             &mut transaction,
             observation_id,

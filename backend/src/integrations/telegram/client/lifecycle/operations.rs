@@ -13,6 +13,7 @@ use crate::integrations::telegram::client::models::messages::{
     TelegramCommandKind, TelegramDeleteRequest, TelegramEditRequest, TelegramLifecycleResponse,
     TelegramPinRequest, TelegramRestoreVisibilityRequest,
 };
+use crate::platform::communications::ProviderChannelMessageStore;
 
 pub async fn record_edit(
     pool: &PgPool,
@@ -81,14 +82,9 @@ async fn previous_message_body(
         return Ok(version.body_text);
     }
 
-    sqlx::query_scalar::<_, Option<String>>(
-        "SELECT body_text FROM communication_messages WHERE message_id = $1",
-    )
-    .bind(message_id)
-    .fetch_optional(pool)
-    .await
-    .map(Option::flatten)
-    .map_err(TelegramError::from)
+    Ok(ProviderChannelMessageStore::new(pool.clone())
+        .body_text(message_id)
+        .await?)
 }
 
 pub async fn record_delete(

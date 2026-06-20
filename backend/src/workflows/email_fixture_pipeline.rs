@@ -16,10 +16,10 @@ use crate::domains::graph::core::{GraphStore, GraphStoreError, GraphSummary};
 use crate::domains::persons::api::{
     PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
 };
-use crate::engines::graph_projection::{
+use crate::vault::CommunicationProviderAccountStore;
+use crate::workflows::graph_projection::{
     GraphProjectionError, GraphProjectionReport, GraphProjectionService,
 };
-use crate::vault::CommunicationProviderAccountStore;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EmailFixturePipelineRequest {

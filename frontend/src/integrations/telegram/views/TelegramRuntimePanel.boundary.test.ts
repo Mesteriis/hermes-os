@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
-describe('TelegramPage realtime boundary', () => {
-	it('relies on the global realtime bootstrap instead of opening a page-level telegram socket', () => {
-		const source = readFileSync(new URL('./TelegramPage.vue', import.meta.url), 'utf8')
+describe('TelegramRuntimePanel realtime boundary', () => {
+	it('relies on the global realtime bootstrap instead of opening a panel-level telegram socket', () => {
+		const source = readFileSync(new URL('./TelegramRuntimePanel.vue', import.meta.url), 'utf8')
 
 		expect(source).not.toContain('createTelegramRealtimeConnection')
 		expect(source).not.toContain('realtimeCleanup')
@@ -38,5 +38,7 @@ describe('TelegramPage realtime boundary', () => {
 		expect(source).toContain('@uploadMedia="(file) => void uploadMedia(file)"')
 		expect(source).toContain("store.openTelegramInspector('about')")
 		expect(source).not.toContain('telegramChatGroupFilters(')
+		expect(source).toContain('telegram-runtime-panel')
+		expect(source).not.toContain('telegram-page')
 	})
 })

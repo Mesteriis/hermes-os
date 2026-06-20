@@ -5,10 +5,10 @@ use serde_json::json;
 
 use crate::app::{ApiError, AppState};
 use crate::engines::consistency::{
-    ContradictionObservation, ContradictionObservationStore, ContradictionReviewService,
-    ContradictionReviewState,
+    ContradictionObservation, ContradictionObservationStore, ContradictionReviewState,
 };
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
+use crate::workflows::consistency_review::ContradictionReviewService;
 
 const CONTRADICTION_API_ACTOR_ID: &str = "hermes-frontend";
 const DEFAULT_CONTRADICTION_LIMIT: i64 = 50;
