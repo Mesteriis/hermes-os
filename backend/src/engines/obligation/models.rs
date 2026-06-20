@@ -1,10 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-
-use crate::domains::obligations::{
-    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationEvidenceSourceKind,
-    ObligationReviewState,
-};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ObligationExtractionInput {
@@ -83,6 +77,78 @@ impl ObligationExtractionInput {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObligationEntityKind {
+    Persona,
+    Organization,
+    Project,
+    Communication,
+    Document,
+    Task,
+    Event,
+    Decision,
+    Obligation,
+    Knowledge,
+}
+
+impl ObligationEntityKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Persona => "persona",
+            Self::Organization => "organization",
+            Self::Project => "project",
+            Self::Communication => "communication",
+            Self::Document => "document",
+            Self::Task => "task",
+            Self::Event => "event",
+            Self::Decision => "decision",
+            Self::Obligation => "obligation",
+            Self::Knowledge => "knowledge",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObligationEvidenceSourceKind {
+    Communication,
+    Document,
+    CalendarEvent,
+    Observation,
+    Manual,
+}
+
+impl ObligationEvidenceSourceKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Communication => "communication",
+            Self::Document => "document",
+            Self::CalendarEvent => "calendar_event",
+            Self::Observation => "observation",
+            Self::Manual => "manual",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObligationReviewState {
+    Suggested,
+    UserConfirmed,
+    UserRejected,
+}
+
+impl ObligationReviewState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Suggested => "suggested",
+            Self::UserConfirmed => "user_confirmed",
+            Self::UserRejected => "user_rejected",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ObligationExtractionResult {
     pub obligations: Vec<ObligationCandidate>,
@@ -121,43 +187,6 @@ pub struct ObligationCandidate {
     pub review_state: ObligationReviewState,
     pub evidence_source_kind: ObligationEvidenceSourceKind,
     pub evidence_source_id: String,
-}
-
-impl ObligationCandidate {
-    pub fn to_obligation_draft(&self) -> (NewObligation, NewObligationEvidence) {
-        let mut obligation = NewObligation::new(
-            self.obligated_entity_kind,
-            self.obligated_entity_id.clone(),
-            self.statement.clone(),
-            self.confidence,
-            self.review_state,
-        )
-        .metadata(serde_json::json!({
-            "engine": "obligation",
-            "candidate_kind": self.kind.as_str(),
-            "due_text": self.due_text,
-            "condition": self.condition,
-        }));
-
-        if let (Some(kind), Some(id)) = (self.beneficiary_entity_kind, &self.beneficiary_entity_id)
-        {
-            obligation = obligation.beneficiary(kind, id.clone());
-        }
-        if let Some(condition) = &self.condition {
-            obligation = obligation.condition(condition.clone());
-        }
-
-        let evidence =
-            NewObligationEvidence::new(self.evidence_source_kind, self.evidence_source_id.clone())
-                .quote(self.quote.clone())
-                .confidence(self.confidence)
-                .metadata(serde_json::json!({
-                    "engine": "obligation",
-                    "candidate_kind": self.kind.as_str(),
-                }));
-
-        (obligation, evidence)
-    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

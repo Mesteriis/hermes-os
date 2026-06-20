@@ -264,10 +264,10 @@ describe('realtime bootstrap', () => {
       queryKey: ['communications-mail-list']
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['telegram', 'messages']
+      queryKey: ['integrations', 'telegram', 'messages']
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['telegram', 'runtime']
+      queryKey: ['integrations', 'telegram', 'runtime']
     })
   })
 
@@ -382,7 +382,7 @@ describe('realtime bootstrap', () => {
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledOnce()
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['communications-sync-statuses']
+      queryKey: ['integrations', 'mail', 'sync-statuses']
     })
   })
 

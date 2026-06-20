@@ -36,7 +36,7 @@ async fn removed_account_blocks_manual_send_before_message_audit_and_events() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -49,7 +49,7 @@ async fn removed_account_blocks_manual_send_before_message_audit_and_events() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/messages",
+        "/api/v1/communications/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -73,7 +73,9 @@ async fn removed_account_blocks_manual_send_before_message_audit_and_events() {
         .oneshot(
             axum::http::Request::builder()
                 .method("DELETE")
-                .uri(format!("/api/v1/telegram/accounts/{account_id}"))
+                .uri(format!(
+                    "/api/v1/communications/telegram/accounts/{account_id}"
+                ))
                 .header("x-hermes-secret", LOCAL_API_TOKEN)
                 .body(axum::body::Body::empty())
                 .expect("delete request"),
@@ -85,7 +87,7 @@ async fn removed_account_blocks_manual_send_before_message_audit_and_events() {
     let send_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages/send",
+            "/api/v1/communications/telegram/messages/send",
             json!({
                 "command_id": command_id,
                 "account_id": account_id,
@@ -140,7 +142,7 @@ where
     let response = app
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/telegram/messages?account_id={account_id}&provider_chat_id={provider_chat_id}"
+                "/api/v1/communications/telegram/messages?account_id={account_id}&provider_chat_id={provider_chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))

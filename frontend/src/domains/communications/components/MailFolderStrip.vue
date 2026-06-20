@@ -26,8 +26,8 @@ import {
 } from '../forms/mailFolderForm'
 import {
   MAIL_MESSAGE_DRAG_TYPE,
-  hasMailMessageDragType,
-  parseMailMessageDragPayload
+  hasCommunicationMessageDragType,
+  parseCommunicationMessageDragPayload
 } from './mailDragDrop'
 import './MailFolderStrip.css'
 import {
@@ -247,7 +247,7 @@ function handleFolderDragOver(event: DragEvent) {
     event.dataTransfer.dropEffect = 'move'
     return
   }
-  if (!hasMailMessageDragType(event.dataTransfer.types)) return
+  if (!hasCommunicationMessageDragType(event.dataTransfer.types)) return
   event.preventDefault()
   event.dataTransfer.dropEffect = event.altKey ? 'copy' : 'move'
 }
@@ -267,7 +267,7 @@ async function handleFolderDrop(event: DragEvent, folder: MailFolder) {
     dropError.value = ''
     return
   }
-  const payload = parseMailMessageDragPayload(event.dataTransfer.getData(MAIL_MESSAGE_DRAG_TYPE))
+  const payload = parseCommunicationMessageDragPayload(event.dataTransfer.getData(MAIL_MESSAGE_DRAG_TYPE))
   if (!payload) return
 
   const operation = event.altKey ? 'copy' : 'move'

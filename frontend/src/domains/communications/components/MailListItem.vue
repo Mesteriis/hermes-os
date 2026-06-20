@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { CommunicationMessageSummary } from '../types/communications'
 import { messageTime, communicationChannelIcon, senderLabel, conversationPreview } from '../stores/communications'
-import { MAIL_MESSAGE_DRAG_TYPE, createMailMessageDragPayload } from './mailDragDrop'
+import { MAIL_MESSAGE_DRAG_TYPE, createCommunicationMessageDragPayload } from './mailDragDrop'
 
 const props = defineProps<{
   message: CommunicationMessageSummary
@@ -31,7 +31,7 @@ function handleDragStart(event: DragEvent) {
     return
   }
   event.dataTransfer.effectAllowed = 'move'
-  event.dataTransfer.setData(MAIL_MESSAGE_DRAG_TYPE, createMailMessageDragPayload(props.message.message_id, props.selectedMessageIds))
+  event.dataTransfer.setData(MAIL_MESSAGE_DRAG_TYPE, createCommunicationMessageDragPayload(props.message.message_id, props.selectedMessageIds))
   event.dataTransfer.setData('text/plain', props.message.subject)
 }
 </script>

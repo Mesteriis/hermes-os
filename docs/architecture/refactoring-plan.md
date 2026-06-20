@@ -77,7 +77,7 @@ platform/api/
 
 ### 1.8 Email Setup (4 endpoints)
 ```
-domains/mail/api/account_setup/
+domains/communications/api/account_setup/
 ├── dto.rs
 ├── start_gmail_oauth.rs
 ├── complete_gmail_oauth.rs
@@ -147,7 +147,7 @@ domains/tasks/api/
 
 ### 2.5 Mail V1 (50 handlers)
 ```
-domains/mail/api/v1/
+domains/communications/api/v1/
 ├── dto.rs
 ├── messages/           # 10 handlers + dto.rs
 ├── threads/            # 2 handlers + dto.rs

@@ -5,11 +5,11 @@ use crate::ai::core::{
     AI_EMBEDDING_DIMENSION, AiAgentListResponse, AiAgentRun, AiAnswerRequest, AiMeetingPrepRequest,
     AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
 };
-use crate::app::{ApiError, AppState};
-use crate::domains::api_support::{
+use crate::app::api_support::{
     AiRunListResponse, AiRunsQuery, ai_run_store, ai_runtime_client, ai_runtime_settings,
     ai_service,
 };
+use crate::app::{ApiError, AppState};
 use crate::domains::persons::api::PersonProjectionStore;
 
 pub(crate) async fn get_ai_status(

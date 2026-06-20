@@ -8,11 +8,11 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::domains::mail::accounts::{
-    EmailAccountSetupService, ImapAccountSetupRequest,
-};
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
+};
+use hermes_hub_backend::integrations::mail::accounts::{
+    EmailAccountSetupService, ImapAccountSetupRequest,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::{
@@ -136,7 +136,7 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
     let account_id = "icloud-primary";
     let response = app
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/email-accounts/imap",
+            "/api/v1/communications/mail/accounts/imap",
             json!({
                 "account_id": account_id,
                 "provider_kind": "icloud",
@@ -368,7 +368,7 @@ async fn imap_account_setup_api_requires_configured_database() {
 
     let response = app
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/email-accounts/imap",
+            "/api/v1/communications/mail/accounts/imap",
             json!({
                 "account_id": "acct_no_vault",
                 "provider_kind": "imap",
@@ -426,7 +426,7 @@ async fn imap_account_setup_api_requires_initialized_host_vault_against_postgres
 
     let response = app
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/email-accounts/imap",
+            "/api/v1/communications/mail/accounts/imap",
             json!({
                 "account_id": "acct_no_vault_key",
                 "provider_kind": "imap",

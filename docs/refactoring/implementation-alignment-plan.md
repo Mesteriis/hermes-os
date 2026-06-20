@@ -43,7 +43,7 @@ This alignment pass corrected documentation that conflicted with current
 implementation evidence:
 
 - `docs/mail/modules.md` now maps to actual files under
-  `backend/src/domains/mail/`, `backend/src/workflows/` and
+  `backend/src/domains/communications/`, `backend/src/workflows/` and
   `backend/src/integrations/`.
 - `docs/calendar/architecture.md` now maps to actual files under
   `backend/src/domains/calendar/`.
@@ -275,7 +275,7 @@ implementation evidence:
 
 | Target area | Current evidence | Gap | Required plan |
 |---|---|---|---|
-| Communications domain | `/api/v1/communications/*`, `backend/src/domains/mail/*`, Gmail/Telegram/WhatsApp integrations, communication migrations | Public API is communication-shaped, implementation module is still email/mail-shaped. | Communications migration plan before any module rename. |
+| Communications domain | `/api/v1/communications/*`, `backend/src/domains/communications/*`, Gmail/Telegram/WhatsApp integrations, communication migrations | Public API is communication-shaped, implementation module is still email/mail-shaped. | Communications migration plan before any module rename. |
 | Email channel | `docs/mail/*`, email account routes, mail blob migrations | Email is a channel but still has broad module ownership. | Keep channel docs; do not promote Mail to product domain. |
 | Persona Intelligence | `backend/src/domains/persons/*`, `/api/v1/persons/*`, `/api/v1/personas/*`, ADR-0084, ADR-0090, person/contact migrations, migration `0059` for `is_self` and `person_type` constraints | Target entity is Persona, current storage compatibility name is Person/Person ID. Owner Persona storage, GET/PUT owner compatibility route, AI workspace Owner Persona display, Persona-native list/detail/write bridge routes, AI run Owner Persona attribution, PersonaType, role-to-Relationship, interaction-context-to-Preference, trust-to-Relationship, notes-to-memory-card, favorite-to-preference, watchlist-to-preference, risk-to-health-cache, Dossier section adapters, reviewable Dossier snapshots and Persons UI Dossier display have compatibility-layer baselines, but physical Persona-native schema migration and downstream engine projections remain incomplete. | Schema migration ADR before physical code/table rename. |
 | Relationships | `backend/src/domains/relationships/mod.rs`, `backend/src/domains/relationships/api.rs`, migrations `0060`, `0061` and `0068`, graph core, person roles, organization contacts, task relations, project link reviews, Personas workspace review panel, Review workspace | First-class Relationship persistence, graph projection for all current `RelationshipEntityKind` endpoints, guarded entity/global review routes, person role adapters, organization contact link adapters for manual/API and email-sync paths, manual task relation adapters, project link review adapters, Personas workspace global suggested review, cross-domain Review workspace placement and shared Review action dispatch have a baseline, but downstream engine projections are incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and keep review routing in the cross-domain workflow shell. |
@@ -299,7 +299,7 @@ Goal: make the implementation shape explicit without breaking working code.
 Work items:
 
 - keep `/api/v1/communications/*` as the product-facing route family;
-- document `backend/src/domains/mail/*` as the current email-channel
+- document `backend/src/domains/communications/*` as the current email-channel
   implementation;
 - identify modules that are email-specific versus communication-generic;
 - avoid module renames until tests and migration scope are defined;

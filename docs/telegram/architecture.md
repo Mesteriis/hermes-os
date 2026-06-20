@@ -8,6 +8,9 @@ Telegram принадлежит Communications Domain как **channel/source bo
 Он не является отдельным продуктом, не владеет памятью, знаниями, задачами,
 обязательствами, решениями, проектами, организациями или персонами.
 
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
+
 Telegram должен поставлять Hermes:
 
 - raw provider evidence;
@@ -16,7 +19,7 @@ Telegram должен поставлять Hermes:
 - provider commands;
 - realtime updates;
 - identity traces;
-- локальный desktop workbench.
+- integration panels inside the `/communications` workspace.
 
 ## Canonical Flow
 
@@ -68,6 +71,7 @@ Telegram runtime event
 | ADR-0085 | Communication spine and Polygraph integration |
 | ADR-0091 | Production Telegram capability model |
 | ADR-0093 | Vue 3 frontend |
+| ADR-0097 | Channels are integrations; Communications owns domain state |
 
 ## Backend Layers
 
@@ -77,9 +81,9 @@ Telegram runtime event
 | Runtime manager | `backend/src/integrations/telegram/runtime/` | Fixture and TDLib account actor orchestration |
 | Client/store | `backend/src/integrations/telegram/client/` | Account metadata, chat projection, message ingestion, queries, attachment anchors |
 | TDLib boundary | `backend/src/integrations/telegram/tdjson/` | JSON request builders, parsing, QR login, native TDLib loading; contract tests are split by environment, request builders, parsing snapshots and QR-login flows |
-| Source records | `backend/src/domains/mail/core/` compatibility boundary | Raw provider records and provider accounts |
-| Projection | `backend/src/domains/mail/messages/` compatibility boundary | Canonical `communication_messages` projection |
-| Media storage | `backend/src/domains/mail/storage/` compatibility boundary | Local blob and attachment metadata/scanner boundary |
+| Source records | `backend/src/domains/communications/core/` compatibility boundary | Raw provider records and provider accounts |
+| Projection | `backend/src/domains/communications/messages/` compatibility boundary | Canonical `communication_messages` projection |
+| Media storage | `backend/src/domains/communications/storage/` compatibility boundary | Local blob and attachment metadata/scanner boundary |
 | Audit | `backend/src/platform/audit/telegram.rs` | Redacted provider-write, automation and lifecycle audit records |
 | Calls | `backend/src/platform/calls/` | Telegram call metadata and fixture transcripts |
 
@@ -87,15 +91,16 @@ Telegram runtime event
 
 | Layer | Current files | Назначение |
 |---|---|---|
-| Route/view | `frontend/src/app/views/TelegramView.vue`, `frontend/src/domains/telegram/views/TelegramPage.vue` | Desktop Telegram workbench |
-| API client | `frontend/src/domains/telegram/api/telegram.ts` | Typed calls to protected backend routes |
-| Query hooks | `frontend/src/domains/telegram/queries/useTelegramQuery.ts` | TanStack Query integration |
-| Store/helpers | `frontend/src/domains/telegram/stores/telegram.ts` | Local UI state, filters, derived lists |
-| Components | `frontend/src/domains/telegram/components/` | Chat list, timeline, composer, action rail, inspector |
+| Runtime/setup panels | `frontend/src/integrations/telegram/views/TelegramPage.vue` | Telegram integration panels embedded in Communications |
+| API client | `frontend/src/integrations/telegram/api/telegram.ts` | Typed calls to protected backend routes |
+| Query hooks | `frontend/src/integrations/telegram/queries/useTelegramQuery.ts` | TanStack Query integration |
+| Store/helpers | `frontend/src/integrations/telegram/stores/telegram.ts` | Local UI state, filters, derived lists |
+| Components | `frontend/src/integrations/telegram/components/` | Chat list, timeline, composer, action rail, inspector |
 
 Realtime delivery on the frontend is shared with the rest of Hermes through
-`frontend/src/platform/bootstrap/realtime.ts`; Telegram views consume query
-state and cache patches instead of opening a second channel-scoped socket.
+`frontend/src/platform/bootstrap/realtime.ts`; Telegram panels consume
+communications-scoped query state and cache patches instead of opening a second
+channel-scoped socket.
 
 ## Runtime Kinds
 
@@ -364,7 +369,7 @@ Raw TDLib JSON недостаточно для устойчивого UI и prov
 ```text
 TDLib message raw metadata
   -> UI attachment hint from message metadata
-  -> POST /api/v1/telegram/media/download
+  -> POST /api/v1/communications/telegram/media/download
   -> TDLib downloadFile
   -> local blob write
   -> communication_attachments row

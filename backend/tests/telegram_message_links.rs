@@ -40,7 +40,7 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",

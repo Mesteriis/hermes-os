@@ -23,6 +23,7 @@ describe('CommunicationsPage folder management integration', () => {
 		)
 
 		expect(source).toContain('useCommunicationsPageController')
+		expect(source).toContain("../../../integrations/mail/components/AccountSetupModal.vue")
 		expect(source).toContain('@generate-ai-reply="handleGenerateAiReply"')
 		expect(source).toContain('@apply-ai-reply="handleApplyAiReply"')
 		expect(source).toContain('@review-security="handleReviewSecurity"')

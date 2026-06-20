@@ -1,4 +1,4 @@
-use hermes_hub_backend::domains::mail::rfc822::{
+use hermes_hub_backend::integrations::mail::rfc822::{
     ParsedEmailAttachmentDisposition, parse_rfc822_message,
 };
 

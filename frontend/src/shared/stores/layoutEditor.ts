@@ -84,8 +84,8 @@ const defaultWidgets: WidgetDefinition[] = [
   { id: 'agents-overview', title: 'AI Agents', icon: 'tabler:sparkles', viewScope: ['agents'], defaultColumns: 8, defaultRows: 4, minColumns: 4, minRows: 2, canAdd: true, removable: true },
   { id: 'organizations-list', title: 'Organizations', icon: 'tabler:building-community', viewScope: ['organizations'], defaultColumns: 8, defaultRows: 4, minColumns: 4, minRows: 2, canAdd: true, removable: true },
   { id: 'timeline-stream', title: 'Timeline', icon: 'tabler:timeline-event', viewScope: ['timeline'], defaultColumns: 8, defaultRows: 6, minColumns: 4, minRows: 3, canAdd: true, removable: true },
-  { id: 'telegram-messages', title: 'Messages', icon: 'tabler:brand-telegram', viewScope: ['telegram'], defaultColumns: 8, defaultRows: 6, minColumns: 4, minRows: 3, canAdd: true, removable: true },
-  { id: 'whatsapp-messages', title: 'Messages', icon: 'tabler:brand-whatsapp', viewScope: ['whatsapp'], defaultColumns: 8, defaultRows: 6, minColumns: 4, minRows: 3, canAdd: true, removable: true }
+  { id: 'telegram-messages', title: 'Messages', icon: 'tabler:brand-telegram', viewScope: ['communications', 'telegram'], defaultColumns: 8, defaultRows: 6, minColumns: 4, minRows: 3, canAdd: true, removable: true },
+  { id: 'whatsapp-messages', title: 'Messages', icon: 'tabler:brand-whatsapp', viewScope: ['communications', 'whatsapp'], defaultColumns: 8, defaultRows: 6, minColumns: 4, minRows: 3, canAdd: true, removable: true }
 ]
 
 function getWidgetsForView(viewId: string, setting: LayoutSettings): ResolvedWidget[] {

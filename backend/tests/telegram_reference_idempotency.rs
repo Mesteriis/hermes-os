@@ -35,7 +35,7 @@ async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -150,7 +150,7 @@ async fn create_reference_message(
 ) -> String {
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,

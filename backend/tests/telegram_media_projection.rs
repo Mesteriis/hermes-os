@@ -6,14 +6,14 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
     NewRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::mail::messages::MessageProjectionStore;
-use hermes_hub_backend::integrations::telegram::client::project_raw_telegram_message;
+use hermes_hub_backend::domains::communications::messages::MessageProjectionStore;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::provider_communication_projection::project_raw_telegram_message;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, json_body, json_post_request_with_actor, unique_suffix,
 };
@@ -118,7 +118,7 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -131,7 +131,7 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/messages",
+        "/api/v1/communications/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": chat_id,
@@ -150,7 +150,7 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
 
     let download_response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/media/download",
+            "/api/v1/communications/telegram/media/download",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,

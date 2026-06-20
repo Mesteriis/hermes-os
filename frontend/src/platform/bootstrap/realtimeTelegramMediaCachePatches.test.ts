@@ -12,8 +12,8 @@ function applyQueryDataUpdate<TData>(
 
 describe('telegram media realtime cache patch handling', () => {
   it('patches cached telegram message and media search results for started and progress events', () => {
-    const messageKey = ['telegram', 'messages', 'account-1', 'chat-1', 50]
-    const mediaKey = ['telegram', 'search', 'media', '', 'account-1', 'chat-1', 'all', 100]
+    const messageKey = ['integrations', 'telegram', 'messages', 'account-1', 'chat-1', 50]
+    const mediaKey = ['integrations', 'telegram', 'search', 'media', '', 'account-1', 'chat-1', 'all', 100]
     const message = {
       message_id: 'tg-msg-media-1',
       raw_record_id: 'raw-media-1',
@@ -72,8 +72,8 @@ describe('telegram media realtime cache patch handling', () => {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
         const key = JSON.stringify(queryKey)
-        if (key === JSON.stringify(['telegram', 'messages'])) return [[messageKey, currentMessages]]
-        if (key === JSON.stringify(['telegram', 'search', 'media'])) {
+        if (key === JSON.stringify(['integrations', 'telegram', 'messages'])) return [[messageKey, currentMessages]]
+        if (key === JSON.stringify(['integrations', 'telegram', 'search', 'media'])) {
           return [[mediaKey, currentMediaResponse]]
         }
         return []
@@ -144,8 +144,8 @@ describe('telegram media realtime cache patch handling', () => {
   })
 
   it('patches cached telegram message and media search results for failed download events', () => {
-    const messageKey = ['telegram', 'messages', 'account-1', 'chat-1', 50]
-    const mediaKey = ['telegram', 'search', 'media', '', 'account-1', 'chat-1', 'all', 100]
+    const messageKey = ['integrations', 'telegram', 'messages', 'account-1', 'chat-1', 50]
+    const mediaKey = ['integrations', 'telegram', 'search', 'media', '', 'account-1', 'chat-1', 'all', 100]
     const messages = [
       {
         message_id: 'tg-msg-media-2',
@@ -207,8 +207,8 @@ describe('telegram media realtime cache patch handling', () => {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
         const key = JSON.stringify(queryKey)
-        if (key === JSON.stringify(['telegram', 'messages'])) return [[messageKey, messages]]
-        if (key === JSON.stringify(['telegram', 'search', 'media'])) {
+        if (key === JSON.stringify(['integrations', 'telegram', 'messages'])) return [[messageKey, messages]]
+        if (key === JSON.stringify(['integrations', 'telegram', 'search', 'media'])) {
           return [[mediaKey, mediaResponse]]
         }
         return []
@@ -252,8 +252,8 @@ describe('telegram media realtime cache patch handling', () => {
   })
 
   it('patches cached telegram message and media search results for completed download events', () => {
-    const messageKey = ['telegram', 'messages', 'account-1', 'chat-1', 50]
-    const mediaKey = ['telegram', 'search', 'media', '', 'account-1', 'chat-1', 'all', 100]
+    const messageKey = ['integrations', 'telegram', 'messages', 'account-1', 'chat-1', 50]
+    const mediaKey = ['integrations', 'telegram', 'search', 'media', '', 'account-1', 'chat-1', 'all', 100]
     const messages = [
       {
         message_id: 'tg-msg-media-3',
@@ -312,8 +312,8 @@ describe('telegram media realtime cache patch handling', () => {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
         const key = JSON.stringify(queryKey)
-        if (key === JSON.stringify(['telegram', 'messages'])) return [[messageKey, messages]]
-        if (key === JSON.stringify(['telegram', 'search', 'media'])) {
+        if (key === JSON.stringify(['integrations', 'telegram', 'messages'])) return [[messageKey, messages]]
+        if (key === JSON.stringify(['integrations', 'telegram', 'search', 'media'])) {
           return [[mediaKey, mediaResponse]]
         }
         return []

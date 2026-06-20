@@ -7,10 +7,10 @@ import DraftStrip from './DraftStrip.vue'
 import HealthStrip from './HealthStrip.vue'
 import MailCertificateStrip from './MailCertificateStrip.vue'
 import MailResourceOverviewStrip from './MailResourceOverviewStrip.vue'
-import MailSyncSettingsStrip from './MailSyncSettingsStrip.vue'
+import MailSyncSettingsStrip from '../../../integrations/mail/components/MailSyncSettingsStrip.vue'
 import type {
   CommunicationSectionId,
-  EmailDraft,
+  CommunicationDraft,
   MailArchitectureBlocker,
   MailSyncSettings,
   MailSyncSettingsUpdate,
@@ -47,7 +47,7 @@ const props = defineProps<{
   isLoadingMoreSubscriptions: boolean
   hasMoreTopSenders: boolean
   isLoadingMoreTopSenders: boolean
-  drafts: EmailDraft[]
+  drafts: CommunicationDraft[]
   hasMoreDrafts: boolean
   isLoadingMoreDrafts: boolean
   actionStatus: string
@@ -67,7 +67,7 @@ const emit = defineEmits<{
   loadMoreSubscriptions: []
   loadMoreTopSenders: []
   selectSection: [sectionId: CommunicationSectionId]
-  openDraft: [draft: EmailDraft]
+  openDraft: [draft: CommunicationDraft]
   deleteDraft: [draftId: string]
   loadMoreDrafts: []
   clearPageError: []

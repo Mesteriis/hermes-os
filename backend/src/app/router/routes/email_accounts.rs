@@ -3,45 +3,51 @@ use super::support::*;
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router
         .route(
-            "/api/v1/email-accounts/gmail/oauth/start",
+            "/api/v1/communications/mail/accounts/gmail/oauth/start",
             post(post_gmail_oauth_start),
         )
         .route(
-            "/api/v1/email-accounts/gmail/oauth/complete",
+            "/api/v1/communications/mail/accounts/gmail/oauth/complete",
             post(post_gmail_oauth_complete),
         )
-        .route("/api/v1/email-accounts", get(get_v1_email_accounts))
         .route(
-            "/api/v1/email-accounts/import",
+            "/api/v1/communications/mail/accounts",
+            get(get_v1_email_accounts),
+        )
+        .route(
+            "/api/v1/communications/mail/accounts/import",
             post(post_v1_email_account_import),
         )
-        .route("/api/v1/email-accounts/imap", post(post_imap_account_setup))
         .route(
-            "/api/v1/email-accounts/{account_id}",
+            "/api/v1/communications/mail/accounts/imap",
+            post(post_imap_account_setup),
+        )
+        .route(
+            "/api/v1/communications/mail/accounts/{account_id}",
             get(get_v1_email_account).delete(delete_v1_email_account),
         )
         .route(
-            "/api/v1/email-accounts/{account_id}/export",
+            "/api/v1/communications/mail/accounts/{account_id}/export",
             get(get_v1_email_account_export),
         )
         .route(
-            "/api/v1/email-accounts/{account_id}/logout",
+            "/api/v1/communications/mail/accounts/{account_id}/logout",
             post(post_v1_email_account_logout),
         )
         .route(
-            "/api/v1/email-accounts/sync-status",
+            "/api/v1/communications/mail/accounts/sync-status",
             get(get_v1_email_account_sync_status),
         )
         .route(
-            "/api/v1/email-accounts/{account_id}/sync-settings",
+            "/api/v1/communications/mail/accounts/{account_id}/sync-settings",
             get(get_v1_email_account_sync_settings).put(put_v1_email_account_sync_settings),
         )
         .route(
-            "/api/v1/email-accounts/{account_id}/sync-now",
+            "/api/v1/communications/mail/accounts/{account_id}/sync-now",
             post(post_v1_email_account_sync_now),
         )
         .route(
-            "/api/v1/email-accounts/{account_id}/sync-full-resync",
+            "/api/v1/communications/mail/accounts/{account_id}/sync-full-resync",
             post(post_v1_email_account_sync_full_resync),
         )
 }

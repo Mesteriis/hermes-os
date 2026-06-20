@@ -79,11 +79,11 @@ fn spawn_mail_background_sync_scheduler(state: &AppState) {
     let vault = state.vault.clone();
 
     tokio::spawn(async move {
-        let store = crate::domains::mail::background_sync::MailSyncStore::new(pool.clone());
-        let service = crate::domains::mail::background_sync::MailBackgroundSyncService::new(
+        let store = crate::workflows::mail_background_sync::MailSyncStore::new(pool.clone());
+        let service = crate::workflows::mail_background_sync::MailBackgroundSyncService::new(
             pool,
             vault,
-            crate::domains::mail::background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+            crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
         );
         if let Err(error) = store.mark_orphaned_active_runs_failed(Utc::now()).await {
             tracing::warn!(error = %error, "mail background sync startup recovery failed");
@@ -113,13 +113,15 @@ fn spawn_mail_outbox_delivery_scheduler(state: &AppState) {
     let vault = state.vault.clone();
 
     tokio::spawn(async move {
-        let store = crate::domains::mail::outbox::EmailOutboxStore::new(pool.clone());
-        let sender = crate::domains::mail::outbox::ProviderOutboxEmailSender::new(
+        let store =
+            crate::domains::communications::outbox::CommunicationOutboxStore::new(pool.clone());
+        let sender = crate::domains::communications::outbox::ProviderOutboxEmailSender::new(
             pool,
             vault.clone(),
-            crate::domains::mail::outbox::LiveSmtpTransport,
+            crate::domains::communications::outbox::LiveSmtpTransport,
         );
-        let worker = crate::domains::mail::outbox::EmailOutboxDeliveryWorker::new(store, sender);
+        let worker =
+            crate::domains::communications::outbox::EmailOutboxDeliveryWorker::new(store, sender);
         let mut tick = tokio::time::interval(Duration::from_secs(10));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 

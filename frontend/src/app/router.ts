@@ -15,8 +15,6 @@ import ReviewView from './views/ReviewView.vue'
 import SettingsView from './views/SettingsView.vue'
 import AgentsView from './views/AgentsView.vue'
 import OrganizationsView from './views/OrganizationsView.vue'
-import TelegramView from './views/TelegramView.vue'
-import WhatsAppView from './views/WhatsAppView.vue'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', redirect: '/home' },
@@ -33,9 +31,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/review', name: 'review', component: ReviewView },
   { path: '/settings', name: 'settings', component: SettingsView },
   { path: '/agents', name: 'agents', component: AgentsView },
-  { path: '/organizations', name: 'organizations', component: OrganizationsView },
-  { path: '/telegram', name: 'telegram', component: TelegramView },
-  { path: '/whatsapp', name: 'whatsapp', component: WhatsAppView }
+  { path: '/organizations', name: 'organizations', component: OrganizationsView }
 ]
 
 const router = createRouter({

@@ -1,7 +1,11 @@
 # ADR-0094 Telegram Base Domain Completion Boundary
 
-Status: Accepted
+Status: Superseded by ADR-0097
 Date: 2026-06-18
+
+Superseded note: ADR-0097 replaces the "Telegram Channel" operating-surface
+framing. Telegram remains a Communication Channel capability set and integration
+adapter; it is not a product/backend/frontend domain.
 
 Clarifies:
 
@@ -28,8 +32,8 @@ architecture behind a broad domain label.
 
 ## Decision
 
-The base Telegram Domain is completed as a Communication Channel and moves to
-maintenance once the implementation, tests and documentation agree that P0
+The base Telegram channel capability set is completed and moves to maintenance
+once the implementation, tests and documentation agree that P0
 provider-command, lifecycle, reply/forward, topic, dialog, search and media
 parity are closed for the supported scope.
 
@@ -65,7 +69,7 @@ Rules:
 
 - `planned` capabilities must be visible in the backend capability contract and
   frontend capability matrix.
-- `planned` does not authorize implementation inside the base Telegram Domain.
+- `planned` does not authorize implementation inside a Telegram product domain.
 - Future work for Bot Runtime, Voice, Calls and AI Layer must start as separate
   initiatives with their own ADR or ADR update before implementation.
 - Provider writes continue to use the durable outbox.

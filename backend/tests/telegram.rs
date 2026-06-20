@@ -1,4 +1,4 @@
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationProviderKind, ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::platform::secrets::SecretKind;

@@ -8,11 +8,12 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::domains::mail::outbox::{
-    EmailOutboxStatus, EmailOutboxStore, NewEmailOutboxItem, OutboxSendReceipt,
+use hermes_hub_backend::domains::communications::outbox::{
+    CommunicationOutboxStatus, CommunicationOutboxStore, NewCommunicationOutboxItem,
+    OutboxSendReceipt,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -100,7 +101,7 @@ async fn v1_read_receipt_records_correlation_and_realtime_event_against_postgres
     let persisted = sqlx::query(
         r#"
         SELECT account_id, outbox_id, provider_message_id, recipient, receipt_kind, metadata
-        FROM mail_read_receipts
+        FROM communication_read_receipts
         WHERE provider_record_id = $1
         "#,
     )
@@ -288,7 +289,7 @@ async fn v1_provider_delivery_event_records_delivery_status_against_postgres() {
     assert_eq!(body["source_kind"], "gmail_history");
 
     let metadata: Value =
-        sqlx::query_scalar("SELECT metadata FROM email_outbox_tracking WHERE outbox_id = $1")
+        sqlx::query_scalar("SELECT metadata FROM communication_outbox WHERE outbox_id = $1")
             .bind(&outbox_id)
             .fetch_one(&pool)
             .await
@@ -437,7 +438,7 @@ async fn v1_delivery_notification_parses_dsn_and_appends_delivery_status_event_a
     assert_eq!(body["source_kind"], "dsn");
 
     let outbox_metadata: Value =
-        sqlx::query_scalar("SELECT metadata FROM email_outbox_tracking WHERE outbox_id = $1")
+        sqlx::query_scalar("SELECT metadata FROM communication_outbox WHERE outbox_id = $1")
             .bind(&outbox_id)
             .fetch_one(&pool)
             .await
@@ -538,7 +539,7 @@ async fn v1_delivery_notification_parses_mdn_into_read_receipt_against_postgres(
     assert_eq!(body["read_receipt"]["source_kind"], "mdn");
 
     let read_receipt_count: i64 = sqlx::query_scalar(
-        "SELECT count(*)::BIGINT FROM mail_read_receipts WHERE account_id = $1 AND provider_record_id = $2",
+        "SELECT count(*)::BIGINT FROM communication_read_receipts WHERE account_id = $1 AND provider_record_id = $2",
     )
     .bind(&account_id)
     .bind(format!("mdn-parser-{suffix}"))
@@ -586,9 +587,9 @@ async fn seed_sent_outbox_item(
         .expect("store provider account");
 
     let outbox_id = format!("outbox-read-receipt-{}", uid());
-    let store = EmailOutboxStore::new(pool);
+    let store = CommunicationOutboxStore::new(pool);
     store
-        .enqueue(&NewEmailOutboxItem {
+        .enqueue(&NewCommunicationOutboxItem {
             outbox_id: outbox_id.clone(),
             account_id: account_id.to_owned(),
             draft_id: None,
@@ -598,7 +599,7 @@ async fn seed_sent_outbox_item(
             subject: "Read receipt seed".to_owned(),
             body_text: "Private body not for receipt events".to_owned(),
             body_html: None,
-            status: EmailOutboxStatus::Queued,
+            status: CommunicationOutboxStatus::Queued,
             scheduled_send_at: None,
             undo_deadline_at: None,
             metadata: json!({}),

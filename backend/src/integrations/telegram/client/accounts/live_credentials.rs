@@ -1,4 +1,4 @@
-use crate::domains::mail::core::{CommunicationProviderKind, ProviderAccountSecretPurpose};
+use crate::platform::communications::{CommunicationProviderKind, ProviderAccountSecretPurpose};
 use crate::platform::secrets::{SecretKind, SecretReferenceStore};
 
 use super::super::errors::TelegramError;

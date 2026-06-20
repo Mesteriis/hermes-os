@@ -3,11 +3,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 
-use hermes_hub_backend::domains::mail::core::EmailProviderKind;
-use hermes_hub_backend::domains::mail::fixtures::pipeline::{
+use hermes_hub_backend::domains::communications::core::EmailProviderKind;
+use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::email_fixture_pipeline::{
     EmailFixturePipelineRequest, project_fixture_email_messages,
 };
-use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn fixture_email_pipeline_imports_projects_persons_and_graph_against_postgres() {

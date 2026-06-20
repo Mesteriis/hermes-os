@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use hermes_hub_backend::domains::mail::core::EmailProviderKind;
+use hermes_hub_backend::domains::communications::core::EmailProviderKind;
 use hermes_hub_backend::platform::secrets::ResolvedSecret;
 
 use crate::env::{first_env, optional_env, parse_bool, parse_port, parse_usize};

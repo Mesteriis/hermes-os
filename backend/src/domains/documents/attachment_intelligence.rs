@@ -5,22 +5,21 @@ mod models;
 #[cfg(test)]
 mod tests;
 
-use crate::domains::mail::storage::StoredMailAttachmentWithBlob;
-
 use classification::classify_by_name_and_type;
 use file_kinds::{is_archive_type, is_document_type, is_executable_type};
 
 pub use models::{
-    AttachmentCategory, AttachmentClassification, AttachmentIntelligenceError, RiskLevel,
+    AttachmentCategory, AttachmentClassification, AttachmentIntelligenceError,
+    AttachmentIntelligenceInput, RiskLevel,
 };
 
 pub struct AttachmentIntelligenceService;
 
 impl AttachmentIntelligenceService {
     /// Classify an attachment by filename and content type.
-    pub fn classify(attachment: &StoredMailAttachmentWithBlob) -> AttachmentClassification {
-        let filename = attachment.attachment.filename.as_deref().unwrap_or("");
-        let content_type = &attachment.attachment.content_type;
+    pub fn classify(attachment: &AttachmentIntelligenceInput) -> AttachmentClassification {
+        let filename = attachment.filename.as_deref().unwrap_or("");
+        let content_type = &attachment.content_type;
         let filename_lower = filename.to_lowercase();
 
         let category = classify_by_name_and_type(&filename_lower, content_type);
@@ -35,10 +34,10 @@ impl AttachmentIntelligenceService {
             RiskLevel::Safe
         };
 
-        let size_mb = attachment.attachment.size_bytes as f64 / 1_048_576.0;
+        let size_mb = attachment.size_bytes as f64 / 1_048_576.0;
 
         AttachmentClassification {
-            attachment_id: attachment.attachment.attachment_id.clone(),
+            attachment_id: attachment.attachment_id.clone(),
             category,
             is_executable,
             is_archive,

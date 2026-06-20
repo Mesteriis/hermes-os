@@ -31,9 +31,9 @@ Version 5.0 is complete when Hermes Hub can use WhatsApp Web as a local-first, u
 - [x] Provider account model accepts `whatsapp_web` without breaking email or Telegram providers.
 - [x] WhatsApp Web session secret purpose is account-scoped and compatible only with non-plaintext session protection secrets.
 - [x] Backend migration extends provider/message constraints and creates WhatsApp Web session metadata storage.
-- [x] Backend exposes protected `/api/v1/whatsapp/*` fixture/manual foundation endpoints.
+- [x] Backend exposes protected `/api/v1/communications/whatsapp/*` fixture/manual foundation endpoints.
 - [x] WhatsApp Web fixture ingestion projects raw messages into canonical communication messages.
-- [x] Protected `/api/v1/whatsapp/capabilities` exposes fixture-ready, live-blocked and unsupported WhatsApp capabilities.
+- [x] Protected `/api/v1/communications/whatsapp/capabilities` exposes fixture-ready, live-blocked and unsupported WhatsApp capabilities.
 - [x] Desktop WhatsApp account/session/status surfaces call protected backend APIs.
 - [x] `make backend-whatsapp-smoke-dev` covers WhatsApp Web fixture/manual foundation.
 - [x] `make validate`, frontend checks and desktop browser smoke pass after WhatsApp UI integration.

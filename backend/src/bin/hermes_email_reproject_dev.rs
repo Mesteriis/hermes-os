@@ -3,14 +3,14 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
 use hermes_hub_backend::app::init_tracing;
-use hermes_hub_backend::domains::mail::background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
-use hermes_hub_backend::domains::mail::core::StoredRawCommunicationRecord;
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::core::StoredRawCommunicationRecord;
+use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, parse_raw_email_message_from_blob, project_parsed_raw_email_message,
 };
-use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
+use hermes_hub_backend::domains::communications::storage::LocalMailBlobStore;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::Row;

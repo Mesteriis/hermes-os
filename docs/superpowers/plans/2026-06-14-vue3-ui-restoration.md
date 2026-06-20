@@ -38,13 +38,13 @@
 
 Current line-count scan shows these files need decomposition or careful handling:
 
-- `frontend/src/domains/telegram/components/TelegramMessageThread.vue` — 903 lines, violates hard limit.
+- `frontend/src/integrations/telegram/components/TelegramMessageThread.vue` — 903 lines, violates hard limit.
 - `frontend/src/domains/communications/views/CommunicationsPage.vue` — 890 lines, violates hard limit.
 - `frontend/src/domains/settings/components/SidebarSettings.vue` — 660 lines, must be split before completion.
 - `frontend/src/domains/settings/components/AppearanceSettings.vue` — 462 lines, warning zone.
 - `frontend/src/domains/communications/components/ComposeDrawer.vue` — 447 lines, warning zone.
 - `frontend/src/domains/review/views/ReviewPage.vue` — 470 lines, warning zone.
-- `frontend/src/domains/telegram/views/TelegramPage.vue` — 426 lines, warning zone.
+- `frontend/src/integrations/telegram/views/TelegramPage.vue` — 426 lines, warning zone.
 - `frontend/src/domains/knowledge/views/KnowledgePage.vue` — 407 lines, warning zone.
 
 ## File Map
@@ -66,10 +66,10 @@ Current line-count scan shows these files need decomposition or careful handling
 - `frontend/src/domains/communications/components/CommunicationsListPane.vue`
 - `frontend/src/domains/communications/components/CommunicationsDetailPane.vue`
 - `frontend/src/domains/communications/components/CommunicationsRailPane.vue`
-- `frontend/src/domains/telegram/components/thread/TelegramThreadHeader.vue`
-- `frontend/src/domains/telegram/components/thread/TelegramMessageList.vue`
-- `frontend/src/domains/telegram/components/thread/TelegramComposer.vue`
-- `frontend/src/domains/telegram/components/thread/TelegramSyncPanel.vue`
+- `frontend/src/integrations/telegram/components/thread/TelegramThreadHeader.vue`
+- `frontend/src/integrations/telegram/components/thread/TelegramMessageList.vue`
+- `frontend/src/integrations/telegram/components/thread/TelegramComposer.vue`
+- `frontend/src/integrations/telegram/components/thread/TelegramSyncPanel.vue`
 - `frontend/src/domains/settings/components/sidebar/SidebarNavigationList.vue`
 - `frontend/src/domains/settings/components/sidebar/SidebarGroupEditor.vue`
 - `frontend/src/domains/settings/components/sidebar/SidebarItemEditor.vue`
@@ -101,7 +101,7 @@ Current line-count scan shows these files need decomposition or careful handling
 - `frontend/src/domains/settings/components/SidebarSettings.vue`
 - `frontend/src/domains/communications/views/CommunicationsPage.vue`
 - `frontend/src/domains/communications/components/MessageBodyTab.vue`
-- `frontend/src/domains/telegram/components/TelegramMessageThread.vue`
+- `frontend/src/integrations/telegram/components/TelegramMessageThread.vue`
 - `frontend/src/domains/calendar/views/CalendarPage.vue`
 - `frontend/src/domains/tasks/views/TasksPage.vue`
 - every domain view under `frontend/src/domains/*/views/*.vue` during screen restoration.
@@ -157,8 +157,8 @@ import { chromium } from 'playwright'
 const routes = [
   ['home', '/#/home'],
   ['communications', '/#/communications'],
-  ['telegram', '/#/telegram'],
-  ['whatsapp', '/#/whatsapp'],
+  ['communications', 'telegram', '/#/communications'],
+  ['communications', 'whatsapp', '/#/communications'],
   ['timeline', '/#/timeline'],
   ['persons', '/#/persons'],
   ['projects', '/#/projects'],
@@ -1832,12 +1832,12 @@ Expected: pass.
 ## Task 11: Telegram Thread Decomposition
 
 **Files:**
-- Create: `frontend/src/domains/telegram/components/thread/TelegramThreadHeader.vue`
-- Create: `frontend/src/domains/telegram/components/thread/TelegramMessageList.vue`
-- Create: `frontend/src/domains/telegram/components/thread/TelegramComposer.vue`
-- Create: `frontend/src/domains/telegram/components/thread/TelegramSyncPanel.vue`
-- Modify: `frontend/src/domains/telegram/components/TelegramMessageThread.vue`
-- Modify: `frontend/src/domains/telegram/views/TelegramPage.vue`
+- Create: `frontend/src/integrations/telegram/components/thread/TelegramThreadHeader.vue`
+- Create: `frontend/src/integrations/telegram/components/thread/TelegramMessageList.vue`
+- Create: `frontend/src/integrations/telegram/components/thread/TelegramComposer.vue`
+- Create: `frontend/src/integrations/telegram/components/thread/TelegramSyncPanel.vue`
+- Modify: `frontend/src/integrations/telegram/components/TelegramMessageThread.vue`
+- Modify: `frontend/src/integrations/telegram/views/TelegramPage.vue`
 
 - [ ] **Step 1: Define split responsibilities**
 
@@ -2001,7 +2001,7 @@ Expected: pass.
 - Modify: `frontend/src/domains/review/views/ReviewPage.vue`
 - Modify: `frontend/src/domains/agents/views/AgentsPage.vue`
 - Modify: `frontend/src/domains/organizations/views/OrganizationsPage.vue`
-- Modify: `frontend/src/domains/whatsapp/views/WhatsAppPage.vue`
+- Modify: `frontend/src/integrations/whatsapp/views/WhatsAppPage.vue`
 - Modify: matching component files under each domain.
 
 - [ ] **Step 1: Inspect old and current files for every remaining domain**

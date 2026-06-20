@@ -2,17 +2,17 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::graph::projection::GraphProjectionService;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
+use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
 use hermes_hub_backend::domains::projects::core::{ProjectStore, project_graph_node_id};
 use hermes_hub_backend::domains::projects::link_reviews::ProjectLinkReviewStore;
+use hermes_hub_backend::engines::graph_projection::GraphProjectionService;
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
 use sqlx::Row;

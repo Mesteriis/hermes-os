@@ -1,8 +1,8 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, toValue } from 'vue'
 import {
-  fetchMailMessage,
-  fetchMailMessages,
+  fetchCommunicationMessage,
+  fetchCommunicationMessages,
   fetchMailSyncSettings,
   fetchMailboxHealth,
   fetchMailSyncStatus,
@@ -15,15 +15,15 @@ import {
 import { fetchMessageAiState } from '../api/aiState'
 import type {
   CommunicationMessageSummary,
-  EmailPersona,
+  CommunicationPersona,
   LocalMessageState,
   MailboxHealth,
-  MailMessageDetailResponse,
-  MailMessagesResponse,
+  CommunicationMessageDetailResponse,
+  CommunicationMessagesResponse,
   MailSyncSettings,
   MailSyncSettingsUpdate,
   MailSyncStatus,
-  EmailThread,
+  CommunicationThread,
   ThreadMessagesResponse,
   ThreadListResponse,
   WorkflowState,
@@ -45,7 +45,7 @@ export function useMailListQuery(
   query?: QueryParam<string>,
   localState?: QueryParam<LocalMessageState>
 ) {
-  return useInfiniteQuery<MailMessagesResponse, Error, CommunicationMessageSummary[], readonly unknown[], string | null>({
+  return useInfiniteQuery<CommunicationMessagesResponse, Error, CommunicationMessageSummary[], readonly unknown[], string | null>({
     queryKey: computed(() => mailListQueryKey(
       toValue(accountId),
       toValue(workflowState),
@@ -55,7 +55,7 @@ export function useMailListQuery(
     )),
     initialPageParam: null,
     queryFn: async ({ pageParam }) => {
-      return fetchMailMessages(
+      return fetchCommunicationMessages(
         toValue(accountId),
         toValue(workflowState),
         toValue(channelKind),
@@ -74,7 +74,7 @@ export function useMailListQuery(
 }
 
 export function useMessageQuery(messageId: NullableQueryParam<string>) {
-  return useQuery<MailMessageDetailResponse | null>({
+  return useQuery<CommunicationMessageDetailResponse | null>({
     queryKey: computed(() => {
       const id = toValue(messageId)
       return id ? mailMessageQueryKey(id) : ['communications-message', null] as const
@@ -82,7 +82,7 @@ export function useMessageQuery(messageId: NullableQueryParam<string>) {
     queryFn: async () => {
       const id = toValue(messageId)
       if (!id) return null
-      return fetchMailMessage(id)
+      return fetchCommunicationMessage(id)
     },
     enabled: computed(() => !!toValue(messageId)),
     ...mailDetailQueryOptions
@@ -118,7 +118,7 @@ export function useStateCountsQuery(accountId?: QueryParam<string>, localState?:
 
 export function useSyncStatusesQuery() {
   return useQuery<MailSyncStatus[]>({
-    queryKey: ['communications-sync-statuses'],
+    queryKey: ['integrations', 'mail', 'sync-statuses'],
     queryFn: async () => {
       const res = await fetchMailSyncStatus()
       return res.items
@@ -131,7 +131,9 @@ export function useMailSyncSettingsQuery(accountId: NullableQueryParam<string>) 
   return useQuery<MailSyncSettings | null>({
     queryKey: computed(() => {
       const id = toValue(accountId)
-      return id ? ['communications-sync-settings', id] as const : ['communications-sync-settings', null] as const
+      return id
+        ? ['integrations', 'mail', 'sync-settings', id] as const
+        : ['integrations', 'mail', 'sync-settings', null] as const
     }),
     queryFn: async () => {
       const id = toValue(accountId)
@@ -152,15 +154,15 @@ export function useUpdateMailSyncSettingsMutation() {
   >({
     mutationFn: async ({ accountId, settings }) => updateMailSyncSettings(accountId, settings),
     onSuccess: (_settings, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['communications-sync-settings', variables.accountId] })
-      queryClient.invalidateQueries({ queryKey: ['communications-sync-statuses'] })
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'mail', 'sync-settings', variables.accountId] })
+      queryClient.invalidateQueries({ queryKey: ['integrations', 'mail', 'sync-statuses'] })
     }
   })
 }
 
 export function useMailboxHealthQuery(accountId?: QueryParam<string>) {
   return useQuery<MailboxHealth | null>({
-    queryKey: computed(() => ['communications-mailbox-health', toValue(accountId)]),
+    queryKey: computed(() => ['integrations', 'mail', 'mailbox-health', toValue(accountId)]),
     queryFn: async () => {
       return fetchMailboxHealth(toValue(accountId))
     },
@@ -169,7 +171,7 @@ export function useMailboxHealthQuery(accountId?: QueryParam<string>) {
 }
 
 export function useConversationsQuery(accountId?: QueryParam<string>) {
-  return useInfiniteQuery<ThreadListResponse, Error, EmailThread[], readonly unknown[], string | null>({
+  return useInfiniteQuery<ThreadListResponse, Error, CommunicationThread[], readonly unknown[], string | null>({
     queryKey: computed(() => ['communications-threads', toValue(accountId)]),
     initialPageParam: null,
     queryFn: async ({ pageParam }) => fetchThreads(toValue(accountId), 50, pageParam),
@@ -200,7 +202,7 @@ export function useThreadMessagesQuery(accountId: NullableQueryParam<string>, su
 }
 
 export function usePersonasQuery() {
-  return useQuery<EmailPersona[]>({
+  return useQuery<CommunicationPersona[]>({
     queryKey: ['communications-personas'],
     queryFn: async () => {
       const res = await fetchPersonas()

@@ -1,11 +1,7 @@
-use crate::domains::decisions::DecisionStoreError;
-use crate::domains::mail::core::CommunicationIngestionError;
-use crate::domains::mail::messages::MessageProjectionError;
-use crate::domains::mail::storage::MailStorageError;
-use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::platform::observations::ObservationStoreError;
 use crate::platform::secrets::{DatabaseEncryptedVaultError, SecretReferenceError};
 use crate::vault::HostVaultError;
+use crate::workflows::provider_communication_projection::ProviderCommunicationProjectionError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
 #[derive(Debug, thiserror::Error)]
@@ -25,8 +21,11 @@ pub enum TelegramError {
     #[error("Telegram QR login setup was not found")]
     QrLoginNotFound,
 
-    #[error(transparent)]
-    Communication(#[from] CommunicationIngestionError),
+    #[error("Telegram provider account store operation failed: {0}")]
+    ProviderAccountStore(String),
+
+    #[error("Telegram media storage operation failed: {0}")]
+    MediaStorage(String),
 
     #[error(transparent)]
     SecretReference(#[from] SecretReferenceError),
@@ -38,16 +37,7 @@ pub enum TelegramError {
     HostVault(#[from] HostVaultError),
 
     #[error(transparent)]
-    MessageProjection(#[from] MessageProjectionError),
-
-    #[error(transparent)]
-    MailStorage(#[from] MailStorageError),
-
-    #[error(transparent)]
-    Decision(#[from] DecisionStoreError),
-
-    #[error(transparent)]
-    TaskCandidate(#[from] TaskCandidateError),
+    CommunicationProjection(#[from] ProviderCommunicationProjectionError),
 
     #[error(transparent)]
     ReviewInboxWorkflow(#[from] ReviewInboxWorkflowError),

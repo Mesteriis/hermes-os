@@ -1,4 +1,4 @@
-use crate::domains::mail::core::EmailProviderKind;
+use crate::domains::communications::core::EmailProviderKind;
 use crate::vault::CalendarAccountStore;
 
 use super::errors::HostVaultReconciliationError;

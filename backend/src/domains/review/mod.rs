@@ -1,5 +1,3 @@
-pub mod api;
-
 mod errors;
 pub(crate) mod evidence;
 mod models;

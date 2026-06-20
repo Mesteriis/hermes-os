@@ -1,26 +1,26 @@
 export const MAIL_MESSAGE_DRAG_TYPE = 'application/x-hermes-mail-message-selection'
 
-export type MailMessageDragPayload = {
+export type CommunicationMessageDragPayload = {
   kind: 'mail-message-selection'
   message_id: string
   message_ids: string[]
 }
 
-export function createMailMessageDragPayload(messageId: string, messageIds: string[] = []): string {
+export function createCommunicationMessageDragPayload(messageId: string, messageIds: string[] = []): string {
   const normalizedMessageId = messageId.trim()
   const normalizedMessageIds = uniqueNonBlankIds([normalizedMessageId, ...messageIds])
   return JSON.stringify({
     kind: 'mail-message-selection',
     message_id: normalizedMessageId,
     message_ids: normalizedMessageIds
-  } satisfies MailMessageDragPayload)
+  } satisfies CommunicationMessageDragPayload)
 }
 
-export function parseMailMessageDragPayload(value: string): MailMessageDragPayload | null {
+export function parseCommunicationMessageDragPayload(value: string): CommunicationMessageDragPayload | null {
   if (!value.trim()) return null
 
   try {
-    const parsed = JSON.parse(value) as Partial<MailMessageDragPayload>
+    const parsed = JSON.parse(value) as Partial<CommunicationMessageDragPayload>
     if (parsed.kind !== 'mail-message-selection') return null
     if (typeof parsed.message_id !== 'string' || !parsed.message_id.trim()) return null
     if (parsed.message_ids !== undefined && !validMessageIdList(parsed.message_ids)) return null
@@ -38,7 +38,7 @@ export function parseMailMessageDragPayload(value: string): MailMessageDragPaylo
   }
 }
 
-export function hasMailMessageDragType(types: readonly string[] | DOMStringList): boolean {
+export function hasCommunicationMessageDragType(types: readonly string[] | DOMStringList): boolean {
   return Array.from(types).includes(MAIL_MESSAGE_DRAG_TYPE)
 }
 

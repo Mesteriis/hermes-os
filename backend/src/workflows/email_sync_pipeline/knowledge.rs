@@ -2,7 +2,7 @@ use std::collections::BTreeSet;
 
 use sqlx::postgres::PgPool;
 
-use crate::domains::mail::messages::ProjectedMessage;
+use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::persons::api::PersonProjectionStore;
 
 use super::errors::EmailSyncPipelineError;

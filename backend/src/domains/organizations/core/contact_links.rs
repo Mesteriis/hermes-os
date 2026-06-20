@@ -4,12 +4,6 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
-    RelationshipStore,
-};
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
-
 use super::{OrgCoreError, link_entity_in_transaction};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -123,9 +117,6 @@ impl OrgContactLinkStore {
             )
             .await?;
         }
-
-        Self::materialize_relationship_in_transaction(&mut transaction, &link, observation_id)
-            .await?;
         transaction.commit().await?;
 
         Ok(link)
@@ -188,97 +179,9 @@ impl OrgContactLinkStore {
             updated_at: row.try_get("updated_at")?,
         };
         let inserted: bool = row.try_get("inserted")?;
-
-        Self::materialize_relationship_in_transaction(
-            &mut transaction,
-            &link,
-            Some(observation_id),
-        )
-        .await?;
         transaction.commit().await?;
 
         Ok(inserted)
-    }
-
-    async fn materialize_relationship_in_transaction(
-        transaction: &mut Transaction<'_, Postgres>,
-        link: &OrgContactLink,
-        observation_id: Option<&str>,
-    ) -> Result<(), OrgCoreError> {
-        let relationship = NewRelationship {
-            source_entity_kind: RelationshipEntityKind::Persona,
-            source_entity_id: link.person_id.clone(),
-            target_entity_kind: RelationshipEntityKind::Organization,
-            target_entity_id: link.organization_id.clone(),
-            relationship_type: "member_of".to_owned(),
-            trust_score: 0.5,
-            strength_score: if link.is_primary { 0.85 } else { 0.65 },
-            confidence: link.confidence,
-            review_state: RelationshipReviewState::UserConfirmed,
-            valid_from: link.valid_from,
-            valid_to: link.valid_to,
-            metadata: json!({
-                "compatibility_table": "organization_contact_links",
-                "compatibility_record_id": link.id,
-                "role": link.role,
-                "department": link.department,
-                "source": link.source,
-                "is_primary": link.is_primary
-            }),
-        };
-        let observation_id = match observation_id {
-            Some(observation_id) => observation_id.to_owned(),
-            None => {
-                ObservationStore::capture_in_transaction(
-                    transaction,
-                    &NewObservation::new(
-                        "ORGANIZATION_RECORD_MUTATION",
-                        ObservationOriginKind::LocalRuntime,
-                        Utc::now(),
-                        json!({
-                            "component": "organization_contact_links",
-                            "organization_id": link.organization_id,
-                            "person_id": link.person_id,
-                            "role": link.role,
-                            "department": link.department,
-                            "source": link.source,
-                            "is_primary": link.is_primary,
-                        }),
-                        format!(
-                            "organization-contact-link://{}/{}",
-                            link.organization_id, link.person_id
-                        ),
-                    )
-                    .provenance(json!({
-                        "pipeline": "organization_contact_links",
-                        "link_id": link.id,
-                    })),
-                )
-                .await?
-                .observation_id
-            }
-        };
-        let evidence = NewRelationshipEvidence::observation(observation_id)
-            .excerpt(
-                "Persona is linked to organization through compatibility organization contact data.",
-            )
-            .metadata(json!({
-                "compatibility_table": "organization_contact_links",
-                "organization_id": link.organization_id,
-                "person_id": link.person_id,
-                "role": link.role,
-                "department": link.department,
-                "source": link.source
-            }));
-
-        RelationshipStore::upsert_with_evidence_in_transaction(
-            transaction,
-            &relationship,
-            &[evidence],
-        )
-        .await?;
-
-        Ok(())
     }
 
     pub async fn set_primary(&self, org_id: &str, person_id: &str) -> Result<(), OrgCoreError> {

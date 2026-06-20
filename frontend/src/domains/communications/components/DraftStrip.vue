@@ -3,16 +3,16 @@ import { computed, ref } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
-import type { EmailDraft } from '../types/communications'
+import type { CommunicationDraft } from '../types/communications'
 
 const props = defineProps<{
-  drafts: EmailDraft[]
+  drafts: CommunicationDraft[]
   hasMore: boolean
   isLoadingMore: boolean
 }>()
 
 const emit = defineEmits<{
-  openDraft: [draft: EmailDraft]
+  openDraft: [draft: CommunicationDraft]
   deleteDraft: [draftId: string]
   loadMore: []
 }>()

@@ -2,8 +2,8 @@ use std::sync::mpsc::Sender;
 
 use chrono::Utc;
 
-use crate::domains::mail::core::ProviderAccount;
 use crate::integrations::telegram::client::TelegramError;
+use crate::platform::communications::ProviderAccount;
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 use crate::vault::CommunicationProviderSecretBindingStore;

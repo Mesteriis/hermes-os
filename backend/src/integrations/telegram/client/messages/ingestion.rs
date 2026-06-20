@@ -1,7 +1,7 @@
 use serde_json::{Value, json};
 
-use crate::domains::mail::core::{CommunicationIngestionStore, NewRawCommunicationRecord};
-use crate::domains::mail::messages::MessageProjectionStore;
+use crate::platform::communications::NewRawCommunicationRecord;
+use crate::workflows::provider_communication_projection::record_and_project_telegram_message;
 
 use super::super::TELEGRAM_MESSAGE_RECORD_KIND;
 use super::super::errors::TelegramError;
@@ -9,7 +9,6 @@ use super::super::identifiers::telegram_raw_record_id;
 use super::super::models::{
     NewTelegramChat, NewTelegramMessage, TelegramMessageIngestResult, TelegramSyncState,
 };
-use super::super::projection::project_raw_telegram_message;
 use super::super::store::TelegramStore;
 use super::message_metadata::{
     derive_mention_metadata, derive_tdlib_attachment_metadata, derive_tdlib_media_album_metadata,
@@ -36,7 +35,6 @@ impl TelegramStore {
         tdlib_raw: Option<Value>,
     ) -> Result<TelegramMessageIngestResult, TelegramError> {
         message.validate_for_runtime(runtime_kind)?;
-        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
         let provider_account = self.telegram_provider_account(&message.account_id).await?;
 
         let chat = NewTelegramChat {
@@ -135,10 +133,7 @@ impl TelegramStore {
             "account_id": message.account_id,
             "provider_chat_id": message.provider_chat_id,
         }));
-        let raw = communication_store.record_raw_source(&raw).await?;
-        let projected =
-            project_raw_telegram_message(&MessageProjectionStore::new(self.pool.clone()), &raw)
-                .await?;
+        let projected = record_and_project_telegram_message(self.pool.clone(), raw).await?;
         if !tdlib_provider_reactions.is_empty() || !tdlib_chosen_reactions.is_empty() {
             super::super::reactions::sync_provider_reactions(
                 &self.pool,
@@ -163,7 +158,7 @@ impl TelegramStore {
             .await?;
 
         Ok(TelegramMessageIngestResult {
-            raw_record_id: raw.raw_record_id,
+            raw_record_id: projected.raw_record_id,
             message_id: projected.message_id,
         })
     }

@@ -6,7 +6,7 @@ pub(super) fn routes() -> Router<AppState> {
         .route("/healthz", get(healthz))
         .route("/readyz", get(readyz))
         .route(
-            "/api/v1/email-accounts/gmail/oauth/callback",
+            "/api/v1/communications/mail/accounts/gmail/oauth/callback",
             get(get_gmail_oauth_callback),
         )
         .route(

@@ -1,4 +1,4 @@
-use hermes_hub_backend::domains::mail::core::EmailProviderKind;
+use hermes_hub_backend::domains::communications::core::EmailProviderKind;
 
 use crate::errors::DevEmailSyncError;
 

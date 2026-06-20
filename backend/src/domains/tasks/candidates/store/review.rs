@@ -16,7 +16,6 @@ use super::super::models::{
 };
 use super::super::persistence::row_task_candidate;
 use super::super::validation::validate_non_empty;
-use super::obligation_sync::sync_obligation_candidate_review_state_in_transaction;
 use super::task_activation::upsert_task_in_transaction;
 
 pub(super) async fn set_review_state(
@@ -140,13 +139,6 @@ async fn apply_review_state_in_transaction(
                 actor_id,
             )
             .await?;
-            sync_obligation_candidate_review_state_in_transaction(
-                transaction,
-                task_candidate_id,
-                &candidate,
-                review_state,
-            )
-            .await?;
             update_candidate_review_state(
                 transaction,
                 task_candidate_id,
@@ -168,13 +160,6 @@ async fn apply_review_state_in_transaction(
             )
             .await?;
             delete_task_for_candidate(transaction, task_candidate_id).await?;
-            sync_obligation_candidate_review_state_in_transaction(
-                transaction,
-                task_candidate_id,
-                &candidate,
-                review_state,
-            )
-            .await?;
         }
     }
 

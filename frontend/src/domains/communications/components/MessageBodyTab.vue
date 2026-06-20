@@ -12,7 +12,7 @@ import BilingualReplyPanel from './BilingualReplyPanel.vue'
 import MessageAiReplyPanel from './MessageAiReplyPanel.vue'
 import MessageLocalIntelligencePanel from './MessageLocalIntelligencePanel.vue'
 import MessageTrustReviewPanel from './MessageTrustReviewPanel.vue'
-import type { AiReplyResponse, MailMessageDetailResponse, MailMessageInsight } from '../types/communications'
+import type { AiReplyResponse, CommunicationMessageDetailResponse, CommunicationMessageInsight } from '../types/communications'
 import type { BilingualReplyFlowResponse } from '../types/bilingualReplyFlow'
 import {
   aiSummaryContractFromMetadata,
@@ -23,8 +23,8 @@ import {
 const frontendConfig = loadFrontendConfig()
 
 const props = defineProps<{
-  detail: MailMessageDetailResponse | null
-  insight: MailMessageInsight | null
+  detail: CommunicationMessageDetailResponse | null
+  insight: CommunicationMessageInsight | null
 }>()
 
 const emit = defineEmits<{

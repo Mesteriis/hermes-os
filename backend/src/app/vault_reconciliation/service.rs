@@ -1,6 +1,6 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::mail::core::{NewProviderAccount, NewProviderAccountSecretBinding};
+use crate::domains::communications::core::{NewProviderAccount, NewProviderAccountSecretBinding};
 use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
 use crate::vault::{
     CalendarAccountStore, CommunicationProviderAccountStore,

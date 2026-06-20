@@ -8,9 +8,9 @@
 
 | Method | Path | Описание |
 |---|---|---|
-| POST | `/api/v1/telegram/media/download` | Download TDLib file and persist completed local blob + Communication attachment row |
-| POST | `/api/v1/telegram/media/upload` | Queue provider-side media send from a local `attachment_id` or `blob_id` through the durable Telegram command outbox |
-| GET | `/api/v1/telegram/search/media?account_id=&provider_chat_id=&kind=&limit=` | Projected Telegram media gallery/filter with attachment download metadata for files-tab parity |
+| POST | `/api/v1/communications/telegram/media/download` | Download TDLib file and persist completed local blob + Communication attachment row |
+| POST | `/api/v1/communications/telegram/media/upload` | Queue provider-side media send from a local `attachment_id` or `blob_id` through the durable Telegram command outbox |
+| GET | `/api/v1/communications/telegram/search/media?account_id=&provider_chat_id=&kind=&limit=` | Projected Telegram media gallery/filter with attachment download metadata for files-tab parity |
 
 Fixture runtime intentionally fails closed for media downloads.
 Media download requests emit `telegram.media.download.started` before runtime
@@ -35,12 +35,12 @@ Media upload uses the provider command model:
 ```text
 POST /api/v1/communications/attachments/import
   -> communication_mail_blobs + communication_attachment_imports
-POST /api/v1/telegram/media/upload
+POST /api/v1/communications/telegram/media/upload
   -> telegram_provider_write_commands(command_kind=send_media)
   -> TDLib sendMessage media builder
 ```
 
-`/api/v1/telegram/media/upload` does not accept raw file bytes and does not call
+`/api/v1/communications/telegram/media/upload` does not accept raw file bytes and does not call
 TDLib directly from UI. It accepts a local `attachment_id` or `blob_id`, rejects
 malicious imported attachments, records provider-write audit metadata and emits
 `telegram.media.upload.started` plus command status events. Provider completion
@@ -93,11 +93,11 @@ tdlib_file_id
 
 | Method | Path | Назначение |
 |---|---|---|
-| GET | `/api/v1/telegram/media` | Media gallery/search |
-| GET | `/api/v1/telegram/media/{media_id}/preview` | Telegram workbench preview |
-| GET | `/api/v1/telegram/media/search?q=&type=` | Provider/local media search |
-| POST | `/api/v1/telegram/voice/send` | Voice message send |
-| POST | `/api/v1/telegram/video-note/send` | Video note send |
+| GET | `/api/v1/communications/telegram/media` | Media gallery/search |
+| GET | `/api/v1/communications/telegram/media/{media_id}/preview` | Telegram workbench preview |
+| GET | `/api/v1/communications/telegram/media/search?q=&type=` | Provider/local media search |
+| POST | `/api/v1/communications/telegram/voice/send` | Voice message send |
+| POST | `/api/v1/communications/telegram/video-note/send` | Video note send |
 
 ## Attachments
 
@@ -118,10 +118,10 @@ storage remains provider-neutral.
 - local chat title filter in UI;
 - local loaded thread text filter;
 - shared Communication search can include Telegram-projected messages by `channel_kind`.
-- workspace dialog search UI backed by `GET /api/v1/telegram/chats/search`;
-- workspace message search UI backed by `GET /api/v1/telegram/search/messages`;
-- explicit provider search command `POST /api/v1/telegram/search/provider`;
-- workspace media search UI plus files tab gallery backed by `GET /api/v1/telegram/search/media`.
+- workspace dialog search UI backed by `GET /api/v1/communications/telegram/chats/search`;
+- workspace message search UI backed by `GET /api/v1/communications/telegram/search/messages`;
+- explicit provider search command `POST /api/v1/communications/telegram/search/provider`;
+- workspace media search UI plus files tab gallery backed by `GET /api/v1/communications/telegram/search/media`.
 - downloaded local Telegram media can open in a read-only viewer using projected
   attachment metadata and local blob paths.
 - saved-search create/select/delete UI reuses the shared Communication
@@ -132,22 +132,22 @@ storage remains provider-neutral.
 ### Недостающие маршруты
 | Method | Path | Назначение |
 |---|---|---|
-| GET | `/api/v1/telegram/search/provider` | Не требуется: command endpoint реализован как POST для явного provider search. |
+| GET | `/api/v1/communications/telegram/search/provider` | Не требуется: command endpoint реализован как POST для явного provider search. |
 
 Current search contract notes:
 
-- `GET /api/v1/telegram/chats/search` searches projected Telegram chats by
+- `GET /api/v1/communications/telegram/chats/search` searches projected Telegram chats by
   title and optional `account_id` scope.
-- `GET /api/v1/telegram/search/messages` searches projected Telegram messages by
+- `GET /api/v1/communications/telegram/search/messages` searches projected Telegram messages by
   text and optional `account_id` / `provider_chat_id` scope. Если `account_id` указан, в запрос
   также инициируется TDLib provider search для актуализации projection.
-- `POST /api/v1/telegram/search/provider` now exposes provider search as explicit
+- `POST /api/v1/communications/telegram/search/provider` now exposes provider search as explicit
   capability-aligned command endpoint and returns full projection response after
   provider attempt.
 - The workspace search results panel renders a provider/local/fallback search
   source label derived from selected-account runtime status, so provider-backed
   searches are visible without requiring a separate provider-only UI.
-- `GET /api/v1/telegram/search/media` is a projection-backed gallery/filter
+- `GET /api/v1/communications/telegram/search/media` is a projection-backed gallery/filter
   endpoint. It currently supports optional free-text `q`, scope and `kind`,
   attempts TDLib provider message search first when both `q` and `account_id`
   are present, and then returns projected attachment download metadata

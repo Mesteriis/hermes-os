@@ -1,10 +1,10 @@
 import type { InfiniteData } from '@tanstack/vue-query'
 import type {
 	BulkMessageActionRequest,
-	EmailDraft,
-	EmailOutboxItem,
-	MailMessageDetailResponse,
-	MailMessagesResponse,
+	CommunicationDraft,
+	CommunicationOutboxItem,
+	CommunicationMessageDetailResponse,
+	CommunicationMessagesResponse,
 	OutboxListResponse,
 	MailSyncStatus
 } from '../types/communications'
@@ -37,7 +37,7 @@ import {
 	type AiStatePatchPayload,
 	type DraftPatchPayload,
 	type FolderMessagePatchPayload,
-	type MailMessagePatchPayload,
+	type CommunicationMessagePatchPayload,
 	type MailRealtimePatchQueryClient,
 	type OutboxPatchPayload,
 	type SyncPatchPayload
@@ -72,7 +72,7 @@ export function applyMailRealtimePatch(
 	if (!request) return false
 
 	let patched = false
-	for (const [queryKey, data] of availableQueryClient.getQueriesData<InfiniteData<MailMessagesResponse>>({
+	for (const [queryKey, data] of availableQueryClient.getQueriesData<InfiniteData<CommunicationMessagesResponse>>({
 		queryKey: ['communications-mail-list']
 	})) {
 		availableQueryClient.setQueryData(queryKey, () =>
@@ -83,7 +83,7 @@ export function applyMailRealtimePatch(
 
 	for (const messageId of request.message_ids) {
 		const queryKey = ['communications-message', messageId] as const
-		availableQueryClient.setQueryData<MailMessageDetailResponse | null | undefined>(queryKey, (data) =>
+		availableQueryClient.setQueryData<CommunicationMessageDetailResponse | null | undefined>(queryKey, (data) =>
 			applyBulkMessageActionToMailDetail(data, request)
 		)
 		patched = true
@@ -148,7 +148,7 @@ function applySyncRealtimePatch(
 
 	let patched = false
 	for (const [queryKey, data] of queryClient.getQueriesData<MailSyncStatus[]>({
-		queryKey: ['communications-sync-statuses']
+		queryKey: ['integrations', 'mail', 'sync-statuses']
 	})) {
 		const updated = patchSyncStatuses(data, accountId, payload)
 		if (updated !== data) {
@@ -506,7 +506,7 @@ function applyDraftRealtimePatch(
 	if (!draftId) return false
 
 	let patched = false
-	for (const [queryKey, data] of queryClient.getQueriesData<EmailDraft[]>({
+	for (const [queryKey, data] of queryClient.getQueriesData<CommunicationDraft[]>({
 		queryKey: ['communications-drafts']
 	})) {
 		const updated = removeDraft(data, draftId)
@@ -519,7 +519,7 @@ function applyDraftRealtimePatch(
 	return patched
 }
 
-function removeDraft(drafts: EmailDraft[] | undefined, draftId: string): EmailDraft[] | undefined {
+function removeDraft(drafts: CommunicationDraft[] | undefined, draftId: string): CommunicationDraft[] | undefined {
 	if (!drafts) return drafts
 	const updated = drafts.filter((draft) => draft.draft_id !== draftId)
 	return updated.length === drafts.length ? drafts : updated
@@ -572,7 +572,7 @@ function patchOutboxItems(
 	let changed = false
 	const pages = data.pages.map((page) => {
 		let pageChanged = false
-		const items: EmailOutboxItem[] = []
+		const items: CommunicationOutboxItem[] = []
 
 		for (const item of page?.items ?? []) {
 			if (item.outbox_id !== outboxId) {
@@ -598,7 +598,7 @@ function patchOutboxItems(
 	return changed ? { ...data, pages } : data
 }
 
-function outboxRealtimeQueryMatches(queryKey: readonly unknown[], item: EmailOutboxItem): boolean {
+function outboxRealtimeQueryMatches(queryKey: readonly unknown[], item: CommunicationOutboxItem): boolean {
 	const queryAccountId = queryKey[1]
 	const queryStatus = queryKey[2]
 
@@ -608,10 +608,10 @@ function outboxRealtimeQueryMatches(queryKey: readonly unknown[], item: EmailOut
 }
 
 function patchOutboxItem(
-	item: EmailOutboxItem,
+	item: CommunicationOutboxItem,
 	eventType: string,
 	payload: OutboxPatchPayload | undefined
-): EmailOutboxItem {
+): CommunicationOutboxItem {
 	if (!payload) return item
 
 	if (eventType === 'mail.outbox.delivery_status_changed') {
@@ -668,7 +668,7 @@ function bulkActionRequestFromEvent(eventData: string): BulkMessageActionRequest
 	const eventType = event?.event_type
 	if (typeof eventType !== 'string' || !eventType.startsWith('mail.message.')) return null
 
-	const payload = event?.payload as MailMessagePatchPayload | undefined
+	const payload = event?.payload as CommunicationMessagePatchPayload | undefined
 	const action = normalizeBulkAction(payload?.action)
 	const messageIds = normalizeMessageIds(payload?.message_ids)
 	if (!action || messageIds.length === 0) return null

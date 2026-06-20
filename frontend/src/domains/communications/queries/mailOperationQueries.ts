@@ -17,15 +17,15 @@ import type {
   BulkMessageActionRequest,
   BulkMessageActionResponse,
   DraftListResponse,
-  EmailDraft,
-  EmailOutboxItem,
-  EmailOutboxStatus,
-  MailMessageDetailResponse,
-  MailMessagesResponse,
+  CommunicationDraft,
+  CommunicationOutboxItem,
+  CommunicationOutboxStatus,
+  CommunicationMessageDetailResponse,
+  CommunicationMessagesResponse,
   OutboxListResponse,
   RedirectMessageRequest,
-  SendEmailRequest,
-  SendEmailResponse
+  SendCommunicationRequest,
+  SendCommunicationResponse
 } from '../types/communications'
 import type { MailAiStateRecord, MailAiStateTransitionRequest } from '../types/aiState'
 import {
@@ -41,10 +41,10 @@ import type { QueryParam } from './queryTypes'
 import type { ComposeDraftPayload } from '../forms/composeDraftAutosave'
 
 type BulkMessageActionMutationContext = {
-  previousMailLists: Array<[readonly unknown[], InfiniteData<MailMessagesResponse> | undefined]>
+  previousMailLists: Array<[readonly unknown[], InfiniteData<CommunicationMessagesResponse> | undefined]>
   previousMessages: Array<[
     readonly ['communications-message', string],
-    MailMessageDetailResponse | null | undefined
+    CommunicationMessageDetailResponse | null | undefined
   ]>
 }
 
@@ -57,7 +57,7 @@ type OutboxMutationContext = {
 }
 
 export function useDraftsQuery(accountId?: QueryParam<string>) {
-  return useInfiniteQuery<DraftListResponse, Error, EmailDraft[], readonly unknown[], string | null>({
+  return useInfiniteQuery<DraftListResponse, Error, CommunicationDraft[], readonly unknown[], string | null>({
     queryKey: computed(() => ['communications-drafts', toValue(accountId)]),
     initialPageParam: null,
     queryFn: async ({ pageParam }) => fetchDrafts(toValue(accountId), undefined, 50, pageParam),
@@ -67,8 +67,8 @@ export function useDraftsQuery(accountId?: QueryParam<string>) {
   })
 }
 
-export function useOutboxQuery(accountId?: QueryParam<string>, status?: QueryParam<EmailOutboxStatus>) {
-  return useInfiniteQuery<OutboxListResponse, Error, EmailOutboxItem[], readonly unknown[], string | null>({
+export function useOutboxQuery(accountId?: QueryParam<string>, status?: QueryParam<CommunicationOutboxStatus>) {
+  return useInfiniteQuery<OutboxListResponse, Error, CommunicationOutboxItem[], readonly unknown[], string | null>({
     queryKey: computed(() => ['communications-outbox', toValue(accountId), toValue(status)]),
     initialPageParam: null,
     queryFn: async ({ pageParam }) => fetchOutboxItems(toValue(accountId), toValue(status), 100, pageParam),
@@ -80,8 +80,8 @@ export function useOutboxQuery(accountId?: QueryParam<string>, status?: QueryPar
 
 export function useSendMailMutation() {
   const queryClient = useQueryClient()
-  return useMutation<SendEmailResponse, Error, SendEmailRequest, DraftMutationContext>({
-    mutationFn: async (request: SendEmailRequest) => {
+  return useMutation<SendCommunicationResponse, Error, SendCommunicationRequest, DraftMutationContext>({
+    mutationFn: async (request: SendCommunicationRequest) => {
       return sendEmail(request)
     },
     onMutate: async (request) => {
@@ -111,7 +111,7 @@ export function useSendMailMutation() {
 
 export function useSaveDraftMutation() {
   const queryClient = useQueryClient()
-  return useMutation<EmailDraft, Error, ComposeDraftPayload, DraftMutationContext>({
+  return useMutation<CommunicationDraft, Error, ComposeDraftPayload, DraftMutationContext>({
     mutationFn: async (draft: ComposeDraftPayload) => {
       return createDraft(draft)
     },
@@ -176,7 +176,7 @@ export function useDeleteDraftMutation() {
 
 export function useUndoOutboxMutation() {
   const queryClient = useQueryClient()
-  return useMutation<EmailOutboxItem, Error, string, OutboxMutationContext>({
+  return useMutation<CommunicationOutboxItem, Error, string, OutboxMutationContext>({
     mutationFn: async (outboxId: string) => {
       return undoOutboxItem(outboxId)
     },
@@ -220,7 +220,7 @@ export function usePrepareBilingualReplyFlowMutation() {
 
 export function useRedirectMessageMutation() {
   const queryClient = useQueryClient()
-  return useMutation<SendEmailResponse, Error, { messageId: string; request: RedirectMessageRequest }>({
+  return useMutation<SendCommunicationResponse, Error, { messageId: string; request: RedirectMessageRequest }>({
     mutationFn: async ({ messageId, request }) => redirectMessage(messageId, request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['communications-outbox'] })
@@ -251,7 +251,7 @@ function restoreOutboxLists(
 function upsertOutboxItemInOutboxPage(
   data: InfiniteData<OutboxListResponse> | undefined,
   queryKey: readonly unknown[],
-  item: EmailOutboxItem
+  item: CommunicationOutboxItem
 ): InfiniteData<OutboxListResponse> | undefined {
   if (!data) return data
   if (!outboxQueryMatches(queryKey, item)) {
@@ -322,7 +322,7 @@ function removeOutboxItemFromOutboxPage(
 function optimisticDraftFromPayload(
   draft: ComposeDraftPayload,
   draftLists: Array<[readonly unknown[], InfiniteData<DraftListResponse> | undefined]>
-): EmailDraft {
+): CommunicationDraft {
   const existing = findCachedDraft(draftLists, draft.draft_id)
   const now = new Date().toISOString()
 
@@ -351,7 +351,7 @@ function optimisticDraftFromPayload(
 function findCachedDraft(
   draftLists: Array<[readonly unknown[], InfiniteData<DraftListResponse> | undefined]>,
   draftId: string
-): EmailDraft | undefined {
+): CommunicationDraft | undefined {
   for (const [, data] of draftLists) {
     for (const page of data?.pages ?? []) {
       const draft = page.items.find((item) => item.draft_id === draftId)
@@ -363,7 +363,7 @@ function findCachedDraft(
 
 function upsertDraftInDraftPages(
   data: InfiniteData<DraftListResponse> | undefined,
-  draft: EmailDraft
+  draft: CommunicationDraft
 ): InfiniteData<DraftListResponse> | undefined {
   if (!data) return data
   const firstPage = data.pages[0]
@@ -405,7 +405,7 @@ function draftQueryMatchesAccount(queryKey: readonly unknown[], accountId: strin
   return typeof queryAccountId !== 'string' || queryAccountId === accountId
 }
 
-function outboxQueryMatches(queryKey: readonly unknown[], item: EmailOutboxItem): boolean {
+function outboxQueryMatches(queryKey: readonly unknown[], item: CommunicationOutboxItem): boolean {
   const queryAccountId = queryKey[1]
   const queryStatus = queryKey[2]
 
@@ -453,16 +453,16 @@ export function useBulkMessageActionMutation() {
       ])
 
       const previousMailLists =
-        queryClient.getQueriesData<InfiniteData<MailMessagesResponse>>({
+        queryClient.getQueriesData<InfiniteData<CommunicationMessagesResponse>>({
           queryKey: ['communications-mail-list']
         })
       const previousMessages = messageQueryKeys.map((queryKey) => {
         return [
           queryKey,
-          queryClient.getQueryData<MailMessageDetailResponse | null>(queryKey)
+          queryClient.getQueryData<CommunicationMessageDetailResponse | null>(queryKey)
         ] as [
           readonly ['communications-message', string],
-          MailMessageDetailResponse | null | undefined
+          CommunicationMessageDetailResponse | null | undefined
         ]
       })
 

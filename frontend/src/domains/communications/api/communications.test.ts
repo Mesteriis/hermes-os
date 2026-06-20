@@ -5,7 +5,7 @@ import {
   createSavedSearch,
   deleteSavedSearch,
   deleteRichTemplate,
-  fetchMailMessages,
+  fetchCommunicationMessages,
   fetchDrafts,
   fetchSubscriptions,
   fetchTopSenders,
@@ -41,7 +41,7 @@ describe('communications API', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    const response = await fetchMailMessages(
+    const response = await fetchCommunicationMessages(
       'account-1',
       'new',
       'email',

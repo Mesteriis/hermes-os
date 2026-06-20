@@ -42,25 +42,25 @@
 ### Task 1: Mail Handler God File Decomposition
 
 **Files:**
-- Modify: `backend/src/domains/mail/handlers/mod.rs`
-- Create: `backend/src/domains/mail/handlers/account_management.rs`
-- Create: `backend/src/domains/mail/handlers/account_setup.rs`
-- Create: `backend/src/domains/mail/handlers/account_support.rs`
-- Create: `backend/src/domains/mail/handlers/communication_messages.rs`
-- Create: `backend/src/domains/mail/handlers/communication_queries.rs`
-- Create: `backend/src/domains/mail/handlers/finance_analytics.rs`
-- Create: `backend/src/domains/mail/handlers/legal_export.rs`
-- Create: `backend/src/domains/mail/handlers/message_actions.rs`
-- Create: `backend/src/domains/mail/handlers/sending.rs`
-- Create: `backend/src/domains/mail/handlers/templates_status.rs`
-- Create: `backend/src/domains/mail/handlers/workflow_state.rs`
+- Modify: `backend/src/domains/communications/handlers/mod.rs`
+- Create: `backend/src/domains/communications/handlers/account_management.rs`
+- Create: `backend/src/domains/communications/handlers/account_setup.rs`
+- Create: `backend/src/domains/communications/handlers/account_support.rs`
+- Create: `backend/src/domains/communications/handlers/communication_messages.rs`
+- Create: `backend/src/domains/communications/handlers/communication_queries.rs`
+- Create: `backend/src/domains/communications/handlers/finance_analytics.rs`
+- Create: `backend/src/domains/communications/handlers/legal_export.rs`
+- Create: `backend/src/domains/communications/handlers/message_actions.rs`
+- Create: `backend/src/domains/communications/handlers/sending.rs`
+- Create: `backend/src/domains/communications/handlers/templates_status.rs`
+- Create: `backend/src/domains/communications/handlers/workflow_state.rs`
 
 - [x] **Step 1: Verify the stop-factor fails**
 
 Run:
 
 ```sh
-test "$(wc -l < backend/src/domains/mail/handlers/mod.rs | tr -d ' ')" -le 700
+test "$(wc -l < backend/src/domains/communications/handlers/mod.rs | tr -d ' ')" -le 700
 ```
 
 Expected before refactor: FAIL because the file has 3000 lines.
@@ -69,14 +69,14 @@ Expected before refactor: FAIL because the file has 3000 lines.
 
 Move contiguous handler groups into sibling modules and keep `pub(crate)` route handlers re-exported from `mod.rs`.
 
-The resulting `backend/src/domains/mail/handlers/mod.rs` owns module assembly and imports only. Handler modules own one bounded route group each.
+The resulting `backend/src/domains/communications/handlers/mod.rs` owns module assembly and imports only. Handler modules own one bounded route group each.
 
 - [x] **Step 3: Verify the target files are below threshold**
 
 Run:
 
 ```sh
-find backend/src/domains/mail/handlers -maxdepth 1 -type f -name '*.rs' -print0 \
+find backend/src/domains/communications/handlers -maxdepth 1 -type f -name '*.rs' -print0 \
   | xargs -0 wc -l \
   | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
 ```
@@ -99,7 +99,7 @@ Expected after refactor: PASS.
 Run:
 
 ```sh
-git add backend/src/domains/mail/handlers docs/superpowers/plans/2026-06-13-documentation-alignment-architecture-gates.md IMPLEMENTATION_STATUS.md
+git add backend/src/domains/communications/handlers docs/superpowers/plans/2026-06-13-documentation-alignment-architecture-gates.md IMPLEMENTATION_STATUS.md
 git commit -m "refactor: split mail handler modules"
 ```
 
@@ -1225,37 +1225,37 @@ make lint-architecture
 ### Task 30: Mail Background Sync Boundary Decomposition
 
 **Files:**
-- Modify: `backend/src/domains/mail/background_sync.rs`
-- Create: `backend/src/domains/mail/background_sync/errors.rs`
-- Create: `backend/src/domains/mail/background_sync/models.rs`
-- Create: `backend/src/domains/mail/background_sync/provider.rs`
-- Create: `backend/src/domains/mail/background_sync/rows.rs`
-- Create: `backend/src/domains/mail/background_sync/service.rs`
-- Create: `backend/src/domains/mail/background_sync/store.rs`
-- Create: `backend/src/domains/mail/background_sync/validation.rs`
+- Modify: `backend/src/domains/communications/background_sync.rs`
+- Create: `backend/src/domains/communications/background_sync/errors.rs`
+- Create: `backend/src/domains/communications/background_sync/models.rs`
+- Create: `backend/src/domains/communications/background_sync/provider.rs`
+- Create: `backend/src/domains/communications/background_sync/rows.rs`
+- Create: `backend/src/domains/communications/background_sync/service.rs`
+- Create: `backend/src/domains/communications/background_sync/store.rs`
+- Create: `backend/src/domains/communications/background_sync/validation.rs`
 
 - [x] **Step 1: Verify mail background sync boundary failure**
 
 Run:
 
 ```sh
-test "$(wc -l < backend/src/domains/mail/background_sync.rs | tr -d ' ')" -le 700
-test -d backend/src/domains/mail/background_sync
+test "$(wc -l < backend/src/domains/communications/background_sync.rs | tr -d ' ')" -le 700
+test -d backend/src/domains/communications/background_sync
 ```
 
 Expected before refactor: FAIL because `background_sync.rs` had 1684 lines and mixed run orchestration, provider network sync, SQL persistence, row mapping, DTOs, errors and validation helpers.
 
 - [x] **Step 2: Extract bounded background sync modules**
 
-Keep `crate::domains::mail::background_sync` as the public import path by replacing `background_sync.rs` with a facade. Move lifecycle orchestration into `service.rs`, provider network/projection loops into `provider.rs`, SQL persistence into `store.rs`, public DTOs and internal run models into `models.rs`, error enums into `errors.rs`, SQL row mapping into `rows.rs`, and validation/helper functions into `validation.rs`.
+Keep `crate::domains::communications::background_sync` as the public import path by replacing `background_sync.rs` with a facade. Move lifecycle orchestration into `service.rs`, provider network/projection loops into `provider.rs`, SQL persistence into `store.rs`, public DTOs and internal run models into `models.rs`, error enums into `errors.rs`, SQL row mapping into `rows.rs`, and validation/helper functions into `validation.rs`.
 
 - [x] **Step 3: Validate**
 
 Run:
 
 ```sh
-test "$(wc -l < backend/src/domains/mail/background_sync.rs | tr -d ' ')" -le 700
-find backend/src/domains/mail/background_sync -type f -name '*.rs' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
+test "$(wc -l < backend/src/domains/communications/background_sync.rs | tr -d ' ')" -le 700
+find backend/src/domains/communications/background_sync -type f -name '*.rs' -print0 | xargs -0 wc -l | awk '$2 != "total" && $1 > 700 { print; failed=1 } END { exit failed ? 1 : 0 }'
 cargo fmt --manifest-path backend/Cargo.toml --check
 cargo check --manifest-path backend/Cargo.toml
 cargo test --manifest-path backend/Cargo.toml mail_sync

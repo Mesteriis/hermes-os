@@ -10,14 +10,14 @@ pub(crate) use hermes_hub_backend::ai::core::{
     AiRunStore, NewSemanticEmbedding, SemanticEmbeddingStore, SemanticSourceKind,
 };
 pub(crate) use hermes_hub_backend::app::{build_router, build_router_with_database};
-pub(crate) use hermes_hub_backend::domains::documents::core::{
-    DocumentImportStore, NewDocumentImport,
-};
-pub(crate) use hermes_hub_backend::domains::mail::core::{
+pub(crate) use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-pub(crate) use hermes_hub_backend::domains::mail::messages::{
+pub(crate) use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
+};
+pub(crate) use hermes_hub_backend::domains::documents::core::{
+    DocumentImportStore, NewDocumentImport,
 };
 pub(crate) use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
 pub(crate) use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};

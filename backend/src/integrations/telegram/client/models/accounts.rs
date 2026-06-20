@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::domains::mail::core::CommunicationProviderKind;
+use crate::platform::communications::CommunicationProviderKind;
 use crate::platform::secrets::{SecretKind, SecretStoreKind};
 
 use super::super::errors::TelegramError;

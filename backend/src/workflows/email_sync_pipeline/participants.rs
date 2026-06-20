@@ -1,6 +1,6 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::mail::messages::{MessageProjectionStore, ProjectedMessage};
+use crate::domains::communications::messages::{MessageProjectionStore, ProjectedMessage};
 
 use super::errors::EmailSyncPipelineError;
 

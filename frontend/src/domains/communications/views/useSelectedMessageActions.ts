@@ -20,7 +20,7 @@ import {
 } from '../queries/useCommunicationsQuery'
 import { splitComposeRecipients } from '../forms/composeValidation'
 import {
-  emptyMailMessageInsight,
+  emptyCommunicationMessageInsight,
   forwardComposeForm,
   newComposeForm,
   replyAllComposeForm,
@@ -29,7 +29,7 @@ import {
 import type { useCommunicationsStore } from '../stores/communications'
 import type {
   AiReplyResponse,
-  MailMessageDetailItem,
+  CommunicationMessageDetailItem,
   MessageExportFormat
 } from '../types/communications'
 import type { BilingualReplyFlowResponse } from '../types/bilingualReplyFlow'
@@ -38,7 +38,7 @@ type CommunicationsStore = ReturnType<typeof useCommunicationsStore>
 type RefetchHandler = () => Promise<unknown>
 
 type SelectedMessageActionOptions = {
-  getMessageDetail: () => MailMessageDetailItem | null
+  getMessageDetail: () => CommunicationMessageDetailItem | null
   refetchMessageDetail: RefetchHandler
 }
 
@@ -220,8 +220,8 @@ export function useSelectedMessageActions(
   async function handleTranslate() {
     await runSelectedMessageAction(async (messageId) => {
       const result = await translateMessageMutation.mutateAsync({ messageId, targetLanguage: 'en' })
-      store.setMailMessageInsight({
-        ...(store.mailMessageInsight ?? emptyMailMessageInsight(messageId)),
+      store.setCommunicationMessageInsight({
+        ...(store.mailMessageInsight ?? emptyCommunicationMessageInsight(messageId)),
         translation: result
       })
       return 'Translated'
@@ -235,8 +235,8 @@ export function useSelectedMessageActions(
         tone: replyOptions.tone,
         language: replyOptions.language
       })
-      store.setMailMessageInsight({
-        ...(store.mailMessageInsight ?? emptyMailMessageInsight(messageId)),
+      store.setCommunicationMessageInsight({
+        ...(store.mailMessageInsight ?? emptyCommunicationMessageInsight(messageId)),
         aiReply: result
       })
       return result.generated === false ? result.reason || 'AI reply not generated' : 'AI reply generated'
@@ -266,8 +266,8 @@ export function useSelectedMessageActions(
   async function handleReviewSecurity() {
     await runSelectedMessageAction(async (messageId) => {
       const result = await reviewSecurityMutation.mutateAsync(messageId)
-      store.setMailMessageInsight({
-        ...(store.mailMessageInsight ?? emptyMailMessageInsight(messageId)),
+      store.setCommunicationMessageInsight({
+        ...(store.mailMessageInsight ?? emptyCommunicationMessageInsight(messageId)),
         auth: result.auth,
         signature: result.signature
       })
@@ -278,8 +278,8 @@ export function useSelectedMessageActions(
   async function handleReviewRecipients() {
     await runSelectedMessageAction(async (messageId) => {
       const result = await reviewRecipientsMutation.mutateAsync(messageId)
-      store.setMailMessageInsight({
-        ...(store.mailMessageInsight ?? emptyMailMessageInsight(messageId)),
+      store.setCommunicationMessageInsight({
+        ...(store.mailMessageInsight ?? emptyCommunicationMessageInsight(messageId)),
         smartCc: result
       })
       return `${result.suggestions.length} recipient suggestions`
@@ -289,8 +289,8 @@ export function useSelectedMessageActions(
   async function handleCreateTask() {
     await runSelectedMessageAction(async (messageId) => {
       const result = await extractMessageTasksMutation.mutateAsync(messageId)
-      store.setMailMessageInsight({
-        ...(store.mailMessageInsight ?? emptyMailMessageInsight(messageId)),
+      store.setCommunicationMessageInsight({
+        ...(store.mailMessageInsight ?? emptyCommunicationMessageInsight(messageId)),
         tasks: result.tasks
       })
       return `Extracted ${result.tasks.length} tasks`
@@ -300,8 +300,8 @@ export function useSelectedMessageActions(
   async function handleCreateNote() {
     await runSelectedMessageAction(async (messageId) => {
       const result = await extractMessageNotesMutation.mutateAsync(messageId)
-      store.setMailMessageInsight({
-        ...(store.mailMessageInsight ?? emptyMailMessageInsight(messageId)),
+      store.setCommunicationMessageInsight({
+        ...(store.mailMessageInsight ?? emptyCommunicationMessageInsight(messageId)),
         notes: result.notes
       })
       return `Extracted ${result.notes.length} notes`

@@ -1,5 +1,5 @@
-use hermes_hub_backend::domains::mail::core::CommunicationIngestionError;
-use hermes_hub_backend::integrations::gmail::client::EmailProviderNetworkError;
+use hermes_hub_backend::domains::communications::core::CommunicationIngestionError;
+use hermes_hub_backend::integrations::mail::gmail::client::EmailProviderNetworkError;
 use hermes_hub_backend::platform::config::ConfigError;
 use hermes_hub_backend::platform::secrets::SecretResolutionError;
 use hermes_hub_backend::platform::storage::StorageError;

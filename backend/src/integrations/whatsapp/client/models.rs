@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::domains::mail::core::CommunicationProviderKind;
+use crate::platform::communications::CommunicationProviderKind;
 
 use super::errors::WhatsappWebError;
 use super::validation::{validate_non_empty, validate_object};

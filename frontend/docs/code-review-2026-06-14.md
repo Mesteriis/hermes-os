@@ -206,14 +206,14 @@ Blocking code regressions внутри самих split modules не подтв�
 
 ## Дополнение: ревью текущего Mail/Persons SRP split diff
 
-**Объём:** `backend/src/domains/mail/core/models.rs`, новые `backend/src/domains/mail/core/models/*` modules, `backend/src/domains/persons/enrichment.rs`, новые `backend/src/domains/persons/enrichment/*` modules, `IMPLEMENTATION_STATUS.md`.
+**Объём:** `backend/src/domains/communications/core/models.rs`, новые `backend/src/domains/communications/core/models/*` modules, `backend/src/domains/persons/enrichment.rs`, новые `backend/src/domains/persons/enrichment/*` modules, `IMPLEMENTATION_STATUS.md`.
 **ADR:** ADR-0041, ADR-0046, ADR-0055, ADR-0076, ADR-0084, ADR-0086, ADR-0090.
 
 ### Major: новые Mail/Persons split modules сейчас untracked
 
-**Статус:** Открыто до staging/commit. `git status --short` показывает `?? backend/src/domains/mail/core/models/` и `?? backend/src/domains/persons/enrichment/` вместе с facade changes.
+**Статус:** Открыто до staging/commit. `git status --short` показывает `?? backend/src/domains/communications/core/models/` и `?? backend/src/domains/persons/enrichment/` вместе с facade changes.
 
-**Файлы:** `backend/src/domains/mail/core/models.rs`, `backend/src/domains/mail/core/models/*`, `backend/src/domains/persons/enrichment.rs`, `backend/src/domains/persons/enrichment/*`
+**Файлы:** `backend/src/domains/communications/core/models.rs`, `backend/src/domains/communications/core/models/*`, `backend/src/domains/persons/enrichment.rs`, `backend/src/domains/persons/enrichment/*`
 
 Оба facade-файла теперь объявляют child modules через `mod ...;`. Если tracked facade changes попадут в commit без новых module files, backend перестанет компилироваться. Это тот же integration risk, что уже зафиксирован для OmniRoute/Project split-а, теперь он распространяется и на Mail core model / Persons enrichment split.
 
@@ -264,20 +264,20 @@ Blocking code regressions внутри API support stores split modules не п�
 
 ## Дополнение: ревью текущего Mail Rules SRP split diff
 
-**Объём:** `backend/src/domains/mail/rules.rs`, новые `backend/src/domains/mail/rules/*` modules, `IMPLEMENTATION_STATUS.md`.
+**Объём:** `backend/src/domains/communications/rules.rs`, новые `backend/src/domains/communications/rules/*` modules, `IMPLEMENTATION_STATUS.md`.
 **ADR:** ADR-0041, ADR-0046, ADR-0052, ADR-0055, ADR-0092.
 
 ### Major: новый Mail rules split directory сейчас untracked
 
-**Статус:** Открыто до staging/commit. `git status --short` показывает `?? backend/src/domains/mail/rules/` вместе с tracked facade change `M backend/src/domains/mail/rules.rs`.
+**Статус:** Открыто до staging/commit. `git status --short` показывает `?? backend/src/domains/communications/rules/` вместе с tracked facade change `M backend/src/domains/communications/rules.rs`.
 
-**Файлы:** `backend/src/domains/mail/rules.rs`, `backend/src/domains/mail/rules/*`
+**Файлы:** `backend/src/domains/communications/rules.rs`, `backend/src/domains/communications/rules/*`
 
 Facade теперь объявляет child modules через `mod ...;`. Если в commit попадет только tracked facade file без новых module files, backend не соберется. Это тот же integration risk, что уже зафиксирован для остальных SRP split-ов.
 
 **Impact:** partial commit/PR ломает compile path для mail rule models, mode parsing, store persistence, condition evaluation, row mapping and validation.
 
-**Fix:** перед commit/staging добавить `backend/src/domains/mail/rules/` вместе с facade changes и проверять staged diff.
+**Fix:** перед commit/staging добавить `backend/src/domains/communications/rules/` вместе с facade changes и проверять staged diff.
 
 ### Review note
 
@@ -458,14 +458,14 @@ Blocking split-induced regressions внутри Dev Email Sync modules не по
 
 ## Дополнение: ревью текущего Mail Communication Queries / Finance Analytics SRP split diff
 
-**Объём:** `backend/src/domains/mail/handlers/communication_queries.rs`, новые `backend/src/domains/mail/handlers/communication_queries/*` modules, `backend/src/domains/mail/handlers/finance_analytics.rs`, новые `backend/src/domains/mail/handlers/finance_analytics/*` modules, `IMPLEMENTATION_STATUS.md`.
+**Объём:** `backend/src/domains/communications/handlers/communication_queries.rs`, новые `backend/src/domains/communications/handlers/communication_queries/*` modules, `backend/src/domains/communications/handlers/finance_analytics.rs`, новые `backend/src/domains/communications/handlers/finance_analytics/*` modules, `IMPLEMENTATION_STATUS.md`.
 **ADR:** ADR-0080, ADR-0085; `docs/domains/communications.md`.
 
 ### Major: новые Mail handler split directories сейчас untracked
 
-**Статус:** Открыто до staging/commit. `git status --short` показывает `?? backend/src/domains/mail/handlers/communication_queries/` и `?? backend/src/domains/mail/handlers/finance_analytics/` вместе с tracked facade changes.
+**Статус:** Открыто до staging/commit. `git status --short` показывает `?? backend/src/domains/communications/handlers/communication_queries/` и `?? backend/src/domains/communications/handlers/finance_analytics/` вместе с tracked facade changes.
 
-**Файлы:** `backend/src/domains/mail/handlers/communication_queries.rs`, `backend/src/domains/mail/handlers/communication_queries/*`, `backend/src/domains/mail/handlers/finance_analytics.rs`, `backend/src/domains/mail/handlers/finance_analytics/*`
+**Файлы:** `backend/src/domains/communications/handlers/communication_queries.rs`, `backend/src/domains/communications/handlers/communication_queries/*`, `backend/src/domains/communications/handlers/finance_analytics.rs`, `backend/src/domains/communications/handlers/finance_analytics/*`
 
 Facade files теперь объявляют child modules через `mod ...;`. Если commit попадет только с tracked facade files без новых module directories, backend не соберется. Риск повышен тем, что ordinary `git diff --stat` по tracked files показывает только сокращение facades и не показывает содержимое untracked modules.
 

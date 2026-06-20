@@ -5,7 +5,7 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::platform::config::AppConfig;
@@ -51,7 +51,7 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
     let secret_ref = "secret:provider-account:icloud-recover:imap_password";
     let response = app
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/email-accounts/imap",
+            "/api/v1/communications/mail/accounts/imap",
             json!({
                 "account_id": account_id,
                 "provider_kind": "icloud",

@@ -32,10 +32,10 @@ Organization, Project, Obligation or Decision lifecycle.
 
 | Module | Files | Status |
 |---|---|---|
-| Workbench page | `frontend/src/domains/telegram/views/TelegramPage.vue` | DONE |
-| API clients | `frontend/src/domains/telegram/api/` | DONE |
-| TanStack Query composables | `frontend/src/domains/telegram/queries/` | DONE |
-| Local UI store | `frontend/src/domains/telegram/stores/telegram.ts` | DONE |
+| Workbench page | `frontend/src/integrations/telegram/views/TelegramPage.vue` | DONE |
+| API clients | `frontend/src/integrations/telegram/api/` | DONE |
+| TanStack Query composables | `frontend/src/integrations/telegram/queries/` | DONE |
+| Local UI store | `frontend/src/integrations/telegram/stores/telegram.ts` | DONE |
 | Dialog list/actions | `TelegramChatList.vue`, `TelegramActionRail.vue`, `dialogActionHelpers.ts` | DONE |
 | Thread/timeline | `TelegramMessageThread.vue`, `thread/TelegramMessageList.vue` | DONE |
 | Lifecycle/reference evidence | `thread/TelegramMessageReferencePanel.vue`, lifecycle/reference queries | DONE |

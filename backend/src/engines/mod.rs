@@ -1,10 +1,9 @@
 pub mod automation;
-pub mod automation_api;
 pub mod consistency;
-pub mod consistency_api;
 pub mod context_packs;
 pub mod decision;
 pub mod enrichment;
+pub mod graph_projection;
 pub mod identity_resolution;
 pub mod memory;
 pub mod obligation;

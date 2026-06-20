@@ -1,24 +1,64 @@
-import type {
-	Relationship,
-	RelationshipReviewState
-} from '../../personas/types/persona'
-import type {
-	Decision,
-	DecisionReviewState,
-	Obligation,
-	ObligationReviewState
-} from '../../tasks/types/task'
-import type {
-	ContradictionObservation,
-	ContradictionReviewState
-} from '../../knowledge/types/knowledge'
+export type RelationshipReviewState = 'suggested' | 'system_accepted' | 'user_confirmed' | 'user_rejected'
+export type DecisionReviewState = 'suggested' | 'user_confirmed' | 'user_rejected'
+export type ObligationReviewState = 'suggested' | 'user_confirmed' | 'user_rejected'
+export type ContradictionReviewState = 'suggested' | 'user_confirmed' | 'user_rejected'
+export type UserRelationshipReviewState = Extract<
+	RelationshipReviewState,
+	'user_confirmed' | 'user_rejected'
+>
 
-export type { Relationship, Decision, Obligation, ContradictionObservation }
-export type {
-	DecisionReviewState,
-	ObligationReviewState,
-	ContradictionReviewState,
-	RelationshipReviewState
+export interface Relationship {
+	relationship_id: string
+	source_entity_kind: string
+	source_entity_id: string
+	target_entity_kind: string
+	target_entity_id: string
+	relationship_type: string
+	trust_score?: number | null
+	review_state: RelationshipReviewState
+}
+
+export interface Decision {
+	decision_id: string
+	title: string
+	decided_by_entity_kind?: string | null
+	decided_by_entity_id?: string | null
+	decided_at?: string | null
+	review_state: DecisionReviewState
+}
+
+export interface Obligation {
+	obligation_id: string
+	statement: string
+	obligated_entity_kind: string
+	obligated_entity_id: string
+	due_at?: string | null
+	review_state: ObligationReviewState
+}
+
+export interface ContradictionObservation {
+	observation_id: string
+	old_claim: string
+	new_claim: string
+	severity: string
+	created_at: string
+	review_state: ContradictionReviewState
+}
+
+export interface RelationshipListResponse {
+	relationships: Relationship[]
+}
+
+export interface DecisionListResponse {
+	items: Decision[]
+}
+
+export interface ObligationListResponse {
+	items: Obligation[]
+}
+
+export interface ContradictionListResponse {
+	items: ContradictionObservation[]
 }
 
 export type ReviewWorkspaceItemKind = 'relationship' | 'decision' | 'obligation' | 'contradiction'
@@ -73,7 +113,7 @@ export type ReviewWorkspaceItemAction =
 	| {
 			kind: 'relationship'
 			item: Relationship
-			reviewState: string
+			reviewState: UserRelationshipReviewState
 	  }
 	| {
 			kind: 'decision'

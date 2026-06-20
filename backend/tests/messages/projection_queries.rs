@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::messages::{
     LocalMessageState, MessageProjectionError, MessageSearchMatchMode, MessageSearchQuery,
     NewProjectedMessage, ProjectedMessagePageQuery, WorkflowState, project_raw_email_message,
 };

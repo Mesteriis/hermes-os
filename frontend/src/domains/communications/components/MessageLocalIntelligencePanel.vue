@@ -8,13 +8,13 @@ import {
 } from '../queries/useCommunicationsQuery'
 import type {
   LanguageDetection,
-  MailMessageInsight,
+  CommunicationMessageInsight,
   MessageExplainResponse
 } from '../types/communications'
 
 const props = defineProps<{
   messageId: string | null
-  insight: MailMessageInsight | null
+  insight: CommunicationMessageInsight | null
 }>()
 
 const explainMutation = useExplainMessageMutation()

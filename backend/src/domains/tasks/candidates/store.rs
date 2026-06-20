@@ -1,5 +1,4 @@
 mod list;
-mod obligation_sync;
 mod refresh;
 mod review;
 mod task_activation;

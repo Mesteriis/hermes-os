@@ -61,15 +61,6 @@ pub(super) fn projection_error_parts(error: PersonProjectionError) -> ErrorParts
             error.to_string(),
             false,
         ),
-        PersonProjectionError::Graph(error) => {
-            tracing::error!(error = %error, "person graph projection operation failed");
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "person_projection_error",
-                "person projection operation failed".to_owned(),
-                false,
-            )
-        }
         PersonProjectionError::Sqlx(error) => {
             tracing::error!(error = %error, "person projection operation failed");
             (

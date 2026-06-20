@@ -1,8 +1,8 @@
 pub mod brain;
+mod command_service;
 pub mod core;
 pub mod events;
 pub(crate) mod evidence;
-pub mod handlers;
 pub mod health;
 pub mod intelligence;
 pub mod meetings;

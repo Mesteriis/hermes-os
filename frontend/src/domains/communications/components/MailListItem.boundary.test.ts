@@ -6,7 +6,7 @@ describe('MailListItem drag payload boundary', () => {
     const source = readFileSync(new URL('./MailListItem.vue', import.meta.url), 'utf8')
 
     expect(source).toContain('selectedMessageIds: string[]')
-    expect(source).toContain('createMailMessageDragPayload(props.message.message_id, props.selectedMessageIds)')
+    expect(source).toContain('createCommunicationMessageDragPayload(props.message.message_id, props.selectedMessageIds)')
     expect(source).toContain('role="option"')
     expect(source).toContain(':aria-selected="isChecked || isSelected"')
   })

@@ -11,6 +11,7 @@ describe('CommunicationsActionBar export boundary', () => {
     expect(source).toContain('Export ready')
     expect(source).toContain('MailResourceOverviewStrip')
     expect(source).toContain('MailSyncSettingsStrip')
+    expect(source).toContain('../../../integrations/mail/components/MailSyncSettingsStrip.vue')
     expect(source).toContain('MailCertificateStrip')
     expect(source).toContain('hasMoreDrafts')
     expect(source).toContain('isLoadingMoreDrafts')

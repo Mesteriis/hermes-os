@@ -1,8 +1,7 @@
-use crate::domains::obligations::ObligationReviewState;
-
 use super::errors::ObligationEngineError;
 use super::models::{
-    ObligationCandidate, ObligationCandidateKind, ObligationExtractionInput, validate_non_empty,
+    ObligationCandidate, ObligationCandidateKind, ObligationExtractionInput, ObligationReviewState,
+    validate_non_empty,
 };
 
 pub(crate) fn detect_commitment(

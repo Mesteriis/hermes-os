@@ -78,11 +78,11 @@ gap в текущем периоде закрыт.
 | Document processing job evidence trail | `document_processing_jobs` теперь пишут canonical evidence trail из owner-store `domains/documents/processing/jobs.rs`: queued/upsert дает `DOCUMENT_PROCESSING_JOB`, а `running/requeued/succeeded/failed/skipped` дают `DOCUMENT_PROCESSING_JOB_STATUS`; `observation_link` пишется на `documents/document_processing_job`. API error mapping обновлен под `ObservationStoreError`; regression tests расширены assertion-ами на `observation_links`. Architecture guard теперь также запрещает direct `document_processing_jobs` mutations вне owner file. | Live DB assertions в existing tests зависят от `HERMES_TEST_DATABASE_URL`; без него targeted tests только компилируются и скипаются. | Следующий шаг: идти дальше в remaining runtime/job owners после document processing/mail sync. | Частично |
 | API owner cleanup: obligations / contradictions / document retry | `put_v1_obligation_review`, `put_v1_contradiction_review` и `post_document_processing_job_retry` больше не пишут `observation_links` напрямую из API layer. Для `obligations` и `consistency` link creation поднят в owner store methods `set_review_state_with_observation(...)`; для document retry API сначала делает durable retry command, затем materialize-ит manual `DOCUMENT_PROCESSING_JOB_STATUS` observation и через idempotent owner path `retry_failed_job_with_observation(...)` привязывает `retry_command` link к `documents/document_processing_job`. Быстрый grep по этим API-файлам на `upsert_link`/`NewObservationLink` теперь пустой. | Следующие большие API-heavy кластеры все еще остаются в `calendar`, `mail`, а также в compatibility API paths `tasks` и `organizations`. Live DB доказательство для свежего document retry path зависит от `HERMES_TEST_DATABASE_URL`; в текущей среде есть compile gate и skip-aware targeted tests. | Следующий owner pass: `calendar/handlers/*` и `mail/handlers/*`, затем compatibility API cleanup для `tasks` и `organizations`. | Частично |
 | Mail background sync run evidence trail | `communication_mail_sync_runs` теперь materialize canonical evidence trail в owner store: `start_run` пишет `COMMUNICATION_MAIL_SYNC_RUN`, а `update_progress`, `mark_recoverable_full_resync`, `finish_run`, `mark_orphaned_active_runs_failed` пишут `COMMUNICATION_MAIL_SYNC_RUN_STATUS`; `observation_link` идет на `communications/mail_sync_run`. `v1_communications_api` расширен проверкой observation trail для `sync-now`, architecture guard запрещает direct run mutations вне owner files. | Live execution ветки по-прежнему зависит от `HERMES_TEST_DATABASE_URL`; без него остается compile-only coverage. Нужно пройти оставшиеся runtime/job owners и, вероятно, добавить отдельный guard на `document_processing_jobs`. | Следующий technical pass: remaining runtime/job owners after mail sync, starting with adjacent document/semantic/background slices plus missing direct-mutation guards. | Частично |
-| Mail drafts / folders / saved searches owner cleanup | `backend/src/domains/mail/handlers/communication_queries/{drafts,folders,saved_searches}.rs` больше не пишут `observation_link` напрямую. Durable linking поднят в owner stores: `EmailDraftStore::{upsert_with_observation,delete_with_observation}`, `MailFolderStore::{create_with_observation,update_with_observation,delete_with_observation,copy_message_with_observation,move_message_with_observation}`, `MailSavedSearchStore::{create_with_observation,update_with_observation,delete_with_observation}`. Таргетные regressions `v1_post_draft`, `v1_custom_folders_copy_move_and_events_against_postgres`, `v1_saved_searches_crud_and_events_against_postgres` и architecture guard прошли после cleanup. | В mail handler layer после этого среза еще остаются `message_actions`, `sending/*` и `workflow_actions/*`; CRUD/query owners для drafts/folders/saved searches сняты с handler-level linking. | Следующий mail pass: `message_actions` и `sending/local_state` как следующий message-mutation cluster. | Частично |
-| Mail workflow / local-state / AI / outbox / attachment-import owner cleanup | `backend/src/domains/mail/handlers/{workflow_state,message_ai_state}.rs`, `backend/src/domains/mail/handlers/communication_queries/{outbox,imports}.rs` и `backend/src/domains/mail/handlers/sending/local_state.rs` больше не materialize `observation_link` напрямую. Durable linking поднят в owner layers: `MessageProjectionStore::{transition_workflow_state_with_observation,move_to_local_trash_with_observation,restore_from_local_trash_with_observation}`, `MailAiStateStore::transition_with_observation(...)`, `EmailOutboxStore::undo_with_observation(...)`, `MailStorageStore::upsert_imported_attachment_with_observation(...)`. Live regressions `v1_message_ai_state_transitions_are_durable_and_emit_event_against_postgres`, `v1_local_state_endpoints_capture_observation_trail_against_postgres`, `drafts_outbox::v1_send_schedules_outbox_message_and_allows_undo_against_postgres`, `telegram_media_upload_imports_attachment_and_queues_provider_command` и architecture guard прошли после cleanup. Во время этого pass найден и закрыт системный баг merge semantics: extra metadata больше не перетирает базовую owner metadata в новых mail owner methods. | В mail handler layer остаются `message_actions`, `sending/{forwarding,provider_send}` и `workflow_actions/actions/{calendar,documents,tasks}.rs`; это уже следующий message/runtime mutation cluster. | Следующий mail pass: `message_actions`, затем `provider_send/forwarding` и workflow projections. | Частично |
-| Mail message-actions owner cleanup | `backend/src/domains/mail/handlers/message_actions.rs` больше не materialize `message_flag_update` links напрямую. Durable linking поднят в owner layers: `MessageProjectionStore::set_message_metadata_with_observation(...)` и `MessageFlags::{toggle_pin_with_observation,toggle_important_with_observation,snooze_with_observation,add_label_with_observation,remove_label_with_observation,toggle_mute_with_observation}`. Live regression `message_important_endpoint_toggles_metadata_flag` прошел после cleanup, а grep по handler больше не находит `NewObservationLink`/`upsert_link`. | В mail handler layer остаются `sending/{forwarding,provider_send}` и `workflow_actions/actions/{calendar,documents,tasks}.rs`; рядом также нужно отдельно решить, нужен ли аналогичный owner-path для bulk message actions beyond existing store. | Следующий mail pass: `provider_send/forwarding`, затем workflow projections и при необходимости bulk message actions consistency pass. | Частично |
-| Mail forwarding and workflow-projection owner cleanup | `backend/src/domains/mail/handlers/sending/forwarding.rs` и `backend/src/domains/mail/handlers/workflow_actions/actions/{calendar,documents,tasks}.rs` больше не пишут `observation_link` напрямую. Durable linking поднят в owner layers: `EmailOutboxStore::enqueue_with_observation(...)`, `CalendarEventStore::create_manual_with_observation_in_transaction(...)`, `DocumentImportStore::import_document_manual_with_observation_in_transaction(...)`; `workflow_actions/tasks.rs` теперь полагается на уже существующий observation-aware `TaskStore::create_in_transaction(...)` и не дублирует task link из handler. Compile gate для `v1_workflow_actions`/`v1_communications_regressions`/`v1_communications_api`, skip-aware workflow regressions (`create_event`, `create_note`, `link_document`), live outbox regression `drafts_outbox::v1_send_schedules_outbox_message_and_allows_undo_against_postgres` и architecture guard прошли после cleanup. | В mail handler layer прямые `observation_link` writes остались только в `backend/src/domains/mail/handlers/sending/provider_send.rs`; это последний явный mail handler hotspot данного кластера. | Следующий mail pass: выделить owner/service path для live `provider_send` (SMTP/Gmail immediate send), чтобы handler больше не materialize-ил provider-send links сам. | Частично |
-| Mail provider-send owner cleanup | `backend/src/domains/mail/handlers/sending/provider_send.rs` больше не materialize `observation_link` напрямую ни для immediate SMTP/Gmail send, ни для outbox enqueue path. Durable linking поднят в owner layers: `ProviderSendStore::record_sent_with_observation(...)` в `domains/mail/send.rs` и `EmailOutboxStore::enqueue_with_observation(...)` в `domains/mail/outbox.rs`. Во время этого pass снова проявился системный merge bug: extra metadata перетирала базовую owner metadata в `enqueue_with_observation(...)`; bug исправлен тем же паттерном merge-by-object. Live regressions `gmail_send_api_uses_gmail_api_when_send_scope_enabled_against_postgres`, `send_api::imap_send_api_sends_via_configured_smtp_against_postgres`, `drafts_outbox::v1_send_schedules_outbox_message_and_allows_undo_against_postgres` прошли после фикса, а grep по `backend/src/domains/mail/handlers/**` на `NewObservationLink/upsert_link` теперь пустой. | Mail handler layer как источник direct evidence linking больше не содержит известных production hotspots; дальше долг уже сместился в compatibility/API owner surfaces и deeper owner/runtime files. | Следующий слой: `domains/organizations/api.rs`, `domains/tasks/api.rs`, `domains/review/store.rs`, `domains/tasks/candidates/store/review.rs` и другие compatibility/owner files, где linking еще живет вне более узких core owner modules. | Частично |
+| Mail drafts / folders / saved searches owner cleanup | `backend/src/domains/communications/handlers/communication_queries/{drafts,folders,saved_searches}.rs` больше не пишут `observation_link` напрямую. Durable linking поднят в owner stores: `EmailDraftStore::{upsert_with_observation,delete_with_observation}`, `MailFolderStore::{create_with_observation,update_with_observation,delete_with_observation,copy_message_with_observation,move_message_with_observation}`, `MailSavedSearchStore::{create_with_observation,update_with_observation,delete_with_observation}`. Таргетные regressions `v1_post_draft`, `v1_custom_folders_copy_move_and_events_against_postgres`, `v1_saved_searches_crud_and_events_against_postgres` и architecture guard прошли после cleanup. | В mail handler layer после этого среза еще остаются `message_actions`, `sending/*` и `workflow_actions/*`; CRUD/query owners для drafts/folders/saved searches сняты с handler-level linking. | Следующий mail pass: `message_actions` и `sending/local_state` как следующий message-mutation cluster. | Частично |
+| Mail workflow / local-state / AI / outbox / attachment-import owner cleanup | `backend/src/domains/communications/handlers/{workflow_state,message_ai_state}.rs`, `backend/src/domains/communications/handlers/communication_queries/{outbox,imports}.rs` и `backend/src/domains/communications/handlers/sending/local_state.rs` больше не materialize `observation_link` напрямую. Durable linking поднят в owner layers: `MessageProjectionStore::{transition_workflow_state_with_observation,move_to_local_trash_with_observation,restore_from_local_trash_with_observation}`, `MailAiStateStore::transition_with_observation(...)`, `EmailOutboxStore::undo_with_observation(...)`, `MailStorageStore::upsert_imported_attachment_with_observation(...)`. Live regressions `v1_message_ai_state_transitions_are_durable_and_emit_event_against_postgres`, `v1_local_state_endpoints_capture_observation_trail_against_postgres`, `drafts_outbox::v1_send_schedules_outbox_message_and_allows_undo_against_postgres`, `telegram_media_upload_imports_attachment_and_queues_provider_command` и architecture guard прошли после cleanup. Во время этого pass найден и закрыт системный баг merge semantics: extra metadata больше не перетирает базовую owner metadata в новых mail owner methods. | В mail handler layer остаются `message_actions`, `sending/{forwarding,provider_send}` и `workflow_actions/actions/{calendar,documents,tasks}.rs`; это уже следующий message/runtime mutation cluster. | Следующий mail pass: `message_actions`, затем `provider_send/forwarding` и workflow projections. | Частично |
+| Mail message-actions owner cleanup | `backend/src/domains/communications/handlers/message_actions.rs` больше не materialize `message_flag_update` links напрямую. Durable linking поднят в owner layers: `MessageProjectionStore::set_message_metadata_with_observation(...)` и `MessageFlags::{toggle_pin_with_observation,toggle_important_with_observation,snooze_with_observation,add_label_with_observation,remove_label_with_observation,toggle_mute_with_observation}`. Live regression `message_important_endpoint_toggles_metadata_flag` прошел после cleanup, а grep по handler больше не находит `NewObservationLink`/`upsert_link`. | В mail handler layer остаются `sending/{forwarding,provider_send}` и `workflow_actions/actions/{calendar,documents,tasks}.rs`; рядом также нужно отдельно решить, нужен ли аналогичный owner-path для bulk message actions beyond existing store. | Следующий mail pass: `provider_send/forwarding`, затем workflow projections и при необходимости bulk message actions consistency pass. | Частично |
+| Mail forwarding and workflow-projection owner cleanup | `backend/src/domains/communications/handlers/sending/forwarding.rs` и `backend/src/domains/communications/handlers/workflow_actions/actions/{calendar,documents,tasks}.rs` больше не пишут `observation_link` напрямую. Durable linking поднят в owner layers: `EmailOutboxStore::enqueue_with_observation(...)`, `CalendarEventStore::create_manual_with_observation_in_transaction(...)`, `DocumentImportStore::import_document_manual_with_observation_in_transaction(...)`; `workflow_actions/tasks.rs` теперь полагается на уже существующий observation-aware `TaskStore::create_in_transaction(...)` и не дублирует task link из handler. Compile gate для `v1_workflow_actions`/`v1_communications_regressions`/`v1_communications_api`, skip-aware workflow regressions (`create_event`, `create_note`, `link_document`), live outbox regression `drafts_outbox::v1_send_schedules_outbox_message_and_allows_undo_against_postgres` и architecture guard прошли после cleanup. | В mail handler layer прямые `observation_link` writes остались только в `backend/src/domains/communications/handlers/sending/provider_send.rs`; это последний явный mail handler hotspot данного кластера. | Следующий mail pass: выделить owner/service path для live `provider_send` (SMTP/Gmail immediate send), чтобы handler больше не materialize-ил provider-send links сам. | Частично |
+| Mail provider-send owner cleanup | `backend/src/domains/communications/handlers/sending/provider_send.rs` больше не materialize `observation_link` напрямую ни для immediate SMTP/Gmail send, ни для outbox enqueue path. Durable linking поднят в owner layers: `ProviderSendStore::record_sent_with_observation(...)` в `domains/mail/send.rs` и `EmailOutboxStore::enqueue_with_observation(...)` в `domains/mail/outbox.rs`. Во время этого pass снова проявился системный merge bug: extra metadata перетирала базовую owner metadata в `enqueue_with_observation(...)`; bug исправлен тем же паттерном merge-by-object. Live regressions `gmail_send_api_uses_gmail_api_when_send_scope_enabled_against_postgres`, `send_api::imap_send_api_sends_via_configured_smtp_against_postgres`, `drafts_outbox::v1_send_schedules_outbox_message_and_allows_undo_against_postgres` прошли после фикса, а grep по `backend/src/domains/communications/handlers/**` на `NewObservationLink/upsert_link` теперь пустой. | Mail handler layer как источник direct evidence linking больше не содержит известных production hotspots; дальше долг уже сместился в compatibility/API owner surfaces и deeper owner/runtime files. | Следующий слой: `domains/organizations/api.rs`, `domains/tasks/api.rs`, `domains/review/store.rs`, `domains/tasks/candidates/store/review.rs` и другие compatibility/owner files, где linking еще живет вне более узких core owner modules. | Частично |
 | Compatibility API owner cleanup: organizations and tasks | `backend/src/domains/organizations/api.rs` и `backend/src/domains/tasks/api.rs` больше не materialize `observation_link` напрямую. Для organizations linking вынесен в `backend/src/domains/organizations/core/evidence.rs`; `create_with_observation`, `update_with_observation`, `archive_with_observation` и email-domain projection path теперь ходят через core evidence helpers. Для tasks linking вынесен в `backend/src/domains/tasks/core/observation_links.rs`; `TaskStore::create_in_transaction`, `update_internal` и `set_status_internal` больше не создают `NewObservationLink` сами. Compile gate для `relationships` и `tasks` прошел после refactor, а grep по `organizations/api.rs` и `tasks/api.rs` на `NewObservationLink/upsert_link` теперь пустой. | Compatibility/API debt теперь сузился: следующий явный слой — `domains/review/store.rs` и `domains/tasks/candidates/store/review.rs`, затем deeper owner/runtime files вроде `tasks/core/evidence.rs`, `organizations/enrichment.rs`, `organizations/health.rs` и соседних owner stores. | Следующий pass: review transition linking helpers, затем systematic audit remaining non-handler owner files с direct `observation_link`. | Частично |
 | Review transition owner cleanup | `backend/src/domains/review/store.rs` и `backend/src/domains/tasks/candidates/store/review.rs` больше не materialize `review_transition` links напрямую. Общая семантика review-transition evidence вынесена в `backend/src/domains/review/evidence.rs`; `ReviewInboxStore::{set_status_with_observation,promote_with_observation}` и `task_candidates::store::review::set_review_state_with_observation(...)` теперь используют общий helper вместо локального `NewObservationLink` construction. Compile gate для `review_inbox`, `task_candidates`, `relationships`, `tasks` прошел после cleanup, а grep по этим store-файлам на `NewObservationLink/upsert_link` пустой. | Compatibility/API слой теперь в основном дочищен; следующий долг сместился в deeper owner/runtime files и domain core stores: `organizations/{health,enrichment}`, `tasks/core/{evidence,relations,subtasks,checklists}`, `persons/**`, `calendar/core/**`, `mail/*store*`, `decisions/store`, `obligations/store` и similar owner modules. | Следующий pass: взять следующий плотный core-owner cluster, вероятнее всего `organizations/{health,enrichment}` плюс `tasks/core/evidence`, чтобы дальше сжимать domain-owner direct linking. | Частично |
 | Organizations core owner cleanup | `backend/src/domains/organizations/core/{aliases,departments,identity,contact_links}.rs` больше не materialize organization-related `observation_link` напрямую. Общий entity-link helper вынесен в `backend/src/domains/organizations/core/evidence.rs`, и эти core stores теперь используют его вместо собственного `NewObservationLink` construction. Compile gate для `relationships`, `review_inbox`, `task_candidates`, `tasks` прошел после cleanup. | В organizations bounded context еще остаются direct link writes в `organizations/enrichment.rs`, `organizations/health.rs` и частично в самом `core/evidence.rs`, что уже является canonical owner layer и не compatibility/API surface. | Следующий organizations pass: `health` и `enrichment`, затем общий person/organization review-memory cluster. | Частично |
@@ -298,9 +298,9 @@ gap в текущем периоде закрыт.
 | Зона | Файлы | Что не завершено |
 |---|---|---|
 | Calendar handlers (remaining) | `backend/src/domains/calendar/service.rs` введен как orchestration owner; handler-level manual observation capture и direct `*_with_observation(...)` orchestration из `backend/src/domains/calendar/handlers/**` сняты. | Следующий calendar долг уже не в handlers, а в deeper owner/runtime surfaces и vocabulary/registry consistency вокруг calendar source/provider mutations. |
-| Mail handlers | — | Быстрый grep по `backend/src/domains/mail/handlers/**` больше не находит `NewObservationLink`/`upsert_link`; mail bounded context снял handler-level direct evidence linking во всех уже пройденных production handlers. Следующий mail-долг уже находится в owner/runtime files, а не в handlers. |
-| Mail communication query mutations | `backend/src/domains/mail/service.rs` теперь владеет manual observation capture для `communication_queries/{drafts,folders,saved_searches,outbox,imports}.rs`; handler-level capture из этих файлов снят. | В mail handler layer из явных manual observation capture hotspots остался в первую очередь `backend/src/domains/mail/handlers/sending/provider_send.rs`, после него уже идут deeper runtime/owner tails. |
-| Mail provider send evidence orchestration | `backend/src/domains/mail/service.rs` теперь также владеет evidence-orchestration для `backend/src/domains/mail/handlers/sending/provider_send.rs`: outbox enqueue и sent-provider link больше не materialize-ятся из handler. | В mail handler layer после этого остались последние manual observation hotspots: `sending/forwarding.rs`, `workflow_state.rs`, `sending/local_state.rs`, `message_ai_state.rs`, `message_actions.rs`, `workflow_actions/actions/persons.rs`. |
+| Mail handlers | — | Быстрый grep по `backend/src/domains/communications/handlers/**` больше не находит `NewObservationLink`/`upsert_link`; mail bounded context снял handler-level direct evidence linking во всех уже пройденных production handlers. Следующий mail-долг уже находится в owner/runtime files, а не в handlers. |
+| Mail communication query mutations | `backend/src/domains/communications/service.rs` теперь владеет manual observation capture для `communication_queries/{drafts,folders,saved_searches,outbox,imports}.rs`; handler-level capture из этих файлов снят. | В mail handler layer из явных manual observation capture hotspots остался в первую очередь `backend/src/domains/communications/handlers/sending/provider_send.rs`, после него уже идут deeper runtime/owner tails. |
+| Mail provider send evidence orchestration | `backend/src/domains/communications/service.rs` теперь также владеет evidence-orchestration для `backend/src/domains/communications/handlers/sending/provider_send.rs`: outbox enqueue и sent-provider link больше не materialize-ятся из handler. | В mail handler layer после этого остались последние manual observation hotspots: `sending/forwarding.rs`, `workflow_state.rs`, `sending/local_state.rs`, `message_ai_state.rs`, `message_actions.rs`, `workflow_actions/actions/persons.rs`. |
 | Compatibility API paths | — | `tasks/api.rs`, `organizations/api.rs`, `review/store.rs` и `tasks/candidates/store/review.rs` уже очищены от direct `NewObservationLink/upsert_link`; следующий долг теперь уже в deeper owner/runtime files, а не в compatibility/API surfaces. |
 | Dense owner/runtime clusters | remaining mail tails, integration owners, technical engine/runtime tails | После cleanup organizations/tasks/review/persons/relationships/projects/calendar-core/vault-provider/calendar-event-store/decisions/obligations/documents-core/ai-control-center/review-promotion/mail-owner-core остаток direct-linking сместился дальше в remaining mail store tails, integration owners и технические runtime/engine кластеры. Следующий practical pass должен переоткрыть repo-wide inventory и брать следующий самый плотный production cluster. |
 
@@ -473,13 +473,13 @@ Validation:
 
 Что сделано:
 
-- добавлен `backend/src/domains/mail/service.rs` как owner-service для manual observation-first mutations в mail communication query layer;
+- добавлен `backend/src/domains/communications/service.rs` как owner-service для manual observation-first mutations в mail communication query layer;
 - на сервис переведены:
-  - `backend/src/domains/mail/handlers/communication_queries/drafts.rs`
-  - `backend/src/domains/mail/handlers/communication_queries/folders.rs`
-  - `backend/src/domains/mail/handlers/communication_queries/saved_searches.rs`
-  - `backend/src/domains/mail/handlers/communication_queries/outbox.rs`
-  - `backend/src/domains/mail/handlers/communication_queries/imports.rs`
+  - `backend/src/domains/communications/handlers/communication_queries/drafts.rs`
+  - `backend/src/domains/communications/handlers/communication_queries/folders.rs`
+  - `backend/src/domains/communications/handlers/communication_queries/saved_searches.rs`
+  - `backend/src/domains/communications/handlers/communication_queries/outbox.rs`
+  - `backend/src/domains/communications/handlers/communication_queries/imports.rs`
 - `MailCommandService` теперь владеет manual observation capture для:
   - draft create/update/delete;
   - mail folder create/update/delete;
@@ -492,7 +492,7 @@ Validation:
 
 - `backend/src/app/error/conversions/mail.rs` теперь знает `MailCommandServiceError`;
 - `scripts/check-architecture.mjs` теперь запрещает возвращать manual mail communication mutation orchestration обратно в `communication_queries` handlers;
-- `backend/src/domains/mail/mod.rs` экспортирует `service`.
+- `backend/src/domains/communications/mod.rs` экспортирует `service`.
 
 Validation:
 
@@ -503,17 +503,17 @@ Validation:
 Реальный остаток после этого slice:
 
 - mail `communication_queries` mutation handlers стали thin и больше не владеют observation capture;
-- следующий явный mail hotspot сузился до `backend/src/domains/mail/handlers/sending/provider_send.rs`;
+- следующий явный mail hotspot сузился до `backend/src/domains/communications/handlers/sending/provider_send.rs`;
 - общий ориентир по незавершенному объему всего refactor: около `6%`.
 
 ## 5.2.11. Mail provider_send evidence orchestration -> mail domain service
 
 Что сделано:
 
-- `backend/src/domains/mail/service.rs` расширен еще двумя owner-methods:
+- `backend/src/domains/communications/service.rs` расширен еще двумя owner-methods:
   - `enqueue_outbox_send(...)`
   - `record_provider_send_sent(...)`
-- `backend/src/domains/mail/handlers/sending/provider_send.rs` больше не:
+- `backend/src/domains/communications/handlers/sending/provider_send.rs` больше не:
   - создает manual observation сам для SMTP/Gmail send;
   - вызывает `ProviderSendStore::record_sent_with_observation(...)` напрямую;
   - вызывает `EmailOutboxStore::enqueue_with_observation(...)` напрямую для scheduled/undo-send path.
@@ -539,7 +539,7 @@ Validation:
 
 Что сделано:
 
-- `backend/src/domains/mail/service.rs` расширен финальным handler-facing orchestration набором:
+- `backend/src/domains/communications/service.rs` расширен финальным handler-facing orchestration набором:
   - `transition_message_workflow_state(...)`
   - `mark_message_imap_read(...)`
   - `move_message_to_local_trash(...)`
@@ -553,12 +553,12 @@ Validation:
   - `remove_message_label(...)`
   - `enqueue_redirect_message(...)`
 - на этот service/workflow слой переведены:
-  - `backend/src/domains/mail/handlers/workflow_state.rs`
-  - `backend/src/domains/mail/handlers/sending/local_state.rs`
-  - `backend/src/domains/mail/handlers/message_ai_state.rs`
-  - `backend/src/domains/mail/handlers/message_actions.rs`
-  - `backend/src/domains/mail/handlers/sending/forwarding.rs`
-  - `backend/src/domains/mail/handlers/workflow_actions/actions/persons.rs`
+  - `backend/src/domains/communications/handlers/workflow_state.rs`
+  - `backend/src/domains/communications/handlers/sending/local_state.rs`
+  - `backend/src/domains/communications/handlers/message_ai_state.rs`
+  - `backend/src/domains/communications/handlers/message_actions.rs`
+  - `backend/src/domains/communications/handlers/sending/forwarding.rs`
+  - `backend/src/domains/communications/handlers/workflow_actions/actions/persons.rs`
 - для workflow action person projection добавлен отдельный orchestration owner:
   - `backend/src/workflows/workflow_action_person_projection.rs`
 
@@ -588,7 +588,7 @@ Validation:
 - `backend/src/vault/provider_accounts.rs` усилен owner-methods:
   - `mark_logged_out(...)`
   - `upsert_runtime_account(...)`
-- `backend/src/domains/mail/handlers/account_management.rs` больше не владеет logout/config mutation orchestration:
+- `backend/src/domains/communications/handlers/account_management.rs` больше не владеет logout/config mutation orchestration:
   - handler не строит logout config вручную;
   - handler не вызывает `update_config_with_origin(...)` напрямую;
   - logout идет через owner method `CommunicationProviderAccountStore::mark_logged_out(...)`.
@@ -601,7 +601,7 @@ Validation:
 
 - `scripts/check-architecture.mjs` теперь:
   - запрещает direct durable mutations таблиц `communication_provider_accounts`, `communication_provider_account_secret_refs`, `task_provider_accounts`, `calendar_accounts`, `calendar_sources` вне `backend/src/vault/provider_accounts.rs`;
-  - запрещает возвращать logout/config mutation orchestration обратно в `backend/src/domains/mail/handlers/account_management.rs`.
+  - запрещает возвращать logout/config mutation orchestration обратно в `backend/src/domains/communications/handlers/account_management.rs`.
 - По пути закрыт unrelated compile blocker в `backend/tests/project_link_reviews.rs`: legacy `entity_id` заменен на текущий `target_entity_id`.
 
 Validation:
@@ -1064,7 +1064,7 @@ hermes-hub/
 | `cargo test --manifest-path backend/Cargo.toml --test email_account_setup gmail_api::gmail_oauth_callback_completes_pending_grant_without_api_secret -- --exact --nocapture` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test email_outbox -- --nocapture` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test email_sync_pipeline obligation -- --nocapture` | PASS (`HERMES_TEST_DATABASE_URL` не задан, live test skipped after compile) |
-| `rg -n 'CommunicationIngestionStore' backend/src/domains/mail/handlers/sending/provider_send.rs backend/src/domains/mail/outbox/provider_sender.rs backend/src/domains/mail/background_sync/provider/gmail.rs backend/src/domains/mail/accounts/service.rs backend/src/domains/mail/accounts/service/constructors.rs backend/src/domains/mail/accounts/service/stores.rs backend/src/domains/api_support/stores/integration_stores.rs -g '*.rs'` | PASS (no remaining `CommunicationIngestionStore` dependency in targeted refresh/send runtime files) |
+| `rg -n 'CommunicationIngestionStore' backend/src/domains/communications/handlers/sending/provider_send.rs backend/src/domains/communications/outbox/provider_sender.rs backend/src/domains/communications/background_sync/provider/gmail.rs backend/src/domains/communications/accounts/service.rs backend/src/domains/communications/accounts/service/constructors.rs backend/src/domains/communications/accounts/service/stores.rs backend/src/domains/api_support/stores/integration_stores.rs -g '*.rs'` | PASS (no remaining `CommunicationIngestionStore` dependency in targeted refresh/send runtime files) |
 | `cargo test --manifest-path backend/Cargo.toml --no-run --test review_inbox --test task_candidates` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test review_inbox task_candidate_review_mirror_promotes_obligation_candidate_against_postgres -- --exact --nocapture` | PASS (`HERMES_TEST_DATABASE_URL` не задан, live test skipped after compile) |
 | `cargo test --manifest-path backend/Cargo.toml --test task_candidates review::task_candidate_review_confirm_creates_active_task_against_postgres -- --exact --nocapture` | PASS (`HERMES_TEST_DATABASE_URL` не задан, live test skipped after compile) |
@@ -1086,25 +1086,25 @@ hermes-hub/
 | `HERMES_TEST_DATABASE_URL='postgres://hermes:change-me-local-dev-only@127.0.0.1:30432/hermes_hub' cargo test --manifest-path backend/Cargo.toml --test tasks task_store_update_with_observation_materializes_task_link_against_postgres -- --exact --nocapture --test-threads=1` | PASS |
 | `HERMES_TEST_DATABASE_URL='postgres://hermes:change-me-local-dev-only@127.0.0.1:30432/hermes_hub' cargo test --manifest-path backend/Cargo.toml --test tasks_api crud::task_analyze_runtime_path_captures_observation_against_postgres -- --exact --nocapture --test-threads=1` | PASS |
 | `node scripts/check-architecture.mjs` | PASS |
-| `rg -n "upsert_link\\(|NewObservationLink" backend/src/domains/mail/handlers/communication_queries/drafts.rs backend/src/domains/mail/handlers/communication_queries/folders.rs backend/src/domains/mail/handlers/communication_queries/saved_searches.rs -g '!**/target/**'` | PASS (совпадений нет) |
+| `rg -n "upsert_link\\(|NewObservationLink" backend/src/domains/communications/handlers/communication_queries/drafts.rs backend/src/domains/communications/handlers/communication_queries/folders.rs backend/src/domains/communications/handlers/communication_queries/saved_searches.rs -g '!**/target/**'` | PASS (совпадений нет) |
 | `cargo test --manifest-path backend/Cargo.toml --no-run --test v1_communications_ai_state --test v1_communications_message_actions --test v1_communications_regressions --test telegram_media_upload` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test v1_communications_ai_state v1_message_ai_state_transitions_are_durable_and_emit_event_against_postgres -- --nocapture` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test v1_communications_message_actions v1_local_state_endpoints_capture_observation_trail_against_postgres -- --nocapture` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test v1_communications_regressions drafts_outbox::v1_send_schedules_outbox_message_and_allows_undo_against_postgres -- --nocapture` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test telegram_media_upload telegram_media_upload_imports_attachment_and_queues_provider_command -- --nocapture` | PASS |
-| `rg -n "upsert_link\\(|NewObservationLink" backend/src/domains/mail/handlers/workflow_state.rs backend/src/domains/mail/handlers/message_ai_state.rs backend/src/domains/mail/handlers/communication_queries/outbox.rs backend/src/domains/mail/handlers/communication_queries/imports.rs -g '!**/target/**'` | PASS (совпадений нет) |
+| `rg -n "upsert_link\\(|NewObservationLink" backend/src/domains/communications/handlers/workflow_state.rs backend/src/domains/communications/handlers/message_ai_state.rs backend/src/domains/communications/handlers/communication_queries/outbox.rs backend/src/domains/communications/handlers/communication_queries/imports.rs -g '!**/target/**'` | PASS (совпадений нет) |
 | `cargo test --manifest-path backend/Cargo.toml --test message_flags_api message_important_endpoint_toggles_metadata_flag -- --nocapture` | PASS |
-| `rg -n "upsert_link\\(|NewObservationLink|link_message_flag_observation" backend/src/domains/mail/handlers/message_actions.rs -g '!**/target/**'` | PASS (совпадений нет) |
+| `rg -n "upsert_link\\(|NewObservationLink|link_message_flag_observation" backend/src/domains/communications/handlers/message_actions.rs -g '!**/target/**'` | PASS (совпадений нет) |
 | `cargo test --manifest-path backend/Cargo.toml --no-run --test v1_workflow_actions --test v1_communications_regressions --test v1_communications_api` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test v1_workflow_actions workflow_action_create_event_reuses_message_observation_for_calendar_projection -- --nocapture` | PASS (`HERMES_TEST_DATABASE_URL` не задан, live test skipped after compile) |
 | `cargo test --manifest-path backend/Cargo.toml --test v1_workflow_actions workflow_action_create_note_creates_markdown_document -- --nocapture` | PASS (`HERMES_TEST_DATABASE_URL` не задан, live test skipped after compile) |
 | `cargo test --manifest-path backend/Cargo.toml --test v1_workflow_actions workflow_action_link_document_reuses_message_observation_for_document_projection -- --nocapture` | PASS (`HERMES_TEST_DATABASE_URL` не задан, live test skipped after compile) |
-| `rg -n "upsert_link\\(|NewObservationLink" backend/src/domains/mail/handlers/workflow_actions/actions backend/src/domains/mail/handlers/sending/forwarding.rs -g '!**/target/**'` | PASS (совпадений нет) |
+| `rg -n "upsert_link\\(|NewObservationLink" backend/src/domains/communications/handlers/workflow_actions/actions backend/src/domains/communications/handlers/sending/forwarding.rs -g '!**/target/**'` | PASS (совпадений нет) |
 | `cargo test --manifest-path backend/Cargo.toml --no-run --test gmail_send_api --test email_account_setup --test v1_communications_regressions` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test gmail_send_api gmail_send_api_uses_gmail_api_when_send_scope_enabled_against_postgres -- --nocapture` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test email_account_setup imap_send_api_sends_via_configured_smtp_against_postgres -- --nocapture` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --test v1_communications_regressions drafts_outbox::v1_send_schedules_outbox_message_and_allows_undo_against_postgres -- --nocapture` | PASS |
-| `rg -n "upsert_link\\(|NewObservationLink" backend/src/domains/mail/handlers -g '!**/target/**'` | PASS (совпадений нет) |
+| `rg -n "upsert_link\\(|NewObservationLink" backend/src/domains/communications/handlers -g '!**/target/**'` | PASS (совпадений нет) |
 | `rg -n "NewObservationLink|upsert_link\\(|upsert_link_in_transaction\\(" backend/src/**/handlers backend/src/app/router/routes -g '!**/target/**'` | PASS (совпадений нет) |
 | `cargo test --manifest-path backend/Cargo.toml --no-run --test relationships` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --no-run --test tasks --test relationships` | PASS |
@@ -1170,12 +1170,12 @@ hermes-hub/
 ### Что осталось после этого среза
 
 - remaining mail tails:
-  - `backend/src/domains/mail/messages/store/local_state.rs`
-  - `backend/src/domains/mail/outbox/delivery_status.rs`
-  - `backend/src/domains/mail/send.rs`
-  - `backend/src/domains/mail/ai_state.rs`
-  - `backend/src/domains/mail/messages/store/workflow.rs`
-  - `backend/src/domains/mail/messages/store/participants.rs`
+  - `backend/src/domains/communications/messages/store/local_state.rs`
+  - `backend/src/domains/communications/outbox/delivery_status.rs`
+  - `backend/src/domains/communications/send.rs`
+  - `backend/src/domains/communications/ai_state.rs`
+  - `backend/src/domains/communications/messages/store/workflow.rs`
+  - `backend/src/domains/communications/messages/store/participants.rs`
 - integration/runtime tails:
   - `backend/src/integrations/telegram/client/*`
   - `backend/src/integrations/whatsapp/client/store/sessions.rs`
@@ -1225,15 +1225,15 @@ hermes-hub/
 ### Что осталось после этого среза
 
 - remaining mail/runtime tails:
-  - `backend/src/domains/mail/outbox/delivery_status.rs`
-  - `backend/src/domains/mail/send.rs`
-  - `backend/src/domains/mail/ai_state.rs`
-  - `backend/src/domains/mail/messages/store/local_state.rs`
-  - `backend/src/domains/mail/messages/store/workflow.rs`
-  - `backend/src/domains/mail/messages/store/metadata.rs`
-  - `backend/src/domains/mail/messages/store/participants.rs`
-  - `backend/src/domains/mail/storage/imports.rs`
-  - `backend/src/domains/mail/bulk_actions.rs`
+  - `backend/src/domains/communications/outbox/delivery_status.rs`
+  - `backend/src/domains/communications/send.rs`
+  - `backend/src/domains/communications/ai_state.rs`
+  - `backend/src/domains/communications/messages/store/local_state.rs`
+  - `backend/src/domains/communications/messages/store/workflow.rs`
+  - `backend/src/domains/communications/messages/store/metadata.rs`
+  - `backend/src/domains/communications/messages/store/participants.rs`
+  - `backend/src/domains/communications/storage/imports.rs`
+  - `backend/src/domains/communications/bulk_actions.rs`
 - remaining technical/runtime owners:
   - `backend/src/ai/core/runs.rs`
   - `backend/src/ai/core/semantic/embeddings.rs`
@@ -1252,16 +1252,16 @@ hermes-hub/
 
 ### Что сделано
 
-- На существующий `backend/src/domains/mail/evidence.rs` переведены remaining mail runtime/store tails:
-  - `backend/src/domains/mail/outbox/delivery_status.rs`
-  - `backend/src/domains/mail/send.rs`
-  - `backend/src/domains/mail/ai_state.rs`
-  - `backend/src/domains/mail/messages/store/local_state.rs`
-  - `backend/src/domains/mail/messages/store/workflow.rs`
-  - `backend/src/domains/mail/messages/store/metadata.rs`
-  - `backend/src/domains/mail/messages/store/participants.rs`
-  - `backend/src/domains/mail/storage/imports.rs`
-  - `backend/src/domains/mail/bulk_actions.rs`
+- На существующий `backend/src/domains/communications/evidence.rs` переведены remaining mail runtime/store tails:
+  - `backend/src/domains/communications/outbox/delivery_status.rs`
+  - `backend/src/domains/communications/send.rs`
+  - `backend/src/domains/communications/ai_state.rs`
+  - `backend/src/domains/communications/messages/store/local_state.rs`
+  - `backend/src/domains/communications/messages/store/workflow.rs`
+  - `backend/src/domains/communications/messages/store/metadata.rs`
+  - `backend/src/domains/communications/messages/store/participants.rs`
+  - `backend/src/domains/communications/storage/imports.rs`
+  - `backend/src/domains/communications/bulk_actions.rs`
 - Из этого `mail` cluster убраны прямые `NewObservationLink` / `ObservationStore::upsert_link*`.
 - Merge semantics для link metadata теперь проходят через owner helper вместо локальных ad-hoc блоков.
 
@@ -1272,7 +1272,7 @@ hermes-hub/
 | `cargo fmt --manifest-path backend/Cargo.toml` | PASS |
 | `cargo test --manifest-path backend/Cargo.toml --no-run --test v1_communications_ai_state --test v1_communications_regressions --test message_flags_api --test telegram_media_upload --test email_outbox --test v1_communications_api` | PASS |
 | `node scripts/check-architecture.mjs` | PASS |
-| `rg -n "NewObservationLink|upsert_link\\(|upsert_link_in_transaction\\(" backend/src/domains/mail/outbox/delivery_status.rs backend/src/domains/mail/send.rs backend/src/domains/mail/ai_state.rs backend/src/domains/mail/messages/store/local_state.rs backend/src/domains/mail/messages/store/workflow.rs backend/src/domains/mail/messages/store/metadata.rs backend/src/domains/mail/messages/store/participants.rs backend/src/domains/mail/storage/imports.rs backend/src/domains/mail/bulk_actions.rs -g '!**/target/**'` | PASS (совпадений нет) |
+| `rg -n "NewObservationLink|upsert_link\\(|upsert_link_in_transaction\\(" backend/src/domains/communications/outbox/delivery_status.rs backend/src/domains/communications/send.rs backend/src/domains/communications/ai_state.rs backend/src/domains/communications/messages/store/local_state.rs backend/src/domains/communications/messages/store/workflow.rs backend/src/domains/communications/messages/store/metadata.rs backend/src/domains/communications/messages/store/participants.rs backend/src/domains/communications/storage/imports.rs backend/src/domains/communications/bulk_actions.rs -g '!**/target/**'` | PASS (совпадений нет) |
 
 ### Что осталось после этого среза
 
@@ -1323,7 +1323,7 @@ hermes-hub/
 - Дочищены оставшиеся helper files, которые еще напрямую собирали `NewObservationLink`:
   - `backend/src/engines/automation/evidence.rs`
   - `backend/src/domains/tasks/core/observation_links.rs`
-  - `backend/src/domains/mail/background_sync/evidence.rs`
+  - `backend/src/domains/communications/background_sync/evidence.rs`
   - `backend/src/domains/persons/core/evidence.rs`
   - `backend/src/domains/organizations/core/evidence.rs`
 - После этого repo-wide direct observation link materialization вне `platform/observations` снят.

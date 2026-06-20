@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::domains::calendar::events::CalendarError;
-use crate::domains::mail::core::CommunicationIngestionError;
+use crate::domains::communications::core::CommunicationIngestionError;
 use crate::platform::secrets::SecretReferenceError;
 use crate::vault::HostVaultError;
 

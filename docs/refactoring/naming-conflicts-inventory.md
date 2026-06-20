@@ -119,8 +119,8 @@ pub enum SemanticSourceKind {
 
 | Файл/модуль | Проблема |
 |-------------|----------|
-| `domains/mail/` | Название `mail` вместо `communications` |
-| `backend/src/domains/mail/` | ~100+ файлов в God-директории |
+| `domains/communications/` | Название `mail` вместо `communications` |
+| `backend/src/domains/communications/` | ~100+ файлов в God-директории |
 | `/api/v1/communications/*` | API уже использует правильное имя |
 | `frontend/src/domains/communications/` | Frontend уже использует правильное имя |
 
@@ -133,4 +133,4 @@ pub enum SemanticSourceKind {
 2. `SemanticSourceKind::Person` → `"persona"` (не `"contact"`)
 3. Перенести `fetchOrganizations` из personas/api в organizations/api
 4. Устранить cross-domain imports в review store
-5. Начать рефакторинг `domains/mail/` → `domains/communications/`
+5. Начать рефакторинг `domains/communications/` → `domains/communications/`

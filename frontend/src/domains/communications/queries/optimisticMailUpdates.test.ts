@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { InfiniteData } from '@tanstack/vue-query'
 import type {
 	CommunicationMessageSummary,
-	EmailDraft,
-	EmailOutboxItem,
-	MailMessagesResponse
+	CommunicationDraft,
+	CommunicationOutboxItem,
+	CommunicationMessagesResponse
 } from '../types/communications'
 import {
 	applyBulkMessageActionToMailDetail,
@@ -44,7 +44,7 @@ function message(overrides: Partial<CommunicationMessageSummary>): Communication
 	}
 }
 
-function mailList(items: CommunicationMessageSummary[]): InfiniteData<MailMessagesResponse> {
+function mailList(items: CommunicationMessageSummary[]): InfiniteData<CommunicationMessagesResponse> {
 	return {
 		pages: [
 			{
@@ -57,7 +57,7 @@ function mailList(items: CommunicationMessageSummary[]): InfiniteData<MailMessag
 	}
 }
 
-function draft(overrides: Partial<EmailDraft> = {}): EmailDraft {
+function draft(overrides: Partial<CommunicationDraft> = {}): CommunicationDraft {
 	return {
 		draft_id: 'draft-1',
 		account_id: 'account-1',
@@ -81,7 +81,7 @@ function draft(overrides: Partial<EmailDraft> = {}): EmailDraft {
 	}
 }
 
-function outboxItem(overrides: Partial<EmailOutboxItem> = {}): EmailOutboxItem {
+function outboxItem(overrides: Partial<CommunicationOutboxItem> = {}): CommunicationOutboxItem {
 	return {
 		outbox_id: 'outbox-1',
 		account_id: 'account-1',

@@ -168,10 +168,10 @@ Supported environment variables:
 - `GET /api/v1/graph/summary` - returns graph node, edge and evidence summary counts. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/graph/search` - searches graph nodes by `q` with optional `limit`. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/graph/neighborhood` - returns the depth-1 graph neighborhood for `node_id`, including neighboring nodes, edges and evidence. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
-- `POST /api/v1/email-accounts/gmail/oauth/start` - starts Gmail OAuth account setup and returns a PKCE authorization URL. Requires local API headers, PostgreSQL and an initialized/unlocked host vault.
-- `GET /api/v1/email-accounts/gmail/oauth/callback` - displays OAuth callback code/state for the desktop setup flow.
-- `POST /api/v1/email-accounts/gmail/oauth/complete` - exchanges a Gmail authorization code, stores credential payloads in the host vault and creates provider account bindings. Requires local API headers, PostgreSQL and an initialized/unlocked host vault.
-- `POST /api/v1/email-accounts/imap` - creates iCloud/raw IMAP account metadata and stores password/app-password payloads in the host vault. Requires local API headers, PostgreSQL and an initialized/unlocked host vault.
+- `POST /api/v1/communications/mail/accounts/gmail/oauth/start` - starts Gmail OAuth account setup and returns a PKCE authorization URL. Requires local API headers, PostgreSQL and an initialized/unlocked host vault.
+- `GET /api/v1/communications/mail/accounts/gmail/oauth/callback` - displays OAuth callback code/state for the desktop setup flow.
+- `POST /api/v1/communications/mail/accounts/gmail/oauth/complete` - exchanges a Gmail authorization code, stores credential payloads in the host vault and creates provider account bindings. Requires local API headers, PostgreSQL and an initialized/unlocked host vault.
+- `POST /api/v1/communications/mail/accounts/imap` - creates iCloud/raw IMAP account metadata and stores password/app-password payloads in the host vault. Requires local API headers, PostgreSQL and an initialized/unlocked host vault.
 - `POST /api/v1/events` - appends a canonical event through the application/API boundary. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/events/{event_id}` - loads a canonical event by ID. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.
 - `GET /api/v1/audit/events` - returns event API audit records. Supports `target_id`, `actor_id`, `after_audit_id` and `limit` query parameters. Requires `X-Hermes-Secret: <HERMES_LOCAL_API_SECRET>`.

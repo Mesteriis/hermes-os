@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import MailListItem from './MailListItem.vue'
-import { useMailMessagePrefetch } from '../queries/mailPrefetch'
+import { useCommunicationMessagePrefetch } from '../queries/mailPrefetch'
 import type { CommunicationMessageSummary } from '../types/communications'
 
 const props = defineProps<{
@@ -23,7 +23,7 @@ const emit = defineEmits<{
 }>()
 
 const parentRef = ref<HTMLDivElement | null>(null)
-const prefetchMailMessage = useMailMessagePrefetch()
+const prefetchCommunicationMessage = useCommunicationMessagePrefetch()
 
 const virtualOptions = computed(() => ({
   count: props.messages.length,
@@ -44,7 +44,7 @@ function handleSelect(index: number) {
 }
 
 function handlePrefetch(messageId: string) {
-  void prefetchMailMessage(messageId)
+  void prefetchCommunicationMessage(messageId)
 }
 
 function handleScroll() {

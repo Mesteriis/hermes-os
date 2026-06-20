@@ -1,11 +1,11 @@
-use crate::domains::mail::core::StoredRawCommunicationRecord;
-use crate::domains::mail::messages::ProjectedMessage;
-use crate::domains::mail::rfc822::{ParsedEmailAttachment, ParsedEmailAttachmentDisposition};
-use crate::domains::mail::storage::{
+use crate::domains::communications::core::StoredRawCommunicationRecord;
+use crate::domains::communications::messages::ProjectedMessage;
+use crate::domains::communications::storage::{
     AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, AttachmentSafetyScanner,
     LocalMailBlobStore, MailAttachmentDisposition, MailStorageStore, NewMailAttachment,
     NewMailBlob,
 };
+use crate::integrations::mail::rfc822::{ParsedEmailAttachment, ParsedEmailAttachmentDisposition};
 
 use super::errors::EmailSyncPipelineError;
 

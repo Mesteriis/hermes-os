@@ -1,6 +1,6 @@
 import type {
 	BulkMessageAction,
-	EmailOutboxItem,
+	CommunicationOutboxItem,
 	LocalMessageState,
 	WorkflowState
 } from '../types/communications'
@@ -26,7 +26,7 @@ export type StoredEventEnvelope = {
 	}
 }
 
-export type MailMessagePatchPayload = {
+export type CommunicationMessagePatchPayload = {
 	action?: unknown
 	action_parameters?: unknown
 	message_ids?: unknown
@@ -152,7 +152,7 @@ export function nullableNumberValue(value: unknown): number | null {
 	return Number.isFinite(number) ? number : null
 }
 
-export function outboxStatusValue(value: unknown): EmailOutboxItem['status'] | null {
+export function outboxStatusValue(value: unknown): CommunicationOutboxItem['status'] | null {
 	const status = stringValue(value)
 	if (
 		status === 'queued' ||

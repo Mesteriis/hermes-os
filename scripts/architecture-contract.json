@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "adr": "docs/adr/ADR-architecture-communication-contract.md",
+  "interaction_kinds": [
+    "direct_call",
+    "command_port",
+    "query_port",
+    "event",
+    "projection",
+    "runtime_integration_api"
+  ],
+  "backend": {
+    "layers": {
+      "app": {
+        "allow": [
+          "domain_command_ports",
+          "domain_query_ports",
+          "integration_runtime_integration_api",
+          "platform"
+        ],
+        "deny": [
+          "stores",
+          "business_orchestration"
+        ]
+      },
+      "domains": {
+        "allow": [
+          "own_modules",
+          "platform",
+          "pure_engines"
+        ],
+        "deny": [
+          "other_domains",
+          "integrations",
+          "app",
+          "workflows"
+        ]
+      },
+      "integrations": {
+        "allow": [
+          "own_modules",
+          "platform",
+          "vault",
+          "external_sdks"
+        ],
+        "deny": [
+          "domains",
+          "app",
+          "workflows",
+          "business_truth"
+        ]
+      },
+      "workflows": {
+        "allow": [
+          "domain_command_ports",
+          "domain_query_ports",
+          "events",
+          "platform"
+        ],
+        "deny": [
+          "stores",
+          "handlers",
+          "integration_clients"
+        ]
+      },
+      "engines": {
+        "allow": [
+          "own_projections",
+          "own_indexes",
+          "platform"
+        ],
+        "deny": [
+          "business_domain_mutation",
+          "integrations"
+        ]
+      },
+      "ai": {
+        "allow": [
+          "candidates",
+          "summaries",
+          "classifications",
+          "embeddings"
+        ],
+        "deny": [
+          "domain_stores",
+          "domain_mutation",
+          "source_of_truth"
+        ]
+      },
+      "platform": {
+        "allow": [
+          "all_importers"
+        ],
+        "deny": [
+          "domains",
+          "integrations",
+          "workflows"
+        ]
+      },
+      "vault": {
+        "allow": [
+          "secrets",
+          "sessions",
+          "runtime_state"
+        ],
+        "deny": [
+          "business_truth"
+        ]
+      }
+    }
+  },
+  "frontend": {
+    "layers": {
+      "app": {
+        "allow": [
+          "compose_domain_views",
+          "compose_domain_stores",
+          "routing"
+        ]
+      },
+      "domains": {
+        "allow": [
+          "own_modules",
+          "platform",
+          "shared"
+        ],
+        "deny": [
+          "other_frontend_domains",
+          "provider_runtime_state"
+        ]
+      },
+      "integrations": {
+        "allow": [
+          "provider_setup",
+          "provider_runtime",
+          "platform"
+        ],
+        "deny": [
+          "business_truth"
+        ]
+      }
+    },
+    "provider_business_cache_roots": {
+      "forbidden": [
+        "telegram",
+        "whatsapp",
+        "mail"
+      ],
+      "allowed_business_root": "communications",
+      "allowed_runtime_root": [
+        "integrations",
+        "<provider>",
+        "runtime"
+      ]
+    }
+  }
+}

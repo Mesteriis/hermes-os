@@ -263,7 +263,7 @@ shared/ui/
 ### Level 2 — Domain components
 
 ```text
-domains/mail/components/
+domains/communications/components/
   MailListItem.vue
   MailAttachmentChip.vue
 
@@ -274,7 +274,7 @@ domains/telegram/components/
 ### Level 3 — Features
 
 ```text
-domains/mail/views/
+domains/communications/views/
   MailList.vue
   MailViewer.vue
 

@@ -8,7 +8,16 @@ const execFileAsync = promisify(execFile);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const failures = [];
 const selfTestMode = process.argv.includes('--self-test');
+const architectureContractPath = path.join(repoRoot, 'scripts', 'architecture-contract.json');
 const boundaryBaselinePath = path.join(repoRoot, 'scripts', 'architecture-boundary-baseline.json');
+const expectedInteractionKinds = [
+	'direct_call',
+	'command_port',
+	'query_port',
+	'event',
+	'projection',
+	'runtime_integration_api'
+];
 const forbiddenCanonicalEvidenceDirs = [
 	'backend/src/domains/signals',
 	'backend/src/domains/events',
@@ -16,22 +25,22 @@ const forbiddenCanonicalEvidenceDirs = [
 	'backend/src/domains/evidence',
 	'backend/src/vault/observations'
 ];
-const communicationRawRecordInsertOwner = 'backend/src/domains/mail/core/raw_records.rs';
-const communicationMessageInsertOwner = 'backend/src/domains/mail/messages/store/upsert.rs';
+const communicationRawRecordInsertOwner = 'backend/src/domains/communications/core/raw_records.rs';
+const communicationMessageInsertOwner = 'backend/src/domains/communications/messages/store/upsert.rs';
 const reviewPromotionEngine = 'backend/src/engines/review_promotion/mod.rs';
 const communicationProviderCrudFacadeOwners = new Set([
-	'backend/src/domains/mail/core/accounts.rs',
-	'backend/src/domains/mail/core/secrets.rs'
+	'backend/src/domains/communications/core/accounts.rs',
+	'backend/src/domains/communications/core/secrets.rs'
 ]);
 const telegramProviderOwnershipCompatExceptions = new Set([
 	'backend/src/integrations/telegram/api/raw.rs'
 ]);
 const telegramCommandQueueOwner = 'backend/src/integrations/telegram/client/commands.rs';
 const mailSyncRunMutationOwners = new Set([
-	'backend/src/domains/mail/background_sync/store/run_start.rs',
-	'backend/src/domains/mail/background_sync/store/run_progress.rs',
-	'backend/src/domains/mail/background_sync/store/run_finish.rs',
-	'backend/src/domains/mail/background_sync/store/orphaned.rs'
+	'backend/src/domains/communications/background_sync/store/run_start.rs',
+	'backend/src/domains/communications/background_sync/store/run_progress.rs',
+	'backend/src/domains/communications/background_sync/store/run_finish.rs',
+	'backend/src/domains/communications/background_sync/store/orphaned.rs'
 ]);
 const aiPromptMutationOwners = new Set([
 	'backend/src/ai/control_center/prompts/templates.rs',
@@ -100,12 +109,12 @@ const taskCandidateReviewServiceOwner = 'backend/src/domains/tasks/candidates/se
 const projectLinkReviewServiceOwner = 'backend/src/domains/projects/link_reviews/service.rs';
 const contradictionReviewServiceOwner = 'backend/src/engines/consistency/service.rs';
 const documentProcessingCommandServiceOwner = 'backend/src/domains/documents/processing/service.rs';
-const mailCommandServiceOwner = 'backend/src/domains/mail/service.rs';
+const mailCommandServiceOwner = 'backend/src/domains/communications/service.rs';
 const emailSyncPipelineOrganizationOwner = 'backend/src/workflows/email_sync_pipeline/organizations.rs';
 const emailSyncPipelineParticipantsOwner = 'backend/src/workflows/email_sync_pipeline/participants.rs';
 const emailSyncPipelineRelationshipsOwner = 'backend/src/workflows/email_sync_pipeline/relationships.rs';
 
-const sharedBackendDomainModules = new Set(['api_support', 'settings']);
+const sharedBackendDomainModules = new Set();
 const businessBackendDomains = new Set([
 	'agents',
 	'calendar',
@@ -578,7 +587,7 @@ function mailSyncRunMutationFailures(fileContents) {
 	const errors = [];
 	const directMutationPattern = /\b(?:INSERT\s+INTO|UPDATE)\s+communication_mail_sync_runs\b/gi;
 	for (const [file, content] of fileContents.entries()) {
-		if (!file.startsWith('backend/src/domains/mail/background_sync/')) continue;
+		if (!file.startsWith('backend/src/domains/communications/background_sync/')) continue;
 		if (mailSyncRunMutationOwners.has(file)) continue;
 		if (directMutationPattern.test(content)) {
 			errors.push(
@@ -963,11 +972,11 @@ function personHandlerManualOrchestrationFailures(fileContents) {
 
 function mailCommunicationQueryManualOrchestrationFailures(fileContents) {
 	const mailHandlerFiles = [
-		'backend/src/domains/mail/handlers/communication_queries/drafts.rs',
-		'backend/src/domains/mail/handlers/communication_queries/folders.rs',
-		'backend/src/domains/mail/handlers/communication_queries/saved_searches.rs',
-		'backend/src/domains/mail/handlers/communication_queries/outbox.rs',
-		'backend/src/domains/mail/handlers/communication_queries/imports.rs'
+		'backend/src/domains/communications/handlers/communication_queries/drafts.rs',
+		'backend/src/domains/communications/handlers/communication_queries/folders.rs',
+		'backend/src/domains/communications/handlers/communication_queries/saved_searches.rs',
+		'backend/src/domains/communications/handlers/communication_queries/outbox.rs',
+		'backend/src/domains/communications/handlers/communication_queries/imports.rs'
 	];
 	const forbiddenPatterns = [
 		/\bNewObservation\b/,
@@ -997,7 +1006,7 @@ function mailCommunicationQueryManualOrchestrationFailures(fileContents) {
 }
 
 function mailProviderSendManualOrchestrationFailures(fileContents) {
-	const content = fileContents.get('backend/src/domains/mail/handlers/sending/provider_send.rs');
+	const content = fileContents.get('backend/src/domains/communications/handlers/sending/provider_send.rs');
 	if (content === undefined) return [];
 	const forbiddenPatterns = [
 		/\bNewObservation\b/,
@@ -1008,7 +1017,7 @@ function mailProviderSendManualOrchestrationFailures(fileContents) {
 	];
 	if (forbiddenPatterns.some((pattern) => pattern.test(content))) {
 		return [
-			`backend/src/domains/mail/handlers/sending/provider_send.rs: manual provider send evidence orchestration must stay in ${mailCommandServiceOwner}, not the sending handler`
+			`backend/src/domains/communications/handlers/sending/provider_send.rs: manual provider send evidence orchestration must stay in ${mailCommandServiceOwner}, not the sending handler`
 		];
 	}
 	return [];
@@ -1016,12 +1025,12 @@ function mailProviderSendManualOrchestrationFailures(fileContents) {
 
 function mailFinalHandlerManualOrchestrationFailures(fileContents) {
 	const files = [
-		'backend/src/domains/mail/handlers/sending/forwarding.rs',
-		'backend/src/domains/mail/handlers/workflow_state.rs',
-		'backend/src/domains/mail/handlers/sending/local_state.rs',
-		'backend/src/domains/mail/handlers/message_ai_state.rs',
-		'backend/src/domains/mail/handlers/message_actions.rs',
-		'backend/src/domains/mail/handlers/workflow_actions/actions/persons.rs'
+		'backend/src/domains/communications/handlers/sending/forwarding.rs',
+		'backend/src/domains/communications/handlers/workflow_state.rs',
+		'backend/src/domains/communications/handlers/sending/local_state.rs',
+		'backend/src/domains/communications/handlers/message_ai_state.rs',
+		'backend/src/domains/communications/handlers/message_actions.rs',
+		'backend/src/domains/communications/handlers/workflow_actions/actions/persons.rs'
 	];
 	const forbiddenPatterns = [
 		/\bNewObservation\b/,
@@ -1056,7 +1065,7 @@ function mailFinalHandlerManualOrchestrationFailures(fileContents) {
 }
 
 function mailAccountManagementManualOrchestrationFailures(fileContents) {
-	const content = fileContents.get('backend/src/domains/mail/handlers/account_management.rs');
+	const content = fileContents.get('backend/src/domains/communications/handlers/account_management.rs');
 	if (content === undefined) return [];
 	const forbiddenPatterns = [
 		/\bObservationOriginKind\b/,
@@ -1064,7 +1073,7 @@ function mailAccountManagementManualOrchestrationFailures(fileContents) {
 	];
 	if (forbiddenPatterns.some((pattern) => pattern.test(content))) {
 		return [
-			`backend/src/domains/mail/handlers/account_management.rs: email account logout/config mutation orchestration must stay in backend/src/vault/provider_accounts.rs owner methods, not the handler`
+			`backend/src/domains/communications/handlers/account_management.rs: email account logout/config mutation orchestration must stay in backend/src/vault/provider_accounts.rs owner methods, not the handler`
 		];
 	}
 	return [];
@@ -1196,6 +1205,9 @@ async function checkAdrFiles() {
 	const adrNumbers = new Map();
 
 	for (const file of adrFiles) {
+		if (file === 'ADR-architecture-communication-contract.md') {
+			continue;
+		}
 		const match = /^ADR-(\d{4})-[a-z0-9-]+\.md$/.exec(file);
 		if (match === null) {
 			failures.push(`docs/adr/${file}: ADR filename must be ADR-NNNN-kebab-case.md`);
@@ -1224,6 +1236,56 @@ async function checkAdrFiles() {
 				failures.push(`docs/adr/${file}: references missing ADR-${reference[1]}`);
 			}
 		}
+	}
+}
+
+async function checkArchitectureContract() {
+	if (await exists(boundaryBaselinePath)) {
+		failures.push(
+			'scripts/architecture-boundary-baseline.json: forbidden by the architecture communication contract; fix the boundary instead of baselining it'
+		);
+	}
+
+	let contract;
+	try {
+		contract = JSON.parse(await readFile(architectureContractPath, 'utf8'));
+	} catch (error) {
+		failures.push(`scripts/architecture-contract.json: cannot read or parse contract: ${error.message}`);
+		return;
+	}
+
+	if (contract.schema_version !== 1) {
+		failures.push('scripts/architecture-contract.json: schema_version must be 1');
+	}
+	if (JSON.stringify(contract.interaction_kinds) !== JSON.stringify(expectedInteractionKinds)) {
+		failures.push(
+			`scripts/architecture-contract.json: interaction_kinds must be ${expectedInteractionKinds.join(', ')}`
+		);
+	}
+
+	const requiredBackendLayers = ['app', 'domains', 'integrations', 'workflows', 'engines', 'ai', 'platform', 'vault'];
+	for (const layer of requiredBackendLayers) {
+		if (contract.backend?.layers?.[layer] === undefined) {
+			failures.push(`scripts/architecture-contract.json: missing backend layer ${layer}`);
+		}
+	}
+	const requiredFrontendLayers = ['app', 'domains', 'integrations'];
+	for (const layer of requiredFrontendLayers) {
+		if (contract.frontend?.layers?.[layer] === undefined) {
+			failures.push(`scripts/architecture-contract.json: missing frontend layer ${layer}`);
+		}
+	}
+
+	if (!contract.backend?.layers?.domains?.deny?.includes('other_domains')) {
+		failures.push('scripts/architecture-contract.json: backend domains must deny other_domains');
+	}
+	if (!contract.backend?.layers?.integrations?.deny?.includes('domains')) {
+		failures.push('scripts/architecture-contract.json: backend integrations must deny domains');
+	}
+	if (contract.frontend?.provider_business_cache_roots?.allowed_business_root !== 'communications') {
+		failures.push(
+			'scripts/architecture-contract.json: frontend provider business cache root must be communications'
+		);
 	}
 }
 
@@ -1332,69 +1394,7 @@ async function checkCanonicalEvidenceBoundaries() {
 	failures.push(...documentProcessingApiManualOrchestrationFailures(fileContents));
 }
 
-function boundaryKey(violation) {
-	return `${violation.file} -> ${violation.importedDomain}`;
-}
-
-function baselineKey(entry) {
-	return `${entry.file} -> ${entry.importedDomain}`;
-}
-
-async function loadBoundaryBaseline() {
-	const content = await readFile(boundaryBaselinePath, 'utf8');
-	const baseline = JSON.parse(content);
-	for (const section of ['backend', 'frontend']) {
-		if (!Array.isArray(baseline[section])) {
-			failures.push(`scripts/architecture-boundary-baseline.json: ${section} must be an array`);
-			baseline[section] = [];
-			continue;
-		}
-
-		for (const entry of baseline[section]) {
-			if (
-				entry === null ||
-				typeof entry !== 'object' ||
-				typeof entry.file !== 'string' ||
-				typeof entry.importedDomain !== 'string'
-			) {
-				failures.push(
-					`scripts/architecture-boundary-baseline.json: ${section} entries must contain file and importedDomain strings`
-				);
-			}
-		}
-	}
-	return baseline;
-}
-
-function boundaryBaselineFailures(section, violations, baselineEntries) {
-	const baselineKeys = new Set(baselineEntries.map(baselineKey));
-	const currentKeys = new Set(violations.map(boundaryKey));
-	const errors = [];
-
-	for (const violation of violations) {
-		if (!baselineKeys.has(boundaryKey(violation))) {
-			errors.push(violation.message);
-		}
-	}
-
-	for (const entry of baselineEntries) {
-		const key = baselineKey(entry);
-		if (!currentKeys.has(key)) {
-			errors.push(
-				`scripts/architecture-boundary-baseline.json: stale ${section} baseline entry ${key}`
-			);
-		}
-	}
-
-	return errors;
-}
-
-function applyBoundaryBaseline(section, violations, baselineEntries) {
-	failures.push(...boundaryBaselineFailures(section, violations, baselineEntries));
-}
-
 async function checkLayerBoundaries() {
-	const baseline = await loadBoundaryBaseline();
 	const backendFiles = await collectFiles('backend/src', new Set(['.rs']));
 	const frontendFiles = await collectFiles('frontend/src/domains', new Set(['.ts', '.vue']));
 	const backendViolations = [];
@@ -1410,8 +1410,25 @@ async function checkLayerBoundaries() {
 		frontendViolations.push(...frontendBoundaryViolations(file, source));
 	}
 
-	applyBoundaryBaseline('backend', backendViolations, baseline.backend);
-	applyBoundaryBaseline('frontend', frontendViolations, baseline.frontend);
+	failures.push(...backendViolations.map((violation) => violation.message));
+	failures.push(...frontendViolations.map((violation) => violation.message));
+	failures.push(...await frontendProviderBusinessCacheRootFailures());
+}
+
+async function frontendProviderBusinessCacheRootFailures() {
+	const frontendFiles = await collectFiles('frontend/src', new Set(['.ts', '.vue']));
+	const errors = [];
+	const forbiddenRootPattern =
+		/\b(?:queryKey|invalidateQueries|setQueryData|getQueryData|removeQueries|refetchQueries|cancelQueries)\b[\s\S]{0,180}?\[\s*['"](telegram|whatsapp|mail)['"]/g;
+	for (const file of frontendFiles) {
+		const source = await readFile(path.join(repoRoot, file), 'utf8');
+		for (const match of source.matchAll(forbiddenRootPattern)) {
+			errors.push(
+				`${file}: provider business query/cache root "${match[1]}" is forbidden; use ["communications", ...] for business data or ["integrations", "${match[1]}", "runtime", ...] for provider runtime state`
+			);
+		}
+	}
+	return errors;
 }
 
 function assertSelfTest(name, condition) {
@@ -1483,47 +1500,6 @@ function runSelfTests() {
 			'frontend/src/app/views/HomeView.vue',
 			"import TasksPage from '../../domains/tasks/views/TasksPage.vue'"
 		).length === 0
-	);
-	assertSelfTest(
-		'exact baseline allows only the listed legacy pair',
-		boundaryBaselineFailures(
-			'backend',
-			[
-				{
-					file: 'backend/src/domains/mail/handlers/mod.rs',
-					importedDomain: 'tasks',
-					message: 'known legacy tasks import'
-				}
-			],
-			[{ file: 'backend/src/domains/mail/handlers/mod.rs', importedDomain: 'tasks' }]
-		).length === 0
-	);
-	assertSelfTest(
-		'exact baseline rejects new domain import in legacy file',
-		boundaryBaselineFailures(
-			'backend',
-			[
-				{
-					file: 'backend/src/domains/mail/handlers/mod.rs',
-					importedDomain: 'tasks',
-					message: 'known legacy tasks import'
-				},
-				{
-					file: 'backend/src/domains/mail/handlers/mod.rs',
-					importedDomain: 'radar',
-					message: 'new radar import'
-				}
-			],
-			[{ file: 'backend/src/domains/mail/handlers/mod.rs', importedDomain: 'tasks' }]
-		).length === 1
-	);
-	assertSelfTest(
-		'exact baseline reports stale entries',
-		boundaryBaselineFailures(
-			'frontend',
-			[],
-			[{ file: 'frontend/src/domains/telegram/api/telegram.ts', importedDomain: 'communications' }]
-		).length === 1
 	);
 	assertSelfTest(
 		'canonical evidence guard rejects forbidden evidence domain',
@@ -1612,7 +1588,7 @@ function runSelfTests() {
 	assertSelfTest(
 		'provider CRUD compatibility facade usage outside owner files fails',
 		communicationProviderCrudFacadeFailures(new Map([
-			['backend/src/domains/mail/outbox/provider_sender.rs', 'store.upsert_provider_account(&account);']
+			['backend/src/domains/communications/outbox/provider_sender.rs', 'store.upsert_provider_account(&account);']
 		])).length === 1
 	);
 	assertSelfTest(
@@ -1636,7 +1612,7 @@ function runSelfTests() {
 	assertSelfTest(
 		'provider CRUD compatibility facade owner files pass',
 		communicationProviderCrudFacadeFailures(new Map([
-			['backend/src/domains/mail/core/accounts.rs', 'store.upsert_provider_account(&account);']
+			['backend/src/domains/communications/core/accounts.rs', 'store.upsert_provider_account(&account);']
 		])).length === 0
 	);
 	assertSelfTest(
@@ -1644,7 +1620,7 @@ function runSelfTests() {
 		telegramProviderOwnershipFailures(new Map([
 			[
 				'backend/src/integrations/telegram/runtime/manager.rs',
-				'use crate::domains::mail::core::CommunicationIngestionStore;'
+				'use crate::domains::communications::core::CommunicationIngestionStore;'
 			]
 		])).length === 1
 	);
@@ -1661,7 +1637,7 @@ function runSelfTests() {
 		'mail account management guard rejects handler-owned logout mutation orchestration',
 		mailAccountManagementManualOrchestrationFailures(new Map([
 			[
-				'backend/src/domains/mail/handlers/account_management.rs',
+				'backend/src/domains/communications/handlers/account_management.rs',
 				'CommunicationProviderAccountStore::new(pool).update_config_with_origin(&account_id, &config, ObservationOriginKind::LocalRuntime, "actor", "logout");'
 			]
 		])).length === 1
@@ -1670,7 +1646,7 @@ function runSelfTests() {
 		'mail account management guard allows owner method call',
 		mailAccountManagementManualOrchestrationFailures(new Map([
 			[
-				'backend/src/domains/mail/handlers/account_management.rs',
+				'backend/src/domains/communications/handlers/account_management.rs',
 				'CommunicationProviderAccountStore::new(pool).mark_logged_out(&account_id);'
 			]
 		])).length === 0
@@ -1688,6 +1664,7 @@ async function main() {
 		failures.push('AGENTS.md is required at repository root');
 	}
 
+	await checkArchitectureContract();
 	await checkAdrFiles();
 	await checkMigrations();
 	await checkDockerBoundary();

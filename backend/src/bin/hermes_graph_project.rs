@@ -1,5 +1,5 @@
 use hermes_hub_backend::domains::graph::core::{GraphCount, GraphStore, GraphSummary};
-use hermes_hub_backend::domains::graph::projection::{
+use hermes_hub_backend::engines::graph_projection::{
     GraphProjectionReport, GraphProjectionService,
 };
 use hermes_hub_backend::platform::config::AppConfig;

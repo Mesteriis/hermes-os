@@ -37,7 +37,7 @@ async fn telegram_commands_endpoint_filters_by_chat_and_kind() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -90,7 +90,7 @@ async fn telegram_commands_endpoint_filters_by_chat_and_kind() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/telegram/commands?account_id={account_id}&provider_chat_id={provider_chat_id}&provider_message_id={provider_chat_id}:1&command_kinds=mark_read&limit=20"
+                "/api/v1/communications/telegram/commands?account_id={account_id}&provider_chat_id={provider_chat_id}&provider_message_id={provider_chat_id}:1&command_kinds=mark_read&limit=20"
             ),
             LOCAL_API_TOKEN,
         ))

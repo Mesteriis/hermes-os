@@ -196,20 +196,16 @@ mod tests {
     use testkit::context::TestContext;
 
     use super::*;
-    use crate::domains::mail::core::{
-        CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
-        NewRawCommunicationRecord,
+    use crate::platform::communications::{
+        CommunicationProviderKind, NewProviderAccount, NewRawCommunicationRecord,
     };
-    use crate::domains::mail::messages::MessageProjectionStore;
-    use crate::integrations::telegram::client::project_raw_telegram_message;
     use crate::vault::CommunicationProviderAccountStore;
+    use crate::workflows::provider_communication_projection::record_and_project_telegram_message;
 
     #[tokio::test]
     async fn update_message_attachment_download_state_patches_projected_metadata() {
         let ctx = TestContext::new().await;
         let pool = ctx.pool().clone();
-        let communication_store = CommunicationIngestionStore::new(pool.clone());
-        let message_store = MessageProjectionStore::new(pool.clone());
         let telegram_store = TelegramStore::new(pool.clone());
         let suffix = format!("{}", Utc::now().timestamp_nanos_opt().unwrap_or(0));
         let account_id = format!("telegram-media-metadata-{suffix}");
@@ -228,46 +224,42 @@ mod tests {
             )
             .await
             .expect("provider account");
-        let raw = communication_store
-            .record_raw_source(
-                &NewRawCommunicationRecord::new(
-                    format!("raw:telegram-media-metadata:{suffix}"),
-                    &account_id,
-                    "telegram_message",
-                    &provider_message_id,
-                    format!("sha256:{suffix}"),
-                    format!("telegram-tdlib-history:{account_id}:{provider_chat_id}"),
-                    json!({
-                        "provider_chat_id": provider_chat_id,
-                        "chat_title": "Media Channel",
-                        "chat_kind": "channel",
-                        "sender_id": format!("chat:{provider_chat_id}"),
-                        "sender_display_name": "Media Channel",
-                        "text": "",
-                        "delivery_state": "received",
-                        "tdlib_raw": {
-                            "@type": "message",
-                            "id": 7001_i64,
-                            "chat_id": provider_chat_id,
-                            "content": {"@type": "messagePhoto"}
-                        }
-                    }),
-                )
-                .occurred_at(Utc::now())
-                .provenance(json!({
-                    "provider": "telegram",
-                    "provider_kind": "telegram_user",
-                    "runtime": "tdlib",
-                    "account_id": account_id,
+        let projected = record_and_project_telegram_message(
+            pool.clone(),
+            NewRawCommunicationRecord::new(
+                format!("raw:telegram-media-metadata:{suffix}"),
+                &account_id,
+                "telegram_message",
+                &provider_message_id,
+                format!("sha256:{suffix}"),
+                format!("telegram-tdlib-history:{account_id}:{provider_chat_id}"),
+                json!({
                     "provider_chat_id": provider_chat_id,
-                })),
+                    "chat_title": "Media Channel",
+                    "chat_kind": "channel",
+                    "sender_id": format!("chat:{provider_chat_id}"),
+                    "sender_display_name": "Media Channel",
+                    "text": "",
+                    "delivery_state": "received",
+                    "tdlib_raw": {
+                        "@type": "message",
+                        "id": 7001_i64,
+                        "chat_id": provider_chat_id,
+                        "content": {"@type": "messagePhoto"}
+                    }
+                }),
             )
-            .await
-            .expect("raw source");
-
-        let projected = project_raw_telegram_message(&message_store, &raw)
-            .await
-            .expect("project media message");
+            .occurred_at(Utc::now())
+            .provenance(json!({
+                "provider": "telegram",
+                "provider_kind": "telegram_user",
+                "runtime": "tdlib",
+                "account_id": account_id,
+                "provider_chat_id": provider_chat_id,
+            })),
+        )
+        .await
+        .expect("project media message");
 
         telegram_store
             .update_message_attachment_download_state(

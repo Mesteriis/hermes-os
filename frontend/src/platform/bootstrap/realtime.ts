@@ -8,8 +8,8 @@ import type {
 } from '../sse'
 import type { FrontendConfig } from '../config/env'
 import { applyMailRealtimePatch } from '../../domains/communications/queries/realtimeMailPatches'
-import { applyTelegramParticipantRealtimePatch } from '../../domains/telegram/queries/realtimeTelegramParticipantPatches'
-import { applyTelegramRealtimePatch } from '../../domains/telegram/queries/realtimeTelegramPatches'
+import { applyTelegramParticipantRealtimePatch } from '../../integrations/telegram/queries/realtimeTelegramParticipantPatches'
+import { applyTelegramRealtimePatch } from '../../integrations/telegram/queries/realtimeTelegramPatches'
 
 export type RealtimeClient = {
 	connect: () => void
@@ -45,11 +45,9 @@ const REALTIME_CURSOR_STORAGE_KEY = 'hermes.realtime.lastEventId'
 const REALTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
 	['communications-mail-list'],
 	['communications-state-counts'],
-	['communications-sync-statuses'],
 	['communications-drafts'],
 	['communications-outbox'],
 	['communications-threads'],
-	['communications-mailbox-health'],
 	['communications-message'],
 	['communications-ai-state'],
 	['communications-saved-searches'],
@@ -58,14 +56,19 @@ const REALTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
 	['communications-attachment-search']
 ]
 
+const MAIL_RUNTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
+	['integrations', 'mail', 'sync-statuses'],
+	['integrations', 'mail', 'mailbox-health']
+]
+
 const TELEGRAM_QUERY_KEYS: readonly (readonly unknown[])[] = [
-	['telegram', 'capabilities'],
-	['telegram', 'accounts'],
-	['telegram', 'chats'],
-	['telegram', 'folders'],
-	['telegram', 'messages'],
-	['telegram', 'runtime'],
-	['telegram', 'calls']
+	['integrations', 'telegram', 'capabilities'],
+	['integrations', 'telegram', 'accounts'],
+	['integrations', 'telegram', 'chats'],
+	['integrations', 'telegram', 'folders'],
+	['integrations', 'telegram', 'messages'],
+	['integrations', 'telegram', 'runtime'],
+	['integrations', 'telegram', 'calls']
 ]
 
 export function initializeRealtime(
@@ -246,7 +249,7 @@ export function handleRealtimeEvent(
 }
 
 function laggedRealtimeQueryKeys(): readonly (readonly unknown[])[] {
-	return [...REALTIME_QUERY_KEYS, ...TELEGRAM_QUERY_KEYS]
+	return [...REALTIME_QUERY_KEYS, ...MAIL_RUNTIME_QUERY_KEYS, ...TELEGRAM_QUERY_KEYS]
 }
 
 function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly unknown[])[] {
@@ -263,7 +266,7 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 		return [['communications-outbox'], ['communications-mail-list']]
 	}
 	if (eventType.startsWith('mail.sync.')) {
-		return [['communications-sync-statuses']]
+		return [['integrations', 'mail', 'sync-statuses']]
 	}
 	if (eventType.startsWith('mail.message.')) {
 		return [
@@ -293,40 +296,40 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 		return [['communications-folders'], ['communications-folder-messages']]
 	}
 	if (eventType.startsWith('telegram.sync.')) {
-		return [['telegram', 'chats'], ['telegram', 'messages'], ['telegram', 'runtime']]
+		return [['integrations', 'telegram', 'chats'], ['integrations', 'telegram', 'messages'], ['integrations', 'telegram', 'runtime']]
 	}
 	if (eventType.startsWith('telegram.message.')) {
-		return [['telegram', 'messages'], ['telegram', 'chats']]
+		return [['integrations', 'telegram', 'messages'], ['integrations', 'telegram', 'chats']]
 	}
 	if (eventType.startsWith('telegram.typing.')) {
-		return [['telegram', 'chats'], ['telegram', 'runtime']]
+		return [['integrations', 'telegram', 'chats'], ['integrations', 'telegram', 'runtime']]
 	}
 	if (eventType.startsWith('telegram.topic.')) {
-		return [['telegram', 'topics'], ['telegram', 'topic-search'], ['telegram', 'topic-messages']]
+		return [['integrations', 'telegram', 'topics'], ['integrations', 'telegram', 'topic-search'], ['integrations', 'telegram', 'topic-messages']]
 	}
 	if (eventType.startsWith('telegram.participant.')) {
-		return [['telegram', 'chat-members'], ['telegram', 'chats']]
+		return [['integrations', 'telegram', 'chat-members'], ['integrations', 'telegram', 'chats']]
 	}
 	if (eventType.startsWith('telegram.folders.')) {
-		return [['telegram', 'folders'], ['telegram', 'chats']]
+		return [['integrations', 'telegram', 'folders'], ['integrations', 'telegram', 'chats']]
 	}
 	if (eventType.startsWith('telegram.media.upload.')) {
-		return [['telegram', 'commands'], ['telegram', 'runtime']]
+		return [['integrations', 'telegram', 'commands'], ['integrations', 'telegram', 'runtime']]
 	}
 	if (eventType.startsWith('telegram.media.download.')) {
-		return [['telegram', 'messages'], ['telegram', 'search', 'media']]
+		return [['integrations', 'telegram', 'messages'], ['integrations', 'telegram', 'search', 'media']]
 	}
 	if (eventType.startsWith('telegram.reaction.')) {
-		return [['telegram', 'messages']]
+		return [['integrations', 'telegram', 'messages']]
 	}
 	if (eventType.startsWith('telegram.command.')) {
-		return [['telegram', 'messages'], ['telegram', 'runtime'], ['telegram', 'commands']]
+		return [['integrations', 'telegram', 'messages'], ['integrations', 'telegram', 'runtime'], ['integrations', 'telegram', 'commands']]
 	}
 	if (eventType.startsWith('telegram.')) {
 		return TELEGRAM_QUERY_KEYS
 	}
 
-	return REALTIME_QUERY_KEYS
+	return [...REALTIME_QUERY_KEYS, ...MAIL_RUNTIME_QUERY_KEYS]
 }
 
 function canonicalEventType(data: string): string | null {

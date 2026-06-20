@@ -1,7 +1,7 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
-  MailMessagesResponse,
-  MailMessageDetailResponse,
+  CommunicationMessagesResponse,
+  CommunicationMessageDetailResponse,
   WorkflowState,
   LocalMessageState,
   WorkflowStateCountsResponse,
@@ -12,7 +12,7 @@ import type {
   WorkflowActionRequest,
   WorkflowActionResponse,
   DraftListResponse,
-  EmailDraft,
+  CommunicationDraft,
   DraftDeleteResponse,
   MailboxHealth,
   SenderStatsListResponse,
@@ -30,11 +30,11 @@ import type {
   AiReplyVariantsResponse,
   ExtractTasksResponse,
   ExtractNotesResponse,
-  EmailSearchResponse,
+  CommunicationSearchResponse,
   SubscriptionListResponse,
   MailArchitectureBlocker,
-  EmailPersona,
-  EmailTemplate,
+  CommunicationPersona,
+  CommunicationTemplate,
   RichTemplateDeleteResponse,
   RichTemplateMailMergePreviewRequest,
   RichTemplateMailMergePreviewResponse,
@@ -46,7 +46,7 @@ import type {
   BulkMessageActionResponse
 } from '../types/communications'
 
-export async function fetchMailMessages(
+export async function fetchCommunicationMessages(
   accountId?: string,
   workflowState?: WorkflowState,
   channelKind?: string,
@@ -54,7 +54,7 @@ export async function fetchMailMessages(
   localState?: LocalMessageState,
   limit = 250,
   cursor?: string | null
-): Promise<MailMessagesResponse> {
+): Promise<CommunicationMessagesResponse> {
   const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
   if (accountId?.trim()) params.set('account_id', accountId.trim())
   if (workflowState?.trim()) params.set('workflow_state', workflowState.trim())
@@ -62,14 +62,14 @@ export async function fetchMailMessages(
   if (query?.trim()) params.set('q', query.trim())
   if (localState?.trim()) params.set('local_state', localState.trim())
   if (cursor?.trim()) params.set('cursor', cursor.trim())
-  return ApiClient.instance.get<MailMessagesResponse>(
+  return ApiClient.instance.get<CommunicationMessagesResponse>(
     `/api/v1/communications/messages?${params.toString()}`,
     'Mail messages request failed'
   )
 }
 
-export async function fetchMailMessage(messageId: string): Promise<MailMessageDetailResponse> {
-  return ApiClient.instance.get<MailMessageDetailResponse>(
+export async function fetchCommunicationMessage(messageId: string): Promise<CommunicationMessageDetailResponse> {
+  return ApiClient.instance.get<CommunicationMessageDetailResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(messageId)}`,
     'Mail message detail request failed'
   )
@@ -161,9 +161,9 @@ export async function runWorkflowAction(
   )
 }
 
-export async function searchEmails(query: string, limit = 20): Promise<EmailSearchResponse> {
+export async function searchEmails(query: string, limit = 20): Promise<CommunicationSearchResponse> {
   const params = new URLSearchParams({ q: query, limit: String(Math.trunc(limit)) })
-  return ApiClient.instance.get<EmailSearchResponse>(
+  return ApiClient.instance.get<CommunicationSearchResponse>(
     `/api/v1/communications/search?${params.toString()}`,
     'Email search failed'
   )
@@ -186,8 +186,8 @@ export async function fetchDrafts(
   )
 }
 
-export async function createDraft(draft: unknown): Promise<EmailDraft> {
-  return ApiClient.instance.post<EmailDraft>(
+export async function createDraft(draft: unknown): Promise<CommunicationDraft> {
+  return ApiClient.instance.post<CommunicationDraft>(
     '/api/v1/communications/drafts',
     draft,
     'Draft creation failed'
@@ -380,15 +380,15 @@ export async function fetchTopSenders(
   )
 }
 
-export async function fetchPersonas(): Promise<{ items: EmailPersona[] }> {
-  return ApiClient.instance.get<{ items: EmailPersona[] }>(
+export async function fetchPersonas(): Promise<{ items: CommunicationPersona[] }> {
+  return ApiClient.instance.get<{ items: CommunicationPersona[] }>(
     '/api/v1/communications/personas',
     'Persona request failed'
   )
 }
 
-export async function fetchRichTemplates(): Promise<{ templates: EmailTemplate[] }> {
-  return ApiClient.instance.get<{ templates: EmailTemplate[] }>(
+export async function fetchRichTemplates(): Promise<{ templates: CommunicationTemplate[] }> {
+  return ApiClient.instance.get<{ templates: CommunicationTemplate[] }>(
     '/api/v1/communications/templates/rich',
     'Rich template request failed'
   )

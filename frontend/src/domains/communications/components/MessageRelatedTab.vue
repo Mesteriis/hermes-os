@@ -2,14 +2,14 @@
 import { computed, ref } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
-import type { MailMessageDetailResponse, MessageExportFormat } from '../types/communications'
+import type { CommunicationMessageDetailResponse, MessageExportFormat } from '../types/communications'
 import {
   mailMessageLabelsFromMetadata,
   mailMessageSnoozeUntilFromMetadata
 } from '../helpers/mailPageModels'
 
 const props = defineProps<{
-  detail: MailMessageDetailResponse | null
+  detail: CommunicationMessageDetailResponse | null
 }>()
 
 const emit = defineEmits<{

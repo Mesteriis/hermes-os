@@ -3,7 +3,6 @@ mod errors;
 mod materialization;
 mod models;
 mod queries;
-mod relationship_materialization;
 mod rows;
 mod store;
 

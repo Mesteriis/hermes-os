@@ -11,13 +11,13 @@ use tempfile::tempdir;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
-use hermes_hub_backend::domains::mail::outbox::{
-    EmailOutboxDeliveryWorker, EmailOutboxStatus, EmailOutboxStore, LiveSmtpTransport,
-    NewEmailOutboxItem, ProviderOutboxEmailSender,
+use hermes_hub_backend::domains::communications::outbox::{
+    CommunicationOutboxStatus, CommunicationOutboxStore, EmailOutboxDeliveryWorker,
+    LiveSmtpTransport, NewCommunicationOutboxItem, ProviderOutboxEmailSender,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::{
@@ -125,11 +125,11 @@ async fn outbox_delivery_worker_sends_gmail_items_through_gmail_api_against_post
         )
         .expect("store gmail OAuth bundle");
 
-    let outbox_store = EmailOutboxStore::new(pool.clone());
+    let outbox_store = CommunicationOutboxStore::new(pool.clone());
     let now = Utc::now();
     let outbox_id = "outbox:gmail:scheduled";
     outbox_store
-        .enqueue(&NewEmailOutboxItem {
+        .enqueue(&NewCommunicationOutboxItem {
             outbox_id: outbox_id.to_owned(),
             account_id: account_id.to_owned(),
             draft_id: None,
@@ -139,7 +139,7 @@ async fn outbox_delivery_worker_sends_gmail_items_through_gmail_api_against_post
             subject: "Scheduled Gmail API send".to_owned(),
             body_text: "Queued Gmail outbox body.".to_owned(),
             body_html: None,
-            status: EmailOutboxStatus::Scheduled,
+            status: CommunicationOutboxStatus::Scheduled,
             scheduled_send_at: Some(now - Duration::seconds(1)),
             undo_deadline_at: Some(now - Duration::seconds(1)),
             metadata: json!({}),
@@ -161,7 +161,7 @@ async fn outbox_delivery_worker_sends_gmail_items_through_gmail_api_against_post
     assert_eq!(report.retried, 0);
 
     let sent_items = outbox_store
-        .list(Some(account_id), Some(EmailOutboxStatus::Sent), 10)
+        .list(Some(account_id), Some(CommunicationOutboxStatus::Sent), 10)
         .await
         .expect("list sent outbox");
     assert_eq!(sent_items.len(), 1);

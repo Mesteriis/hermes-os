@@ -36,7 +36,7 @@ async fn telegram_dialog_search_returns_projected_chat_matches() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -49,7 +49,7 @@ async fn telegram_dialog_search_returns_projected_chat_matches() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/messages",
+        "/api/v1/communications/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": matching_chat_id,
@@ -67,7 +67,7 @@ async fn telegram_dialog_search_returns_projected_chat_matches() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/messages",
+        "/api/v1/communications/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": other_chat_id,
@@ -87,7 +87,7 @@ async fn telegram_dialog_search_returns_projected_chat_matches() {
     let response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/chats/search?q=Alpha&account_id={account_id}&limit=10"),
+            &format!("/api/v1/communications/telegram/chats/search?q=Alpha&account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -124,7 +124,7 @@ async fn telegram_media_search_filters_by_free_text_query() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -138,7 +138,7 @@ async fn telegram_media_search_filters_by_free_text_query() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -200,7 +200,7 @@ async fn telegram_media_search_filters_by_free_text_query() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/telegram/search/media?q=invoice&account_id={account_id}&provider_chat_id={chat_id}&limit=20"
+                "/api/v1/communications/telegram/search/media?q=invoice&account_id={account_id}&provider_chat_id={chat_id}&limit=20"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -248,7 +248,7 @@ async fn telegram_pinned_messages_route_returns_projection_backed_items() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -318,7 +318,7 @@ async fn telegram_pinned_messages_route_returns_projection_backed_items() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/chats?account_id={account_id}&limit=10"),
+            &format!("/api/v1/communications/telegram/chats?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -333,7 +333,9 @@ async fn telegram_pinned_messages_route_returns_projection_backed_items() {
     let response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/chats/{telegram_chat_id}/pinned-messages?limit=10"),
+            &format!(
+                "/api/v1/communications/telegram/chats/{telegram_chat_id}/pinned-messages?limit=10"
+            ),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -375,7 +377,7 @@ async fn telegram_message_created_event_includes_projected_chat_snapshot() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -400,7 +402,7 @@ async fn telegram_message_created_event_includes_projected_chat_snapshot() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/chats?account_id={account_id}&limit=10"),
+            &format!("/api/v1/communications/telegram/chats?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -470,7 +472,7 @@ async fn telegram_message_pin_route_records_local_projection_command_and_audit()
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -494,7 +496,7 @@ async fn telegram_message_pin_route_records_local_projection_command_and_audit()
     let response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/telegram/messages/{message_id}/pin"),
+            &format!("/api/v1/communications/telegram/messages/{message_id}/pin"),
             json!({
                 "command_id": command_id,
                 "account_id": account_id,

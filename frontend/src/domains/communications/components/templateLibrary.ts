@@ -1,5 +1,5 @@
 import { splitComposeRecipients } from '../forms/composeValidation'
-import type { EmailTemplate } from '../types/templates'
+import type { CommunicationTemplate } from '../types/templates'
 
 export type TemplateLibraryCategory =
   | 'mail-merge'
@@ -47,10 +47,10 @@ export function templateLibraryCategoryLabel(category: TemplateLibraryCategory):
 }
 
 export function filterTemplateLibraryTemplates(
-  templates: EmailTemplate[],
+  templates: CommunicationTemplate[],
   query: string,
   category: TemplateLibraryCategory | 'all'
-): EmailTemplate[] {
+): CommunicationTemplate[] {
   const normalizedQuery = query.trim().toLowerCase()
   const categoryFiltered = templates.filter((template) =>
     templateMatchesLibraryCategory(template, category)
@@ -66,7 +66,7 @@ export function filterTemplateLibraryTemplates(
   })
 }
 
-export function orderTemplateLibraryTemplates(templates: EmailTemplate[]): EmailTemplate[] {
+export function orderTemplateLibraryTemplates(templates: CommunicationTemplate[]): CommunicationTemplate[] {
   return templates
     .slice()
     .sort((left, right) => {
@@ -100,7 +100,7 @@ export function suggestTemplateSaveName(
 }
 
 export function deriveTemplateLibraryCategories(
-  template: Pick<EmailTemplate, 'variables' | 'malformed_placeholders' | 'undeclared_variables'>
+  template: Pick<CommunicationTemplate, 'variables' | 'malformed_placeholders' | 'undeclared_variables'>
 ): TemplateLibraryCategory[] {
   const categories: TemplateLibraryCategory[] = []
 
@@ -115,7 +115,7 @@ export function deriveTemplateLibraryCategories(
 }
 
 export function templateMatchesLibraryCategory(
-  template: Pick<EmailTemplate, 'variables' | 'malformed_placeholders' | 'undeclared_variables'>,
+  template: Pick<CommunicationTemplate, 'variables' | 'malformed_placeholders' | 'undeclared_variables'>,
   category: TemplateLibraryCategory | 'all'
 ): boolean {
   if (category === 'all') return true

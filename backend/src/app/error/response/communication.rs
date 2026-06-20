@@ -1,7 +1,7 @@
 use axum::http::StatusCode;
 
 use super::super::types::ApiError;
-use super::{ErrorParts, mail};
+use super::{ErrorParts, communications};
 
 pub(super) fn parts(error: ApiError) -> ErrorParts {
     match error {
@@ -47,7 +47,7 @@ pub(super) fn parts(error: ApiError) -> ErrorParts {
             "communication message was not found".to_owned(),
             false,
         ),
-        ApiError::AccountSetup(error) => mail::account_setup_error_parts(error),
+        ApiError::AccountSetup(error) => communications::account_setup_error_parts(error),
         ApiError::AccountSetupState => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "account_setup_state_error",

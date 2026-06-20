@@ -28,7 +28,4 @@ pub enum PersonProjectionError {
 
     #[error("invalid persona type: {0}")]
     InvalidPersonaType(String),
-
-    #[error(transparent)]
-    Graph(#[from] crate::domains::graph::core::GraphStoreError),
 }

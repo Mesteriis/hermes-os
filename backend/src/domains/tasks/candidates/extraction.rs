@@ -1,16 +1,12 @@
 use serde_json::json;
 
-use crate::domains::obligations::ObligationReviewState;
 use crate::engines::obligation::ObligationCandidate;
 
 use super::constants::{
     OBLIGATION_CANDIDATE_METADATA_KEY, REVIEW_TEXT_SNIPPET_CHARS, TITLE_PREVIEW_CHARS,
 };
 use super::errors::TaskCandidateError;
-use super::models::{
-    CandidatePayload, StoredCandidateRow, TaskCandidateKind, TaskCandidateReviewState,
-    TaskCandidateSourceKind,
-};
+use super::models::{CandidatePayload, TaskCandidateKind, TaskCandidateSourceKind};
 use super::validation::text_preview;
 
 pub(crate) struct CandidateFragment {
@@ -102,31 +98,5 @@ pub(crate) fn task_candidate_payload_from_obligation(
         assignee_label: None,
         confidence: (candidate.confidence - 0.08).max(0.0),
         evidence_excerpt: evidence_excerpt(&candidate.quote),
-    }
-}
-
-pub(crate) fn obligation_candidate_from_metadata(
-    candidate: &StoredCandidateRow,
-) -> Result<ObligationCandidate, TaskCandidateError> {
-    let value = candidate
-        .candidate_metadata
-        .get(OBLIGATION_CANDIDATE_METADATA_KEY)
-        .cloned()
-        .ok_or_else(|| {
-            TaskCandidateError::InvalidCandidateMetadata(
-                OBLIGATION_CANDIDATE_METADATA_KEY.to_owned(),
-            )
-        })?;
-
-    Ok(serde_json::from_value(value)?)
-}
-
-pub(crate) fn obligation_review_state_from_task_candidate(
-    review_state: TaskCandidateReviewState,
-) -> ObligationReviewState {
-    match review_state {
-        TaskCandidateReviewState::Suggested => ObligationReviewState::Suggested,
-        TaskCandidateReviewState::UserConfirmed => ObligationReviewState::UserConfirmed,
-        TaskCandidateReviewState::UserRejected => ObligationReviewState::UserRejected,
     }
 }

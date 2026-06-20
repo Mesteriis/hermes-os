@@ -1,7 +1,7 @@
 use chrono::Utc;
 use serde_json::json;
 
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
 };
 use hermes_hub_backend::integrations::telegram::client::lifecycle;

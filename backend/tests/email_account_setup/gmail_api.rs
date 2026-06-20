@@ -9,7 +9,7 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::platform::config::AppConfig;
@@ -72,11 +72,11 @@ async fn gmail_oauth_start_api_uses_configured_google_desktop_client_against_pos
 
     let response = app
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/email-accounts/gmail/oauth/start",
+            "/api/v1/communications/mail/accounts/gmail/oauth/start",
             json!({
                 "account_id": "gmail-primary",
                 "display_name": "Google Workspace",
-                "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback"
+                "redirect_uri": "http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/callback"
             }),
             LOCAL_API_TOKEN,
             "hermes-frontend",
@@ -141,11 +141,11 @@ async fn gmail_oauth_start_api_requires_initialized_host_vault_against_postgres(
 
     let response = app
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/email-accounts/gmail/oauth/start",
+            "/api/v1/communications/mail/accounts/gmail/oauth/start",
             json!({
                 "account_id": "gmail-primary",
                 "display_name": "Google Workspace",
-                "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback"
+                "redirect_uri": "http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/callback"
             }),
             LOCAL_API_TOKEN,
             "hermes-frontend",
@@ -222,11 +222,11 @@ async fn gmail_oauth_start_api_reopens_initialized_host_vault_after_restart_agai
 
     let response = restarted_app
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/email-accounts/gmail/oauth/start",
+            "/api/v1/communications/mail/accounts/gmail/oauth/start",
             json!({
                 "account_id": "gmail-primary",
                 "display_name": "Google Workspace",
-                "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback"
+                "redirect_uri": "http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/callback"
             }),
             LOCAL_API_TOKEN,
             "hermes-frontend",
@@ -279,12 +279,12 @@ async fn gmail_oauth_callback_completes_pending_grant_without_api_secret() {
     let start_response = app
         .clone()
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/email-accounts/gmail/oauth/start",
+            "/api/v1/communications/mail/accounts/gmail/oauth/start",
             json!({
                 "account_id": account_id,
                 "display_name": "Google Workspace",
                 "client_id": "desktop-client-id",
-                "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback",
+                "redirect_uri": "http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/callback",
                 "app_return_url": "http://127.0.0.1:5174/?hermes_oauth=gmail_connected",
                 "authorization_endpoint": format!("{}/authorize", token_server.base_url()),
                 "token_endpoint": format!("{}/token", token_server.base_url())
@@ -300,7 +300,7 @@ async fn gmail_oauth_callback_completes_pending_grant_without_api_secret() {
 
     let callback_response = app
         .oneshot(get_request(&format!(
-            "/api/v1/email-accounts/gmail/oauth/callback?code=authorization-code&state={state}"
+            "/api/v1/communications/mail/accounts/gmail/oauth/callback?code=authorization-code&state={state}"
         )))
         .await
         .expect("callback response");
@@ -503,7 +503,7 @@ async fn gmail_oauth_callback_rejects_unknown_state_without_api_secret() {
             Request::builder()
                 .method("GET")
                 .uri(
-                    "/api/v1/email-accounts/gmail/oauth/callback?code=authorization-code&state=oauth-state",
+                    "/api/v1/communications/mail/accounts/gmail/oauth/callback?code=authorization-code&state=oauth-state",
                 )
                 .body(Body::empty())
                 .expect("request"),
@@ -527,7 +527,7 @@ async fn gmail_oauth_callback_rejects_missing_code_without_leaking_secrets() {
 
     let response = app
         .oneshot(get_request(
-            "/api/v1/email-accounts/gmail/oauth/callback?state=oauth-state",
+            "/api/v1/communications/mail/accounts/gmail/oauth/callback?state=oauth-state",
         ))
         .await
         .expect("response");
@@ -552,14 +552,14 @@ async fn gmail_oauth_start_and_complete_still_require_api_secret() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/email-accounts/gmail/oauth/start")
+                .uri("/api/v1/communications/mail/accounts/gmail/oauth/start")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     json!({
                         "account_id": "gmail-primary",
                         "display_name": "Google Workspace",
                         "client_id": "desktop-client-id",
-                        "redirect_uri": "http://127.0.0.1:8080/api/v1/email-accounts/gmail/oauth/callback"
+                        "redirect_uri": "http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/callback"
                     })
                     .to_string(),
                 ))
@@ -573,7 +573,7 @@ async fn gmail_oauth_start_and_complete_still_require_api_secret() {
         .oneshot(
             Request::builder()
                 .method("POST")
-                .uri("/api/v1/email-accounts/gmail/oauth/complete")
+                .uri("/api/v1/communications/mail/accounts/gmail/oauth/complete")
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(Body::from(
                     json!({

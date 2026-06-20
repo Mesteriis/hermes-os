@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::domains::mail::core::{CommunicationProviderKind, ProviderAccountSecretPurpose};
+use crate::platform::communications::{CommunicationProviderKind, ProviderAccountSecretPurpose};
 use crate::platform::secrets::{DatabaseEncryptedSecretVault, SecretKind, SecretStoreKind};
 use crate::vault::{HostVault, SecretEntryContext};
 

@@ -159,7 +159,7 @@ describe('realtime cache patch handling', () => {
   })
 
   it('patches cached sync statuses for sync progress realtime events', () => {
-    const syncKey = ['communications-sync-statuses']
+    const syncKey = ['integrations', 'mail', 'sync-statuses']
     const statuses = [
       {
         account_id: 'account-1',
@@ -270,7 +270,7 @@ describe('realtime cache patch handling', () => {
     )
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['communications-sync-statuses']
+      queryKey: ['integrations', 'mail', 'sync-statuses']
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['communications-attachment-search']

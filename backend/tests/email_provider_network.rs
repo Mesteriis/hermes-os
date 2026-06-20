@@ -9,19 +9,21 @@ use chrono::{TimeZone, Utc};
 use serde_json::json;
 use sqlx::Row;
 
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::domains::mail::storage::{LocalMailBlobStore, MailStorageStore};
-use hermes_hub_backend::domains::mail::sync::{
-    EmailSyncBatch, FetchedEmailMessage, record_email_sync_batch,
-    record_email_sync_batch_with_mail_blobs,
-};
-use hermes_hub_backend::integrations::gmail::client::{
+use hermes_hub_backend::domains::communications::storage::{LocalMailBlobStore, MailStorageStore};
+use hermes_hub_backend::integrations::mail::gmail::client::{
     GmailApiClient, GmailFetchOptions, ImapFetchOptions, ImapNetworkClient,
+};
+use hermes_hub_backend::integrations::mail::sync::{
+    EmailSyncBatch, FetchedCommunicationSourceMessage,
 };
 use hermes_hub_backend::platform::secrets::ResolvedSecret;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::email_sync_pipeline::{
+    record_email_sync_batch, record_email_sync_batch_with_mail_blobs,
+};
 
 #[tokio::test]
 async fn gmail_api_client_fetches_raw_messages_with_bearer_token() {
@@ -175,7 +177,7 @@ async fn email_sync_records_provider_network_batch_against_postgres() {
         provider_kind: EmailProviderKind::Gmail,
         stream_id: "gmail:history".to_owned(),
         checkpoint: Some(json!({"provider": "gmail", "history_id": "12345"})),
-        messages: vec![FetchedEmailMessage {
+        messages: vec![FetchedCommunicationSourceMessage {
             provider_record_id: format!("gmail-network-message-{suffix}"),
             source_fingerprint: format!("sha256:gmail-network-message-{suffix}"),
             occurred_at: Utc.timestamp_millis_opt(1_770_000_000_000).single(),
@@ -260,7 +262,7 @@ async fn email_sync_records_provider_batches_with_mail_blobs_against_postgres() 
         provider_kind: EmailProviderKind::Gmail,
         stream_id: "gmail:history".to_owned(),
         checkpoint: Some(json!({"provider": "gmail", "history_id": "blob-123"})),
-        messages: vec![FetchedEmailMessage {
+        messages: vec![FetchedCommunicationSourceMessage {
             provider_record_id: format!("gmail-blob-message-{suffix}"),
             source_fingerprint: format!("sha256:gmail-blob-message-{suffix}"),
             occurred_at: Utc.timestamp_millis_opt(1_770_000_000_000).single(),
@@ -275,7 +277,7 @@ async fn email_sync_records_provider_batches_with_mail_blobs_against_postgres() 
         provider_kind: EmailProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 77})),
-        messages: vec![FetchedEmailMessage {
+        messages: vec![FetchedCommunicationSourceMessage {
             provider_record_id: format!("imap-blob-message-{suffix}"),
             source_fingerprint: format!("sha256:imap-blob-message-{suffix}"),
             occurred_at: Utc.timestamp_millis_opt(1_770_000_100_000).single(),

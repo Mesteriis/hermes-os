@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 use chrono::{Duration, Utc};
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
 use serde_json::json;

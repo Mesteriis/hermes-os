@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use crate::domains::mail::core::{EmailProviderKind, ProviderAccountSecretPurpose};
+use crate::domains::communications::core::{EmailProviderKind, ProviderAccountSecretPurpose};
 use crate::platform::secrets::{SecretKind, SecretStoreKind};
 use crate::vault::HostVaultManifestEntry;
 

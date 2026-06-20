@@ -1,4 +1,4 @@
-use crate::domains::mail::core::ProviderAccount;
+use crate::platform::communications::ProviderAccount;
 use crate::vault::CommunicationProviderAccountStore;
 
 use super::super::errors::TelegramError;
@@ -11,7 +11,8 @@ impl TelegramStore {
     ) -> Result<ProviderAccount, TelegramError> {
         let provider_account = CommunicationProviderAccountStore::new(self.pool.clone())
             .get(account_id)
-            .await?
+            .await
+            .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?
             .ok_or_else(|| {
                 TelegramError::InvalidRequest(format!(
                     "Telegram account `{account_id}` is not configured"

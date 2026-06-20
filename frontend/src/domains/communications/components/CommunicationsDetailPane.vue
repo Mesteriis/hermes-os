@@ -3,9 +3,9 @@ import MailViewer from './MailViewer.vue'
 import ThreadConversationView from './ThreadConversationView.vue'
 import type {
   AiReplyResponse,
-  MailMessageDetailResponse,
-  MailMessageInsight,
-  MailThreadSummary,
+  CommunicationMessageDetailResponse,
+  CommunicationMessageInsight,
+  CommunicationThreadSummary,
   MessageContextTab,
   MessageExportFormat,
   ThreadMessage
@@ -13,10 +13,10 @@ import type {
 import type { BilingualReplyFlowResponse } from '../types/bilingualReplyFlow'
 
 defineProps<{
-  detail: MailMessageDetailResponse | null
-  insight: MailMessageInsight | null
+  detail: CommunicationMessageDetailResponse | null
+  insight: CommunicationMessageInsight | null
   activeTab: MessageContextTab
-  selectedThread: MailThreadSummary | null
+  selectedThread: CommunicationThreadSummary | null
   threadMessages: ThreadMessage[]
   isThreadLoading: boolean
   threadErrorMessage: string

@@ -8,14 +8,16 @@ import type {
 	ReviewItem,
 	ReviewWorkspaceItemAction
 } from '../types/review'
-import { fetchRelationships, reviewRelationship } from '../../personas/api/personas'
 import {
+	fetchRelationships,
+	reviewRelationship,
 	fetchDecisionReviewItems,
 	reviewDecision,
 	fetchObligationReviewItems,
-	reviewObligation
-} from '../../tasks/api/tasks'
-import { fetchContradictions, reviewContradiction } from '../../knowledge/api/knowledge'
+	reviewObligation,
+	fetchContradictions,
+	reviewContradiction
+} from '../api/workspace'
 import {
 	fetchReviewItems,
 	approveReviewItem,

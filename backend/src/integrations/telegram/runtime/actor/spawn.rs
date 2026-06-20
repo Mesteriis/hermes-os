@@ -1,9 +1,9 @@
 use std::sync::mpsc::{self, Sender};
 use std::thread;
 
-use crate::domains::mail::core::ProviderAccount;
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson;
+use crate::platform::communications::ProviderAccount;
 use crate::platform::config::AppConfig;
 use tokio::sync::mpsc::UnboundedSender;
 

@@ -8,6 +8,9 @@ WhatsApp принадлежит Communications Domain как **channel/source bo
 Он не является Memory, Knowledge, Task, Project, Persona, Organization,
 Decision или Obligation.
 
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
+
 WhatsApp должен поставлять Hermes:
 
 - raw provider evidence;
@@ -67,6 +70,7 @@ It must not become hidden headless scraping.
 | ADR-0085 | Communication spine and Polygraph integration |
 | ADR-0091 | Provider channel capability model pattern |
 | ADR-0093 | Vue 3 frontend |
+| ADR-0097 | Channels are integrations; Communications owns domain state |
 
 ADR-0051 is the controlling WhatsApp-specific decision. It keeps WhatsApp Web
 as the first provider boundary and keeps Meta Business API as a separate future
@@ -133,14 +137,14 @@ Target layers:
 
 | Layer | Target module | Назначение |
 |---|---|---|
-| Route/view | `frontend/src/domains/whatsapp/views/` | Desktop WhatsApp workbench |
-| API client | `frontend/src/domains/whatsapp/api/` | Typed calls to protected backend routes |
-| Query hooks | `frontend/src/domains/whatsapp/queries/` | TanStack Query integration |
-| Store/helpers | `frontend/src/domains/whatsapp/stores/` | Local UI state, selected account/dialog, filters and command status |
-| Components | `frontend/src/domains/whatsapp/components/` | Dialog list, thread, composer, media/status/call panels and inspector |
+| Runtime/setup panels | `frontend/src/integrations/whatsapp/views/` | WhatsApp integration panels embedded in Communications |
+| API client | `frontend/src/integrations/whatsapp/api/` | Typed calls to protected backend routes |
+| Query hooks | `frontend/src/integrations/whatsapp/queries/` | TanStack Query integration |
+| Store/helpers | `frontend/src/integrations/whatsapp/stores/` | Local UI state, selected account/dialog, filters and command status |
+| Components | `frontend/src/integrations/whatsapp/components/` | Dialog list, thread, composer, media/status/call panels and inspector |
 | Realtime patches | shared platform bootstrap | Cache patching from `whatsapp.*` events |
 
-WhatsApp views must consume the shared frontend realtime bootstrap. They must
+WhatsApp panels must consume the shared frontend realtime bootstrap. They must
 not open a channel-specific event transport.
 
 ## Runtime Kinds

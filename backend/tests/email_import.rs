@@ -4,15 +4,15 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::{TimeZone, Utc};
 use serde_json::json;
 
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::domains::mail::import::{
+use hermes_hub_backend::domains::communications::import::{
     FixtureEmailImportRequest, import_fixture_email_messages,
     import_fixture_email_messages_with_records,
 };
-use hermes_hub_backend::domains::mail::sources::{
-    FixtureEmailMessage, parse_fixture_email_messages,
+use hermes_hub_backend::domains::communications::sources::{
+    FixtureCommunicationSourceMessage, parse_fixture_email_messages,
 };
 use hermes_hub_backend::platform::storage::Database;
 
@@ -35,7 +35,7 @@ fn fixture_email_source_parses_account_scoped_messages() {
 
     assert_eq!(
         messages,
-        vec![FixtureEmailMessage {
+        vec![FixtureCommunicationSourceMessage {
             provider_record_id: "gmail-msg-1".to_owned(),
             subject: "Budget review".to_owned(),
             from: "alice@example.com".to_owned(),

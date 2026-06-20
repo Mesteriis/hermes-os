@@ -2,7 +2,7 @@
 
 Status date: 2026-06-18.
 
-Base Telegram Domain: `COMPLETED`.
+Base Telegram channel capability set: `COMPLETED`.
 
 ## Search
 

@@ -1,6 +1,6 @@
 use sqlx::{Postgres, Transaction};
 
-use crate::domains::mail::messages::ProjectedMessage;
+use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::persons::api::{PersonProjectionError, PersonProjectionStore};
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 

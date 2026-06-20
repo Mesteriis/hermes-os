@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import CommunicationsContextInspector from './CommunicationsContextInspector.vue'
 import CommunicationsContextRail from './CommunicationsContextRail.vue'
-import type { InspectorMode, MailMessageDetailResponse, ProjectItem, TaskItem } from '../types/communications'
+import type { InspectorMode, CommunicationMessageDetailResponse, ProjectItem, TaskItem } from '../types/communications'
 
 defineProps<{
-  detail: MailMessageDetailResponse | null
+  detail: CommunicationMessageDetailResponse | null
   inspectorMode: InspectorMode
   projects: ProjectItem[]
   tasks: TaskItem[]

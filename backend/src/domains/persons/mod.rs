@@ -1,11 +1,11 @@
 pub mod analytics;
 pub mod api;
+mod command_service;
 pub mod core;
 pub mod enrichment;
 pub mod enrichment_engine;
 pub mod expertise;
 pub mod export;
-pub mod handlers;
 pub mod health;
 pub mod identity;
 pub mod intelligence;

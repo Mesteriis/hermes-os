@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/vue-query'
-import { fetchOrganizations, fetchOrganization } from '../../personas/api/personas'
+import { fetchOrganizations, fetchOrganization } from '../api/organizations'
 import type { Organization } from '../types/organization'
 
 export function useOrganizationsQuery() {
@@ -13,7 +13,7 @@ export function useOrganizationsQuery() {
 }
 
 export function useOrganizationQuery(orgId: string) {
-  return useQuery<any>({
+  return useQuery<Organization>({
     queryKey: ['organizations', orgId],
     queryFn: () => fetchOrganization(orgId),
     enabled: !!orgId

@@ -45,7 +45,7 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/accounts/fixture",
+            "/api/v1/communications/telegram/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -63,7 +63,7 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -172,7 +172,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let capabilities_response = app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v1/telegram/capabilities",
+            "/api/v1/communications/telegram/capabilities",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -235,7 +235,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/accounts/fixture",
+            "/api/v1/communications/telegram/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -256,7 +256,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -286,7 +286,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/chats?account_id={account_id}"),
+            &format!("/api/v1/communications/telegram/chats?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await

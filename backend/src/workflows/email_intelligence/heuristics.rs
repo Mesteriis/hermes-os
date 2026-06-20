@@ -1,4 +1,4 @@
-use crate::domains::mail::messages::ProjectedMessage;
+use crate::domains::communications::messages::ProjectedMessage;
 use crate::workflows::email_intelligence::models::{EmailKnowledgeCandidate, EmailSummaryContract};
 
 const URGENT_WORDS: &[&str] = &[

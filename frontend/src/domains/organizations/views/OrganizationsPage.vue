@@ -2,17 +2,14 @@
 import { useI18n } from '../../../platform/i18n'
 import Icon from '../../../shared/ui/Icon.vue'
 import { useOrganizationsQuery } from '../queries/useOrganizationsQuery'
-import { usePersonsQuery } from '../../personas/queries/usePersonasQuery'
 import OrganizationsList from '../components/OrganizationsList.vue'
 import OrganizationsDetail from '../components/OrganizationsDetail.vue'
 import type { Organization } from '../types/organization'
-import type { EnrichedPerson } from '../../personas/types/persona'
 import { ref, computed } from 'vue'
 
 const { t } = useI18n()
 
 const { data: organizationsData, isLoading } = useOrganizationsQuery()
-const { data: personsData } = usePersonsQuery()
 
 const selectedOrganizationId = ref('')
 
@@ -21,15 +18,7 @@ const selectedOrganization = computed(() => {
   return orgs.find((o: Organization) => o.organization_id === selectedOrganizationId.value) ?? orgs[0] ?? null
 })
 
-const orgPeople = computed(() => {
-  const org = selectedOrganization.value
-  if (!org) return []
-  return (personsData.value ?? []).filter((p: EnrichedPerson) =>
-    p.linked_projects?.some((pid: string) =>
-      org.display_name && pid.includes(org.display_name)
-    )
-  ).slice(0, 5)
-})
+const orgPeople = computed(() => [])
 </script>
 
 <template>

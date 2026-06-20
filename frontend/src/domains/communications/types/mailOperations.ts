@@ -1,4 +1,4 @@
-export type EmailDraft = {
+export type CommunicationDraft = {
   draft_id: string
   account_id: string
   persona_id: string | null
@@ -20,13 +20,13 @@ export type EmailDraft = {
 }
 
 export type DraftListResponse = {
-  items: EmailDraft[]
+  items: CommunicationDraft[]
   next_cursor: string | null
   has_more: boolean
 }
 export type DraftDeleteResponse = { deleted: boolean }
 
-export type SendEmailRequest = {
+export type SendCommunicationRequest = {
   account_id: string
   to: string[]
   cc?: string[]
@@ -42,7 +42,7 @@ export type SendEmailRequest = {
   confirmed_provider_write: boolean
 }
 
-export type SendEmailResponse = {
+export type SendCommunicationResponse = {
   message_id: string
   outbox_id: string | null
   accepted: string[]
@@ -61,9 +61,9 @@ export type RedirectMessageRequest = {
   confirmed_provider_write?: boolean
 }
 
-export type EmailOutboxStatus = 'queued' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'canceled'
+export type CommunicationOutboxStatus = 'queued' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'canceled'
 
-export type EmailOutboxItem = {
+export type CommunicationOutboxItem = {
   outbox_id: string
   account_id: string
   draft_id: string | null
@@ -73,7 +73,7 @@ export type EmailOutboxItem = {
   subject: string
   body_text: string
   body_html: string | null
-  status: EmailOutboxStatus
+  status: CommunicationOutboxStatus
   scheduled_send_at: string | null
   undo_deadline_at: string | null
   send_attempts: number
@@ -87,7 +87,7 @@ export type EmailOutboxItem = {
 }
 
 export type OutboxListResponse = {
-  items: EmailOutboxItem[]
+  items: CommunicationOutboxItem[]
   next_cursor: string | null
   has_more: boolean
 }

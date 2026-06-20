@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
 use hermes_hub_backend::platform::config::AppConfig;

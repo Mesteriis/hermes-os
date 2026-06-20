@@ -1,6 +1,6 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::mail::messages::ProjectedMessage;
+use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::organizations::api::OrganizationStore;
 use crate::domains::organizations::core::OrgContactLinkStore;
 

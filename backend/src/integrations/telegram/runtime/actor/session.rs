@@ -1,9 +1,9 @@
-use crate::domains::mail::core::{
-    ProviderAccountSecretPurpose, ProviderCredentialError, ProviderCredentialReader,
-};
 use crate::integrations::telegram::client::TelegramError;
+use crate::platform::communications::ProviderAccountSecretPurpose;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
-use crate::vault::CommunicationProviderSecretBindingStore;
+use crate::vault::{
+    CommunicationProviderSecretBindingStore, ProviderCredentialError, ProviderCredentialReader,
+};
 
 pub(in crate::integrations::telegram::runtime) async fn optional_telegram_session_key(
     binding_store: &CommunicationProviderSecretBindingStore,

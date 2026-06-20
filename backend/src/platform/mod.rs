@@ -1,10 +1,10 @@
 pub mod audit;
 pub mod calls;
-pub mod calls_api;
 pub mod capabilities;
+pub mod communications;
 pub mod config;
 pub mod events;
-pub mod events_api;
+pub mod formatting;
 pub mod observations;
 pub mod projections;
 pub mod secrets;

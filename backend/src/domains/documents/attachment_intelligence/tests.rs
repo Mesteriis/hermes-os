@@ -1,33 +1,12 @@
 use super::file_kinds::{is_archive_type, is_executable_type};
 use super::*;
-use crate::domains::mail::storage::{
-    AttachmentSafetyScanStatus, MailAttachmentDisposition, StoredMailAttachment,
-};
-use chrono::Utc;
 
-fn test_attachment(filename: &str, content_type: &str, size: i64) -> StoredMailAttachmentWithBlob {
-    StoredMailAttachmentWithBlob {
-        attachment: StoredMailAttachment {
-            attachment_id: "att:1".into(),
-            message_id: "msg:1".into(),
-            raw_record_id: "raw:1".into(),
-            blob_id: "blob:1".into(),
-            provider_attachment_id: "prov:1".into(),
-            filename: Some(filename.into()),
-            content_type: content_type.into(),
-            size_bytes: size,
-            sha256: "sha256:abc".into(),
-            disposition: MailAttachmentDisposition::Attachment,
-            scan_status: AttachmentSafetyScanStatus::NotScanned,
-            scan_engine: None,
-            scan_checked_at: None,
-            scan_summary: None,
-            scan_metadata: serde_json::json!({}),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        },
-        storage_kind: "local_fs".into(),
-        storage_path: "/tmp/test".into(),
+fn test_attachment(filename: &str, content_type: &str, size: i64) -> AttachmentIntelligenceInput {
+    AttachmentIntelligenceInput {
+        attachment_id: "att:1".into(),
+        filename: Some(filename.into()),
+        content_type: content_type.into(),
+        size_bytes: size,
     }
 }
 

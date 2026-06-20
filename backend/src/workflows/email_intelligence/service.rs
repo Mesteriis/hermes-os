@@ -1,4 +1,6 @@
-use crate::domains::mail::messages::{MessageProjectionStore, ProjectedMessage, WorkflowState};
+use crate::domains::communications::messages::{
+    MessageProjectionStore, ProjectedMessage, WorkflowState,
+};
 use crate::integrations::ai_runtime::AiRuntimeClient;
 use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use crate::workflows::email_intelligence::heuristics;

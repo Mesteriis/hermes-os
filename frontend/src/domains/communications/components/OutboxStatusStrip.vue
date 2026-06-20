@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
-import type { EmailOutboxItem } from '../types/communications'
+import type { CommunicationOutboxItem } from '../types/communications'
 import {
   outboxStatusPresentation,
   visibleOutboxStatusItems
 } from './outboxStatus'
 
 const props = defineProps<{
-  items: EmailOutboxItem[]
+  items: CommunicationOutboxItem[]
   isLoading: boolean
   isLoadingMore: boolean
   hasMore: boolean

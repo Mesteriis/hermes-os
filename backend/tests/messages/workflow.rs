@@ -1,4 +1,4 @@
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::messages::{
     LocalMessageState, WorkflowState, WorkflowStateCount, project_raw_email_message,
 };
 

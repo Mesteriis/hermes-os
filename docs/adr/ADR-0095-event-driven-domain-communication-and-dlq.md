@@ -96,14 +96,9 @@ Negative:
 
 ## Implementation Notes
 
-The initial implementation introduces the platform consumer runtime and CI
-architecture guard before the full physical domain refactor. Existing violations
-are tracked as exact file/domain pairs in
-`scripts/architecture-boundary-baseline.json` so the repository can stay green
-while new direct domain dependencies are blocked, including new dependencies
-added inside legacy files. The architecture guard also fails when a baseline
-entry becomes stale, forcing the baseline to shrink as refactors remove legacy
-coupling.
+Superseded by `ADR-architecture-communication-contract`.
 
-Legacy exceptions must be removed as Communications, Personas, Radar and channel
-integrations are migrated to event consumers.
+The event/DLQ rules in this ADR remain accepted, but the temporary boundary
+baseline is abolished. Existing violations must be removed or moved behind the
+communication contract. `scripts/architecture-boundary-baseline.json` must not
+exist.

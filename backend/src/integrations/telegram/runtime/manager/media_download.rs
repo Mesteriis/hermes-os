@@ -1,7 +1,7 @@
 use crate::integrations::telegram::client::TelegramError;
+use crate::workflows::telegram_media_storage::persist_downloaded_media;
 
 use super::super::commands::request_actor_download_file;
-use super::super::media::persist_downloaded_media;
 use super::super::models::{TelegramMediaDownloadRequest, TelegramMediaDownloadResponse};
 use super::super::status::account_runtime_kind;
 use super::account::load_active_account;
@@ -41,7 +41,7 @@ impl TelegramRuntimeManager {
                 .await?;
                 let mut response = persist_downloaded_media(
                     context.telegram_store,
-                    context.mail_store,
+                    context.telegram_store.pool().clone(),
                     request,
                     &file,
                     telegram_media_blob_root(),

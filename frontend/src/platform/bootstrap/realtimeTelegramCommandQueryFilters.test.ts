@@ -3,10 +3,10 @@ import { handleRealtimeEvent } from './realtime'
 
 describe('telegram command realtime query filters', () => {
   it('inserts command rows only into matching filtered command caches', () => {
-    const matchingKey = ['telegram', 'commands', 'account-1', 20, 'chat-1', 'chat-1:42', 'mark_read|mark_unread']
-    const otherChatKey = ['telegram', 'commands', 'account-1', 20, 'chat-2', 'chat-1:42', 'mark_read|mark_unread']
-    const otherMessageKey = ['telegram', 'commands', 'account-1', 20, 'chat-1', 'chat-1:99', 'mark_read|mark_unread']
-    const otherKindKey = ['telegram', 'commands', 'account-1', 20, 'chat-1', 'chat-1:42', 'join|leave']
+    const matchingKey = ['integrations', 'telegram', 'commands', 'account-1', 20, 'chat-1', 'chat-1:42', 'mark_read|mark_unread']
+    const otherChatKey = ['integrations', 'telegram', 'commands', 'account-1', 20, 'chat-2', 'chat-1:42', 'mark_read|mark_unread']
+    const otherMessageKey = ['integrations', 'telegram', 'commands', 'account-1', 20, 'chat-1', 'chat-1:99', 'mark_read|mark_unread']
+    const otherKindKey = ['integrations', 'telegram', 'commands', 'account-1', 20, 'chat-1', 'chat-1:42', 'join|leave']
     const commands: Array<Record<string, unknown>> = []
 
     const setQueryData = vi.fn((queryKey, updater) =>
@@ -15,7 +15,7 @@ describe('telegram command realtime query filters', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['telegram', 'commands'])) {
+        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'commands'])) {
           return [
             [matchingKey, commands],
             [otherChatKey, commands],

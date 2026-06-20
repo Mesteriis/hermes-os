@@ -30,7 +30,7 @@ backend/src/
 ### Правила размещения
 
 1. **app/** — HTTP-роутинг, обработчики, AppState, error types верхнего уровня. Не содержит бизнес-логики.
-2. **domains/** — Каждый подкаталог — самостоятельный bounded context. Домены не импортируют друг друга напрямую. Для cross-domain коммуникации используют `crate::platform::events` (event log) и `crate::domains::graph` (knowledge graph).
+2. **domains/** — Каждый подкаталог — самостоятельный bounded context. Домены не импортируют друг друга напрямую. Для cross-domain коммуникации используют контракт из `ADR-architecture-communication-contract`.
 3. **engines/** — Общие движки, не привязанные к конкретному домену.
 4. **integrations/** — Адаптеры внешних систем. Не содержат бизнес-логики, только транспорт/протокол.
 5. **ai/** — AI-компоненты изолированы от доменов. Домены используют AI через events или явные сервисные границы.
@@ -48,11 +48,14 @@ use crate::domains::tasks::api::TaskStore;
 // ✅ Разрешено — через events
 use crate::platform::events::EventStore;
 
-// ✅ Разрешено — через graph
-use crate::domains::graph::core::GraphStore;
+// ✅ Разрешено — через command/query/event contract владельца
+use crate::platform::events::EventStore;
 ```
 
-Исключение: `domains::graph` может импортироваться другими доменами как общая точка интеграции (knowledge graph — системный spine).
+Прежнее исключение для `domains::graph` упразднено. Graph является доменом и
+не может использоваться как shared spine через прямые импорты из других
+доменов. Детальный контракт слоёв и допустимых способов взаимодействия описан в
+`ADR-architecture-communication-contract`.
 
 ### Порог размера файлов
 
@@ -78,5 +81,4 @@ use crate::domains::graph::core::GraphStore;
 - Рефакторинг `lib.rs` устраняет god file: routing, handlers, state, error разделены.
 - Domain isolation предотвращает циклические зависимости при росте системы.
 - Порог в 700 строк с обязательным обоснованием предотвращает повторное появление god files.
-- Импорты становятся длиннее (`crate::domains::mail::core` вместо `crate::communications`), но это плата за явные границы.
-
+- Импорты становятся длиннее (`crate::domains::communications::core` вместо `crate::communications`), но это плата за явные границы.

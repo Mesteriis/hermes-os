@@ -1,4 +1,4 @@
-export type EmailPersona = {
+export type CommunicationPersona = {
   persona_id: string
   account_id: string
   name: string

@@ -1,7 +1,4 @@
-use serde_json::json;
-
 use super::PersonProjectionStore;
-use crate::domains::graph::core::{GraphNodeKind, GraphStore, NewGraphNode};
 use crate::domains::persons::api::errors::PersonProjectionError;
 use crate::domains::persons::api::models::{Person, PersonaType};
 use crate::domains::persons::api::rows::row_to_person;
@@ -89,22 +86,6 @@ impl PersonProjectionStore {
         .bind(&email_address)
         .bind(&normalized_agent_id)
         .execute(&mut *transaction)
-        .await?;
-
-        GraphStore::upsert_node_in_transaction(
-            &mut transaction,
-            &NewGraphNode::new(
-                GraphNodeKind::Person,
-                &person.person_id,
-                &person.display_name,
-            )
-            .properties(json!({
-                "persona_type": PersonaType::AiAgent.as_str(),
-                "agent_id": normalized_agent_id,
-                "email_address": email_address,
-                "source": "ai_agent_registry"
-            })),
-        )
         .await?;
 
         transaction.commit().await?;

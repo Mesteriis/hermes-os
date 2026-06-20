@@ -34,7 +34,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/accounts/fixture",
+            "/api/v1/communications/telegram/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -52,7 +52,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let initial_status = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/runtime/status?account_id={account_id}"),
+            &format!("/api/v1/communications/telegram/runtime/status?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -76,7 +76,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let start_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/runtime/start",
+            "/api/v1/communications/telegram/runtime/start",
             json!({ "account_id": account_id }),
             LOCAL_API_TOKEN,
         ))
@@ -91,7 +91,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let running_status = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/runtime/status?account_id={account_id}"),
+            &format!("/api/v1/communications/telegram/runtime/status?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -105,7 +105,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let restart_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/runtime/restart",
+            "/api/v1/communications/telegram/runtime/restart",
             json!({ "account_id": account_id }),
             LOCAL_API_TOKEN,
         ))
@@ -120,7 +120,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let stop_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/runtime/stop",
+            "/api/v1/communications/telegram/runtime/stop",
             json!({ "account_id": account_id }),
             LOCAL_API_TOKEN,
         ))
@@ -136,7 +136,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let stopped_status = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/runtime/status?account_id={account_id}"),
+            &format!("/api/v1/communications/telegram/runtime/status?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -216,7 +216,7 @@ async fn telegram_runtime_status_reports_tdlib_diagnostics_for_qr_authorized_use
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/accounts",
+            "/api/v1/communications/telegram/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -234,7 +234,7 @@ async fn telegram_runtime_status_reports_tdlib_diagnostics_for_qr_authorized_use
     let runtime_status = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/runtime/status?account_id={account_id}"),
+            &format!("/api/v1/communications/telegram/runtime/status?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -294,7 +294,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
         let response = app
             .clone()
             .oneshot(json_post_request_with_actor(
-                "/api/v1/telegram/accounts/fixture",
+                "/api/v1/communications/telegram/accounts/fixture",
                 json!({
                     "account_id": id,
                     "provider_kind": "telegram_user",
@@ -313,7 +313,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let start_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/runtime/start",
+            "/api/v1/communications/telegram/runtime/start",
             json!({ "account_id": account_id }),
             LOCAL_API_TOKEN,
         ))
@@ -324,7 +324,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -347,7 +347,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let list_response = app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v1/telegram/accounts",
+            "/api/v1/communications/telegram/accounts",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -373,7 +373,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let logout_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/telegram/accounts/{account_id}/logout"),
+            &format!("/api/v1/communications/telegram/accounts/{account_id}/logout"),
             json!({}),
             LOCAL_API_TOKEN,
         ))
@@ -391,7 +391,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let logged_out_status = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/runtime/status?account_id={account_id}"),
+            &format!("/api/v1/communications/telegram/runtime/status?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -403,7 +403,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let logged_out_list_response = app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v1/telegram/accounts",
+            "/api/v1/communications/telegram/accounts",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -421,7 +421,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let remove_response = app
         .clone()
         .oneshot(delete_request_with_token(
-            &format!("/api/v1/telegram/accounts/{account_id}"),
+            &format!("/api/v1/communications/telegram/accounts/{account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -434,7 +434,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let default_list_response = app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v1/telegram/accounts",
+            "/api/v1/communications/telegram/accounts",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -454,7 +454,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let removed_list_response = app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v1/telegram/accounts?include_removed=true",
+            "/api/v1/communications/telegram/accounts?include_removed=true",
             LOCAL_API_TOKEN,
         ))
         .await

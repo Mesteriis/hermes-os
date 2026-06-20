@@ -1,12 +1,15 @@
 # Hermes Communications - Telegram Channel
 
-Status: `COMPLETED` base domain, 2026-06-18.
+Status: `COMPLETED` base channel capability set, 2026-06-18.
 
 Telegram in Hermes is a Communication Channel inside Hermes Communications. It
 does not own Memory, Knowledge, Persona, Organization, Project, Obligation or
 Decision lifecycle. Telegram supplies source evidence, provider commands,
 communication projections, realtime events, identity traces, timeline evidence
 and media evidence for other systems.
+
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
 
 ```text
 Telegram Provider
@@ -19,7 +22,7 @@ Telegram Provider
 
 ## Completed Boundary
 
-The base Telegram channel is complete for daily desktop work:
+The base Telegram channel capability set is complete for daily desktop work:
 
 - account setup, QR-authorized TDLib user runtime metadata and runtime health;
 - provider-write outbox, command status, retry/dead-letter visibility and
@@ -42,8 +45,8 @@ locally.
 
 ## Deferred Initiatives
 
-The following are intentionally outside base Telegram and are tracked as
-`planned` capabilities by ADR-0094:
+The following are intentionally outside the base Telegram channel capability set
+and are tracked as `planned` capabilities by ADR-0094/ADR-0097:
 
 - Bot Runtime;
 - Voice Recording;

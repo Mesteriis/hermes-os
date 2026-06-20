@@ -1,5 +1,5 @@
-use crate::domains::mail::core::ProviderAccount;
 use crate::integrations::telegram::client::{TelegramError, ensure_telegram_account_active};
+use crate::platform::communications::ProviderAccount;
 use crate::vault::CommunicationProviderAccountStore;
 
 use super::super::status::load_telegram_account;

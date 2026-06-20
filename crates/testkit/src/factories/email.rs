@@ -1,5 +1,5 @@
 use chrono::Utc;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
 use sqlx::postgres::PgPool;
@@ -50,7 +50,7 @@ impl<'a> EmailFactory<'a> {
         self,
     ) -> Result<
         (NewProviderAccount, NewRawCommunicationRecord),
-        hermes_hub_backend::domains::mail::core::CommunicationIngestionError,
+        hermes_hub_backend::domains::communications::core::CommunicationIngestionError,
     > {
         let store = CommunicationIngestionStore::new(self.pool.clone());
 

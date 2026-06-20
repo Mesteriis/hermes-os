@@ -6,7 +6,7 @@ pipeline; they do not make Mail a product identity or standalone top-level
 application.
 
 Paths below refer to the current Rust implementation under
-`backend/src/domains/mail/` unless another path is shown.
+`backend/src/domains/communications/` unless another path is shown.
 
 ## Core Pipeline
 
@@ -85,7 +85,7 @@ Paths below refer to the current Rust implementation under
 
 | Модуль | Назначение |
 |---|---|
-| `backend/src/integrations/gmail/client.rs`, `accounts.rs` | Gmail API + account metadata |
+| `backend/src/integrations/mail/gmail/client.rs`, `accounts.rs` | Gmail API + account metadata |
 | `imap_write.rs` | IMAP write операции (STORE, EXPUNGE) |
 | `accounts.rs` | Настройка аккаунтов: Gmail OAuth, IMAP, шифрование |
 
