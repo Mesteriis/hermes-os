@@ -1,4 +1,4 @@
-use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
+use crate::platform::ai_runtime::{AiRuntimePortError, SharedAiRuntimePort};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -19,11 +19,11 @@ pub struct Translation {
 
 #[derive(Clone)]
 pub struct MultilingualService {
-    runtime: Option<AiRuntimeClient>,
+    runtime: Option<SharedAiRuntimePort>,
 }
 
 impl MultilingualService {
-    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+    pub fn new(runtime: Option<SharedAiRuntimePort>) -> Self {
         Self { runtime }
     }
 
@@ -160,7 +160,7 @@ impl MultilingualService {
 #[derive(Debug, Error)]
 pub enum MultilingualError {
     #[error(transparent)]
-    Runtime(#[from] AiRuntimeError),
+    Runtime(#[from] AiRuntimePortError),
 }
 
 #[cfg(test)]

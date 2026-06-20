@@ -6,11 +6,10 @@ use crate::ai::core::{
     AiStatusResponse, AiTaskCandidateRefreshRequest, v3_agents,
 };
 use crate::app::api_support::{
-    AiRunListResponse, AiRunsQuery, ai_run_store, ai_runtime_client, ai_runtime_settings,
-    ai_service,
+    AiRunListResponse, AiRunsQuery, ai_persona_attribution_port_optional, ai_run_store,
+    ai_runtime_client, ai_runtime_settings, ai_service,
 };
 use crate::app::{ApiError, AppState};
-use crate::domains::persons::api::PersonProjectionStore;
 
 pub(crate) async fn get_ai_status(
     State(state): State<AppState>,
@@ -57,15 +56,15 @@ pub(crate) async fn get_ai_agents(
     let runtime_settings = ai_runtime_settings(&state).await?;
     let mut items = v3_agents(&runtime_settings.chat_model);
 
-    if let Some(pool) = state.database.pool() {
-        let store = PersonProjectionStore::new(pool.clone());
+    if let Some(persona_attribution) = ai_persona_attribution_port_optional(&state) {
         for item in &mut items {
-            let persona = store
+            let persona = persona_attribution
                 .upsert_ai_agent_persona(item.agent_id, item.display_name)
-                .await?;
-            item.persona_id = Some(persona.person_id);
-            item.persona_type = Some(persona.persona_type.as_str());
-            item.persona_email = Some(persona.email_address);
+                .await
+                .map_err(crate::ai::core::AiError::from)?;
+            item.persona_id = Some(persona.persona_id);
+            item.persona_type = Some(persona.persona_type);
+            item.persona_email = Some(persona.persona_email);
         }
     }
 

@@ -2,14 +2,13 @@ use serde_json::json;
 
 use crate::domains::communications::core::{CommunicationIngestionStore, NewIngestionCheckpoint};
 use crate::domains::communications::storage::{LocalMailBlobStore, MailStorageStore, NewMailBlob};
-use crate::platform::communications::NewRawCommunicationRecord;
+use crate::platform::communications::{
+    EmailSyncBatch, EmailSyncBlobImportReport, EmailSyncImportReport, NewRawCommunicationRecord,
+};
 
 use super::errors::EmailSyncRecordError;
 use super::ids::{EMAIL_MESSAGE_RECORD_KIND, raw_record_id};
 use super::raw_payload::{payload_with_raw_blob_reference, raw_message_bytes};
-use crate::integrations::mail::sync::{
-    EmailSyncBatch, EmailSyncBlobImportReport, EmailSyncImportReport,
-};
 
 pub async fn record_email_sync_batch(
     store: &CommunicationIngestionStore,

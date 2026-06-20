@@ -58,8 +58,12 @@ pub(super) fn ai_error_parts(error: AiError) -> ErrorParts {
             tracing::error!(error = %error, "AI event store operation failed");
             internal_runtime_error()
         }
-        AiError::PersonProjection(error) => {
+        AiError::PersonaAttribution(error) => {
             tracing::error!(error = %error, "AI persona attribution operation failed");
+            internal_runtime_error()
+        }
+        AiError::PersonaAttributionUnavailable => {
+            tracing::error!("AI persona attribution port was not configured");
             internal_runtime_error()
         }
         AiError::ReviewInboxWorkflow(error) => {

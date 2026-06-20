@@ -3,6 +3,7 @@ use sqlx::postgres::PgPool;
 use crate::integrations::ai_runtime::AiRuntimeClient;
 
 use super::super::types::AiModelRouting;
+use super::attribution_port::SharedAiPersonaAttributionPort;
 
 #[derive(Clone)]
 pub struct AiService {
@@ -11,6 +12,7 @@ pub struct AiService {
     pub(super) chat_model: String,
     pub(super) embedding_model: String,
     pub(super) model_routing: AiModelRouting,
+    pub(super) persona_attribution: Option<SharedAiPersonaAttributionPort>,
 }
 
 impl AiService {
@@ -37,6 +39,15 @@ impl AiService {
             chat_model: model_routing.default_chat.clone(),
             embedding_model: model_routing.embeddings.clone(),
             model_routing,
+            persona_attribution: None,
         }
+    }
+
+    pub fn with_persona_attribution(
+        mut self,
+        persona_attribution: SharedAiPersonaAttributionPort,
+    ) -> Self {
+        self.persona_attribution = Some(persona_attribution);
+        self
     }
 }

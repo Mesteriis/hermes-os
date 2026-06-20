@@ -127,13 +127,21 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
         !frontend_communications_domain.contains(&legacy_whatsapp_key),
         "user-facing communication caches must not use provider-rooted WhatsApp query keys"
     );
+    for forbidden_business_key in [
+        "['integrations', 'telegram', 'messages'",
+        "['integrations', 'telegram', 'chats'",
+        "['integrations', 'whatsapp', 'messages'",
+    ] {
+        assert!(
+            !frontend_integration_runtime.contains(forbidden_business_key),
+            "provider business cache key must live under communications, not integrations: {forbidden_business_key}"
+        );
+    }
     assert!(
-        !frontend_integration_runtime.contains("['communications', 'telegram'"),
-        "integration runtime code must not keep Telegram query keys under communications"
-    );
-    assert!(
-        !frontend_integration_runtime.contains("['communications', 'whatsapp'"),
-        "integration runtime code must not keep WhatsApp query keys under communications"
+        frontend_integration_runtime.contains("['communications', 'telegram', 'messages'")
+            && frontend_integration_runtime.contains("['communications', 'telegram', 'chats'")
+            && frontend_integration_runtime.contains("['communications', 'whatsapp', 'messages'"),
+        "Telegram/WhatsApp business caches must be communication-scoped"
     );
     assert!(
         frontend_integration_runtime.contains("['integrations', 'telegram'"),

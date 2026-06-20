@@ -8,8 +8,6 @@ use crate::domains::communications::core::{
 use crate::domains::communications::messages::{
     MessageProjectionError, MessageProjectionStore, NewProjectedMessage, ProjectedMessage,
 };
-use crate::integrations::telegram::client::TelegramDeliveryState;
-use crate::integrations::whatsapp::client::WhatsappWebDeliveryState;
 use crate::platform::communications::{NewRawCommunicationRecord, StoredRawCommunicationRecord};
 
 const TELEGRAM_MESSAGE_RECORD_KIND: &str = "telegram_message";
@@ -74,11 +72,10 @@ pub async fn project_raw_telegram_message(
             "payload field `text` is required".to_owned(),
         ));
     }
-    let delivery_state = TelegramDeliveryState::try_from(required_payload_string(
-        &raw.payload,
-        "delivery_state",
-    )?)
-    .map_err(|error| ProviderCommunicationProjectionError::InvalidRequest(error.to_string()))?;
+    let delivery_state = provider_delivery_state(
+        &required_payload_string(&raw.payload, "delivery_state")?,
+        "Telegram",
+    )?;
     let channel_kind = raw
         .provenance
         .get("provider_kind")
@@ -98,7 +95,7 @@ pub async fn project_raw_telegram_message(
         channel_kind: channel_kind.to_owned(),
         conversation_id: Some(provider_chat_id),
         sender_display_name: Some(sender_display_name),
-        delivery_state: delivery_state.as_message_delivery_state().to_owned(),
+        delivery_state,
         message_metadata: raw.payload.clone(),
     };
 
@@ -138,11 +135,10 @@ pub async fn project_raw_whatsapp_web_message(
     let chat_title = required_payload_string(&raw.payload, "chat_title")?;
     let sender_display_name = required_payload_string(&raw.payload, "sender_display_name")?;
     let text = required_payload_string(&raw.payload, "text")?;
-    let delivery_state = WhatsappWebDeliveryState::try_from(required_payload_string(
-        &raw.payload,
-        "delivery_state",
-    )?)
-    .map_err(|error| ProviderCommunicationProjectionError::InvalidRequest(error.to_string()))?;
+    let delivery_state = provider_delivery_state(
+        &required_payload_string(&raw.payload, "delivery_state")?,
+        "WhatsApp Web",
+    )?;
 
     Ok(store
         .upsert_channel_message(&NewProjectedMessage {
@@ -158,7 +154,7 @@ pub async fn project_raw_whatsapp_web_message(
             channel_kind: "whatsapp_web".to_owned(),
             conversation_id: Some(provider_chat_id),
             sender_display_name: Some(sender_display_name),
-            delivery_state: delivery_state.as_message_delivery_state().to_owned(),
+            delivery_state,
             message_metadata: raw.payload.clone(),
         })
         .await?)
@@ -183,6 +179,18 @@ fn optional_payload_string(payload: &Value, field: &'static str) -> Option<Strin
         .and_then(Value::as_str)
         .map(str::trim)
         .map(ToOwned::to_owned)
+}
+
+fn provider_delivery_state(
+    value: &str,
+    provider_label: &'static str,
+) -> Result<String, ProviderCommunicationProjectionError> {
+    match value {
+        "received" | "sent" | "send_dry_run" | "send_blocked" => Ok(value.to_owned()),
+        _ => Err(ProviderCommunicationProjectionError::InvalidRequest(
+            format!("unsupported {provider_label} delivery_state `{value}`"),
+        )),
+    }
 }
 
 fn is_tdlib_raw_payload(raw: &StoredRawCommunicationRecord) -> bool {

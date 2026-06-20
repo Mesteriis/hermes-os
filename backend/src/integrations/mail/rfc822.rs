@@ -1,15 +1,4 @@
-mod body;
-mod decoding;
-mod errors;
-mod headers;
-mod models;
-mod multipart;
-mod parser;
-mod util;
-mod wire;
-
-pub use errors::EmailRfc822ParseError;
-pub use models::{
-    ParsedCommunicationSourceMessage, ParsedEmailAttachment, ParsedEmailAttachmentDisposition,
+pub use crate::platform::communications::rfc822::{
+    EmailRfc822ParseError, ParsedCommunicationSourceMessage, ParsedEmailAttachment,
+    ParsedEmailAttachmentDisposition, parse_rfc822_message,
 };
-pub use parser::parse_rfc822_message;

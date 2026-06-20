@@ -1,33 +1,25 @@
 use async_native_tls::TlsConnector;
-use thiserror::Error;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 
 use crate::platform::secrets::ResolvedSecret;
 
-pub use crate::platform::communications::{OutgoingEmail, SendResult};
+pub use crate::platform::communications::{
+    EmailSendError, OutgoingEmail, SendResult, SmtpConfig, SmtpTransport,
+};
 
-#[derive(Clone, Debug)]
-pub struct SmtpConfig {
-    pub host: String,
-    pub port: u16,
-    pub tls: bool,
-    pub starttls: bool,
-    pub username: String,
-}
-impl SmtpConfig {
-    pub fn new(host: impl Into<String>, port: u16, tls: bool, username: impl Into<String>) -> Self {
-        Self {
-            host: host.into(),
-            port,
-            tls,
-            starttls: false,
-            username: username.into(),
-        }
-    }
+#[derive(Clone, Default)]
+pub struct LiveSmtpTransport;
 
-    pub fn starttls(mut self, starttls: bool) -> Self {
-        self.starttls = starttls;
-        self
+impl SmtpTransport for LiveSmtpTransport {
+    fn send<'a>(
+        &'a self,
+        config: &'a SmtpConfig,
+        password: &'a ResolvedSecret,
+        email: &'a OutgoingEmail,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<SendResult, EmailSendError>> + Send + 'a>,
+    > {
+        Box::pin(async move { SmtpClient::new().send(config, password, email).await })
     }
 }
 
@@ -309,14 +301,4 @@ mod tests {
         assert!(message.contains("In-Reply-To: <parent@example.com>\r\n"));
         assert!(message.contains("References: <root@example.com>\r\n"));
     }
-}
-
-#[derive(Debug, Error)]
-pub enum EmailSendError {
-    #[error(transparent)]
-    Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Tls(#[from] async_native_tls::Error),
-    #[error("SMTP protocol error: {0}")]
-    Protocol(String),
 }

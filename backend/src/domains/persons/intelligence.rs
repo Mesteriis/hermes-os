@@ -1,4 +1,4 @@
-use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
+use crate::platform::ai_runtime::{AiRuntimePortError, SharedAiRuntimePort};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -23,11 +23,11 @@ pub struct PersonInsight {
 
 #[derive(Clone)]
 pub struct PersonIntelligenceService {
-    runtime: Option<AiRuntimeClient>,
+    runtime: Option<SharedAiRuntimePort>,
 }
 
 impl PersonIntelligenceService {
-    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+    pub fn new(runtime: Option<SharedAiRuntimePort>) -> Self {
         Self { runtime }
     }
 
@@ -217,7 +217,7 @@ pub struct PersonMessage {
 #[derive(Debug, Error)]
 pub enum PersonIntelligenceError {
     #[error(transparent)]
-    Runtime(#[from] AiRuntimeError),
+    Runtime(#[from] AiRuntimePortError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
 }

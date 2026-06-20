@@ -1,7 +1,6 @@
 use serde_json::Value;
 
-use crate::integrations::mail::gmail::client::{GmailApiClient, GmailFetchOptions};
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::communications::GmailMessageListFetchRequest;
 
 use super::super::super::errors::ProviderSyncError;
 use super::super::super::models::{MailSyncPhase, ProgressMode, ProgressUpdate};
@@ -11,8 +10,6 @@ use super::super::{ProviderSyncContext, ProviderSyncSummary};
 impl MailBackgroundSyncService {
     pub(in crate::workflows::mail_background_sync::provider::gmail) async fn sync_gmail_message_list_pages(
         &self,
-        client: &GmailApiClient,
-        access_token: &ResolvedSecret,
         context: &ProviderSyncContext<'_>,
         summary: &mut ProviderSyncSummary,
         mut page_token: Option<String>,
@@ -30,11 +27,14 @@ impl MailBackgroundSyncService {
                     current_batch_size: context.settings.batch_size,
                 })
                 .await?;
-            let mut options = GmailFetchOptions::new(context.settings.batch_size as u16);
-            if let Some(token) = page_token {
-                options = options.page_token(token);
-            }
-            let batch = client.fetch_raw_messages(access_token, &options).await?;
+            let batch = self
+                .provider_sync
+                .fetch_gmail_message_list(GmailMessageListFetchRequest {
+                    account_id: context.account.account_id.clone(),
+                    max_results: context.settings.batch_size as u16,
+                    page_token,
+                })
+                .await?;
             page_token = batch
                 .checkpoint
                 .as_ref()

@@ -5,7 +5,9 @@ use crate::domains::communications::storage::{
     LocalMailBlobStore, MailAttachmentDisposition, MailStorageStore, NewMailAttachment,
     NewMailBlob,
 };
-use crate::integrations::mail::rfc822::{ParsedEmailAttachment, ParsedEmailAttachmentDisposition};
+use crate::platform::communications::rfc822::{
+    ParsedEmailAttachment, ParsedEmailAttachmentDisposition,
+};
 
 use super::errors::EmailSyncPipelineError;
 

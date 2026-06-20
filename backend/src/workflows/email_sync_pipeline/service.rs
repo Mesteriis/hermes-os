@@ -6,7 +6,7 @@ use crate::domains::communications::storage::{
     HeuristicAttachmentSafetyScanner, LocalMailBlobStore, MailStorageStore,
 };
 use crate::domains::persons::api::PersonProjectionStore;
-use crate::integrations::mail::sync::EmailSyncBatch;
+use crate::platform::communications::EmailSyncBatch;
 
 use super::candidates::refresh_message_context_candidates;
 use super::errors::EmailSyncPipelineError;

@@ -4,7 +4,7 @@ mod projection;
 mod summary;
 mod types;
 
-use crate::integrations::mail::sync::EmailSyncAdapterConfig;
+use crate::platform::communications::EmailSyncAdapterConfig;
 
 use super::errors::ProviderSyncError;
 use super::service::MailBackgroundSyncService;

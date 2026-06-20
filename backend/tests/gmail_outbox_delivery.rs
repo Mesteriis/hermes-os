@@ -17,8 +17,10 @@ use hermes_hub_backend::domains::communications::core::{
 };
 use hermes_hub_backend::domains::communications::outbox::{
     CommunicationOutboxStatus, CommunicationOutboxStore, EmailOutboxDeliveryWorker,
-    LiveSmtpTransport, NewCommunicationOutboxItem, ProviderOutboxEmailSender,
+    NewCommunicationOutboxItem, ProviderOutboxEmailSender,
 };
+use hermes_hub_backend::integrations::mail::outbox::LiveGmailOutboxTransport;
+use hermes_hub_backend::integrations::mail::send::LiveSmtpTransport;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
@@ -149,7 +151,12 @@ async fn outbox_delivery_worker_sends_gmail_items_through_gmail_api_against_post
 
     let worker = EmailOutboxDeliveryWorker::new(
         outbox_store.clone(),
-        ProviderOutboxEmailSender::new(pool.clone(), vault, LiveSmtpTransport),
+        ProviderOutboxEmailSender::new(
+            pool.clone(),
+            vault.clone(),
+            LiveSmtpTransport,
+            LiveGmailOutboxTransport::new(pool.clone(), vault),
+        ),
     );
     let report = worker
         .deliver_due(now + Duration::seconds(1), 10)

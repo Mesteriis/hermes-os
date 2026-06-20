@@ -17,7 +17,10 @@ pub use semantic::{
     NewSemanticEmbedding, SemanticEmbedding, SemanticEmbeddingStore, SemanticIndexReport,
     SemanticSearchResult, SemanticSourceKind,
 };
-pub use service::AiService;
+pub use service::{
+    AiAgentPersonaAttribution, AiPersonaAttributionError, AiPersonaAttributionPort, AiService,
+    SharedAiPersonaAttributionPort,
+};
 pub use types::{
     AiAnswerRequest, AiAnswerResponse, AiCitation, AiMeetingPrepRequest, AiMeetingPrepResponse,
     AiModelRouting, AiStatusResponse, AiTaskCandidateRefreshRequest,

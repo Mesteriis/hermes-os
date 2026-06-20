@@ -17,8 +17,12 @@ use super::super::commands::{
     request_actor_toggle_chat_mute, request_actor_toggle_chat_unread,
     request_actor_toggle_forum_topic_closed,
 };
+use super::super::models::{TelegramMediaSendRequest, TelegramMediaSendType};
 use super::super::state::TelegramRuntimeCommand;
-use crate::workflows::telegram_media_storage::media_send_request;
+use crate::workflows::telegram_media_storage::{
+    TelegramMediaStorageError, TelegramPreparedMediaSendRequest, TelegramProviderMediaCommand,
+    media_send_request,
+};
 
 pub(super) enum DispatchOutcome {
     AwaitingProvider,
@@ -46,7 +50,19 @@ pub(super) async fn dispatch_command(
             Ok(DispatchOutcome::ObservedMessage(snapshot))
         }
         "send_media" => {
-            let request = media_send_request(pool, command).await?;
+            let request = media_send_request(
+                pool,
+                &TelegramProviderMediaCommand {
+                    command_id: command.command_id.clone(),
+                    account_id: command.account_id.clone(),
+                    command_kind: command.command_kind.clone(),
+                    provider_chat_id: command.provider_chat_id.clone(),
+                    payload: command.payload.clone(),
+                },
+            )
+            .await
+            .map_err(telegram_media_storage_error)?;
+            let request = telegram_media_send_request(request)?;
             let snapshot = request_actor_send_media(command_tx, request).await?;
             Ok(DispatchOutcome::ObservedMessage(snapshot))
         }
@@ -216,6 +232,29 @@ pub(super) async fn dispatch_command(
         other => Err(TelegramError::InvalidRequest(format!(
             "command executor: unsupported command kind `{other}`"
         ))),
+    }
+}
+
+fn telegram_media_send_request(
+    request: TelegramPreparedMediaSendRequest,
+) -> Result<TelegramMediaSendRequest, TelegramError> {
+    Ok(TelegramMediaSendRequest {
+        command_id: request.command_id,
+        provider_chat_id: request.provider_chat_id,
+        media_type: TelegramMediaSendType::try_from(request.media_type.as_str())?,
+        local_path: request.local_path,
+        caption: request.caption,
+        filename: request.filename,
+    })
+}
+
+fn telegram_media_storage_error(error: TelegramMediaStorageError) -> TelegramError {
+    match error {
+        TelegramMediaStorageError::InvalidRequest(message) => {
+            TelegramError::InvalidRequest(message)
+        }
+        TelegramMediaStorageError::Runtime(message) => TelegramError::TdlibRuntime(message),
+        TelegramMediaStorageError::Storage(message) => TelegramError::MediaStorage(message),
     }
 }
 

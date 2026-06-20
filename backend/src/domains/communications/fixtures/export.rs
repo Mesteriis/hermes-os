@@ -10,7 +10,7 @@ mod rfc822;
 mod text;
 
 use crate::domains::communications::sources::FixtureCommunicationSourceMessage;
-use crate::integrations::mail::sync::EmailSyncBatch;
+use crate::platform::communications::EmailSyncBatch;
 
 pub use self::errors::EmailFixtureExportError;
 pub use self::models::{EmailFixtureExportOptions, EmailFixturePrivacyMode};

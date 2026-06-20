@@ -231,6 +231,13 @@ pub(super) fn mail_sync_service(
         pool.clone(),
         state.vault.clone(),
         DEFAULT_MAIL_SYNC_BLOB_ROOT,
+        std::sync::Arc::new(
+            crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort::new(
+                pool.clone(),
+                state.vault.clone(),
+                crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+            ),
+        ),
     ))
 }
 

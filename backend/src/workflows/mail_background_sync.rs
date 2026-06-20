@@ -5,7 +5,7 @@ pub const DEFAULT_MAIL_SYNC_BLOB_ROOT: &str = "docker/data/mail";
 const MAX_BATCH_SIZE: i32 = 500;
 const MIN_POLL_INTERVAL_SECONDS: i32 = 60;
 const MAX_POLL_INTERVAL_SECONDS: i32 = 86_400;
-const DEFAULT_GMAIL_API_BASE_URL: &str = "https://www.googleapis.com";
+pub const DEFAULT_GMAIL_API_BASE_URL: &str = "https://www.googleapis.com";
 
 mod errors;
 mod events;

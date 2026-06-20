@@ -264,7 +264,7 @@ describe('realtime bootstrap', () => {
       queryKey: ['communications-mail-list']
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'messages']
+      queryKey: ['communications', 'telegram', 'messages']
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['integrations', 'telegram', 'runtime']

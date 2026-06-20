@@ -1,12 +1,12 @@
 use thiserror::Error;
 
 use crate::domains::communications::messages::MessageProjectionError;
-use crate::integrations::ai_runtime::AiRuntimeError;
+use crate::platform::ai_runtime::AiRuntimePortError;
 
 #[derive(Debug, Error)]
 pub enum EmailIntelligenceError {
     #[error(transparent)]
-    Runtime(#[from] AiRuntimeError),
+    Runtime(#[from] AiRuntimePortError),
 
     #[error(transparent)]
     MessageProjection(#[from] MessageProjectionError),

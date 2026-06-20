@@ -1,4 +1,4 @@
-use crate::integrations::mail::sync::EmailSyncPlanError;
+use crate::platform::communications::{EmailProviderSyncErrorKind, EmailSyncPlanError};
 use crate::vault::HostVaultError;
 
 use super::super::errors::ProviderSyncError;
@@ -42,21 +42,24 @@ impl SanitizedSyncFailure {
 impl From<ProviderSyncError> for SanitizedSyncFailure {
     fn from(error: ProviderSyncError) -> Self {
         match error {
-            ProviderSyncError::MissingCredential | ProviderSyncError::Credential(_) => Self {
-                code: "credential_unavailable".to_owned(),
-                message: "Provider credential is unavailable for this account".to_owned(),
-            },
-            ProviderSyncError::AccountSetup(_) => Self {
-                code: "oauth_refresh_failed".to_owned(),
-                message: "OAuth access token refresh failed".to_owned(),
-            },
-            ProviderSyncError::ProviderNetwork(error) => {
-                tracing::warn!(error = %error, "mail provider sync network call failed");
-                Self {
-                    code: "provider_network_error".to_owned(),
-                    message: "Mail provider network request failed".to_owned(),
+            ProviderSyncError::ProviderSync(error) => match error.kind {
+                EmailProviderSyncErrorKind::MissingCredential
+                | EmailProviderSyncErrorKind::Credential => Self {
+                    code: "credential_unavailable".to_owned(),
+                    message: "Provider credential is unavailable for this account".to_owned(),
+                },
+                EmailProviderSyncErrorKind::AccountSetup => Self {
+                    code: "oauth_refresh_failed".to_owned(),
+                    message: "OAuth access token refresh failed".to_owned(),
+                },
+                EmailProviderSyncErrorKind::ProviderNetwork => {
+                    tracing::warn!(error = %error, "mail provider sync network call failed");
+                    Self {
+                        code: "provider_network_error".to_owned(),
+                        message: "Mail provider network request failed".to_owned(),
+                    }
                 }
-            }
+            },
             ProviderSyncError::Pipeline(error) => {
                 tracing::error!(error = %error, "mail sync projection pipeline failed");
                 Self {

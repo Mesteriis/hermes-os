@@ -6,10 +6,10 @@ use thiserror::Error;
 use super::{
     ReviewInboxError, ReviewInboxStore, ReviewItem, ReviewItemStatus, ReviewPromotionTarget,
 };
-use crate::engines::review_promotion::{ReviewPromotionError, ReviewPromotionService};
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
 };
+use crate::workflows::review_promotion::{ReviewPromotionError, ReviewPromotionService};
 
 #[derive(Clone)]
 pub struct ReviewInboxService {

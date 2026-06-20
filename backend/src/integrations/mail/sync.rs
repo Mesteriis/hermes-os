@@ -1,7 +1,6 @@
 mod errors;
 mod models;
 mod planning;
-mod validation;
 
 pub use errors::EmailSyncPlanError;
 pub use models::{

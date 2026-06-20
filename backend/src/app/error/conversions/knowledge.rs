@@ -9,7 +9,7 @@ use crate::domains::relationships::{RelationshipCommandServiceError, Relationshi
 use crate::domains::review::{ReviewInboxError, ReviewInboxServiceError};
 use crate::domains::tasks::candidates::{TaskCandidateError, TaskCandidateReviewServiceError};
 use crate::engines::consistency::{ConsistencyError, ContradictionReviewServiceError};
-use crate::engines::review_promotion::ReviewPromotionError;
+use crate::workflows::review_promotion::ReviewPromotionError;
 
 impl From<crate::domains::graph::core::GraphStoreError> for ApiError {
     fn from(error: crate::domains::graph::core::GraphStoreError) -> Self {

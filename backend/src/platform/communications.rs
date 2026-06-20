@@ -1,9 +1,18 @@
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
 
 use crate::platform::secrets::{ResolvedSecret, SecretKind, SecretReference};
+
+mod email_sync;
+pub mod rfc822;
+
+pub use email_sync::{EmailSyncPlanError, imap_mailbox_stream_id, plan_email_sync};
 
 #[derive(Debug, Error)]
 pub enum CommunicationContractError {
@@ -217,6 +226,58 @@ impl NewRawCommunicationRecord {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmailSyncPlan {
+    pub account_id: String,
+    pub provider_kind: EmailProviderKind,
+    pub credential_purpose: ProviderAccountSecretPurpose,
+    pub stream_id: String,
+    pub adapter_config: EmailSyncAdapterConfig,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EmailSyncAdapterConfig {
+    Gmail {
+        history_stream_id: String,
+    },
+    Imap {
+        host: String,
+        port: u16,
+        tls: bool,
+        mailbox: String,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FetchedCommunicationSourceMessage {
+    pub provider_record_id: String,
+    pub source_fingerprint: String,
+    pub occurred_at: Option<DateTime<Utc>>,
+    pub payload: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmailSyncBatch {
+    pub provider_kind: EmailProviderKind,
+    pub stream_id: String,
+    pub checkpoint: Option<Value>,
+    pub messages: Vec<FetchedCommunicationSourceMessage>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmailSyncImportReport {
+    pub inserted_or_existing_records: usize,
+    pub checkpoint_saved: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EmailSyncBlobImportReport {
+    pub inserted_or_existing_records: usize,
+    pub checkpoint_saved: bool,
+    pub blobs_upserted: usize,
+    pub raw_records: Vec<StoredRawCommunicationRecord>,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ProviderAccountSecretPurpose {
@@ -334,6 +395,167 @@ pub struct OutgoingEmail {
 pub struct SendResult {
     pub message_id: String,
     pub accepted_recipients: Vec<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SmtpConfig {
+    pub host: String,
+    pub port: u16,
+    pub tls: bool,
+    pub starttls: bool,
+    pub username: String,
+}
+
+impl SmtpConfig {
+    pub fn new(host: impl Into<String>, port: u16, tls: bool, username: impl Into<String>) -> Self {
+        Self {
+            host: host.into(),
+            port,
+            tls,
+            starttls: false,
+            username: username.into(),
+        }
+    }
+
+    pub fn starttls(mut self, starttls: bool) -> Self {
+        self.starttls = starttls;
+        self
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum EmailSendError {
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
+
+    #[error(transparent)]
+    Tls(#[from] async_native_tls::Error),
+
+    #[error("SMTP protocol error: {0}")]
+    Protocol(String),
+
+    #[error("provider send error: {0}")]
+    Provider(String),
+}
+
+pub trait SmtpTransport: Clone + Send + Sync {
+    fn send<'a>(
+        &'a self,
+        config: &'a SmtpConfig,
+        password: &'a ResolvedSecret,
+        email: &'a OutgoingEmail,
+    ) -> Pin<Box<dyn Future<Output = Result<SendResult, EmailSendError>> + Send + 'a>>;
+}
+
+pub struct GmailOutboxSendRequest<'a> {
+    pub account_id: &'a str,
+    pub oauth_secret_ref: &'a str,
+    pub api_base_url: &'a str,
+    pub email: &'a OutgoingEmail,
+}
+
+pub trait GmailOutboxTransport: Clone + Send + Sync {
+    fn send<'a>(
+        &'a self,
+        request: GmailOutboxSendRequest<'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<SendResult, EmailSendError>> + Send + 'a>>;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GmailMessageListFetchRequest {
+    pub account_id: String,
+    pub max_results: u16,
+    pub page_token: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct GmailHistoryFetchRequest {
+    pub account_id: String,
+    pub start_history_id: String,
+    pub max_results: u16,
+    pub page_token: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ImapMessageFetchRequest {
+    pub account_id: String,
+    pub provider_kind: EmailProviderKind,
+    pub host: String,
+    pub port: u16,
+    pub tls: bool,
+    pub mailbox: String,
+    pub username: String,
+    pub max_messages: usize,
+    pub last_seen_uid: Option<u32>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EmailProviderSyncErrorKind {
+    MissingCredential,
+    Credential,
+    AccountSetup,
+    ProviderNetwork,
+}
+
+#[derive(Clone, Debug, Error, Eq, PartialEq)]
+#[error("{kind:?}: {message}")]
+pub struct EmailProviderSyncError {
+    pub kind: EmailProviderSyncErrorKind,
+    pub message: String,
+    pub history_expired: bool,
+}
+
+impl EmailProviderSyncError {
+    pub fn missing_credential() -> Self {
+        Self {
+            kind: EmailProviderSyncErrorKind::MissingCredential,
+            message: "missing provider credential binding".to_owned(),
+            history_expired: false,
+        }
+    }
+
+    pub fn credential(error: impl std::fmt::Display) -> Self {
+        Self {
+            kind: EmailProviderSyncErrorKind::Credential,
+            message: error.to_string(),
+            history_expired: false,
+        }
+    }
+
+    pub fn account_setup(error: impl std::fmt::Display) -> Self {
+        Self {
+            kind: EmailProviderSyncErrorKind::AccountSetup,
+            message: error.to_string(),
+            history_expired: false,
+        }
+    }
+
+    pub fn provider_network(error: impl std::fmt::Display, history_expired: bool) -> Self {
+        Self {
+            kind: EmailProviderSyncErrorKind::ProviderNetwork,
+            message: error.to_string(),
+            history_expired,
+        }
+    }
+}
+
+pub type SharedEmailProviderSyncPort = Arc<dyn EmailProviderSyncPort>;
+
+pub trait EmailProviderSyncPort: Send + Sync {
+    fn fetch_gmail_message_list<'a>(
+        &'a self,
+        request: GmailMessageListFetchRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<EmailSyncBatch, EmailProviderSyncError>> + Send + 'a>>;
+
+    fn fetch_gmail_history<'a>(
+        &'a self,
+        request: GmailHistoryFetchRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<EmailSyncBatch, EmailProviderSyncError>> + Send + 'a>>;
+
+    fn fetch_imap_messages<'a>(
+        &'a self,
+        request: ImapMessageFetchRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<EmailSyncBatch, EmailProviderSyncError>> + Send + 'a>>;
 }
 
 fn validate_non_empty(field: &'static str, value: &str) -> Result<(), CommunicationContractError> {

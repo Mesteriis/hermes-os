@@ -1,6 +1,6 @@
 use crate::domains::communications::storage::LocalMailBlobStore;
 use crate::engines::graph_projection::GraphProjectionService;
-use crate::integrations::mail::sync::EmailSyncBatch;
+use crate::platform::communications::EmailSyncBatch;
 use crate::workflows::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
 
 use super::super::errors::ProviderSyncError;

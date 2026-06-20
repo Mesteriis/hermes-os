@@ -1,5 +1,3 @@
-use crate::domains::persons::api::PersonProjectionStore;
-
 use super::super::agents::ai_agent_display_name;
 use super::super::errors::AiError;
 use super::core::AiService;
@@ -14,17 +12,17 @@ impl AiService {
         &self,
         agent_id: &str,
     ) -> Result<AiRunAttribution, AiError> {
-        let person_store = PersonProjectionStore::new(self.pool.clone());
-        let agent_persona = person_store
+        let persona_attribution = self
+            .persona_attribution
+            .as_ref()
+            .ok_or(AiError::PersonaAttributionUnavailable)?;
+        let agent_persona = persona_attribution
             .upsert_ai_agent_persona(agent_id, ai_agent_display_name(agent_id)?)
             .await?;
-        let owner_persona_id = person_store
-            .owner_persona()
-            .await?
-            .map(|owner| owner.person_id);
+        let owner_persona_id = persona_attribution.owner_persona_id().await?;
 
         Ok(AiRunAttribution {
-            agent_persona_id: agent_persona.person_id,
+            agent_persona_id: agent_persona.persona_id,
             owner_persona_id,
         })
     }

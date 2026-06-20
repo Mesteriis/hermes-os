@@ -1,9 +1,6 @@
 use serde_json::Value;
 
-use crate::integrations::mail::gmail::client::{ImapFetchOptions, ImapNetworkClient};
-use crate::platform::communications::ProviderAccountSecretPurpose;
-use crate::platform::secrets::SecretReferenceStore;
-use crate::vault::{CommunicationProviderSecretBindingStore, ProviderCredentialReader};
+use crate::platform::communications::ImapMessageFetchRequest;
 
 use super::super::errors::ProviderSyncError;
 use super::super::models::{MailSyncPhase, ProgressMode, ProgressUpdate};
@@ -17,18 +14,6 @@ impl MailBackgroundSyncService {
         context: ProviderSyncContext<'_>,
         config: ImapAccountConfig<'_>,
     ) -> Result<ProviderSyncSummary, ProviderSyncError> {
-        let credential_reader = ProviderCredentialReader::new(
-            CommunicationProviderSecretBindingStore::new(self.pool.clone()),
-            SecretReferenceStore::new(self.pool.clone()),
-            &self.vault,
-        );
-        let credential = credential_reader
-            .read(
-                &context.account.account_id,
-                ProviderAccountSecretPurpose::ImapPassword,
-            )
-            .await?;
-        let client = ImapNetworkClient::new();
         let mut summary = ProviderSyncSummary::default();
         let mut last_seen_uid = context
             .checkpoint_before
@@ -57,20 +42,19 @@ impl MailBackgroundSyncService {
                     current_batch_size: context.settings.batch_size,
                 })
                 .await?;
-            let mut options = ImapFetchOptions::new(
-                config.host,
-                config.port,
-                config.tls,
-                config.mailbox,
-                &context.account.external_account_id,
-            )
-            .provider_kind(context.account.provider_kind)
-            .max_messages(context.settings.batch_size as usize);
-            if let Some(uid) = last_seen_uid {
-                options = options.last_seen_uid(uid);
-            }
-            let batch = client
-                .fetch_raw_messages(&credential.secret, &options)
+            let batch = self
+                .provider_sync
+                .fetch_imap_messages(ImapMessageFetchRequest {
+                    account_id: context.account.account_id.clone(),
+                    provider_kind: context.account.provider_kind,
+                    host: config.host.to_owned(),
+                    port: config.port,
+                    tls: config.tls,
+                    mailbox: config.mailbox.to_owned(),
+                    username: context.account.external_account_id.clone(),
+                    max_messages: context.settings.batch_size as usize,
+                    last_seen_uid,
+                })
                 .await?;
             let fetched_count = batch.messages.len();
             let batch_uid_validity = batch

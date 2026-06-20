@@ -3,12 +3,6 @@ mod message_list;
 
 use serde_json::Value;
 
-use crate::integrations::mail::accounts::EmailAccountSetupService;
-use crate::integrations::mail::gmail::client::GmailApiClient;
-use crate::platform::communications::ProviderAccountSecretPurpose;
-use crate::platform::secrets::SecretReferenceStore;
-use crate::vault::CommunicationProviderSecretBindingStore;
-
 use super::super::errors::ProviderSyncError;
 use super::super::service::MailBackgroundSyncService;
 use super::{ProviderSyncContext, ProviderSyncSummary};
@@ -18,22 +12,6 @@ impl MailBackgroundSyncService {
         &self,
         context: ProviderSyncContext<'_>,
     ) -> Result<ProviderSyncSummary, ProviderSyncError> {
-        let binding = CommunicationProviderSecretBindingStore::new(self.pool.clone())
-            .get_for_account(
-                &context.account.account_id,
-                ProviderAccountSecretPurpose::OauthToken,
-            )
-            .await?
-            .ok_or(ProviderSyncError::MissingCredential)?;
-        let account_setup = EmailAccountSetupService::new_with_host_vault(
-            self.pool.clone(),
-            SecretReferenceStore::new(self.pool.clone()),
-            self.vault.clone(),
-        );
-        let access_token = account_setup
-            .refresh_gmail_access_token(&binding.secret_ref)
-            .await?;
-        let client = GmailApiClient::new(&self.gmail_api_base_url).user_id("me");
         let mut summary = ProviderSyncSummary::default();
         let checkpoint_next_page_token = context
             .checkpoint_before
@@ -48,14 +26,8 @@ impl MailBackgroundSyncService {
             .and_then(Value::as_str);
 
         if checkpoint_next_page_token.is_some() && checkpoint_page_kind != Some("history") {
-            self.sync_gmail_message_list_pages(
-                &client,
-                &access_token,
-                &context,
-                &mut summary,
-                checkpoint_next_page_token,
-            )
-            .await?;
+            self.sync_gmail_message_list_pages(&context, &mut summary, checkpoint_next_page_token)
+                .await?;
             return Ok(summary);
         }
 
@@ -80,8 +52,6 @@ impl MailBackgroundSyncService {
             };
             let history_expired = self
                 .sync_gmail_history_pages(
-                    &client,
-                    &access_token,
                     &context,
                     &mut summary,
                     &start_history_id,
@@ -93,7 +63,7 @@ impl MailBackgroundSyncService {
             }
         }
 
-        self.sync_gmail_message_list_pages(&client, &access_token, &context, &mut summary, None)
+        self.sync_gmail_message_list_pages(&context, &mut summary, None)
             .await?;
 
         Ok(summary)

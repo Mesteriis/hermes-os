@@ -163,6 +163,71 @@ pub async fn upsert_chat_participant(
     Ok(member)
 }
 
+pub async fn mark_absent_members_from_exhaustive_roster(
+    pool: &PgPool,
+    telegram_chat_id: &str,
+    observed_member_ids: &[String],
+    observed_via: &str,
+) -> Result<Vec<TelegramChatMember>, TelegramError> {
+    let observed_at = Utc::now();
+    let permissions_patch = json!({
+        "membership_state": "absent_exhaustive",
+        "observed_via": observed_via,
+    });
+    let raw_payload_patch = json!({
+        "membership_state": "absent_exhaustive",
+        "observed_via": observed_via,
+    });
+    let mut transaction = pool.begin().await?;
+    let rows = sqlx::query(
+        r#"
+        UPDATE telegram_chat_participants
+        SET status = 'absent_exhaustive',
+            permissions = COALESCE(permissions, '{}'::jsonb) || $3::jsonb,
+            raw_payload = COALESCE(raw_payload, '{}'::jsonb) || $4::jsonb,
+            observed_at = $2,
+            updated_at = $2
+        WHERE telegram_chat_id = $1
+          AND source = 'tdlib'
+          AND provider_member_id <> ALL($5)
+          AND status IS DISTINCT FROM 'absent_exhaustive'
+        RETURNING account_id, provider_chat_id, provider_member_id, display_name, username, role,
+                  status, is_admin, is_owner, permissions, raw_payload, source, observed_at
+        "#,
+    )
+    .bind(telegram_chat_id)
+    .bind(observed_at)
+    .bind(&permissions_patch)
+    .bind(&raw_payload_patch)
+    .bind(observed_member_ids)
+    .fetch_all(&mut *transaction)
+    .await
+    .map_err(TelegramError::from)?;
+
+    let mut members = Vec::with_capacity(rows.len());
+    for row in rows {
+        let account_id: String = row.try_get("account_id")?;
+        let provider_chat_id: String = row.try_get("provider_chat_id")?;
+        let raw_payload: serde_json::Value = row.try_get("raw_payload")?;
+        let member = row_to_provider_member(row)?;
+        capture_chat_participant_observation_in_transaction(
+            &mut transaction,
+            telegram_chat_id,
+            &account_id,
+            &provider_chat_id,
+            &member,
+            &raw_payload,
+            "absent_exhaustive",
+            "telegram.client.participants.mark_absent_members_from_exhaustive_roster",
+            member.observed_at.unwrap_or(observed_at),
+        )
+        .await?;
+        members.push(member);
+    }
+    transaction.commit().await?;
+    Ok(members)
+}
+
 pub fn telegram_self_provider_member_id(external_account_id: &str) -> Option<String> {
     let value = external_account_id.trim();
     if value.is_empty() {

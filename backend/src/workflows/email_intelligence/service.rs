@@ -1,7 +1,7 @@
 use crate::domains::communications::messages::{
     MessageProjectionStore, ProjectedMessage, WorkflowState,
 };
-use crate::integrations::ai_runtime::AiRuntimeClient;
+use crate::platform::ai_runtime::SharedAiRuntimePort;
 use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
 use crate::workflows::email_intelligence::heuristics;
 use crate::workflows::email_intelligence::models::{EmailAnalysis, EmailSummaryContract};
@@ -11,11 +11,11 @@ use crate::workflows::email_intelligence::prompt::{
 
 #[derive(Clone)]
 pub struct EmailIntelligenceService {
-    runtime: Option<AiRuntimeClient>,
+    runtime: Option<SharedAiRuntimePort>,
 }
 
 impl EmailIntelligenceService {
-    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+    pub fn new(runtime: Option<SharedAiRuntimePort>) -> Self {
         Self { runtime }
     }
 

@@ -8,7 +8,6 @@ pub mod identity_resolution;
 pub mod memory;
 pub mod obligation;
 pub mod relationships;
-pub mod review_promotion;
 pub mod risk;
 pub mod search;
 pub mod timeline;

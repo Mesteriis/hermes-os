@@ -1,6 +1,5 @@
 use chrono::{DateTime, TimeDelta, Utc};
 
-use crate::integrations::mail::gmail::client::EmailProviderNetworkError;
 use crate::vault::{HostVault, HostVaultError, VaultMode};
 
 use super::errors::MailSyncError;
@@ -13,14 +12,6 @@ pub(super) fn require_unlocked_vault(vault: &HostVault) -> Result<(), HostVaultE
         VaultMode::Locked => Err(HostVaultError::Locked),
         VaultMode::Uninitialized => Err(HostVaultError::Uninitialized),
     }
-}
-
-pub(super) fn gmail_history_expired(error: &EmailProviderNetworkError) -> bool {
-    matches!(
-        error,
-        EmailProviderNetworkError::Http(source)
-            if source.status().is_some_and(|status| status.as_u16() == 404)
-    )
 }
 
 pub(super) fn validate_account_id(account_id: &str) -> Result<(), MailSyncError> {

@@ -152,7 +152,7 @@ export function telegramMessageSnapshot(value: unknown): TelegramMessage | null 
 }
 
 export function messageQueryScope(queryKey: readonly unknown[]): [string | null, string | null, number | null] {
-  if (queryKey[0] !== 'integrations' || queryKey[1] !== 'telegram' || queryKey[2] !== 'messages') return [null, null, null]
+  if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram' || queryKey[2] !== 'messages') return [null, null, null]
   const accountId = typeof queryKey[3] === 'string' && queryKey[3] !== 'all' && queryKey[3] !== 'none'
     ? queryKey[3]
     : null
@@ -164,7 +164,7 @@ export function messageQueryScope(queryKey: readonly unknown[]): [string | null,
 }
 
 export function chatQueryScope(queryKey: readonly unknown[]): [string | null, number | null] {
-  if (queryKey[0] !== 'integrations' || queryKey[1] !== 'telegram' || queryKey[2] !== 'chats') return [null, null]
+  if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram' || queryKey[2] !== 'chats') return [null, null]
   const accountId = typeof queryKey[3] === 'string' && queryKey[3] !== 'all' ? queryKey[3] : null
   const limit = typeof queryKey[4] === 'number' ? queryKey[4] : null
   return [accountId, limit]

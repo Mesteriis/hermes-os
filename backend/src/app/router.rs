@@ -81,9 +81,16 @@ fn spawn_mail_background_sync_scheduler(state: &AppState) {
     tokio::spawn(async move {
         let store = crate::workflows::mail_background_sync::MailSyncStore::new(pool.clone());
         let service = crate::workflows::mail_background_sync::MailBackgroundSyncService::new(
-            pool,
-            vault,
+            pool.clone(),
+            vault.clone(),
             crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+            std::sync::Arc::new(
+                crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort::new(
+                    pool,
+                    vault,
+                    crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                ),
+            ),
         );
         if let Err(error) = store.mark_orphaned_active_runs_failed(Utc::now()).await {
             tracing::warn!(error = %error, "mail background sync startup recovery failed");
@@ -116,9 +123,10 @@ fn spawn_mail_outbox_delivery_scheduler(state: &AppState) {
         let store =
             crate::domains::communications::outbox::CommunicationOutboxStore::new(pool.clone());
         let sender = crate::domains::communications::outbox::ProviderOutboxEmailSender::new(
-            pool,
+            pool.clone(),
             vault.clone(),
-            crate::domains::communications::outbox::LiveSmtpTransport,
+            crate::integrations::mail::send::LiveSmtpTransport,
+            crate::integrations::mail::outbox::LiveGmailOutboxTransport::new(pool, vault.clone()),
         );
         let worker =
             crate::domains::communications::outbox::EmailOutboxDeliveryWorker::new(store, sender);

@@ -10,9 +10,10 @@ pub(crate) async fn post_v1_extract_tasks(
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
     let runtime_settings = ai_runtime_settings(&state).await?;
-    let svc = crate::domains::communications::extract::EmailExtractService::new(
-        ai_runtime_client(&state, &runtime_settings).ok(),
-    );
+    let svc = crate::domains::communications::extract::EmailExtractService::new(ai_runtime_port(
+        &state,
+        &runtime_settings,
+    ));
     let tasks = svc.extract_tasks(&msg).await?;
     Ok(Json(serde_json::json!({"tasks": tasks})))
 }

@@ -5,10 +5,9 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::core::CommunicationIngestionStore;
-use crate::integrations::mail::sync::plan_email_sync;
+use crate::platform::communications::{SharedEmailProviderSyncPort, plan_email_sync};
 use crate::vault::{CommunicationProviderAccountStore, HostVault};
 
-use super::DEFAULT_GMAIL_API_BASE_URL;
 use super::errors::MailSyncError;
 use super::models::{
     FinishRun, MailSyncPhase, MailSyncRunResponse, MailSyncRunStatus, MailSyncSettings,
@@ -23,23 +22,22 @@ pub struct MailBackgroundSyncService {
     pub(super) pool: PgPool,
     pub(super) vault: HostVault,
     pub(super) blob_root: PathBuf,
-    pub(super) gmail_api_base_url: String,
+    pub(super) provider_sync: SharedEmailProviderSyncPort,
 }
 
 impl MailBackgroundSyncService {
-    pub fn new(pool: PgPool, vault: HostVault, blob_root: impl Into<PathBuf>) -> Self {
+    pub fn new(
+        pool: PgPool,
+        vault: HostVault,
+        blob_root: impl Into<PathBuf>,
+        provider_sync: SharedEmailProviderSyncPort,
+    ) -> Self {
         Self {
             pool,
             vault,
             blob_root: blob_root.into(),
-            gmail_api_base_url: DEFAULT_GMAIL_API_BASE_URL.to_owned(),
+            provider_sync,
         }
-    }
-
-    #[cfg(test)]
-    pub fn gmail_api_base_url(mut self, base_url: impl Into<String>) -> Self {
-        self.gmail_api_base_url = base_url.into();
-        self
     }
 
     pub async fn run_due_accounts(&self) -> Result<Vec<MailSyncRunResponse>, MailSyncError> {

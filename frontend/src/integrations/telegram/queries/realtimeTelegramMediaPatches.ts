@@ -43,7 +43,7 @@ export function patchTelegramMediaSearch(
   snapshot: TelegramMessage | null
 ): TelegramMediaSearchResponse | undefined {
   if (!response || !isTelegramMediaDownloadEvent(eventType)) return response
-  if (queryKey[0] !== 'integrations' || queryKey[1] !== 'telegram' || queryKey[2] !== 'search' || queryKey[3] !== 'media') {
+  if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram' || queryKey[2] !== 'search' || queryKey[3] !== 'media') {
     return response
   }
 

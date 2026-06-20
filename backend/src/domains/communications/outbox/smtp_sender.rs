@@ -7,38 +7,14 @@ use sqlx::postgres::PgPool;
 use crate::domains::communications::core::{
     EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose, ProviderCredentialReader,
 };
-use crate::integrations::mail::send::{EmailSendError, SmtpClient, SmtpConfig};
-use crate::platform::communications::{OutgoingEmail, SendResult};
-use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore, SecretResolver};
+use crate::platform::communications::{OutgoingEmail, SmtpConfig, SmtpTransport};
+use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 use crate::vault::{CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore};
 
 use super::{CommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt};
 
-pub trait SmtpTransport: Clone + Send + Sync {
-    fn send<'a>(
-        &'a self,
-        config: &'a SmtpConfig,
-        password: &'a ResolvedSecret,
-        email: &'a OutgoingEmail,
-    ) -> Pin<Box<dyn Future<Output = Result<SendResult, EmailSendError>> + Send + 'a>>;
-}
-
-#[derive(Clone, Default)]
-pub struct LiveSmtpTransport;
-
-impl SmtpTransport for LiveSmtpTransport {
-    fn send<'a>(
-        &'a self,
-        config: &'a SmtpConfig,
-        password: &'a ResolvedSecret,
-        email: &'a OutgoingEmail,
-    ) -> Pin<Box<dyn Future<Output = Result<SendResult, EmailSendError>> + Send + 'a>> {
-        Box::pin(async move { SmtpClient::new().send(config, password, email).await })
-    }
-}
-
 #[derive(Clone)]
-pub struct SmtpOutboxEmailSender<R, T = LiveSmtpTransport> {
+pub struct SmtpOutboxEmailSender<R, T> {
     provider_account_store: CommunicationProviderAccountStore,
     provider_secret_binding_store: CommunicationProviderSecretBindingStore,
     secret_store: SecretReferenceStore,

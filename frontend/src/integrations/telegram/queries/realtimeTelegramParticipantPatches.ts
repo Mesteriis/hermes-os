@@ -38,7 +38,7 @@ export function applyTelegramParticipantRealtimePatch(
 
   let patched = false
   for (const [queryKey, data] of getQueriesData<TelegramChatMember[] | TelegramChatMembersInfiniteData>({
-    queryKey: ['integrations', 'telegram', 'chat-members']
+    queryKey: ['communications', 'telegram', 'chat-members']
   })) {
     if (queryKey[3] !== telegramChatId) continue
     const updated = patchParticipantQuery(queryKey, data, participant)

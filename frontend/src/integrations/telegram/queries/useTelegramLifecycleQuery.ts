@@ -41,7 +41,7 @@ export function useTelegramMessageReactionsQuery(
   enabled: MaybeRefOrGetter<boolean> = true
 ) {
   return useQuery<TelegramReactionListResponse>({
-    queryKey: computed(() => ['integrations', 'telegram', 'message-reactions', toValue(messageId)]),
+    queryKey: computed(() => ['communications', 'telegram', 'message-reactions', toValue(messageId)]),
     queryFn: () => fetchTelegramReactions(toValue(messageId) as string),
     enabled: computed(() => Boolean(toValue(messageId)) && Boolean(toValue(enabled))),
   })

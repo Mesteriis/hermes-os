@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::domains::communications::storage::MailStorageError;
-use crate::integrations::mail::rfc822::EmailRfc822ParseError;
+use crate::platform::communications::rfc822::EmailRfc822ParseError;
 use crate::platform::observations::ObservationStoreError;
 
 #[derive(Debug, Error)]

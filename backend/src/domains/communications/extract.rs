@@ -1,6 +1,6 @@
 // §20-21: Task + Note extraction from email via LLM + heuristics
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
+use crate::platform::ai_runtime::{AiRuntimePortError, SharedAiRuntimePort};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -23,11 +23,11 @@ pub struct ExtractedNote {
 
 #[derive(Clone)]
 pub struct EmailExtractService {
-    runtime: Option<AiRuntimeClient>,
+    runtime: Option<SharedAiRuntimePort>,
 }
 
 impl EmailExtractService {
-    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+    pub fn new(runtime: Option<SharedAiRuntimePort>) -> Self {
         Self { runtime }
     }
 
@@ -151,7 +151,7 @@ fn truncate(s: &str, max: usize) -> &str {
 #[derive(Debug, Error)]
 pub enum ExtractError {
     #[error(transparent)]
-    Runtime(#[from] AiRuntimeError),
+    Runtime(#[from] AiRuntimePortError),
     #[error(transparent)]
     Serde(#[from] serde_json::Error),
 }

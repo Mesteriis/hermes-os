@@ -17,7 +17,6 @@ use hermes_hub_backend::domains::review::{
     ReviewPromotionTarget,
 };
 use hermes_hub_backend::domains::tasks::api::TaskStore;
-use hermes_hub_backend::engines::review_promotion::ReviewPromotionService;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore,
@@ -27,6 +26,7 @@ use hermes_hub_backend::workflows::review_inbox::sync_decisions_to_review_for_ob
 use hermes_hub_backend::workflows::review_inbox::sync_obligations_to_review_for_observations;
 use hermes_hub_backend::workflows::review_inbox::sync_relationships_to_review_for_observations;
 use hermes_hub_backend::workflows::review_inbox::sync_task_candidates_to_review_for_observations;
+use hermes_hub_backend::workflows::review_promotion::ReviewPromotionService;
 use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
@@ -1019,7 +1019,7 @@ async fn task_candidate_review_mirror_promotes_obligation_candidate_against_post
     assert_eq!(review_item.metadata["due_text"], json!("Friday 5pm"));
 
     let promoted =
-        hermes_hub_backend::engines::review_promotion::ReviewPromotionService::new(pool.clone())
+        hermes_hub_backend::workflows::review_promotion::ReviewPromotionService::new(pool.clone())
             .promote(
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new("tasks", "task", format!("task:v1:mirror:{suffix}")),
@@ -1106,7 +1106,7 @@ async fn decision_review_mirror_promotes_existing_decision_against_postgres() {
         .expect("mirrored decision review item");
 
     let promoted =
-        hermes_hub_backend::engines::review_promotion::ReviewPromotionService::new(pool.clone())
+        hermes_hub_backend::workflows::review_promotion::ReviewPromotionService::new(pool.clone())
             .promote(
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new(
@@ -1227,7 +1227,7 @@ async fn obligation_review_mirror_promotes_existing_obligation_against_postgres(
         .expect("mirrored obligation review item");
 
     let promoted =
-        hermes_hub_backend::engines::review_promotion::ReviewPromotionService::new(pool.clone())
+        hermes_hub_backend::workflows::review_promotion::ReviewPromotionService::new(pool.clone())
             .promote(
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new(
@@ -1358,7 +1358,7 @@ async fn relationship_review_mirror_promotes_existing_relationship_against_postg
         .expect("mirrored relationship review item");
 
     let promoted =
-        hermes_hub_backend::engines::review_promotion::ReviewPromotionService::new(pool.clone())
+        hermes_hub_backend::workflows::review_promotion::ReviewPromotionService::new(pool.clone())
             .promote(
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new(
@@ -1472,7 +1472,7 @@ async fn identity_candidate_review_mirror_promotes_existing_candidate_against_po
     assert_eq!(review_item.item_kind, ReviewItemKind::IdentityCandidate);
 
     let promoted =
-        hermes_hub_backend::engines::review_promotion::ReviewPromotionService::new(pool.clone())
+        hermes_hub_backend::workflows::review_promotion::ReviewPromotionService::new(pool.clone())
             .promote(
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new(
@@ -1665,7 +1665,7 @@ async fn project_link_candidate_review_promotes_existing_candidate_against_postg
         .expect("create project link review item");
 
     let promoted =
-        hermes_hub_backend::engines::review_promotion::ReviewPromotionService::new(pool.clone())
+        hermes_hub_backend::workflows::review_promotion::ReviewPromotionService::new(pool.clone())
             .promote(
                 &item.review_item_id,
                 ReviewPromotionTarget::new(

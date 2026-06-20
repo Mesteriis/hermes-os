@@ -9,6 +9,7 @@ use sqlx::postgres::{PgPool, PgRow, Postgres};
 use thiserror::Error;
 
 use crate::domains::communications::evidence::{link_mail_entity_in_transaction, merge_metadata};
+pub use crate::platform::communications::SmtpTransport;
 use crate::platform::events::{EventStore, NewEventEnvelope};
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
@@ -30,8 +31,7 @@ pub use delivery_status::{
 pub use provider_send_store::{ProviderSendStore, ProviderSendStoreError};
 pub use provider_sender::ProviderOutboxEmailSender;
 pub use smtp_sender::{
-    LiveSmtpTransport, SmtpOutboxEmailSender, SmtpTransport, outgoing_email_from_outbox_item,
-    smtp_config_for_provider_account,
+    SmtpOutboxEmailSender, outgoing_email_from_outbox_item, smtp_config_for_provider_account,
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]

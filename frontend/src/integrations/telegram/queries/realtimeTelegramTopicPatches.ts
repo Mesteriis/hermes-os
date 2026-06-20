@@ -33,7 +33,7 @@ export function patchTelegramTopicList(
 }
 
 function isTopicListQueryKey(queryKey: readonly unknown[]): boolean {
-  if (queryKey[0] !== 'integrations' || queryKey[1] !== 'telegram') return false
+  if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram') return false
   return queryKey[2] === 'topics' || queryKey[2] === 'topic-search'
 }
 

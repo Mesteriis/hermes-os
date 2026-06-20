@@ -1,7 +1,7 @@
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use crate::domains::graph::core::{GraphNodeKind, node_id};
+use crate::platform::graph::{GraphNodeKind, node_id};
 
 use super::super::errors::AiError;
 use super::super::helpers::recipients_text;

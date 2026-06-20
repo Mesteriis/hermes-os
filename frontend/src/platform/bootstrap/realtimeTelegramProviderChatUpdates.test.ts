@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from 'vitest'
 import { handleRealtimeEvent } from './realtime'
 
 function queryClientForChat(chat: Record<string, unknown>) {
-  const chatsKey = ['integrations', 'telegram', 'chats', 'account-1', 50]
-  const chatDetailKey = ['integrations', 'telegram', 'chat-detail', 'tgchat-1']
+  const chatsKey = ['communications', 'telegram', 'chats', 'account-1', 50]
+  const chatDetailKey = ['communications', 'telegram', 'chat-detail', 'tgchat-1']
   const setQueryData = vi.fn((queryKey, updater) => {
     if (typeof updater !== 'function') return updater
     if (JSON.stringify(queryKey) === JSON.stringify(chatsKey)) return updater([chat])
@@ -14,8 +14,8 @@ function queryClientForChat(chat: Record<string, unknown>) {
     invalidateQueries: vi.fn(),
     getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
       const key = JSON.stringify(queryKey)
-      if (key === JSON.stringify(['integrations', 'telegram', 'chats'])) return [[chatsKey, [chat]]]
-      if (key === JSON.stringify(['integrations', 'telegram', 'chat-detail'])) return [[chatDetailKey, chat]]
+      if (key === JSON.stringify(['communications', 'telegram', 'chats'])) return [[chatsKey, [chat]]]
+      if (key === JSON.stringify(['communications', 'telegram', 'chat-detail'])) return [[chatDetailKey, chat]]
       return []
     }),
     setQueryData,

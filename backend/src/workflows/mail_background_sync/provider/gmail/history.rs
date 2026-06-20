@@ -1,19 +1,15 @@
 use serde_json::Value;
 
-use crate::integrations::mail::gmail::client::{GmailApiClient, GmailHistoryFetchOptions};
-use crate::platform::secrets::ResolvedSecret;
+use crate::platform::communications::GmailHistoryFetchRequest;
 
 use super::super::super::errors::ProviderSyncError;
 use super::super::super::models::{MailSyncPhase, ProgressMode, ProgressUpdate};
 use super::super::super::service::MailBackgroundSyncService;
-use super::super::super::validation::gmail_history_expired;
 use super::super::{ProviderSyncContext, ProviderSyncSummary};
 
 impl MailBackgroundSyncService {
     pub(in crate::workflows::mail_background_sync::provider::gmail) async fn sync_gmail_history_pages(
         &self,
-        client: &GmailApiClient,
-        access_token: &ResolvedSecret,
         context: &ProviderSyncContext<'_>,
         summary: &mut ProviderSyncSummary,
         start_history_id: &str,
@@ -32,17 +28,18 @@ impl MailBackgroundSyncService {
                     current_batch_size: context.settings.batch_size,
                 })
                 .await?;
-            let mut options =
-                GmailHistoryFetchOptions::new(start_history_id, context.settings.batch_size as u16);
-            if let Some(token) = page_token {
-                options = options.page_token(token);
-            }
-            let history_batch = client
-                .fetch_history_raw_messages(access_token, &options)
+            let history_batch = self
+                .provider_sync
+                .fetch_gmail_history(GmailHistoryFetchRequest {
+                    account_id: context.account.account_id.clone(),
+                    start_history_id: start_history_id.to_owned(),
+                    max_results: context.settings.batch_size as u16,
+                    page_token,
+                })
                 .await;
             let batch = match history_batch {
                 Ok(batch) => batch,
-                Err(error) if gmail_history_expired(&error) => {
+                Err(error) if error.history_expired => {
                     context
                         .store
                         .mark_recoverable_full_resync(context.run_id, "gmail_history_expired")

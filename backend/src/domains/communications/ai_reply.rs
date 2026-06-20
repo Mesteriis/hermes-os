@@ -1,5 +1,5 @@
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::integrations::ai_runtime::{AiRuntimeClient, AiRuntimeError};
+use crate::platform::ai_runtime::{AiRuntimePortError, SharedAiRuntimePort};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -20,11 +20,11 @@ pub struct AiReplyOptions {
 
 #[derive(Clone)]
 pub struct AiReplyService {
-    runtime: Option<AiRuntimeClient>,
+    runtime: Option<SharedAiRuntimePort>,
 }
 
 impl AiReplyService {
-    pub fn new(runtime: Option<AiRuntimeClient>) -> Self {
+    pub fn new(runtime: Option<SharedAiRuntimePort>) -> Self {
         Self { runtime }
     }
 
@@ -104,7 +104,7 @@ fn truncate(s: &str, max: usize) -> &str {
 #[derive(Debug, Error)]
 pub enum AiReplyError {
     #[error(transparent)]
-    Runtime(#[from] AiRuntimeError),
+    Runtime(#[from] AiRuntimePortError),
 }
 
 #[cfg(test)]

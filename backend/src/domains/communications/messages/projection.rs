@@ -2,7 +2,9 @@ use serde_json::json;
 
 use crate::domains::communications::core::StoredRawCommunicationRecord;
 use crate::domains::communications::storage::LocalMailBlobStore;
-use crate::integrations::mail::rfc822::{ParsedCommunicationSourceMessage, parse_rfc822_message};
+use crate::platform::communications::rfc822::{
+    ParsedCommunicationSourceMessage, parse_rfc822_message,
+};
 
 use super::errors::MessageProjectionError;
 use super::ids::message_id;

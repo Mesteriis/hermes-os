@@ -19,7 +19,6 @@ use crate::domains::review::ReviewInboxError;
 use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::engines::automation::AutomationError;
 use crate::engines::consistency::ConsistencyError;
-use crate::engines::review_promotion::ReviewPromotionError;
 use crate::integrations::mail::accounts::EmailAccountSetupError;
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::whatsapp::client::WhatsappWebError;
@@ -29,6 +28,7 @@ use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::settings::SettingsError;
 use crate::platform::storage::StorageError;
 use crate::vault::HostVaultError;
+use crate::workflows::review_promotion::ReviewPromotionError;
 
 pub enum ApiError {
     DatabaseNotConfigured,

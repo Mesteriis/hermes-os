@@ -2,42 +2,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+pub use crate::platform::graph::GraphNodeKind;
+
 use super::errors::GraphStoreError;
 use super::validation::{validate_json_object, validate_non_empty};
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum GraphNodeKind {
-    Person,
-    EmailAddress,
-    Message,
-    Document,
-    Project,
-    Organization,
-    Task,
-    Event,
-    Decision,
-    Obligation,
-    Knowledge,
-}
-
-impl GraphNodeKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Person => "person",
-            Self::EmailAddress => "email_address",
-            Self::Message => "message",
-            Self::Document => "document",
-            Self::Project => "project",
-            Self::Organization => "organization",
-            Self::Task => "task",
-            Self::Event => "event",
-            Self::Decision => "decision",
-            Self::Obligation => "obligation",
-            Self::Knowledge => "knowledge",
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]

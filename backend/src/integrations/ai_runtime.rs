@@ -1,7 +1,11 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use thiserror::Error;
 
 use crate::integrations::ollama::client::{OllamaClient, OllamaError};
 use crate::integrations::omniroute::client::{OmniRouteClient, OmniRouteError};
+use crate::platform::ai_runtime::{AiChatResult, AiEmbedResult, AiRuntimePort, AiRuntimePortError};
 
 #[derive(Clone)]
 pub enum AiRuntimeClient {
@@ -111,20 +115,6 @@ impl AiRuntimeClient {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct AiChatResult {
-    pub model: String,
-    pub content: String,
-    pub total_duration_ns: Option<u64>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct AiEmbedResult {
-    pub model: String,
-    pub embedding: Vec<f32>,
-    pub total_duration_ns: Option<u64>,
-}
-
 #[derive(Debug, Error)]
 pub enum AiRuntimeError {
     #[error(transparent)]
@@ -132,4 +122,38 @@ pub enum AiRuntimeError {
 
     #[error(transparent)]
     OmniRoute(#[from] OmniRouteError),
+}
+
+impl From<AiRuntimeError> for AiRuntimePortError {
+    fn from(error: AiRuntimeError) -> Self {
+        match error {
+            AiRuntimeError::Ollama(error) => Self::provider("ollama", error.to_string()),
+            AiRuntimeError::OmniRoute(error) => Self::provider("omniroute", error.to_string()),
+        }
+    }
+}
+
+impl AiRuntimePort for AiRuntimeClient {
+    fn runtime_name(&self) -> &'static str {
+        AiRuntimeClient::runtime_name(self)
+    }
+
+    fn chat<'a>(
+        &'a self,
+        prompt: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<AiChatResult, AiRuntimePortError>> + Send + 'a>> {
+        Box::pin(async move { self.chat(prompt).await.map_err(Into::into) })
+    }
+
+    fn embed_with_model<'a>(
+        &'a self,
+        input: &'a str,
+        model: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<AiEmbedResult, AiRuntimePortError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.embed_with_model(input, model)
+                .await
+                .map_err(Into::into)
+        })
+    }
 }

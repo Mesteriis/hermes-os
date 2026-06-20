@@ -7,50 +7,48 @@ use sqlx::postgres::PgPool;
 use crate::domains::communications::core::{
     EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose,
 };
-use crate::integrations::mail::accounts::EmailAccountSetupService;
-use crate::integrations::mail::gmail::client::GmailApiClient;
-use crate::platform::secrets::SecretReferenceStore;
+use crate::platform::communications::{
+    GmailOutboxSendRequest, GmailOutboxTransport, SmtpTransport,
+};
 use crate::vault::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore, HostVault,
 };
 
-use super::smtp_sender::{LiveSmtpTransport, SmtpOutboxEmailSender, SmtpTransport};
+use super::smtp_sender::SmtpOutboxEmailSender;
 use super::{
     CommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxSendReceipt,
     outgoing_email_from_outbox_item,
 };
 
 #[derive(Clone)]
-pub struct ProviderOutboxEmailSender<T = LiveSmtpTransport> {
-    pool: PgPool,
+pub struct ProviderOutboxEmailSender<T, G> {
     provider_account_store: CommunicationProviderAccountStore,
     provider_secret_binding_store: CommunicationProviderSecretBindingStore,
-    secret_store: SecretReferenceStore,
-    vault: HostVault,
     smtp_sender: SmtpOutboxEmailSender<HostVault, T>,
+    gmail_transport: G,
 }
 
-impl<T> ProviderOutboxEmailSender<T>
+impl<T, G> ProviderOutboxEmailSender<T, G>
 where
     T: SmtpTransport,
+    G: GmailOutboxTransport,
 {
-    pub fn new(pool: PgPool, vault: HostVault, smtp_transport: T) -> Self {
+    pub fn new(pool: PgPool, vault: HostVault, smtp_transport: T, gmail_transport: G) -> Self {
         Self {
-            pool: pool.clone(),
             provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
             provider_secret_binding_store: CommunicationProviderSecretBindingStore::new(
                 pool.clone(),
             ),
-            secret_store: SecretReferenceStore::new(pool.clone()),
-            vault: vault.clone(),
             smtp_sender: SmtpOutboxEmailSender::new(pool, vault, smtp_transport),
+            gmail_transport,
         }
     }
 }
 
-impl<T> OutboxEmailSender for ProviderOutboxEmailSender<T>
+impl<T, G> OutboxEmailSender for ProviderOutboxEmailSender<T, G>
 where
     T: SmtpTransport,
+    G: GmailOutboxTransport,
 {
     fn send<'a>(
         &'a self,
@@ -78,9 +76,10 @@ where
     }
 }
 
-impl<T> ProviderOutboxEmailSender<T>
+impl<T, G> ProviderOutboxEmailSender<T, G>
 where
     T: SmtpTransport,
+    G: GmailOutboxTransport,
 {
     async fn send_gmail(
         &self,
@@ -100,19 +99,15 @@ where
                     "Gmail OAuth credential is unavailable for this account".to_owned(),
                 )
             })?;
-        let account_setup = EmailAccountSetupService::new_with_host_vault(
-            self.pool.clone(),
-            self.secret_store.clone(),
-            self.vault.clone(),
-        );
-        let access_token = account_setup
-            .refresh_gmail_access_token(&binding.secret_ref)
-            .await
-            .map_err(|error| delivery_error("Gmail OAuth token refresh failed", error))?;
         let email = outgoing_email_from_outbox_item(item, account);
-        let result = GmailApiClient::new(gmail_api_base_url(&account.config))
-            .user_id("me")
-            .send_message(&access_token, &email)
+        let result = self
+            .gmail_transport
+            .send(GmailOutboxSendRequest {
+                account_id: &account.account_id,
+                oauth_secret_ref: &binding.secret_ref,
+                api_base_url: gmail_api_base_url(&account.config),
+                email: &email,
+            })
             .await
             .map_err(|error| delivery_error("Gmail API send failed", error))?;
 

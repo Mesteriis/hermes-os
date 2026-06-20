@@ -1,8 +1,6 @@
-use super::models::{GraphEvidenceSourceKind, GraphNodeKind, RelationshipType};
+pub use crate::platform::graph::node_id;
 
-pub fn node_id(kind: GraphNodeKind, stable_key: &str) -> String {
-    format!("graph:node:v1:{}:{stable_key}", kind.as_str())
-}
+use super::models::{GraphEvidenceSourceKind, RelationshipType};
 
 pub fn edge_id(
     source_node_id: &str,

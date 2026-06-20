@@ -1,10 +1,11 @@
 use thiserror::Error;
 
-use crate::domains::persons::api::PersonProjectionError;
 use crate::integrations::ai_runtime::AiRuntimeError;
 use crate::platform::events::EventStoreError;
 use crate::platform::observations::ObservationStoreError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
+
+use super::service::AiPersonaAttributionError;
 
 #[derive(Debug, Error)]
 pub enum AiError {
@@ -32,8 +33,11 @@ pub enum AiError {
     #[error(transparent)]
     EventStore(#[from] EventStoreError),
 
+    #[error("AI persona attribution port was not configured")]
+    PersonaAttributionUnavailable,
+
     #[error(transparent)]
-    PersonProjection(#[from] PersonProjectionError),
+    PersonaAttribution(#[from] AiPersonaAttributionError),
 
     #[error(transparent)]
     ReviewInboxWorkflow(#[from] ReviewInboxWorkflowError),

@@ -3,7 +3,7 @@ import { handleRealtimeEvent } from './realtime'
 
 describe('telegram participant realtime cache patching', () => {
   it('upserts cached chat members for participant update events across infinite member pages', () => {
-    const membersKey = ['integrations', 'telegram', 'chat-members', 'tgchat-1', 50, '', '']
+    const membersKey = ['communications', 'telegram', 'chat-members', 'tgchat-1', 50, '', '']
     const existing = {
       pages: [
         {
@@ -35,7 +35,7 @@ describe('telegram participant realtime cache patching', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'chat-members'])) {
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'chat-members'])) {
           return [[membersKey, existing]]
         }
         return []
@@ -83,7 +83,7 @@ describe('telegram participant realtime cache patching', () => {
   })
 
   it('removes cached chat members when exhaustive provider absence is observed', () => {
-    const membersKey = ['integrations', 'telegram', 'chat-members', 'tgchat-1', 50, '', '']
+    const membersKey = ['communications', 'telegram', 'chat-members', 'tgchat-1', 50, '', '']
     const existing = {
       pages: [
         {
@@ -115,7 +115,7 @@ describe('telegram participant realtime cache patching', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'chat-members'])) {
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'chat-members'])) {
           return [[membersKey, existing]]
         }
         return []
@@ -158,7 +158,7 @@ describe('telegram participant realtime cache patching', () => {
   })
 
   it('removes cached chat members when participant lifecycle becomes inactive', () => {
-    const membersKey = ['integrations', 'telegram', 'chat-members', 'tgchat-1', 50, '', '']
+    const membersKey = ['communications', 'telegram', 'chat-members', 'tgchat-1', 50, '', '']
     const existing = {
       pages: [
         {
@@ -190,7 +190,7 @@ describe('telegram participant realtime cache patching', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'chat-members'])) {
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'chat-members'])) {
           return [[membersKey, existing]]
         }
         return []
