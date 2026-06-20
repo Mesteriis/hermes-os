@@ -5,6 +5,9 @@
 This is a starting production-channel audit. Per request, the WhatsApp Channel
 implementation is treated as not yet existing for this package.
 
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
+
 Implementation audit totals:
 
 ```text

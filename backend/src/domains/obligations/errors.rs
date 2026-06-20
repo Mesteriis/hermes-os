@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-use crate::domains::graph::core::GraphStoreError;
 use crate::platform::observations::ObservationStoreError;
 use crate::workflows::review_mirror::ReviewMirrorError;
 
@@ -8,9 +7,6 @@ use crate::workflows::review_mirror::ReviewMirrorError;
 pub enum ObligationStoreError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
-
-    #[error(transparent)]
-    Graph(#[from] GraphStoreError),
 
     #[error(transparent)]
     Observation(#[from] ObservationStoreError),

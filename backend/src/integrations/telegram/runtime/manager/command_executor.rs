@@ -10,9 +10,7 @@ use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
 
 use super::TelegramRuntimeManager;
 use super::command_executor_dispatch::{DispatchOutcome, dispatch_command};
-use super::command_executor_media::{
-    emit_media_upload_event, media_send_request, media_upload_progress_payload,
-};
+use super::command_executor_media::{emit_media_upload_event, media_upload_progress_payload};
 use super::realtime_events::command_event_payload;
 use super::topic_events::upsert_topic_snapshot;
 

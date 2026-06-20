@@ -8,13 +8,13 @@ use sqlx::postgres::PgPool;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
+use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::domains::projects::core::{NewProject, ProjectStore};
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;

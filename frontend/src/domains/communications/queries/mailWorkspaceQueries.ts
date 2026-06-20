@@ -29,7 +29,7 @@ import {
   updateSavedSearch
 } from '../api/communications'
 import type {
-  EmailTemplate,
+  CommunicationTemplate,
   MailArchitectureBlocker,
   RichTemplateDeleteResponse,
   RichTemplateMailMergePreviewRequest,
@@ -101,7 +101,7 @@ type FolderMessageMutationContext = {
 }
 
 export function useRichTemplatesQuery() {
-  return useQuery<EmailTemplate[]>({
+  return useQuery<CommunicationTemplate[]>({
     queryKey: ['communications-rich-templates'],
     queryFn: async () => {
       const res = await fetchRichTemplates()

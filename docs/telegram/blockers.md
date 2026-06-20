@@ -2,7 +2,7 @@
 
 Status date: 2026-06-18.
 
-Base Telegram Domain has no active architectural blockers.
+The Telegram channel capability set has no active architectural blockers.
 
 ## Closed Blockers
 

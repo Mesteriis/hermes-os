@@ -1,9 +1,11 @@
 use serde_json::{Value, json};
 
-use hermes_hub_backend::domains::mail::accounts::{
+use hermes_hub_backend::domains::communications::core::{
+    EmailProviderKind, ProviderAccountSecretPurpose,
+};
+use hermes_hub_backend::integrations::mail::accounts::{
     EmailAccountSetupService, GmailOAuthSetupRequest,
 };
-use hermes_hub_backend::domains::mail::core::{EmailProviderKind, ProviderAccountSecretPurpose};
 use hermes_hub_backend::platform::secrets::{
     DatabaseEncryptedSecretVault, NewSecretReference, ResolvedSecret, SecretKind, SecretResolver,
     SecretStoreKind,

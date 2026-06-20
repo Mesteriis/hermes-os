@@ -1,11 +1,11 @@
 use chrono::Utc;
 use serde_json::json;
 
-use hermes_hub_backend::domains::mail::core::NewRawCommunicationRecord;
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::core::NewRawCommunicationRecord;
+use hermes_hub_backend::domains::communications::messages::{
     NewProjectedMessage, project_raw_email_message, project_raw_email_message_from_blob,
 };
-use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
+use hermes_hub_backend::domains::communications::storage::LocalMailBlobStore;
 
 use super::support::{
     live_projection_context, record_raw_email_message, store_provider_account, unique_suffix,

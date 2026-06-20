@@ -2,6 +2,8 @@
 
 Этот файл описывает текущую email-channel реализацию. Канонический домен —
 Communications; Email is a channel/source boundary, not the product identity.
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
 
 The percentages below describe email-channel coverage only. They are not product
 completion scores for Communications, Memory, Knowledge, Obligations,

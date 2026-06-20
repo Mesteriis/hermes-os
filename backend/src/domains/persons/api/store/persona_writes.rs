@@ -1,6 +1,5 @@
 use super::PersonProjectionStore;
 use super::owner::assign_owner_persona_in_transaction;
-use crate::domains::graph::core::GraphNodeKind;
 use crate::domains::persons::api::errors::PersonProjectionError;
 use crate::domains::persons::api::models::Person;
 use crate::domains::persons::api::rows::row_to_person;
@@ -42,7 +41,7 @@ impl PersonProjectionStore {
             )
             .bind(persona_id)
             .bind(&display_name)
-            .bind(GraphNodeKind::Person.as_str())
+            .bind("person")
             .execute(&mut *transaction)
             .await?;
         }
@@ -110,7 +109,7 @@ impl PersonProjectionStore {
             )
             .bind(persona_id)
             .bind(&display_name)
-            .bind(GraphNodeKind::Person.as_str())
+            .bind("person")
             .execute(&mut *transaction)
             .await?;
         }

@@ -1,6 +1,6 @@
 use std::io::{Cursor, Write};
 
-use hermes_hub_backend::domains::mail::archive_inspection::{
+use hermes_hub_backend::domains::communications::archive_inspection::{
     ArchiveInspectionError, ArchiveInspectionLimits, inspect_zip_bytes,
 };
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};

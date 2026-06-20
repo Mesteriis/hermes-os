@@ -23,8 +23,8 @@ import {
 import type {
   BulkMessageActionRequest,
   CommunicationSectionId,
-  EmailDraft,
-  MailThreadSummary
+  CommunicationDraft,
+  CommunicationThreadSummary
 } from '../types/communications'
 import type { MailSavedSearch } from '../types/savedSearches'
 import { useMailSyncActions } from './useMailSyncActions'
@@ -183,7 +183,7 @@ export function useCommunicationsPageController() {
     store.selectMessage(-1)
     store.clearSelectedThread()
     store.setMessageDetail(null)
-    store.setMailMessageInsight(null)
+    store.setCommunicationMessageInsight(null)
   }
 
   function handleSearchQueryUpdate(query: string) {
@@ -215,10 +215,10 @@ export function useCommunicationsPageController() {
   function handleSelectMessage(index: number) {
     store.selectMessage(index)
     store.setActiveMessageContextTab('message')
-    store.setMailMessageInsight(null)
+    store.setCommunicationMessageInsight(null)
   }
 
-  function handleSelectThread(thread: MailThreadSummary) {
+  function handleSelectThread(thread: CommunicationThreadSummary) {
     store.selectThread(thread)
     store.setActiveMessageContextTab('message')
   }
@@ -226,7 +226,7 @@ export function useCommunicationsPageController() {
   function handleOpenThreadMessage(messageId: string) {
     store.selectMessageId(messageId)
     store.setActiveMessageContextTab('message')
-    store.setMailMessageInsight(null)
+    store.setCommunicationMessageInsight(null)
   }
 
   const {
@@ -327,7 +327,7 @@ export function useCommunicationsPageController() {
     resetSelectedMessageContext()
   }
 
-  function handleOpenDraft(draft: EmailDraft) {
+  function handleOpenDraft(draft: CommunicationDraft) {
     store.openCompose(draftToComposeForm(draft))
   }
 

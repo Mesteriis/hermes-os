@@ -3,16 +3,16 @@ use serde_json::json;
 use sqlx::Row;
 use testkit::context::TestContext;
 
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
-use hermes_hub_backend::domains::mail::outbox::{
-    EmailOutboxDeliveryWorker, EmailOutboxItem, EmailOutboxStatus, EmailOutboxStore,
-    NewEmailOutboxItem, OutboxDeliveryError, OutboxEmailSender, OutboxRetryPolicy,
-    OutboxSendReceipt, SmtpOutboxEmailSender, SmtpTransport,
+use hermes_hub_backend::domains::communications::outbox::{
+    CommunicationOutboxItem, CommunicationOutboxStatus, CommunicationOutboxStore,
+    EmailOutboxDeliveryWorker, NewCommunicationOutboxItem, OutboxDeliveryError, OutboxEmailSender,
+    OutboxRetryPolicy, OutboxSendReceipt, SmtpOutboxEmailSender, SmtpTransport,
 };
-use hermes_hub_backend::domains::mail::send::{
+use hermes_hub_backend::integrations::mail::send::{
     EmailSendError, OutgoingEmail, SendResult, SmtpConfig,
 };
 use hermes_hub_backend::platform::secrets::{
@@ -41,11 +41,11 @@ async fn outbox_claim_due_waits_for_schedule_and_undo_deadline_against_postgres(
         .await
         .expect("store provider account");
 
-    let store = EmailOutboxStore::new(pool);
+    let store = CommunicationOutboxStore::new(pool);
     let now = Utc::now();
     let outbox_id = format!("outbox-store-{suffix}");
     store
-        .enqueue(&NewEmailOutboxItem {
+        .enqueue(&NewCommunicationOutboxItem {
             outbox_id: outbox_id.clone(),
             account_id,
             draft_id: None,
@@ -55,7 +55,7 @@ async fn outbox_claim_due_waits_for_schedule_and_undo_deadline_against_postgres(
             subject: "Claim after undo".to_owned(),
             body_text: "Do not send before undo window closes.".to_owned(),
             body_html: None,
-            status: EmailOutboxStatus::Queued,
+            status: CommunicationOutboxStatus::Queued,
             scheduled_send_at: Some(now - Duration::minutes(1)),
             undo_deadline_at: Some(now + Duration::seconds(30)),
             metadata: json!({ "source": "test" }),
@@ -72,7 +72,7 @@ async fn outbox_claim_due_waits_for_schedule_and_undo_deadline_against_postgres(
         .expect("claim after undo window");
     assert_eq!(claimed.len(), 1);
     assert_eq!(claimed[0].outbox_id, outbox_id);
-    assert_eq!(claimed[0].status, EmailOutboxStatus::Sending);
+    assert_eq!(claimed[0].status, CommunicationOutboxStatus::Sending);
     assert_eq!(claimed[0].send_attempts, 1);
     assert!(claimed[0].claimed_at.is_some());
 }
@@ -86,7 +86,7 @@ async fn outbox_delivery_worker_marks_sent_and_appends_event_against_postgres() 
         .expect("current timestamp nanos");
     let account_id = format!("acct-outbox-delivery-{suffix}");
     seed_provider_account(pool.clone(), &account_id, suffix).await;
-    let store = EmailOutboxStore::new(pool.clone());
+    let store = CommunicationOutboxStore::new(pool.clone());
     let now = Utc::now();
     let outbox_id = format!("outbox-delivery-{suffix}");
     enqueue_due_item(&store, &account_id, &outbox_id, now).await;
@@ -108,7 +108,7 @@ async fn outbox_delivery_worker_marks_sent_and_appends_event_against_postgres() 
     assert_eq!(report.failed, 0);
     assert_eq!(report.retried, 0);
     let sent_items = store
-        .list(Some(&account_id), Some(EmailOutboxStatus::Sent), 10)
+        .list(Some(&account_id), Some(CommunicationOutboxStatus::Sent), 10)
         .await
         .expect("list sent items");
     assert_eq!(sent_items.len(), 1);
@@ -174,7 +174,7 @@ async fn outbox_delivery_worker_marks_failed_and_appends_event_against_postgres(
         .expect("current timestamp nanos");
     let account_id = format!("acct-outbox-failure-{suffix}");
     seed_provider_account(pool.clone(), &account_id, suffix).await;
-    let store = EmailOutboxStore::new(pool.clone());
+    let store = CommunicationOutboxStore::new(pool.clone());
     let now = Utc::now();
     let outbox_id = format!("outbox-failure-{suffix}");
     enqueue_due_item(&store, &account_id, &outbox_id, now).await;
@@ -196,7 +196,11 @@ async fn outbox_delivery_worker_marks_failed_and_appends_event_against_postgres(
     assert_eq!(report.failed, 1);
     assert_eq!(report.retried, 0);
     let failed_items = store
-        .list(Some(&account_id), Some(EmailOutboxStatus::Failed), 10)
+        .list(
+            Some(&account_id),
+            Some(CommunicationOutboxStatus::Failed),
+            10,
+        )
         .await
         .expect("list failed items");
     assert_eq!(failed_items.len(), 1);
@@ -244,7 +248,7 @@ async fn outbox_delivery_worker_schedules_retry_with_backoff_against_postgres() 
         .expect("current timestamp nanos");
     let account_id = format!("acct-outbox-retry-{suffix}");
     seed_provider_account(pool.clone(), &account_id, suffix).await;
-    let store = EmailOutboxStore::new(pool.clone());
+    let store = CommunicationOutboxStore::new(pool.clone());
     let now = Utc::now();
     let delivery_started_at = now + Duration::seconds(1);
     let outbox_id = format!("outbox-retry-{suffix}");
@@ -267,7 +271,11 @@ async fn outbox_delivery_worker_schedules_retry_with_backoff_against_postgres() 
     assert_eq!(report.failed, 0);
     assert_eq!(report.retried, 1);
     let retry_items = store
-        .list(Some(&account_id), Some(EmailOutboxStatus::Scheduled), 10)
+        .list(
+            Some(&account_id),
+            Some(CommunicationOutboxStatus::Scheduled),
+            10,
+        )
         .await
         .expect("list retry items");
     assert_eq!(retry_items.len(), 1);
@@ -353,7 +361,7 @@ async fn outbox_list_page_uses_cursor_pagination_against_postgres() {
         .expect("current timestamp nanos");
     let account_id = format!("acct-outbox-page-{suffix}");
     seed_provider_account(pool.clone(), &account_id, suffix).await;
-    let store = EmailOutboxStore::new(pool);
+    let store = CommunicationOutboxStore::new(pool);
     let now = Utc::now();
     let older_id = format!("outbox-page-older-{suffix}");
     let newer_id = format!("outbox-page-newer-{suffix}");
@@ -401,7 +409,7 @@ async fn smtp_outbox_sender_resolves_account_scoped_smtp_credentials_against_pos
         .expect("insert smtp test credential");
     let transport = RecordingSmtpTransport::default();
     let sender = SmtpOutboxEmailSender::new(pool.clone(), resolver, transport.clone());
-    let store = EmailOutboxStore::new(pool);
+    let store = CommunicationOutboxStore::new(pool);
     let now = Utc::now();
     let outbox_id = format!("outbox-smtp-{suffix}");
     let item = enqueue_due_item(&store, &account_id, &outbox_id, now).await;
@@ -443,7 +451,7 @@ async fn smtp_outbox_sender_rejects_missing_smtp_config_without_transport_call()
         InMemorySecretResolver::new(),
         transport.clone(),
     );
-    let store = EmailOutboxStore::new(pool);
+    let store = CommunicationOutboxStore::new(pool);
     let outbox_id = format!("outbox-smtp-missing-{suffix}");
     let item = enqueue_due_item(&store, &account_id, &outbox_id, Utc::now()).await;
 
@@ -522,13 +530,13 @@ async fn seed_smtp_provider_account(
 }
 
 async fn enqueue_due_item(
-    store: &EmailOutboxStore,
+    store: &CommunicationOutboxStore,
     account_id: &str,
     outbox_id: &str,
     now: chrono::DateTime<Utc>,
-) -> EmailOutboxItem {
+) -> CommunicationOutboxItem {
     store
-        .enqueue(&NewEmailOutboxItem {
+        .enqueue(&NewCommunicationOutboxItem {
             outbox_id: outbox_id.to_owned(),
             account_id: account_id.to_owned(),
             draft_id: None,
@@ -538,7 +546,7 @@ async fn enqueue_due_item(
             subject: "Delivery worker".to_owned(),
             body_text: "Deliver this due outbox item.".to_owned(),
             body_html: None,
-            status: EmailOutboxStatus::Queued,
+            status: CommunicationOutboxStatus::Queued,
             scheduled_send_at: Some(now - Duration::minutes(1)),
             undo_deadline_at: Some(now - Duration::seconds(1)),
             metadata: json!({ "source": "test" }),
@@ -555,7 +563,7 @@ struct StaticSuccessSender {
 impl OutboxEmailSender for StaticSuccessSender {
     fn send<'a>(
         &'a self,
-        _item: &'a EmailOutboxItem,
+        _item: &'a CommunicationOutboxItem,
     ) -> Pin<Box<dyn Future<Output = Result<OutboxSendReceipt, OutboxDeliveryError>> + Send + 'a>>
     {
         Box::pin(async move {
@@ -610,7 +618,7 @@ impl SmtpTransport for RecordingSmtpTransport {
 impl OutboxEmailSender for StaticFailureSender {
     fn send<'a>(
         &'a self,
-        _item: &'a EmailOutboxItem,
+        _item: &'a CommunicationOutboxItem,
     ) -> Pin<Box<dyn Future<Output = Result<OutboxSendReceipt, OutboxDeliveryError>> + Send + 'a>>
     {
         Box::pin(async move { Err(OutboxDeliveryError::Transport(self.message.clone())) })

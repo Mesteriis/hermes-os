@@ -1,4 +1,4 @@
-export type EmailTemplate = {
+export type CommunicationTemplate = {
   template_id: string
   name: string
   subject_template: string
@@ -29,7 +29,7 @@ export type RichTemplateUpsertRequest = {
 
 export type RichTemplateUpsertResponse = {
   saved: boolean
-  template: EmailTemplate
+  template: CommunicationTemplate
 }
 
 export type RichTemplateDeleteResponse = {

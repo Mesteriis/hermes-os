@@ -2,11 +2,11 @@
 import { computed } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
-import type { MailMessageDetailResponse, InspectorMode } from '../types/communications'
+import type { CommunicationMessageDetailResponse, InspectorMode } from '../types/communications'
 import { senderLabel, senderEmail } from '../stores/communications'
 
 const props = defineProps<{
-  detail: MailMessageDetailResponse | null
+  detail: CommunicationMessageDetailResponse | null
   inspectorMode: InspectorMode
 }>()
 

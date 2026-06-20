@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::domains::mail::core::NewProviderAccount;
+use crate::platform::communications::NewProviderAccount;
 use crate::vault::CommunicationProviderAccountStore;
 
 use super::super::errors::TelegramError;
@@ -33,7 +33,8 @@ impl TelegramStore {
         }));
         let stored_account = CommunicationProviderAccountStore::new(self.pool.clone())
             .upsert(&account)
-            .await?;
+            .await
+            .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?;
 
         Ok(TelegramAccountSetupResponse {
             account_id: stored_account.account_id,

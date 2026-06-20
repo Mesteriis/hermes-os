@@ -613,7 +613,7 @@ class TestCalls:
 
 class TestTelegram:
     def test_telegram_capabilities(self):
-        r = api("/api/v1/telegram/capabilities")
+        r = api("/api/v1/communications/telegram/capabilities")
         assert r.status_code == HTTPStatus.OK
 
 
@@ -621,5 +621,5 @@ class TestTelegram:
 
 class TestWhatsApp:
     def test_whatsapp_capabilities(self):
-        r = api("/api/v1/whatsapp/capabilities")
+        r = api("/api/v1/communications/whatsapp/capabilities")
         assert r.status_code == HTTPStatus.OK

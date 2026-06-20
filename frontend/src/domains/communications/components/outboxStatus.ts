@@ -1,4 +1,4 @@
-import type { EmailOutboxItem } from '../types/communications'
+import type { CommunicationOutboxItem } from '../types/communications'
 
 export type OutboxStatusTone = 'neutral' | 'success' | 'warning' | 'danger' | 'muted'
 
@@ -23,7 +23,7 @@ const UTC_DATE_FORMAT = new Intl.DateTimeFormat('en-US', {
 })
 
 export function outboxStatusPresentation(
-  item: EmailOutboxItem,
+  item: CommunicationOutboxItem,
   now: Date = new Date()
 ): OutboxStatusPresentation {
   const readReceipt = objectField(item.metadata, 'latest_read_receipt')
@@ -160,10 +160,10 @@ export function outboxStatusPresentation(
 }
 
 export function visibleOutboxStatusItems(
-  items: EmailOutboxItem[],
+  items: CommunicationOutboxItem[],
   maxItems = 6,
   now: Date = new Date()
-): EmailOutboxItem[] {
+): CommunicationOutboxItem[] {
   return [...items]
     .filter((item) => outboxStatusPresentation(item, now).isVisible)
     .sort((a, b) => statusPriority(a) - statusPriority(b) || timestampMillis(b.updated_at) - timestampMillis(a.updated_at))
@@ -181,7 +181,7 @@ function stringField(value: JsonObject | null, field: string): string | null {
   return typeof nested === 'string' && nested.trim() ? nested : null
 }
 
-function canUndo(item: EmailOutboxItem, now: Date): boolean {
+function canUndo(item: CommunicationOutboxItem, now: Date): boolean {
   if (item.status !== 'queued' && item.status !== 'scheduled') return false
   if (!item.undo_deadline_at) return false
   return timestampMillis(item.undo_deadline_at) >= now.getTime()
@@ -199,7 +199,7 @@ function timestampMillis(value: string): number {
   return Number.isFinite(timestamp) ? timestamp : 0
 }
 
-function statusPriority(item: EmailOutboxItem): number {
+function statusPriority(item: CommunicationOutboxItem): number {
   if (item.status === 'failed') return 0
   if (item.status === 'sending') return 1
   if (item.status === 'queued' || item.status === 'scheduled') return 2

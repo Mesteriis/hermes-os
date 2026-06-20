@@ -6,13 +6,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
-use hermes_hub_backend::domains::mail::storage::{
+use hermes_hub_backend::domains::communications::storage::{
     LocalMailBlobStore, MailAttachmentDisposition, MailStorageStore, NewMailAttachment, NewMailBlob,
 };
 use hermes_hub_backend::platform::config::AppConfig;

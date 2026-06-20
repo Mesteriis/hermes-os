@@ -1,15 +1,43 @@
 use thiserror::Error;
 
+use crate::domains::communications::core::CommunicationIngestionError;
+use crate::domains::communications::messages::MessageProjectionError;
+use crate::domains::communications::storage::{AttachmentSafetyScanError, MailStorageError};
 use crate::domains::decisions::DecisionStoreError;
-use crate::domains::mail::messages::MessageProjectionError;
-use crate::domains::mail::storage::{AttachmentSafetyScanError, MailStorageError};
-use crate::domains::mail::sync::EmailSyncRecordError;
 use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::core::OrgCoreError;
 use crate::domains::persons::api::PersonProjectionError;
 use crate::domains::persons::memory::PersonMemoryError;
 use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
+
+#[derive(Debug, Error)]
+pub enum EmailSyncRecordError {
+    #[error("email sync record field must not be empty: {0}")]
+    EmptyField(&'static str),
+
+    #[error(transparent)]
+    Communication(#[from] CommunicationIngestionError),
+
+    #[error(transparent)]
+    MailStorage(#[from] MailStorageError),
+
+    #[error("email sync payload must be a JSON object before raw blob projection")]
+    InvalidRawPayloadObject,
+
+    #[error("email sync payload missing provider raw field: {field}")]
+    MissingRawPayloadField { field: &'static str },
+
+    #[error("email sync payload field {field} is invalid base64: {source}")]
+    InvalidRawPayloadBase64 {
+        field: &'static str,
+        #[source]
+        source: base64::DecodeError,
+    },
+
+    #[error("email sync does not support provider kind: {0}")]
+    UnsupportedProviderKind(String),
+}
 
 #[derive(Debug, Error)]
 pub enum EmailSyncPipelineError {

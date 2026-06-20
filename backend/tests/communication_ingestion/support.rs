@@ -2,7 +2,7 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) use chrono::Utc;
-pub(crate) use hermes_hub_backend::domains::mail::core::{
+pub(crate) use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewIngestionCheckpoint, NewProviderAccount,
     NewProviderAccountSecretBinding, NewRawCommunicationRecord, ProviderAccountSecretPurpose,
     ProviderCredentialError, ProviderCredentialReader,

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import AccountSetupModal from '../components/AccountSetupModal.vue'
 import AttachmentSearchPanel from '../components/AttachmentSearchPanel.vue'
 import BulkActionsBar from '../components/BulkActionsBar.vue'
 import CommunicationsActionBar from '../components/CommunicationsActionBar.vue'
@@ -12,6 +11,7 @@ import MailFolderStrip from '../components/MailFolderStrip.vue'
 import OutboxStatusStrip from '../components/OutboxStatusStrip.vue'
 import SavedSearchStrip from '../components/SavedSearchStrip.vue'
 import { communicationSectionTabs } from '../constants/sectionTabs'
+import AccountSetupModal from '../../../integrations/mail/components/AccountSetupModal.vue'
 import { useCommunicationsPageController } from './useCommunicationsPageController'
 
 const {

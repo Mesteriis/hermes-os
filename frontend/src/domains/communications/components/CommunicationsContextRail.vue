@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import Icon from '../../../shared/ui/Icon.vue'
-import type { MailMessageDetailResponse, ProjectItem, TaskItem } from '../types/communications'
+import type { CommunicationMessageDetailResponse, ProjectItem, TaskItem } from '../types/communications'
 import { senderLabel, senderEmail } from '../stores/communications'
 
 const props = defineProps<{
-  detail: MailMessageDetailResponse | null
+  detail: CommunicationMessageDetailResponse | null
   projects: ProjectItem[]
   tasks: TaskItem[]
 }>()

@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::domains::mail::core::{CommunicationProviderKind, NewProviderAccount};
+use crate::platform::communications::{CommunicationProviderKind, NewProviderAccount};
 use crate::vault::CommunicationProviderAccountStore;
 
 use super::WhatsappWebStore;
@@ -36,7 +36,8 @@ impl WhatsappWebStore {
         }));
         let stored_account = CommunicationProviderAccountStore::new(self.pool.clone())
             .upsert(&account)
-            .await?;
+            .await
+            .map_err(|error| WhatsappWebError::ProviderAccountStore(error.to_string()))?;
 
         let session = self
             .upsert_session(&NewWhatsappWebSession {

@@ -1,7 +1,7 @@
 use chrono::{Duration, Utc};
 use hermes_hub_backend::domains::calendar::events::{CalendarEventStore, NewCalendarEvent};
 use hermes_hub_backend::domains::calendar::meetings::MeetingNoteStore;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
 use hermes_hub_backend::domains::persons::api::PersonProjectionStore;

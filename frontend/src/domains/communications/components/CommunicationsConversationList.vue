@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
-import type { CommunicationMessageSummary, MailThreadSummary, NavigatorMode } from '../types/communications'
+import type { CommunicationMessageSummary, CommunicationThreadSummary, NavigatorMode } from '../types/communications'
 import { senderLabel, messageTime } from '../stores/communications'
 import { useThreadMessagesPrefetch } from '../queries/mailPrefetch'
 
 const props = defineProps<{
   accountId: string
   messages: CommunicationMessageSummary[]
-  threads: MailThreadSummary[]
+  threads: CommunicationThreadSummary[]
   selectedIndex: number
   selectedThreadId: string
   navigatorMode: NavigatorMode
@@ -20,7 +20,7 @@ const prefetchThreadMessages = useThreadMessagesPrefetch()
 
 const emit = defineEmits<{
   select: [index: number]
-  selectThread: [thread: MailThreadSummary]
+  selectThread: [thread: CommunicationThreadSummary]
   loadMoreThreads: []
   'update:navigatorMode': [mode: NavigatorMode]
 }>()
@@ -66,7 +66,7 @@ function getMessageIndex(msg: CommunicationMessageSummary): number {
   return props.messages.indexOf(msg)
 }
 
-function handleThreadPrefetch(thread: MailThreadSummary): void {
+function handleThreadPrefetch(thread: CommunicationThreadSummary): void {
   void prefetchThreadMessages(props.accountId, thread.subject)
 }
 </script>

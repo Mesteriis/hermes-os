@@ -1,10 +1,10 @@
 import type {
   CommunicationMessageSummary,
   ComposeFormModel,
-  EmailDraft,
-  MailKnowledgeCandidate,
-  MailMessageInsight,
-  SendEmailRequest,
+  CommunicationDraft,
+  CommunicationKnowledgeCandidate,
+  CommunicationMessageInsight,
+  SendCommunicationRequest,
   ThreadMessage
 } from '../types/communications'
 import { datetimeLocalToIso } from '../forms/composeDraftAutosave'
@@ -15,11 +15,11 @@ export type AiSummaryContract = {
   action_items: string[]
   risks: string[]
   deadlines: string[]
-  event_candidates: MailKnowledgeCandidate[]
-  persona_candidates: MailKnowledgeCandidate[]
-  organization_candidates: MailKnowledgeCandidate[]
-  document_candidates: MailKnowledgeCandidate[]
-  agreement_candidates: MailKnowledgeCandidate[]
+  event_candidates: CommunicationKnowledgeCandidate[]
+  persona_candidates: CommunicationKnowledgeCandidate[]
+  organization_candidates: CommunicationKnowledgeCandidate[]
+  document_candidates: CommunicationKnowledgeCandidate[]
+  agreement_candidates: CommunicationKnowledgeCandidate[]
 }
 
 export type MailExtractionReviewItem = {
@@ -37,10 +37,10 @@ export type MailExtractionReviewSection = {
 export type MailKnowledgeReviewSection = {
   kind: 'event' | 'persona' | 'organization' | 'document' | 'agreement'
   title: string
-  items: MailKnowledgeCandidate[]
+  items: CommunicationKnowledgeCandidate[]
 }
 
-export function emptyMailMessageInsight(messageId: string): MailMessageInsight {
+export function emptyCommunicationMessageInsight(messageId: string): CommunicationMessageInsight {
   return {
     messageId,
     explain: null,
@@ -56,7 +56,7 @@ export function emptyMailMessageInsight(messageId: string): MailMessageInsight {
 }
 
 export function mailExtractionSectionsFromInsight(
-  insight: MailMessageInsight | null
+  insight: CommunicationMessageInsight | null
 ): MailExtractionReviewSection[] {
   if (!insight) return []
   const sections: MailExtractionReviewSection[] = []
@@ -145,9 +145,9 @@ function stringArrayValue(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
 }
 
-function candidateArrayValue(value: unknown): MailKnowledgeCandidate[] {
+function candidateArrayValue(value: unknown): CommunicationKnowledgeCandidate[] {
   if (!Array.isArray(value)) return []
-  return value.flatMap((item): MailKnowledgeCandidate[] => {
+  return value.flatMap((item): CommunicationKnowledgeCandidate[] => {
     if (typeof item === 'string' && item.trim().length > 0) {
       const candidate = item.trim()
       return [{ title: candidate, evidence: candidate }]
@@ -278,7 +278,7 @@ export function newComposeForm(accountId: string, draftId: string): ComposeFormM
   }
 }
 
-export function composeFormToSendRequest(form: ComposeFormModel): SendEmailRequest {
+export function composeFormToSendRequest(form: ComposeFormModel): SendCommunicationRequest {
   return {
     account_id: form.accountId,
     to: splitComposeRecipients(form.toText),
@@ -335,7 +335,7 @@ function htmlToPlainText(value: string): string {
     .trim()
 }
 
-export function draftToComposeForm(draft: EmailDraft): ComposeFormModel {
+export function draftToComposeForm(draft: CommunicationDraft): ComposeFormModel {
   return {
     mode: 'compose',
     draftId: draft.draft_id,

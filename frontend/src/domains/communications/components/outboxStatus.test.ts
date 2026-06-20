@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { EmailOutboxItem } from '../types/communications'
+import type { CommunicationOutboxItem } from '../types/communications'
 import {
   outboxStatusPresentation,
   visibleOutboxStatusItems
 } from './outboxStatus'
 
-function outboxItem(overrides: Partial<EmailOutboxItem> = {}): EmailOutboxItem {
+function outboxItem(overrides: Partial<CommunicationOutboxItem> = {}): CommunicationOutboxItem {
   return {
     outbox_id: 'outbox-1',
     account_id: 'account-1',

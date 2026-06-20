@@ -31,9 +31,9 @@ The repository already contains meaningful implementation slices:
 
 | Area | Current implementation evidence |
 |---|---|
-| Communications and email | `domains/mail`, communication ingestion/messages migrations, `/api/v1/communications/*`, mail sync, drafts, send/reply/forward, workflow state, analytics, invoices, legal docs, certificates and attachment metadata. |
-| Telegram | Telegram integration modules, runtime manager, migrations for chats/messages/policies/calls, `/api/v1/telegram/*` routes, Telegram frontend page and production capability target in `docs/telegram/` / ADR-0091. |
-| WhatsApp | WhatsApp integration modules, WhatsApp Web sessions/messages migrations, `/api/v1/whatsapp/*` routes and WhatsApp frontend page. |
+| Communications and email | `domains/communications`, communication ingestion/messages migrations, `/api/v1/communications/*`, mail sync, drafts, send/reply/forward, workflow state, analytics, invoices, legal docs, certificates and attachment metadata. |
+| Telegram | Telegram integration modules, runtime manager, migrations for chats/messages/policies/calls, `/api/v1/communications/telegram/*` routes, Telegram frontend page and production capability target in `docs/telegram/` / ADR-0091. |
+| WhatsApp | WhatsApp integration modules, WhatsApp Web sessions/messages migrations, `/api/v1/communications/whatsapp/*` routes and WhatsApp frontend page. |
 | Graph | Graph tables, graph projection module and `/api/v1/graph/*` routes. |
 | Documents | Document tables, processing jobs/artifacts, document processing APIs and Documents frontend page. |
 | Projects | Project tables, project link review workflow, project APIs and Projects frontend page. |
@@ -69,7 +69,7 @@ Documentation outcomes:
 - channel mapping for email, Telegram, WhatsApp, calls and meetings;
 - source evidence rules;
 - canonical Communication lifecycle;
-- current implementation compatibility notes for `domains/mail` and route names.
+- current implementation compatibility notes for `domains/communications` and route names.
 
 Implementation plan topics:
 

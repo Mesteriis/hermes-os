@@ -9,7 +9,6 @@ use crate::workflows::review_mirror::sync_relationship_review_state_in_transacti
 
 use super::errors::RelationshipStoreError;
 use super::evidence::link_relationship_entity_in_transaction;
-use super::graph_projection::project_relationship_graph_in_transaction;
 use super::ids::{evidence_id, relationship_id};
 use super::models::{
     NewRelationship, NewRelationshipEvidence, Relationship, RelationshipEntityKind,
@@ -181,8 +180,6 @@ impl RelationshipStore {
             }
         }
 
-        project_relationship_graph_in_transaction(transaction, &stored).await?;
-
         Ok(stored)
     }
 
@@ -326,7 +323,6 @@ impl RelationshipStore {
             metadata,
         )
         .await?;
-        project_relationship_graph_in_transaction(&mut transaction, &relationship).await?;
         sync_relationship_review_state_in_transaction(&mut transaction, &relationship).await?;
         transaction.commit().await?;
 

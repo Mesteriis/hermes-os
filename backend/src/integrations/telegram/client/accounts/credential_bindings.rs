@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::domains::mail::core::NewProviderAccountSecretBinding;
+use crate::platform::communications::NewProviderAccountSecretBinding;
 use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
 use crate::vault::CommunicationProviderSecretBindingStore;
 
@@ -40,7 +40,8 @@ impl TelegramStore {
                 credential.secret_purpose,
                 &secret_ref,
             ))
-            .await?;
+            .await
+            .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?;
 
         Ok(TelegramCredentialBinding {
             secret_purpose: credential.secret_purpose.as_str().to_owned(),

@@ -2,8 +2,9 @@ use serde_json::json;
 use sqlx::Row;
 use sqlx::postgres::PgPool;
 
-use crate::domains::obligations::ObligationEntityKind;
-use crate::engines::obligation::{ObligationEngine, ObligationExtractionInput};
+use crate::engines::obligation::{
+    ObligationEngine, ObligationEntityKind, ObligationExtractionInput,
+};
 
 use super::super::constants::OWNER_PERSONA_EXTRACTION_CONTEXT_ID;
 use super::super::errors::TaskCandidateError;

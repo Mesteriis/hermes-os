@@ -70,7 +70,7 @@ Capability states:
 - `degraded`: the feature was available but the current account/runtime cannot
   execute it reliably.
 - `planned`: the feature is intentionally deferred to a named initiative and is
-  not part of base Telegram Domain completion.
+  not part of base Telegram channel capability completion.
 - `unsupported`: the feature is intentionally out of current scope or conflicts
   with Hermes policy.
 
@@ -372,6 +372,6 @@ Risk handling:
 - Add migrations and implementation ADRs before introducing tombstone/message
   version persistence, proxy persistence, outbox persistence, call runtime or
   session bundle schemas.
-- Extend `/api/v1/telegram/capabilities` before exposing new UI controls.
+- Extend `/api/v1/communications/telegram/capabilities` before exposing new UI controls.
 - Add fixture tests for every new capability state and opt-in smoke tests for
   live TDLib flows.

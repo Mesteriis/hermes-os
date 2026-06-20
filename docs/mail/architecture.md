@@ -5,6 +5,9 @@
 Email belongs to the Communications domain. It is not a separate product or a
 parallel memory model.
 
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
+
 ## Layers
 
 ```text
@@ -59,6 +62,9 @@ Communication
 
 ## Storage Boundary
 
-Email-specific tables preserve provider records, messages, drafts, templates,
-attachments and related metadata. They feed canonical Communications, Events and
-shared engines. Search indexes and AI summaries are derived state.
+Canonical communication tables own accounts, channels, conversations, messages,
+drafts, outbox, attachments, saved searches and provider command state.
+Historical email/mail-prefixed tables may remain for upgrade compatibility, but
+new runtime/domain behavior must treat them as migration sources or adapter
+compatibility, not as the product domain owner. Search indexes and AI summaries
+are derived state.

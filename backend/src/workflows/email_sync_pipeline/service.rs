@@ -1,17 +1,18 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::mail::core::CommunicationIngestionStore;
-use crate::domains::mail::messages::MessageProjectionStore;
-use crate::domains::mail::storage::{
+use crate::domains::communications::core::CommunicationIngestionStore;
+use crate::domains::communications::messages::MessageProjectionStore;
+use crate::domains::communications::storage::{
     HeuristicAttachmentSafetyScanner, LocalMailBlobStore, MailStorageStore,
 };
-use crate::domains::mail::sync::{EmailSyncBatch, record_email_sync_batch_with_mail_blobs};
 use crate::domains::persons::api::PersonProjectionStore;
+use crate::integrations::mail::sync::EmailSyncBatch;
 
 use super::candidates::refresh_message_context_candidates;
 use super::errors::EmailSyncPipelineError;
 use super::knowledge::project_message_knowledge;
 use super::raw_records::project_raw_records;
+use super::recording::record_email_sync_batch_with_mail_blobs;
 use super::report::EmailSyncPipelineReport;
 
 pub async fn project_email_sync_batch_with_mail_blobs(

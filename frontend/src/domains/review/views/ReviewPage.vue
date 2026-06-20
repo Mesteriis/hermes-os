@@ -2,7 +2,13 @@
 import { onMounted, ref } from 'vue'
 import { useReviewStore } from '../stores/review'
 import Icon from '../../../shared/ui/Icon.vue'
-import type { ReviewItem, ReviewItemPromotionRequest } from '../types/review'
+import type {
+	Decision,
+	Obligation,
+	Relationship,
+	ReviewItem,
+	ReviewItemPromotionRequest
+} from '../types/review'
 
 const store = useReviewStore()
 const promoteDrafts = ref<Record<string, ReviewItemPromotionRequest>>({})
@@ -16,20 +22,20 @@ async function loadReviewWorkspace() {
 	syncPromoteDrafts()
 }
 
-function relationshipPeer(item: import('../../personas/types/persona').Relationship): string {
+function relationshipPeer(item: Relationship): string {
 	return `${item.source_entity_kind}:${item.source_entity_id} → ${item.target_entity_kind}:${item.target_entity_id}`
 }
 
-function decisionEntityLabel(item: import('../../tasks/types/task').Decision): string {
+function decisionEntityLabel(item: Decision): string {
 	if (!item.decided_by_entity_kind || !item.decided_by_entity_id) return 'Unknown'
 	return `${item.decided_by_entity_kind}:${item.decided_by_entity_id}`
 }
 
-function obligationEntityLabel(item: import('../../tasks/types/task').Obligation): string {
+function obligationEntityLabel(item: Obligation): string {
 	return `${item.obligated_entity_kind}:${item.obligated_entity_id}`
 }
 
-function formatItemTime(value: string | null): string {
+function formatItemTime(value: string | null | undefined): string {
 	if (!value) return ''
 	const date = new Date(value)
 	if (Number.isNaN(date.getTime())) return ''

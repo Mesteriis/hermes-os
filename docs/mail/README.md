@@ -4,6 +4,9 @@ Email is a communication channel inside Hermes, not the product identity.
 Hermes is not an email client. The email surface preserves source evidence and
 projects provider records into the Communications domain.
 
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
+
 ## Principles
 
 - **Personal-first**: the system serves the local owner.
@@ -19,7 +22,7 @@ projects provider records into the Communications domain.
 The current backend exposes email-related communication routes under:
 
 ```text
-http://127.0.0.1:8080/api/v1/communications/
+http://127.0.0.1:8080/api/v1/communications/mail/
 ```
 
 Implementation metrics and route details live in the API/status documents. This

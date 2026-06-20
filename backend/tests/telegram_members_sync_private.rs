@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
 };
 use hermes_hub_backend::platform::config::AppConfig;
@@ -48,7 +48,7 @@ async fn telegram_private_members_sync_uses_tdlib_chat_metadata_and_records_audi
 
     post_ok(
         app.clone(),
-        "/api/v1/telegram/messages",
+        "/api/v1/communications/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -85,7 +85,7 @@ async fn telegram_private_members_sync_uses_tdlib_chat_metadata_and_records_audi
     let sync_response = app
         .clone()
         .oneshot(json_post(
-            &format!("/api/v1/telegram/chats/{telegram_chat_id}/members/sync"),
+            &format!("/api/v1/communications/telegram/chats/{telegram_chat_id}/members/sync"),
             json!({}),
         ))
         .await
@@ -110,7 +110,7 @@ async fn telegram_private_members_sync_uses_tdlib_chat_metadata_and_records_audi
     let members_response = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/telegram/chats/{telegram_chat_id}/members?limit=10"
+            "/api/v1/communications/telegram/chats/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("members response");
@@ -228,7 +228,7 @@ where
 {
     let response = app
         .oneshot(get(&format!(
-            "/api/v1/telegram/chats?account_id={account_id}&limit=10"
+            "/api/v1/communications/telegram/chats?account_id={account_id}&limit=10"
         )))
         .await
         .expect("chat list response");

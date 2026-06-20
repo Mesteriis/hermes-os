@@ -2,11 +2,12 @@ use chrono::{DateTime, Utc};
 use serde_json::json;
 use sqlx::{Postgres, Transaction};
 
-use crate::domains::mail::core::{CommunicationIngestionStore, NewRawCommunicationRecord};
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatFolderSnapshot, TelegramTdlibChatSnapshot,
 };
+use crate::platform::communications::NewRawCommunicationRecord;
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use crate::workflows::provider_communication_projection::record_raw_provider_communication;
 
 use super::TELEGRAM_CHAT_RECORD_KIND;
 use super::chat_metadata::tdlib_chat_projection_metadata;
@@ -558,7 +559,6 @@ impl TelegramStore {
         account_id: &str,
         snapshot: &TelegramTdlibChatSnapshot,
     ) -> Result<TelegramChat, TelegramError> {
-        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
         let provider_account = self.telegram_provider_account(account_id).await?;
         let raw_record_id = telegram_raw_record_id(
             &provider_account.account_id,
@@ -586,7 +586,7 @@ impl TelegramStore {
             "account_id": provider_account.account_id,
             "provider_chat_id": snapshot.provider_chat_id,
         }));
-        communication_store.record_raw_source(&raw).await?;
+        record_raw_provider_communication(self.pool.clone(), raw).await?;
 
         self.upsert_chat(&NewTelegramChat {
             account_id: provider_account.account_id,

@@ -3,8 +3,8 @@ import Icon from '../../../shared/ui/Icon.vue'
 import type { BulkMessageAction, BulkMessageActionRequest } from '../types/communications'
 import {
   MAIL_MESSAGE_DRAG_TYPE,
-  hasMailMessageDragType,
-  parseMailMessageDragPayload
+  hasCommunicationMessageDragType,
+  parseCommunicationMessageDragPayload
 } from './mailDragDrop'
 
 type BulkActionCommand = Omit<BulkMessageActionRequest, 'message_ids'>
@@ -37,7 +37,7 @@ const metadataActions: { command: BulkActionCommand; label: string; icon: string
 
 function handleActionDrop(event: DragEvent, action: BulkMessageAction) {
   if (props.isRunning || !event.dataTransfer) return
-  const payload = parseMailMessageDragPayload(event.dataTransfer.getData(MAIL_MESSAGE_DRAG_TYPE))
+  const payload = parseCommunicationMessageDragPayload(event.dataTransfer.getData(MAIL_MESSAGE_DRAG_TYPE))
   if (!payload) return
   emit('action', { action })
 }
@@ -50,7 +50,7 @@ function nextBusinessMorningIso() {
 }
 
 function handleActionDragOver(event: DragEvent) {
-  if (!event.dataTransfer || !hasMailMessageDragType(event.dataTransfer.types)) return
+  if (!event.dataTransfer || !hasCommunicationMessageDragType(event.dataTransfer.types)) return
   event.preventDefault()
   event.dataTransfer.dropEffect = 'move'
 }

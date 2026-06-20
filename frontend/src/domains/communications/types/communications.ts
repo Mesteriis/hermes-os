@@ -32,7 +32,7 @@ export type CommunicationMessageSummary = {
   local_state_changed_at: string | null
 }
 
-export type MailMessagesResponse = {
+export type CommunicationMessagesResponse = {
   items: CommunicationMessageSummary[]
   next_cursor: string | null
   has_more: boolean
@@ -60,7 +60,7 @@ export type CommunicationAttachment = {
   updated_at: string
 }
 
-export type MailMessageDetailItem = {
+export type CommunicationMessageDetailItem = {
   message_id: string
   raw_record_id: string
   account_id: string
@@ -87,8 +87,8 @@ export type MailMessageDetailItem = {
   local_state_reason: string | null
 }
 
-export type MailMessageDetailResponse = {
-  message: MailMessageDetailItem
+export type CommunicationMessageDetailResponse = {
+  message: CommunicationMessageDetailItem
   attachments: CommunicationAttachment[]
 }
 
@@ -173,7 +173,7 @@ export type MailSyncRunResponse = {
   next_run_at: string | null
 }
 
-export type EmailThread = {
+export type CommunicationThread = {
   thread_id: string
   account_id: string
   subject: string
@@ -187,8 +187,8 @@ export type EmailThread = {
   dominant_workflow_state: string
 }
 
-export type MailThreadSummary = Pick<
-  EmailThread,
+export type CommunicationThreadSummary = Pick<
+  CommunicationThread,
   | 'thread_id'
   | 'subject'
   | 'message_count'
@@ -219,7 +219,7 @@ export type ThreadMessage = {
 }
 
 export type ThreadListResponse = {
-  items: EmailThread[]
+  items: CommunicationThread[]
   next_cursor: string | null
   has_more: boolean
 }
@@ -235,11 +235,11 @@ export type MessageAnalyzeResponse = {
     action_items: string[]
     risks: string[]
     deadlines: string[]
-    event_candidates: MailKnowledgeCandidate[]
-    persona_candidates: MailKnowledgeCandidate[]
-    organization_candidates: MailKnowledgeCandidate[]
-    document_candidates: MailKnowledgeCandidate[]
-    agreement_candidates: MailKnowledgeCandidate[]
+    event_candidates: CommunicationKnowledgeCandidate[]
+    persona_candidates: CommunicationKnowledgeCandidate[]
+    organization_candidates: CommunicationKnowledgeCandidate[]
+    document_candidates: CommunicationKnowledgeCandidate[]
+    agreement_candidates: CommunicationKnowledgeCandidate[]
   }
   importance_score: number | null
   workflow_state: string
@@ -248,7 +248,7 @@ export type MessageAnalyzeResponse = {
   evidence: string[]
 }
 
-export type MailKnowledgeCandidate = {
+export type CommunicationKnowledgeCandidate = {
   title: string
   evidence: string
 }
@@ -444,7 +444,7 @@ export type ExtractedNote = {
 export type ExtractTasksResponse = { tasks: ExtractedTask[] }
 export type ExtractNotesResponse = { notes: ExtractedNote[] }
 
-export type EmailSearchResponse = {
+export type CommunicationSearchResponse = {
   results: { object_id: string; object_kind: string; title: string }[]
 }
 
@@ -470,7 +470,7 @@ export type DuplicateAttachmentGroup = {
   count: number
 }
 
-export type MailMessageInsight = {
+export type CommunicationMessageInsight = {
   messageId: string
   explain: MessageExplainResponse | null
   smartCc: SmartCcResponse | null
@@ -507,7 +507,7 @@ export type MailResourceSummary = {
   blockers: number
 }
 
-export type { EmailPersona } from './personas'
+export type { CommunicationPersona } from './personas'
 export type {
   MailCertificate,
   MailCertificateCreateRequest,
@@ -519,16 +519,16 @@ export type {
   BulkMessageActionResponse,
   DraftDeleteResponse,
   DraftListResponse,
-  EmailDraft,
-  EmailOutboxItem,
-  EmailOutboxStatus,
+  CommunicationDraft,
+  CommunicationOutboxItem,
+  CommunicationOutboxStatus,
   OutboxListResponse,
   RedirectMessageRequest,
-  SendEmailRequest,
-  SendEmailResponse
+  SendCommunicationRequest,
+  SendCommunicationResponse
 } from './mailOperations'
 export type {
-  EmailTemplate,
+  CommunicationTemplate,
   RichTemplateDeleteResponse,
   RichTemplateMailMergePreviewRequest,
   RichTemplateMailMergePreviewResponse,

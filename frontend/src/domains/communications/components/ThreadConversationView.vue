@@ -5,7 +5,7 @@ import Button from '../../../shared/ui/Button.vue'
 import ThreadInlineReplyComposer from './ThreadInlineReplyComposer.vue'
 import ThreadAttachmentInsightPanel from './ThreadAttachmentInsightPanel.vue'
 import { useTranslateThreadMutation } from '../queries/useCommunicationsQuery'
-import type { MailThreadSummary, ThreadMessage } from '../types/communications'
+import type { CommunicationThreadSummary, ThreadMessage } from '../types/communications'
 import type { ThreadTranslationResponse } from '../types/multilingual'
 import { attachmentIcon } from '../stores/communications'
 import { messageTime, senderEmail, senderLabel } from '../stores/communications'
@@ -18,7 +18,7 @@ import {
 } from './threadConversationPresentation'
 
 const props = defineProps<{
-  thread: MailThreadSummary
+  thread: CommunicationThreadSummary
   messages: ThreadMessage[]
   isLoading: boolean
   errorMessage: string

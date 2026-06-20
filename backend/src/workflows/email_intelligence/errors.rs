@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::domains::mail::messages::MessageProjectionError;
+use crate::domains::communications::messages::MessageProjectionError;
 use crate::integrations::ai_runtime::AiRuntimeError;
 
 #[derive(Debug, Error)]

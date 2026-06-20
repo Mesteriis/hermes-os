@@ -79,9 +79,7 @@ impl PersonIntelligenceService {
             Some("neutral".into())
         };
 
-        let lang = crate::domains::mail::multilingual::MultilingualService::detect_language(
-            &combined_text,
-        );
+        let detected_language = detect_language(&combined_text);
 
         let trust = 50i16
             .saturating_add((messages.len() as i16 * 2).min(30))
@@ -92,7 +90,7 @@ impl PersonIntelligenceService {
             avg_response_hours: None,
             frequent_topics: topics,
             typical_tone: tone,
-            detected_language: Some(lang.language),
+            detected_language: Some(detected_language),
             writing_style: if avg_len > 500 {
                 Some("verbose".into())
             } else if avg_len < 100 {
@@ -154,6 +152,59 @@ impl PersonIntelligenceService {
         }
         actions
     }
+}
+
+fn detect_language(text: &str) -> String {
+    let text = text.trim();
+    if text.is_empty() {
+        return "unknown".to_owned();
+    }
+
+    let lower = text.to_lowercase();
+    if text.chars().any(|c| ('\u{0400}'..='\u{04FF}').contains(&c)) {
+        if lower.contains('ї') || lower.contains('є') {
+            return "uk".to_owned();
+        }
+        return "ru".to_owned();
+    }
+    if text.chars().any(|c| ('\u{4E00}'..='\u{9FFF}').contains(&c)) {
+        return "zh".to_owned();
+    }
+    if lower.contains('ñ')
+        || [
+            "hola",
+            "gracias",
+            "para",
+            "como",
+            "que",
+            "por favor",
+            "saludos",
+            "adjunto",
+        ]
+        .iter()
+        .any(|word| lower.contains(word))
+    {
+        return "es".to_owned();
+    }
+    if ["privet", "spasibo", "pozhaluysta"]
+        .iter()
+        .any(|word| lower.contains(word))
+    {
+        return "ru".to_owned();
+    }
+    if [
+        "mit", "und", "der", "die", "das", "ist", "von", "für", "danke", "bitte",
+    ]
+    .iter()
+    .any(|word| lower.contains(word))
+    {
+        return "de".to_owned();
+    }
+    if text.chars().any(|c| c.is_ascii_alphabetic()) {
+        return "en".to_owned();
+    }
+
+    "unknown".to_owned()
 }
 
 #[derive(Clone, Debug)]

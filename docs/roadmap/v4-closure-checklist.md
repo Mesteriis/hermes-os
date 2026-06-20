@@ -35,11 +35,11 @@ Version 4.0 is complete when Hermes Hub provides a desktop-configurable Telegram
 - [x] Provider account model accepts `telegram_user` and `telegram_bot` without breaking email providers.
 - [x] Telegram secret purposes are account-scoped and compatible only with non-plaintext secret references.
 - [x] Backend migration creates Telegram chat, outbound policy and call transcript tables.
-- [x] Backend exposes protected `/api/v1/telegram/*`, `/api/v1/policies/*` and `/api/v1/calls/*` foundation endpoints.
+- [x] Backend exposes protected `/api/v1/communications/telegram/*`, `/api/v1/policies/*` and `/api/v1/calls/*` foundation endpoints.
 - [x] Automated-send dry-run rejects sends outside enabled policies.
 - [x] Automated-send dry-run records auditable preview metadata without storing secret values.
 - [x] Call transcript storage preserves account, call and source provenance.
-- [x] Protected `/api/v1/telegram/capabilities` exposes fixture-ready, live-blocked and Telegram unsupported capabilities.
+- [x] Protected `/api/v1/communications/telegram/capabilities` exposes fixture-ready, live-blocked and Telegram unsupported capabilities.
 - [x] Desktop Telegram account, policy, call transcript and runtime guardrail surfaces call protected backend APIs.
 - [x] `make backend-telegram-smoke-dev` covers Telegram fixture runtime, policy and transcript storage.
 - [x] `make validate`, `make frontend-check` and `make frontend-build` pass after Telegram UI integration.

@@ -2,11 +2,11 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use hermes_hub_backend::domains::mail::core::EmailProviderKind;
-use hermes_hub_backend::domains::mail::fixtures::export::{
+use hermes_hub_backend::domains::communications::core::EmailProviderKind;
+use hermes_hub_backend::domains::communications::fixtures::export::{
     EmailFixtureExportOptions, export_fixture_messages_from_sync_batch,
 };
-use hermes_hub_backend::integrations::gmail::client::{ImapFetchOptions, ImapNetworkClient};
+use hermes_hub_backend::integrations::mail::gmail::client::{ImapFetchOptions, ImapNetworkClient};
 use hermes_hub_backend::platform::secrets::ResolvedSecret;
 use serde::Serialize;
 use thiserror::Error;

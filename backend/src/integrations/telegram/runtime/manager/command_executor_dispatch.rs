@@ -18,7 +18,7 @@ use super::super::commands::{
     request_actor_toggle_forum_topic_closed,
 };
 use super::super::state::TelegramRuntimeCommand;
-use super::command_executor_media::media_send_request;
+use crate::workflows::telegram_media_storage::media_send_request;
 
 pub(super) enum DispatchOutcome {
     AwaitingProvider,

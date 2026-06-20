@@ -57,7 +57,7 @@ describe('MailFolderStrip folder management boundary', () => {
 		expect(source).toContain('folderIndent(folderRows[virtualFolder.index])')
 		expect(source).toContain('@drop.prevent="handleFolderDrop($event, folderRows[virtualFolder.index].folder)"')
 		expect(source).toContain('@dragstart="folderReorder.handleDragStart($event, folderRows[virtualFolder.index].folder)"')
-		expect(source).toContain('parseMailMessageDragPayload')
+		expect(source).toContain('parseCommunicationMessageDragPayload')
 		expect(source).toContain('folderReorder.handleDrop(event, folder)')
 		expect(source).not.toContain('../api/communications')
 		expect(source).not.toContain('ApiClient')

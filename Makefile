@@ -9,7 +9,7 @@ CARGO_VALIDATE_CLIPPY_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/validate-clippy
 CARGO_VALIDATE_TEST_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/validate-test
 CARGO_BUILD_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/build
 
-.PHONY: help dev logs build migrate validate architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-build frontend-validate vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
+.PHONY: help dev logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-build frontend-validate vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
 
 help:
 	@printf '%s\n' 'Hermes development commands:'
@@ -41,7 +41,14 @@ migrate:
 
 validate: architecture-check code-boundaries-check backend-validate frontend-validate
 
+lint-architecture: architecture-check code-boundaries-check
+
+lint-rust: backend-fmt-check backend-clippy
+
+lint-frontend: frontend-lint
+
 architecture-check:
+	@node scripts/check-architecture-contract.test.mjs
 	@node scripts/check-architecture.mjs --self-test
 	@node scripts/check-architecture.mjs
 

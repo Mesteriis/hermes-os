@@ -1,9 +1,9 @@
 use chrono::Utc;
 use serde_json::Value;
 
-use crate::domains::mail::core::{CommunicationProviderKind, ProviderAccount};
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson::TdJsonLibrary;
+use crate::platform::communications::{CommunicationProviderKind, ProviderAccount};
 use crate::platform::config::AppConfig;
 use crate::vault::CommunicationProviderAccountStore;
 
@@ -18,7 +18,8 @@ pub(super) async fn load_telegram_account(
     let account_id = validate_non_empty("account_id", account_id)?;
     let account = provider_account_store
         .get(&account_id)
-        .await?
+        .await
+        .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?
         .ok_or_else(|| {
             TelegramError::InvalidRequest(format!(
                 "Telegram account `{account_id}` is not configured"

@@ -1,30 +1,30 @@
 import { QueryClient } from '@tanstack/vue-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { fetchMailMessage, fetchMailMessages, fetchThreadMessages } from '../api/communications'
-import type { MailMessageDetailResponse, MailMessagesResponse, ThreadMessagesResponse } from '../types/communications'
+import { fetchCommunicationMessage, fetchCommunicationMessages, fetchThreadMessages } from '../api/communications'
+import type { CommunicationMessageDetailResponse, CommunicationMessagesResponse, ThreadMessagesResponse } from '../types/communications'
 import type { AttachmentSearchResult } from '../types/attachments'
 import type { MailSavedSearch } from '../types/savedSearches'
 import {
   mailListQueryKey,
   mailMessageQueryKey,
-  prefetchMailMessageForAttachmentResult,
+  prefetchCommunicationMessageForAttachmentResult,
   prefetchMailListForSavedSearch,
-  prefetchMailMessage,
+  prefetchCommunicationMessage,
   prefetchThreadMessages,
   threadMessagesQueryKey
 } from './mailPrefetch'
 
 vi.mock('../api/communications', () => ({
-  fetchMailMessage: vi.fn(),
-  fetchMailMessages: vi.fn(),
+  fetchCommunicationMessage: vi.fn(),
+  fetchCommunicationMessages: vi.fn(),
   fetchThreadMessages: vi.fn()
 }))
 
-const fetchMailMessageMock = vi.mocked(fetchMailMessage)
-const fetchMailMessagesMock = vi.mocked(fetchMailMessages)
+const fetchCommunicationMessageMock = vi.mocked(fetchCommunicationMessage)
+const fetchCommunicationMessagesMock = vi.mocked(fetchCommunicationMessages)
 const fetchThreadMessagesMock = vi.mocked(fetchThreadMessages)
 
-function messageDetail(messageId: string): MailMessageDetailResponse {
+function messageDetail(messageId: string): CommunicationMessageDetailResponse {
   return {
     message: {
       message_id: messageId,
@@ -72,7 +72,7 @@ function threadMessages(): ThreadMessagesResponse {
   }
 }
 
-function mailMessages(): MailMessagesResponse {
+function mailMessages(): CommunicationMessagesResponse {
   return {
     items: [],
     next_cursor: null,
@@ -129,28 +129,28 @@ function attachmentSearchResult(overrides: Partial<AttachmentSearchResult> = {})
 
 describe('mail prefetch query helpers', () => {
   beforeEach(() => {
-    fetchMailMessageMock.mockReset()
-    fetchMailMessagesMock.mockReset()
+    fetchCommunicationMessageMock.mockReset()
+    fetchCommunicationMessagesMock.mockReset()
     fetchThreadMessagesMock.mockReset()
   })
 
   it('prefetches message detail into the TanStack Query cache', async () => {
     const client = queryClient()
     const detail = messageDetail('msg-1')
-    fetchMailMessageMock.mockResolvedValueOnce(detail)
+    fetchCommunicationMessageMock.mockResolvedValueOnce(detail)
 
-    await prefetchMailMessage(client, ' msg-1 ')
+    await prefetchCommunicationMessage(client, ' msg-1 ')
 
-    expect(fetchMailMessageMock).toHaveBeenCalledWith('msg-1')
+    expect(fetchCommunicationMessageMock).toHaveBeenCalledWith('msg-1')
     expect(client.getQueryData(mailMessageQueryKey('msg-1'))).toEqual(detail)
   })
 
   it('ignores blank message ids', async () => {
     const client = queryClient()
 
-    await prefetchMailMessage(client, '  ')
+    await prefetchCommunicationMessage(client, '  ')
 
-    expect(fetchMailMessageMock).not.toHaveBeenCalled()
+    expect(fetchCommunicationMessageMock).not.toHaveBeenCalled()
   })
 
   it('prefetches thread messages into the shared TanStack Query cache', async () => {
@@ -175,11 +175,11 @@ describe('mail prefetch query helpers', () => {
   it('prefetches the first mail list page for a saved search', async () => {
     const client = queryClient()
     const response = mailMessages()
-    fetchMailMessagesMock.mockResolvedValueOnce(response)
+    fetchCommunicationMessagesMock.mockResolvedValueOnce(response)
 
     await prefetchMailListForSavedSearch(client, savedSearch(), 'fallback-account')
 
-    expect(fetchMailMessagesMock).toHaveBeenCalledWith(
+    expect(fetchCommunicationMessagesMock).toHaveBeenCalledWith(
       'account-1',
       'needs_action',
       'email',
@@ -194,11 +194,11 @@ describe('mail prefetch query helpers', () => {
   it('prefetches the parent message for an attachment search result', async () => {
     const client = queryClient()
     const detail = messageDetail('msg-attachment-1')
-    fetchMailMessageMock.mockResolvedValueOnce(detail)
+    fetchCommunicationMessageMock.mockResolvedValueOnce(detail)
 
-    await prefetchMailMessageForAttachmentResult(client, attachmentSearchResult())
+    await prefetchCommunicationMessageForAttachmentResult(client, attachmentSearchResult())
 
-    expect(fetchMailMessageMock).toHaveBeenCalledWith('msg-attachment-1')
+    expect(fetchCommunicationMessageMock).toHaveBeenCalledWith('msg-attachment-1')
     expect(client.getQueryData(mailMessageQueryKey('msg-attachment-1'))).toEqual(detail)
   })
 })

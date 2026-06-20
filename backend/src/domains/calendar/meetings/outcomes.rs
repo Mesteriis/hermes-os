@@ -5,7 +5,6 @@ use sqlx::postgres::PgPool;
 
 use crate::domains::calendar::evidence::link_calendar_entity_in_transaction;
 
-use super::outcome_projection::project_outcome_domain_record;
 use super::rows::{MEETING_OUTCOME_COLUMNS, row_to_meeting_outcome};
 use super::{MeetingOutcome, MeetingsError};
 
@@ -80,21 +79,7 @@ impl MeetingOutcomeStore {
             .bind(source.unwrap_or("manual"))
             .fetch_one(&mut *transaction)
             .await?;
-        let mut outcome = row_to_meeting_outcome(row)?;
-
-        if let Some(linked_entity_id) =
-            project_outcome_domain_record(&mut transaction, &outcome).await?
-        {
-            let query = format!(
-                "UPDATE meeting_outcomes SET linked_entity_id = $1, updated_at = now() WHERE id::text = $2 RETURNING {MEETING_OUTCOME_COLUMNS}"
-            );
-            let row = sqlx::query(&query)
-                .bind(linked_entity_id)
-                .bind(&outcome.id)
-                .fetch_one(&mut *transaction)
-                .await?;
-            outcome = row_to_meeting_outcome(row)?;
-        }
+        let outcome = row_to_meeting_outcome(row)?;
 
         if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
             link_calendar_entity_in_transaction(

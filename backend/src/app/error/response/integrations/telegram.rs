@@ -45,11 +45,23 @@ pub(super) fn telegram_error_parts(error: TelegramError) -> ErrorParts {
             "Telegram QR login setup was not found".to_owned(),
             false,
         ),
-        TelegramError::Communication(error) => internal(
+        TelegramError::ProviderAccountStore(error) => internal(
             error,
-            "Telegram communication store operation failed",
-            "telegram_store_error",
-            "Telegram store operation failed",
+            "Telegram provider account store operation failed",
+            "telegram_provider_account_store_error",
+            "Telegram provider account store operation failed",
+        ),
+        TelegramError::MediaStorage(error) => internal(
+            error,
+            "Telegram media storage operation failed",
+            "telegram_media_storage_error",
+            "Telegram media storage operation failed",
+        ),
+        TelegramError::CommunicationProjection(error) => internal(
+            error,
+            "Telegram communication projection operation failed",
+            "telegram_projection_error",
+            "Telegram communication projection failed",
         ),
         TelegramError::SecretReference(error) => internal(
             error,
@@ -72,30 +84,6 @@ pub(super) fn telegram_error_parts(error: TelegramError) -> ErrorParts {
                 false,
             )
         }
-        TelegramError::MessageProjection(error) => internal(
-            error,
-            "Telegram message projection failed",
-            "telegram_projection_error",
-            "Telegram message projection failed",
-        ),
-        TelegramError::MailStorage(error) => internal(
-            error,
-            "Telegram mail storage operation failed",
-            "telegram_mail_storage_error",
-            "Telegram attachment storage operation failed",
-        ),
-        TelegramError::Decision(error) => internal(
-            error,
-            "Telegram decision candidate refresh failed",
-            "telegram_decision_refresh_error",
-            "Telegram decision candidate refresh failed",
-        ),
-        TelegramError::TaskCandidate(error) => internal(
-            error,
-            "Telegram task candidate refresh failed",
-            "telegram_task_candidate_refresh_error",
-            "Telegram task candidate refresh failed",
-        ),
         TelegramError::ReviewInboxWorkflow(error) => internal(
             error,
             "Telegram review inbox mirroring failed",

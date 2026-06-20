@@ -1,0 +1,20 @@
+mod accounts;
+mod checkpoints;
+mod errors;
+mod models;
+mod raw_records;
+mod rows;
+mod secrets;
+mod store;
+mod validation;
+
+pub use crate::vault::{ProviderCredentialError, ProviderCredentialReader};
+pub use errors::CommunicationIngestionError;
+pub use models::{
+    CommunicationProviderKind, DeletedProviderAccount, EmailProviderKind, IngestionCheckpoint,
+    NewIngestionCheckpoint, NewProviderAccount, NewProviderAccountSecretBinding,
+    NewRawCommunicationRecord, ProviderAccount, ProviderAccountSecretBinding,
+    ProviderAccountSecretPurpose, ProviderAccountUsage, ProviderCredential,
+    StoredRawCommunicationRecord,
+};
+pub use store::CommunicationIngestionStore;

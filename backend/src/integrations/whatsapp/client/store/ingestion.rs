@@ -1,8 +1,8 @@
 use serde_json::json;
 
-use crate::domains::mail::core::{CommunicationIngestionStore, NewRawCommunicationRecord};
-use crate::domains::mail::messages::MessageProjectionStore;
+use crate::platform::communications::NewRawCommunicationRecord;
 use crate::vault::CommunicationProviderAccountStore;
+use crate::workflows::provider_communication_projection::record_and_project_whatsapp_web_message;
 
 use super::WhatsappWebStore;
 use crate::integrations::whatsapp::client::constants::WHATSAPP_WEB_MESSAGE_RECORD_KIND;
@@ -11,7 +11,6 @@ use crate::integrations::whatsapp::client::ids::whatsapp_web_raw_record_id;
 use crate::integrations::whatsapp::client::models::{
     NewWhatsappWebMessage, WhatsappWebLinkState, WhatsappWebMessageIngestResult,
 };
-use crate::integrations::whatsapp::client::projection::project_raw_whatsapp_web_message;
 
 impl WhatsappWebStore {
     pub async fn ingest_fixture_message(
@@ -19,10 +18,10 @@ impl WhatsappWebStore {
         message: &NewWhatsappWebMessage,
     ) -> Result<WhatsappWebMessageIngestResult, WhatsappWebError> {
         message.validate()?;
-        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
         let provider_account = CommunicationProviderAccountStore::new(self.pool.clone())
             .get(&message.account_id)
-            .await?
+            .await
+            .map_err(|error| WhatsappWebError::ProviderAccountStore(error.to_string()))?
             .ok_or_else(|| {
                 WhatsappWebError::InvalidRequest(format!(
                     "WhatsApp Web account `{}` is not configured",
@@ -82,10 +81,7 @@ impl WhatsappWebStore {
             "account_id": message.account_id,
             "provider_chat_id": message.provider_chat_id,
         }));
-        let raw = communication_store.record_raw_source(&raw).await?;
-        let projected =
-            project_raw_whatsapp_web_message(&MessageProjectionStore::new(self.pool.clone()), &raw)
-                .await?;
+        let projected = record_and_project_whatsapp_web_message(self.pool.clone(), raw).await?;
         self.refresh_message_intelligence_candidates(&projected.message_id)
             .await?;
 
@@ -93,7 +89,7 @@ impl WhatsappWebStore {
             .await?;
 
         Ok(WhatsappWebMessageIngestResult {
-            raw_record_id: raw.raw_record_id,
+            raw_record_id: projected.raw_record_id,
             message_id: projected.message_id,
         })
     }

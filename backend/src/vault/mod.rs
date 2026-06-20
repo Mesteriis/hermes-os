@@ -8,6 +8,7 @@ mod manifest;
 mod models;
 mod paths;
 mod provider_accounts;
+mod provider_credentials;
 mod recovery;
 mod secrets;
 mod storage;
@@ -26,6 +27,7 @@ pub use provider_accounts::{
     CalendarAccountStore, CalendarSourceStore, CommunicationProviderAccountStore,
     CommunicationProviderSecretBindingStore, TaskProviderStore,
 };
+pub use provider_credentials::{ProviderCredentialError, ProviderCredentialReader};
 
 #[derive(Clone)]
 pub struct HostVault {

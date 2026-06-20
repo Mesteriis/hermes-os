@@ -12,29 +12,17 @@ pub(super) fn whatsapp_web_error_parts(error: WhatsappWebError) -> ErrorParts {
             message,
             false,
         ),
-        WhatsappWebError::Communication(error) => internal(
+        WhatsappWebError::ProviderAccountStore(error) => internal(
             error,
-            "WhatsApp Web communication store operation failed",
-            "whatsapp_web_store_error",
-            "WhatsApp Web store operation failed",
+            "WhatsApp Web provider account store operation failed",
+            "whatsapp_web_provider_account_store_error",
+            "WhatsApp Web provider account store operation failed",
         ),
-        WhatsappWebError::MessageProjection(error) => internal(
+        WhatsappWebError::CommunicationProjection(error) => internal(
             error,
-            "WhatsApp Web message projection failed",
+            "WhatsApp Web communication projection failed",
             "whatsapp_web_projection_error",
-            "WhatsApp Web message projection failed",
-        ),
-        WhatsappWebError::Decision(error) => internal(
-            error,
-            "WhatsApp Web decision candidate refresh failed",
-            "whatsapp_web_decision_refresh_error",
-            "WhatsApp Web decision candidate refresh failed",
-        ),
-        WhatsappWebError::TaskCandidate(error) => internal(
-            error,
-            "WhatsApp Web task candidate refresh failed",
-            "whatsapp_web_task_candidate_refresh_error",
-            "WhatsApp Web task candidate refresh failed",
+            "WhatsApp Web communication projection failed",
         ),
         WhatsappWebError::ReviewInboxWorkflow(error) => internal(
             error,

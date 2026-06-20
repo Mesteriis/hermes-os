@@ -9,7 +9,7 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
@@ -77,7 +77,7 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/whatsapp/accounts/fixture",
+            "/api/v1/communications/whatsapp/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "whatsapp_web",
@@ -95,7 +95,7 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/whatsapp/messages",
+            "/api/v1/communications/whatsapp/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -294,7 +294,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let capabilities_response = app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v1/whatsapp/capabilities",
+            "/api/v1/communications/whatsapp/capabilities",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -337,7 +337,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/whatsapp/accounts/fixture",
+            "/api/v1/communications/whatsapp/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "whatsapp_web",
@@ -363,7 +363,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/whatsapp/messages",
+            "/api/v1/communications/whatsapp/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -392,7 +392,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let sessions_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/whatsapp/sessions?account_id={account_id}"),
+            &format!("/api/v1/communications/whatsapp/sessions?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -442,7 +442,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/whatsapp/messages?account_id={account_id}&provider_chat_id={chat_id}"
+                "/api/v1/communications/whatsapp/messages?account_id={account_id}&provider_chat_id={chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))

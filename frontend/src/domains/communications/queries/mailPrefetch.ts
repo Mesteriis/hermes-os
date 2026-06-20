@@ -1,6 +1,6 @@
 import { useQueryClient, type QueryClient } from '@tanstack/vue-query'
-import { fetchMailMessage, fetchMailMessages, fetchThreadMessages } from '../api/communications'
-import type { LocalMessageState, MailMessageDetailResponse, MailMessagesResponse, ThreadMessagesResponse, WorkflowState } from '../types/communications'
+import { fetchCommunicationMessage, fetchCommunicationMessages, fetchThreadMessages } from '../api/communications'
+import type { LocalMessageState, CommunicationMessageDetailResponse, CommunicationMessagesResponse, ThreadMessagesResponse, WorkflowState } from '../types/communications'
 import type { AttachmentSearchResult } from '../types/attachments'
 import type { MailSavedSearch } from '../types/savedSearches'
 
@@ -32,35 +32,35 @@ export function threadMessagesQueryKey(accountId: string, subject: string) {
   return ['communications-thread-messages', accountId, subject] as const
 }
 
-export async function prefetchMailMessage(
+export async function prefetchCommunicationMessage(
   queryClient: QueryClient,
   messageId: string
 ): Promise<void> {
   const normalizedMessageId = messageId.trim()
   if (!normalizedMessageId) return
 
-  await queryClient.prefetchQuery<MailMessageDetailResponse>({
+  await queryClient.prefetchQuery<CommunicationMessageDetailResponse>({
     queryKey: mailMessageQueryKey(normalizedMessageId),
-    queryFn: () => fetchMailMessage(normalizedMessageId),
+    queryFn: () => fetchCommunicationMessage(normalizedMessageId),
     staleTime: MESSAGE_PREFETCH_STALE_MS
   })
 }
 
-export function useMailMessagePrefetch() {
+export function useCommunicationMessagePrefetch() {
   const queryClient = useQueryClient()
-  return (messageId: string) => prefetchMailMessage(queryClient, messageId)
+  return (messageId: string) => prefetchCommunicationMessage(queryClient, messageId)
 }
 
-export async function prefetchMailMessageForAttachmentResult(
+export async function prefetchCommunicationMessageForAttachmentResult(
   queryClient: QueryClient,
   result: AttachmentSearchResult
 ): Promise<void> {
-  await prefetchMailMessage(queryClient, result.message_id)
+  await prefetchCommunicationMessage(queryClient, result.message_id)
 }
 
 export function useAttachmentSearchResultPrefetch() {
   const queryClient = useQueryClient()
-  return (result: AttachmentSearchResult) => prefetchMailMessageForAttachmentResult(queryClient, result)
+  return (result: AttachmentSearchResult) => prefetchCommunicationMessageForAttachmentResult(queryClient, result)
 }
 
 export async function prefetchThreadMessages(
@@ -95,9 +95,9 @@ export async function prefetchMailListForSavedSearch(
   const query = savedSearch.query.trim() || undefined
   const localState = savedSearch.local_state
 
-  await queryClient.prefetchQuery<MailMessagesResponse>({
+  await queryClient.prefetchQuery<CommunicationMessagesResponse>({
     queryKey: mailListQueryKey(accountId, workflowState, channelKind, query, localState),
-    queryFn: () => fetchMailMessages(accountId, workflowState, channelKind, query, localState, 250, null),
+    queryFn: () => fetchCommunicationMessages(accountId, workflowState, channelKind, query, localState, 250, null),
     staleTime: MESSAGE_PREFETCH_STALE_MS
   })
 }

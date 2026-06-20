@@ -488,7 +488,7 @@ function integrationSort(a: IntegrationViewModel, b: IntegrationViewModel): numb
 		['gmail', 10],
 		['icloud', 20],
 		['imap', 30],
-		['telegram', 40],
+		['communications', 'telegram', 40],
 		['whatsapp_web', 50]
 	]);
 	return (priority.get(a.providerKind) ?? 100) - (priority.get(b.providerKind) ?? 100);

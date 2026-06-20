@@ -14,7 +14,7 @@ use tokio::time::{Duration, sleep};
 use tower::ServiceExt;
 
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretStoreKind};
@@ -343,7 +343,7 @@ where
 pub async fn wait_for_provider_account(
     communication_store: &CommunicationIngestionStore,
     account_id: &str,
-) -> hermes_hub_backend::domains::mail::core::ProviderAccount {
+) -> hermes_hub_backend::domains::communications::core::ProviderAccount {
     for _ in 0..50 {
         if let Some(account) = communication_store
             .provider_account(account_id)
@@ -380,7 +380,7 @@ pub async fn wait_for_provider_account_secret_binding(
     communication_store: &CommunicationIngestionStore,
     account_id: &str,
     secret_purpose: ProviderAccountSecretPurpose,
-) -> hermes_hub_backend::domains::mail::core::ProviderAccountSecretBinding {
+) -> hermes_hub_backend::domains::communications::core::ProviderAccountSecretBinding {
     for _ in 0..50 {
         if let Some(binding) = communication_store
             .provider_account_secret_binding(account_id, secret_purpose)

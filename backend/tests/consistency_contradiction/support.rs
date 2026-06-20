@@ -4,16 +4,17 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::Utc;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, EmailProviderKind, NewProviderAccount,
     NewRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
-use hermes_hub_backend::integrations::telegram::client::project_raw_telegram_message;
-use hermes_hub_backend::integrations::whatsapp::client::project_raw_whatsapp_web_message;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::provider_communication_projection::{
+    project_raw_telegram_message, project_raw_whatsapp_web_message,
+};
 use serde_json::json;
 use sqlx::postgres::PgPool;
 

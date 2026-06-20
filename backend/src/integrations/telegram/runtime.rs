@@ -1,7 +1,6 @@
 mod actor;
 mod commands;
 mod manager;
-mod media;
 mod models;
 mod participant_commands;
 mod state;

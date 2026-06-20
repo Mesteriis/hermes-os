@@ -3,8 +3,9 @@
 Status: Canonical architecture baseline for the 2026-06-18 documentation
 consolidation.
 
-Scope: Communications target model and channel ownership. This document does
-not authorize code moves, route changes or schema migrations.
+Scope: Communications target model and channel ownership. ADR-0097 is the
+controlling decision for channel/domain boundaries, route changes and canonical
+communication tables.
 
 ## Purpose
 
@@ -12,6 +13,9 @@ Communications are the primary intake spine for Hermes. Messages, calls,
 meetings, provider events and communication attachments enter Hermes as source
 evidence, then feed memory, relationships, decisions, obligations, tasks,
 projects, documents and context.
+
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
 
 ```text
 Communication
@@ -52,10 +56,10 @@ The Communications domain does not own:
 
 ## Channel Structure
 
-Target documentation structure:
+Target implementation and documentation structure:
 
 ```text
-communications/
+backend/src/domains/communications/
   conversations/
   messages/
   participants/
@@ -63,15 +67,17 @@ communications/
   search/
   realtime/
 
-channels/
-  email/
+backend/src/integrations/
+  mail/
   telegram/
   whatsapp/
 ```
 
 The current repository has `docs/mail`, `docs/telegram` and `docs/whatsapp`.
 Those directories should be interpreted as channel capability specs, not as
-separate product domains.
+separate product domains. Mail, Telegram and WhatsApp provider/runtime panels
+belong under integration modules and may be embedded into the Communications
+workspace.
 
 ## Shared Abstractions
 
@@ -142,13 +148,30 @@ Rules:
 
 ## API And UI Boundary
 
-Current implementation has separate UI surfaces for Communications, Telegram
-and WhatsApp. That is acceptable as an operating surface. It must not imply that
-Telegram or WhatsApp own independent durable memory.
+The only user-facing communication workspace is `/communications`. Channel
+filters, account setup panels, runtime status panels and capability panels may
+appear there, but Telegram, WhatsApp and Mail do not get top-level product
+routes.
+
+Public channel-scoped API routes use:
+
+```text
+/api/v1/communications/mail/*
+/api/v1/communications/telegram/*
+/api/v1/communications/whatsapp/*
+```
+
+Removed public route families:
+
+```text
+/api/v1/<legacy-provider-root>/*
+```
+
+where `<legacy-provider-root>` was `email-accounts`, `telegram` or `whatsapp`.
 
 Frontend channel work must use:
 
-- domain API clients;
+- Communications-scoped API clients and query keys;
 - TanStack Query for server state;
 - shared realtime bootstrap;
 - backend capability states before exposing provider operations;

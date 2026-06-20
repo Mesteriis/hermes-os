@@ -306,8 +306,8 @@ Extended parity deferred outside base closure:
 Current frontend client:
 
 ```text
-frontend/src/domains/telegram/api/telegram.ts
-frontend/src/domains/telegram/queries/useTelegramQuery.ts
+frontend/src/integrations/telegram/api/telegram.ts
+frontend/src/integrations/telegram/queries/useTelegramQuery.ts
 ```
 
 Covered:

@@ -13,7 +13,7 @@ use tempfile::tempdir;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };

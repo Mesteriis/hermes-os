@@ -93,7 +93,7 @@
 | Settings page | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Account setup | ❌ | ❌ | ❌ | ❌ | ❌ |
 
-### 2.7 Telegram Domain
+### 2.7 Telegram Channel
 
 | Компонент | Loading | Empty | Error | Skeleton | Success/Transition |
 |-----------|---------|-------|-------|----------|-------------------|
@@ -130,12 +130,12 @@
 | Store | Файл | Статус |
 |-------|------|--------|
 | Personas | `frontend/src/domains/personas/stores/` | ❌ Отсутствует |
-| WhatsApp | `frontend/src/domains/whatsapp/stores/` | ❌ Отсутствует |
+| WhatsApp | `frontend/src/integrations/whatsapp/stores/` | ❌ Отсутствует |
 | Organizations | `frontend/src/domains/organizations/stores/` | ❌ Отсутствует |
 | Documents | `frontend/src/domains/documents/stores/` | ❌ Отсутствует |
 | Notes | `frontend/src/domains/notes/stores/` | ❌ Отсутствует |
 | Communications | `frontend/src/domains/communications/stores/communications.ts` | ✅ Существует |
-| Telegram | `frontend/src/domains/telegram/stores/telegram.ts` | ✅ Существует |
+| Telegram | `frontend/src/integrations/telegram/stores/telegram.ts` | ✅ Существует |
 | Knowledge | `frontend/src/domains/knowledge/stores/knowledge.ts` | ✅ Существует |
 | Review | `frontend/src/domains/review/stores/review.ts` | ✅ Существует |
 | Tasks | `frontend/src/domains/tasks/stores/tasks.ts` | ✅ Существует |

@@ -1,8 +1,6 @@
-use hermes_hub_backend::domains::obligations::{
-    ObligationEntityKind, ObligationEvidenceSourceKind, ObligationReviewState,
-};
 use hermes_hub_backend::engines::obligation::{
-    ObligationCandidateKind, ObligationEngine, ObligationExtractionInput,
+    ObligationCandidateKind, ObligationEngine, ObligationEntityKind, ObligationEvidenceSourceKind,
+    ObligationExtractionInput, ObligationReviewState,
 };
 
 #[test]
@@ -54,14 +52,6 @@ fn obligation_engine_detects_owner_promise_from_communication() {
     );
     assert_eq!(candidate.evidence_source_id, "message:proposal-commitment");
 
-    let (obligation, evidence) = candidate.to_obligation_draft();
-    assert_eq!(obligation.statement, "send the revised project proposal");
-    assert_eq!(obligation.review_state, ObligationReviewState::Suggested);
-    assert_eq!(
-        evidence.source_kind,
-        ObligationEvidenceSourceKind::Communication
-    );
-    assert_eq!(evidence.source_id, "message:proposal-commitment");
     assert_eq!(
         result.task_candidates[0].statement,
         "send the revised project proposal"

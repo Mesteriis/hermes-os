@@ -1,9 +1,8 @@
-pub(crate) mod api_support;
 pub mod calendar;
+pub mod communications;
 pub mod decisions;
 pub mod documents;
 pub mod graph;
-pub mod mail;
 pub mod obligations;
 pub mod organizations;
 pub mod persons;

@@ -8,7 +8,7 @@ describe('CommunicationsConversationList boundary', () => {
 			'utf8'
 		)
 
-		expect(source).toContain('threads: MailThreadSummary[]')
+		expect(source).toContain('threads: CommunicationThreadSummary[]')
 		expect(source).toContain('selectedThreadId: string')
 		expect(source).toContain('accountId: string')
 		expect(source).toContain('v-for="thread in threads"')
@@ -17,7 +17,7 @@ describe('CommunicationsConversationList boundary', () => {
 		expect(source).toContain('handleThreadPrefetch')
 		expect(source).toContain('@mouseenter="handleThreadPrefetch(thread)"')
 		expect(source).toContain('@focus="handleThreadPrefetch(thread)"')
-		expect(source).toContain("selectThread: [thread: MailThreadSummary]")
+		expect(source).toContain("selectThread: [thread: CommunicationThreadSummary]")
 		expect(source).toContain("loadMoreThreads: []")
 		expect(source).toContain('hasThreadNextPage')
 		expect(source).not.toMatch(/\bfetch\s*\(/)

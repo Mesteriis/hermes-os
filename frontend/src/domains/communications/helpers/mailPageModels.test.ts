@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { CommunicationMessageSummary, EmailDraft, ThreadMessage } from '../types/communications'
+import type { CommunicationMessageSummary, CommunicationDraft, ThreadMessage } from '../types/communications'
 import {
   aiSummaryContractFromMetadata,
   composeFormToSendRequest,
   draftToComposeForm,
-  emptyMailMessageInsight,
+  emptyCommunicationMessageInsight,
   mailMessageLabelsFromMetadata,
   mailMessageSnoozeUntilFromMetadata,
   mailKnowledgeSectionsFromSummaryContract,
@@ -45,7 +45,7 @@ function message(overrides: Partial<CommunicationMessageSummary> = {}): Communic
   }
 }
 
-function draft(): EmailDraft {
+function draft(): CommunicationDraft {
   return {
     draft_id: 'draft-1',
     account_id: 'account-1',
@@ -92,7 +92,7 @@ function threadMessage(overrides: Partial<ThreadMessage> = {}): ThreadMessage {
 
 describe('mail page model helpers', () => {
   it('creates an empty message insight shell for the selected message', () => {
-    expect(emptyMailMessageInsight('msg-1')).toMatchObject({
+    expect(emptyCommunicationMessageInsight('msg-1')).toMatchObject({
       messageId: 'msg-1',
       tasks: [],
       notes: [],
@@ -209,7 +209,7 @@ describe('mail page model helpers', () => {
 
   it('builds review sections for extracted mail task and note candidates', () => {
     const sections = mailExtractionSectionsFromInsight({
-      ...emptyMailMessageInsight('msg-1'),
+      ...emptyCommunicationMessageInsight('msg-1'),
       tasks: [
         {
           title: 'Send signed amendment',

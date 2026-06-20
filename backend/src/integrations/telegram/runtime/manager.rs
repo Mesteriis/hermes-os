@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::domains::mail::background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
-use crate::domains::mail::storage::MailStorageStore;
 use crate::integrations::telegram::client::TelegramStore;
 use crate::platform::config::AppConfig;
 use crate::platform::events::EventBus;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 use crate::vault::{CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore};
+use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use sqlx::PgPool;
 
 use super::state::TelegramRuntimeActorHandle;
@@ -47,7 +46,6 @@ pub(crate) struct TelegramMediaDownloadContext<'a, S: SecretResolver + Sync + ?S
     pub(crate) provider_account_store: &'a CommunicationProviderAccountStore,
     pub(crate) provider_secret_binding_store: &'a CommunicationProviderSecretBindingStore,
     pub(crate) telegram_store: &'a TelegramStore,
-    pub(crate) mail_store: &'a MailStorageStore,
     pub(crate) secret_store: &'a SecretReferenceStore,
     pub(crate) secret_resolver: &'a S,
     pub(crate) config: &'a AppConfig,

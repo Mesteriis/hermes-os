@@ -8,7 +8,6 @@ use super::materialization::{
     sync_favorite_preference_in_transaction, sync_notes_memory_card_in_transaction,
 };
 use super::models::EnrichedPerson;
-use super::relationship_materialization::materialize_trust_relationship_in_transaction;
 use super::rows::{ENRICHED_PERSON_COLUMNS, row_to_enriched};
 use super::store::PersonEnrichmentStore;
 
@@ -43,8 +42,6 @@ impl PersonEnrichmentStore {
             return Err(PersonEnrichmentError::NotFound);
         };
         let enriched = row_to_enriched(row)?;
-        materialize_trust_relationship_in_transaction(&mut transaction, &enriched, fingerprint)
-            .await?;
         transaction.commit().await?;
 
         Ok(enriched)
@@ -81,8 +78,6 @@ impl PersonEnrichmentStore {
             return Err(PersonEnrichmentError::NotFound);
         };
         let enriched = row_to_enriched(row)?;
-        materialize_trust_relationship_in_transaction(&mut transaction, &enriched, fingerprint)
-            .await?;
         link_persons_entity_in_transaction(
             &mut transaction,
             observation_id,

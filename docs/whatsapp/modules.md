@@ -56,10 +56,10 @@ them with this package.
 
 | Module | Target files | Назначение | Status |
 |---|---|---|---|
-| `page` | `frontend/src/domains/whatsapp/views/` | Desktop WhatsApp workbench | MISSING |
-| `api` | `frontend/src/domains/whatsapp/api/` | Typed backend route calls | MISSING |
-| `queries` | `frontend/src/domains/whatsapp/queries/` | TanStack Query hooks/mutations | MISSING |
-| `store` | `frontend/src/domains/whatsapp/stores/` | Local UI state, filters and selected context | MISSING |
+| `page` | `frontend/src/integrations/whatsapp/views/` | Desktop WhatsApp workbench | MISSING |
+| `api` | `frontend/src/integrations/whatsapp/api/` | Typed backend route calls | MISSING |
+| `queries` | `frontend/src/integrations/whatsapp/queries/` | TanStack Query hooks/mutations | MISSING |
+| `store` | `frontend/src/integrations/whatsapp/stores/` | Local UI state, filters and selected context | MISSING |
 | `account_setup` | WhatsApp account/session components | Account setup, link flow, logout/remove and runtime status | MISSING |
 | `dialogs` | Dialog list components | Private/group/community/broadcast/status list | MISSING |
 | `messages` | Message thread components | Source-backed timeline, reply/forward/delete/reaction UI | MISSING |

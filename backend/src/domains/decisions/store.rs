@@ -10,7 +10,6 @@ use super::errors::DecisionStoreError;
 use super::evidence::{
     link_decision_review_transition_in_transaction, link_decision_support_in_transaction,
 };
-use super::graph_projection::project_decision_graph_in_transaction;
 use super::ids::{decision_id, evidence_id};
 use super::models::{
     Decision, DecisionEntityKind, DecisionReviewState, NewDecision, NewDecisionEvidence,
@@ -204,9 +203,6 @@ impl DecisionStore {
             .execute(&mut **transaction)
             .await?;
         }
-
-        project_decision_graph_in_transaction(transaction, &stored, evidence, impacted_entities)
-            .await?;
 
         Ok(stored)
     }

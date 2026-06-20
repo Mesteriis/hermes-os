@@ -2,17 +2,17 @@ use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{TimeZone, Utc};
+use hermes_hub_backend::domains::communications::core::{
+    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
+};
+use hermes_hub_backend::domains::communications::messages::{
+    MessageProjectionStore, project_raw_email_message,
+};
 use hermes_hub_backend::domains::decisions::{
     DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState, DecisionStatus,
     DecisionStore, DecisionStoreError, NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
 };
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
-use hermes_hub_backend::domains::mail::core::{
-    CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
-};
-use hermes_hub_backend::domains::mail::messages::{
-    MessageProjectionStore, project_raw_email_message,
-};
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::{Value, json};
 use sqlx::Row;

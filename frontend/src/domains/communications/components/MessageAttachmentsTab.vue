@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { FlexRender, getCoreRowModel, useVueTable } from '@tanstack/vue-table'
 import Icon from '../../../shared/ui/Icon.vue'
-import type { MailMessageDetailResponse } from '../types/communications'
+import type { CommunicationMessageDetailResponse } from '../types/communications'
 import { attachmentIcon } from '../stores/communications'
 import {
   useAttachmentArchiveInspectionQuery,
@@ -21,7 +21,7 @@ import {
 } from './attachmentTable'
 
 const props = defineProps<{
-  detail: MailMessageDetailResponse | null
+  detail: CommunicationMessageDetailResponse | null
 }>()
 
 const attachments = computed(() => props.detail?.attachments ?? [])

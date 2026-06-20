@@ -2,11 +2,11 @@
 import { computed } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
-import type { MailMessageInsight } from '../types/communications'
+import type { CommunicationMessageInsight } from '../types/communications'
 
 const props = defineProps<{
   messageId: string | null
-  insight: MailMessageInsight | null
+  insight: CommunicationMessageInsight | null
 }>()
 
 const emit = defineEmits<{

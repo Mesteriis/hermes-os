@@ -10,7 +10,7 @@
 ## Base
 
 ```text
-/api/v1/telegram
+/api/v1/communications/telegram
 ```
 
 ## Navigation

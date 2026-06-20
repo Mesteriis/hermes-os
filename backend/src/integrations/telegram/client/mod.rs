@@ -12,7 +12,6 @@ mod messages;
 pub mod models;
 mod participant_roster;
 pub mod participants;
-mod projection;
 mod reactions;
 mod references;
 pub mod rows;
@@ -57,13 +56,13 @@ pub use self::models::{
     TelegramTopicCreateRequest, TelegramTopicLifecycleResponse, TelegramTopicListResponse,
 };
 pub use self::participant_roster::mark_absent_members_from_exhaustive_roster;
-pub use self::projection::project_raw_telegram_message;
 pub(in crate::integrations::telegram) use self::reactions::{
     TelegramReactionMessageRef, sync_provider_reactions,
 };
 pub use self::reactions::{add_reaction, reconcile_reaction_commands_from_provider_message_state};
 pub use self::store::TelegramStore;
 pub use self::vault::TelegramSecretVault;
+pub type ProviderCommunicationMessage = TelegramMessage;
 
 pub(crate) use self::identifiers::{
     ensure_telegram_account_active, telegram_chat_id, telegram_text_preview_hash,

@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   MAIL_MESSAGE_DRAG_TYPE,
-  createMailMessageDragPayload,
-  hasMailMessageDragType,
-  parseMailMessageDragPayload
+  createCommunicationMessageDragPayload,
+  hasCommunicationMessageDragType,
+  parseCommunicationMessageDragPayload
 } from './mailDragDrop'
 
 describe('mail drag/drop helpers', () => {
   it('serializes and parses selected mail message drag payloads', () => {
-    const payload = createMailMessageDragPayload(' msg-1 ', [' msg-2 ', 'msg-1', ''])
+    const payload = createCommunicationMessageDragPayload(' msg-1 ', [' msg-2 ', 'msg-1', ''])
 
-    expect(parseMailMessageDragPayload(payload)).toEqual({
+    expect(parseCommunicationMessageDragPayload(payload)).toEqual({
       kind: 'mail-message-selection',
       message_id: 'msg-1',
       message_ids: ['msg-1', 'msg-2']
@@ -20,7 +20,7 @@ describe('mail drag/drop helpers', () => {
   it('keeps compatibility with legacy single-message payloads', () => {
     const payload = JSON.stringify({ kind: 'mail-message-selection', message_id: 'msg-1' })
 
-    expect(parseMailMessageDragPayload(payload)).toEqual({
+    expect(parseCommunicationMessageDragPayload(payload)).toEqual({
       kind: 'mail-message-selection',
       message_id: 'msg-1',
       message_ids: ['msg-1']
@@ -28,15 +28,15 @@ describe('mail drag/drop helpers', () => {
   })
 
   it('rejects malformed drag payloads', () => {
-    expect(parseMailMessageDragPayload('')).toBeNull()
-    expect(parseMailMessageDragPayload('not-json')).toBeNull()
-    expect(parseMailMessageDragPayload(JSON.stringify({ kind: 'other', message_id: 'msg-1' }))).toBeNull()
-    expect(parseMailMessageDragPayload(JSON.stringify({ kind: 'mail-message-selection', message_id: '' }))).toBeNull()
-    expect(parseMailMessageDragPayload(JSON.stringify({ kind: 'mail-message-selection', message_id: 'msg-1', message_ids: [''] }))).toBeNull()
+    expect(parseCommunicationMessageDragPayload('')).toBeNull()
+    expect(parseCommunicationMessageDragPayload('not-json')).toBeNull()
+    expect(parseCommunicationMessageDragPayload(JSON.stringify({ kind: 'other', message_id: 'msg-1' }))).toBeNull()
+    expect(parseCommunicationMessageDragPayload(JSON.stringify({ kind: 'mail-message-selection', message_id: '' }))).toBeNull()
+    expect(parseCommunicationMessageDragPayload(JSON.stringify({ kind: 'mail-message-selection', message_id: 'msg-1', message_ids: [''] }))).toBeNull()
   })
 
   it('detects the custom Hermes mail drag type', () => {
-    expect(hasMailMessageDragType([MAIL_MESSAGE_DRAG_TYPE, 'text/plain'])).toBe(true)
-    expect(hasMailMessageDragType(['text/plain'])).toBe(false)
+    expect(hasCommunicationMessageDragType([MAIL_MESSAGE_DRAG_TYPE, 'text/plain'])).toBe(true)
+    expect(hasCommunicationMessageDragType(['text/plain'])).toBe(false)
   })
 })

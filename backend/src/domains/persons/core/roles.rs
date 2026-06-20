@@ -4,12 +4,6 @@ use serde_json::json;
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
-    RelationshipStore,
-};
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
-
 use super::errors::PersonCoreError;
 use super::link_persons_entity_in_transaction;
 
@@ -92,14 +86,6 @@ impl PersonRoleStore {
             )
             .await?;
         }
-
-        materialize_role_relationship_in_transaction(
-            &mut transaction,
-            &role,
-            RelationshipReviewState::UserConfirmed,
-            observation_id,
-        )
-        .await?;
         transaction.commit().await?;
 
         Ok(role)
@@ -138,28 +124,20 @@ impl PersonRoleStore {
 
         if let Some(existing_role) = existing_role
             && removed
+            && let Some(observation_id) = observation_id
         {
-            if let Some(observation_id) = observation_id {
-                link_persons_entity_in_transaction(
-                    &mut transaction,
-                    observation_id,
-                    "role",
-                    format!("{person_id}:{role}"),
-                    None,
-                    Some(json!({
-                        "person_id": person_id,
-                        "role": role,
-                        "action": "delete",
-                        "deleted": removed,
-                    })),
-                )
-                .await?;
-            }
-            materialize_role_relationship_in_transaction(
+            link_persons_entity_in_transaction(
                 &mut transaction,
-                &existing_role,
-                RelationshipReviewState::UserRejected,
                 observation_id,
+                "role",
+                format!("{person_id}:{role}"),
+                None,
+                Some(json!({
+                    "person_id": existing_role.person_id,
+                    "role": existing_role.role,
+                    "action": "delete",
+                    "deleted": removed,
+                })),
             )
             .await?;
         }
@@ -168,78 +146,6 @@ impl PersonRoleStore {
 
         Ok(removed)
     }
-}
-
-async fn materialize_role_relationship_in_transaction(
-    transaction: &mut Transaction<'_, Postgres>,
-    role: &PersonRole,
-    review_state: RelationshipReviewState,
-    observation_id: Option<&str>,
-) -> Result<(), PersonCoreError> {
-    let relationship = NewRelationship {
-        source_entity_kind: RelationshipEntityKind::Persona,
-        source_entity_id: role.person_id.clone(),
-        target_entity_kind: RelationshipEntityKind::Knowledge,
-        target_entity_id: person_role_knowledge_id(&role.role),
-        relationship_type: "has_role".to_owned(),
-        trust_score: 1.0,
-        strength_score: 0.7,
-        confidence: 1.0,
-        review_state,
-        valid_from: Some(role.assigned_at),
-        valid_to: None,
-        metadata: json!({
-            "compatibility_source": "person_roles",
-            "compatibility_record_id": role.id,
-            "role": role.role,
-            "assigned_by": role.assigned_by,
-            "assigned_at": role.assigned_at,
-        }),
-    };
-    let observation_id = match observation_id {
-        Some(observation_id) => observation_id.to_owned(),
-        None => {
-            ObservationStore::capture_in_transaction(
-                transaction,
-                &NewObservation::new(
-                    "PERSON_ROLE",
-                    ObservationOriginKind::LocalRuntime,
-                    Utc::now(),
-                    json!({
-                        "component": "person_roles",
-                        "person_id": role.person_id,
-                        "role_id": role.id,
-                        "role": role.role,
-                        "assigned_by": role.assigned_by,
-                        "assigned_at": role.assigned_at,
-                    }),
-                    format!("person-role://{}/{}", role.person_id, role.id),
-                )
-                .provenance(json!({
-                    "pipeline": "person_roles",
-                    "role_id": role.id,
-                    "review_state": review_state.as_str(),
-                })),
-            )
-            .await?
-            .observation_id
-        }
-    };
-
-    let evidence = NewRelationshipEvidence::observation(observation_id)
-        .excerpt(role.role.clone())
-        .metadata(json!({
-            "compatibility_source": "person_roles",
-            "person_id": role.person_id,
-            "role": role.role,
-            "assigned_by": role.assigned_by,
-            "review_state": review_state.as_str(),
-        }));
-
-    RelationshipStore::upsert_with_evidence_in_transaction(transaction, &relationship, &[evidence])
-        .await?;
-
-    Ok(())
 }
 
 fn row_to_role(row: PgRow) -> Result<PersonRole, PersonCoreError> {

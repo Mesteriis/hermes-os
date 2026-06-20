@@ -8,7 +8,7 @@ describe('ThreadConversationView boundary', () => {
       'utf8'
     )
 
-    expect(source).toContain('thread: MailThreadSummary')
+    expect(source).toContain('thread: CommunicationThreadSummary')
     expect(source).toContain('messages: ThreadMessage[]')
     expect(source).toContain('isSendingReply: boolean')
     expect(source).toContain('v-for="message in messages"')

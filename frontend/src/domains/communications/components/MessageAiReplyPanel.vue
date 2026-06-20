@@ -2,12 +2,12 @@
 import { computed, ref } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
-import type { AiReplyResponse, MailMessageInsight } from '../types/communications'
+import type { AiReplyResponse, CommunicationMessageInsight } from '../types/communications'
 import { useGenerateAiReplyVariantsMutation } from '../queries/useCommunicationsQuery'
 
 const props = defineProps<{
   messageId: string | null
-  insight: MailMessageInsight | null
+  insight: CommunicationMessageInsight | null
 }>()
 
 const emit = defineEmits<{

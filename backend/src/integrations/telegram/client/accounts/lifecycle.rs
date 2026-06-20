@@ -20,7 +20,8 @@ impl TelegramStore {
     ) -> Result<Vec<TelegramAccount>, TelegramError> {
         let accounts = CommunicationProviderAccountStore::new(self.pool.clone())
             .list()
-            .await?;
+            .await
+            .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?;
 
         Ok(accounts
             .into_iter()
@@ -85,7 +86,8 @@ impl TelegramStore {
                 "telegram.accounts.lifecycle.update",
                 lifecycle_state,
             )
-            .await?
+            .await
+            .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?
             .ok_or_else(|| {
                 TelegramError::InvalidRequest(format!(
                     "Telegram account `{}` is not configured",

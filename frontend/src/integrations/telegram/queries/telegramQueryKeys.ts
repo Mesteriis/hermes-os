@@ -1,0 +1,16 @@
+export const telegramQueryKeys = {
+  capabilities: ['integrations', 'telegram', 'capabilities'] as const,
+  accountCapabilities: ['integrations', 'telegram', 'account-capabilities'] as const,
+  accounts: ['integrations', 'telegram', 'accounts'] as const,
+  chats: ['integrations', 'telegram', 'chats'] as const,
+  folders: ['integrations', 'telegram', 'folders'] as const,
+  chatDetail: ['integrations', 'telegram', 'chat-detail'] as const,
+  chatMembers: ['integrations', 'telegram', 'chat-members'] as const,
+  messages: ['integrations', 'telegram', 'messages'] as const,
+  runtime: ['integrations', 'telegram', 'runtime'] as const,
+  calls: ['integrations', 'telegram', 'calls'] as const,
+  callTranscript: ['integrations', 'telegram', 'call-transcript'] as const,
+  topics: ['integrations', 'telegram', 'topics'] as const,
+  topicMessages: ['integrations', 'telegram', 'topic-messages'] as const,
+  topicSearch: ['integrations', 'telegram', 'topic-search'] as const,
+}

@@ -94,9 +94,10 @@ A Communication is not just an inbox item. It is evidence that can produce
 knowledge, relationships, obligations, decisions, tasks and project context.
 
 Provider-specific production behavior stays under channel capability specs. The
-current Telegram domain audit and target matrix are
-[Telegram Domain](../telegram/README.md) and
-[Telegram Gap Analysis](../telegram/gap-analysis.md), governed by ADR-0091.
+current Telegram channel capability matrix is
+[Telegram Channel Capability Spec](../telegram/README.md) and
+[Telegram Gap Analysis](../telegram/gap-analysis.md), governed by ADR-0091 and
+ADR-0097.
 
 Communications are primary, but they are not the only source of evidence.
 Documents, calendar events, manual owner input, imported files and provider
@@ -273,11 +274,11 @@ Implemented route groups include:
 - `/api/v1/tasks/*` and `/api/v1/task-candidates/*`;
 - `/api/v1/settings/*`;
 - `/api/v1/ai/*`;
-- `/api/v1/telegram/*`;
-- `/api/v1/whatsapp/*`;
+- `/api/v1/communications/telegram/*`;
+- `/api/v1/communications/whatsapp/*`;
 - `/api/v1/policies/*`;
 - `/api/v1/calls/*`;
-- `/api/v1/email-accounts/*`;
+- `/api/v1/communications/mail/accounts/*`;
 - `/api/v1/events/*` and `/api/v1/audit/events`.
 
 This route list is implementation evidence only. It is not the target product
@@ -318,7 +319,7 @@ target product model.
 | Owner Persona partially implemented | Migration `0059` adds `is_self` uniqueness and `person_type` constraints on the compatibility `persons` table, and GET/PUT `/api/v1/persons/owner` exposes the compatibility Owner Persona route. Agents and UI still need to consistently route owner-scoped context through that Owner Persona. | Wire agent attribution and context assembly to the Owner Persona before expanding autonomous actions. |
 | First-class Relationships partially implemented | Migrations `0060`, `0061` and `0068` plus `backend/src/domains/relationships/` add first-class Relationship persistence with evidence, trust score, strength score, confidence, review state, graph projection for all current Relationship entity kinds, and guarded entity/global review routes. Manual/API person roles now materialize source-backed `has_role` Relationships from Persona to role Knowledge anchors and demote those Relationships to `user_rejected` when the role is removed. Manual/API and email-sync organization contact links now materialize source-backed `member_of` Relationships from Persona to Organization. Manual task relations now materialize source-backed Relationships from Task to known target entity kinds. Explicit project link reviews now materialize source-backed Relationships from Project to reviewed Communication or Document and demote the candidate back to `suggested` when explicit review is reset. The Personas workspace and cross-domain Review workspace include suggested Relationship review, and the Review service owns confirm/reject routing for Relationship review items. Downstream engine projections remain incomplete. | Migrate remaining relationship-shaped read-model semantics behind compatibility boundaries and keep review routing in the Review workspace. |
 | Polygraph engine partially implemented | ADR-0087, migration `0062`, `backend/src/engines/consistency.rs` and `backend/src/engines/consistency_api.rs` add structured direct-contradiction detection, deterministic structured and limited natural-language `location` / `status` claim extraction from Communication/Document/Event evidence text, reviewable `ContradictionObservation` persistence and guarded backend review routes. `ContradictionObservationStore::refresh_deterministic_observations` now compares active `person_facts` Memory claims with claims from projected email message subject/body evidence matched by Persona email sender, projected Telegram/WhatsApp message evidence matched through active channel identities and provider `sender_id`, imported Document title/extracted-text evidence that references the Persona email, meeting-note content linked through event participants and successful call transcript text linked through active Telegram identity. The Knowledge workspace and cross-domain Review workspace include Polygraph review, and the Review service owns confirm/reject routing for contradiction observations. Broad natural-language extraction and broader provider evidence remain incomplete. | Expand ingestion wiring to broader provider evidence, then add reviewed-outcome semantics without automatic memory overwrite. |
-| Communications still mail-heavy | Many modules are email-specific under `domains/mail`. | Keep provider-specific modules but document Communications as the product domain and email as one channel. |
+| Communications still mail-heavy | Many modules are email-specific under `domains/communications`. | Keep provider-specific modules but document Communications as the product domain and email as one channel. |
 | Telegram production capability matrix is not implemented end-to-end | Current Telegram foundation covers account setup, runtime status/start, chat/history sync, manual send, media download facade, policy dry-runs, call metadata and fixture transcripts. ADR-0091 and `docs/telegram/` define the broader production target for accounts, sessions, proxies, chats, messages, tombstones, history, attachments, calls, offline, export and desktop UX. | Deliver Telegram in gated slices. Do not expose provider-write, destructive, call, export, proxy or session import/export features as available until capability state, storage, audit, UI and validation exist. |
 | Engine boundaries are partial | Search, automation, Polygraph and Obligation have baseline engine modules. Memory, Timeline, Trust, Risk and Enrichment remain partly embedded in domain modules. | Continue extracting shared engine behavior only behind dedicated plans and review workflows. |
 | Knowledge model incomplete | Knowledge graph exists, but Knowledge as reviewed understanding is not fully documented or implemented as a lifecycle. | Define Knowledge domain spec and review states before implementation work. |

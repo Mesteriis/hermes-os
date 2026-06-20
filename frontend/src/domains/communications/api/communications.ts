@@ -1,6 +1,6 @@
 export {
-  fetchMailMessages,
-  fetchMailMessage,
+  fetchCommunicationMessages,
+  fetchCommunicationMessage,
   transitionMessageWorkflowState,
   fetchMessageStateCounts,
   trashMessage,
@@ -58,7 +58,7 @@ export {
   updateMailSyncSettings,
   runMailSyncNow,
   runMailFullResync
-} from './syncApi'
+} from '../../../integrations/mail/api/syncApi'
 export { sendEmail, redirectMessage } from './sendApi'
 export {
   fetchOutboxItems,
@@ -90,4 +90,4 @@ export {
   extractMessageTasks,
   extractMessageNotes
 } from './messageApi'
-export type { EmailSearchResponse } from '../types/communications'
+export type { CommunicationSearchResponse } from '../types/communications'

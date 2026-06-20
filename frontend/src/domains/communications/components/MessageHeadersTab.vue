@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { MailMessageDetailResponse } from '../types/communications'
+import type { CommunicationMessageDetailResponse } from '../types/communications'
 
 const props = defineProps<{
-  detail: MailMessageDetailResponse | null
+  detail: CommunicationMessageDetailResponse | null
 }>()
 
 const message = props.detail?.message ?? null

@@ -49,7 +49,7 @@ Search results must expose:
 ## Current Implementation Evidence
 
 Current implementation includes `backend/src/engines/search.rs` and
-`backend/src/domains/mail/search.rs`. Existing architecture also names Tantivy as
+`backend/src/domains/communications/search.rs`. Existing architecture also names Tantivy as
 the full text search foundation.
 
 ## Migration Plan

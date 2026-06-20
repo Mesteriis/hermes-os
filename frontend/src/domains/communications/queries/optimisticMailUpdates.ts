@@ -2,12 +2,12 @@ import type { InfiniteData } from '@tanstack/vue-query'
 import type {
 	BulkMessageActionRequest,
 	CommunicationMessageSummary,
-	EmailDraft,
-	EmailOutboxItem,
+	CommunicationDraft,
+	CommunicationOutboxItem,
 	LocalMessageState,
-	MailMessageDetailItem,
-	MailMessageDetailResponse,
-	MailMessagesResponse,
+	CommunicationMessageDetailItem,
+	CommunicationMessageDetailResponse,
+	CommunicationMessagesResponse,
 	WorkflowState
 } from '../types/communications'
 
@@ -30,10 +30,10 @@ type MailListFilters = {
 }
 
 export function applyBulkMessageActionToMailList(
-	data: InfiniteData<MailMessagesResponse> | undefined,
+	data: InfiniteData<CommunicationMessagesResponse> | undefined,
 	request: BulkMessageActionRequest,
 	queryKey?: readonly unknown[]
-): InfiniteData<MailMessagesResponse> | undefined {
+): InfiniteData<CommunicationMessagesResponse> | undefined {
 	if (!data) return data
 
 	const targetIds = new Set(request.message_ids)
@@ -75,9 +75,9 @@ export function applyBulkMessageActionToMailList(
 }
 
 export function applyBulkMessageActionToMailDetail(
-	data: MailMessageDetailResponse | null | undefined,
+	data: CommunicationMessageDetailResponse | null | undefined,
 	request: BulkMessageActionRequest
-): MailMessageDetailResponse | null | undefined {
+): CommunicationMessageDetailResponse | null | undefined {
 	if (!data || !data.message || !request.message_ids.includes(data.message.message_id)) return data
 
 	const updatedMessage = applyBulkMessageActionToDetailItem(data.message, request)
@@ -86,9 +86,9 @@ export function applyBulkMessageActionToMailDetail(
 }
 
 export function upsertDraftInDraftList(
-	drafts: EmailDraft[] | undefined,
-	draft: EmailDraft
-): EmailDraft[] | undefined {
+	drafts: CommunicationDraft[] | undefined,
+	draft: CommunicationDraft
+): CommunicationDraft[] | undefined {
 	if (!drafts) return drafts
 
 	const index = drafts.findIndex((item) => item.draft_id === draft.draft_id)
@@ -100,18 +100,18 @@ export function upsertDraftInDraftList(
 }
 
 export function removeDraftFromDraftList(
-	drafts: EmailDraft[] | undefined,
+	drafts: CommunicationDraft[] | undefined,
 	draftId: string
-): EmailDraft[] | undefined {
+): CommunicationDraft[] | undefined {
 	if (!drafts) return drafts
 	const next = drafts.filter((draft) => draft.draft_id !== draftId)
 	return next.length === drafts.length ? drafts : next
 }
 
 export function upsertOutboxItem(
-	items: EmailOutboxItem[] | undefined,
-	item: EmailOutboxItem
-): EmailOutboxItem[] | undefined {
+	items: CommunicationOutboxItem[] | undefined,
+	item: CommunicationOutboxItem
+): CommunicationOutboxItem[] | undefined {
 	if (!items) return items
 
 	const index = items.findIndex((existing) => existing.outbox_id === item.outbox_id)
@@ -123,9 +123,9 @@ export function upsertOutboxItem(
 }
 
 export function markOutboxItemCanceled(
-	items: EmailOutboxItem[] | undefined,
+	items: CommunicationOutboxItem[] | undefined,
 	outboxId: string
-): EmailOutboxItem[] | undefined {
+): CommunicationOutboxItem[] | undefined {
 	if (!items) return items
 
 	let changed = false
@@ -153,9 +153,9 @@ function applyBulkMessageActionToSummary(
 }
 
 function applyBulkMessageActionToDetailItem(
-	message: MailMessageDetailItem,
+	message: CommunicationMessageDetailItem,
 	request: BulkMessageActionRequest
-): MailMessageDetailItem {
+): CommunicationMessageDetailItem {
 	const updated = applyBulkMessageActionToBaseMessage(message, request)
 	return updated === message ? message : { ...message, ...updated }
 }

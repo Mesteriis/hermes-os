@@ -19,6 +19,9 @@ Communication
 Hermes is not an email client or messenger. Provider surfaces are capture and
 interaction boundaries for the Personal Memory System.
 
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
+
 ## Responsibilities
 
 The Communications domain owns:
@@ -60,7 +63,7 @@ Product workflows operate over Communication, Conversation, Participant,
 Attachment, Event and Context.
 
 Telegram provider-specific production behavior is documented in
-[Telegram Domain Audit](../telegram/README.md). That document set is a
+[Telegram Channel Capability Spec](../telegram/README.md). That document set is a
 channel capability spec, not a separate domain.
 
 ## Source Evidence
@@ -111,26 +114,28 @@ Communications use:
 
 Current backend implementation is split across:
 
-- `backend/src/domains/mail/*`;
-- `backend/src/integrations/gmail.rs`;
-- `backend/src/integrations/telegram.rs`;
-- `backend/src/integrations/whatsapp.rs`;
+- `backend/src/domains/communications/*`;
+- `backend/src/integrations/mail/gmail/*`;
+- `backend/src/integrations/telegram/*`;
+- `backend/src/integrations/whatsapp/*`;
 - calls and communication-related routes registered in
   `backend/src/app/router.rs`;
 - migrations `0005`, `0007`, `0011`, `0012`, `0020`, `0021`, `0025` through
-  `0032`, `0055` and `0056`.
+  `0032`, `0055`, `0056` and `0149`.
 
-Current UI includes Communications, Telegram and WhatsApp surfaces. The backend
-still has email-heavy module names because email was implemented first.
+Current UI uses `/communications` as the single communication workspace.
+Telegram, WhatsApp and Mail appear as filters, account setup panels, runtime
+status panels or capability panels. The backend still has some email-heavy
+compatibility names because email was implemented first.
 
 ## Migration Plan
 
-1. Keep provider-specific code stable until a separate implementation plan
-   defines safe renames.
-2. Document new behavior under Communications, not Mail.
-3. Treat email, Telegram, WhatsApp, calls and meetings as channel-specific
+1. Keep provider-specific code inside integration modules.
+2. Document new behavior under Communications, not Mail, Telegram or WhatsApp
+   domains.
+3. Treat mail, Telegram, WhatsApp, calls and meetings as channel-specific
    adapters feeding the same Communication model.
-4. Add explicit source evidence and extraction vocabulary to future API and
-   schema plans.
+4. Use `/api/v1/communications/{mail,telegram,whatsapp}/*` for public
+   channel-scoped communication APIs.
 5. Introduce Consistency / Contradiction Engine review output before any
    automatic memory overwrite behavior.

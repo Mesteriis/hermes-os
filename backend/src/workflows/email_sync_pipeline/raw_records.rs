@@ -1,10 +1,10 @@
-use crate::domains::mail::core::StoredRawCommunicationRecord;
-use crate::domains::mail::ingestion::analyze_ingested_message;
-use crate::domains::mail::messages::{
+use crate::domains::communications::core::StoredRawCommunicationRecord;
+use crate::domains::communications::ingestion::analyze_ingested_message;
+use crate::domains::communications::messages::{
     MessageProjectionStore, ProjectedMessage, parse_raw_email_message_from_blob,
     project_parsed_raw_email_message,
 };
-use crate::domains::mail::storage::{
+use crate::domains::communications::storage::{
     AttachmentSafetyScanner, LocalMailBlobStore, MailStorageStore,
 };
 

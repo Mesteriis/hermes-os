@@ -4,7 +4,6 @@ use sqlx::postgres::PgPool;
 
 use super::errors::PersonTrustError;
 use super::models::PersonPromise;
-use super::obligation_projection::project_promise_obligation;
 use super::rows::row_to_promise;
 
 #[derive(Clone)]
@@ -48,7 +47,6 @@ impl PersonPromiseStore {
         .fetch_one(&mut *transaction)
         .await?;
         let promise = row_to_promise(row)?;
-        project_promise_obligation(&mut transaction, &promise).await?;
         transaction.commit().await?;
 
         Ok(promise)

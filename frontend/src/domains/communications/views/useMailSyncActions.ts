@@ -2,7 +2,7 @@ import {
   useMailSyncSettingsQuery,
   useRunMailSyncNowMutation,
   useUpdateMailSyncSettingsMutation
-} from '../queries/useCommunicationsQuery'
+} from '../../../integrations/mail/queries/runtimeQueries'
 import type { useCommunicationsStore } from '../stores/communications'
 import type { MailSyncSettingsUpdate } from '../types/communications'
 

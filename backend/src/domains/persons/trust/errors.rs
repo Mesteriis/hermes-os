@@ -6,9 +6,6 @@ pub enum PersonTrustError {
     Sqlx(#[from] sqlx::Error),
 
     #[error(transparent)]
-    Obligation(#[from] crate::domains::obligations::ObligationStoreError),
-
-    #[error(transparent)]
     RiskEngine(#[from] crate::engines::risk::RiskEngineError),
 
     #[error(transparent)]

@@ -1,5 +1,7 @@
 use super::*;
-use crate::domains::mail::messages::{LocalMessageState, ProjectedMessage, WorkflowState};
+use crate::domains::communications::messages::{
+    LocalMessageState, ProjectedMessage, WorkflowState,
+};
 use chrono::Utc;
 use serde_json::json;
 

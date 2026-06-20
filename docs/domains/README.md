@@ -22,7 +22,7 @@ needs a projection.
 
 | Domain | Canonical document | Status |
 |---|---|---|
-| Communications | [Communications](communications.md) | implemented with email-heavy naming and Telegram/WhatsApp surfaces |
+| Communications | [Communications](communications.md) | implemented as the single communication domain; Mail, Telegram and WhatsApp are channel integrations |
 | Personas | [Personas](persons.md), [Persona Intelligence](../persons/README.md) | partially implemented through `persons` and compatibility migrations |
 | Relationships | [Relationships](relationships.md) | partially implemented through first-class persistence, graph projection for all current Relationship entity kinds, guarded global suggested review, organization contact link adapters, person role adapters, task relation adapters, project link review adapters and Personas workspace review; remaining cross-domain inbox work incomplete |
 | Organizations | [Organizations](organizations.md), [Organizations Folder](../organizations/README.md) | implemented as a memory anchor domain |
@@ -43,7 +43,7 @@ provider into a standalone Hermes domain.
 
 | Channel | Spec | Status |
 |---|---|---|
-| Telegram | [Telegram Domain Audit](../telegram/README.md) | target production capability matrix with current implementation baseline |
+| Telegram | [Telegram Channel Capability Spec](../telegram/README.md) | target production capability matrix with current implementation baseline |
 
 ## Engine Documents
 
@@ -55,7 +55,8 @@ Engines are not domains. Engine ownership lives in
 
 The repository still contains historical naming and compatibility boundaries:
 
-- `mail` backend modules implement much of the Communications capability.
+- `communications` backend modules still contain some mail-heavy compatibility
+  names because email was the first implemented channel.
 - `person_id` and `/api/v1/persons/*` are current implementation names, while
   new domain language is Persona.
 - `contacts` appears in migration history because the persistence model evolved

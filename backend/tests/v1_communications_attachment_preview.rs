@@ -6,19 +6,19 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
-use hermes_hub_backend::domains::mail::storage::{
+use hermes_hub_backend::domains::communications::storage::{
     AttachmentSafetyScanReport, AttachmentSafetyScanStatus, LocalMailBlobStore,
     MailAttachmentDisposition, MailStorageStore, NewMailAttachment, NewMailBlob,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use testkit::context::TestContext;
 
 const T: &str = "v1comms-attachment-preview-test-token";

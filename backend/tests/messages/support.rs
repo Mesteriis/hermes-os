@@ -7,11 +7,11 @@ use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgPoolOptions};
 
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
     StoredRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::mail::messages::MessageProjectionStore;
+use hermes_hub_backend::domains::communications::messages::MessageProjectionStore;
 use hermes_hub_backend::platform::storage::Database;
 
 pub async fn live_projection_context(

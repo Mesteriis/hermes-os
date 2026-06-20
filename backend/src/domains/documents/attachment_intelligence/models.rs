@@ -1,6 +1,14 @@
 use serde::Serialize;
 use thiserror::Error;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AttachmentIntelligenceInput {
+    pub attachment_id: String,
+    pub filename: Option<String>,
+    pub content_type: String,
+    pub size_bytes: i64,
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct AttachmentClassification {
     pub attachment_id: String,

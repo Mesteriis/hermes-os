@@ -2,12 +2,12 @@
 import Icon from '../../../shared/ui/Icon.vue'
 import CommunicationsConversationList from './CommunicationsConversationList.vue'
 import MailList from './MailList.vue'
-import type { CommunicationMessageSummary, MailThreadSummary, NavigatorMode } from '../types/communications'
+import type { CommunicationMessageSummary, CommunicationThreadSummary, NavigatorMode } from '../types/communications'
 
 defineProps<{
   accountId: string
   messages: CommunicationMessageSummary[]
-  threads: MailThreadSummary[]
+  threads: CommunicationThreadSummary[]
   selectedIndex: number
   selectedThreadId: string
   selectedMessageIds: string[]
@@ -23,7 +23,7 @@ defineProps<{
 
 const emit = defineEmits<{
   select: [index: number]
-  selectThread: [thread: MailThreadSummary]
+  selectThread: [thread: CommunicationThreadSummary]
   toggleSelection: [messageId: string, extendRange: boolean]
   selectVisible: [messageIds: string[]]
   clearSelection: []

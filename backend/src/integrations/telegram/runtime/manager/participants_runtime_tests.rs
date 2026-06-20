@@ -1,6 +1,5 @@
 use super::super::{TelegramMemberSyncContext, TelegramRuntimeEventBridgeContext};
 use super::sync_provider_roster_snapshots;
-use crate::domains::mail::core::{EmailProviderKind, NewProviderAccount};
 use crate::integrations::telegram::client::TelegramChat;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::{
@@ -10,6 +9,7 @@ use crate::integrations::telegram::client::participants::upsert_chat_participant
 use crate::integrations::telegram::client::{
     NewTelegramChatParticipant, TelegramError, TelegramStore,
 };
+use crate::platform::communications::{EmailProviderKind, NewProviderAccount};
 use crate::platform::config::AppConfig;
 use crate::platform::events::EventBus;
 use crate::platform::events::bus::telegram_event_types;

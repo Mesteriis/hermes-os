@@ -35,7 +35,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -50,7 +50,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let root_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -78,7 +78,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let reply_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -106,7 +106,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let forward_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -238,7 +238,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let reply_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/messages/{reply_message_id}/reply-chain"),
+            &format!("/api/v1/communications/telegram/messages/{reply_message_id}/reply-chain"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -257,7 +257,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let root_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/messages/{root_message_id}/reply-chain"),
+            &format!("/api/v1/communications/telegram/messages/{root_message_id}/reply-chain"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -281,7 +281,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let leaf_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/messages/{leaf_message_id}/reply-chain"),
+            &format!("/api/v1/communications/telegram/messages/{leaf_message_id}/reply-chain"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -297,7 +297,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let forward_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/messages/{forward_message_id}/forward-chain"),
+            &format!("/api/v1/communications/telegram/messages/{forward_message_id}/forward-chain"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -316,7 +316,9 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let final_forward_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/messages/{final_forward_message_id}/forward-chain"),
+            &format!(
+                "/api/v1/communications/telegram/messages/{final_forward_message_id}/forward-chain"
+            ),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -347,7 +349,7 @@ async fn create_reference_message(
 ) -> String {
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,
@@ -393,7 +395,7 @@ async fn telegram_chat_detail_and_members_routes_return_projected_data() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -414,7 +416,7 @@ async fn telegram_chat_detail_and_members_routes_return_projected_data() {
     {
         assert_ok(
             app.clone(),
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -435,7 +437,7 @@ async fn telegram_chat_detail_and_members_routes_return_projected_data() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/chats?account_id={account_id}&limit=10"),
+            &format!("/api/v1/communications/telegram/chats?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -450,7 +452,7 @@ async fn telegram_chat_detail_and_members_routes_return_projected_data() {
     let detail_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/chats/{telegram_chat_id}"),
+            &format!("/api/v1/communications/telegram/chats/{telegram_chat_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -463,7 +465,7 @@ async fn telegram_chat_detail_and_members_routes_return_projected_data() {
     let members_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/chats/{telegram_chat_id}/members?limit=10"),
+            &format!("/api/v1/communications/telegram/chats/{telegram_chat_id}/members?limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -498,7 +500,7 @@ async fn telegram_folders_route_returns_projection_backed_filters() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -545,7 +547,7 @@ async fn telegram_folders_route_returns_projection_backed_filters() {
     ] {
         assert_ok(
             app.clone(),
-            "/api/v1/telegram/messages",
+            "/api/v1/communications/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": format!("{provider_chat_id}-{suffix}"),
@@ -593,7 +595,7 @@ async fn telegram_folders_route_returns_projection_backed_filters() {
     let folders_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/telegram/folders?account_id={account_id}"),
+            &format!("/api/v1/communications/telegram/folders?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await

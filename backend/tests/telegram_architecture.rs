@@ -10,10 +10,10 @@ fn telegram_implementation_files_stay_below_architecture_line_limit() {
         .parent()
         .expect("backend crate must live under repository root");
     let roots = [
-        backend_manifest_dir.join("src/domains/api_support"),
+        backend_manifest_dir.join("src/app/api_support"),
         backend_manifest_dir.join("src/integrations/telegram"),
         backend_manifest_dir.join("tests"),
-        repo_root.join("frontend/src/domains/telegram"),
+        repo_root.join("frontend/src/integrations/telegram"),
     ];
 
     let mut violations = Vec::new();

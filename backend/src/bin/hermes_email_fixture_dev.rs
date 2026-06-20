@@ -3,13 +3,13 @@ use std::fs;
 use std::path::PathBuf;
 
 use chrono::Utc;
-use hermes_hub_backend::domains::mail::core::EmailProviderKind;
-use hermes_hub_backend::domains::mail::fixtures::pipeline::{
+use hermes_hub_backend::domains::communications::core::EmailProviderKind;
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::email_fixture_pipeline::{
     EmailFixturePipelineRequest, import_fixture_email_messages_for_dev,
     project_fixture_email_messages,
 };
-use hermes_hub_backend::platform::config::AppConfig;
-use hermes_hub_backend::platform::storage::Database;
 use thiserror::Error;
 
 const DEFAULT_FIXTURE_PATH: &str = "tmp/email-fixtures/icloud-inbox-redacted.json";

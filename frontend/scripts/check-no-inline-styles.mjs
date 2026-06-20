@@ -30,9 +30,9 @@ const dynamicLayoutStyleAllowlist = new Set([
 	'src/domains/notes/components/NotesList.vue',
 	'src/domains/personas/components/PersonsList.vue',
 	'src/domains/tasks/components/TaskList.vue',
-	'src/domains/telegram/components/TelegramChatList.vue',
+	'src/integrations/telegram/components/TelegramChatList.vue',
 	'src/domains/timeline/components/TimelineStream.vue',
-	'src/domains/whatsapp/components/WhatsAppSessionList.vue'
+	'src/integrations/whatsapp/components/WhatsAppSessionList.vue'
 ]);
 
 async function collectSourceFiles(root) {

@@ -33,7 +33,7 @@ async fn telegram_exhaustive_roster_absence_reconciles_self_leave_command() {
 
     post_ok(
         app.clone(),
-        "/api/v1/telegram/accounts/fixture",
+        "/api/v1/communications/telegram/accounts/fixture",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",

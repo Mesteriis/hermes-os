@@ -1,4 +1,3 @@
-use crate::domains::mail::core::ProviderAccount;
 use crate::integrations::telegram::client::participants::{
     reconcile_participant_commands_from_message_evidence, tdlib_self_membership_lifecycle,
 };
@@ -6,6 +5,7 @@ use crate::integrations::telegram::client::{
     TelegramError, TelegramStore, derive_tdlib_chosen_reaction_emojis,
     reconcile_reaction_commands_from_provider_message_state,
 };
+use crate::platform::communications::ProviderAccount;
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 use crate::vault::{CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore};

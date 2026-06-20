@@ -6,11 +6,13 @@ use chrono::{TimeZone, Utc};
 use serde_json::json;
 use sqlx::Row;
 
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
-use hermes_hub_backend::domains::mail::sync::{EmailSyncBatch, FetchedEmailMessage};
+use hermes_hub_backend::domains::communications::storage::LocalMailBlobStore;
+use hermes_hub_backend::integrations::mail::sync::{
+    EmailSyncBatch, FetchedCommunicationSourceMessage,
+};
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
 
@@ -59,7 +61,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
         provider_kind: EmailProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 88})),
-        messages: vec![FetchedEmailMessage {
+        messages: vec![FetchedCommunicationSourceMessage {
             provider_record_id: provider_record_id.clone(),
             source_fingerprint: format!("sha256:sync-pipeline-{suffix}"),
             occurred_at: Utc.timestamp_millis_opt(1_770_000_000_000).single(),
@@ -386,7 +388,7 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
         provider_kind: EmailProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 90})),
-        messages: vec![FetchedEmailMessage {
+        messages: vec![FetchedCommunicationSourceMessage {
             provider_record_id: provider_record_id.clone(),
             source_fingerprint: format!("sha256:sync-candidates-{suffix}"),
             occurred_at: Utc.timestamp_millis_opt(1_770_000_200_000).single(),
@@ -645,7 +647,7 @@ async fn email_sync_pipeline_extracts_attachment_metadata_with_initial_scan_stat
         provider_kind: EmailProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 89})),
-        messages: vec![FetchedEmailMessage {
+        messages: vec![FetchedCommunicationSourceMessage {
             provider_record_id: provider_record_id.clone(),
             source_fingerprint: format!("sha256:sync-attachment-{suffix}"),
             occurred_at: Utc.timestamp_millis_opt(1_770_000_100_000).single(),
@@ -785,7 +787,7 @@ async fn email_sync_pipeline_marks_executable_attachment_payloads_malicious() {
         provider_kind: EmailProviderKind::Imap,
         stream_id: "imap:INBOX".to_owned(),
         checkpoint: Some(json!({"provider": "imap", "last_seen_uid": 90})),
-        messages: vec![FetchedEmailMessage {
+        messages: vec![FetchedCommunicationSourceMessage {
             provider_record_id: provider_record_id.clone(),
             source_fingerprint: format!("sha256:sync-malicious-attachment-{suffix}"),
             occurred_at: Utc.timestamp_millis_opt(1_770_000_200_000).single(),

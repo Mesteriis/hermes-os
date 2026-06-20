@@ -42,7 +42,7 @@ import {
   type TemplateLibraryCategory,
   type TemplateRecipientVariableMapping
 } from './templateLibrary'
-import type { EmailTemplate, RichTemplateMailMergePreviewResponse } from '../types/communications'
+import type { CommunicationTemplate, RichTemplateMailMergePreviewResponse } from '../types/communications'
 import './ComposeTemplatePicker.css'
 
 const props = defineProps<{
@@ -219,11 +219,11 @@ function updateVariable(variable: string, value: string): void {
   }
 }
 
-function templateDiagnosticCount(template: EmailTemplate): number {
+function templateDiagnosticCount(template: CommunicationTemplate): number {
   return storedTemplateDiagnosticMessages(template).length
 }
 
-function templateUpdatedLabel(template: EmailTemplate): string {
+function templateUpdatedLabel(template: CommunicationTemplate): string {
   return formatTemplateUpdatedLabel(template.updated_at)
 }
 
@@ -283,7 +283,7 @@ function clearTemplateLibraryQuery(): void {
   templateLibraryQuery.value = ''
 }
 
-function buildDefaultPreviewRows(template: EmailTemplate | null): Array<{ row_id: string; variables: Record<string, string> }> {
+function buildDefaultPreviewRows(template: CommunicationTemplate | null): Array<{ row_id: string; variables: Record<string, string> }> {
   if (!template) return []
   const values = resolveTemplateVariableValues(
     template,

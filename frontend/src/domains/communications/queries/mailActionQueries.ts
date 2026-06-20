@@ -54,8 +54,8 @@ function invalidateMessageViews(queryClient: ReturnType<typeof useQueryClient>, 
 function invalidateSyncViews(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: ['communications-mail-list'] })
   queryClient.invalidateQueries({ queryKey: ['communications-state-counts'] })
-  queryClient.invalidateQueries({ queryKey: ['communications-sync-statuses'] })
-  queryClient.invalidateQueries({ queryKey: ['communications-mailbox-health'] })
+  queryClient.invalidateQueries({ queryKey: ['integrations', 'mail', 'sync-statuses'] })
+  queryClient.invalidateQueries({ queryKey: ['integrations', 'mail', 'mailbox-health'] })
 }
 
 export function useToggleMessagePinMutation() {

@@ -1,6 +1,6 @@
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import type { EmailTemplate, RichTemplateUpsertRequest } from '../types/templates'
+import type { CommunicationTemplate, RichTemplateUpsertRequest } from '../types/templates'
 
 export type TemplateFormValues = z.infer<typeof templateFormSchema>
 export type TemplateComposeContent = {
@@ -19,7 +19,7 @@ export type StoredTemplateDiagnosticMessage = {
   values: string[]
 }
 export type StoredTemplateDiagnosticSource = Pick<
-  EmailTemplate,
+  CommunicationTemplate,
   'malformed_placeholders' | 'undeclared_variables' | 'unused_variables'
 >
 export type TemplateVariableDefaultsContext = {
@@ -168,7 +168,7 @@ export function defaultTemplateVariableValue(
 }
 
 export function resolveTemplateVariableValues(
-  template: Pick<EmailTemplate, 'variables'> | null | undefined,
+  template: Pick<CommunicationTemplate, 'variables'> | null | undefined,
   existingValues: Record<string, string>,
   context: TemplateVariableDefaultsContext,
   options: { preserveExisting: boolean }

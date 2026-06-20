@@ -1,9 +1,9 @@
 mod ai;
 mod communication;
+mod communications;
 mod document_processing;
 mod integrations;
 mod knowledge;
-mod mail;
 mod persons;
 mod platform;
 mod review;

@@ -3,7 +3,7 @@ import { handleRealtimeEvent } from './realtime'
 
 describe('telegram members sync realtime handling', () => {
   it('patches cached telegram runtime status for members sync events', () => {
-    const runtimeKey = ['telegram', 'runtime', 'account-1']
+    const runtimeKey = ['integrations', 'telegram', 'runtime', 'account-1']
     const runtimeStatus = {
       account_id: 'account-1',
       provider_kind: 'telegram_user',
@@ -22,7 +22,7 @@ describe('telegram members sync realtime handling', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['telegram', 'messages'])) return []
+        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'messages'])) return []
         return [[runtimeKey, runtimeStatus]]
       }),
       setQueryData

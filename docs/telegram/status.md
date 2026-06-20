@@ -2,7 +2,10 @@
 
 Status date: 2026-06-18.
 
-Base Telegram Domain: `COMPLETED`.
+Base Telegram channel capability set: `COMPLETED`.
+
+Invariant: A channel is never a domain. A channel is an integration. A
+communication is the domain object.
 
 ## Summary
 
@@ -26,9 +29,9 @@ Base Telegram Domain: `COMPLETED`.
 
 ## Deferred Initiatives
 
-ADR-0094 moves the following outside base Telegram: Bot Runtime, Voice,
-Video/Calls, Session import/export, MTProxy, SOCKS5 and Telegram-specific AI
-flows. Their capability state is `planned`.
+ADR-0094 and ADR-0097 move the following outside the base Telegram channel
+capability set: Bot Runtime, Voice, Video/Calls, Session import/export, MTProxy,
+SOCKS5 and Telegram-specific AI flows. Their capability state is `planned`.
 
 ## Validation Policy
 

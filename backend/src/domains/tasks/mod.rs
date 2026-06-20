@@ -1,8 +1,8 @@
 pub mod api;
 pub mod brain;
 pub mod candidates;
+mod command_service;
 pub mod core;
-pub mod handlers;
 pub mod health;
 pub mod intelligence;
 pub mod rules;

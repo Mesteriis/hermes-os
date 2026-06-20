@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::domains::mail::core::NewProviderAccount;
+use crate::platform::communications::NewProviderAccount;
 use crate::platform::secrets::SecretReferenceStore;
 use crate::vault::CommunicationProviderAccountStore;
 
@@ -35,7 +35,8 @@ impl TelegramStore {
                 )
                 .config(live_account_config(request, runtime)),
             )
-            .await?;
+            .await
+            .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?;
 
         let credential_bindings = self
             .store_live_account_credentials(secret_store, vault, request)

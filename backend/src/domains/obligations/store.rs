@@ -10,7 +10,6 @@ use super::errors::ObligationStoreError;
 use super::evidence::{
     link_obligation_review_transition_in_transaction, link_obligation_support_in_transaction,
 };
-use super::graph_projection::project_obligation_graph_in_transaction;
 use super::ids::{evidence_id, obligation_id};
 use super::models::{
     NewObligation, NewObligationEvidence, Obligation, ObligationEntityKind, ObligationReviewState,
@@ -176,8 +175,6 @@ impl ObligationStore {
                 .await?;
             }
         }
-
-        project_obligation_graph_in_transaction(transaction, &stored, evidence).await?;
 
         Ok(stored)
     }

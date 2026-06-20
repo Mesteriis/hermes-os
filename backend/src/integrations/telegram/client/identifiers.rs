@@ -1,7 +1,7 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-use crate::domains::mail::core::{ProviderAccount, ProviderAccountSecretPurpose};
+use crate::platform::communications::{ProviderAccount, ProviderAccountSecretPurpose};
 
 use super::TELEGRAM_ACCOUNT_ACTIVE;
 use super::errors::TelegramError;

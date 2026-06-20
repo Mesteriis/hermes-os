@@ -1,9 +1,9 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
-import type { EmailOutboxItem, EmailOutboxStatus, OutboxListResponse } from '../types/communications'
+import type { CommunicationOutboxItem, CommunicationOutboxStatus, OutboxListResponse } from '../types/communications'
 
 export async function fetchOutboxItems(
   accountId?: string,
-  status?: EmailOutboxStatus,
+  status?: CommunicationOutboxStatus,
   limit = 100,
   cursor?: string | null
 ): Promise<OutboxListResponse> {
@@ -17,8 +17,8 @@ export async function fetchOutboxItems(
   )
 }
 
-export async function undoOutboxItem(outboxId: string): Promise<EmailOutboxItem> {
-  return ApiClient.instance.post<EmailOutboxItem>(
+export async function undoOutboxItem(outboxId: string): Promise<CommunicationOutboxItem> {
+  return ApiClient.instance.post<CommunicationOutboxItem>(
     `/api/v1/communications/outbox/${encodeURIComponent(outboxId)}/undo`,
     {},
     'Undo send failed'

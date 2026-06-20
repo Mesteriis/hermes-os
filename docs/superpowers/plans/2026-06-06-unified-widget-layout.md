@@ -131,8 +131,8 @@ const views = [
 	['documents', 'Documents'],
 	['notes', 'Notes'],
 	['knowledge-graph', 'Knowledge Graph'],
-	['telegram', 'Telegram'],
-	['whatsapp', 'WhatsApp'],
+	['communications', 'telegram', 'Telegram'],
+	['communications', 'whatsapp', 'WhatsApp'],
 	['ai-agents', 'AI Agents'],
 	['settings', 'Settings']
 ];
@@ -1158,16 +1158,16 @@ export const widgetRegistry: WidgetDefinition[] = [
 	widget('knowledge-search-results', 'Search Results', ['knowledge-graph'], 'inspector', ['inspector'], 'api_backed'),
 	widget('knowledge-evidence-context', 'Evidence', ['knowledge-graph'], 'inspector', ['inspector'], 'api_backed'),
 
-	widget('telegram-chat-list', 'Telegram Chats', ['telegram'], 'list', ['list'], 'api_backed'),
-	widget('telegram-message-thread', 'Message Thread', ['telegram'], 'detail', ['detail'], 'api_backed'),
-	widget('telegram-account-status', 'Account Status', ['telegram'], 'rail', ['rail'], 'api_backed'),
-	widget('telegram-sync-controls', 'Sync Controls', ['telegram'], 'rail', ['rail'], 'api_backed'),
-	widget('telegram-selected-chat-metadata', 'Selected Chat Metadata', ['telegram'], 'rail', ['rail']),
+	widget('telegram-chat-list', 'Telegram Chats', ['communications', 'telegram'], 'list', ['list'], 'api_backed'),
+	widget('telegram-message-thread', 'Message Thread', ['communications', 'telegram'], 'detail', ['detail'], 'api_backed'),
+	widget('telegram-account-status', 'Account Status', ['communications', 'telegram'], 'rail', ['rail'], 'api_backed'),
+	widget('telegram-sync-controls', 'Sync Controls', ['communications', 'telegram'], 'rail', ['rail'], 'api_backed'),
+	widget('telegram-selected-chat-metadata', 'Selected Chat Metadata', ['communications', 'telegram'], 'rail', ['rail']),
 
-	widget('whatsapp-session-status', 'Session Status', ['whatsapp'], 'header', ['header'], 'api_backed'),
-	widget('whatsapp-chat-message-surface', 'Chat Message Surface', ['whatsapp'], 'detail', ['detail'], 'api_backed'),
-	widget('whatsapp-sync-controls', 'Sync Controls', ['whatsapp'], 'rail', ['rail'], 'api_backed'),
-	widget('whatsapp-account-session-metadata', 'Account Session Metadata', ['whatsapp'], 'rail', ['rail']),
+	widget('whatsapp-session-status', 'Session Status', ['communications', 'whatsapp'], 'header', ['header'], 'api_backed'),
+	widget('whatsapp-chat-message-surface', 'Chat Message Surface', ['communications', 'whatsapp'], 'detail', ['detail'], 'api_backed'),
+	widget('whatsapp-sync-controls', 'Sync Controls', ['communications', 'whatsapp'], 'rail', ['rail'], 'api_backed'),
+	widget('whatsapp-account-session-metadata', 'Account Session Metadata', ['communications', 'whatsapp'], 'rail', ['rail']),
 
 	widget('ai-runtime-metrics', 'Runtime Metrics', ['ai-agents'], 'metrics', ['metrics'], 'api_backed'),
 	widget('ai-agent-list', 'Agent List', ['ai-agents'], 'main', ['main'], 'api_backed'),

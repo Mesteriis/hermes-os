@@ -3,8 +3,8 @@ use sqlx::Row;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::decisions::DecisionStore;
-use crate::domains::mail::messages::ProjectedMessage;
 use crate::domains::obligations::ObligationStore;
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxStore, ReviewItemKind,

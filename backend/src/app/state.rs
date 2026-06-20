@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::domains::mail::accounts::GmailOAuthPendingGrant;
+use crate::integrations::mail::accounts::GmailOAuthPendingGrant;
 use crate::integrations::telegram::runtime::TelegramRuntimeManager;
 use crate::integrations::telegram::tdjson::PendingQrLoginMap;
 use crate::platform::config::AppConfig;

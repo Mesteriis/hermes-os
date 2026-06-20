@@ -8,10 +8,10 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount, NewRawCommunicationRecord,
 };
-use hermes_hub_backend::domains::mail::messages::{
+use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::platform::config::AppConfig;
@@ -717,8 +717,14 @@ async fn v1_redirect_message_enqueues_outbox_redirect_against_postgres() {
 
     let row = sqlx::query(
         r#"
-        SELECT account_id, to_recipients, cc_recipients, subject, body_text, metadata
-        FROM email_outbox_tracking
+        SELECT
+            account_id,
+            to_participants AS to_recipients,
+            cc_participants AS cc_recipients,
+            subject,
+            body_text,
+            metadata
+        FROM communication_outbox
         WHERE outbox_id = $1
         "#,
     )

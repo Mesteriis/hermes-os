@@ -1,4 +1,4 @@
-use crate::domains::mail::messages::ProjectedMessage;
+use crate::domains::communications::messages::ProjectedMessage;
 
 pub(super) const EMAIL_INTELLIGENCE_PROMPT_VERSION: &str =
     "v3-email-intelligence-mail-knowledge-candidates-2026-06-15";

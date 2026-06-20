@@ -34,7 +34,9 @@ async fn telegram_and_whatsapp_capabilities_are_split_under_v1() {
 
     let telegram = app
         .clone()
-        .oneshot(get_request_with_secret("/api/v1/telegram/capabilities"))
+        .oneshot(get_request_with_secret(
+            "/api/v1/communications/telegram/capabilities",
+        ))
         .await
         .expect("telegram capabilities response");
     assert_eq!(telegram.status(), StatusCode::OK);
@@ -45,7 +47,9 @@ async fn telegram_and_whatsapp_capabilities_are_split_under_v1() {
     assert_has_capability(&telegram_body, "runtime.fixture");
 
     let whatsapp = app
-        .oneshot(get_request_with_secret("/api/v1/whatsapp/capabilities"))
+        .oneshot(get_request_with_secret(
+            "/api/v1/communications/whatsapp/capabilities",
+        ))
         .await
         .expect("whatsapp capabilities response");
     assert_eq!(whatsapp.status(), StatusCode::OK);

@@ -10,8 +10,8 @@ import MessageRelatedTab from './MessageRelatedTab.vue'
 import MessageTimelineTab from './MessageTimelineTab.vue'
 import type {
   AiReplyResponse,
-  MailMessageDetailResponse,
-  MailMessageInsight,
+  CommunicationMessageDetailResponse,
+  CommunicationMessageInsight,
   MessageContextTab,
   MessageExportFormat
 } from '../types/communications'
@@ -24,8 +24,8 @@ import { senderLabel, senderEmail, messageTime } from '../stores/communications'
 import type { BilingualReplyFlowResponse } from '../types/bilingualReplyFlow'
 
 const props = defineProps<{
-  detail: MailMessageDetailResponse | null
-  insight: MailMessageInsight | null
+  detail: CommunicationMessageDetailResponse | null
+  insight: CommunicationMessageInsight | null
   activeTab: MessageContextTab
 }>()
 

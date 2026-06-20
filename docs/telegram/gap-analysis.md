@@ -2,10 +2,11 @@
 
 Status date: 2026-06-18.
 
-Base Telegram Domain status: `COMPLETED`.
+Base Telegram channel capability status: `COMPLETED`.
 
-This document tracks active Telegram-domain gaps only. Deferred initiatives are
-not base Telegram gaps; ADR-0094 moves them to separate future work.
+This document tracks active Telegram channel capability gaps only. Deferred
+initiatives are not base Telegram channel gaps; ADR-0094 and ADR-0097 move them
+to separate future work.
 
 ## Closure Summary
 
@@ -48,7 +49,7 @@ not base Telegram gaps; ADR-0094 moves them to separate future work.
 | Realtime events use shared event bus/bootstrap | CLOSED |
 | Polling is not used where realtime path exists | CLOSED |
 | Telegram implementation, test, docs and frontend files stay under 700 lines | CLOSED |
-| Documentation matches base-domain scope | CLOSED |
+| Documentation matches channel capability scope | CLOSED |
 
 Live Telegram validation remains opt-in because TDLib credentials, native
 library loading and account QR authorization are local machine concerns.

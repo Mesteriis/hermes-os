@@ -1,6 +1,6 @@
 use serde_json::{Value, json};
 
-use crate::domains::mail::core::EmailProviderKind;
+use crate::domains::communications::core::EmailProviderKind;
 
 pub(super) fn fallback_provider_account_config(
     provider_kind: EmailProviderKind,

@@ -4,12 +4,6 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
-    RelationshipStore,
-};
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
-
 use super::{TaskCoreError, materialize_task_entity_link_in_transaction};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -101,7 +95,6 @@ impl TaskRelationStore {
         };
 
         Self::materialize_observation_link_in_transaction(&mut transaction, &relation).await?;
-        Self::materialize_relationship_in_transaction(&mut transaction, &relation).await?;
         transaction.commit().await?;
 
         Ok(relation)
@@ -135,96 +128,5 @@ impl TaskRelationStore {
         .await?;
 
         Ok(())
-    }
-
-    async fn materialize_relationship_in_transaction(
-        transaction: &mut Transaction<'_, Postgres>,
-        relation: &TaskRelation,
-    ) -> Result<(), TaskCoreError> {
-        let Some(target_entity_kind) = task_relation_entity_kind(&relation.entity_type) else {
-            return Ok(());
-        };
-        let relationship = NewRelationship {
-            source_entity_kind: RelationshipEntityKind::Task,
-            source_entity_id: relation.task_id.clone(),
-            target_entity_kind,
-            target_entity_id: relation.entity_id.clone(),
-            relationship_type: relation.relation_type.clone(),
-            trust_score: 0.5,
-            strength_score: 0.6,
-            confidence: relation.confidence,
-            review_state: RelationshipReviewState::UserConfirmed,
-            valid_from: None,
-            valid_to: None,
-            metadata: json!({
-                "compatibility_table": "task_relations",
-                "compatibility_record_id": relation.id,
-                "source": relation.source,
-                "entity_type": relation.entity_type
-            }),
-        };
-        let observation_id = {
-            let observation = ObservationStore::capture_in_transaction(
-                transaction,
-                &NewObservation::new(
-                    "TASK_MUTATION",
-                    ObservationOriginKind::LocalRuntime,
-                    Utc::now(),
-                    json!({
-                        "component": "task_relation",
-                        "task_id": relation.task_id,
-                        "relation_id": relation.id,
-                        "entity_type": relation.entity_type,
-                        "entity_id": relation.entity_id,
-                        "relation_type": relation.relation_type,
-                        "source": relation.source,
-                    }),
-                    format!("task-relation://{}/{}", relation.task_id, relation.id),
-                )
-                .provenance(json!({
-                    "pipeline": "task_relation_materialization",
-                    "relation_id": relation.id,
-                })),
-            )
-            .await?;
-            observation.observation_id
-        };
-        let evidence = NewRelationshipEvidence::observation(observation_id)
-            .excerpt("Task relation was recorded through compatibility task relation data.")
-            .metadata(json!({
-                "compatibility_table": "task_relations",
-                "task_id": relation.task_id,
-                "entity_type": relation.entity_type,
-                "entity_id": relation.entity_id,
-                "relation_type": relation.relation_type,
-                "source": relation.source
-            }));
-
-        RelationshipStore::upsert_with_evidence_in_transaction(
-            transaction,
-            &relationship,
-            &[evidence],
-        )
-        .await?;
-
-        Ok(())
-    }
-}
-
-fn task_relation_entity_kind(entity_type: &str) -> Option<RelationshipEntityKind> {
-    match entity_type.trim() {
-        "person" | "persona" | "contact" => Some(RelationshipEntityKind::Persona),
-        "organization" | "org" => Some(RelationshipEntityKind::Organization),
-        "project" => Some(RelationshipEntityKind::Project),
-        "communication" | "communication_message" | "message" | "email" => {
-            Some(RelationshipEntityKind::Communication)
-        }
-        "document" | "doc" => Some(RelationshipEntityKind::Document),
-        "task" => Some(RelationshipEntityKind::Task),
-        "event" | "calendar_event" => Some(RelationshipEntityKind::Event),
-        "decision" => Some(RelationshipEntityKind::Decision),
-        "obligation" => Some(RelationshipEntityKind::Obligation),
-        "knowledge" | "knowledge_item" => Some(RelationshipEntityKind::Knowledge),
-        _ => None,
     }
 }

@@ -3,12 +3,12 @@ import { ref, computed } from 'vue'
 import { format, formatDistanceToNow } from 'date-fns'
 import type {
   CommunicationMessageSummary,
-  MailMessageDetailResponse,
+  CommunicationMessageDetailResponse,
   WorkflowState,
   LocalMessageState,
   MailSyncStatus,
   MailboxHealth,
-  EmailDraft,
+  CommunicationDraft,
   ComposeFormModel,
   ComposeMode,
   MailAccountOption,
@@ -16,9 +16,9 @@ import type {
   InspectorMode,
   MessageContextTab,
   MessageExportResponse,
-  MailMessageInsight,
+  CommunicationMessageInsight,
   CommunicationSectionId,
-  MailThreadSummary,
+  CommunicationThreadSummary,
   ProjectItem,
   TaskItem
 } from '../types/communications'
@@ -42,7 +42,7 @@ const emptyComposeForm: ComposeFormModel = {
 export const useCommunicationsStore = defineStore('communications-ui', () => {
   // --- Message list state ---
   const communicationMessages = ref<CommunicationMessageSummary[]>([])
-  const selectedCommunicationDetail = ref<MailMessageDetailResponse | null>(null)
+  const selectedCommunicationDetail = ref<CommunicationMessageDetailResponse | null>(null)
   const communicationsError = ref('')
   const isCommunicationsLoading = ref(false)
   const selectedConversationIndex = ref(-1)
@@ -62,7 +62,7 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   const aiAnalysisResult = ref<Record<string, unknown> | null>(null)
 
   // --- Drafts ---
-  const drafts = ref<EmailDraft[]>([])
+  const drafts = ref<CommunicationDraft[]>([])
 
   // --- Health ---
   const mailboxHealth = ref<MailboxHealth | null>(null)
@@ -71,8 +71,8 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   const topSenders = ref<{ sender: string; message_count: number }[]>([])
 
   // --- Threads ---
-  const threads = ref<MailThreadSummary[]>([])
-  const selectedThread = ref<MailThreadSummary | null>(null)
+  const threads = ref<CommunicationThreadSummary[]>([])
+  const selectedThread = ref<CommunicationThreadSummary | null>(null)
   const selectedThreadId = computed(() => selectedThread.value?.thread_id ?? '')
 
   // --- Resources ---
@@ -80,7 +80,7 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
   const mailResourceSummary = ref<Record<string, number>>({})
 
   // --- Message insight ---
-  const mailMessageInsight = ref<MailMessageInsight | null>(null)
+  const mailMessageInsight = ref<CommunicationMessageInsight | null>(null)
 
   // --- Action status ---
   const isMailActionRunning = ref(false)
@@ -198,7 +198,7 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     selectionAnchorMessageId.value = uniqueIds[0] ?? ''
   }
 
-  function setMessageDetail(detail: MailMessageDetailResponse | null) {
+  function setMessageDetail(detail: CommunicationMessageDetailResponse | null) {
     selectedCommunicationDetail.value = detail
   }
 
@@ -241,7 +241,7 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     isMailSyncBusy.value = busy
   }
 
-  function setDrafts(draftList: EmailDraft[]) {
+  function setDrafts(draftList: CommunicationDraft[]) {
     drafts.value = draftList
   }
 
@@ -253,11 +253,11 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     topSenders.value = senders
   }
 
-  function setThreads(threadList: MailThreadSummary[]) {
+  function setThreads(threadList: CommunicationThreadSummary[]) {
     threads.value = threadList
   }
 
-  function selectThread(thread: MailThreadSummary) {
+  function selectThread(thread: CommunicationThreadSummary) {
     selectedThread.value = thread
     selectedConversationIndex.value = -1
     selectedCommunicationMessageId.value = ''
@@ -269,7 +269,7 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     selectedThread.value = null
   }
 
-  function setMailMessageInsight(insight: MailMessageInsight | null) {
+  function setCommunicationMessageInsight(insight: CommunicationMessageInsight | null) {
     mailMessageInsight.value = insight
   }
 
@@ -394,7 +394,7 @@ export const useCommunicationsStore = defineStore('communications-ui', () => {
     setStateFilter, setLocalStateFilter, setStateCounts,
     setMailSyncStatuses, setMailSyncStatusMessage, setMailSyncError, setIsMailSyncBusy,
     setDrafts, setMailboxHealth, setTopSenders, setThreads, selectThread, clearSelectedThread,
-    setMailMessageInsight, setIsMailActionRunning, setMailActionStatus, setMailActionError,
+    setCommunicationMessageInsight, setIsMailActionRunning, setMailActionStatus, setMailActionError,
     setLastMessageExport,
     openCompose, closeCompose, updateComposeForm,
     setComposeStatusMessage, setComposeSendError, setIsSendingMessage,

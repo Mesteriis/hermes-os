@@ -1,7 +1,6 @@
 mod errors;
 mod models;
 mod notes;
-mod outcome_projection;
 mod outcomes;
 mod recordings;
 mod rows;

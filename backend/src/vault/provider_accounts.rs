@@ -6,7 +6,7 @@ use sqlx::{Postgres, Transaction};
 use crate::domains::calendar::events::{
     CalendarAccount, CalendarAccountUpdate, CalendarError, CalendarSource,
 };
-use crate::domains::mail::core::{
+use crate::domains::communications::core::{
     CommunicationIngestionError, DeletedProviderAccount, NewProviderAccount,
     NewProviderAccountSecretBinding, ProviderAccount, ProviderAccountSecretBinding,
     ProviderAccountSecretPurpose, ProviderAccountUsage,
@@ -592,7 +592,9 @@ impl CommunicationProviderAccountStore {
         config: serde_json::Value,
     ) -> Result<ProviderAccount, CommunicationIngestionError> {
         let provider_kind =
-            crate::domains::mail::core::CommunicationProviderKind::try_from(provider_kind)?;
+            crate::domains::communications::core::CommunicationProviderKind::try_from(
+                provider_kind,
+            )?;
         self.upsert(
             &NewProviderAccount::new(account_id, provider_kind, display_name, external_account_id)
                 .config(config),

@@ -13,6 +13,16 @@ export default defineConfig({
 		port: 5173
 	},
 	build: {
-		outDir: 'dist'
+		outDir: 'dist',
+		chunkSizeWarningLimit: 1536,
+		rollupOptions: {
+			onwarn(warning, defaultHandler) {
+				const isIgnoredAnnotationWarning = warning.message.includes('INVALID_ANNOTATION') &&
+					warning.message.includes('@vueuse/core');
+				if (!isIgnoredAnnotationWarning) {
+					defaultHandler(warning);
+				}
+			}
+		}
 	}
 })

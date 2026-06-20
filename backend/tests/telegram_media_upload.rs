@@ -7,7 +7,7 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::domains::mail::core::{
+use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
 };
 use hermes_hub_backend::platform::config::AppConfig;
@@ -94,7 +94,7 @@ async fn telegram_media_upload_imports_attachment_and_queues_provider_command() 
     let upload_response = app
         .clone()
         .oneshot(post(
-            "/api/v1/telegram/media/upload",
+            "/api/v1/communications/telegram/media/upload",
             json!({
                 "command_id": command_id.clone(),
                 "account_id": account_id.clone(),
@@ -115,7 +115,7 @@ async fn telegram_media_upload_imports_attachment_and_queues_provider_command() 
     let duplicate_upload_response = app
         .clone()
         .oneshot(post(
-            "/api/v1/telegram/media/upload",
+            "/api/v1/communications/telegram/media/upload",
             json!({
                 "command_id": format!("tcmd_media_upload_duplicate_{suffix}"),
                 "account_id": account_id.clone(),
@@ -247,7 +247,7 @@ async fn telegram_media_upload_rejects_malicious_import_before_outbox_insert() {
     let command_id = format!("tcmd_media_upload_reject_{suffix}");
     let upload_response = app
         .oneshot(post(
-            "/api/v1/telegram/media/upload",
+            "/api/v1/communications/telegram/media/upload",
             json!({
                 "command_id": command_id.clone(),
                 "account_id": account_id.clone(),

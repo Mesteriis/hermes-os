@@ -1,6 +1,6 @@
-use hermes_hub_backend::domains::mail::core::CommunicationIngestionStore;
-use hermes_hub_backend::domains::mail::storage::LocalMailBlobStore;
-use hermes_hub_backend::domains::mail::sync::imap_mailbox_stream_id;
+use hermes_hub_backend::domains::communications::core::CommunicationIngestionStore;
+use hermes_hub_backend::domains::communications::storage::LocalMailBlobStore;
+use hermes_hub_backend::integrations::mail::sync::imap_mailbox_stream_id;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::CommunicationProviderAccountStore;
