@@ -55,3 +55,6 @@ docker/data/**
 tmp/
 temp/
 *.log
+
+# AutoClaw KDream data
+.autoclaw/
