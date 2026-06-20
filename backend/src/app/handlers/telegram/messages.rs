@@ -27,6 +27,10 @@ use crate::integrations::telegram::runtime::TelegramRuntimeOperationContext;
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
+use crate::workflows::provider_communication_projection::record_and_project_telegram_message;
+use crate::workflows::review_inbox::{
+    refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
+};
 
 mod mark_read;
 mod reactions;
@@ -94,14 +98,44 @@ fn build_command_event(
     )
 }
 
+async fn project_manual_send_response(
+    state: &AppState,
+    response: &mut TelegramManualSendResponse,
+) -> Result<(), ApiError> {
+    let Some(pool) = state.database.pool().cloned() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let Some(raw) = response.raw.take() else {
+        return Err(ApiError::Telegram(TelegramError::InvalidRequest(
+            "Telegram send response is missing raw provider observation".to_owned(),
+        )));
+    };
+    let projected = record_and_project_telegram_message(pool, raw).await?;
+    response.raw_record_id = projected.raw_record_id;
+    response.message_id = projected.message_id;
+    Ok(())
+}
+
 pub(crate) async fn post_telegram_fixture_message(
     State(state): State<AppState>,
     Json(request): Json<NewTelegramMessage>,
 ) -> Result<Json<TelegramMessageIngestResult>, ApiError> {
-    let response = telegram_store(&state)?
-        .ingest_fixture_message(&request)
-        .await?;
     let store = telegram_store(&state)?;
+    let observed = store.ingest_fixture_message(&request).await?;
+    let Some(pool) = state.database.pool().cloned() else {
+        return Err(ApiError::DatabaseNotConfigured);
+    };
+    let projected = record_and_project_telegram_message(pool.clone(), observed.raw).await?;
+    let response = TelegramMessageIngestResult {
+        raw_record_id: projected.raw_record_id,
+        message_id: projected.message_id,
+    };
+    store
+        .recompute_chat_unread_count(&observed.telegram_chat_id)
+        .await?;
+    let message_ids = vec![response.message_id.clone()];
+    refresh_message_decisions_into_review(&pool, &message_ids).await?;
+    refresh_message_task_candidates_into_review(&pool, &message_ids).await?;
 
     let event = build_event(
         telegram_event_types::MESSAGE_CREATED,
@@ -143,10 +177,11 @@ pub(crate) async fn post_telegram_manual_send(
         config: &state.config,
         event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
     };
-    let response = state
+    let mut response = state
         .telegram_runtime
         .send_manual_message(&context, &request)
         .await?;
+    project_manual_send_response(&state, &mut response).await?;
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_message_send(
             AUDIT_ACTOR_ID,
@@ -214,10 +249,11 @@ pub(crate) async fn post_telegram_message_reply(
         config: &state.config,
         event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
     };
-    let response = state
+    let mut response = state
         .telegram_runtime
         .send_reply_message(&context, &request)
         .await?;
+    project_manual_send_response(&state, &mut response).await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_message_send(
@@ -287,10 +323,11 @@ pub(crate) async fn post_telegram_message_forward(
         config: &state.config,
         event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
     };
-    let response = state
+    let mut response = state
         .telegram_runtime
         .send_forward_message(&context, &request)
         .await?;
+    project_manual_send_response(&state, &mut response).await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_message_send(

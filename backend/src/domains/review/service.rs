@@ -1,15 +1,12 @@
 use chrono::Utc;
-use serde_json::{Value, json};
+use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use super::{
-    ReviewInboxError, ReviewInboxStore, ReviewItem, ReviewItemStatus, ReviewPromotionTarget,
-};
+use super::{ReviewInboxError, ReviewInboxStore, ReviewItem, ReviewItemStatus};
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
 };
-use crate::workflows::review_promotion::{ReviewPromotionError, ReviewPromotionService};
 
 #[derive(Clone)]
 pub struct ReviewInboxService {
@@ -63,49 +60,6 @@ impl ReviewInboxService {
             )
             .await?)
     }
-
-    pub async fn promote_from_manual(
-        &self,
-        review_item_id: &str,
-        target: ReviewPromotionTarget,
-        captured_by: &'static str,
-        endpoint: &'static str,
-    ) -> Result<ReviewItem, ReviewInboxServiceError> {
-        let observation = ObservationStore::new(self.pool.clone())
-            .capture(
-                &NewObservation::new(
-                    "REVIEW_TRANSITION",
-                    ObservationOriginKind::Manual,
-                    Utc::now(),
-                    json!({
-                        "review_item_id": review_item_id,
-                        "operation": "review_item_promote",
-                        "target_domain": target.target_domain,
-                        "target_entity_kind": target.target_entity_kind,
-                        "target_entity_id": target.target_entity_id,
-                    }),
-                    format!("review-item://{review_item_id}/promote"),
-                )
-                .provenance(json!({
-                    "captured_by": captured_by,
-                    "endpoint": endpoint,
-                })),
-            )
-            .await
-            .map_err(ReviewInboxServiceError::PromotionObservationCapture)?;
-
-        Ok(ReviewPromotionService::new(self.pool.clone())
-            .promote_with_observation(
-                review_item_id,
-                target,
-                Some(&observation.observation_id),
-                Some(json!({
-                    "captured_by": captured_by,
-                    "endpoint": endpoint,
-                })),
-            )
-            .await?)
-    }
 }
 
 #[derive(Debug, Error)]
@@ -118,7 +72,4 @@ pub enum ReviewInboxServiceError {
 
     #[error(transparent)]
     ReviewInbox(#[from] ReviewInboxError),
-
-    #[error(transparent)]
-    ReviewPromotion(#[from] ReviewPromotionError),
 }

@@ -382,7 +382,7 @@ describe('realtime bootstrap', () => {
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledOnce()
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'mail', 'sync-statuses']
+      queryKey: ['communications', 'mail', 'sync-statuses']
     })
   })
 

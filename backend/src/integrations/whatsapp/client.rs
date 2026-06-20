@@ -10,6 +10,7 @@ pub use errors::WhatsappWebError;
 pub use models::{
     NewWhatsappWebMessage, NewWhatsappWebSession, WhatsappWebAccountSetupRequest,
     WhatsappWebAccountSetupResponse, WhatsappWebCompanionRuntime, WhatsappWebDeliveryState,
-    WhatsappWebLinkState, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
+    WhatsappWebLinkState, WhatsappWebMessage, WhatsappWebMessageIngestResult,
+    WhatsappWebObservedMessage, WhatsappWebSession,
 };
 pub use store::WhatsappWebStore;

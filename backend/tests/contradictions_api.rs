@@ -15,6 +15,7 @@ use hermes_hub_backend::engines::consistency::{
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::consistency_review::sync_contradiction_review_item;
 
 const LOCAL_API_TOKEN: &str = "contradictions-api-test-token";
 
@@ -233,10 +234,14 @@ async fn seed_contradiction_observation(pool: &PgPool, suffix: u128) -> Contradi
         metadata: json!({"source": "contradictions_api_test"}),
     };
 
-    ContradictionObservationStore::new(pool.clone())
+    let stored = ContradictionObservationStore::new(pool.clone())
         .upsert(&observation)
         .await
-        .expect("seed contradiction observation")
+        .expect("seed contradiction observation");
+    sync_contradiction_review_item(pool, &stored)
+        .await
+        .expect("seed contradiction review item");
+    stored
 }
 
 fn get_request_with_token(uri: &str, token: &str) -> Request<Body> {

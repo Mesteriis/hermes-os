@@ -3,7 +3,6 @@ use thiserror::Error;
 use crate::engines::obligation::ObligationEngineError;
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::observations::ObservationStoreError;
-use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum TaskCandidateError {
@@ -51,9 +50,6 @@ pub enum TaskCandidateError {
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),
-
-    #[error(transparent)]
-    ReviewMirror(#[from] ReviewMirrorError),
 
     #[error(transparent)]
     SerdeJson(#[from] serde_json::Error),

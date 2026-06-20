@@ -1,6 +1,5 @@
 use thiserror::Error;
 
-use crate::domains::review::ReviewInboxError;
 use crate::platform::observations::ObservationStoreError;
 
 #[derive(Debug, Error)]
@@ -31,9 +30,6 @@ pub enum ConsistencyError {
 
     #[error("contradiction observation not found: {0}")]
     ObservationNotFound(String),
-
-    #[error(transparent)]
-    ReviewInbox(#[from] ReviewInboxError),
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),

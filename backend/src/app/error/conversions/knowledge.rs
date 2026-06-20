@@ -8,7 +8,8 @@ use crate::domains::projects::link_reviews::{
 use crate::domains::relationships::{RelationshipCommandServiceError, RelationshipStoreError};
 use crate::domains::review::{ReviewInboxError, ReviewInboxServiceError};
 use crate::domains::tasks::candidates::{TaskCandidateError, TaskCandidateReviewServiceError};
-use crate::engines::consistency::{ConsistencyError, ContradictionReviewServiceError};
+use crate::engines::consistency::ConsistencyError;
+use crate::workflows::consistency_review::ContradictionReviewServiceError;
 use crate::workflows::review_promotion::ReviewPromotionError;
 
 impl From<crate::domains::graph::core::GraphStoreError> for ApiError {
@@ -206,6 +207,10 @@ impl From<ContradictionReviewServiceError> for ApiError {
                 tracing::error!(error = %error, "contradiction review observation capture failed");
                 Self::InvalidContradictionReview("contradiction review observation capture failed")
             }
+            ContradictionReviewServiceError::ReviewWorkflow(error) => {
+                tracing::error!(error = %error, "contradiction review inbox sync failed");
+                Self::InvalidContradictionReview("contradiction review inbox sync failed")
+            }
         }
     }
 }
@@ -280,7 +285,6 @@ impl From<ReviewInboxServiceError> for ApiError {
                 Self::InvalidReviewQuery("review item promote observation capture failed")
             }
             ReviewInboxServiceError::ReviewInbox(inner) => Self::from(inner),
-            ReviewInboxServiceError::ReviewPromotion(inner) => Self::from(inner),
         }
     }
 }

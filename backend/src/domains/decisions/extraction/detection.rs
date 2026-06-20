@@ -1,8 +1,8 @@
-use crate::domains::decisions::DecisionReviewState;
-use crate::engines::decision::models::{
+use super::models::{
     DecisionCandidate, DecisionCandidateKind, DecisionExtractionInput,
     DecisionImpactedEntityCandidate,
 };
+use crate::domains::decisions::DecisionReviewState;
 
 pub fn detect_decision(
     input: &DecisionExtractionInput,

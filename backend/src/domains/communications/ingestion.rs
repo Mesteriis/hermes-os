@@ -1,7 +1,40 @@
 use crate::domains::communications::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, WorkflowState,
 };
-use crate::workflows::email_intelligence::EmailIntelligenceService;
+
+const URGENT_WORDS: &[&str] = &[
+    "urgent",
+    "asap",
+    "deadline",
+    "immediately",
+    "critical",
+    "action required",
+];
+const FINANCE_WORDS: &[&str] = &[
+    "invoice",
+    "payment",
+    "factura",
+    "bill",
+    "amount due",
+    "receipt",
+    "tax",
+];
+const LEGAL_WORDS: &[&str] = &[
+    "contract",
+    "agreement",
+    "nda",
+    "legal",
+    "liability",
+    "confidential",
+    "attorney",
+];
+const ATTACHMENT_WORDS: &[&str] = &["attached", "attachment", "see attached", "please find"];
+const JUNK_WORDS: &[&str] = &[
+    "unsubscribe",
+    "opt out",
+    "this email was sent",
+    "if you no longer wish",
+];
 
 /// Result of Hermes auto-analysis on an ingested message.
 #[derive(Debug)]
@@ -20,8 +53,8 @@ pub async fn analyze_ingested_message(
     store: &MessageProjectionStore,
     message: &ProjectedMessage,
 ) -> Result<IngestionAnalysis, MessageProjectionError> {
-    let score = EmailIntelligenceService::heuristic_score(message);
-    let category = EmailIntelligenceService::heuristic_category(message);
+    let score = heuristic_score(message);
+    let category = heuristic_category(message);
 
     let body_lower = message.body_text.to_lowercase();
 
@@ -59,6 +92,72 @@ pub async fn analyze_ingested_message(
         is_phishing,
         auto_workflow_state: auto_state,
     })
+}
+
+fn heuristic_score(message: &ProjectedMessage) -> i16 {
+    let mut score: i16 = 30;
+    let body_lower = message.body_text.to_lowercase();
+    let subject_lower = message.subject.to_lowercase();
+
+    if contains_any(&subject_lower, URGENT_WORDS) {
+        score = score.saturating_add(15);
+    }
+    if contains_any(&body_lower, FINANCE_WORDS) || contains_any(&subject_lower, FINANCE_WORDS) {
+        score = score.saturating_add(20);
+    }
+    if contains_any(&body_lower, LEGAL_WORDS) || contains_any(&subject_lower, LEGAL_WORDS) {
+        score = score.saturating_add(25);
+    }
+
+    if body_lower.contains('?') {
+        score = score.saturating_add(10);
+    }
+    if contains_any(&body_lower, ATTACHMENT_WORDS) {
+        score = score.saturating_add(10);
+    }
+    if contains_any(&body_lower, JUNK_WORDS) {
+        score = score.saturating_sub(20);
+    }
+    if message.body_text.len() < 50 {
+        score = score.saturating_sub(10);
+    }
+
+    score.clamp(0, 100)
+}
+
+fn heuristic_category(message: &ProjectedMessage) -> Option<String> {
+    let body_lower = message.body_text.to_lowercase();
+    let subject_lower = message.subject.to_lowercase();
+
+    if body_lower.contains("invoice")
+        || body_lower.contains("factura")
+        || body_lower.contains("payment")
+    {
+        return Some("finance".to_owned());
+    }
+    if body_lower.contains("contract")
+        || body_lower.contains("nda")
+        || body_lower.contains("agreement")
+    {
+        return Some("legal".to_owned());
+    }
+    if body_lower.contains("unsubscribe") || body_lower.contains("newsletter") {
+        return Some("marketing".to_owned());
+    }
+    if subject_lower.contains("notification") || body_lower.contains("notification") {
+        return Some("notification".to_owned());
+    }
+    if body_lower.contains("click here")
+        && (body_lower.contains("account") || body_lower.contains("verify"))
+    {
+        return Some("suspicious".to_owned());
+    }
+
+    None
+}
+
+fn contains_any(value: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| value.contains(needle))
 }
 
 #[cfg(test)]
@@ -104,7 +203,7 @@ mod tests {
             "hacker@evil.com",
             "Please verify your account immediately by clicking here",
         );
-        let analysis = EmailIntelligenceService::heuristic_score(&msg);
+        let analysis = heuristic_score(&msg);
         assert!(analysis > 0);
     }
 
@@ -115,7 +214,7 @@ mod tests {
             "news@company.com",
             "Click here to read. To unsubscribe, click here.",
         );
-        let score = EmailIntelligenceService::heuristic_score(&msg);
+        let score = heuristic_score(&msg);
         assert!(score <= 30, "newsletters should score low, got {score}");
     }
 
@@ -126,7 +225,7 @@ mod tests {
             "billing@vendor.com",
             "Please find your invoice attached. Amount due: $500. Payment required by June 15.",
         );
-        let score = EmailIntelligenceService::heuristic_score(&msg);
+        let score = heuristic_score(&msg);
         assert!(score >= 50, "invoices should score high, got {score}");
     }
 }

@@ -57,8 +57,8 @@ const REALTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
 ]
 
 const MAIL_RUNTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
-	['integrations', 'mail', 'sync-statuses'],
-	['integrations', 'mail', 'mailbox-health']
+	['communications', 'mail', 'sync-statuses'],
+	['communications', 'mail', 'mailbox-health']
 ]
 
 const TELEGRAM_QUERY_KEYS: readonly (readonly unknown[])[] = [
@@ -266,7 +266,7 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 		return [['communications-outbox'], ['communications-mail-list']]
 	}
 	if (eventType.startsWith('mail.sync.')) {
-		return [['integrations', 'mail', 'sync-statuses']]
+		return [['communications', 'mail', 'sync-statuses']]
 	}
 	if (eventType.startsWith('mail.message.')) {
 		return [

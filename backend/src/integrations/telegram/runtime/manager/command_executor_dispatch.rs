@@ -19,10 +19,6 @@ use super::super::commands::{
 };
 use super::super::models::{TelegramMediaSendRequest, TelegramMediaSendType};
 use super::super::state::TelegramRuntimeCommand;
-use crate::workflows::telegram_media_storage::{
-    TelegramMediaStorageError, TelegramPreparedMediaSendRequest, TelegramProviderMediaCommand,
-    media_send_request,
-};
 
 pub(super) enum DispatchOutcome {
     AwaitingProvider,
@@ -31,7 +27,7 @@ pub(super) enum DispatchOutcome {
 }
 
 pub(super) async fn dispatch_command(
-    pool: &PgPool,
+    _pool: &PgPool,
     command: &TelegramProviderWriteCommand,
     command_tx: std::sync::mpsc::Sender<TelegramRuntimeCommand>,
 ) -> Result<DispatchOutcome, TelegramError> {
@@ -50,19 +46,16 @@ pub(super) async fn dispatch_command(
             Ok(DispatchOutcome::ObservedMessage(snapshot))
         }
         "send_media" => {
-            let request = media_send_request(
-                pool,
-                &TelegramProviderMediaCommand {
-                    command_id: command.command_id.clone(),
-                    account_id: command.account_id.clone(),
-                    command_kind: command.command_kind.clone(),
-                    provider_chat_id: command.provider_chat_id.clone(),
-                    payload: command.payload.clone(),
-                },
-            )
-            .await
-            .map_err(telegram_media_storage_error)?;
-            let request = telegram_media_send_request(request)?;
+            let request = TelegramMediaSendRequest {
+                command_id: command.command_id.clone(),
+                provider_chat_id: command.provider_chat_id.clone(),
+                media_type: TelegramMediaSendType::try_from(
+                    payload_string(command, "media_type")?.as_str(),
+                )?,
+                local_path: payload_string(command, "local_path")?,
+                caption: payload_optional_string(command, "caption"),
+                filename: payload_optional_string(command, "filename"),
+            };
             let snapshot = request_actor_send_media(command_tx, request).await?;
             Ok(DispatchOutcome::ObservedMessage(snapshot))
         }
@@ -235,29 +228,6 @@ pub(super) async fn dispatch_command(
     }
 }
 
-fn telegram_media_send_request(
-    request: TelegramPreparedMediaSendRequest,
-) -> Result<TelegramMediaSendRequest, TelegramError> {
-    Ok(TelegramMediaSendRequest {
-        command_id: request.command_id,
-        provider_chat_id: request.provider_chat_id,
-        media_type: TelegramMediaSendType::try_from(request.media_type.as_str())?,
-        local_path: request.local_path,
-        caption: request.caption,
-        filename: request.filename,
-    })
-}
-
-fn telegram_media_storage_error(error: TelegramMediaStorageError) -> TelegramError {
-    match error {
-        TelegramMediaStorageError::InvalidRequest(message) => {
-            TelegramError::InvalidRequest(message)
-        }
-        TelegramMediaStorageError::Runtime(message) => TelegramError::TdlibRuntime(message),
-        TelegramMediaStorageError::Storage(message) => TelegramError::MediaStorage(message),
-    }
-}
-
 fn payload_string(
     command: &TelegramProviderWriteCommand,
     key: &str,
@@ -275,6 +245,16 @@ fn payload_string(
                 command.command_kind
             ))
         })
+}
+
+fn payload_optional_string(command: &TelegramProviderWriteCommand, key: &str) -> Option<String> {
+    command
+        .payload
+        .get(key)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
 }
 
 fn payload_i64(command: &TelegramProviderWriteCommand, key: &str) -> Result<i64, TelegramError> {

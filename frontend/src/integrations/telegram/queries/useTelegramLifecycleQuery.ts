@@ -19,7 +19,7 @@ export function useTelegramMessageVersionsQuery(
   enabled: MaybeRefOrGetter<boolean> = true
 ) {
   return useQuery<TelegramMessageVersionListResponse>({
-    queryKey: computed(() => ['integrations', 'telegram', 'message-versions', toValue(messageId)]),
+    queryKey: computed(() => ['communications', 'messages', toValue(messageId), 'versions']),
     queryFn: () => fetchTelegramMessageVersions(toValue(messageId) as string),
     enabled: computed(() => Boolean(toValue(messageId)) && Boolean(toValue(enabled))),
   })
@@ -30,7 +30,7 @@ export function useTelegramMessageTombstonesQuery(
   enabled: MaybeRefOrGetter<boolean> = true
 ) {
   return useQuery<TelegramMessageTombstoneListResponse>({
-    queryKey: computed(() => ['integrations', 'telegram', 'message-tombstones', toValue(messageId)]),
+    queryKey: computed(() => ['communications', 'messages', toValue(messageId), 'tombstones']),
     queryFn: () => fetchTelegramMessageTombstones(toValue(messageId) as string),
     enabled: computed(() => Boolean(toValue(messageId)) && Boolean(toValue(enabled))),
   })

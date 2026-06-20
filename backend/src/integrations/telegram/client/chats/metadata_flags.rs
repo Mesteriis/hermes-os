@@ -1,9 +1,11 @@
 use chrono::{DateTime, Utc};
-use sqlx::Row;
 
 use super::super::errors::TelegramError;
 use super::super::models::TelegramChat;
 use super::TelegramStore;
+use crate::platform::communications::ProviderChannelMessageStore;
+
+const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
 impl TelegramStore {
     pub async fn set_chat_metadata_bool(
@@ -111,44 +113,14 @@ impl TelegramStore {
             .and_then(serde_json::Value::as_str)
             .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
             .map(|value| value.with_timezone(&Utc));
-        let unread_count = sqlx::query_scalar::<_, i64>(
-            r#"
-            SELECT COUNT(*)::bigint
-            FROM communication_messages
-            WHERE account_id = $1
-              AND conversation_id = $2
-              AND channel_kind IN ('telegram_user', 'telegram_bot')
-              AND delivery_state = 'received'
-              AND ($3::timestamptz IS NULL OR COALESCE(occurred_at, projected_at) > $3)
-            "#,
-        )
-        .bind(&chat.account_id)
-        .bind(&chat.provider_chat_id)
-        .bind(last_read_at)
-        .fetch_one(&self.pool)
-        .await?;
-        let mention_count = sqlx::query_scalar::<_, i64>(
-            r#"
-            SELECT COALESCE(SUM(
-                CASE
-                    WHEN jsonb_typeof(message_metadata->'mention_count') = 'number'
-                        THEN (message_metadata->>'mention_count')::bigint
-                    ELSE 0
-                END
-            ), 0)::bigint
-            FROM communication_messages
-            WHERE account_id = $1
-              AND conversation_id = $2
-              AND channel_kind IN ('telegram_user', 'telegram_bot')
-              AND delivery_state = 'received'
-              AND ($3::timestamptz IS NULL OR COALESCE(occurred_at, projected_at) > $3)
-            "#,
-        )
-        .bind(&chat.account_id)
-        .bind(&chat.provider_chat_id)
-        .bind(last_read_at)
-        .fetch_one(&self.pool)
-        .await?;
+        let (unread_count, mention_count) = ProviderChannelMessageStore::new(self.pool.clone())
+            .unread_counts(
+                &chat.account_id,
+                &chat.provider_chat_id,
+                TELEGRAM_CHANNEL_KINDS,
+                last_read_at,
+            )
+            .await?;
         metadata.insert(
             "unread_count".to_owned(),
             serde_json::Value::Number(serde_json::Number::from(unread_count.max(0))),

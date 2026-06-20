@@ -1,8 +1,11 @@
 use super::WhatsappWebStore;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::models::WhatsappWebMessage;
-use crate::integrations::whatsapp::client::rows::row_to_whatsapp_web_message;
+use crate::integrations::whatsapp::client::rows::provider_channel_message_to_whatsapp_web_message;
 use crate::integrations::whatsapp::client::validation::validate_limit;
+use crate::platform::communications::ProviderChannelMessageStore;
+
+const WHATSAPP_WEB_CHANNEL_KINDS: &[&str] = &["whatsapp_web"];
 
 impl WhatsappWebStore {
     pub async fn recent_messages(
@@ -16,37 +19,16 @@ impl WhatsappWebStore {
         let provider_chat_id = provider_chat_id
             .map(str::trim)
             .filter(|value| !value.is_empty());
-        let rows = sqlx::query(
-            r#"
-            SELECT
-                message_id,
-                raw_record_id,
+        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+            .recent_messages(
                 account_id,
-                provider_record_id,
-                subject,
-                sender,
-                body_text,
-                occurred_at,
-                projected_at,
-                channel_kind,
-                conversation_id,
-                sender_display_name,
-                delivery_state,
-                message_metadata
-            FROM communication_messages
-            WHERE channel_kind = 'whatsapp_web'
-              AND ($1::text IS NULL OR account_id = $1)
-              AND ($2::text IS NULL OR conversation_id = $2)
-            ORDER BY COALESCE(occurred_at, projected_at) DESC, message_id ASC
-            LIMIT $3
-            "#,
-        )
-        .bind(account_id)
-        .bind(provider_chat_id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await?;
-
-        rows.into_iter().map(row_to_whatsapp_web_message).collect()
+                provider_chat_id,
+                WHATSAPP_WEB_CHANNEL_KINDS,
+                limit,
+            )
+            .await?
+            .into_iter()
+            .map(provider_channel_message_to_whatsapp_web_message)
+            .collect())
     }
 }

@@ -148,7 +148,7 @@ function applySyncRealtimePatch(
 
 	let patched = false
 	for (const [queryKey, data] of queryClient.getQueriesData<MailSyncStatus[]>({
-		queryKey: ['integrations', 'mail', 'sync-statuses']
+		queryKey: ['communications', 'mail', 'sync-statuses']
 	})) {
 		const updated = patchSyncStatuses(data, accountId, payload)
 		if (updated !== data) {

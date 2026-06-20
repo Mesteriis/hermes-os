@@ -1,16 +1,14 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::body::Body;
+use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
-use chrono::Utc;
 use serde_json::{Value, json};
 use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::integrations::telegram::client::{
-    NewTelegramChat, NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramStore,
-    TelegramSyncState,
+    NewTelegramChat, TelegramChatKind, TelegramStore, TelegramSyncState,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -67,22 +65,24 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
         .await
         .expect("public chat");
 
-    let result = store
-        .ingest_fixture_message(&NewTelegramMessage {
-            account_id: account_id.clone(),
-            provider_chat_id: chat_id.clone(),
-            provider_message_id: format!("{chat_id}:4242"),
-            chat_kind: TelegramChatKind::Channel,
-            chat_title: public_chat.title,
-            sender_id: "sender-link".to_owned(),
-            sender_display_name: "Link Sender".to_owned(),
-            text: "Public channel message with stable provider permalink.".to_owned(),
-            import_batch_id: format!("telegram-link-fixture-{suffix}"),
-            occurred_at: Utc::now(),
-            delivery_state: TelegramDeliveryState::Received,
-        })
-        .await
-        .expect("message ingest");
+    let result = assert_ok(
+        app.clone(),
+        "/api/v1/communications/telegram/messages",
+        json!({
+            "account_id": account_id.clone(),
+            "provider_chat_id": chat_id.clone(),
+            "provider_message_id": format!("{chat_id}:4242"),
+            "chat_kind": "channel",
+            "chat_title": public_chat.title.clone(),
+            "sender_id": "sender-link",
+            "sender_display_name": "Link Sender",
+            "text": "Public channel message with stable provider permalink.",
+            "import_batch_id": format!("telegram-link-fixture-{suffix}"),
+            "occurred_at": "2026-06-19T10:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
 
     let chats_after_ingest = store
         .list_chats(Some(&account_id), 10)
@@ -122,16 +122,9 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
         }),
         "chat upsert observation must exist"
     );
-    assert!(
-        chat_observation_rows.iter().any(|row| {
-            row.get::<String, _>("kind_code") == "TELEGRAM_CHAT"
-                && row.get::<String, _>("relationship_kind") == "metadata_update"
-        }),
-        "chat metadata_update observation must exist"
-    );
 
     let message = store
-        .message_by_id(&result.message_id)
+        .message_by_id(result["message_id"].as_str().expect("message_id"))
         .await
         .expect("message lookup")
         .expect("projected message");
@@ -142,7 +135,7 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
     assert_eq!(message.metadata["message_link_kind"], json!("public_t_me"));
 }
 
-async fn assert_ok<S>(app: S, path: &str, body: Value)
+async fn assert_ok<S>(app: S, path: &str, body: Value) -> Value
 where
     S: tower::Service<Request<Body>, Response = axum::response::Response> + Clone,
     S::Error: std::fmt::Debug,
@@ -153,6 +146,10 @@ where
         .await
         .expect("response");
     assert_eq!(response.status(), StatusCode::OK);
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("response body");
+    serde_json::from_slice(&bytes).expect("json response")
 }
 
 fn json_post_request(path: &str, body: Value, token: &str) -> Request<Body> {

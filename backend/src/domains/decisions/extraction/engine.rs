@@ -1,6 +1,6 @@
-use crate::engines::decision::detection::{detect_decision, sentences};
-use crate::engines::decision::errors::DecisionEngineError;
-use crate::engines::decision::models::{DecisionExtractionInput, DecisionExtractionResult};
+use super::detection::{detect_decision, sentences};
+use super::errors::DecisionEngineError;
+use super::models::{DecisionExtractionInput, DecisionExtractionResult};
 
 pub struct DecisionEngine;
 

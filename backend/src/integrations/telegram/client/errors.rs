@@ -1,8 +1,7 @@
+use crate::platform::communications::ProviderCommunicationMessagePortError;
 use crate::platform::observations::ObservationStoreError;
 use crate::platform::secrets::{DatabaseEncryptedVaultError, SecretReferenceError};
 use crate::vault::HostVaultError;
-use crate::workflows::provider_communication_projection::ProviderCommunicationProjectionError;
-use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum TelegramError {
@@ -37,10 +36,7 @@ pub enum TelegramError {
     HostVault(#[from] HostVaultError),
 
     #[error(transparent)]
-    CommunicationProjection(#[from] ProviderCommunicationProjectionError),
-
-    #[error(transparent)]
-    ReviewInboxWorkflow(#[from] ReviewInboxWorkflowError),
+    CommunicationMessagePort(#[from] ProviderCommunicationMessagePortError),
 
     #[error(transparent)]
     ObservationStore(#[from] ObservationStoreError),

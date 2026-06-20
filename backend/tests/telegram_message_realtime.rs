@@ -12,8 +12,9 @@ use hermes_hub_backend::integrations::telegram::client::lifecycle::{
     record_provider_edit_observation,
 };
 use hermes_hub_backend::integrations::telegram::client::{
-    NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramStore,
+    NewTelegramMessage, TelegramChatKind, TelegramDeliveryState, TelegramMessage, TelegramStore,
 };
+use hermes_hub_backend::workflows::provider_communication_projection::record_and_project_telegram_message;
 use testkit::context::TestContext;
 
 #[tokio::test]
@@ -25,8 +26,10 @@ async fn telegram_provider_delete_observation_is_idempotent_and_reconciles_delet
     let provider_chat_id = "-100message-delete";
     let provider_message_id = format!("{provider_chat_id}:42");
 
-    let ingested = store
-        .ingest_fixture_message(&NewTelegramMessage {
+    let message = ingest_projected_fixture_message(
+        &pool,
+        &store,
+        NewTelegramMessage {
             account_id: account_id.clone(),
             provider_chat_id: provider_chat_id.to_owned(),
             provider_message_id: provider_message_id.clone(),
@@ -38,14 +41,9 @@ async fn telegram_provider_delete_observation_is_idempotent_and_reconciles_delet
             import_batch_id: "telegram-realtime-test".to_owned(),
             occurred_at: Utc::now(),
             delivery_state: TelegramDeliveryState::Received,
-        })
-        .await
-        .expect("ingest fixture message");
-    let message = store
-        .message_by_id(&ingested.message_id)
-        .await
-        .expect("load message")
-        .expect("message");
+        },
+    )
+    .await;
 
     lifecycle::insert_command(
         &pool,
@@ -154,8 +152,10 @@ async fn telegram_provider_edit_observation_is_idempotent_and_reconciles_edit_co
     let provider_chat_id = "-100message-edit";
     let provider_message_id = format!("{provider_chat_id}:42");
 
-    let ingested = store
-        .ingest_fixture_message(&NewTelegramMessage {
+    let message = ingest_projected_fixture_message(
+        &pool,
+        &store,
+        NewTelegramMessage {
             account_id: account_id.clone(),
             provider_chat_id: provider_chat_id.to_owned(),
             provider_message_id: provider_message_id.clone(),
@@ -167,14 +167,9 @@ async fn telegram_provider_edit_observation_is_idempotent_and_reconciles_edit_co
             import_batch_id: "telegram-realtime-test".to_owned(),
             occurred_at: Utc::now(),
             delivery_state: TelegramDeliveryState::Received,
-        })
-        .await
-        .expect("ingest fixture message");
-    let message = store
-        .message_by_id(&ingested.message_id)
-        .await
-        .expect("load message")
-        .expect("message");
+        },
+    )
+    .await;
 
     lifecycle::insert_command(
         &pool,
@@ -519,4 +514,23 @@ async fn create_telegram_account(
         .await
         .expect("provider account");
     account_id
+}
+
+async fn ingest_projected_fixture_message(
+    pool: &sqlx::PgPool,
+    store: &TelegramStore,
+    message: NewTelegramMessage,
+) -> TelegramMessage {
+    let observed = store
+        .ingest_fixture_message(&message)
+        .await
+        .expect("observe fixture message");
+    let projected = record_and_project_telegram_message(pool.clone(), observed.raw)
+        .await
+        .expect("project fixture message");
+    store
+        .message_by_id(&projected.message_id)
+        .await
+        .expect("load message")
+        .expect("message")
 }

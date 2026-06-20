@@ -34,11 +34,10 @@ use super::storage::{
     MailStorageError, MailStorageStore, NewCommunicationAttachmentImport, NewMailBlob,
     new_communication_attachment_import_id,
 };
-use crate::platform::communications::OutgoingEmail;
+use crate::platform::communications::{DEFAULT_MAIL_SYNC_BLOB_ROOT, OutgoingEmail};
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
 };
-use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
 const MAX_ATTACHMENT_IMPORT_BYTES: usize = 50 * 1024 * 1024;
 const LOCAL_IMPORT_ACTOR_ID: &str = "hermes-frontend";

@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use super::errors::DecisionEngineError;
 use crate::domains::decisions::{
     DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState, NewDecision,
     NewDecisionEvidence, NewDecisionImpactedEntity,
 };
-use crate::engines::decision::errors::DecisionEngineError;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DecisionExtractionInput {

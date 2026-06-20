@@ -5,9 +5,7 @@ use sqlx::{Postgres, Transaction};
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatFolderSnapshot, TelegramTdlibChatSnapshot,
 };
-use crate::platform::communications::NewRawCommunicationRecord;
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
-use crate::workflows::provider_communication_projection::record_raw_provider_communication;
 
 use super::TELEGRAM_CHAT_RECORD_KIND;
 use super::chat_metadata::tdlib_chat_projection_metadata;
@@ -565,29 +563,6 @@ impl TelegramStore {
             TELEGRAM_CHAT_RECORD_KIND,
             &snapshot.provider_chat_id,
         );
-        let import_batch_id = format!("telegram-tdlib-chat-sync:{}", provider_account.account_id);
-        let raw = NewRawCommunicationRecord::new(
-            &raw_record_id,
-            &provider_account.account_id,
-            TELEGRAM_CHAT_RECORD_KIND,
-            &snapshot.provider_chat_id,
-            format!(
-                "sha256:{}",
-                stable_hash(snapshot.raw.to_string().as_bytes())
-            ),
-            &import_batch_id,
-            snapshot.raw.clone(),
-        )
-        .occurred_at(snapshot.last_message_at.unwrap_or_else(Utc::now))
-        .provenance(json!({
-            "provider": "telegram",
-            "provider_kind": provider_account.provider_kind.as_str(),
-            "runtime": "tdlib",
-            "account_id": provider_account.account_id,
-            "provider_chat_id": snapshot.provider_chat_id,
-        }));
-        record_raw_provider_communication(self.pool.clone(), raw).await?;
-
         self.upsert_chat(&NewTelegramChat {
             account_id: provider_account.account_id,
             provider_chat_id: snapshot.provider_chat_id.clone(),

@@ -4,8 +4,6 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::workflows::review_mirror::sync_decision_review_state_in_transaction;
-
 use super::errors::DecisionStoreError;
 use super::evidence::{
     link_decision_review_transition_in_transaction, link_decision_support_in_transaction,
@@ -339,7 +337,6 @@ impl DecisionStore {
             metadata,
         )
         .await?;
-        sync_decision_review_state_in_transaction(&mut transaction, &decision).await?;
         transaction.commit().await?;
         Ok(decision)
     }

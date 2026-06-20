@@ -17,10 +17,10 @@ onMounted(() => {
 })
 
 watch(
-  () => route.name,
-  (name) => {
+  () => [route.name, route.query.section] as const,
+  ([name, section]) => {
     if (typeof name === 'string') {
-      nav.syncFromRoute(name as Parameters<typeof nav.syncFromRoute>[0])
+      nav.syncFromRoute(name as Parameters<typeof nav.syncFromRoute>[0], section)
     }
   },
   { immediate: true }

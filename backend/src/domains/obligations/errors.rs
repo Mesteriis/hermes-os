@@ -1,7 +1,6 @@
 use thiserror::Error;
 
 use crate::platform::observations::ObservationStoreError;
-use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum ObligationStoreError {
@@ -49,7 +48,4 @@ pub enum ObligationStoreError {
 
     #[error("unknown obligation risk state stored in database: {0}")]
     UnknownRiskState(String),
-
-    #[error(transparent)]
-    ReviewMirror(#[from] ReviewMirrorError),
 }

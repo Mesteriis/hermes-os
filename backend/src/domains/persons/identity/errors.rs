@@ -2,7 +2,6 @@ use thiserror::Error;
 
 use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::observations::ObservationStoreError;
-use crate::workflows::review_mirror::ReviewMirrorError;
 
 #[derive(Debug, Error)]
 pub enum PersonIdentityError {
@@ -41,9 +40,6 @@ pub enum PersonIdentityError {
 
     #[error(transparent)]
     Observation(#[from] ObservationStoreError),
-
-    #[error(transparent)]
-    ReviewMirror(#[from] ReviewMirrorError),
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),

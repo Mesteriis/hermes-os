@@ -5,7 +5,10 @@ use sqlx::{PgPool, Postgres, Transaction};
 use super::errors::TelegramError;
 use super::evidence::link_telegram_entity_in_transaction;
 use super::models::topics::{NewTelegramTopic, TelegramTopic};
+use crate::platform::communications::ProviderChannelMessageStore;
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+
+const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
 fn row_to_telegram_topic(row: sqlx::postgres::PgRow) -> Result<TelegramTopic, TelegramError> {
     use sqlx::Row;
@@ -202,22 +205,7 @@ pub async fn list_topic_message_ids(
     topic_id: &str,
     limit: i64,
 ) -> Result<Vec<String>, TelegramError> {
-    // Messages belong to a forum topic via message_metadata->>'forum_topic_id'.
-    // The index idx_comm_messages_forum_topic_id covers this filter.
-    let rows: Vec<(String,)> = sqlx::query_as(
-        r"
-        SELECT message_id FROM communication_messages
-        WHERE message_metadata->>'forum_topic_id' = $1
-          AND channel_kind IN ('telegram_user', 'telegram_bot')
-        ORDER BY COALESCE(occurred_at, projected_at) DESC NULLS LAST, message_id ASC
-        LIMIT $2
-        ",
-    )
-    .bind(topic_id)
-    .bind(limit)
-    .fetch_all(pool)
-    .await
-    .map_err(TelegramError::from)?;
-
-    Ok(rows.into_iter().map(|(id,)| id).collect())
+    Ok(ProviderChannelMessageStore::new(pool.clone())
+        .message_ids_by_metadata_string("forum_topic_id", topic_id, TELEGRAM_CHANNEL_KINDS, limit)
+        .await?)
 }

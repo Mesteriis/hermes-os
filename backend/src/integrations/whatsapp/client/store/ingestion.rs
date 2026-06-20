@@ -2,21 +2,20 @@ use serde_json::json;
 
 use crate::platform::communications::NewRawCommunicationRecord;
 use crate::vault::CommunicationProviderAccountStore;
-use crate::workflows::provider_communication_projection::record_and_project_whatsapp_web_message;
 
 use super::WhatsappWebStore;
 use crate::integrations::whatsapp::client::constants::WHATSAPP_WEB_MESSAGE_RECORD_KIND;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::ids::whatsapp_web_raw_record_id;
 use crate::integrations::whatsapp::client::models::{
-    NewWhatsappWebMessage, WhatsappWebLinkState, WhatsappWebMessageIngestResult,
+    NewWhatsappWebMessage, WhatsappWebLinkState, WhatsappWebObservedMessage,
 };
 
 impl WhatsappWebStore {
     pub async fn ingest_fixture_message(
         &self,
         message: &NewWhatsappWebMessage,
-    ) -> Result<WhatsappWebMessageIngestResult, WhatsappWebError> {
+    ) -> Result<WhatsappWebObservedMessage, WhatsappWebError> {
         message.validate()?;
         let provider_account = CommunicationProviderAccountStore::new(self.pool.clone())
             .get(&message.account_id)
@@ -81,16 +80,9 @@ impl WhatsappWebStore {
             "account_id": message.account_id,
             "provider_chat_id": message.provider_chat_id,
         }));
-        let projected = record_and_project_whatsapp_web_message(self.pool.clone(), raw).await?;
-        self.refresh_message_intelligence_candidates(&projected.message_id)
-            .await?;
-
         self.update_session_last_sync(&message.account_id, message.occurred_at)
             .await?;
 
-        Ok(WhatsappWebMessageIngestResult {
-            raw_record_id: projected.raw_record_id,
-            message_id: projected.message_id,
-        })
+        Ok(WhatsappWebObservedMessage { raw })
     }
 }

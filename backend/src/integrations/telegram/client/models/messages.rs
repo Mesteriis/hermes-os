@@ -6,6 +6,7 @@ use sha2::{Digest, Sha256};
 use super::super::errors::TelegramError;
 use super::super::validation::validate_non_empty;
 use super::chats::TelegramChatKind;
+use crate::platform::communications::NewRawCommunicationRecord;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct NewTelegramMessage {
@@ -108,6 +109,14 @@ pub struct TelegramMessageIngestResult {
     pub message_id: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TelegramObservedMessage {
+    pub raw_record_id: String,
+    pub message_id: String,
+    pub raw: NewRawCommunicationRecord,
+    pub telegram_chat_id: String,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub struct TelegramManualSendRequest {
     pub command_id: String,
@@ -128,6 +137,8 @@ impl TelegramManualSendRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct TelegramManualSendResponse {
+    #[serde(skip_serializing)]
+    pub raw: Option<NewRawCommunicationRecord>,
     pub raw_record_id: String,
     pub message_id: String,
     pub account_id: String,

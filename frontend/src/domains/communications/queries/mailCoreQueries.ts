@@ -118,7 +118,7 @@ export function useStateCountsQuery(accountId?: QueryParam<string>, localState?:
 
 export function useSyncStatusesQuery() {
   return useQuery<MailSyncStatus[]>({
-    queryKey: ['integrations', 'mail', 'sync-statuses'],
+    queryKey: ['communications', 'mail', 'sync-statuses'],
     queryFn: async () => {
       const res = await fetchMailSyncStatus()
       return res.items
@@ -132,8 +132,8 @@ export function useMailSyncSettingsQuery(accountId: NullableQueryParam<string>) 
     queryKey: computed(() => {
       const id = toValue(accountId)
       return id
-        ? ['integrations', 'mail', 'sync-settings', id] as const
-        : ['integrations', 'mail', 'sync-settings', null] as const
+        ? ['communications', 'mail', 'sync-settings', id] as const
+        : ['communications', 'mail', 'sync-settings', null] as const
     }),
     queryFn: async () => {
       const id = toValue(accountId)
@@ -154,15 +154,15 @@ export function useUpdateMailSyncSettingsMutation() {
   >({
     mutationFn: async ({ accountId, settings }) => updateMailSyncSettings(accountId, settings),
     onSuccess: (_settings, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'mail', 'sync-settings', variables.accountId] })
-      queryClient.invalidateQueries({ queryKey: ['integrations', 'mail', 'sync-statuses'] })
+      queryClient.invalidateQueries({ queryKey: ['communications', 'mail', 'sync-settings', variables.accountId] })
+      queryClient.invalidateQueries({ queryKey: ['communications', 'mail', 'sync-statuses'] })
     }
   })
 }
 
 export function useMailboxHealthQuery(accountId?: QueryParam<string>) {
   return useQuery<MailboxHealth | null>({
-    queryKey: computed(() => ['integrations', 'mail', 'mailbox-health', toValue(accountId)]),
+    queryKey: computed(() => ['communications', 'mail', 'mailbox-health', toValue(accountId)]),
     queryFn: async () => {
       return fetchMailboxHealth(toValue(accountId))
     },

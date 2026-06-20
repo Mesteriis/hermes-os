@@ -4,6 +4,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use crate::platform::communications::CommunicationProviderKind;
+use crate::platform::communications::NewRawCommunicationRecord;
 
 use super::errors::WhatsappWebError;
 use super::validation::{validate_non_empty, validate_object};
@@ -196,6 +197,11 @@ impl TryFrom<String> for WhatsappWebDeliveryState {
 pub struct WhatsappWebMessageIngestResult {
     pub raw_record_id: String,
     pub message_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WhatsappWebObservedMessage {
+    pub raw: NewRawCommunicationRecord,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

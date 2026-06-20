@@ -10,7 +10,7 @@ export function useTelegramAttachmentPreviewQuery(
   enabled: MaybeRefOrGetter<boolean> = true
 ) {
   return useQuery<TelegramAttachmentPreviewResponse>({
-    queryKey: computed(() => ['integrations', 'telegram', 'attachment-preview', toValue(attachmentId) ?? 'none']),
+    queryKey: computed(() => ['communications', 'messages', toValue(attachmentId) ?? 'none', 'attachment-preview']),
     queryFn: () => previewTelegramAttachment(toValue(attachmentId) as string),
     enabled: computed(() => Boolean(toValue(attachmentId)) && Boolean(toValue(enabled))),
   })

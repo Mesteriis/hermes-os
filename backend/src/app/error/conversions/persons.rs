@@ -22,9 +22,6 @@ impl From<PersonIdentityError> for ApiError {
             PersonIdentityError::Observation(_) => {
                 Self::InvalidPersonIdentityReview("identity candidate evidence observation failed")
             }
-            PersonIdentityError::ReviewMirror(_) => {
-                Self::InvalidPersonIdentityReview("identity candidate review inbox sync failed")
-            }
             _ => Self::PersonIdentity(error),
         }
     }

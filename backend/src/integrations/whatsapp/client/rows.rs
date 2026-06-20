@@ -1,6 +1,8 @@
 use sqlx::Row;
 use sqlx::postgres::PgRow;
 
+use crate::platform::communications::ProviderChannelMessage;
+
 use super::errors::WhatsappWebError;
 use super::models::{WhatsappWebMessage, WhatsappWebSession};
 
@@ -40,4 +42,25 @@ pub(crate) fn row_to_whatsapp_web_message(
         delivery_state: row.try_get("delivery_state")?,
         metadata: row.try_get("message_metadata")?,
     })
+}
+
+pub(crate) fn provider_channel_message_to_whatsapp_web_message(
+    message: ProviderChannelMessage,
+) -> WhatsappWebMessage {
+    WhatsappWebMessage {
+        message_id: message.message_id,
+        raw_record_id: message.raw_record_id,
+        account_id: message.account_id,
+        provider_message_id: message.provider_record_id,
+        provider_chat_id: Some(message.conversation_id),
+        chat_title: message.subject,
+        sender: message.sender,
+        sender_display_name: message.sender_display_name,
+        text: message.body_text,
+        occurred_at: message.occurred_at,
+        projected_at: message.projected_at,
+        channel_kind: message.channel_kind,
+        delivery_state: message.delivery_state,
+        metadata: message.message_metadata,
+    }
 }
