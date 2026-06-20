@@ -1,1 +1,0 @@
-pub(super) const PROJECT_KEYWORD_CONFIDENCE: f64 = 0.75;
