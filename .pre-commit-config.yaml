@@ -3,21 +3,35 @@ repos:
     hooks:
       - id: hermes-architecture-guards
         name: Hermes architecture and code guards
-        entry: make lint-architecture
+        entry: make architecture-check
         language: system
         pass_filenames: false
         always_run: true
 
-      - id: hermes-rust-lint
-        name: Hermes Rust lint (fmt + clippy, no tests)
-        entry: make lint-rust
+      - id: hermes-code-boundaries
+        name: Hermes code boundary guards
+        entry: make code-boundaries-check
         language: system
         pass_filenames: false
-        files: ^(backend/(src|tests|migrations)/|backend/Cargo\.(toml|lock)$|Makefile$)
+        files: ^(backend/src/|frontend/src/|Makefile$)
+
+      - id: hermes-rust-fmt
+        name: Hermes Rust format check
+        entry: make backend-fmt-check
+        language: system
+        pass_filenames: false
+        files: ^backend/.*\.rs$
+
+      - id: hermes-rust-clippy
+        name: Hermes Rust clippy
+        entry: make backend-clippy
+        language: system
+        pass_filenames: false
+        files: ^backend/.*\.rs$
 
       - id: hermes-frontend-lint
-        name: Hermes frontend lint (style + TS/Svelte, no tests)
-        entry: make lint-frontend
+        name: Hermes frontend lint (style + TypeScript/Vue, no tests)
+        entry: make frontend-lint
         language: system
         pass_filenames: false
-        files: ^frontend/(src|static|scripts)/|^frontend/(package\.json|pnpm-lock\.yaml|tsconfig\.json|svelte\.config\.js|vite\.config\.ts)$
+        files: ^frontend/(src|static|scripts)/|^frontend/(package\.json|pnpm-lock\.yaml|tsconfig\.json|vite\.config\.ts)$
