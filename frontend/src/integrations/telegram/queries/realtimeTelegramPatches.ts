@@ -11,7 +11,7 @@ import type {
   TelegramRuntimeStatus
 } from '../types/telegram'
 import type { TelegramTopicListResponse } from '../types/telegramTopics'
-import { isRecord, storedEventEnvelope, stringValue } from '../../../domains/communications/queries/realtimePatchShared'
+import { isRecord, storedEventEnvelope, stringValue } from '../../../shared/communications/queries/realtimePatchShared'
 import { patchTelegramTopicList } from './realtimeTelegramTopicPatches'
 import { patchTelegramCommandList } from './realtimeTelegramCommandPatches'
 import {

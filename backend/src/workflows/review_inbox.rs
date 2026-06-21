@@ -4,12 +4,12 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::decisions::DecisionStore;
-use crate::domains::obligations::ObligationStore;
+use crate::domains::decisions::DecisionReviewPort;
+use crate::domains::obligations::ObligationReviewPort;
 use crate::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxStore, ReviewItemKind,
+    NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxPort, ReviewItemKind,
 };
-use crate::domains::tasks::candidates::TaskCandidateStore;
+use crate::domains::tasks::candidates::TaskCandidatePort;
 use crate::workflows::email_intelligence::{
     EmailIntelligenceService, EmailKnowledgeCandidate, EmailSummaryContract,
 };
@@ -24,13 +24,13 @@ pub enum ReviewInboxWorkflowError {
     ReviewInbox(#[from] ReviewInboxError),
 
     #[error(transparent)]
-    Decision(#[from] crate::domains::decisions::DecisionStoreError),
+    Decision(#[from] crate::domains::decisions::DecisionReviewPortError),
 
     #[error(transparent)]
-    Obligation(#[from] crate::domains::obligations::ObligationStoreError),
+    Obligation(#[from] crate::domains::obligations::ObligationReviewPortError),
 
     #[error(transparent)]
-    Relationship(#[from] crate::domains::relationships::RelationshipStoreError),
+    Relationship(#[from] crate::domains::relationships::RelationshipReviewPortError),
 
     #[error(transparent)]
     TaskCandidate(#[from] crate::domains::tasks::candidates::TaskCandidateError),
@@ -50,7 +50,7 @@ pub async fn refresh_message_task_candidates_into_review(
         return Ok(0);
     }
 
-    let refreshed = TaskCandidateStore::new(pool.clone())
+    let refreshed = TaskCandidatePort::new(pool.clone())
         .refresh_message_candidates_for_ids(message_ids)
         .await?;
     let observation_ids = load_message_observation_ids(pool, message_ids).await?;
@@ -66,7 +66,7 @@ pub async fn refresh_message_decisions_into_review(
         return Ok(0);
     }
 
-    let refreshed = DecisionStore::new(pool.clone())
+    let refreshed = DecisionReviewPort::new(pool.clone())
         .refresh_message_candidates_for_ids(message_ids)
         .await?;
     let observation_ids = load_message_observation_ids(pool, message_ids).await?;
@@ -82,7 +82,7 @@ pub async fn refresh_message_knowledge_candidates_into_review(
         return Ok(0);
     }
 
-    let review_store = ReviewInboxStore::new(pool.clone());
+    let review_store = ReviewInboxPort::new(pool.clone());
     let mut mirrored = 0;
     for message in messages {
         let summary_contract = message_summary_contract(message);

@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type {
   MailSyncSettings,
   MailSyncSettingsUpdate
-} from '../../../domains/communications/types/communications'
+} from '../../../shared/mailSync/types'
 
 export const syncSettingsFormSchema = z.object({
   sync_enabled: z.boolean(),

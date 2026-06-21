@@ -26,7 +26,7 @@ describe('telegram topics API', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/telegram/topics/search?')
+    expect(url).toContain('/api/v1/communications/provider-topics/search?')
     expect(url).toContain('q=architecture+docs')
     expect(url).toContain('telegram_chat_id=chat-42')
     expect(url).toContain('limit=25')

@@ -72,7 +72,7 @@ async fn fixture_account_blocks_reply_and_forward_before_side_effects() {
     let reply_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/telegram/messages/{root_message_id}/reply"),
+            &format!("/api/v1/communications/provider-messages/{root_message_id}/reply"),
             json!({
                 "command_id": format!("reply-{suffix}"),
                 "account_id": account_id,
@@ -89,7 +89,7 @@ async fn fixture_account_blocks_reply_and_forward_before_side_effects() {
     let forward_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/telegram/messages/{root_message_id}/forward"),
+            &format!("/api/v1/communications/provider-messages/{root_message_id}/forward"),
             json!({
                 "command_id": format!("forward-{suffix}"),
                 "account_id": account_id,
@@ -146,7 +146,7 @@ where
     let response = app
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/communications/telegram/messages?account_id={account_id}&provider_chat_id={provider_chat_id}"
+                "/api/v1/communications/provider-messages?account_id={account_id}&provider_chat_id={provider_chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))

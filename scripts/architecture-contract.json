@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "adr": "docs/adr/ADR-architecture-communication-contract.md",
+  "adr": "docs/adr/ADR-0098-provider-neutral-communications-api-and-strict-boundaries.md",
   "interaction_kinds": [
     "direct_call",
     "command_port",
@@ -33,7 +33,8 @@
           "other_domains",
           "integrations",
           "app",
-          "workflows"
+          "workflows",
+          "vault"
         ]
       },
       "integrations": {
@@ -89,12 +90,14 @@
       },
       "platform": {
         "allow": [
-          "all_importers"
+          "neutral_contracts",
+          "technical_infrastructure"
         ],
         "deny": [
           "domains",
           "integrations",
-          "workflows"
+          "workflows",
+          "business_table_sql"
         ]
       },
       "vault": {
@@ -126,19 +129,31 @@
         ],
         "deny": [
           "other_frontend_domains",
-          "provider_runtime_state"
+          "provider_runtime_state",
+          "integrations"
         ]
       },
       "integrations": {
         "allow": [
           "provider_setup",
           "provider_runtime",
-          "platform"
+          "platform",
+          "shared"
         ],
         "deny": [
-          "business_truth"
+          "business_truth",
+          "domains"
         ]
       }
+    },
+    "business_route_model": {
+      "allowed_business_root": "/api/v1/communications",
+      "forbidden_provider_business_roots": [
+        "/api/v1/communications/mail",
+        "/api/v1/communications/telegram",
+        "/api/v1/communications/whatsapp"
+      ],
+      "allowed_runtime_root": "/api/v1/integrations/{provider}"
     },
     "provider_business_cache_roots": {
       "forbidden": [

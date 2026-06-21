@@ -1,6 +1,3 @@
-use crate::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
-};
 use crate::integrations::telegram::client::participants::{
     reconcile_participant_commands_from_message_evidence, tdlib_self_membership_lifecycle,
 };
@@ -8,7 +5,9 @@ use crate::integrations::telegram::client::{
     TelegramError, TelegramStore, derive_tdlib_chosen_reaction_emojis,
     reconcile_reaction_commands_from_provider_message_state,
 };
-use crate::platform::communications::ProviderAccount;
+use crate::platform::communications::{
+    ProviderAccount, ProviderAccountLookupPort, ProviderSecretBindingLookupPort,
+};
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 
@@ -27,9 +26,9 @@ pub(in crate::integrations::telegram::runtime::manager) struct TdlibHistorySyncC
     S: SecretResolver + Sync + ?Sized,
 > {
     pub(in crate::integrations::telegram::runtime::manager) provider_account_store:
-        &'a CommunicationProviderAccountStore,
+        &'a dyn ProviderAccountLookupPort,
     pub(in crate::integrations::telegram::runtime::manager) provider_secret_binding_store:
-        &'a CommunicationProviderSecretBindingStore,
+        &'a dyn ProviderSecretBindingLookupPort,
     pub(in crate::integrations::telegram::runtime::manager) telegram_store: &'a TelegramStore,
     pub(in crate::integrations::telegram::runtime::manager) secret_store: &'a SecretReferenceStore,
     pub(in crate::integrations::telegram::runtime::manager) secret_resolver: &'a S,

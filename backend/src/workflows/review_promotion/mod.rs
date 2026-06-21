@@ -5,37 +5,35 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::domains::decisions::{
-    DecisionReviewState, DecisionStore, NewDecision, NewDecisionEvidence,
+    DecisionReviewPort, DecisionReviewState, NewDecision, NewDecisionEvidence,
 };
-use crate::domains::documents::core::{
-    DocumentImportError, DocumentImportStore, NewDocumentImport,
-};
+use crate::domains::documents::core::{DocumentImportError, DocumentImportPort, NewDocumentImport};
 use crate::domains::obligations::{
-    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationReviewState,
-    ObligationStore,
+    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationReviewPort,
+    ObligationReviewState,
 };
-use crate::domains::organizations::api::{OrganizationError, OrganizationStore};
-use crate::domains::persons::api::{PersonProjectionError, PersonProjectionStore};
+use crate::domains::organizations::api::{OrganizationCommandPort, OrganizationError};
+use crate::domains::persons::api::{PersonProjectionError, PersonProjectionPort};
 use crate::domains::persons::identity::{
-    PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
+    PersonIdentityPort, PersonIdentityReviewCommand, PersonIdentityReviewState,
 };
-use crate::domains::projects::core::ProjectStore;
-use crate::domains::projects::core::{NewProject, ProjectStoreError};
+use crate::domains::projects::core::ProjectCommandPort;
+use crate::domains::projects::core::{NewProject, ProjectCommandPortError};
 use crate::domains::projects::link_reviews::{
-    ProjectLinkReviewCommand, ProjectLinkReviewState, ProjectLinkReviewStore, ProjectLinkTargetKind,
+    ProjectLinkReviewCommand, ProjectLinkReviewPort, ProjectLinkReviewState, ProjectLinkTargetKind,
 };
 use crate::domains::relationships::{
-    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewState,
-    RelationshipStore,
+    NewRelationship, NewRelationshipEvidence, RelationshipEntityKind, RelationshipReviewPort,
+    RelationshipReviewState,
 };
 use crate::domains::review::{
-    ReviewInboxError, ReviewInboxStore, ReviewItem, ReviewItemEvidenceRecord, ReviewItemKind,
+    ReviewInboxError, ReviewInboxPort, ReviewItem, ReviewItemEvidenceRecord, ReviewItemKind,
     ReviewPromotionTarget,
 };
-use crate::domains::tasks::api::{NewTask, TaskError, TaskStore};
-use crate::domains::tasks::core::{ObligationTaskLinkStore, TaskCoreError};
+use crate::domains::tasks::api::{NewTask, TaskCommandPort, TaskError};
+use crate::domains::tasks::core::{ObligationTaskLinkPort, TaskCoreError};
 use crate::platform::observations::{
-    NewObservation, Observation, ObservationOriginKind, ObservationStore, ObservationStoreError,
+    NewObservation, Observation, ObservationOriginKind, ObservationPort, ObservationPortError,
     link_domain_entity, materialize_review_transition_link,
 };
 
@@ -50,11 +48,11 @@ pub enum ReviewPromotionError {
     #[error(transparent)]
     DocumentImport(#[from] DocumentImportError),
     #[error(transparent)]
-    Decision(#[from] crate::domains::decisions::DecisionStoreError),
+    Decision(#[from] crate::domains::decisions::DecisionReviewPortError),
     #[error(transparent)]
-    Obligation(#[from] crate::domains::obligations::ObligationStoreError),
+    Obligation(#[from] crate::domains::obligations::ObligationReviewPortError),
     #[error(transparent)]
-    Relationship(#[from] crate::domains::relationships::RelationshipStoreError),
+    Relationship(#[from] crate::domains::relationships::RelationshipReviewPortError),
     #[error(transparent)]
     PersonIdentity(#[from] crate::domains::persons::identity::PersonIdentityError),
     #[error(transparent)]
@@ -62,11 +60,11 @@ pub enum ReviewPromotionError {
     #[error(transparent)]
     ProjectLinkReview(#[from] crate::domains::projects::link_reviews::ProjectLinkReviewError),
     #[error(transparent)]
-    ProjectStore(#[from] ProjectStoreError),
+    ProjectCommandPort(#[from] ProjectCommandPortError),
     #[error(transparent)]
     Organization(#[from] OrganizationError),
     #[error(transparent)]
-    Observation(#[from] ObservationStoreError),
+    Observation(#[from] ObservationPortError),
     #[error("{0}")]
     InvalidTarget(String),
     #[error(transparent)]
@@ -99,7 +97,7 @@ impl ReviewPromotionService {
         observation_id: Option<&str>,
         metadata: Option<Value>,
     ) -> Result<ReviewItem, ReviewPromotionError> {
-        let review_store = ReviewInboxStore::new(self.pool.clone());
+        let review_store = ReviewInboxPort::new(self.pool.clone());
         let item = review_store.get(review_item_id).await?;
         let evidence = review_store.list_evidence(review_item_id).await?;
         let resolved_target = self.materialize_target(&item, &target, &evidence).await?;
@@ -146,7 +144,7 @@ impl ReviewPromotionService {
                         format!("review-item://{}/identity-candidate", item.review_item_id),
                     )
                     .await?;
-                let result = PersonIdentityStore::new(self.pool.clone())
+                let result = PersonIdentityPort::new(self.pool.clone())
                     .set_review_state(&PersonIdentityReviewCommand {
                         command_id: format!("review-promotion:{}", item.review_item_id),
                         identity_candidate_id: identity_candidate_id.clone(),
@@ -195,7 +193,7 @@ impl ReviewPromotionService {
                         ),
                     )
                     .await?;
-                let result = ProjectLinkReviewStore::new(self.pool.clone())
+                let result = ProjectLinkReviewPort::new(self.pool.clone())
                     .set_review_state(&ProjectLinkReviewCommand {
                         command_id: format!("review-promotion:{}", item.review_item_id),
                         project_id: project_id.clone(),
@@ -251,7 +249,7 @@ impl ReviewPromotionService {
                         format!("review-item://{}/task", item.review_item_id),
                     )
                     .await?;
-                let task = TaskStore::new(self.pool.clone())
+                let task = TaskCommandPort::new(self.pool.clone())
                     .create(&NewTask {
                         title: item.title.clone(),
                         description: Some(item.summary.clone()),
@@ -297,7 +295,7 @@ impl ReviewPromotionService {
                 if metadata_string(&item.metadata, "candidate_kind").as_deref()
                     == Some("obligation_task")
                 {
-                    let obligation = ObligationStore::new(self.pool.clone())
+                    let obligation = ObligationReviewPort::new(self.pool.clone())
                         .upsert_with_evidence(
                             &NewObligation::new(
                                 ObligationEntityKind::Knowledge,
@@ -315,14 +313,14 @@ impl ReviewPromotionService {
                             &obligation_evidence(evidence),
                         )
                         .await?;
-                    ObligationTaskLinkStore::new(self.pool.clone())
+                    ObligationTaskLinkPort::new(self.pool.clone())
                         .link_fulfillment_task(&obligation.obligation_id, &task.task_id)
                         .await?;
                 }
                 Ok(ReviewPromotionTarget::new("tasks", "task", task.task_id))
             }
             ReviewItemKind::PotentialDecision => {
-                let decision_store = DecisionStore::new(self.pool.clone());
+                let decision_store = DecisionReviewPort::new(self.pool.clone());
                 let decision = if metadata_string(&item.metadata, "mirrored_from").as_deref()
                     == Some("decisions")
                 {
@@ -403,7 +401,7 @@ impl ReviewPromotionService {
                 ))
             }
             ReviewItemKind::PotentialObligation => {
-                let obligation_store = ObligationStore::new(self.pool.clone());
+                let obligation_store = ObligationReviewPort::new(self.pool.clone());
                 let obligation = if metadata_string(&item.metadata, "mirrored_from").as_deref()
                     == Some("obligations")
                 {
@@ -485,7 +483,7 @@ impl ReviewPromotionService {
                 ))
             }
             ReviewItemKind::PotentialRelationship => {
-                let relationship_store = RelationshipStore::new(self.pool.clone());
+                let relationship_store = RelationshipReviewPort::new(self.pool.clone());
                 let relationship = if metadata_string(&item.metadata, "mirrored_from").as_deref()
                     == Some("relationships")
                 {
@@ -608,7 +606,7 @@ impl ReviewPromotionService {
                 format!("review-item://{}/person", item.review_item_id),
             )
             .await?;
-        PersonProjectionStore::new(self.pool.clone())
+        PersonProjectionPort::new(self.pool.clone())
             .upsert_review_person(&person_id, item.title.trim())
             .await?;
         self.link_review_transition_observation(
@@ -659,7 +657,7 @@ impl ReviewPromotionService {
                 format!("review-item://{}/organization", item.review_item_id),
             )
             .await?;
-        OrganizationStore::new(self.pool.clone())
+        OrganizationCommandPort::new(self.pool.clone())
             .upsert_review_organization(
                 &organization_id,
                 item.title.trim(),
@@ -714,7 +712,7 @@ impl ReviewPromotionService {
                 format!("review-item://{}/project", item.review_item_id),
             )
             .await?;
-        ProjectStore::new(self.pool.clone())
+        ProjectCommandPort::new(self.pool.clone())
             .upsert_project(&NewProject::active(
                 &project_id,
                 item.title.trim(),
@@ -788,7 +786,7 @@ impl ReviewPromotionService {
             )
             .await?;
         let markdown = self.knowledge_candidate_markdown(item, evidence).await?;
-        let imported = DocumentImportStore::new(self.pool.clone())
+        let imported = DocumentImportPort::new(self.pool.clone())
             .import_document(&NewDocumentImport::markdown(
                 &document_id,
                 knowledge_document_title(item),
@@ -835,7 +833,7 @@ impl ReviewPromotionService {
         item: &ReviewItem,
         evidence: &[ReviewItemEvidenceRecord],
     ) -> Result<String, ReviewPromotionError> {
-        let observation_store = ObservationStore::new(self.pool.clone());
+        let observation_store = ObservationPort::new(self.pool.clone());
         let mut markdown = String::new();
         markdown.push_str("# ");
         markdown.push_str(item.title.trim());
@@ -879,7 +877,7 @@ impl ReviewPromotionService {
         payload: Value,
         source_ref: String,
     ) -> Result<Observation, ReviewPromotionError> {
-        Ok(ObservationStore::new(self.pool.clone())
+        Ok(ObservationPort::new(self.pool.clone())
             .capture(
                 &NewObservation::new(
                     "REVIEW_TRANSITION",

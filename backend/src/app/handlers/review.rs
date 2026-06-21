@@ -4,13 +4,13 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::app::workflow_services::review_promotion::ReviewPromotionService;
 use crate::app::{ApiError, AppState};
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxService, ReviewInboxStore, ReviewItem,
     ReviewItemKind, ReviewItemStatus, ReviewPromotionTarget,
 };
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
-use crate::workflows::review_promotion::ReviewPromotionService;
 
 const DEFAULT_REVIEW_LIMIT: i64 = 50;
 const MIN_REVIEW_LIMIT: i64 = 1;

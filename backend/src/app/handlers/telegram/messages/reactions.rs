@@ -15,7 +15,7 @@ use crate::integrations::telegram::client::models::messages::{
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::bus::telegram_event_types;
 
-/// POST /api/v1/communications/telegram/messages/{message_id}/reactions
+/// POST /api/v1/communications/provider-messages/{message_id}/reactions
 pub(crate) async fn post_telegram_reaction(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
@@ -75,7 +75,7 @@ pub(crate) async fn post_telegram_reaction(
     Ok(Json(response))
 }
 
-/// DELETE /api/v1/communications/telegram/messages/{message_id}/reactions
+/// DELETE /api/v1/communications/provider-messages/{message_id}/reactions
 pub(crate) async fn delete_telegram_reaction(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
@@ -144,7 +144,7 @@ pub(crate) async fn delete_telegram_reaction(
     Ok(Json(response))
 }
 
-/// GET /api/v1/communications/telegram/messages/{message_id}/reactions
+/// GET /api/v1/communications/provider-messages/{message_id}/reactions
 pub(crate) async fn get_telegram_reactions(
     State(state): State<AppState>,
     Path(message_id): Path<String>,

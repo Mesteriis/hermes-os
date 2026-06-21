@@ -12,7 +12,7 @@ import {
 import type {
   MailSyncSettings,
   MailSyncSettingsUpdate
-} from '../../../domains/communications/types/communications'
+} from '../../../shared/mailSync/types'
 
 const props = defineProps<{
   settings: MailSyncSettings | null

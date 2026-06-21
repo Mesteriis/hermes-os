@@ -1,11 +1,9 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::{
-    CommunicationProviderSecretBindingStore, ProviderCredentialReader,
-};
 use crate::integrations::mail::accounts::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{
     EmailProviderNetworkError, GmailApiClient, GmailFetchOptions, GmailHistoryFetchOptions,
@@ -14,22 +12,30 @@ use crate::integrations::mail::gmail::client::{
 use crate::platform::communications::{
     EmailProviderSyncError, EmailProviderSyncPort, EmailSyncBatch, GmailHistoryFetchRequest,
     GmailMessageListFetchRequest, ImapMessageFetchRequest, ProviderAccountSecretPurpose,
+    ProviderSecretBindingLookupPort,
 };
-use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore};
+use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore, SecretResolver};
 use crate::vault::HostVault;
 
 #[derive(Clone)]
 pub struct LiveEmailProviderSyncPort {
     pool: PgPool,
     vault: HostVault,
+    provider_secret_binding_store: Arc<dyn ProviderSecretBindingLookupPort>,
     gmail_api_base_url: String,
 }
 
 impl LiveEmailProviderSyncPort {
-    pub fn new(pool: PgPool, vault: HostVault, gmail_api_base_url: impl Into<String>) -> Self {
+    pub fn new(
+        pool: PgPool,
+        vault: HostVault,
+        provider_secret_binding_store: Arc<dyn ProviderSecretBindingLookupPort>,
+        gmail_api_base_url: impl Into<String>,
+    ) -> Self {
         Self {
             pool,
             vault,
+            provider_secret_binding_store,
             gmail_api_base_url: gmail_api_base_url.into(),
         }
     }
@@ -38,12 +44,13 @@ impl LiveEmailProviderSyncPort {
         &self,
         account_id: &str,
     ) -> Result<ResolvedSecret, EmailProviderSyncError> {
-        let binding = CommunicationProviderSecretBindingStore::new(self.pool.clone())
+        let binding = self
+            .provider_secret_binding_store
             .get_for_account(account_id, ProviderAccountSecretPurpose::OauthToken)
             .await
             .map_err(EmailProviderSyncError::credential)?
             .ok_or_else(EmailProviderSyncError::missing_credential)?;
-        EmailAccountSetupService::new_with_host_vault(
+        EmailAccountSetupService::new_with_host_vault_for_token_refresh(
             self.pool.clone(),
             SecretReferenceStore::new(self.pool.clone()),
             self.vault.clone(),
@@ -52,6 +59,38 @@ impl LiveEmailProviderSyncPort {
         .await
         .map_err(EmailProviderSyncError::account_setup)
     }
+}
+
+async fn read_provider_secret(
+    binding_store: &dyn ProviderSecretBindingLookupPort,
+    secret_store: &SecretReferenceStore,
+    resolver: &(impl SecretResolver + Sync + ?Sized),
+    account_id: &str,
+    secret_purpose: ProviderAccountSecretPurpose,
+) -> Result<ResolvedSecret, EmailProviderSyncError> {
+    let binding = binding_store
+        .get_for_account(account_id, secret_purpose)
+        .await
+        .map_err(EmailProviderSyncError::credential)?
+        .ok_or_else(EmailProviderSyncError::missing_credential)?;
+    let reference = secret_store
+        .secret_reference(&binding.secret_ref)
+        .await
+        .map_err(EmailProviderSyncError::credential)?
+        .ok_or_else(EmailProviderSyncError::missing_credential)?;
+    if !binding
+        .secret_purpose
+        .accepts_secret_kind(reference.secret_kind)
+    {
+        return Err(EmailProviderSyncError::credential(format!(
+            "provider account secret kind is incompatible: secret_ref={}, secret_purpose={:?}, secret_kind={:?}",
+            reference.secret_ref, binding.secret_purpose, reference.secret_kind
+        )));
+    }
+    resolver
+        .resolve(&reference)
+        .await
+        .map_err(EmailProviderSyncError::credential)
 }
 
 impl EmailProviderSyncPort for LiveEmailProviderSyncPort {
@@ -107,18 +146,15 @@ impl EmailProviderSyncPort for LiveEmailProviderSyncPort {
     ) -> Pin<Box<dyn Future<Output = Result<EmailSyncBatch, EmailProviderSyncError>> + Send + 'a>>
     {
         Box::pin(async move {
-            let credential_reader = ProviderCredentialReader::new(
-                CommunicationProviderSecretBindingStore::new(self.pool.clone()),
-                SecretReferenceStore::new(self.pool.clone()),
+            let secret_store = SecretReferenceStore::new(self.pool.clone());
+            let credential = read_provider_secret(
+                self.provider_secret_binding_store.as_ref(),
+                &secret_store,
                 &self.vault,
-            );
-            let credential = credential_reader
-                .read(
-                    &request.account_id,
-                    ProviderAccountSecretPurpose::ImapPassword,
-                )
-                .await
-                .map_err(EmailProviderSyncError::credential)?;
+                &request.account_id,
+                ProviderAccountSecretPurpose::ImapPassword,
+            )
+            .await?;
             let mut options = ImapFetchOptions::new(
                 &request.host,
                 request.port,
@@ -132,7 +168,7 @@ impl EmailProviderSyncPort for LiveEmailProviderSyncPort {
                 options = options.last_seen_uid(uid);
             }
             ImapNetworkClient::new()
-                .fetch_raw_messages(&credential.secret, &options)
+                .fetch_raw_messages(&credential, &options)
                 .await
                 .map_err(|error| EmailProviderSyncError::provider_network(error, false))
         })

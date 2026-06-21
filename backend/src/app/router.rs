@@ -86,8 +86,11 @@ fn spawn_mail_background_sync_scheduler(state: &AppState) {
             crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
             std::sync::Arc::new(
                 crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort::new(
-                    pool,
+                    pool.clone(),
                     vault,
+                    std::sync::Arc::new(
+                        crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(pool),
+                    ),
                     crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
                 ),
             ),
@@ -169,6 +172,13 @@ fn spawn_telegram_command_executor(state: &AppState) {
     }
     let runtime = state.telegram_runtime.clone();
     let event_bus = state.event_bus.clone();
+    let telegram_store = match crate::app::api_support::telegram_store(state) {
+        Ok(store) => store,
+        Err(_error) => {
+            tracing::warn!("telegram command executor store is unavailable");
+            return;
+        }
+    };
 
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(5));
@@ -177,7 +187,10 @@ fn spawn_telegram_command_executor(state: &AppState) {
         loop {
             tick.tick().await;
             crate::integrations::telegram::runtime::execute_queued_commands(
-                &pool, &runtime, &event_bus, 10,
+                &telegram_store,
+                &runtime,
+                &event_bus,
+                10,
             )
             .await;
         }

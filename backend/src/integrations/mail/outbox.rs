@@ -34,7 +34,7 @@ impl GmailOutboxTransport for LiveGmailOutboxTransport {
         request: GmailOutboxSendRequest<'a>,
     ) -> Pin<Box<dyn Future<Output = Result<SendResult, EmailSendError>> + Send + 'a>> {
         Box::pin(async move {
-            let account_setup = EmailAccountSetupService::new_with_host_vault(
+            let account_setup = EmailAccountSetupService::new_with_host_vault_for_token_refresh(
                 self.pool.clone(),
                 self.secret_store.clone(),
                 self.vault.clone(),

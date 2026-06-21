@@ -1,7 +1,7 @@
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::persons::memory::RelationshipEventStore;
+use crate::domains::persons::memory::RelationshipEventPort;
 
 use super::errors::EmailSyncPipelineError;
 use super::participants::EmailParticipant;
@@ -22,7 +22,7 @@ pub(crate) async fn insert_relationship_event(
     } else {
         "Received email"
     };
-    let inserted = RelationshipEventStore::new(pool.clone())
+    let inserted = RelationshipEventPort::new(pool.clone())
         .upsert_email_message_event(
             &message.observation_id,
             &message.message_id,

@@ -10,14 +10,14 @@ use crate::domains::persons::identity::{
 use crate::domains::projects::link_reviews::{ProjectLinkReviewState, ProjectLinkTargetKind};
 use crate::domains::relationships::{Relationship, RelationshipReviewState};
 use crate::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxStore, ReviewItem,
+    NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxPort, ReviewItem,
     ReviewItemKind, ReviewItemStatus, ReviewPromotionTarget,
 };
 use crate::domains::tasks::candidates::{
     StoredCandidateRow, TaskCandidateReviewState, task_id_from_candidate,
 };
 use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
+    NewObservation, ObservationOriginKind, ObservationPort, ObservationPortError,
 };
 
 #[derive(Debug, Error)]
@@ -29,7 +29,7 @@ pub enum ReviewMirrorError {
     ReviewInbox(#[from] ReviewInboxError),
 
     #[error(transparent)]
-    Observation(#[from] ObservationStoreError),
+    Observation(#[from] ObservationPortError),
 
     #[error("review-backed observation is required: {0}")]
     ObservationRequired(String),
@@ -68,7 +68,7 @@ pub async fn sync_decision_review_state_in_transaction(
 
     match decision.review_state {
         DecisionReviewState::Suggested => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::New,
@@ -76,7 +76,7 @@ pub async fn sync_decision_review_state_in_transaction(
             .await?;
         }
         DecisionReviewState::UserRejected => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::Dismissed,
@@ -84,7 +84,7 @@ pub async fn sync_decision_review_state_in_transaction(
             .await?;
         }
         DecisionReviewState::UserConfirmed => {
-            let _ = ReviewInboxStore::promote_in_transaction(
+            let _ = ReviewInboxPort::promote_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new("decisions", "decision", &decision.decision_id),
@@ -130,7 +130,7 @@ pub async fn sync_obligation_review_state_in_transaction(
 
     match obligation.review_state {
         ObligationReviewState::Suggested => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::New,
@@ -138,7 +138,7 @@ pub async fn sync_obligation_review_state_in_transaction(
             .await?;
         }
         ObligationReviewState::UserRejected => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::Dismissed,
@@ -146,7 +146,7 @@ pub async fn sync_obligation_review_state_in_transaction(
             .await?;
         }
         ObligationReviewState::UserConfirmed => {
-            let _ = ReviewInboxStore::promote_in_transaction(
+            let _ = ReviewInboxPort::promote_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new("obligations", "obligation", &obligation.obligation_id),
@@ -199,7 +199,7 @@ pub async fn sync_relationship_review_state_in_transaction(
 
     match relationship.review_state {
         RelationshipReviewState::Suggested => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::New,
@@ -207,7 +207,7 @@ pub async fn sync_relationship_review_state_in_transaction(
             .await?;
         }
         RelationshipReviewState::SystemAccepted => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::Approved,
@@ -215,7 +215,7 @@ pub async fn sync_relationship_review_state_in_transaction(
             .await?;
         }
         RelationshipReviewState::UserRejected => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::Dismissed,
@@ -223,7 +223,7 @@ pub async fn sync_relationship_review_state_in_transaction(
             .await?;
         }
         RelationshipReviewState::UserConfirmed => {
-            let _ = ReviewInboxStore::promote_in_transaction(
+            let _ = ReviewInboxPort::promote_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new(
@@ -243,7 +243,7 @@ pub(crate) async fn sync_identity_candidate_to_review(
     pool: &sqlx::postgres::PgPool,
     payload: &PersonIdentityCandidatePayload,
 ) -> Result<(), ReviewMirrorError> {
-    let observation = ObservationStore::new(pool.clone())
+    let observation = ObservationPort::new(pool.clone())
         .capture(&identity_candidate_observation(payload))
         .await?;
     let _ =
@@ -255,7 +255,7 @@ pub(crate) async fn sync_identity_candidate_to_review_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     payload: &PersonIdentityCandidatePayload,
 ) -> Result<(), ReviewMirrorError> {
-    let observation = ObservationStore::capture_in_transaction(
+    let observation = ObservationPort::capture_in_transaction(
         transaction,
         &identity_candidate_observation(payload),
     )
@@ -275,7 +275,7 @@ pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
     review_state: PersonIdentityReviewState,
     payload: &PersonIdentityCandidatePayload,
 ) -> Result<(), ReviewMirrorError> {
-    let observation = ObservationStore::capture_in_transaction(
+    let observation = ObservationPort::capture_in_transaction(
         transaction,
         &identity_candidate_observation(payload),
     )
@@ -289,7 +289,7 @@ pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
 
     match review_state {
         PersonIdentityReviewState::Suggested => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::New,
@@ -297,7 +297,7 @@ pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
             .await?;
         }
         PersonIdentityReviewState::UserRejected => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::Dismissed,
@@ -305,7 +305,7 @@ pub(crate) async fn sync_identity_candidate_review_state_in_transaction(
             .await?;
         }
         PersonIdentityReviewState::UserConfirmed => {
-            let _ = ReviewInboxStore::promote_in_transaction(
+            let _ = ReviewInboxPort::promote_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new("persons", "identity_candidate", identity_candidate_id),
@@ -357,7 +357,7 @@ pub(crate) async fn sync_task_candidate_review_state_in_transaction(
 
     match review_state {
         TaskCandidateReviewState::Suggested => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::New,
@@ -365,7 +365,7 @@ pub(crate) async fn sync_task_candidate_review_state_in_transaction(
             .await?;
         }
         TaskCandidateReviewState::UserRejected => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::Dismissed,
@@ -373,7 +373,7 @@ pub(crate) async fn sync_task_candidate_review_state_in_transaction(
             .await?;
         }
         TaskCandidateReviewState::UserConfirmed => {
-            let _ = ReviewInboxStore::promote_in_transaction(
+            let _ = ReviewInboxPort::promote_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new(
@@ -415,7 +415,7 @@ pub(crate) async fn ensure_identity_candidate_review_item_in_transaction(
     let identity_candidate_id = payload.identity_candidate_id();
     let evidence = identity_candidate_review_evidence(&identity_candidate_id, observation_id);
 
-    match ReviewInboxStore::find_latest_by_kind_and_metadata_in_transaction(
+    match ReviewInboxPort::find_latest_by_kind_and_metadata_in_transaction(
         transaction,
         ReviewItemKind::IdentityCandidate,
         &json!({
@@ -424,7 +424,7 @@ pub(crate) async fn ensure_identity_candidate_review_item_in_transaction(
     )
     .await?
     {
-        Some(item) => Ok(ReviewInboxStore::attach_evidence_in_transaction(
+        Some(item) => Ok(ReviewInboxPort::attach_evidence_in_transaction(
             transaction,
             &item.review_item_id,
             &[evidence],
@@ -432,7 +432,7 @@ pub(crate) async fn ensure_identity_candidate_review_item_in_transaction(
         .await?),
         None => {
             let item = identity_candidate_review_item(payload);
-            Ok(ReviewInboxStore::create_with_evidence_in_transaction(
+            Ok(ReviewInboxPort::create_with_evidence_in_transaction(
                 transaction,
                 &item,
                 &[evidence],
@@ -498,7 +498,7 @@ pub(crate) async fn sync_project_link_review_state_in_transaction(
 
     match review_state {
         ProjectLinkReviewState::Suggested => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::New,
@@ -506,7 +506,7 @@ pub(crate) async fn sync_project_link_review_state_in_transaction(
             .await?;
         }
         ProjectLinkReviewState::UserRejected => {
-            let _ = ReviewInboxStore::transition_status_in_transaction(
+            let _ = ReviewInboxPort::transition_status_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewItemStatus::Dismissed,
@@ -514,7 +514,7 @@ pub(crate) async fn sync_project_link_review_state_in_transaction(
             .await?;
         }
         ProjectLinkReviewState::UserConfirmed => {
-            let _ = ReviewInboxStore::promote_in_transaction(
+            let _ = ReviewInboxPort::promote_in_transaction(
                 transaction,
                 &review_item.review_item_id,
                 ReviewPromotionTarget::new(
@@ -560,7 +560,7 @@ pub(crate) async fn ensure_decision_review_item_in_transaction(
     confidence: f64,
     observation_id: &str,
 ) -> Result<ReviewItem, ReviewMirrorError> {
-    match ReviewInboxStore::find_latest_by_kind_and_metadata_in_transaction(
+    match ReviewInboxPort::find_latest_by_kind_and_metadata_in_transaction(
         transaction,
         ReviewItemKind::PotentialDecision,
         &json!({ "decision_id": decision_id }),
@@ -574,7 +574,7 @@ pub(crate) async fn ensure_decision_review_item_in_transaction(
                     "mirrored_from": "decisions",
                     "decision_id": decision_id,
                 }));
-            Ok(ReviewInboxStore::attach_evidence_in_transaction(
+            Ok(ReviewInboxPort::attach_evidence_in_transaction(
                 transaction,
                 &item.review_item_id,
                 &[evidence],
@@ -598,7 +598,7 @@ pub(crate) async fn ensure_decision_review_item_in_transaction(
                     "mirrored_from": "decisions",
                     "decision_id": decision_id,
                 }));
-            Ok(ReviewInboxStore::create_with_evidence_in_transaction(
+            Ok(ReviewInboxPort::create_with_evidence_in_transaction(
                 transaction,
                 &item,
                 &[evidence],
@@ -614,7 +614,7 @@ pub(crate) async fn ensure_task_candidate_review_item_in_transaction(
     candidate: &StoredCandidateRow,
     observation_id: &str,
 ) -> Result<ReviewItem, ReviewMirrorError> {
-    match ReviewInboxStore::find_latest_by_kind_and_metadata_in_transaction(
+    match ReviewInboxPort::find_latest_by_kind_and_metadata_in_transaction(
         transaction,
         ReviewItemKind::PotentialTask,
         &json!({ "task_candidate_id": task_candidate_id }),
@@ -628,7 +628,7 @@ pub(crate) async fn ensure_task_candidate_review_item_in_transaction(
                     "mirrored_from": "task_candidates",
                     "task_candidate_id": task_candidate_id,
                 }));
-            Ok(ReviewInboxStore::attach_evidence_in_transaction(
+            Ok(ReviewInboxPort::attach_evidence_in_transaction(
                 transaction,
                 &item.review_item_id,
                 &[evidence],
@@ -660,7 +660,7 @@ pub(crate) async fn ensure_task_candidate_review_item_in_transaction(
                     "mirrored_from": "task_candidates",
                     "task_candidate_id": task_candidate_id,
                 }));
-            Ok(ReviewInboxStore::create_with_evidence_in_transaction(
+            Ok(ReviewInboxPort::create_with_evidence_in_transaction(
                 transaction,
                 &item,
                 &[evidence],
@@ -682,7 +682,7 @@ async fn ensure_project_link_candidate_review_item_in_transaction(
     observation_id: &str,
     graph_node_id: Option<&str>,
 ) -> Result<ReviewItem, ReviewMirrorError> {
-    match ReviewInboxStore::find_latest_by_kind_and_metadata_in_transaction(
+    match ReviewInboxPort::find_latest_by_kind_and_metadata_in_transaction(
         transaction,
         ReviewItemKind::ProjectLinkCandidate,
         &json!({
@@ -702,7 +702,7 @@ async fn ensure_project_link_candidate_review_item_in_transaction(
                     "target_kind": target_kind.as_str(),
                     "target_id": target_id,
                 }));
-            Ok(ReviewInboxStore::attach_evidence_in_transaction(
+            Ok(ReviewInboxPort::attach_evidence_in_transaction(
                 transaction,
                 &item.review_item_id,
                 &[evidence],
@@ -734,7 +734,7 @@ async fn ensure_project_link_candidate_review_item_in_transaction(
                     "target_kind": target_kind.as_str(),
                     "target_id": target_id,
                 }));
-            Ok(ReviewInboxStore::create_with_evidence_in_transaction(
+            Ok(ReviewInboxPort::create_with_evidence_in_transaction(
                 transaction,
                 &item,
                 &[evidence],
@@ -774,7 +774,7 @@ pub(crate) async fn ensure_obligation_review_item_in_transaction(
     confidence: f64,
     observation_id: &str,
 ) -> Result<ReviewItem, ReviewMirrorError> {
-    match ReviewInboxStore::find_latest_by_kind_and_metadata_in_transaction(
+    match ReviewInboxPort::find_latest_by_kind_and_metadata_in_transaction(
         transaction,
         ReviewItemKind::PotentialObligation,
         &json!({ "obligation_id": obligation_id }),
@@ -788,7 +788,7 @@ pub(crate) async fn ensure_obligation_review_item_in_transaction(
                     "mirrored_from": "obligations",
                     "obligation_id": obligation_id,
                 }));
-            Ok(ReviewInboxStore::attach_evidence_in_transaction(
+            Ok(ReviewInboxPort::attach_evidence_in_transaction(
                 transaction,
                 &item.review_item_id,
                 &[evidence],
@@ -812,7 +812,7 @@ pub(crate) async fn ensure_obligation_review_item_in_transaction(
                     "mirrored_from": "obligations",
                     "obligation_id": obligation_id,
                 }));
-            Ok(ReviewInboxStore::create_with_evidence_in_transaction(
+            Ok(ReviewInboxPort::create_with_evidence_in_transaction(
                 transaction,
                 &item,
                 &[evidence],
@@ -866,7 +866,7 @@ pub(crate) async fn ensure_relationship_review_item_in_transaction(
     summary: Option<&str>,
     observation_id: &str,
 ) -> Result<ReviewItem, ReviewMirrorError> {
-    match ReviewInboxStore::find_latest_by_kind_and_metadata_in_transaction(
+    match ReviewInboxPort::find_latest_by_kind_and_metadata_in_transaction(
         transaction,
         ReviewItemKind::PotentialRelationship,
         &json!({ "relationship_id": relationship_id }),
@@ -880,7 +880,7 @@ pub(crate) async fn ensure_relationship_review_item_in_transaction(
                     "mirrored_from": "relationships",
                     "relationship_id": relationship_id,
                 }));
-            Ok(ReviewInboxStore::attach_evidence_in_transaction(
+            Ok(ReviewInboxPort::attach_evidence_in_transaction(
                 transaction,
                 &item.review_item_id,
                 &[evidence],
@@ -909,7 +909,7 @@ pub(crate) async fn ensure_relationship_review_item_in_transaction(
                     "mirrored_from": "relationships",
                     "relationship_id": relationship_id,
                 }));
-            Ok(ReviewInboxStore::create_with_evidence_in_transaction(
+            Ok(ReviewInboxPort::create_with_evidence_in_transaction(
                 transaction,
                 &item,
                 &[evidence],

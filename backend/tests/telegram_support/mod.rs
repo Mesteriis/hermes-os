@@ -44,7 +44,7 @@ where
 {
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/messages",
+            "/api/v1/communications/provider-messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,

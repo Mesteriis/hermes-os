@@ -16,12 +16,12 @@ use super::account::load_active_account;
 use super::actor_states::running_actor_state;
 use super::realtime_events::spawn_telegram_runtime_event_bridge;
 use super::{TelegramRuntimeManager, TelegramRuntimeStartContext};
-use crate::domains::communications::core::CommunicationProviderAccountStore;
+use crate::platform::communications::ProviderAccountLookupPort;
 
 impl TelegramRuntimeManager {
     pub async fn status_for_account(
         &self,
-        provider_account_store: &CommunicationProviderAccountStore,
+        provider_account_store: &dyn ProviderAccountLookupPort,
         config: &AppConfig,
         account_id: &str,
     ) -> Result<TelegramRuntimeStatus, TelegramError> {
@@ -71,7 +71,7 @@ impl TelegramRuntimeManager {
                 };
                 if result.1.is_some() {
                     spawn_telegram_runtime_event_bridge(
-                        context.event_store_pool.clone(),
+                        Some(context.telegram_store.clone()),
                         context.event_bus.clone(),
                         account.account_id.clone(),
                         runtime_event_rx,
@@ -112,7 +112,7 @@ impl TelegramRuntimeManager {
 
     pub async fn stop_account_runtime(
         &self,
-        provider_account_store: &CommunicationProviderAccountStore,
+        provider_account_store: &dyn ProviderAccountLookupPort,
         config: &AppConfig,
         request: &TelegramRuntimeStopRequest,
     ) -> Result<TelegramRuntimeStatus, TelegramError> {

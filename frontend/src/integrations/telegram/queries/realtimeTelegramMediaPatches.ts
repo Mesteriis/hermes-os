@@ -3,7 +3,7 @@ import type {
   TelegramMediaSearchResponse,
   TelegramMessage,
 } from '../types/telegram'
-import { isRecord, stringValue } from '../../../domains/communications/queries/realtimePatchShared'
+import { isRecord, stringValue } from '../../../shared/communications/queries/realtimePatchShared'
 import {
   type TelegramEventPayload,
   matchesMessageScope,

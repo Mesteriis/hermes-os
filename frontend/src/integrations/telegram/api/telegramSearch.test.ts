@@ -36,7 +36,7 @@ describe('telegram search API', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/telegram/chats/search?')
+    expect(url).toContain('/api/v1/communications/provider-conversations/search?')
     expect(url).toContain('q=alpha')
     expect(url).toContain('account_id=telegram-account-1')
     expect(url).toContain('limit=15')
@@ -61,7 +61,7 @@ describe('telegram search API', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/telegram/search/messages?')
+    expect(url).toContain('/api/v1/communications/provider-search/messages?')
     expect(url).toContain('q=project+alpha')
     expect(url).toContain('account_id=telegram-account-1')
     expect(url).toContain('provider_chat_id=chat-42')
@@ -87,7 +87,7 @@ describe('telegram search API', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/telegram/search/provider')
+    expect(url).toContain('/api/v1/communications/provider-search/provider')
     expect(init.method).toBe('POST')
     const body = JSON.parse(init.body as string)
     expect(body).toEqual({
@@ -123,7 +123,7 @@ describe('telegram search API', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/telegram/search/media?')
+    expect(url).toContain('/api/v1/communications/provider-search/media?')
     expect(url).toContain('q=invoice')
     expect(url).toContain('account_id=telegram-account-1')
     expect(url).toContain('provider_chat_id=chat-42')
@@ -150,7 +150,7 @@ describe('telegram search API', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/telegram/chats/tgchat-1/pinned-messages?')
+    expect(url).toContain('/api/v1/communications/provider-conversations/tgchat-1/pinned-messages?')
     expect(url).toContain('limit=40')
     expect(init.method).toBe('GET')
   })

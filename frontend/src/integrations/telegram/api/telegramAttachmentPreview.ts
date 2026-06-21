@@ -1,5 +1,5 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
-import type { AttachmentPreviewResponse } from '../../../domains/communications/types/attachments'
+import type { AttachmentPreviewResponse } from '../../../shared/communications/types/attachments'
 
 export type TelegramAttachmentPreviewResponse = AttachmentPreviewResponse
 

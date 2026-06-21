@@ -19,6 +19,11 @@ Clarifies:
 - ADR-0093 Frontend Platform Migration to Vue 3
 - ADR-0095 Event-Driven Domain Communication and DLQ
 
+Route note: ADR-0098 supersedes the intermediate provider-scoped business route
+decision from this ADR. Channels remain integrations, but business
+Communications APIs are now provider-neutral under `/api/v1/communications/*`;
+provider setup/runtime APIs live under `/api/v1/integrations/*`.
+
 ## Context
 
 Hermes accumulated channel-shaped implementation surfaces while building email,
@@ -57,9 +62,9 @@ Rules:
 - Public channel-scoped API routes use:
 
 ```text
-/api/v1/communications/mail/*
-/api/v1/communications/telegram/*
-/api/v1/communications/whatsapp/*
+/api/v1/integrations/mail/*
+/api/v1/integrations/telegram/*
+/api/v1/communications/provider-web/*
 ```
 
 - Public legacy route families are removed:

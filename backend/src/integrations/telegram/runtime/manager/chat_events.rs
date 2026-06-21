@@ -32,17 +32,17 @@ use super::realtime_events::{
 };
 
 pub(super) async fn publish_chat_unread_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatUnreadSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
-    let (chat, reconciled) = match apply_chat_unread_update(&store, account_id, snapshot).await {
+    let (chat, reconciled) = match apply_chat_unread_update(store, account_id, snapshot).await {
         Ok(Some(result)) => result,
         Ok(None) => return,
         Err(error) => {
@@ -51,7 +51,7 @@ pub(super) async fn publish_chat_unread_event(
         }
     };
 
-    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    let context = TelegramRuntimeEventBridgeContext::new(Some(store.clone()), event_bus.clone());
     for command in reconciled {
         publish_command_reconciled_events(Some(&context), &command, &snapshot.source_event).await;
     }
@@ -69,17 +69,17 @@ pub(super) async fn publish_chat_unread_event(
 }
 
 pub(super) async fn publish_chat_marked_as_unread_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatMarkedAsUnreadSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
-    let (chat, reconciled) = match apply_chat_marked_as_unread_update(&store, account_id, snapshot)
+    let (chat, reconciled) = match apply_chat_marked_as_unread_update(store, account_id, snapshot)
         .await
     {
         Ok(Some(result)) => result,
@@ -90,7 +90,7 @@ pub(super) async fn publish_chat_marked_as_unread_event(
         }
     };
 
-    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    let context = TelegramRuntimeEventBridgeContext::new(Some(store.clone()), event_bus.clone());
     for command in reconciled {
         publish_command_reconciled_events(Some(&context), &command, &snapshot.source_event).await;
     }
@@ -109,18 +109,18 @@ pub(super) async fn publish_chat_marked_as_unread_event(
 }
 
 pub(super) async fn publish_chat_notification_settings_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatNotificationSettingsSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
     let (chat, reconciled) = match apply_chat_notification_settings_update(
-        &store, account_id, snapshot,
+        store, account_id, snapshot,
     )
     .await
     {
@@ -132,7 +132,7 @@ pub(super) async fn publish_chat_notification_settings_event(
         }
     };
 
-    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    let context = TelegramRuntimeEventBridgeContext::new(Some(store.clone()), event_bus.clone());
     for command in reconciled {
         publish_command_reconciled_events(Some(&context), &command, &snapshot.source_event).await;
     }
@@ -161,17 +161,17 @@ pub(super) async fn publish_chat_notification_settings_event(
 }
 
 pub(super) async fn publish_chat_position_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatPositionSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
-    let (chat, reconciled) = match apply_chat_position_update(&store, account_id, snapshot).await {
+    let (chat, reconciled) = match apply_chat_position_update(store, account_id, snapshot).await {
         Ok(Some(result)) => result,
         Ok(None) => return,
         Err(error) => {
@@ -180,7 +180,7 @@ pub(super) async fn publish_chat_position_event(
         }
     };
 
-    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    let context = TelegramRuntimeEventBridgeContext::new(Some(store.clone()), event_bus.clone());
     for command in reconciled {
         publish_command_reconciled_events(Some(&context), &command, &snapshot.source_event).await;
     }
@@ -231,7 +231,7 @@ pub(super) async fn publish_chat_position_event(
 }
 
 pub(super) async fn publish_chat_removed_from_list_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibChatRemovedFromListSnapshot,
@@ -245,21 +245,21 @@ pub(super) async fn publish_chat_removed_from_list_event(
         source_event: snapshot.source_event.clone(),
     };
 
-    publish_chat_position_event(pool, event_bus, account_id, &removal_snapshot).await;
+    publish_chat_position_event(telegram_store, event_bus, account_id, &removal_snapshot).await;
 }
 
 pub(super) async fn publish_chat_folders_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     folders: &[TelegramTdlibChatFolderSnapshot],
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
-    let update = match apply_chat_folder_update(&store, account_id, folders).await {
+    let update = match apply_chat_folder_update(store, account_id, folders).await {
         Ok(items) => items,
         Err(error) => {
             tracing::warn!(error = %error, "Telegram runtime event bridge: failed to project chat folder update");

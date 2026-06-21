@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use sqlx::PgPool;
 use tokio::sync::mpsc::UnboundedReceiver;
 
+use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
 use crate::integrations::telegram::tdjson::TelegramTdlibTypingSnapshot;
 use crate::platform::events::bus::telegram_event_types;
@@ -23,18 +23,21 @@ use super::topic_events::publish_topic_event;
 
 #[derive(Clone)]
 pub struct TelegramRuntimeEventBridgeContext {
-    pub(super) pool: Option<PgPool>,
+    pub(super) telegram_store: Option<TelegramStore>,
     pub(super) event_bus: EventBus,
 }
 
 impl TelegramRuntimeEventBridgeContext {
-    pub(crate) fn new(pool: Option<PgPool>, event_bus: EventBus) -> Self {
-        Self { pool, event_bus }
+    pub(crate) fn new(telegram_store: Option<TelegramStore>, event_bus: EventBus) -> Self {
+        Self {
+            telegram_store,
+            event_bus,
+        }
     }
 }
 
 pub(super) fn spawn_telegram_runtime_event_bridge(
-    pool: Option<PgPool>,
+    telegram_store: Option<TelegramStore>,
     event_bus: EventBus,
     account_id: String,
     mut runtime_events: UnboundedReceiver<TelegramRuntimeEvent>,
@@ -43,11 +46,17 @@ pub(super) fn spawn_telegram_runtime_event_bridge(
         while let Some(event) = runtime_events.recv().await {
             match event {
                 TelegramRuntimeEvent::MessageCreated(snapshot) => {
-                    publish_message_created_event(&pool, &event_bus, &account_id, &snapshot).await;
+                    publish_message_created_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
                 }
                 TelegramRuntimeEvent::MessageContentUpdated(snapshot) => {
                     publish_message_content_updated_event(
-                        &pool,
+                        &telegram_store,
                         &event_bus,
                         &account_id,
                         &snapshot,
@@ -55,33 +64,63 @@ pub(super) fn spawn_telegram_runtime_event_bridge(
                     .await;
                 }
                 TelegramRuntimeEvent::MessageEdited(snapshot) => {
-                    publish_message_edited_event(&pool, &event_bus, &account_id, &snapshot).await;
+                    publish_message_edited_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
                 }
                 TelegramRuntimeEvent::MessagePinnedUpdated(snapshot) => {
-                    publish_message_pinned_event(&pool, &event_bus, &account_id, &snapshot).await;
+                    publish_message_pinned_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
                 }
                 TelegramRuntimeEvent::MessageDeleted(snapshot) => {
-                    publish_message_deleted_event(&pool, &event_bus, &account_id, &snapshot).await;
+                    publish_message_deleted_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
                 }
                 TelegramRuntimeEvent::MessageInteractionInfoUpdated(snapshot) => {
-                    publish_reaction_changed_event(&pool, &event_bus, &account_id, &snapshot).await;
+                    publish_reaction_changed_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
                 }
                 TelegramRuntimeEvent::TypingChanged(snapshot) => {
-                    publish_typing_event(&pool, &event_bus, &account_id, &snapshot).await;
+                    publish_typing_event(&telegram_store, &event_bus, &account_id, &snapshot).await;
                 }
                 TelegramRuntimeEvent::TopicUpdated(snapshot) => {
-                    publish_topic_event(&pool, &event_bus, &account_id, &snapshot).await;
+                    publish_topic_event(&telegram_store, &event_bus, &account_id, &snapshot).await;
                 }
                 TelegramRuntimeEvent::ChatUnreadUpdated(snapshot) => {
-                    publish_chat_unread_event(&pool, &event_bus, &account_id, &snapshot).await;
+                    publish_chat_unread_event(&telegram_store, &event_bus, &account_id, &snapshot)
+                        .await;
                 }
                 TelegramRuntimeEvent::ChatMarkedAsUnreadUpdated(snapshot) => {
-                    publish_chat_marked_as_unread_event(&pool, &event_bus, &account_id, &snapshot)
-                        .await;
+                    publish_chat_marked_as_unread_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
                 }
                 TelegramRuntimeEvent::ChatNotificationSettingsUpdated(snapshot) => {
                     publish_chat_notification_settings_event(
-                        &pool,
+                        &telegram_store,
                         &event_bus,
                         &account_id,
                         &snapshot,
@@ -89,14 +128,26 @@ pub(super) fn spawn_telegram_runtime_event_bridge(
                     .await;
                 }
                 TelegramRuntimeEvent::ChatPositionUpdated(snapshot) => {
-                    publish_chat_position_event(&pool, &event_bus, &account_id, &snapshot).await;
+                    publish_chat_position_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
                 }
                 TelegramRuntimeEvent::ChatRemovedFromList(snapshot) => {
-                    publish_chat_removed_from_list_event(&pool, &event_bus, &account_id, &snapshot)
-                        .await;
+                    publish_chat_removed_from_list_event(
+                        &telegram_store,
+                        &event_bus,
+                        &account_id,
+                        &snapshot,
+                    )
+                    .await;
                 }
                 TelegramRuntimeEvent::ChatFoldersUpdated(folders) => {
-                    publish_chat_folders_event(&pool, &event_bus, &account_id, &folders).await;
+                    publish_chat_folders_event(&telegram_store, &event_bus, &account_id, &folders)
+                        .await;
                 }
             }
         }
@@ -200,7 +251,8 @@ async fn publish_command_event(
         return;
     };
 
-    if let Some(pool) = &context.pool {
+    if let Some(store) = &context.telegram_store {
+        let pool = store.pool();
         let event_store = EventStore::new(pool.clone());
         if let Err(error) = event_store.append(&event).await {
             tracing::warn!(error = %error, "Telegram runtime event bridge: failed to append command reconciliation event");
@@ -287,7 +339,10 @@ mod typing_tests {
     async fn publish_command_reconciled_events_appends_status_and_reconciled_records() {
         let ctx = TestContext::new().await;
         let pool = ctx.pool().clone();
-        let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), EventBus::new());
+        let context = TelegramRuntimeEventBridgeContext::new(
+            Some(crate::test_support::telegram_store(&pool)),
+            EventBus::new(),
+        );
         let command = sample_command();
 
         publish_command_reconciled_events(Some(&context), &command, "tdlib.updateMessageContent")
@@ -325,7 +380,7 @@ mod typing_tests {
 }
 
 async fn publish_typing_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibTypingSnapshot,
@@ -334,7 +389,8 @@ async fn publish_typing_event(
         return;
     };
 
-    if let Some(pool) = pool {
+    if let Some(store) = telegram_store {
+        let pool = store.pool();
         let event_store = EventStore::new(pool.clone());
         if let Err(error) = event_store.append(&event).await {
             tracing::warn!(error = %error, "Telegram runtime event bridge: failed to append typing event");

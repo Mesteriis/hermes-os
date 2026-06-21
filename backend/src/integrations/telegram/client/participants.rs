@@ -617,7 +617,7 @@ pub async fn list_provider_chat_members(
 }
 
 pub async fn list_message_heuristic_members(
-    pool: &PgPool,
+    store: &TelegramStore,
     account_id: &str,
     provider_chat_id: &str,
     query: Option<&str>,
@@ -631,7 +631,7 @@ pub async fn list_message_heuristic_members(
 
     let limit = validate_chat_list_limit(limit)?;
     let query = normalized_query(query);
-    let members = TelegramStore::new(pool.clone())
+    let members = store
         .provider_channel_message_store()
         .heuristic_members(
             account_id,

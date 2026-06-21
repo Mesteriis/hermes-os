@@ -9,6 +9,7 @@ mod scanner;
 mod store;
 mod validation;
 
+pub use blob_store::LocalCommunicationBlobStore as LocalCommunicationBlobPort;
 pub use blob_store::{LocalCommunicationBlob, LocalCommunicationBlobStore};
 pub use errors::{AttachmentSafetyScanError, CommunicationStorageError};
 pub use imports::new_communication_attachment_import_id;
@@ -22,3 +23,4 @@ pub use scanner::{
     AttachmentSafetyScanner, HeuristicAttachmentSafetyScanner, NoopAttachmentSafetyScanner,
 };
 pub use store::CommunicationStorageStore;
+pub use store::CommunicationStorageStore as CommunicationBlobMetadataPort;

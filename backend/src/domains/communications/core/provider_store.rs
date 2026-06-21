@@ -8,6 +8,11 @@ use super::models::{
     DeletedProviderAccount, NewProviderAccount, NewProviderAccountSecretBinding, ProviderAccount,
     ProviderAccountSecretBinding, ProviderAccountSecretPurpose, ProviderAccountUsage,
 };
+use crate::platform::communications::{
+    ProviderAccountCommandPort, ProviderAccountLookupPort, ProviderAccountPortError,
+    ProviderSecretBindingCommandPort, ProviderSecretBindingLookupPort,
+    ProviderSecretBindingPortError,
+};
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, link_domain_entity_in_transaction,
 };
@@ -680,6 +685,243 @@ impl CommunicationProviderSecretBindingStore {
         row.map(row_to_provider_secret_binding).transpose()
     }
 }
+
+impl ProviderAccountLookupPort for CommunicationProviderAccountStore {
+    fn get<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Option<ProviderAccount>, ProviderAccountPortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderAccountStore::get(self, account_id)
+                .await
+                .map_err(ProviderAccountPortError::new)
+        })
+    }
+
+    fn list<'a>(
+        &'a self,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<Vec<ProviderAccount>, ProviderAccountPortError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderAccountStore::list(self)
+                .await
+                .map_err(ProviderAccountPortError::new)
+        })
+    }
+}
+
+impl ProviderAccountCommandPort for CommunicationProviderAccountStore {
+    fn upsert<'a>(
+        &'a self,
+        account: &'a NewProviderAccount,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<ProviderAccount, ProviderAccountPortError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderAccountStore::upsert(self, account)
+                .await
+                .map_err(ProviderAccountPortError::new)
+        })
+    }
+
+    fn upsert_runtime_account<'a>(
+        &'a self,
+        account_id: String,
+        provider_kind: String,
+        display_name: String,
+        external_account_id: String,
+        config: serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<ProviderAccount, ProviderAccountPortError>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderAccountStore::upsert_runtime_account(
+                self,
+                account_id,
+                &provider_kind,
+                display_name,
+                external_account_id,
+                config,
+            )
+            .await
+            .map_err(ProviderAccountPortError::new)
+        })
+    }
+
+    fn update_config<'a>(
+        &'a self,
+        account_id: &'a str,
+        config: &'a serde_json::Value,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Option<ProviderAccount>, ProviderAccountPortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderAccountStore::update_config(self, account_id, config)
+                .await
+                .map_err(ProviderAccountPortError::new)
+        })
+    }
+
+    fn update_config_with_origin<'a>(
+        &'a self,
+        account_id: &'a str,
+        config: &'a serde_json::Value,
+        origin_kind: ObservationOriginKind,
+        actor: &'a str,
+        action: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Option<ProviderAccount>, ProviderAccountPortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderAccountStore::update_config_with_origin(
+                self,
+                account_id,
+                config,
+                origin_kind,
+                actor,
+                action,
+            )
+            .await
+            .map_err(ProviderAccountPortError::new)
+        })
+    }
+
+    fn mark_logged_out<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Option<ProviderAccount>, ProviderAccountPortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderAccountStore::mark_logged_out(self, account_id)
+                .await
+                .map_err(ProviderAccountPortError::new)
+        })
+    }
+
+    fn delete_metadata<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<DeletedProviderAccount, ProviderAccountPortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderAccountStore::delete_metadata(self, account_id)
+                .await
+                .map_err(ProviderAccountPortError::new)
+        })
+    }
+}
+
+impl ProviderSecretBindingLookupPort for CommunicationProviderSecretBindingStore {
+    fn list_for_account<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<ProviderAccountSecretBinding>,
+                        ProviderSecretBindingPortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderSecretBindingStore::list_for_account(self, account_id)
+                .await
+                .map_err(ProviderSecretBindingPortError::new)
+        })
+    }
+
+    fn get_for_account<'a>(
+        &'a self,
+        account_id: &'a str,
+        secret_purpose: ProviderAccountSecretPurpose,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderAccountSecretBinding>,
+                        ProviderSecretBindingPortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderSecretBindingStore::get_for_account(
+                self,
+                account_id,
+                secret_purpose,
+            )
+            .await
+            .map_err(ProviderSecretBindingPortError::new)
+        })
+    }
+}
+
+impl ProviderSecretBindingCommandPort for CommunicationProviderSecretBindingStore {
+    fn bind<'a>(
+        &'a self,
+        binding: &'a NewProviderAccountSecretBinding,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<ProviderAccountSecretBinding, ProviderSecretBindingPortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            CommunicationProviderSecretBindingStore::bind(self, binding)
+                .await
+                .map_err(ProviderSecretBindingPortError::new)
+        })
+    }
+}
+
 struct VaultOwnedEntityLink {
     observation_id: String,
     domain: &'static str,

@@ -58,7 +58,7 @@ export {
   updateMailSyncSettings,
   runMailSyncNow,
   runMailFullResync
-} from '../../../integrations/mail/api/syncApi'
+} from '../../../shared/mailSync/syncApi'
 export { sendEmail, redirectMessage } from './sendApi'
 export {
   fetchOutboxItems,

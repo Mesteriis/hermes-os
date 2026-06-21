@@ -1,8 +1,8 @@
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::organizations::api::OrganizationStore;
-use crate::domains::organizations::core::OrgContactLinkStore;
+use crate::domains::organizations::api::OrganizationCommandPort;
+use crate::domains::organizations::core::OrganizationContactLinkPort;
 
 use super::errors::EmailSyncPipelineError;
 use super::participants::EmailParticipant;
@@ -74,7 +74,7 @@ async fn upsert_email_domain_organization(
     domain: &str,
     observation_id: &str,
 ) -> Result<Option<String>, EmailSyncPipelineError> {
-    let (_, inserted) = OrganizationStore::new(pool.clone())
+    let (_, inserted) = OrganizationCommandPort::new(pool.clone())
         .upsert_email_domain_organization_with_observation(domain, observation_id)
         .await?;
     Ok(inserted.then(|| organization_id_for_domain(domain)))
@@ -87,7 +87,7 @@ async fn upsert_organization_contact_link(
     message: &ProjectedMessage,
     _participant: &EmailParticipant,
 ) -> Result<bool, EmailSyncPipelineError> {
-    let inserted = OrgContactLinkStore::new(pool.clone())
+    let inserted = OrganizationContactLinkPort::new(pool.clone())
         .link_email_participant_with_observation(
             organization_id,
             person_id,

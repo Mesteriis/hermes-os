@@ -4,7 +4,9 @@ use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
 
 use crate::platform::communications::{
-    ProviderChannelMessage, ProviderCommunicationMessagePortError, ProviderHeuristicMember,
+    ProviderAttachmentDownloadStateUpdate, ProviderChannelMessage,
+    ProviderChannelMessageCommandPort, ProviderChannelMessageLookupPort,
+    ProviderCommunicationMessagePortError, ProviderHeuristicMember,
     ProviderMessageAttachmentAnchor, ProviderMessageProjectionObservationContext,
     ProviderMessageReferenceSummary,
 };
@@ -843,22 +845,12 @@ impl ProviderChannelMessageStore {
         Ok(Some(updated))
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub async fn update_attachment_download_state(
         &self,
-        message_id: &str,
-        provider_attachment_id: &str,
-        provider_file_id: i64,
-        download_state: &str,
-        local_path: Option<&str>,
-        size_bytes: Option<i64>,
-        content_type: &str,
-        filename: Option<&str>,
-        observed_at: DateTime<Utc>,
-        context: ProviderMessageProjectionObservationContext<'_>,
+        update: ProviderAttachmentDownloadStateUpdate<'_>,
     ) -> Result<Option<ProviderChannelMessage>, ProviderCommunicationMessagePortError> {
         let Some(current) = self
-            .message_by_id(message_id, context.channel_kinds)
+            .message_by_id(update.message_id, update.context.channel_kinds)
             .await?
         else {
             return Ok(None);
@@ -885,12 +877,12 @@ impl ProviderChannelMessageStore {
             let attachment_id_matches = object
                 .get("attachment_id")
                 .and_then(Value::as_str)
-                .map(|value| value == provider_attachment_id)
+                .map(|value| value == update.provider_attachment_id)
                 .unwrap_or(false);
             let provider_file_matches = object
                 .get("tdlib_file_id")
                 .and_then(Value::as_i64)
-                .map(|value| value == provider_file_id)
+                .map(|value| value == update.provider_file_id)
                 .unwrap_or(false);
             if !attachment_id_matches && !provider_file_matches {
                 continue;
@@ -898,18 +890,18 @@ impl ProviderChannelMessageStore {
 
             object.insert(
                 "attachment_id".to_owned(),
-                json!(provider_attachment_id.to_owned()),
+                json!(update.provider_attachment_id.to_owned()),
             );
-            object.insert("tdlib_file_id".to_owned(), json!(provider_file_id));
-            object.insert("download_state".to_owned(), json!(download_state));
-            object.insert("content_type".to_owned(), json!(content_type));
-            if let Some(path) = local_path {
+            object.insert("tdlib_file_id".to_owned(), json!(update.provider_file_id));
+            object.insert("download_state".to_owned(), json!(update.download_state));
+            object.insert("content_type".to_owned(), json!(update.content_type));
+            if let Some(path) = update.local_path {
                 object.insert("local_path".to_owned(), json!(path));
             }
-            if let Some(size) = size_bytes {
+            if let Some(size) = update.size_bytes {
                 object.insert("size".to_owned(), json!(size));
             }
-            if let Some(name) = filename {
+            if let Some(name) = update.filename {
                 object.insert("filename".to_owned(), json!(name));
             }
             updated_attachment = true;
@@ -917,14 +909,14 @@ impl ProviderChannelMessageStore {
 
         if !updated_attachment {
             attachment_array.push(json!({
-                "attachment_id": provider_attachment_id,
+                "attachment_id": update.provider_attachment_id,
                 "attachment_type": "file",
-                "content_type": content_type,
-                "tdlib_file_id": provider_file_id,
-                "download_state": download_state,
-                "local_path": local_path,
-                "size": size_bytes,
-                "filename": filename,
+                "content_type": update.content_type,
+                "tdlib_file_id": update.provider_file_id,
+                "download_state": update.download_state,
+                "local_path": update.local_path,
+                "size": update.size_bytes,
+                "filename": update.filename,
             }));
         }
 
@@ -953,9 +945,9 @@ impl ProviderChannelMessageStore {
                 message_metadata
             "#,
         )
-        .bind(message_id.trim())
+        .bind(update.message_id.trim())
         .bind(&updated_metadata)
-        .bind(observed_at)
+        .bind(update.observed_at)
         .fetch_optional(&mut *transaction)
         .await?;
 
@@ -966,29 +958,489 @@ impl ProviderChannelMessageStore {
         capture_projection_observation_in_transaction(
             &mut transaction,
             &updated,
-            observed_at,
-            context.relationship_kind,
+            update.observed_at,
+            update.context.relationship_kind,
             json!({
                 "message_id": updated.message_id,
                 "account_id": updated.account_id,
                 "provider_message_id": updated.provider_record_id,
                 "provider_chat_id": updated.conversation_id,
-                "attachment_id": provider_attachment_id,
-                "tdlib_file_id": provider_file_id,
-                "download_state": download_state,
-                "local_path": local_path,
-                "size_bytes": size_bytes,
-                "content_type": content_type,
-                "filename": filename,
+                "attachment_id": update.provider_attachment_id,
+                "tdlib_file_id": update.provider_file_id,
+                "download_state": update.download_state,
+                "local_path": update.local_path,
+                "size_bytes": update.size_bytes,
+                "content_type": update.content_type,
+                "filename": update.filename,
                 "previous_metadata": current.message_metadata,
                 "message_metadata": updated.message_metadata,
             }),
-            context.actor,
+            update.context.actor,
         )
         .await?;
         transaction.commit().await?;
 
         Ok(Some(updated))
+    }
+}
+
+impl ProviderChannelMessageLookupPort for ProviderChannelMessageStore {
+    fn message_by_id<'a>(
+        &'a self,
+        message_id: &'a str,
+        channel_kinds: &'a [&'a str],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::message_by_id(self, message_id, channel_kinds).await
+        })
+    }
+
+    fn message_by_provider_record_id<'a>(
+        &'a self,
+        account_id: &'a str,
+        provider_record_id: &'a str,
+        channel_kinds: &'a [&'a str],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::message_by_provider_record_id(
+                self,
+                account_id,
+                provider_record_id,
+                channel_kinds,
+            )
+            .await
+        })
+    }
+
+    fn recent_messages<'a>(
+        &'a self,
+        account_id: Option<&'a str>,
+        conversation_id: Option<&'a str>,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::recent_messages(
+                self,
+                account_id,
+                conversation_id,
+                channel_kinds,
+                limit,
+            )
+            .await
+        })
+    }
+
+    fn messages_by_ids<'a>(
+        &'a self,
+        message_ids: &'a [String],
+        channel_kinds: &'a [&'a str],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::messages_by_ids(self, message_ids, channel_kinds).await
+        })
+    }
+
+    fn search_messages<'a>(
+        &'a self,
+        account_id: Option<&'a str>,
+        conversation_id: Option<&'a str>,
+        query: &'a str,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::search_messages(
+                self,
+                account_id,
+                conversation_id,
+                query,
+                channel_kinds,
+                limit,
+            )
+            .await
+        })
+    }
+
+    fn pinned_messages<'a>(
+        &'a self,
+        account_id: &'a str,
+        conversation_id: &'a str,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::pinned_messages(
+                self,
+                account_id,
+                conversation_id,
+                channel_kinds,
+                limit,
+            )
+            .await
+        })
+    }
+
+    fn body_text<'a>(
+        &'a self,
+        message_id: &'a str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Option<String>, ProviderCommunicationMessagePortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move { ProviderChannelMessageStore::body_text(self, message_id).await })
+    }
+
+    fn message_ids_by_metadata_string<'a>(
+        &'a self,
+        metadata_key: &'a str,
+        metadata_value: &'a str,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Vec<String>, ProviderCommunicationMessagePortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::message_ids_by_metadata_string(
+                self,
+                metadata_key,
+                metadata_value,
+                channel_kinds,
+                limit,
+            )
+            .await
+        })
+    }
+
+    fn message_id_by_provider_record_id<'a>(
+        &'a self,
+        account_id: &'a str,
+        provider_record_id: &'a str,
+        channel_kinds: &'a [&'a str],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<Option<String>, ProviderCommunicationMessagePortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::message_id_by_provider_record_id(
+                self,
+                account_id,
+                provider_record_id,
+                channel_kinds,
+            )
+            .await
+        })
+    }
+
+    fn reference_summaries<'a>(
+        &'a self,
+        message_ids: &'a [String],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<ProviderMessageReferenceSummary>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::reference_summaries(self, message_ids).await
+        })
+    }
+
+    fn heuristic_members<'a>(
+        &'a self,
+        account_id: &'a str,
+        conversation_id: &'a str,
+        query: Option<&'a str>,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+        offset: i64,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Vec<ProviderHeuristicMember>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::heuristic_members(
+                self,
+                account_id,
+                conversation_id,
+                query,
+                channel_kinds,
+                limit,
+                offset,
+            )
+            .await
+        })
+    }
+
+    fn attachment_anchor<'a>(
+        &'a self,
+        account_id: &'a str,
+        conversation_id: &'a str,
+        provider_record_id: &'a str,
+        channel_kinds: &'a [&'a str],
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderMessageAttachmentAnchor>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::attachment_anchor(
+                self,
+                account_id,
+                conversation_id,
+                provider_record_id,
+                channel_kinds,
+            )
+            .await
+        })
+    }
+
+    fn unread_counts<'a>(
+        &'a self,
+        account_id: &'a str,
+        conversation_id: &'a str,
+        channel_kinds: &'a [&'a str],
+        last_read_at: Option<DateTime<Utc>>,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<(i64, i64), ProviderCommunicationMessagePortError>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::unread_counts(
+                self,
+                account_id,
+                conversation_id,
+                channel_kinds,
+                last_read_at,
+            )
+            .await
+        })
+    }
+}
+
+impl ProviderChannelMessageCommandPort for ProviderChannelMessageStore {
+    fn apply_metadata<'a>(
+        &'a self,
+        message_id: &'a str,
+        metadata: &'a Value,
+        context: ProviderMessageProjectionObservationContext<'a>,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::apply_metadata(self, message_id, metadata, context).await
+        })
+    }
+
+    fn set_delivery_state<'a>(
+        &'a self,
+        message_id: &'a str,
+        delivery_state: &'a str,
+        observed_at: DateTime<Utc>,
+        context: ProviderMessageProjectionObservationContext<'a>,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::set_delivery_state(
+                self,
+                message_id,
+                delivery_state,
+                observed_at,
+                context,
+            )
+            .await
+        })
+    }
+
+    fn apply_content_update<'a>(
+        &'a self,
+        message_id: &'a str,
+        body_text: &'a str,
+        metadata: &'a Value,
+        observed_at: DateTime<Utc>,
+        context: ProviderMessageProjectionObservationContext<'a>,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::apply_content_update(
+                self,
+                message_id,
+                body_text,
+                metadata,
+                observed_at,
+                context,
+            )
+            .await
+        })
+    }
+
+    fn apply_pinned_state<'a>(
+        &'a self,
+        message_id: &'a str,
+        is_pinned: bool,
+        observed_at: DateTime<Utc>,
+        context: ProviderMessageProjectionObservationContext<'a>,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::apply_pinned_state(
+                self,
+                message_id,
+                is_pinned,
+                observed_at,
+                context,
+            )
+            .await
+        })
+    }
+
+    fn update_attachment_download_state<'a>(
+        &'a self,
+        update: ProviderAttachmentDownloadStateUpdate<'a>,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            ProviderChannelMessageStore::update_attachment_download_state(self, update).await
+        })
     }
 }
 

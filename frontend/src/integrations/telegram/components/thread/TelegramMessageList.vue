@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
-import type { MessageAnalyzeResponse } from '../../../../domains/communications/types/communications'
+import type { MessageAnalyzeResponse } from '../../../../shared/communications/types/communications'
 import type { TelegramAttachmentHint, TelegramChat, TelegramMessage, TelegramOperationCapability, TelegramCapabilitiesResponse } from '../../types/telegram'
 import { telegramMessageAttachmentHints } from '../../stores/telegram'
 import { telegramAttachmentReadiness } from '../../stores/telegramMediaSearch'

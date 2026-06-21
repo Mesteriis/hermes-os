@@ -8,6 +8,7 @@ mod identity;
 mod related;
 
 pub use aliases::{OrgAliasStore, OrganizationAlias};
+pub use contact_links::OrgContactLinkStore as OrganizationContactLinkPort;
 pub use contact_links::{OrgContactLink, OrgContactLinkStore};
 pub use departments::{OrgDepartment, OrgDepartmentStore};
 pub use domains::{OrgDomainStore, OrganizationDomain};

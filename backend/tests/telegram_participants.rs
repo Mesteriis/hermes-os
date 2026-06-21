@@ -65,7 +65,7 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
     {
         post_ok(
             app.clone(),
-            "/api/v1/communications/telegram/messages",
+            "/api/v1/communications/provider-messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,
@@ -87,7 +87,7 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
     let fallback_response = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/communications/telegram/chats/{telegram_chat_id}/members?limit=10"
+            "/api/v1/communications/provider-conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("fallback members response");
@@ -110,7 +110,7 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
     let provider_response = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/communications/telegram/chats/{telegram_chat_id}/members?query=owner&role=owner&limit=10"
+            "/api/v1/communications/provider-conversations/{telegram_chat_id}/members?query=owner&role=owner&limit=10"
         )))
         .await
         .expect("provider members response");
@@ -159,7 +159,7 @@ async fn telegram_join_leave_routes_enqueue_provider_write_commands() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/messages",
+        "/api/v1/communications/provider-messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -179,7 +179,7 @@ async fn telegram_join_leave_routes_enqueue_provider_write_commands() {
     let telegram_chat_id = first_chat_id(app.clone(), &account_id).await;
     let join_body = command_response(
         app.clone(),
-        "/api/v1/communications/telegram/chats/join",
+        "/api/v1/communications/provider-conversations/join",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id
@@ -192,7 +192,7 @@ async fn telegram_join_leave_routes_enqueue_provider_write_commands() {
 
     let leave_body = command_response(
         app.clone(),
-        &format!("/api/v1/communications/telegram/chats/{telegram_chat_id}/leave"),
+        &format!("/api/v1/communications/provider-conversations/{telegram_chat_id}/leave"),
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id
@@ -250,7 +250,7 @@ async fn telegram_roster_sync_reconciles_join_only_after_self_member_is_observed
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/messages",
+        "/api/v1/communications/provider-messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -269,7 +269,7 @@ async fn telegram_roster_sync_reconciles_join_only_after_self_member_is_observed
 
     let join_body = command_response(
         app.clone(),
-        "/api/v1/communications/telegram/chats/join",
+        "/api/v1/communications/provider-conversations/join",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id
@@ -376,7 +376,7 @@ async fn telegram_roster_sync_reconciles_leave_when_self_member_is_inactive() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/messages",
+        "/api/v1/communications/provider-messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -396,7 +396,7 @@ async fn telegram_roster_sync_reconciles_leave_when_self_member_is_inactive() {
     let telegram_chat_id = first_chat_id(app.clone(), &account_id).await;
     let leave_body = command_response(
         app.clone(),
-        &format!("/api/v1/communications/telegram/chats/{telegram_chat_id}/leave"),
+        &format!("/api/v1/communications/provider-conversations/{telegram_chat_id}/leave"),
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id
@@ -525,7 +525,7 @@ where
 {
     let response = app
         .oneshot(get(&format!(
-            "/api/v1/communications/telegram/chats?account_id={account_id}&limit=10"
+            "/api/v1/communications/provider-conversations?account_id={account_id}&limit=10"
         )))
         .await
         .expect("chat list response");

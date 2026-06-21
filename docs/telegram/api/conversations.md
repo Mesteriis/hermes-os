@@ -8,8 +8,8 @@
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/telegram/chats?account_id=&limit=` | Projected Telegram chats ordered by last activity |
-| POST | `/api/v1/communications/telegram/sync/chats` | Sync account chats through fixture or TDLib runtime |
+| GET | `/api/v1/communications/provider-conversations?account_id=&limit=` | Projected Telegram chats ordered by last activity |
+| POST | `/api/v1/communications/provider-sync/chats` | Sync account chats through fixture or TDLib runtime |
 
 `telegram_chats.chat_kind` currently supports:
 
@@ -61,19 +61,19 @@ provider-observed reconciliation.
 
 | Method | Path | Назначение |
 |---|---|---|
-| GET | `/api/v1/communications/telegram/chats/{chat_id}` | Projection-backed selected-chat detail |
-| GET | `/api/v1/communications/telegram/chats/{chat_id}/members?query=&role=&limit=&cursor=` | Provider roster rows when synced; labeled message-sender fallback otherwise |
-| POST | `/api/v1/communications/telegram/chats/{chat_id}/members/sync` | TDLib-backed provider roster sync for supergroups/channels and metadata-backed private/saved-message roster hydration |
-| POST | `/api/v1/communications/telegram/chats/join` | Queue provider chat join through durable outbox (`command_kind=join`) |
-| POST | `/api/v1/communications/telegram/chats/{chat_id}/leave` | Queue provider chat leave through durable outbox (`command_kind=leave`) |
-| GET | `/api/v1/communications/telegram/chats/{chat_id}/pinned-messages?limit=` | Projection-backed pinned-message list for the selected chat |
-| GET | `/api/v1/communications/telegram/chats/search?q=&account_id=` | Projection-backed dialog search |
-| GET | `/api/v1/communications/telegram/folders?account_id=` | Projection-backed Telegram folder/chat-list filters derived from `telegram_chats.metadata.folder_name` / `folder_labels`, including optional `provider_folder_id` when TDLib folder metadata is known |
-| POST | `/api/v1/communications/telegram/chats/{chat_id}/pin` | Provider/local pin command |
-| POST | `/api/v1/communications/telegram/chats/{chat_id}/archive` | Provider/local archive command |
-| POST | `/api/v1/communications/telegram/chats/{chat_id}/mute` | Mute/unmute command |
-| POST | `/api/v1/communications/telegram/chats/{chat_id}/read` | Projected mark-read command; when `last_read_inbox_provider_message_id` is provided, queued TDLib `viewMessages(force_read=true)` targets that provider message for provider-side read reconciliation |
-| POST | `/api/v1/communications/telegram/chats/{chat_id}/unread` | Projected mark-unread command plus queued TDLib manual-unread set |
+| GET | `/api/v1/communications/provider-conversations/{chat_id}` | Projection-backed selected-chat detail |
+| GET | `/api/v1/communications/provider-conversations/{chat_id}/members?query=&role=&limit=&cursor=` | Provider roster rows when synced; labeled message-sender fallback otherwise |
+| POST | `/api/v1/communications/provider-conversations/{chat_id}/members/sync` | TDLib-backed provider roster sync for supergroups/channels and metadata-backed private/saved-message roster hydration |
+| POST | `/api/v1/communications/provider-conversations/join` | Queue provider chat join through durable outbox (`command_kind=join`) |
+| POST | `/api/v1/communications/provider-conversations/{chat_id}/leave` | Queue provider chat leave through durable outbox (`command_kind=leave`) |
+| GET | `/api/v1/communications/provider-conversations/{chat_id}/pinned-messages?limit=` | Projection-backed pinned-message list for the selected chat |
+| GET | `/api/v1/communications/provider-conversations/search?q=&account_id=` | Projection-backed dialog search |
+| GET | `/api/v1/communications/provider-conversation-folders?account_id=` | Projection-backed Telegram folder/chat-list filters derived from `telegram_chats.metadata.folder_name` / `folder_labels`, including optional `provider_folder_id` when TDLib folder metadata is known |
+| POST | `/api/v1/communications/provider-conversations/{chat_id}/pin` | Provider/local pin command |
+| POST | `/api/v1/communications/provider-conversations/{chat_id}/archive` | Provider/local archive command |
+| POST | `/api/v1/communications/provider-conversations/{chat_id}/mute` | Mute/unmute command |
+| POST | `/api/v1/communications/provider-conversations/{chat_id}/read` | Projected mark-read command; when `last_read_inbox_provider_message_id` is provided, queued TDLib `viewMessages(force_read=true)` targets that provider message for provider-side read reconciliation |
+| POST | `/api/v1/communications/provider-conversations/{chat_id}/unread` | Projected mark-unread command plus queued TDLib manual-unread set |
 
 Current implementation of pin/archive/mute/read/unread updates projected local
 chat metadata and records durable command rows with realtime command-status
@@ -97,7 +97,7 @@ Extended provider semantics such as true message-level receipt rows, custom
 mute shapes outside the current exact TDLib request contract and folder
 semantics beyond current add/remove/reassign paths are outside the base
 closure.
-`POST /api/v1/communications/telegram/sync/chats` now also
+`POST /api/v1/communications/provider-sync/chats` now also
 hydrates TDLib folder labels through `getChatFolder`, persists
 `folder_labels` / `provider_folder_id` into chat metadata, and runtime
 `updateChatFolders` events emit `telegram.folders.updated` so the folders query
@@ -139,12 +139,12 @@ capability-gated Join/Leave controls.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/telegram/chats/{telegram_chat_id}/topics?limit=` | Fetch forum topics (DB-backed), with optional live TDLib sync refresh |
-| POST | `/api/v1/communications/telegram/chats/{telegram_chat_id}/topics` | Queue forum-topic create command |
-| GET | `/api/v1/communications/telegram/topics/{topic_id}` | Read topic details |
-| POST | `/api/v1/communications/telegram/topics/{topic_id}/close` | Queue forum-topic close/reopen command |
-| GET | `/api/v1/communications/telegram/topics/{topic_id}/messages` | Read topic-scoped timeline by `forum_topic_id` metadata |
-| GET | `/api/v1/communications/telegram/topics/search?q=&telegram_chat_id=&limit=` | Search forum topics within a chat by title |
+| GET | `/api/v1/communications/provider-conversations/{telegram_chat_id}/topics?limit=` | Fetch forum topics (DB-backed), with optional live TDLib sync refresh |
+| POST | `/api/v1/communications/provider-conversations/{telegram_chat_id}/topics` | Queue forum-topic create command |
+| GET | `/api/v1/communications/provider-topics/{topic_id}` | Read topic details |
+| POST | `/api/v1/communications/provider-topics/{topic_id}/close` | Queue forum-topic close/reopen command |
+| GET | `/api/v1/communications/provider-topics/{topic_id}/messages` | Read topic-scoped timeline by `forum_topic_id` metadata |
+| GET | `/api/v1/communications/provider-topics/search?q=&telegram_chat_id=&limit=` | Search forum topics within a chat by title |
 
 The frontend Topics tab consumes these routes through TanStack Query and now
 renders projected `is_pinned`, `is_closed`, `unread_count`, `provider_topic_id`
@@ -163,17 +163,17 @@ closed-state transition and emits `telegram.command.reconciled`.
 
 | Method | Path | Описание |
 |---|---|---|
-| POST | `/api/v1/communications/telegram/messages/{message_id}/edit` | Record append-only local edit version and command metadata |
-| POST | `/api/v1/communications/telegram/messages/{message_id}/delete` | Record tombstone evidence and command metadata |
-| POST | `/api/v1/communications/telegram/messages/{message_id}/restore-visibility` | Record local visibility restore event, command metadata and redacted audit |
-| POST | `/api/v1/communications/telegram/messages/{message_id}/pin` | Record local pin/unpin projection state, command metadata and redacted audit; active TDLib actors execute queued provider pin/unpin |
-| POST | `/api/v1/communications/telegram/messages/{message_id}/reply` | Send TDLib reply message through the active QR-authorized runtime |
-| POST | `/api/v1/communications/telegram/messages/{message_id}/forward` | Forward a source Telegram message through the active QR-authorized runtime |
-| GET | `/api/v1/communications/telegram/messages/{message_id}/versions` | List observed/local message versions |
-| GET | `/api/v1/communications/telegram/messages/{message_id}/tombstones` | List message tombstones |
-| GET | `/api/v1/communications/telegram/messages/{message_id}/raw` | Sanitized raw provider evidence record for the projected Telegram message |
-| GET | `/api/v1/communications/telegram/messages/{message_id}/reply-chain` | Read current reply-chain projection |
-| GET | `/api/v1/communications/telegram/messages/{message_id}/forward-chain` | Read current forward-chain projection |
+| POST | `/api/v1/communications/provider-messages/{message_id}/edit` | Record append-only local edit version and command metadata |
+| POST | `/api/v1/communications/provider-messages/{message_id}/delete` | Record tombstone evidence and command metadata |
+| POST | `/api/v1/communications/provider-messages/{message_id}/restore-visibility` | Record local visibility restore event, command metadata and redacted audit |
+| POST | `/api/v1/communications/provider-messages/{message_id}/pin` | Record local pin/unpin projection state, command metadata and redacted audit; active TDLib actors execute queued provider pin/unpin |
+| POST | `/api/v1/communications/provider-messages/{message_id}/reply` | Send TDLib reply message through the active QR-authorized runtime |
+| POST | `/api/v1/communications/provider-messages/{message_id}/forward` | Forward a source Telegram message through the active QR-authorized runtime |
+| GET | `/api/v1/communications/provider-messages/{message_id}/versions` | List observed/local message versions |
+| GET | `/api/v1/communications/provider-messages/{message_id}/tombstones` | List message tombstones |
+| GET | `/api/v1/communications/provider-messages/{message_id}/raw` | Sanitized raw provider evidence record for the projected Telegram message |
+| GET | `/api/v1/communications/provider-messages/{message_id}/reply-chain` | Read current reply-chain projection |
+| GET | `/api/v1/communications/provider-messages/{message_id}/forward-chain` | Read current forward-chain projection |
 | GET | `/api/v1/integrations/telegram/commands?account_id=&limit=` | List durable Telegram command rows; inspector context now surfaces them as a local audit panel with current-chat filter and text search |
 | POST | `/api/v1/integrations/telegram/commands/{command_id}/retry` | Manually requeue an eligible failed/dead-letter/retrying provider command row through the durable outbox runtime |
 
@@ -226,8 +226,8 @@ Contact/Persona lifecycle records or any cross-domain extraction workflow.
 
 | Method | Path | Назначение |
 |---|---|---|
-| POST | `/api/v1/communications/telegram/chats/{telegram_chat_id}/topics` | Topic write command (create forum topic) |
-| POST | `/api/v1/communications/telegram/topics/{topic_id}/close` | Topic write command (close/reopen forum topic) |
+| POST | `/api/v1/communications/provider-conversations/{telegram_chat_id}/topics` | Topic write command (create forum topic) |
+| POST | `/api/v1/communications/provider-topics/{topic_id}/close` | Topic write command (close/reopen forum topic) |
 
 ## Messages
 
@@ -235,13 +235,13 @@ Contact/Persona lifecycle records or any cross-domain extraction workflow.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/telegram/messages?account_id=&provider_chat_id=&limit=` | Recent projected Telegram messages |
-| POST | `/api/v1/communications/telegram/messages` | Ingest fixture Telegram message |
-| POST | `/api/v1/communications/telegram/sync/history` | Sync selected chat history |
-| POST | `/api/v1/communications/telegram/messages/send` | Manual text send through fixture or TDLib QR-authorized runtime |
-| POST | `/api/v1/communications/telegram/messages/{message_id}/mark-read` | Dedicated provider mark-read command for the selected message; resolves projected chat/message identifiers and queues targeted TDLib `viewMessages(force_read=true)` through the dialog outbox path |
+| GET | `/api/v1/communications/provider-messages?account_id=&provider_chat_id=&limit=` | Recent projected Telegram messages |
+| POST | `/api/v1/communications/provider-messages` | Ingest fixture Telegram message |
+| POST | `/api/v1/communications/provider-sync/history` | Sync selected chat history |
+| POST | `/api/v1/communications/provider-messages/send` | Manual text send through fixture or TDLib QR-authorized runtime |
+| POST | `/api/v1/communications/provider-messages/{message_id}/mark-read` | Dedicated provider mark-read command for the selected message; resolves projected chat/message identifiers and queues targeted TDLib `viewMessages(force_read=true)` through the dialog outbox path |
 
-`POST /api/v1/communications/telegram/sync/history` supports:
+`POST /api/v1/communications/provider-sync/history` supports:
 
 ```text
 latest
@@ -270,9 +270,9 @@ or Persona/identity resolution.
 
 | Method | Path | Назначение |
 |---|---|---|
-| POST | `/api/v1/communications/telegram/messages/{message_id}/reactions` | Add reaction |
-| DELETE | `/api/v1/communications/telegram/messages/{message_id}/reactions` | Remove reaction |
-| GET | `/api/v1/communications/telegram/messages/{message_id}/reactions` | Current reaction projection |
+| POST | `/api/v1/communications/provider-messages/{message_id}/reactions` | Add reaction |
+| DELETE | `/api/v1/communications/provider-messages/{message_id}/reactions` | Remove reaction |
+| GET | `/api/v1/communications/provider-messages/{message_id}/reactions` | Current reaction projection |
 
 Current implementation persists local reaction projection rows, durable command
 metadata and redacted audit records for add/remove, exposes degraded local-write

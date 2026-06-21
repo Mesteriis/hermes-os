@@ -10,4 +10,5 @@ pub use models::{
     ReviewItemStatus, ReviewPromotionTarget,
 };
 pub use service::{ReviewInboxService, ReviewInboxServiceError};
+pub use store::ReviewInboxStore as ReviewInboxPort;
 pub use store::{ReviewInboxStore, ReviewItemEvidenceRecord};

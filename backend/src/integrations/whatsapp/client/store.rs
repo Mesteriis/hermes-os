@@ -5,30 +5,43 @@ mod intelligence;
 mod queries;
 mod sessions;
 
+use std::sync::Arc;
+
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::CommunicationProviderAccountStore;
-use crate::domains::communications::messages::ProviderChannelMessageStore;
+use crate::platform::communications::{
+    ProviderAccountCommandPort, ProviderChannelMessageCommandPort,
+};
 
 #[derive(Clone)]
 pub struct WhatsappWebStore {
     pub(in crate::integrations::whatsapp::client::store) pool: PgPool,
+    provider_account_store: Arc<dyn ProviderAccountCommandPort>,
+    provider_channel_message_store: Arc<dyn ProviderChannelMessageCommandPort>,
 }
 
 impl WhatsappWebStore {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(
+        pool: PgPool,
+        provider_account_store: Arc<dyn ProviderAccountCommandPort>,
+        provider_channel_message_store: Arc<dyn ProviderChannelMessageCommandPort>,
+    ) -> Self {
+        Self {
+            pool,
+            provider_account_store,
+            provider_channel_message_store,
+        }
     }
 
     pub(in crate::integrations::whatsapp::client) fn provider_account_store(
         &self,
-    ) -> CommunicationProviderAccountStore {
-        CommunicationProviderAccountStore::new(self.pool.clone())
+    ) -> &dyn ProviderAccountCommandPort {
+        self.provider_account_store.as_ref()
     }
 
     pub(in crate::integrations::whatsapp::client) fn provider_channel_message_store(
         &self,
-    ) -> ProviderChannelMessageStore {
-        ProviderChannelMessageStore::new(self.pool.clone())
+    ) -> &dyn ProviderChannelMessageCommandPort {
+        self.provider_channel_message_store.as_ref()
     }
 }

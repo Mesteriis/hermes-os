@@ -9,3 +9,5 @@ mod provider_state;
 mod queries;
 pub(in crate::integrations::telegram) mod reaction_metadata;
 mod tdlib_ingestion;
+
+pub(crate) use attachments::TelegramAttachmentDownloadStateUpdate;

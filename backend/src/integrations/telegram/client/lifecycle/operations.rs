@@ -15,14 +15,15 @@ use crate::integrations::telegram::client::models::messages::{
 };
 
 pub async fn record_edit(
-    pool: &PgPool,
+    store: &TelegramStore,
     request: &TelegramEditRequest,
     message_id: &str,
     actor_id: &str,
 ) -> Result<TelegramLifecycleResponse, TelegramError> {
+    let pool = store.pool();
     let now = Utc::now();
     let version_number = latest_version_number(pool, message_id).await? + 1;
-    let previous_body = previous_message_body(pool, message_id).await?;
+    let previous_body = previous_message_body(store, message_id).await?;
 
     let _version = insert_message_version(
         pool,
@@ -72,16 +73,16 @@ pub async fn record_edit(
 }
 
 async fn previous_message_body(
-    pool: &PgPool,
+    store: &TelegramStore,
     message_id: &str,
 ) -> Result<Option<String>, TelegramError> {
-    if let Some(version) = latest_message_version(pool, message_id).await?
+    if let Some(version) = latest_message_version(store.pool(), message_id).await?
         && version.body_text.is_some()
     {
         return Ok(version.body_text);
     }
 
-    Ok(TelegramStore::new(pool.clone())
+    Ok(store
         .provider_channel_message_store()
         .body_text(message_id)
         .await?)
@@ -206,13 +207,14 @@ pub async fn record_restore_visibility(
 }
 
 pub async fn record_pin_state(
-    pool: &PgPool,
+    store: &TelegramStore,
     request: &TelegramPinRequest,
     message_id: &str,
     actor_id: &str,
 ) -> Result<TelegramLifecycleResponse, TelegramError> {
+    let pool = store.pool();
     let now = Utc::now();
-    let updated = TelegramStore::new(pool.clone())
+    let updated = store
         .apply_message_pinned_state(message_id, request.is_pinned, now)
         .await?;
 

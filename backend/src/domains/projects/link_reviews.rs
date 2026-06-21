@@ -16,3 +16,4 @@ pub use models::{
 };
 pub use service::{ProjectLinkReviewService, ProjectLinkReviewServiceError};
 pub use store::ProjectLinkReviewStore;
+pub use store::ProjectLinkReviewStore as ProjectLinkReviewPort;

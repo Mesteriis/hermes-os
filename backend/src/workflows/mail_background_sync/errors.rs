@@ -2,8 +2,8 @@ use thiserror::Error;
 
 use crate::domains::communications::core::CommunicationIngestionError;
 use crate::platform::communications::EmailProviderSyncError;
-use crate::platform::events::{EventEnvelopeError, EventStoreError};
-use crate::platform::observations::ObservationStoreError;
+use crate::platform::events::{EventEnvelopeError, EventLogPortError};
+use crate::platform::observations::ObservationPortError;
 use crate::workflows::email_sync_pipeline::EmailSyncPipelineError;
 use crate::workflows::graph_projection::GraphProjectionError;
 
@@ -19,10 +19,10 @@ pub enum MailSyncError {
     EventEnvelope(#[from] EventEnvelopeError),
 
     #[error(transparent)]
-    EventStore(#[from] EventStoreError),
+    EventLogPort(#[from] EventLogPortError),
 
     #[error(transparent)]
-    ObservationStore(#[from] ObservationStoreError),
+    ObservationPort(#[from] ObservationPortError),
 
     #[error("mail sync account was not found")]
     AccountNotFound,
@@ -55,5 +55,5 @@ pub(super) enum ProviderSyncError {
     Graph(#[from] GraphProjectionError),
 
     #[error(transparent)]
-    SyncStore(#[from] MailSyncError),
+    SyncState(#[from] MailSyncError),
 }

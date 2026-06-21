@@ -1,4 +1,5 @@
 use std::env;
+use std::sync::Arc;
 
 use axum::http::StatusCode;
 use serde_json::json;
@@ -9,7 +10,8 @@ use tower::ServiceExt;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
 use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
+    CommunicationIngestionStore, CommunicationProviderAccountStore,
+    CommunicationProviderSecretBindingStore, EmailProviderKind, ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::integrations::mail::accounts::{
     EmailAccountSetupService, ImapAccountSetupRequest,
@@ -43,6 +45,12 @@ async fn imap_account_setup_stores_encrypted_secret_in_database_against_postgres
         database.pool().expect("configured pool").clone(),
         secret_store.clone(),
         vault.clone(),
+        Arc::new(CommunicationProviderAccountStore::new(
+            database.pool().expect("configured pool").clone(),
+        )),
+        Arc::new(CommunicationProviderSecretBindingStore::new(
+            database.pool().expect("configured pool").clone(),
+        )),
     );
 
     let account_id = format!("acct_imap_setup_{suffix}");

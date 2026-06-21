@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import SavedSearchStrip from '../../../domains/communications/components/SavedSearchStrip.vue'
-import type { CommunicationSavedSearch } from '../../../domains/communications/types/savedSearches'
+import SavedSearchStrip from '../../../shared/communications/components/SavedSearchStrip.vue'
+import type { CommunicationSavedSearch } from '../../../shared/communications/types/savedSearches'
 import { useTelegramStore } from '../stores/telegram'
 
 const props = defineProps<{

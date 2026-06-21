@@ -1,7 +1,10 @@
 use serde_json::{Value, json};
 
+use std::sync::Arc;
+
 use hermes_hub_backend::domains::communications::core::{
-    EmailProviderKind, ProviderAccountSecretPurpose,
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore, EmailProviderKind,
+    ProviderAccountSecretPurpose,
 };
 use hermes_hub_backend::integrations::mail::accounts::{
     EmailAccountSetupService, GmailOAuthSetupRequest,
@@ -30,6 +33,12 @@ async fn gmail_oauth_setup_builds_pkce_url_and_persists_token_bundle_against_pos
         database.pool().expect("configured pool").clone(),
         secret_store.clone(),
         vault.clone(),
+        Arc::new(CommunicationProviderAccountStore::new(
+            database.pool().expect("configured pool").clone(),
+        )),
+        Arc::new(CommunicationProviderSecretBindingStore::new(
+            database.pool().expect("configured pool").clone(),
+        )),
     );
     let pending = service
         .start_gmail_oauth(

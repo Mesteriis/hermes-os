@@ -6,9 +6,9 @@ use thiserror::Error;
 
 use crate::domains::communications::storage::{
     AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, AttachmentSafetyScanner,
-    CommunicationAttachmentDisposition, CommunicationStorageStore, ImportedCommunicationAttachment,
-    LocalCommunicationBlobStore, NewCommunicationAttachment, NewCommunicationBlob,
-    NoopAttachmentSafetyScanner,
+    CommunicationAttachmentDisposition, CommunicationBlobMetadataPort,
+    ImportedCommunicationAttachment, LocalCommunicationBlobPort, NewCommunicationAttachment,
+    NewCommunicationBlob, NoopAttachmentSafetyScanner,
 };
 use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
@@ -163,11 +163,11 @@ pub(crate) async fn persist_downloaded_media(
             "failed to read downloaded Telegram file `{local_path}`: {error}"
         ))
     })?;
-    let blob_store = LocalCommunicationBlobStore::new(blob_root);
+    let blob_store = LocalCommunicationBlobPort::new(blob_root);
     let local_blob = blob_store.put_blob(&bytes).await.map_err(|error| {
         TelegramMediaStorageError::Storage(format!("failed to store Telegram media blob: {error}"))
     })?;
-    let mail_store = CommunicationStorageStore::new(pool);
+    let mail_store = CommunicationBlobMetadataPort::new(pool);
     let content_type = request.content_type();
     let stored_blob = mail_store
         .upsert_blob(
@@ -244,7 +244,7 @@ pub(crate) async fn media_send_request(
         ));
     }
 
-    let mail_store = CommunicationStorageStore::new(pool.clone());
+    let mail_store = CommunicationBlobMetadataPort::new(pool.clone());
     let imported = if let Some(attachment_id) = attachment_id.as_deref() {
         mail_store
             .imported_attachment_by_id(attachment_id)

@@ -2,7 +2,7 @@ use crate::domains::communications::core::StoredRawCommunicationRecord;
 use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::communications::storage::{
     AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, AttachmentSafetyScanner,
-    CommunicationAttachmentDisposition, CommunicationStorageStore, LocalCommunicationBlobStore,
+    CommunicationAttachmentDisposition, CommunicationBlobMetadataPort, LocalCommunicationBlobPort,
     NewCommunicationAttachment, NewCommunicationBlob,
 };
 use crate::platform::communications::rfc822::{
@@ -19,8 +19,8 @@ pub(crate) struct AttachmentProjectionReport {
 }
 
 pub(crate) async fn project_attachments(
-    mail_store: &CommunicationStorageStore,
-    blob_store: &LocalCommunicationBlobStore,
+    mail_store: &CommunicationBlobMetadataPort,
+    blob_store: &LocalCommunicationBlobPort,
     raw_record: &StoredRawCommunicationRecord,
     message: &ProjectedMessage,
     attachments: &[ParsedEmailAttachment],

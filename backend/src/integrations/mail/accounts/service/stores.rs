@@ -1,5 +1,7 @@
-use crate::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+use std::sync::Arc;
+
+use crate::platform::communications::{
+    ProviderAccountCommandPort, ProviderSecretBindingCommandPort,
 };
 use crate::platform::secrets::SecretReferenceStore;
 use sqlx::postgres::PgPool;
@@ -26,15 +28,17 @@ impl EmailAccountSetupService {
 
     pub(in crate::integrations::mail::accounts::service) fn provider_account_store(
         &self,
-    ) -> Result<CommunicationProviderAccountStore, EmailAccountSetupError> {
-        Ok(CommunicationProviderAccountStore::new(self.pool()?.clone()))
+    ) -> Result<Arc<dyn ProviderAccountCommandPort>, EmailAccountSetupError> {
+        self.provider_account_store
+            .clone()
+            .ok_or(EmailAccountSetupError::StoresNotConfigured)
     }
 
     pub(in crate::integrations::mail::accounts::service) fn provider_secret_binding_store(
         &self,
-    ) -> Result<CommunicationProviderSecretBindingStore, EmailAccountSetupError> {
-        Ok(CommunicationProviderSecretBindingStore::new(
-            self.pool()?.clone(),
-        ))
+    ) -> Result<Arc<dyn ProviderSecretBindingCommandPort>, EmailAccountSetupError> {
+        self.provider_secret_binding_store
+            .clone()
+            .ok_or(EmailAccountSetupError::StoresNotConfigured)
     }
 }

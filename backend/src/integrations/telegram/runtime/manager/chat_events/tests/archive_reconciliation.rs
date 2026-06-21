@@ -48,7 +48,7 @@ async fn publish_chat_position_event_reconciles_archive_command_when_provider_ch
 
     let event_bus = EventBus::new();
     publish_chat_position_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatPositionSnapshot {
@@ -135,7 +135,7 @@ async fn publish_chat_position_event_reconciles_unarchive_command_when_provider_
 
     let event_bus = EventBus::new();
     publish_chat_position_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatPositionSnapshot {
@@ -221,7 +221,7 @@ async fn publish_chat_position_event_marks_archive_command_as_mismatch_when_prov
 
     let event_bus = EventBus::new();
     publish_chat_position_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatPositionSnapshot {
@@ -321,7 +321,7 @@ async fn publish_chat_position_event_marks_unarchive_command_as_mismatch_when_pr
 
     let event_bus = EventBus::new();
     publish_chat_position_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatPositionSnapshot {

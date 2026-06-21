@@ -49,7 +49,7 @@ async fn publish_chat_marked_as_unread_event_reconciles_mark_unread_command_and_
 
     let event_bus = EventBus::new();
     publish_chat_marked_as_unread_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatMarkedAsUnreadSnapshot {
@@ -133,7 +133,7 @@ async fn publish_chat_marked_as_unread_event_marks_mark_unread_as_mismatch_when_
 
     let event_bus = EventBus::new();
     publish_chat_marked_as_unread_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatMarkedAsUnreadSnapshot {

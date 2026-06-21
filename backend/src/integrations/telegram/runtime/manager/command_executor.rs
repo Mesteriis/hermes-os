@@ -25,11 +25,12 @@ const STALE_EXECUTION_LOCK_SECONDS: i64 = 120;
 /// `completed` is reserved for provider-observed state or TDLib calls that
 /// return a provider message snapshot.
 pub async fn execute_queued_commands(
-    pool: &PgPool,
+    telegram_store: &TelegramStore,
     runtime: &TelegramRuntimeManager,
     event_bus: &EventBus,
     per_account_limit: i64,
 ) {
+    let pool = telegram_store.pool();
     let now = Utc::now();
     let stale_before = now - Duration::seconds(STALE_EXECUTION_LOCK_SECONDS);
     match lifecycle::recover_stale_executing_commands(pool, now, stale_before).await {
@@ -60,17 +61,25 @@ pub async fn execute_queued_commands(
     };
 
     for account_id in account_ids {
-        execute_account_commands(pool, runtime, event_bus, &account_id, per_account_limit).await;
+        execute_account_commands(
+            telegram_store,
+            runtime,
+            event_bus,
+            &account_id,
+            per_account_limit,
+        )
+        .await;
     }
 }
 
 async fn execute_account_commands(
-    pool: &PgPool,
+    telegram_store: &TelegramStore,
     runtime: &TelegramRuntimeManager,
     event_bus: &EventBus,
     account_id: &str,
     limit: i64,
 ) {
+    let pool = telegram_store.pool();
     let now = Utc::now();
     let commands =
         match lifecycle::claim_due_commands_for_execution(pool, account_id, now, limit).await {
@@ -127,20 +136,20 @@ async fn execute_account_commands(
         }
 
         let result = dispatch_command(pool, &command, command_tx.clone()).await;
-        handle_dispatch_result(pool, event_bus, &command, result).await;
+        handle_dispatch_result(telegram_store, event_bus, &command, result).await;
     }
 }
 
 async fn handle_dispatch_result(
-    pool: &PgPool,
+    telegram_store: &TelegramStore,
     event_bus: &EventBus,
     command: &TelegramProviderWriteCommand,
     result: Result<DispatchOutcome, TelegramError>,
 ) {
+    let pool = telegram_store.pool();
     let now = Utc::now();
     match result {
         Ok(DispatchOutcome::ObservedMessage(snapshot)) => {
-            let telegram_store = TelegramStore::new(pool.clone());
             let import_batch_id = format!(
                 "telegram-command:{}:{}",
                 command.account_id,
@@ -226,9 +235,8 @@ async fn handle_dispatch_result(
             }
         }
         Ok(DispatchOutcome::ObservedTopic(snapshot)) => {
-            let telegram_store = TelegramStore::new(pool.clone());
             let topic = match upsert_topic_snapshot(
-                &telegram_store,
+                telegram_store,
                 &command.account_id,
                 &command.provider_chat_id,
                 &snapshot,

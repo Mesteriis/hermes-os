@@ -108,20 +108,6 @@ const allowedIntegrationCommunicationSqlTables = new Set([
 	'communication_raw_records',
 	'communication_raw_payloads'
 ]);
-const allowedIntegrationCommunicationBridgeFiles = new Set([
-	'backend/src/integrations/mail/accounts/service/stores.rs',
-	'backend/src/integrations/mail/sync_provider.rs',
-	'backend/src/integrations/telegram/client/store.rs',
-	'backend/src/integrations/telegram/runtime/actor/session.rs',
-	'backend/src/integrations/telegram/runtime/manager/account.rs',
-	'backend/src/integrations/telegram/runtime/manager/lifecycle.rs',
-	'backend/src/integrations/telegram/runtime/manager/sync_history_tdlib.rs',
-	'backend/src/integrations/telegram/runtime/manager/tdlib_actor.rs',
-	'backend/src/integrations/telegram/runtime/manager/topic_events.rs',
-	'backend/src/integrations/telegram/runtime/manager.rs',
-	'backend/src/integrations/telegram/runtime/status.rs',
-	'backend/src/integrations/whatsapp/client/store.rs'
-]);
 const allowedFrontendIntegrationCacheKeys = new Set([
 	'capabilities',
 	'account-capabilities',
@@ -153,6 +139,24 @@ const businessBackendDomains = new Set([
 	'tasks',
 	'timeline'
 ]);
+const platformTechnicalTablePrefixes = [
+	'ai_runtime_',
+	'api_audit_',
+	'application_',
+	'audit_',
+	'event_',
+	'observation_',
+	'projection_',
+	'secret_',
+	'settings_'
+];
+const platformForbiddenBusinessTablePrefixes = [
+	'communication_',
+	'task_',
+	'calendar_',
+	'review_',
+	'graph_'
+];
 
 async function exists(filePath) {
 	try {
@@ -336,6 +340,7 @@ function backendBoundaryViolations(relativePath, source) {
 	const importedIntegrations = extractBackendRootImports(source, 'integrations');
 	const importedAppModules = extractBackendRootImports(source, 'app');
 	const importedWorkflowModules = extractBackendRootImports(source, 'workflows');
+	const importedVaultModules = extractBackendRootImports(source, 'vault');
 
 	for (const importedDomain of importedDomains) {
 		if (sharedBackendDomainModules.has(importedDomain)) continue;
@@ -355,8 +360,7 @@ function backendBoundaryViolations(relativePath, source) {
 		if (
 			integrationMatch !== null &&
 			businessBackendDomains.has(importedDomain) &&
-			!isBackendTestFile &&
-			!(importedDomain === 'communications' && allowedIntegrationCommunicationBridgeFiles.has(relativePath))
+			!isBackendTestFile
 		) {
 			violations.push({
 				file: relativePath,
@@ -381,6 +385,13 @@ function backendBoundaryViolations(relativePath, source) {
 				message: `${relativePath}: domain "${domainMatch[1]}" imports workflow "${importedWorkflow}"; publish/consume events or use domain-owned ports instead`
 			});
 		}
+		for (const importedVaultModule of importedVaultModules) {
+			violations.push({
+				file: relativePath,
+				importedVaultModule,
+				message: `${relativePath}: domain "${domainMatch[1]}" imports vault "${importedVaultModule}"; carry secret refs and use platform/provider ports instead`
+			});
+		}
 		for (const importedAppModule of importedAppModules) {
 			violations.push({
 				file: relativePath,
@@ -396,6 +407,27 @@ function backendBoundaryViolations(relativePath, source) {
 				file: relativePath,
 				importedIntegration,
 				message: `${relativePath}: workflow imports integration "${importedIntegration}"; coordinate providers through platform ports/events instead`
+			});
+		}
+		if (/\b[A-Za-z0-9_]*Store\b/.test(source) && /\bcrate::domains::/.test(source)) {
+			violations.push({
+				file: relativePath,
+				message: `${relativePath}: workflow imports concrete domain store types; depend on domain command/query ports instead`
+			});
+		}
+	}
+
+	if (/^backend\/src\/app\/handlers\//.test(relativePath)) {
+		if (importedWorkflowModules.size > 0) {
+			violations.push({
+				file: relativePath,
+				message: `${relativePath}: app handler imports workflow modules directly; route through an application service`
+			});
+		}
+		if (/\bRuntime[A-Za-z0-9_]*Context\b|\b[A-Za-z0-9_]*RuntimeOperationContext\b/.test(source)) {
+			violations.push({
+				file: relativePath,
+				message: `${relativePath}: app handler constructs runtime orchestration context; route through an application service`
 			});
 		}
 	}
@@ -479,6 +511,22 @@ function integrationCommunicationBusinessSqlFailuresForSource(relativePath, sour
 	return errors;
 }
 
+function platformBusinessSqlFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('backend/src/platform/')) return [];
+	const errors = [];
+	const sqlTablePattern =
+		/\b(?:FROM|JOIN|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+([a-zA-Z][a-zA-Z0-9_]*)\b/gi;
+	for (const match of source.matchAll(sqlTablePattern)) {
+		const tableName = match[1];
+		if (platformTechnicalTablePrefixes.some((prefix) => tableName.startsWith(prefix))) continue;
+		if (!platformForbiddenBusinessTablePrefixes.some((prefix) => tableName.startsWith(prefix))) continue;
+		errors.push(
+			`${relativePath}: platform code must not read or mutate business table "${tableName}"; move SQL ownership to the owning domain and expose neutral platform contracts only`
+		);
+	}
+	return errors;
+}
+
 function resolveFrontendImport(relativePath, specifier) {
 	if (specifier.startsWith('.')) {
 		return normalizePath(path.posix.normalize(path.posix.join(path.posix.dirname(relativePath), specifier)));
@@ -494,9 +542,9 @@ function resolveFrontendImport(relativePath, specifier) {
 
 function frontendBoundaryViolations(relativePath, source) {
 	const domainMatch = /^frontend\/src\/domains\/([^/]+)\//.exec(relativePath);
-	if (domainMatch === null) return [];
+	const integrationMatch = /^frontend\/src\/integrations\/([^/]+)\//.exec(relativePath);
+	if (domainMatch === null && integrationMatch === null) return [];
 
-	const currentDomain = domainMatch[1];
 	const violations = [];
 	const importPattern = /\bfrom\s+['"]([^'"]+)['"]|\bimport\s+['"]([^'"]+)['"]/g;
 
@@ -506,19 +554,50 @@ function frontendBoundaryViolations(relativePath, source) {
 		if (resolved === null) continue;
 
 		const importedDomainMatch = /^frontend\/src\/domains\/([^/]+)\//.exec(resolved);
-		if (importedDomainMatch === null) continue;
+		const importedIntegrationMatch = /^frontend\/src\/integrations\/([^/]+)\//.exec(resolved);
 
-		const importedDomain = importedDomainMatch[1];
-		if (importedDomain !== currentDomain) {
+		if (domainMatch !== null && importedDomainMatch !== null) {
+			const currentDomain = domainMatch[1];
+			const importedDomain = importedDomainMatch[1];
+			if (importedDomain !== currentDomain) {
+				violations.push({
+					file: relativePath,
+					importedDomain,
+					message: `${relativePath}: frontend domain "${currentDomain}" imports domain "${importedDomain}"; compose domains from frontend/src/app instead`
+				});
+			}
+		}
+
+		if (domainMatch !== null && importedIntegrationMatch !== null) {
 			violations.push({
 				file: relativePath,
-				importedDomain,
-				message: `${relativePath}: frontend domain "${currentDomain}" imports domain "${importedDomain}"; compose domains from frontend/src/app instead`
+				importedIntegration: importedIntegrationMatch[1],
+				message: `${relativePath}: frontend domain "${domainMatch[1]}" imports integration "${importedIntegrationMatch[1]}"; move shared code to frontend/src/shared or compose from app`
+			});
+		}
+
+		if (integrationMatch !== null && importedDomainMatch !== null) {
+			violations.push({
+				file: relativePath,
+				importedDomain: importedDomainMatch[1],
+				message: `${relativePath}: frontend integration "${integrationMatch[1]}" imports domain "${importedDomainMatch[1]}"; move shared code to frontend/src/shared or platform`
 			});
 		}
 	}
 
 	return violations;
+}
+
+function providerScopedCommunicationRouteFailuresForSource(relativePath, source) {
+	if (!/\.(?:rs|ts|vue|md)$/.test(relativePath)) return [];
+	const errors = [];
+	const forbiddenRoutePattern = /\/api\/v1\/communications\/(mail|telegram|whatsapp)(?=\/|['"`\s])/g;
+	for (const match of source.matchAll(forbiddenRoutePattern)) {
+		errors.push(
+			`${relativePath}: provider-scoped Communications business route "/api/v1/communications/${match[1]}" is forbidden; use provider-neutral /api/v1/communications/* or runtime /api/v1/integrations/${match[1]}/*`
+		);
+	}
+	return errors;
 }
 
 function canonicalEvidenceBoundaryFailures(trackedFiles, existingDirs = new Set()) {
@@ -1605,7 +1684,10 @@ async function checkCanonicalEvidenceBoundaries() {
 
 async function checkLayerBoundaries() {
 	const backendFiles = await collectFiles('backend/src', new Set(['.rs']));
-	const frontendFiles = await collectFiles('frontend/src/domains', new Set(['.ts', '.vue']));
+	const frontendFiles = [
+		...await collectFiles('frontend/src/domains', new Set(['.ts', '.vue'])),
+		...await collectFiles('frontend/src/integrations', new Set(['.ts', '.vue']))
+	];
 	const backendViolations = [];
 	const frontendViolations = [];
 
@@ -1614,6 +1696,12 @@ async function checkLayerBoundaries() {
 		backendViolations.push(...backendBoundaryViolations(file, source));
 		backendViolations.push(
 			...integrationCommunicationBusinessSqlFailuresForSource(file, source).map((message) => ({
+				file,
+				message
+			}))
+		);
+		backendViolations.push(
+			...platformBusinessSqlFailuresForSource(file, source).map((message) => ({
 				file,
 				message
 			}))
@@ -1628,6 +1716,7 @@ async function checkLayerBoundaries() {
 	failures.push(...backendViolations.map((violation) => violation.message));
 	failures.push(...frontendViolations.map((violation) => violation.message));
 	failures.push(...await frontendProviderBusinessCacheRootFailures());
+	failures.push(...await providerScopedCommunicationRouteFailures());
 }
 
 async function frontendProviderBusinessCacheRootFailures() {
@@ -1657,6 +1746,21 @@ function frontendProviderBusinessCacheRootFailuresForSource(relativePath, source
 		errors.push(
 			`${relativePath}: provider query/cache key ["integrations", "${match[1]}", "${cacheKey}"] is forbidden by the integration cache allowlist; use ["communications", ...] for business/read-model data`
 		);
+	}
+	return errors;
+}
+
+async function providerScopedCommunicationRouteFailures() {
+	const files = [
+		...await collectFiles('backend/src', new Set(['.rs'])),
+		...await collectFiles('frontend/src', new Set(['.ts', '.vue'])),
+		...await collectFiles('docs', new Set(['.md'])),
+		...await collectFiles('scripts', new Set(['.mjs', '.js']))
+	];
+	const errors = [];
+	for (const file of files) {
+		const source = await readFile(path.join(repoRoot, file), 'utf8');
+		errors.push(...providerScopedCommunicationRouteFailuresForSource(file, source));
 	}
 	return errors;
 }
@@ -1725,10 +1829,45 @@ function runSelfTests() {
 		).length === 1
 	);
 	assertSelfTest(
+		'integration-to-communications backend import fails without bridge exceptions',
+		backendBoundaryViolations(
+			'backend/src/integrations/telegram/client/store.rs',
+			'use crate::domains::communications::core::CommunicationProviderAccountStore;'
+		).length === 1
+	);
+	assertSelfTest(
+		'domain-to-vault backend import fails',
+		backendBoundaryViolations(
+			'backend/src/domains/communications/outbox/provider_sender.rs',
+			'use crate::vault::HostVault;'
+		).length === 1
+	);
+	assertSelfTest(
 		'workflow-to-integration backend import fails',
 		backendBoundaryViolations(
 			'backend/src/workflows/mail_background_sync/provider.rs',
 			'use crate::integrations::mail::gmail::client::GmailApiClient;'
+		).length === 1
+	);
+	assertSelfTest(
+		'workflow concrete domain store import fails',
+		backendBoundaryViolations(
+			'backend/src/workflows/review_inbox.rs',
+			'use crate::domains::tasks::candidates::TaskCandidateStore;'
+		).length === 1
+	);
+	assertSelfTest(
+		'app handler runtime context construction fails',
+		backendBoundaryViolations(
+			'backend/src/app/handlers/telegram/messages.rs',
+			'use crate::integrations::telegram::runtime::TelegramRuntimeOperationContext;'
+		).length === 1
+	);
+	assertSelfTest(
+		'app handler workflow import fails',
+		backendBoundaryViolations(
+			'backend/src/app/handlers/telegram/messages.rs',
+			'use crate::workflows::provider_communication_projection::record_and_project_telegram_message;'
 		).length === 1
 	);
 	assertSelfTest(
@@ -1774,6 +1913,20 @@ function runSelfTests() {
 		).length === 0
 	);
 	assertSelfTest(
+		'platform business SQL fails',
+		platformBusinessSqlFailuresForSource(
+			'backend/src/platform/communications/channel_messages.rs',
+			'UPDATE communication_messages SET delivery_state = $1 WHERE message_id = $2'
+		).length === 1
+	);
+	assertSelfTest(
+		'platform technical event SQL passes',
+		platformBusinessSqlFailuresForSource(
+			'backend/src/platform/events/store.rs',
+			'INSERT INTO event_log (event_id) VALUES ($1)'
+		).length === 0
+	);
+	assertSelfTest(
 		'frontend integration business read-model query key fails',
 		frontendProviderBusinessCacheRootFailuresForSource(
 			'frontend/src/integrations/telegram/queries/useTelegramLifecycleQuery.ts',
@@ -1813,6 +1966,34 @@ function runSelfTests() {
 		frontendBoundaryViolations(
 			'frontend/src/app/views/HomeView.vue',
 			"import TasksPage from '../../domains/tasks/views/TasksPage.vue'"
+		).length === 0
+	);
+	assertSelfTest(
+		'frontend domain-to-integration import fails',
+		frontendBoundaryViolations(
+			'frontend/src/domains/communications/views/CommunicationsPage.vue',
+			"import AccountSetupModal from '../../../integrations/mail/components/AccountSetupModal.vue'"
+		).length === 1
+	);
+	assertSelfTest(
+		'frontend integration-to-domain import fails',
+		frontendBoundaryViolations(
+			'frontend/src/integrations/telegram/components/TelegramSavedSearchStrip.vue',
+			"import SavedSearchStrip from '../../../domains/communications/components/SavedSearchStrip.vue'"
+		).length === 1
+	);
+	assertSelfTest(
+		'provider-scoped communications business route fails',
+		providerScopedCommunicationRouteFailuresForSource(
+			'backend/src/app/router/routes/messaging.rs',
+			'"/api/v1/communications/telegram/messages"'
+		).length === 1
+	);
+	assertSelfTest(
+		'provider runtime integration route passes',
+		providerScopedCommunicationRouteFailuresForSource(
+			'backend/src/app/router/routes/messaging.rs',
+			'"/api/v1/integrations/telegram/runtime/status"'
 		).length === 0
 	);
 	assertSelfTest(

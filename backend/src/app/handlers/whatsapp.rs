@@ -56,6 +56,13 @@ use crate::domains::persons::identity::{
     PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
 };
 
+use crate::app::workflow_services::email_intelligence::{
+    EmailIntelligenceError, EmailIntelligenceService,
+};
+use crate::app::workflow_services::provider_communication_projection::record_and_project_whatsapp_web_message;
+use crate::app::workflow_services::review_inbox::{
+    refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
+};
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -135,11 +142,6 @@ use crate::platform::settings::{
 };
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
-};
-use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
-use crate::workflows::provider_communication_projection::record_and_project_whatsapp_web_message;
-use crate::workflows::review_inbox::{
-    refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
 };
 
 use crate::app::api_support::*;

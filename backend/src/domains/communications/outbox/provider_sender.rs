@@ -11,7 +11,7 @@ use crate::domains::communications::core::{
 use crate::platform::communications::{
     GmailOutboxSendRequest, GmailOutboxTransport, SmtpTransport,
 };
-use crate::vault::HostVault;
+use crate::platform::secrets::SecretResolver;
 
 use super::smtp_sender::SmtpOutboxEmailSender;
 use super::{
@@ -20,32 +20,34 @@ use super::{
 };
 
 #[derive(Clone)]
-pub struct ProviderOutboxEmailSender<T, G> {
+pub struct ProviderOutboxEmailSender<R, T, G> {
     provider_account_store: CommunicationProviderAccountStore,
     provider_secret_binding_store: CommunicationProviderSecretBindingStore,
-    smtp_sender: SmtpOutboxEmailSender<HostVault, T>,
+    smtp_sender: SmtpOutboxEmailSender<R, T>,
     gmail_transport: G,
 }
 
-impl<T, G> ProviderOutboxEmailSender<T, G>
+impl<R, T, G> ProviderOutboxEmailSender<R, T, G>
 where
+    R: SecretResolver,
     T: SmtpTransport,
     G: GmailOutboxTransport,
 {
-    pub fn new(pool: PgPool, vault: HostVault, smtp_transport: T, gmail_transport: G) -> Self {
+    pub fn new(pool: PgPool, resolver: R, smtp_transport: T, gmail_transport: G) -> Self {
         Self {
             provider_account_store: CommunicationProviderAccountStore::new(pool.clone()),
             provider_secret_binding_store: CommunicationProviderSecretBindingStore::new(
                 pool.clone(),
             ),
-            smtp_sender: SmtpOutboxEmailSender::new(pool, vault, smtp_transport),
+            smtp_sender: SmtpOutboxEmailSender::new(pool, resolver, smtp_transport),
             gmail_transport,
         }
     }
 }
 
-impl<T, G> OutboxEmailSender for ProviderOutboxEmailSender<T, G>
+impl<R, T, G> OutboxEmailSender for ProviderOutboxEmailSender<R, T, G>
 where
+    R: SecretResolver + Send + Sync,
     T: SmtpTransport,
     G: GmailOutboxTransport,
 {
@@ -75,8 +77,9 @@ where
     }
 }
 
-impl<T, G> ProviderOutboxEmailSender<T, G>
+impl<R, T, G> ProviderOutboxEmailSender<R, T, G>
 where
+    R: SecretResolver,
     T: SmtpTransport,
     G: GmailOutboxTransport,
 {

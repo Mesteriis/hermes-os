@@ -1,5 +1,5 @@
 export {
   useMailSyncSettingsQuery,
   useUpdateMailSyncSettingsMutation
-} from '../../../domains/communications/queries/mailCoreQueries'
-export { useRunMailSyncNowMutation } from '../../../domains/communications/queries/mailActionQueries'
+} from '../../../shared/mailSync/runtimeQueries'
+export { useRunMailSyncNowMutation } from '../../../shared/mailSync/runtimeQueries'

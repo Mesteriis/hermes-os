@@ -1,8 +1,8 @@
 use sqlx::{Postgres, Transaction};
 
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::persons::api::{PersonProjectionError, PersonProjectionStore};
-use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
+use crate::domains::persons::api::{PersonProjectionError, PersonProjectionPort};
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationPort};
 
 pub(crate) async fn create_person_projection_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
@@ -13,11 +13,11 @@ pub(crate) async fn create_person_projection_in_transaction(
     message: Option<&ProjectedMessage>,
 ) -> Result<String, PersonProjectionError> {
     let (person, identity_id) =
-        PersonProjectionStore::upsert_email_person_in_transaction(transaction, email).await?;
+        PersonProjectionPort::upsert_email_person_in_transaction(transaction, email).await?;
     let projection_observation_id = if let Some(message) = message {
         message.observation_id.clone()
     } else {
-        ObservationStore::capture_in_transaction(
+        ObservationPort::capture_in_transaction(
             transaction,
             &NewObservation::new(
                 "PERSON_MUTATION",
@@ -40,7 +40,7 @@ pub(crate) async fn create_person_projection_in_transaction(
         .await?
         .observation_id
     };
-    PersonProjectionStore::link_email_person_projection_in_transaction(
+    PersonProjectionPort::link_email_person_projection_in_transaction(
         transaction,
         &projection_observation_id,
         &person,

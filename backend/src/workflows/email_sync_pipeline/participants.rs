@@ -1,6 +1,8 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::messages::{MessageProjectionStore, ProjectedMessage};
+use crate::domains::communications::messages::{
+    CommunicationMessageProjectionPort, ProjectedMessage,
+};
 
 use super::errors::EmailSyncPipelineError;
 
@@ -44,7 +46,7 @@ pub(crate) async fn upsert_message_participant(
     person_id: &str,
     participant: &EmailParticipant,
 ) -> Result<bool, EmailSyncPipelineError> {
-    let inserted = MessageProjectionStore::new(pool.clone())
+    let inserted = CommunicationMessageProjectionPort::new(pool.clone())
         .upsert_email_participant(
             message,
             person_id,

@@ -37,6 +37,7 @@ pub use self::chat_state::{
     reconcile_mute_commands_from_provider_state, reconcile_pin_commands_from_provider_state,
 };
 pub use self::errors::TelegramError;
+pub(crate) use self::messages::TelegramAttachmentDownloadStateUpdate;
 pub(in crate::integrations::telegram) use self::messages::reaction_metadata::derive_tdlib_chosen_reaction_emojis;
 pub(in crate::integrations::telegram) use self::messages::reaction_metadata::{
     derive_tdlib_provider_reactions, derive_tdlib_reaction_summary_metadata,

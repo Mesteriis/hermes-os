@@ -18,8 +18,10 @@ pub use models::{
     ProviderAccountSecretPurpose, ProviderAccountUsage, ProviderCredential,
     StoredRawCommunicationRecord,
 };
+pub use provider_store::CommunicationProviderAccountStore as CommunicationProviderAccountPort;
 pub use provider_store::{
     CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
 pub use secrets::ProviderCredentialReader;
 pub use store::CommunicationIngestionStore;
+pub use store::CommunicationIngestionStore as CommunicationIngestionPort;

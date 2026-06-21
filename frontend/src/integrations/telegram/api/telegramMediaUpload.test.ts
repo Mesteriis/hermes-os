@@ -77,7 +77,7 @@ describe('telegramMediaUpload api', () => {
 
     expect(response.status).toBe('queued')
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/telegram/media/upload')
+    expect(url).toContain('/api/v1/communications/provider-media/upload')
     expect(init.method).toBe('POST')
     expect(JSON.parse(init.body as string)).toMatchObject({
       attachment_id: 'att-import:1',

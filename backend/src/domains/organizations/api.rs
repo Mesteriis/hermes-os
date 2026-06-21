@@ -440,6 +440,8 @@ impl OrganizationStore {
     }
 }
 
+pub type OrganizationCommandPort = OrganizationStore;
+
 impl OrganizationStore {
     async fn link_email_domain_projection_evidence(
         transaction: &mut Transaction<'_, Postgres>,

@@ -12,7 +12,7 @@
 ## Base
 
 ```text
-/api/v1/communications/telegram
+/api/v1/integrations/telegram
 ```
 
 ## Capability Contract

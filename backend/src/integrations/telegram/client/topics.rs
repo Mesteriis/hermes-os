@@ -201,11 +201,11 @@ pub async fn search_topics(
 }
 
 pub async fn list_topic_message_ids(
-    pool: &PgPool,
+    store: &TelegramStore,
     topic_id: &str,
     limit: i64,
 ) -> Result<Vec<String>, TelegramError> {
-    Ok(TelegramStore::new(pool.clone())
+    Ok(store
         .provider_channel_message_store()
         .message_ids_by_metadata_string("forum_topic_id", topic_id, TELEGRAM_CHANNEL_KINDS, limit)
         .await?)

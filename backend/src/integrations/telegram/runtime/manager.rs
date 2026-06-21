@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
-use crate::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
-};
 use crate::integrations::telegram::client::TelegramStore;
-use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+use crate::platform::communications::{
+    DEFAULT_MAIL_SYNC_BLOB_ROOT, ProviderAccountLookupPort, ProviderSecretBindingLookupPort,
+};
 use crate::platform::config::AppConfig;
 use crate::platform::events::EventBus;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
@@ -45,8 +44,8 @@ pub struct TelegramRuntimeManager {
 }
 
 pub(crate) struct TelegramMediaDownloadContext<'a, S: SecretResolver + Sync + ?Sized> {
-    pub(crate) provider_account_store: &'a CommunicationProviderAccountStore,
-    pub(crate) provider_secret_binding_store: &'a CommunicationProviderSecretBindingStore,
+    pub(crate) provider_account_store: &'a dyn ProviderAccountLookupPort,
+    pub(crate) provider_secret_binding_store: &'a dyn ProviderSecretBindingLookupPort,
     pub(crate) telegram_store: &'a TelegramStore,
     pub(crate) secret_store: &'a SecretReferenceStore,
     pub(crate) secret_resolver: &'a S,
@@ -55,8 +54,8 @@ pub(crate) struct TelegramMediaDownloadContext<'a, S: SecretResolver + Sync + ?S
 }
 
 pub(crate) struct TelegramMemberSyncContext<'a, S: SecretResolver + Sync + ?Sized> {
-    pub(crate) provider_account_store: &'a CommunicationProviderAccountStore,
-    pub(crate) provider_secret_binding_store: &'a CommunicationProviderSecretBindingStore,
+    pub(crate) provider_account_store: &'a dyn ProviderAccountLookupPort,
+    pub(crate) provider_secret_binding_store: &'a dyn ProviderSecretBindingLookupPort,
     pub(crate) telegram_store: &'a TelegramStore,
     pub(crate) secret_store: &'a SecretReferenceStore,
     pub(crate) secret_resolver: &'a S,
@@ -65,8 +64,8 @@ pub(crate) struct TelegramMemberSyncContext<'a, S: SecretResolver + Sync + ?Size
 }
 
 pub(crate) struct TelegramRuntimeOperationContext<'a, S: SecretResolver + Sync + ?Sized> {
-    pub(crate) provider_account_store: &'a CommunicationProviderAccountStore,
-    pub(crate) provider_secret_binding_store: &'a CommunicationProviderSecretBindingStore,
+    pub(crate) provider_account_store: &'a dyn ProviderAccountLookupPort,
+    pub(crate) provider_secret_binding_store: &'a dyn ProviderSecretBindingLookupPort,
     pub(crate) telegram_store: &'a TelegramStore,
     pub(crate) secret_store: &'a SecretReferenceStore,
     pub(crate) secret_resolver: &'a S,
@@ -75,13 +74,13 @@ pub(crate) struct TelegramRuntimeOperationContext<'a, S: SecretResolver + Sync +
 }
 
 pub(crate) struct TelegramRuntimeStartContext<'a, S: SecretResolver + Sync + ?Sized> {
-    pub(crate) provider_account_store: &'a CommunicationProviderAccountStore,
-    pub(crate) provider_secret_binding_store: &'a CommunicationProviderSecretBindingStore,
+    pub(crate) provider_account_store: &'a dyn ProviderAccountLookupPort,
+    pub(crate) provider_secret_binding_store: &'a dyn ProviderSecretBindingLookupPort,
+    pub(crate) telegram_store: &'a TelegramStore,
     pub(crate) secret_store: &'a SecretReferenceStore,
     pub(crate) secret_resolver: &'a S,
     pub(crate) config: &'a AppConfig,
     pub(crate) event_bus: &'a EventBus,
-    pub(crate) event_store_pool: Option<PgPool>,
 }
 
 fn telegram_media_blob_root() -> &'static std::path::Path {

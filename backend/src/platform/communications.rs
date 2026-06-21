@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
 
-use crate::platform::observations::ObservationStoreError;
+use crate::platform::observations::{ObservationOriginKind, ObservationStoreError};
 use crate::platform::secrets::{ResolvedSecret, SecretKind, SecretReference};
 
 mod email_sync;
@@ -161,6 +161,22 @@ pub struct ProviderMessageProjectionObservationContext<'a> {
     pub channel_kinds: &'a [&'a str],
     pub relationship_kind: &'a str,
     pub actor: &'a str,
+}
+
+pub type ProviderChannelMessagePortFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, ProviderCommunicationMessagePortError>> + Send + 'a>>;
+
+pub struct ProviderAttachmentDownloadStateUpdate<'a> {
+    pub message_id: &'a str,
+    pub provider_attachment_id: &'a str,
+    pub provider_file_id: i64,
+    pub download_state: &'a str,
+    pub local_path: Option<&'a str>,
+    pub size_bytes: Option<i64>,
+    pub content_type: &'a str,
+    pub filename: Option<&'a str>,
+    pub observed_at: DateTime<Utc>,
+    pub context: ProviderMessageProjectionObservationContext<'a>,
 }
 
 #[derive(Debug, Error)]
@@ -622,6 +638,443 @@ pub trait EmailProviderSyncPort: Send + Sync {
         &'a self,
         request: ImapMessageFetchRequest,
     ) -> Pin<Box<dyn Future<Output = Result<EmailSyncBatch, EmailProviderSyncError>> + Send + 'a>>;
+}
+
+#[derive(Debug, Error)]
+#[error("communication provider account port error: {0}")]
+pub struct ProviderAccountPortError(pub String);
+
+impl ProviderAccountPortError {
+    pub fn new(error: impl std::fmt::Display) -> Self {
+        Self(error.to_string())
+    }
+}
+
+#[derive(Debug, Error)]
+#[error("communication provider secret binding port error: {0}")]
+pub struct ProviderSecretBindingPortError(pub String);
+
+impl ProviderSecretBindingPortError {
+    pub fn new(error: impl std::fmt::Display) -> Self {
+        Self(error.to_string())
+    }
+}
+
+pub trait ProviderAccountLookupPort: Send + Sync {
+    fn get<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Option<ProviderAccount>, ProviderAccountPortError>>
+                + Send
+                + 'a,
+        >,
+    >;
+
+    fn list<'a>(
+        &'a self,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Vec<ProviderAccount>, ProviderAccountPortError>> + Send + 'a,
+        >,
+    >;
+}
+
+pub trait ProviderAccountCommandPort: ProviderAccountLookupPort {
+    fn upsert<'a>(
+        &'a self,
+        account: &'a NewProviderAccount,
+    ) -> Pin<Box<dyn Future<Output = Result<ProviderAccount, ProviderAccountPortError>> + Send + 'a>>;
+
+    fn upsert_runtime_account<'a>(
+        &'a self,
+        account_id: String,
+        provider_kind: String,
+        display_name: String,
+        external_account_id: String,
+        config: Value,
+    ) -> Pin<Box<dyn Future<Output = Result<ProviderAccount, ProviderAccountPortError>> + Send + 'a>>;
+
+    fn update_config<'a>(
+        &'a self,
+        account_id: &'a str,
+        config: &'a Value,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Option<ProviderAccount>, ProviderAccountPortError>>
+                + Send
+                + 'a,
+        >,
+    >;
+
+    fn update_config_with_origin<'a>(
+        &'a self,
+        account_id: &'a str,
+        config: &'a Value,
+        origin_kind: ObservationOriginKind,
+        actor: &'a str,
+        action: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Option<ProviderAccount>, ProviderAccountPortError>>
+                + Send
+                + 'a,
+        >,
+    >;
+
+    fn mark_logged_out<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Option<ProviderAccount>, ProviderAccountPortError>>
+                + Send
+                + 'a,
+        >,
+    >;
+
+    fn delete_metadata<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<DeletedProviderAccount, ProviderAccountPortError>>
+                + Send
+                + 'a,
+        >,
+    >;
+}
+
+pub trait ProviderSecretBindingLookupPort: Send + Sync {
+    fn list_for_account<'a>(
+        &'a self,
+        account_id: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Vec<ProviderAccountSecretBinding>,
+                        ProviderSecretBindingPortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn get_for_account<'a>(
+        &'a self,
+        account_id: &'a str,
+        secret_purpose: ProviderAccountSecretPurpose,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Option<ProviderAccountSecretBinding>,
+                        ProviderSecretBindingPortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+}
+
+pub trait ProviderSecretBindingCommandPort: ProviderSecretBindingLookupPort {
+    fn bind<'a>(
+        &'a self,
+        binding: &'a NewProviderAccountSecretBinding,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<ProviderAccountSecretBinding, ProviderSecretBindingPortError>,
+                > + Send
+                + 'a,
+        >,
+    >;
+}
+
+pub trait ProviderChannelMessageLookupPort: Send + Sync {
+    fn message_by_id<'a>(
+        &'a self,
+        message_id: &'a str,
+        channel_kinds: &'a [&'a str],
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn message_by_provider_record_id<'a>(
+        &'a self,
+        account_id: &'a str,
+        provider_record_id: &'a str,
+        channel_kinds: &'a [&'a str],
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn recent_messages<'a>(
+        &'a self,
+        account_id: Option<&'a str>,
+        conversation_id: Option<&'a str>,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Vec<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn messages_by_ids<'a>(
+        &'a self,
+        message_ids: &'a [String],
+        channel_kinds: &'a [&'a str],
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Vec<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn search_messages<'a>(
+        &'a self,
+        account_id: Option<&'a str>,
+        conversation_id: Option<&'a str>,
+        query: &'a str,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Vec<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn pinned_messages<'a>(
+        &'a self,
+        account_id: &'a str,
+        conversation_id: &'a str,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Vec<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn body_text<'a>(
+        &'a self,
+        message_id: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Option<String>, ProviderCommunicationMessagePortError>>
+                + Send
+                + 'a,
+        >,
+    >;
+
+    fn message_ids_by_metadata_string<'a>(
+        &'a self,
+        metadata_key: &'a str,
+        metadata_value: &'a str,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Vec<String>, ProviderCommunicationMessagePortError>>
+                + Send
+                + 'a,
+        >,
+    >;
+
+    fn message_id_by_provider_record_id<'a>(
+        &'a self,
+        account_id: &'a str,
+        provider_record_id: &'a str,
+        channel_kinds: &'a [&'a str],
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<Option<String>, ProviderCommunicationMessagePortError>>
+                + Send
+                + 'a,
+        >,
+    >;
+
+    fn reference_summaries<'a>(
+        &'a self,
+        message_ids: &'a [String],
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Vec<ProviderMessageReferenceSummary>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn heuristic_members<'a>(
+        &'a self,
+        account_id: &'a str,
+        conversation_id: &'a str,
+        query: Option<&'a str>,
+        channel_kinds: &'a [&'a str],
+        limit: i64,
+        offset: i64,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Vec<ProviderHeuristicMember>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn attachment_anchor<'a>(
+        &'a self,
+        account_id: &'a str,
+        conversation_id: &'a str,
+        provider_record_id: &'a str,
+        channel_kinds: &'a [&'a str],
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Option<ProviderMessageAttachmentAnchor>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn unread_counts<'a>(
+        &'a self,
+        account_id: &'a str,
+        conversation_id: &'a str,
+        channel_kinds: &'a [&'a str],
+        last_read_at: Option<DateTime<Utc>>,
+    ) -> ProviderChannelMessagePortFuture<'a, (i64, i64)>;
+}
+
+pub trait ProviderChannelMessageCommandPort: ProviderChannelMessageLookupPort {
+    fn apply_metadata<'a>(
+        &'a self,
+        message_id: &'a str,
+        metadata: &'a Value,
+        context: ProviderMessageProjectionObservationContext<'a>,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn set_delivery_state<'a>(
+        &'a self,
+        message_id: &'a str,
+        delivery_state: &'a str,
+        observed_at: DateTime<Utc>,
+        context: ProviderMessageProjectionObservationContext<'a>,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn apply_content_update<'a>(
+        &'a self,
+        message_id: &'a str,
+        body_text: &'a str,
+        metadata: &'a Value,
+        observed_at: DateTime<Utc>,
+        context: ProviderMessageProjectionObservationContext<'a>,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn apply_pinned_state<'a>(
+        &'a self,
+        message_id: &'a str,
+        is_pinned: bool,
+        observed_at: DateTime<Utc>,
+        context: ProviderMessageProjectionObservationContext<'a>,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = Result<
+                        Option<ProviderChannelMessage>,
+                        ProviderCommunicationMessagePortError,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    >;
+
+    fn update_attachment_download_state<'a>(
+        &'a self,
+        update: ProviderAttachmentDownloadStateUpdate<'a>,
+    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
 }
 
 fn validate_non_empty(field: &'static str, value: &str) -> Result<(), CommunicationContractError> {

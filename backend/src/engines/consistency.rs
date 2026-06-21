@@ -18,3 +18,4 @@ pub use models::{
     NewEvidenceClaim,
 };
 pub use store::ContradictionObservationStore;
+pub use store::ContradictionObservationStore as ContradictionObservationPort;

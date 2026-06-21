@@ -1,5 +1,5 @@
 use crate::domains::communications::messages::{
-    MessageProjectionStore, ProjectedMessage, WorkflowState,
+    CommunicationMessageProjectionPort, ProjectedMessage, WorkflowState,
 };
 use crate::platform::ai_runtime::SharedAiRuntimePort;
 use crate::workflows::email_intelligence::errors::EmailIntelligenceError;
@@ -41,7 +41,7 @@ impl EmailIntelligenceService {
 
     pub async fn analyze_and_persist(
         &self,
-        store: &MessageProjectionStore,
+        store: &CommunicationMessageProjectionPort,
         message: &ProjectedMessage,
     ) -> Result<bool, EmailIntelligenceError> {
         let Some(analysis) = self.analyze_message(message).await? else {

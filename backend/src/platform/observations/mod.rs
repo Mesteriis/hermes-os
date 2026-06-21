@@ -4,6 +4,7 @@ mod review_links;
 mod store;
 
 pub use errors::ObservationStoreError;
+pub use errors::ObservationStoreError as ObservationPortError;
 pub use models::{
     NewObservation, NewObservationIngestionRun, NewObservationLink, Observation,
     ObservationIngestionRun, ObservationIngestionRunStatus, ObservationKindDefinition,
@@ -14,3 +15,4 @@ pub(crate) use review_links::{
     materialize_review_transition_link_in_transaction,
 };
 pub use store::ObservationStore;
+pub use store::ObservationStore as ObservationPort;

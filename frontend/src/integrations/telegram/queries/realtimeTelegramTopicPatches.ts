@@ -1,5 +1,5 @@
 import type { TelegramTopic, TelegramTopicListResponse } from '../types/telegramTopics'
-import { isRecord, stringValue } from '../../../domains/communications/queries/realtimePatchShared'
+import { isRecord, stringValue } from '../../../shared/communications/queries/realtimePatchShared'
 import type { TelegramEventPayload } from './realtimeTelegramPatchShared'
 
 export function patchTelegramTopicList(

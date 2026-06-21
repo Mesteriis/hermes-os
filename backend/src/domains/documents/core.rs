@@ -11,3 +11,4 @@ pub use errors::{DocumentImportError, DocumentImportWithProcessingError};
 pub(crate) use evidence::link_document_entity_in_transaction;
 pub use models::{ImportedDocument, ImportedDocumentWithProcessing, NewDocumentImport};
 pub use store::DocumentImportStore;
+pub use store::DocumentImportStore as DocumentImportPort;

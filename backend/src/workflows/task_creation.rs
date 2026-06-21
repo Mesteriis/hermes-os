@@ -4,7 +4,7 @@ use sqlx::postgres::Postgres;
 use sqlx::{PgPool, Transaction};
 
 use crate::app::ApiError;
-use crate::domains::tasks::api::{NewTask, Task, TaskStore};
+use crate::domains::tasks::api::{NewTask, Task, TaskCommandPort};
 use crate::domains::tasks::core::materialize_task_observation_link_in_transaction;
 
 pub(crate) struct WorkflowTaskCreateInput {
@@ -27,7 +27,7 @@ pub(crate) async fn create_task_from_workflow_input(
     transaction: &mut Transaction<'_, Postgres>,
     input: WorkflowTaskCreateInput,
 ) -> Result<Task, ApiError> {
-    let task_store = TaskStore::new(pool.clone());
+    let task_store = TaskCommandPort::new(pool.clone());
     let task = task_store
         .create_in_transaction(
             transaction,

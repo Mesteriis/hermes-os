@@ -1,8 +1,5 @@
 use super::super::{TelegramMemberSyncContext, TelegramRuntimeEventBridgeContext};
 use super::sync_provider_roster_snapshots;
-use crate::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
-};
 use crate::integrations::telegram::client::TelegramChat;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::{
@@ -12,7 +9,6 @@ use crate::integrations::telegram::client::participants::upsert_chat_participant
 use crate::integrations::telegram::client::{
     NewTelegramChatParticipant, TelegramError, TelegramStore,
 };
-use crate::platform::communications::{EmailProviderKind, NewProviderAccount};
 use crate::platform::config::AppConfig;
 use crate::platform::events::EventBus;
 use crate::platform::events::bus::telegram_event_types;
@@ -27,16 +23,14 @@ async fn seed_chat(
     external_account_id: &str,
     provider_chat_id: &str,
 ) -> Result<TelegramChat, TelegramError> {
-    CommunicationProviderAccountStore::new(pool.clone())
-        .upsert(&NewProviderAccount::new(
-            account_id,
-            EmailProviderKind::TelegramUser,
-            "Runtime Participant Account",
-            external_account_id.to_owned(),
-        ))
-        .await
-        .expect("seed provider account");
-    TelegramStore::new(pool.clone())
+    crate::test_support::upsert_telegram_runtime_account(
+        pool,
+        account_id,
+        "Runtime Participant Account",
+        external_account_id,
+    )
+    .await;
+    crate::test_support::telegram_store(pool)
         .upsert_chat(&NewTelegramChat {
             account_id: account_id.to_owned(),
             provider_chat_id: provider_chat_id.to_owned(),
@@ -79,14 +73,15 @@ async fn sync_provider_roster_snapshots_appends_join_reconciliation_after_partic
     .await
     .expect("seed join command");
 
-    let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
-    let provider_secret_binding_store = CommunicationProviderSecretBindingStore::new(pool.clone());
-    let telegram_store = TelegramStore::new(pool.clone());
+    let provider_account_store = crate::test_support::communication_provider_account_store(&pool);
+    let provider_secret_binding_store =
+        crate::test_support::communication_provider_secret_binding_store(&pool);
+    let telegram_store = crate::test_support::telegram_store(&pool);
     let secret_store = SecretReferenceStore::new(pool.clone());
     let secret_resolver = InMemorySecretResolver::new();
     let config = AppConfig::default();
     let event_bridge = Some(TelegramRuntimeEventBridgeContext::new(
-        Some(pool.clone()),
+        Some(telegram_store.clone()),
         EventBus::new(),
     ));
     let context = TelegramMemberSyncContext {
@@ -240,14 +235,15 @@ async fn sync_provider_roster_snapshots_appends_leave_reconciliation_after_absen
     .await
     .expect("seed leave command");
 
-    let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
-    let provider_secret_binding_store = CommunicationProviderSecretBindingStore::new(pool.clone());
-    let telegram_store = TelegramStore::new(pool.clone());
+    let provider_account_store = crate::test_support::communication_provider_account_store(&pool);
+    let provider_secret_binding_store =
+        crate::test_support::communication_provider_secret_binding_store(&pool);
+    let telegram_store = crate::test_support::telegram_store(&pool);
     let secret_store = SecretReferenceStore::new(pool.clone());
     let secret_resolver = InMemorySecretResolver::new();
     let config = AppConfig::default();
     let event_bridge = Some(TelegramRuntimeEventBridgeContext::new(
-        Some(pool.clone()),
+        Some(telegram_store.clone()),
         EventBus::new(),
     ));
     let context = TelegramMemberSyncContext {

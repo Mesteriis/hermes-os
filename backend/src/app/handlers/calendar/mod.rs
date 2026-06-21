@@ -83,6 +83,9 @@ use crate::domains::persons::identity::{
     PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
 };
 
+use crate::app::workflow_services::email_intelligence::{
+    EmailIntelligenceError, EmailIntelligenceService,
+};
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -165,7 +168,6 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
-use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 
 use crate::app::api_support::*;
 use crate::app::{ApiError, AppState};

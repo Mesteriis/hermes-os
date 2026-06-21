@@ -541,7 +541,7 @@ impl TelegramStore {
         }
 
         super::participants::list_message_heuristic_members(
-            &self.pool,
+            self,
             &chat.account_id,
             &chat.provider_chat_id,
             query,

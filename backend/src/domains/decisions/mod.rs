@@ -5,12 +5,14 @@ mod evidence;
 mod extraction;
 mod ids;
 mod models;
+pub mod ports;
 mod row_mapping;
 mod service;
 mod store;
 mod validation;
 
 pub use errors::DecisionStoreError;
+pub use errors::DecisionStoreError as DecisionReviewPortError;
 pub use extraction::{
     DecisionCandidate, DecisionCandidateKind, DecisionEngine, DecisionEngineError,
     DecisionExtractionInput, DecisionExtractionResult, DecisionImpactedEntityCandidate,
@@ -22,3 +24,4 @@ pub use models::{
 };
 pub use service::{DecisionCommandService, DecisionCommandServiceError};
 pub use store::DecisionStore;
+pub use store::DecisionStore as DecisionReviewPort;

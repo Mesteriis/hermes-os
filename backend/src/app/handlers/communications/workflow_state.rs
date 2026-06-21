@@ -1,9 +1,9 @@
 use super::*;
+use crate::app::workflow_services::review_inbox::refresh_message_knowledge_candidates_into_review;
 use crate::domains::communications::ai_state::{
     CommunicationAiState, CommunicationAiStateStore, CommunicationAiStateTransitionRequest,
 };
 use crate::domains::communications::service::CommunicationCommandService;
-use crate::workflows::review_inbox::refresh_message_knowledge_candidates_into_review;
 
 #[derive(Deserialize)]
 pub(crate) struct WorkflowStateTransitionApiRequest {

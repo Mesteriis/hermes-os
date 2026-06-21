@@ -1,6 +1,5 @@
 use chrono::Utc;
 use serde_json::json;
-use sqlx::PgPool;
 
 use crate::integrations::telegram::client::lifecycle::{
     reconcile_delete_commands_from_provider_state, reconcile_edit_commands_from_provider_state,
@@ -38,16 +37,16 @@ use projection::{
 };
 
 pub(super) async fn publish_message_created_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
     let import_batch_id = format!(
         "telegram-tdlib-runtime:{}:{}",
         account_id, snapshot.provider_chat_id
@@ -78,17 +77,17 @@ pub(super) async fn publish_message_created_event(
 }
 
 pub(super) async fn publish_message_deleted_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageDeleteSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
-    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    let context = TelegramRuntimeEventBridgeContext::new(Some(store.clone()), event_bus.clone());
     for provider_message_id in &snapshot.provider_message_ids {
         let provider_message_ref = format!("{}:{}", snapshot.provider_chat_id, provider_message_id);
         let message = match store
@@ -147,16 +146,16 @@ pub(super) async fn publish_message_deleted_event(
 }
 
 pub(super) async fn publish_message_content_updated_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageContentSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
     let provider_message_ref = format!(
         "{}:{}",
         snapshot.provider_chat_id, snapshot.provider_message_id
@@ -177,7 +176,7 @@ pub(super) async fn publish_message_content_updated_event(
     let previous_text = message.text.clone();
     let observed_at = Utc::now();
     let updated_message = match apply_provider_message_content_update(
-        &store,
+        store,
         &message,
         snapshot,
         observed_at,
@@ -232,7 +231,7 @@ pub(super) async fn publish_message_content_updated_event(
             Vec::new()
         }
     };
-    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    let context = TelegramRuntimeEventBridgeContext::new(Some(store.clone()), event_bus.clone());
     for command in reconciled {
         publish_command_reconciled_events(Some(&context), &command, &snapshot.source_event).await;
     }
@@ -253,16 +252,16 @@ pub(super) async fn publish_message_content_updated_event(
 }
 
 pub(super) async fn publish_message_edited_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageEditedSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
     let provider_message_ref = format!(
         "{}:{}",
         snapshot.provider_chat_id, snapshot.provider_message_id
@@ -280,7 +279,7 @@ pub(super) async fn publish_message_edited_event(
         return;
     };
 
-    let updated_message = match apply_provider_message_edit_metadata(&store, &message, snapshot)
+    let updated_message = match apply_provider_message_edit_metadata(store, &message, snapshot)
         .await
     {
         Ok(Some(message)) => message,
@@ -307,16 +306,16 @@ pub(super) async fn publish_message_edited_event(
 }
 
 pub(super) async fn publish_message_pinned_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessagePinnedSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
     let provider_message_ref = format!(
         "{}:{}",
         snapshot.provider_chat_id, snapshot.provider_message_id
@@ -364,7 +363,7 @@ pub(super) async fn publish_message_pinned_event(
             Vec::new()
         }
     };
-    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    let context = TelegramRuntimeEventBridgeContext::new(Some(store.clone()), event_bus.clone());
     for command in reconciled {
         publish_command_reconciled_events(Some(&context), &command, &snapshot.source_event).await;
     }
@@ -384,16 +383,16 @@ pub(super) async fn publish_message_pinned_event(
 }
 
 pub(super) async fn publish_reaction_changed_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibMessageInteractionInfoSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
-    let store = TelegramStore::new(pool.clone());
     let provider_message_ref = format!(
         "{}:{}",
         snapshot.provider_chat_id, snapshot.provider_message_id
@@ -431,7 +430,7 @@ pub(super) async fn publish_reaction_changed_event(
         return;
     }
 
-    let updated_message = match update_message_reaction_summary(&store, &message, &snapshot.raw)
+    let updated_message = match update_message_reaction_summary(store, &message, &snapshot.raw)
         .await
     {
         Ok(Some(message)) => message,
@@ -459,7 +458,7 @@ pub(super) async fn publish_reaction_changed_event(
             Vec::new()
         }
     };
-    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    let context = TelegramRuntimeEventBridgeContext::new(Some(store.clone()), event_bus.clone());
     for command in reconciled {
         publish_command_reconciled_events(Some(&context), &command, &snapshot.source_event).await;
     }

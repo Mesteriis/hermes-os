@@ -4,7 +4,7 @@ use serde_json::json;
 use sqlx::{Postgres, Transaction};
 
 use crate::domains::graph::core::{
-    GraphNodeKind, GraphStore, NewGraphEdge, NewGraphNode, RelationshipType, node_id,
+    GraphNodeKind, GraphProjectionPort, NewGraphEdge, NewGraphNode, RelationshipType, node_id,
 };
 use crate::domains::projects::core::{
     ProjectMatchedDocument, ProjectMatchedMessage, ProjectProjectionSource,
@@ -34,7 +34,7 @@ impl GraphProjectionService {
             .await?;
 
         let mut transaction = self.pool.begin().await?;
-        let project_node = GraphStore::upsert_node_in_transaction(
+        let project_node = GraphProjectionPort::upsert_node_in_transaction(
             &mut transaction,
             &NewGraphNode::new(
                 GraphNodeKind::Project,
@@ -111,7 +111,7 @@ impl GraphProjectionService {
         message: &ProjectMatchedMessage,
         report: &mut GraphProjectionReport,
     ) -> Result<(), GraphProjectionError> {
-        GraphStore::upsert_edge_with_evidence_in_transaction(
+        GraphProjectionPort::upsert_edge_with_evidence_in_transaction(
             transaction,
             &NewGraphEdge::new(
                 project_node_id.to_owned(),
@@ -137,7 +137,7 @@ impl GraphProjectionService {
         document: &ProjectMatchedDocument,
         report: &mut GraphProjectionReport,
     ) -> Result<(), GraphProjectionError> {
-        GraphStore::upsert_edge_with_evidence_in_transaction(
+        GraphProjectionPort::upsert_edge_with_evidence_in_transaction(
             transaction,
             &NewGraphEdge::new(
                 project_node_id.to_owned(),
@@ -173,7 +173,7 @@ impl GraphProjectionService {
             let endpoint = self
                 .resolve_message_endpoint(transaction, &participant_email, report)
                 .await?;
-            GraphStore::upsert_edge_with_evidence_in_transaction(
+            GraphProjectionPort::upsert_edge_with_evidence_in_transaction(
                 transaction,
                 &NewGraphEdge::new(
                     project_node_id.to_owned(),

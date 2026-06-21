@@ -1,11 +1,11 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::CommunicationIngestionStore;
-use crate::domains::communications::messages::MessageProjectionStore;
+use crate::domains::communications::core::CommunicationIngestionPort;
+use crate::domains::communications::messages::CommunicationMessageProjectionPort;
 use crate::domains::communications::storage::{
-    CommunicationStorageStore, HeuristicAttachmentSafetyScanner, LocalCommunicationBlobStore,
+    CommunicationBlobMetadataPort, HeuristicAttachmentSafetyScanner, LocalCommunicationBlobPort,
 };
-use crate::domains::persons::api::PersonProjectionStore;
+use crate::domains::persons::api::PersonProjectionPort;
 use crate::platform::communications::EmailSyncBatch;
 
 use super::candidates::refresh_message_context_candidates;
@@ -17,15 +17,15 @@ use super::report::EmailSyncPipelineReport;
 
 pub async fn project_email_sync_batch_with_mail_blobs(
     pool: PgPool,
-    blob_store: &LocalCommunicationBlobStore,
+    blob_store: &LocalCommunicationBlobPort,
     account_id: &str,
     import_batch_id: impl AsRef<str>,
     batch: &EmailSyncBatch,
 ) -> Result<EmailSyncPipelineReport, EmailSyncPipelineError> {
-    let communication_store = CommunicationIngestionStore::new(pool.clone());
-    let mail_store = CommunicationStorageStore::new(pool.clone());
-    let message_store = MessageProjectionStore::new(pool.clone());
-    let person_store = PersonProjectionStore::new(pool.clone());
+    let communication_store = CommunicationIngestionPort::new(pool.clone());
+    let mail_store = CommunicationBlobMetadataPort::new(pool.clone());
+    let message_store = CommunicationMessageProjectionPort::new(pool.clone());
+    let person_store = PersonProjectionPort::new(pool.clone());
     let attachment_scanner = HeuristicAttachmentSafetyScanner;
     let import_report = record_email_sync_batch_with_mail_blobs(
         &communication_store,

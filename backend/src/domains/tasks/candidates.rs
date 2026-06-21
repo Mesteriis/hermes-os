@@ -18,3 +18,4 @@ pub use models::{
 };
 pub use service::{TaskCandidateReviewService, TaskCandidateReviewServiceError};
 pub use store::TaskCandidateStore;
+pub use store::TaskCandidateStore as TaskCandidatePort;

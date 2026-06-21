@@ -19,7 +19,7 @@ export async function searchTelegramChats(params: {
     query.set('limit', String(Math.trunc(params.limit)))
   }
   return ApiClient.instance.get<TelegramChatSearchResponse>(
-    `/api/v1/communications/telegram/chats/search?${query.toString()}`,
+    `/api/v1/communications/provider-conversations/search?${query.toString()}`,
     'Telegram dialog search failed'
   )
 }
@@ -41,7 +41,7 @@ export async function searchTelegramMessages(params: {
     query.set('limit', String(Math.trunc(params.limit)))
   }
   return ApiClient.instance.get<TelegramMessageSearchResponse>(
-    `/api/v1/communications/telegram/search/messages?${query.toString()}`,
+    `/api/v1/communications/provider-search/messages?${query.toString()}`,
     'Telegram message search failed'
   )
 }
@@ -59,7 +59,7 @@ export async function searchTelegramProviderMessages(params: {
     limit: params.limit,
   }
   return ApiClient.instance.post<TelegramMessageSearchResponse>(
-    '/api/v1/communications/telegram/search/provider',
+    '/api/v1/communications/provider-search/provider',
     body,
     'Telegram provider message search failed'
   )
@@ -89,7 +89,7 @@ export async function searchTelegramMedia(params: {
     query.set('limit', String(Math.trunc(params.limit)))
   }
   return ApiClient.instance.get<TelegramMediaSearchResponse>(
-    `/api/v1/communications/telegram/search/media?${query.toString()}`,
+    `/api/v1/communications/provider-search/media?${query.toString()}`,
     'Telegram media search failed'
   )
 }
@@ -103,7 +103,7 @@ export async function fetchTelegramPinnedMessages(params: {
     query.set('limit', String(Math.trunc(params.limit)))
   }
   return ApiClient.instance.get<TelegramMessageListResponse>(
-    `/api/v1/communications/telegram/chats/${encodeURIComponent(params.telegram_chat_id)}/pinned-messages?${query.toString()}`,
+    `/api/v1/communications/provider-conversations/${encodeURIComponent(params.telegram_chat_id)}/pinned-messages?${query.toString()}`,
     'Telegram pinned messages query failed'
   )
 }

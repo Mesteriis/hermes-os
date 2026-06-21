@@ -3,10 +3,11 @@ use sqlx::postgres::PgPool;
 use thiserror::Error;
 
 use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionStore,
+    CommunicationIngestionError, CommunicationIngestionPort,
 };
 use crate::domains::communications::messages::{
-    MessageProjectionError, MessageProjectionStore, NewProjectedMessage, ProjectedMessage,
+    CommunicationMessageProjectionPort, MessageProjectionError, NewProjectedMessage,
+    ProjectedMessage,
 };
 use crate::platform::communications::{NewRawCommunicationRecord, StoredRawCommunicationRecord};
 
@@ -35,7 +36,7 @@ pub async fn record_raw_provider_communication(
     pool: PgPool,
     raw: NewRawCommunicationRecord,
 ) -> Result<StoredRawCommunicationRecord, ProviderCommunicationProjectionError> {
-    Ok(CommunicationIngestionStore::new(pool)
+    Ok(CommunicationIngestionPort::new(pool)
         .record_raw_source(&raw)
         .await?)
 }
@@ -45,7 +46,8 @@ pub async fn record_and_project_telegram_message(
     raw: NewRawCommunicationRecord,
 ) -> Result<ProviderMessageProjection, ProviderCommunicationProjectionError> {
     let raw = record_raw_provider_communication(pool.clone(), raw).await?;
-    let projected = project_raw_telegram_message(&MessageProjectionStore::new(pool), &raw).await?;
+    let projected =
+        project_raw_telegram_message(&CommunicationMessageProjectionPort::new(pool), &raw).await?;
     Ok(ProviderMessageProjection {
         raw_record_id: raw.raw_record_id,
         message_id: projected.message_id,
@@ -53,7 +55,7 @@ pub async fn record_and_project_telegram_message(
 }
 
 pub async fn project_raw_telegram_message(
-    store: &MessageProjectionStore,
+    store: &CommunicationMessageProjectionPort,
     raw: &StoredRawCommunicationRecord,
 ) -> Result<ProjectedMessage, ProviderCommunicationProjectionError> {
     if raw.record_kind != TELEGRAM_MESSAGE_RECORD_KIND {
@@ -114,7 +116,8 @@ pub async fn record_and_project_whatsapp_web_message(
 ) -> Result<ProviderMessageProjection, ProviderCommunicationProjectionError> {
     let raw = record_raw_provider_communication(pool.clone(), raw).await?;
     let projected =
-        project_raw_whatsapp_web_message(&MessageProjectionStore::new(pool), &raw).await?;
+        project_raw_whatsapp_web_message(&CommunicationMessageProjectionPort::new(pool), &raw)
+            .await?;
     Ok(ProviderMessageProjection {
         raw_record_id: raw.raw_record_id,
         message_id: projected.message_id,
@@ -122,7 +125,7 @@ pub async fn record_and_project_whatsapp_web_message(
 }
 
 pub async fn project_raw_whatsapp_web_message(
-    store: &MessageProjectionStore,
+    store: &CommunicationMessageProjectionPort,
     raw: &StoredRawCommunicationRecord,
 ) -> Result<ProjectedMessage, ProviderCommunicationProjectionError> {
     if raw.record_kind != WHATSAPP_WEB_MESSAGE_RECORD_KIND {

@@ -3,19 +3,19 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use crate::domains::communications::core::CommunicationProviderAccountStore;
+use crate::domains::communications::core::CommunicationProviderAccountPort;
 use crate::domains::communications::core::{
-    CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
+    CommunicationIngestionError, CommunicationIngestionPort, EmailProviderKind, NewProviderAccount,
 };
 use crate::domains::communications::import::{
     FixtureEmailImportError, FixtureEmailImportRequest, import_fixture_email_messages_with_records,
 };
 use crate::domains::communications::messages::{
-    MessageProjectionError, MessageProjectionStore, project_raw_email_message,
+    CommunicationMessageProjectionPort, MessageProjectionError, project_raw_email_message,
 };
-use crate::domains::graph::core::{GraphStore, GraphStoreError, GraphSummary};
+use crate::domains::graph::core::{GraphProjectionPort, GraphProjectionPortError, GraphSummary};
 use crate::domains::persons::api::{
-    PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
+    PersonProjectionError, PersonProjectionPort, upsert_persons_from_message_participants,
 };
 use crate::workflows::graph_projection::{
     GraphProjectionError, GraphProjectionReport, GraphProjectionService,
@@ -77,7 +77,7 @@ pub async fn import_fixture_email_messages_for_dev(
     pool: PgPool,
     request: &EmailFixturePipelineRequest,
 ) -> Result<EmailFixtureImportPipelineReport, EmailFixturePipelineError> {
-    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let communication_store = CommunicationIngestionPort::new(pool.clone());
     upsert_fixture_provider_account(&pool, request).await?;
     let import_report = import_fixture_email_messages_with_records(
         &communication_store,
@@ -101,7 +101,7 @@ pub async fn project_fixture_email_messages(
     pool: PgPool,
     request: &EmailFixturePipelineRequest,
 ) -> Result<EmailFixtureProjectionPipelineReport, EmailFixturePipelineError> {
-    let communication_store = CommunicationIngestionStore::new(pool.clone());
+    let communication_store = CommunicationIngestionPort::new(pool.clone());
     upsert_fixture_provider_account(&pool, request).await?;
     let import_report = import_fixture_email_messages_with_records(
         &communication_store,
@@ -113,8 +113,8 @@ pub async fn project_fixture_email_messages(
     )
     .await?;
 
-    let message_store = MessageProjectionStore::new(pool.clone());
-    let person_store = PersonProjectionStore::new(pool.clone());
+    let message_store = CommunicationMessageProjectionPort::new(pool.clone());
+    let person_store = PersonProjectionPort::new(pool.clone());
     let mut projected_messages = 0;
     let mut participants = Vec::new();
     for raw_record in &import_report.raw_records {
@@ -128,7 +128,7 @@ pub async fn project_fixture_email_messages(
     let graph_projection = GraphProjectionService::new(pool.clone())
         .project_from_v1()
         .await?;
-    let graph_summary = GraphStore::new(pool).summary().await?;
+    let graph_summary = GraphProjectionPort::new(pool).summary().await?;
     let total_graph_nodes = graph_summary
         .node_counts
         .iter()
@@ -165,7 +165,7 @@ async fn upsert_fixture_provider_account(
         &request.external_account_id,
     )
     .config(provider_config(request.provider_kind));
-    CommunicationProviderAccountStore::new(pool.clone())
+    CommunicationProviderAccountPort::new(pool.clone())
         .upsert(&account)
         .await?;
     Ok(())
@@ -204,5 +204,5 @@ pub enum EmailFixturePipelineError {
     GraphProjection(#[from] GraphProjectionError),
 
     #[error(transparent)]
-    GraphStore(#[from] GraphStoreError),
+    GraphProjectionPort(#[from] GraphProjectionPortError),
 }

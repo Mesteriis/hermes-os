@@ -3,22 +3,18 @@ use serde_json::json;
 use testkit::context::TestContext;
 
 use super::*;
-use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramChatKind, TelegramDeliveryState,
 };
 
 async fn seed_runtime_account(pool: &sqlx::PgPool, account_id: &str, external: &str) {
-    CommunicationProviderAccountStore::new(pool.clone())
-        .upsert_runtime_account(
-            account_id,
-            "telegram_user",
-            "Telegram Runtime Account",
-            external,
-            json!({}),
-        )
-        .await
-        .expect("seed provider account");
+    crate::test_support::upsert_telegram_runtime_account(
+        pool,
+        account_id,
+        "Telegram Runtime Account",
+        external,
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -34,7 +30,7 @@ async fn publish_message_content_updated_event_skips_without_projected_message()
 
     seed_runtime_account(&pool, account_id, "telegram-ext-content").await;
 
-    let store = TelegramStore::new(pool.clone());
+    let store = crate::test_support::telegram_store(&pool);
     let _observed = store
         .ingest_fixture_message(&NewTelegramMessage {
             account_id: account_id.to_owned(),
@@ -64,8 +60,13 @@ async fn publish_message_content_updated_event_skips_without_projected_message()
         raw: json!({"@type": "message"}),
     };
 
-    publish_message_content_updated_event(&Some(pool.clone()), &event_bus, account_id, &snapshot)
-        .await;
+    publish_message_content_updated_event(
+        &Some(crate::test_support::telegram_store(&pool)),
+        &event_bus,
+        account_id,
+        &snapshot,
+    )
+    .await;
 
     assert!(events.try_recv().is_err());
 }
@@ -84,7 +85,7 @@ async fn publish_message_edited_event_skips_without_projected_message() {
 
     seed_runtime_account(&pool, account_id, "telegram-ext-edited").await;
 
-    let store = TelegramStore::new(pool.clone());
+    let store = crate::test_support::telegram_store(&pool);
     let _observed = store
         .ingest_fixture_message(&NewTelegramMessage {
             account_id: account_id.to_owned(),
@@ -114,7 +115,13 @@ async fn publish_message_edited_event_skips_without_projected_message() {
         raw: json!({"@type": "message"}),
     };
 
-    publish_message_edited_event(&Some(pool.clone()), &event_bus, account_id, &snapshot).await;
+    publish_message_edited_event(
+        &Some(crate::test_support::telegram_store(&pool)),
+        &event_bus,
+        account_id,
+        &snapshot,
+    )
+    .await;
 
     assert!(events.try_recv().is_err());
 }
@@ -132,7 +139,7 @@ async fn publish_reaction_changed_event_skips_without_projected_message() {
 
     seed_runtime_account(&pool, account_id, "telegram-ext-reaction").await;
 
-    let store = TelegramStore::new(pool.clone());
+    let store = crate::test_support::telegram_store(&pool);
     let _observed = store
         .ingest_fixture_message(&NewTelegramMessage {
             account_id: account_id.to_owned(),
@@ -190,7 +197,13 @@ async fn publish_reaction_changed_event_skips_without_projected_message() {
         }),
     };
 
-    publish_reaction_changed_event(&Some(pool.clone()), &event_bus, account_id, &snapshot).await;
+    publish_reaction_changed_event(
+        &Some(crate::test_support::telegram_store(&pool)),
+        &event_bus,
+        account_id,
+        &snapshot,
+    )
+    .await;
 
     assert!(events.try_recv().is_err());
 }

@@ -1,12 +1,36 @@
 use super::super::*;
 use super::database::database_pool;
+use std::sync::Arc;
 
 pub(crate) fn telegram_store(state: &AppState) -> Result<TelegramStore, ApiError> {
-    Ok(TelegramStore::new(database_pool(state)?))
+    let pool = database_pool(state)?;
+    Ok(TelegramStore::new(
+        pool.clone(),
+        Arc::new(
+            crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(crate::domains::communications::messages::ProviderChannelMessageStore::new(pool)),
+    ))
 }
 
 pub(crate) fn whatsapp_web_store(state: &AppState) -> Result<WhatsappWebStore, ApiError> {
-    Ok(WhatsappWebStore::new(database_pool(state)?))
+    let pool = database_pool(state)?;
+    Ok(WhatsappWebStore::new(
+        pool.clone(),
+        Arc::new(
+            crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(crate::domains::communications::messages::ProviderChannelMessageStore::new(pool)),
+    ))
 }
 
 pub(crate) fn automation_store(state: &AppState) -> Result<AutomationStore, ApiError> {
@@ -23,7 +47,17 @@ pub(crate) fn account_setup_service(
     let pool = database_pool(state)?;
     Ok(EmailAccountSetupService::new_with_host_vault(
         pool.clone(),
-        SecretReferenceStore::new(pool),
+        SecretReferenceStore::new(pool.clone()),
         state.vault.clone(),
+        Arc::new(
+            crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                pool.clone(),
+            ),
+        ),
+        Arc::new(
+            crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                pool,
+            ),
+        ),
     ))
 }

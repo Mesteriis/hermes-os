@@ -1,10 +1,14 @@
+use std::sync::Arc;
+
 use chrono::Utc;
 use serde_json::json;
 use sqlx::Row;
 
 use hermes_hub_backend::domains::communications::core::{
-    CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
+    CommunicationIngestionStore, CommunicationProviderAccountStore, CommunicationProviderKind,
+    CommunicationProviderSecretBindingStore, NewProviderAccount,
 };
+use hermes_hub_backend::domains::communications::messages::ProviderChannelMessageStore;
 use hermes_hub_backend::integrations::telegram::client::lifecycle::{
     self, reconcile_delete_commands_from_provider_state,
     reconcile_edit_commands_from_provider_state,
@@ -22,7 +26,7 @@ async fn telegram_provider_delete_observation_is_idempotent_and_reconciles_delet
     let ctx = TestContext::new().await;
     let pool = ctx.pool().clone();
     let account_id = create_telegram_account(&pool, "message-delete", "telegram:delete").await;
-    let store = TelegramStore::new(pool.clone());
+    let store = telegram_store(&pool);
     let provider_chat_id = "-100message-delete";
     let provider_message_id = format!("{provider_chat_id}:42");
 
@@ -148,7 +152,7 @@ async fn telegram_provider_edit_observation_is_idempotent_and_reconciles_edit_co
     let ctx = TestContext::new().await;
     let pool = ctx.pool().clone();
     let account_id = create_telegram_account(&pool, "message-edit", "telegram:edit").await;
-    let store = TelegramStore::new(pool.clone());
+    let store = telegram_store(&pool);
     let provider_chat_id = "-100message-edit";
     let provider_message_id = format!("{provider_chat_id}:42");
 
@@ -273,7 +277,7 @@ async fn telegram_provider_edit_observation_marks_mismatched_edit_command_failed
     let pool = ctx.pool().clone();
     let account_id =
         create_telegram_account(&pool, "message-edit-mismatch", "telegram:edit-mismatch").await;
-    let store = TelegramStore::new(pool.clone());
+    let store = telegram_store(&pool);
     let provider_chat_id = "-100message-edit-mismatch";
     let provider_message_id = format!("{provider_chat_id}:42");
 
@@ -353,7 +357,7 @@ async fn telegram_provider_pin_state_reconciles_message_pin_command() {
     let ctx = TestContext::new().await;
     let pool = ctx.pool().clone();
     let account_id = create_telegram_account(&pool, "message-pin", "telegram:pin").await;
-    let store = TelegramStore::new(pool.clone());
+    let store = telegram_store(&pool);
     let provider_chat_id = "-100message-pin";
     let provider_message_id = format!("{provider_chat_id}:42");
 
@@ -420,7 +424,7 @@ async fn telegram_provider_pin_state_marks_mismatched_unpin_command_failed() {
     let pool = ctx.pool().clone();
     let account_id =
         create_telegram_account(&pool, "message-pin-mismatch", "telegram:pin-mismatch").await;
-    let store = TelegramStore::new(pool.clone());
+    let store = telegram_store(&pool);
     let provider_chat_id = "-100message-pin-mismatch";
     let provider_message_id = format!("{provider_chat_id}:42");
 
@@ -514,6 +518,15 @@ async fn create_telegram_account(
         .await
         .expect("provider account");
     account_id
+}
+
+fn telegram_store(pool: &sqlx::PgPool) -> TelegramStore {
+    TelegramStore::new(
+        pool.clone(),
+        Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
+        Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
+        Arc::new(ProviderChannelMessageStore::new(pool.clone())),
+    )
 }
 
 async fn ingest_projected_fixture_message(

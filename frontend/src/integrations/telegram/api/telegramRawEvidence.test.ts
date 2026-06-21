@@ -26,7 +26,7 @@ describe('telegram raw evidence API', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/communications/telegram/messages/msg%2Fraw%201/raw')
+    expect(url).toContain('/api/v1/communications/provider-messages/msg%2Fraw%201/raw')
     expect(init.method).toBe('GET')
   })
 })

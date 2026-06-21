@@ -43,7 +43,7 @@ impl From<StoredRawCommunicationRecord> for TelegramRawMessageRecord {
     }
 }
 
-/// GET /api/v1/communications/telegram/messages/{message_id}/raw
+/// GET /api/v1/communications/provider-messages/{message_id}/raw
 pub(crate) async fn get_telegram_message_raw(
     State(state): State<AppState>,
     Path(message_id): Path<String>,

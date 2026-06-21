@@ -116,7 +116,6 @@ fn derives_inactive_roster_membership_state_from_status_or_role() {
 
 #[tokio::test]
 async fn marks_stale_tdlib_participants_as_absent_from_exhaustive_roster() {
-    use crate::domains::communications::core::CommunicationProviderAccountStore;
     use crate::platform::storage::Database;
     use testkit::context::TestContext;
 
@@ -126,19 +125,15 @@ async fn marks_stale_tdlib_participants_as_absent_from_exhaustive_roster() {
         .expect("database connection");
     let pool = database.pool().expect("pool").clone();
 
-    TelegramStore::new(pool.clone())
-        .provider_account_store()
-        .upsert_runtime_account(
-            "acct-1",
-            "telegram_user",
-            "Telegram Test Account",
-            "telegram:1",
-            json!({}),
-        )
-        .await
-        .expect("insert provider account");
+    crate::test_support::upsert_telegram_runtime_account(
+        &pool,
+        "acct-1",
+        "Telegram Test Account",
+        "telegram:1",
+    )
+    .await;
 
-    let store = TelegramStore::new(pool.clone());
+    let store = crate::test_support::telegram_store(&pool);
     let chat = store
         .upsert_chat(&NewTelegramChat {
             account_id: "acct-1".to_owned(),

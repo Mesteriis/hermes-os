@@ -274,8 +274,8 @@ Implemented route groups include:
 - `/api/v1/tasks/*` and `/api/v1/task-candidates/*`;
 - `/api/v1/settings/*`;
 - `/api/v1/ai/*`;
-- `/api/v1/communications/telegram/*`;
-- `/api/v1/communications/whatsapp/*`;
+- `/api/v1/integrations/telegram/*`;
+- `/api/v1/communications/provider-web/*`;
 - `/api/v1/policies/*`;
 - `/api/v1/calls/*`;
 - `/api/v1/integrations/mail/accounts/*`;

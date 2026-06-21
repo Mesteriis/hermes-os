@@ -2,9 +2,8 @@ use std::sync::mpsc::Sender;
 
 use chrono::Utc;
 
-use crate::domains::communications::core::CommunicationProviderSecretBindingStore;
 use crate::integrations::telegram::client::TelegramError;
-use crate::platform::communications::ProviderAccount;
+use crate::platform::communications::{ProviderAccount, ProviderSecretBindingLookupPort};
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
 
@@ -19,7 +18,7 @@ use super::realtime_events::{
 impl TelegramRuntimeManager {
     pub(in crate::integrations::telegram::runtime::manager) async fn ensure_tdlib_actor(
         &self,
-        provider_secret_binding_store: &CommunicationProviderSecretBindingStore,
+        provider_secret_binding_store: &dyn ProviderSecretBindingLookupPort,
         secret_store: &SecretReferenceStore,
         secret_resolver: &(impl SecretResolver + Sync + ?Sized),
         config: &AppConfig,
@@ -47,7 +46,7 @@ impl TelegramRuntimeManager {
         )?;
         if let Some(event_bridge) = event_bridge {
             spawn_telegram_runtime_event_bridge(
-                event_bridge.pool,
+                event_bridge.telegram_store,
                 event_bridge.event_bus,
                 account.account_id.clone(),
                 runtime_event_rx,

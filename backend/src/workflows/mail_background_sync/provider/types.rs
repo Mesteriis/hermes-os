@@ -1,15 +1,15 @@
 use serde_json::Value;
 
-use crate::domains::communications::core::CommunicationIngestionStore;
+use crate::domains::communications::core::CommunicationIngestionPort;
 use crate::platform::communications::ProviderAccount;
 
 use super::super::models::MailSyncSettings;
-use super::super::store::MailSyncStore;
+use super::super::store::MailSyncStatePort;
 
 pub(in crate::workflows::mail_background_sync) struct ProviderSyncContext<'a> {
-    pub(in crate::workflows::mail_background_sync) store: &'a MailSyncStore,
+    pub(in crate::workflows::mail_background_sync) store: &'a MailSyncStatePort,
     pub(in crate::workflows::mail_background_sync) communication_store:
-        &'a CommunicationIngestionStore,
+        &'a CommunicationIngestionPort,
     pub(in crate::workflows::mail_background_sync) account: &'a ProviderAccount,
     pub(in crate::workflows::mail_background_sync) run_id: &'a str,
     pub(in crate::workflows::mail_background_sync) settings: &'a MailSyncSettings,

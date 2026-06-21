@@ -33,3 +33,4 @@ pub use search::{
 };
 pub use states::{LocalMessageState, WorkflowState};
 pub use store::MessageProjectionStore;
+pub use store::MessageProjectionStore as CommunicationMessageProjectionPort;

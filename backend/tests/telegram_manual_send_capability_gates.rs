@@ -49,7 +49,7 @@ async fn removed_account_blocks_manual_send_before_message_audit_and_events() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/messages",
+        "/api/v1/communications/provider-messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -87,7 +87,7 @@ async fn removed_account_blocks_manual_send_before_message_audit_and_events() {
     let send_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/messages/send",
+            "/api/v1/communications/provider-messages/send",
             json!({
                 "command_id": command_id,
                 "account_id": account_id,
@@ -142,7 +142,7 @@ where
     let response = app
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/communications/telegram/messages?account_id={account_id}&provider_chat_id={provider_chat_id}"
+                "/api/v1/communications/provider-messages?account_id={account_id}&provider_chat_id={provider_chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))

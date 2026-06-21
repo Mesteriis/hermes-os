@@ -9,6 +9,7 @@ mod validation;
 
 pub use constants::{GRAPH_NEIGHBORHOOD_EDGE_LIMIT, GRAPH_NEIGHBORHOOD_EVIDENCE_LIMIT};
 pub use errors::GraphStoreError;
+pub use errors::GraphStoreError as GraphProjectionPortError;
 pub use ids::{edge_id, evidence_id, node_id};
 pub use models::{
     GraphCount, GraphEdge, GraphEvidenceSourceKind, GraphEvidenceSummary, GraphNeighborhood,
@@ -16,3 +17,4 @@ pub use models::{
     NewGraphNode, RelationshipType,
 };
 pub use store::GraphStore;
+pub use store::GraphStore as GraphProjectionPort;

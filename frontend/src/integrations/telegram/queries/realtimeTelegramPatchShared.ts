@@ -1,5 +1,5 @@
 import type { TelegramChat, TelegramMessage } from '../types/telegram'
-import { isRecord, stringValue } from '../../../domains/communications/queries/realtimePatchShared'
+import { isRecord, stringValue } from '../../../shared/communications/queries/realtimePatchShared'
 
 export const TELEGRAM_TYPING_TTL_MS = 7000
 

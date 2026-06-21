@@ -2,8 +2,6 @@ use sqlx::Row;
 use testkit::context::TestContext;
 
 use super::*;
-use crate::domains::communications::core::CommunicationProviderAccountStore;
-use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::telegram::client::models::messages::TelegramReactionRequest;
 
 #[tokio::test]
@@ -88,15 +86,12 @@ async fn create_telegram_account(
     external_account_id: &str,
 ) -> String {
     let account_id = format!("telegram-reactions-{suffix}");
-    CommunicationProviderAccountStore::new(pool.clone())
-        .upsert_runtime_account(
-            &account_id,
-            "telegram_user",
-            &format!("Telegram Reactions {suffix}"),
-            external_account_id,
-            serde_json::json!({"runtime": "tdlib_qr_authorized"}),
-        )
-        .await
-        .expect("provider account");
+    crate::test_support::upsert_telegram_runtime_account(
+        pool,
+        &account_id,
+        &format!("Telegram Reactions {suffix}"),
+        external_account_id,
+    )
+    .await;
     account_id
 }

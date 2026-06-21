@@ -4,7 +4,7 @@ import type {
   MailSyncSettings,
   MailSyncSettingsUpdate,
   MailSyncRunResponse
-} from '../../../domains/communications/types/communications'
+} from '../../../shared/mailSync/types'
 
 export async function fetchMailSyncStatus(): Promise<MailSyncStatusListResponse> {
   return ApiClient.instance.get<MailSyncStatusListResponse>(

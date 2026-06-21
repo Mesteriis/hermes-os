@@ -131,7 +131,7 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/messages",
+        "/api/v1/communications/provider-messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": chat_id,
@@ -150,7 +150,7 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
 
     let download_response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/media/download",
+            "/api/v1/communications/provider-media/download",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,

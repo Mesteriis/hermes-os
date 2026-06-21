@@ -5,23 +5,22 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use super::helpers::{
-    AUDIT_ACTOR_ID, publish_telegram_event, telegram_message_snapshot_payload,
-    telegram_runtime_event_bridge_context, telegram_secret_store,
-};
+use super::helpers::{AUDIT_ACTOR_ID, publish_telegram_event, telegram_message_snapshot_payload};
 use crate::app::api_support::{
-    api_audit_log, communication_provider_account_store,
-    communication_provider_secret_binding_store, communication_storage_store, telegram_store,
+    api_audit_log, communication_provider_account_store, communication_storage_store,
+    telegram_store,
 };
-use crate::app::{ApiError, AppState};
+use crate::app::telegram_application::TelegramMediaDownloadApplicationError;
+use crate::app::{ApiError, AppState, telegram_application};
 use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::domains::communications::storage::AttachmentSafetyScanStatus;
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::TelegramCommandKind;
-use crate::integrations::telegram::client::{TelegramError, ensure_telegram_account_active};
+use crate::integrations::telegram::client::{
+    TelegramAttachmentDownloadStateUpdate, TelegramError, ensure_telegram_account_active,
+};
 use crate::integrations::telegram::runtime::{
-    TelegramMediaDownloadContext, TelegramMediaDownloadRequest, TelegramMediaDownloadResponse,
-    TelegramMediaSendType,
+    TelegramMediaDownloadRequest, TelegramMediaDownloadResponse, TelegramMediaSendType,
 };
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
@@ -344,28 +343,11 @@ pub(crate) async fn post_telegram_media_download(
     );
     publish_telegram_event(&state, started).await?;
 
-    let secret_store = telegram_secret_store(&state)?;
-    let provider_account_store = communication_provider_account_store(&state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
     let telegram_store = telegram_store(&state)?;
-    let response = match state
-        .telegram_runtime
-        .download_media(
-            TelegramMediaDownloadContext {
-                provider_account_store: &provider_account_store,
-                provider_secret_binding_store: &provider_secret_binding_store,
-                telegram_store: &telegram_store,
-                secret_store: &secret_store,
-                secret_resolver: &state.vault,
-                config: &state.config,
-                event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
-            },
-            &request,
-        )
-        .await
-    {
+    let response = match telegram_application::download_media(&state, &request).await {
         Ok(response) => response,
-        Err(error) => {
+        Err(TelegramMediaDownloadApplicationError::Setup(error)) => return Err(error),
+        Err(TelegramMediaDownloadApplicationError::Runtime(error)) => {
             let failed = build_event(
                 telegram_event_types::MEDIA_DOWNLOAD_FAILED,
                 &request.account_id,
@@ -392,17 +374,20 @@ pub(crate) async fn post_telegram_media_download(
                 &request.provider_message_id,
             )
             .await?;
+        let provider_attachment_id = request.provider_attachment_id();
+        let content_type = request.content_type();
+        let filename = request.filename();
         telegram_store
-            .update_message_attachment_download_state(
-                &attachment_anchor.message_id,
-                &request.provider_attachment_id(),
-                response.tdlib_file_id,
-                &response.status,
-                response.local_path.as_deref(),
-                response.size_bytes,
-                &request.content_type(),
-                request.filename().as_deref(),
-            )
+            .update_message_attachment_download_state(TelegramAttachmentDownloadStateUpdate {
+                message_id: &attachment_anchor.message_id,
+                provider_attachment_id: &provider_attachment_id,
+                tdlib_file_id: response.tdlib_file_id,
+                download_state: &response.status,
+                local_path: response.local_path.as_deref(),
+                size_bytes: response.size_bytes,
+                content_type: &content_type,
+                filename: filename.as_deref(),
+            })
             .await?;
         let event = build_event(
             telegram_event_types::MEDIA_DOWNLOADED,

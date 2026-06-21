@@ -4,7 +4,9 @@ pub(crate) mod guard;
 pub(crate) mod handlers;
 pub(crate) mod router;
 pub(crate) mod state;
+pub(crate) mod telegram_application;
 pub(crate) mod vault_reconciliation;
+pub(crate) mod workflow_services;
 
 pub(crate) use error::{ApiError, AppError};
 pub use router::{build_router, build_router_with_database, init_tracing, run};

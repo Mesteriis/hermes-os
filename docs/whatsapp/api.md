@@ -15,7 +15,7 @@ ADR-0056. Browser WebSocket clients передают local secret через `he
 Business/read-model routes stay under:
 
 ```text
-/api/v1/communications/whatsapp
+/api/v1/communications/provider-web
 ```
 
 Runtime/setup/account-control routes stay under:
@@ -184,11 +184,11 @@ or message bodies.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/chats?account_id=&kind=&limit=&cursor=` | Projected WhatsApp dialogs ordered by last activity |
-| GET | `/api/v1/communications/whatsapp/chats/{chat_id}` | Read projected chat/detail metadata |
-| POST | `/api/v1/communications/whatsapp/sync/chats` | Sync dialogs through validated runtime |
-| POST | `/api/v1/communications/whatsapp/chats/join` | Queue group/community join command when supported |
-| POST | `/api/v1/communications/whatsapp/chats/{chat_id}/leave` | Queue leave command |
+| GET | `/api/v1/communications/provider-web-conversations?account_id=&kind=&limit=&cursor=` | Projected WhatsApp dialogs ordered by last activity |
+| GET | `/api/v1/communications/provider-web-conversations/{chat_id}` | Read projected chat/detail metadata |
+| POST | `/api/v1/communications/provider-web/sync/chats` | Sync dialogs through validated runtime |
+| POST | `/api/v1/communications/provider-web-conversations/join` | Queue group/community join command when supported |
+| POST | `/api/v1/communications/provider-web-conversations/{chat_id}/leave` | Queue leave command |
 
 Supported dialog kinds:
 
@@ -210,8 +210,8 @@ the state.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/chats/{chat_id}/participants?query=&role=&limit=&cursor=` | Read participant evidence |
-| POST | `/api/v1/communications/whatsapp/chats/{chat_id}/participants/sync` | Refresh participant projection when provider/runtime allows |
+| GET | `/api/v1/communications/provider-web-conversations/{chat_id}/participants?query=&role=&limit=&cursor=` | Read participant evidence |
+| POST | `/api/v1/communications/provider-web-conversations/{chat_id}/participants/sync` | Refresh participant projection when provider/runtime allows |
 
 Participant evidence may include:
 
@@ -231,13 +231,13 @@ identity candidates.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/messages?account_id=&chat_id=&limit=&cursor=` | Read projected messages |
-| GET | `/api/v1/communications/whatsapp/messages/{message_id}` | Read a projected message |
-| GET | `/api/v1/communications/whatsapp/messages/{message_id}/raw` | Read sanitized append-only raw provider evidence |
-| POST | `/api/v1/communications/whatsapp/messages/send` | Queue text send command |
-| POST | `/api/v1/communications/whatsapp/messages/{message_id}/reply` | Queue reply command |
-| POST | `/api/v1/communications/whatsapp/messages/{message_id}/forward` | Queue forward command |
-| POST | `/api/v1/communications/whatsapp/messages/{message_id}/delete` | Queue delete/tombstone command |
+| GET | `/api/v1/communications/provider-web-messages?account_id=&chat_id=&limit=&cursor=` | Read projected messages |
+| GET | `/api/v1/communications/provider-web-messages/{message_id}` | Read a projected message |
+| GET | `/api/v1/communications/provider-web-messages/{message_id}/raw` | Read sanitized append-only raw provider evidence |
+| POST | `/api/v1/communications/provider-web-messages/send` | Queue text send command |
+| POST | `/api/v1/communications/provider-web-messages/{message_id}/reply` | Queue reply command |
+| POST | `/api/v1/communications/provider-web-messages/{message_id}/forward` | Queue forward command |
+| POST | `/api/v1/communications/provider-web-messages/{message_id}/delete` | Queue delete/tombstone command |
 
 Supported message classes:
 
@@ -259,9 +259,9 @@ verified.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/messages/{message_id}/reactions` | Read projected reaction evidence |
-| POST | `/api/v1/communications/whatsapp/messages/{message_id}/reactions` | Queue add/change reaction command |
-| DELETE | `/api/v1/communications/whatsapp/messages/{message_id}/reactions/{reaction_id}` | Queue remove reaction command |
+| GET | `/api/v1/communications/provider-web-messages/{message_id}/reactions` | Read projected reaction evidence |
+| POST | `/api/v1/communications/provider-web-messages/{message_id}/reactions` | Queue add/change reaction command |
+| DELETE | `/api/v1/communications/provider-web-messages/{message_id}/reactions/{reaction_id}` | Queue remove reaction command |
 
 Reaction writes require capability checks, command rows, redacted audit and
 provider-observed reconciliation.
@@ -272,10 +272,10 @@ provider-observed reconciliation.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/media?account_id=&chat_id=&kind=&limit=&cursor=` | Search/list projected media |
-| POST | `/api/v1/communications/whatsapp/media/download` | Queue or start provider media download |
-| POST | `/api/v1/communications/whatsapp/media/upload` | Queue media upload/send command from local Communication attachment/blob |
-| GET | `/api/v1/communications/whatsapp/media/{media_id}` | Read media metadata and local availability |
+| GET | `/api/v1/communications/provider-web-media?account_id=&chat_id=&kind=&limit=&cursor=` | Search/list projected media |
+| POST | `/api/v1/communications/provider-web-media/download` | Queue or start provider media download |
+| POST | `/api/v1/communications/provider-web-media/upload` | Queue media upload/send command from local Communication attachment/blob |
+| GET | `/api/v1/communications/provider-web-media/{media_id}` | Read media metadata and local availability |
 
 Supported media classes:
 
@@ -327,10 +327,10 @@ Attachment metadata must preserve:
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/statuses?account_id=&limit=&cursor=` | Read projected status evidence |
-| GET | `/api/v1/communications/whatsapp/statuses/{status_id}` | Read a status evidence record |
-| POST | `/api/v1/communications/whatsapp/statuses/publish` | Queue status publish command |
-| POST | `/api/v1/communications/whatsapp/statuses/{status_id}/reply` | Queue status reply when supported |
+| GET | `/api/v1/communications/provider-web-statuses?account_id=&limit=&cursor=` | Read projected status evidence |
+| GET | `/api/v1/communications/provider-web-statuses/{status_id}` | Read a status evidence record |
+| POST | `/api/v1/communications/provider-web-statuses/publish` | Queue status publish command |
+| POST | `/api/v1/communications/provider-web-statuses/{status_id}/reply` | Queue status reply when supported |
 
 WhatsApp Status is:
 
@@ -349,9 +349,9 @@ must use the outbox.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/voice?account_id=&chat_id=&limit=&cursor=` | Read voice-note attachment metadata |
-| POST | `/api/v1/communications/whatsapp/voice/download` | Download voice note attachment |
-| POST | `/api/v1/communications/whatsapp/voice/send` | Queue voice send command from local blob |
+| GET | `/api/v1/communications/provider-web-voice?account_id=&chat_id=&limit=&cursor=` | Read voice-note attachment metadata |
+| POST | `/api/v1/communications/provider-web-voice/download` | Download voice note attachment |
+| POST | `/api/v1/communications/provider-web-voice/send` | Queue voice send command from local blob |
 
 Supported:
 
@@ -373,8 +373,8 @@ Not supported in the first version:
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/calls?account_id=&chat_id=&limit=&cursor=` | Read call metadata evidence |
-| GET | `/api/v1/communications/whatsapp/calls/{call_id}` | Read single call evidence record |
+| GET | `/api/v1/communications/provider-web-calls?account_id=&chat_id=&limit=&cursor=` | Read call metadata evidence |
+| GET | `/api/v1/communications/provider-web-calls/{call_id}` | Read single call evidence record |
 
 Supported in first version:
 
@@ -399,10 +399,10 @@ No call control route should be added before a future ADR.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/search/messages?q=&account_id=&chat_id=&limit=&cursor=` | Search local projected messages |
-| GET | `/api/v1/communications/whatsapp/search/media?q=&account_id=&kind=&limit=&cursor=` | Search projected media |
-| GET | `/api/v1/communications/whatsapp/search/participants?q=&account_id=&limit=&cursor=` | Search identity traces and participant evidence |
-| POST | `/api/v1/communications/whatsapp/search/provider` | Provider search attempt when runtime capability is available |
+| GET | `/api/v1/communications/provider-web-search/messages?q=&account_id=&chat_id=&limit=&cursor=` | Search local projected messages |
+| GET | `/api/v1/communications/provider-web-search/media?q=&account_id=&kind=&limit=&cursor=` | Search projected media |
+| GET | `/api/v1/communications/provider-web-search/participants?q=&account_id=&limit=&cursor=` | Search identity traces and participant evidence |
+| POST | `/api/v1/communications/provider-web-search/provider` | Provider search attempt when runtime capability is available |
 
 Provider search results that are not projected locally must be marked as
 evidence candidates until raw source records are preserved.

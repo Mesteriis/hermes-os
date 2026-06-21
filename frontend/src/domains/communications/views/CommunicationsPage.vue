@@ -11,7 +11,7 @@ import CommunicationFolderStrip from '../components/CommunicationFolderStrip.vue
 import OutboxStatusStrip from '../components/OutboxStatusStrip.vue'
 import SavedSearchStrip from '../components/SavedSearchStrip.vue'
 import { communicationSectionTabs } from '../constants/sectionTabs'
-import AccountSetupModal from '../../../integrations/mail/components/AccountSetupModal.vue'
+import AccountSetupModal from '../../../shared/mailSetup/AccountSetupModal.vue'
 import { useCommunicationsPageController } from './useCommunicationsPageController'
 
 const {

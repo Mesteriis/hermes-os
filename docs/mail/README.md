@@ -22,7 +22,7 @@ communication is the domain object.
 The current backend exposes email-related communication routes under:
 
 ```text
-http://127.0.0.1:8080/api/v1/communications/mail/
+http://127.0.0.1:8080/api/v1/integrations/mail/
 ```
 
 Implementation metrics and route details live in the API/status documents. This

@@ -15,6 +15,8 @@ pub struct MailSyncStore {
     pub(in crate::workflows::mail_background_sync::store) pool: PgPool,
 }
 
+pub(super) type MailSyncStatePort = MailSyncStore;
+
 impl MailSyncStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }

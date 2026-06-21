@@ -1,5 +1,5 @@
 import type { TelegramChatMember } from '../types/telegram'
-import { isRecord, storedEventEnvelope, stringValue } from '../../../domains/communications/queries/realtimePatchShared'
+import { isRecord, storedEventEnvelope, stringValue } from '../../../shared/communications/queries/realtimePatchShared'
 
 type TelegramChatMembersPage = {
   items: TelegramChatMember[]

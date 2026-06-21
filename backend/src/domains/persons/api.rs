@@ -9,3 +9,4 @@ pub use errors::PersonProjectionError;
 pub use models::{Person, Persona, PersonaType};
 pub use participants::upsert_persons_from_message_participants;
 pub use store::PersonProjectionStore;
+pub use store::PersonProjectionStore as PersonProjectionPort;

@@ -1,7 +1,7 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::graph::core::GraphStore;
-use crate::domains::projects::core::ProjectStore;
+use crate::domains::graph::core::GraphProjectionPort;
+use crate::domains::projects::core::ProjectCommandPort;
 
 use super::errors::GraphProjectionError;
 use super::models::GraphProjectionReport;
@@ -9,15 +9,15 @@ use super::models::GraphProjectionReport;
 #[derive(Clone)]
 pub struct GraphProjectionService {
     pub(super) pool: PgPool,
-    pub(super) graph: GraphStore,
-    pub(super) projects: ProjectStore,
+    pub(super) graph: GraphProjectionPort,
+    pub(super) projects: ProjectCommandPort,
 }
 
 impl GraphProjectionService {
     pub fn new(pool: PgPool) -> Self {
         Self {
-            graph: GraphStore::new(pool.clone()),
-            projects: ProjectStore::new(pool.clone()),
+            graph: GraphProjectionPort::new(pool.clone()),
+            projects: ProjectCommandPort::new(pool.clone()),
             pool,
         }
     }

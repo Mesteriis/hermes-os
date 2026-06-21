@@ -50,7 +50,7 @@ async fn telegram_basic_group_roster_reconciliation_records_observed_source() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/messages",
+        "/api/v1/communications/provider-messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,

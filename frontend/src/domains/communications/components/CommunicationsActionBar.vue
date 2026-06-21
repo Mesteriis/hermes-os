@@ -7,7 +7,7 @@ import DraftStrip from './DraftStrip.vue'
 import HealthStrip from './HealthStrip.vue'
 import MailCertificateStrip from './MailCertificateStrip.vue'
 import MailResourceOverviewStrip from './MailResourceOverviewStrip.vue'
-import MailSyncSettingsStrip from '../../../integrations/mail/components/MailSyncSettingsStrip.vue'
+import MailSyncSettingsStrip from '../../../shared/mailSync/MailSyncSettingsStrip.vue'
 import type {
   CommunicationSectionId,
   CommunicationDraft,

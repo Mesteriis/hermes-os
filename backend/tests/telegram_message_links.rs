@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
@@ -7,6 +8,10 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::domains::communications::core::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
+use hermes_hub_backend::domains::communications::messages::ProviderChannelMessageStore;
 use hermes_hub_backend::integrations::telegram::client::{
     NewTelegramChat, TelegramChatKind, TelegramStore, TelegramSyncState,
 };
@@ -50,7 +55,7 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
     )
     .await;
 
-    let store = TelegramStore::new(pool.clone());
+    let store = telegram_store(&pool);
     let public_chat = store
         .upsert_chat(&NewTelegramChat {
             account_id: account_id.clone(),
@@ -67,7 +72,7 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
 
     let result = assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/messages",
+        "/api/v1/communications/provider-messages",
         json!({
             "account_id": account_id.clone(),
             "provider_chat_id": chat_id.clone(),
@@ -168,4 +173,13 @@ fn unique_suffix() -> String {
         .expect("system clock")
         .as_nanos();
     format!("{now}")
+}
+
+fn telegram_store(pool: &sqlx::PgPool) -> TelegramStore {
+    TelegramStore::new(
+        pool.clone(),
+        Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
+        Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
+        Arc::new(ProviderChannelMessageStore::new(pool.clone())),
+    )
 }

@@ -254,7 +254,7 @@ impl From<ReviewPromotionError> for ApiError {
                 Self::InvalidReviewQuery("review promotion person target is invalid")
             }
             ReviewPromotionError::ProjectLinkReview(inner) => Self::from(inner),
-            ReviewPromotionError::ProjectStore(_) => {
+            ReviewPromotionError::ProjectCommandPort(_) => {
                 Self::InvalidReviewQuery("review promotion project target is invalid")
             }
             ReviewPromotionError::Organization(_) => {

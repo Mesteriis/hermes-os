@@ -4,9 +4,22 @@ use super::super::errors::TelegramError;
 use super::super::models::TelegramAttachmentAnchor;
 use super::super::rows::provider_channel_message_to_telegram_message;
 use super::super::store::TelegramStore;
-use crate::platform::communications::ProviderMessageProjectionObservationContext;
+use crate::platform::communications::{
+    ProviderAttachmentDownloadStateUpdate, ProviderMessageProjectionObservationContext,
+};
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
+
+pub(crate) struct TelegramAttachmentDownloadStateUpdate<'a> {
+    pub(crate) message_id: &'a str,
+    pub(crate) provider_attachment_id: &'a str,
+    pub(crate) tdlib_file_id: i64,
+    pub(crate) download_state: &'a str,
+    pub(crate) local_path: Option<&'a str>,
+    pub(crate) size_bytes: Option<i64>,
+    pub(crate) content_type: &'a str,
+    pub(crate) filename: Option<&'a str>,
+}
 
 impl TelegramStore {
     pub(crate) async fn attachment_anchor_for_message(
@@ -39,39 +52,33 @@ impl TelegramStore {
         })
     }
 
-    #[allow(clippy::too_many_arguments)]
     pub(crate) async fn update_message_attachment_download_state(
         &self,
-        message_id: &str,
-        provider_attachment_id: &str,
-        tdlib_file_id: i64,
-        download_state: &str,
-        local_path: Option<&str>,
-        size_bytes: Option<i64>,
-        content_type: &str,
-        filename: Option<&str>,
+        update: TelegramAttachmentDownloadStateUpdate<'_>,
     ) -> Result<(), TelegramError> {
-        let updated = self.provider_channel_message_store()
-            .update_attachment_download_state(
-                message_id,
-                provider_attachment_id,
-                tdlib_file_id,
-                download_state,
-                local_path,
-                size_bytes,
-                content_type,
-                filename,
-                Utc::now(),
-                ProviderMessageProjectionObservationContext {
+        let updated = self
+            .provider_channel_message_store()
+            .update_attachment_download_state(ProviderAttachmentDownloadStateUpdate {
+                message_id: update.message_id,
+                provider_attachment_id: update.provider_attachment_id,
+                provider_file_id: update.tdlib_file_id,
+                download_state: update.download_state,
+                local_path: update.local_path,
+                size_bytes: update.size_bytes,
+                content_type: update.content_type,
+                filename: update.filename,
+                observed_at: Utc::now(),
+                context: ProviderMessageProjectionObservationContext {
                     channel_kinds: TELEGRAM_CHANNEL_KINDS,
                     relationship_kind: "telegram_attachment_download_state_update",
                     actor: "telegram.client.messages.attachments.update_message_attachment_download_state",
                 },
-            )
+            })
             .await?;
         if updated.is_none() {
             return Err(TelegramError::InvalidRequest(format!(
-                "Telegram message `{message_id}` was not found"
+                "Telegram message `{}` was not found",
+                update.message_id
             )));
         }
         let _ = updated.map(provider_channel_message_to_telegram_message);

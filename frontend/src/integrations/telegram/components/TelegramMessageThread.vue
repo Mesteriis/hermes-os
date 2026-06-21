@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useI18n } from '../../../platform/i18n'
-import type { MessageAnalyzeResponse } from '../../../domains/communications/types/communications'
+import type { MessageAnalyzeResponse } from '../../../shared/communications/types/communications'
 import type {
   TelegramAttachmentHint,
   TelegramCapabilitiesResponse,

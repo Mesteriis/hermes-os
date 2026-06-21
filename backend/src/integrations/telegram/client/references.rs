@@ -87,9 +87,10 @@ pub async fn insert_reply_ref(
 }
 
 pub async fn reply_chain(
-    pool: &PgPool,
+    store: &TelegramStore,
     message_id: &str,
 ) -> Result<TelegramReplyChainResponse, TelegramError> {
+    let pool = store.pool();
     let mut replies = collect_reply_descendants(pool, message_id).await?;
     let mut reply_to = collect_reply_ancestors(pool, message_id).await?;
 
@@ -98,7 +99,7 @@ pub async fn reply_chain(
         summary_ids.push(item.source_message_id.as_str());
         summary_ids.push(item.target_message_id.as_str());
     }
-    let summaries = reference_message_summaries(pool, summary_ids).await?;
+    let summaries = reference_message_summaries(store, summary_ids).await?;
     for item in &mut replies {
         item.source_message_summary = summaries.get(&item.source_message_id).cloned();
         item.target_message_summary = summaries.get(&item.target_message_id).cloned();
@@ -166,13 +167,13 @@ pub async fn insert_forward_ref(
 }
 
 pub async fn forward_chain(
-    pool: &PgPool,
+    store: &TelegramStore,
     message_id: &str,
 ) -> Result<TelegramForwardChainResponse, TelegramError> {
-    let mut forwards = collect_forward_ancestors(pool, message_id).await?;
+    let mut forwards = collect_forward_ancestors(store, message_id).await?;
 
     let summaries = reference_message_summaries(
-        pool,
+        store,
         forwards
             .iter()
             .map(|item| item.source_message_id.as_str())
@@ -282,9 +283,10 @@ async fn reply_refs_by_source(
 }
 
 async fn collect_forward_ancestors(
-    pool: &PgPool,
+    store: &TelegramStore,
     message_id: &str,
 ) -> Result<Vec<TelegramForwardRef>, TelegramError> {
+    let pool = store.pool();
     let mut refs = Vec::new();
     let mut visited = HashSet::new();
     let mut queue = VecDeque::new();
@@ -296,7 +298,7 @@ async fn collect_forward_ancestors(
             continue;
         }
         for mut item in forward_refs_by_source(pool, &current_id).await? {
-            let origin_message_id = local_forward_origin_message_id(pool, &item).await?;
+            let origin_message_id = local_forward_origin_message_id(store, &item).await?;
             if let Some(next_id) = origin_message_id {
                 if !visited.insert(next_id.clone()) {
                     continue;
@@ -336,13 +338,13 @@ async fn forward_refs_by_source(
 }
 
 async fn local_forward_origin_message_id(
-    pool: &PgPool,
+    store: &TelegramStore,
     item: &TelegramForwardRef,
 ) -> Result<Option<String>, TelegramError> {
     let Some(origin_provider_message_id) = item.forward_origin_message_id.as_deref() else {
         return Ok(None);
     };
-    Ok(TelegramStore::new(pool.clone())
+    Ok(store
         .provider_channel_message_store()
         .message_id_by_provider_record_id(
             &item.account_id,
@@ -353,14 +355,14 @@ async fn local_forward_origin_message_id(
 }
 
 async fn reference_message_summaries(
-    pool: &PgPool,
+    store: &TelegramStore,
     message_ids: Vec<&str>,
 ) -> Result<HashMap<String, TelegramMessageReferenceSummary>, TelegramError> {
     if message_ids.is_empty() {
         return Ok(HashMap::new());
     }
     let message_ids: Vec<String> = message_ids.into_iter().map(ToOwned::to_owned).collect();
-    let summaries = TelegramStore::new(pool.clone())
+    let summaries = store
         .provider_channel_message_store()
         .reference_summaries(&message_ids)
         .await?;

@@ -45,6 +45,8 @@ pub struct Task {
     pub updated_at: DateTime<Utc>,
 }
 
+pub type TaskCommandPort = TaskStore;
+
 #[derive(Clone)]
 pub struct TaskStore {
     pool: PgPool,

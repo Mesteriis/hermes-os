@@ -369,7 +369,7 @@ Raw TDLib JSON недостаточно для устойчивого UI и prov
 ```text
 TDLib message raw metadata
   -> UI attachment hint from message metadata
-  -> POST /api/v1/communications/telegram/media/download
+  -> POST /api/v1/communications/provider-media/download
   -> TDLib downloadFile
   -> local blob write
   -> communication_attachments row

@@ -1,33 +1,47 @@
+use std::sync::Arc;
+
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+use crate::platform::communications::{
+    ProviderAccountCommandPort, ProviderChannelMessageCommandPort, ProviderSecretBindingCommandPort,
 };
-use crate::domains::communications::messages::ProviderChannelMessageStore;
 
 #[derive(Clone)]
 pub struct TelegramStore {
     pub(super) pool: PgPool,
+    provider_account_store: Arc<dyn ProviderAccountCommandPort>,
+    provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
+    provider_channel_message_store: Arc<dyn ProviderChannelMessageCommandPort>,
 }
 
 impl TelegramStore {
-    pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+    pub fn new(
+        pool: PgPool,
+        provider_account_store: Arc<dyn ProviderAccountCommandPort>,
+        provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
+        provider_channel_message_store: Arc<dyn ProviderChannelMessageCommandPort>,
+    ) -> Self {
+        Self {
+            pool,
+            provider_account_store,
+            provider_secret_binding_store,
+            provider_channel_message_store,
+        }
     }
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
 
-    pub(super) fn provider_account_store(&self) -> CommunicationProviderAccountStore {
-        CommunicationProviderAccountStore::new(self.pool.clone())
+    pub(super) fn provider_account_store(&self) -> &dyn ProviderAccountCommandPort {
+        self.provider_account_store.as_ref()
     }
 
-    pub(super) fn provider_secret_binding_store(&self) -> CommunicationProviderSecretBindingStore {
-        CommunicationProviderSecretBindingStore::new(self.pool.clone())
+    pub(super) fn provider_secret_binding_store(&self) -> &dyn ProviderSecretBindingCommandPort {
+        self.provider_secret_binding_store.as_ref()
     }
 
-    pub(super) fn provider_channel_message_store(&self) -> ProviderChannelMessageStore {
-        ProviderChannelMessageStore::new(self.pool.clone())
+    pub(super) fn provider_channel_message_store(&self) -> &dyn ProviderChannelMessageCommandPort {
+        self.provider_channel_message_store.as_ref()
     }
 }

@@ -81,7 +81,7 @@ impl From<ProviderSyncError> for SanitizedSyncFailure {
                     message: "Mail sync communication store failed".to_owned(),
                 }
             }
-            ProviderSyncError::SyncStore(error) => {
+            ProviderSyncError::SyncState(error) => {
                 tracing::error!(error = %error, "mail sync status store failed");
                 Self {
                     code: "sync_store_error".to_owned(),

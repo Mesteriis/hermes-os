@@ -89,6 +89,13 @@ use crate::domains::persons::identity::{
     PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
 };
 
+use crate::app::workflow_services::email_intelligence::{
+    EmailIntelligenceError, EmailIntelligenceService, EmailSummaryContract,
+};
+use crate::app::workflow_services::mail_background_sync::{
+    DEFAULT_MAIL_SYNC_BLOB_ROOT, MailBackgroundSyncService, MailSyncError, MailSyncRunResponse,
+    MailSyncSettings, MailSyncSettingsUpdate, MailSyncStatus, MailSyncStore, MailSyncTrigger,
+};
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -173,13 +180,6 @@ use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
 use crate::vault::{EntropyEvent, HostVaultError, VaultMode};
-use crate::workflows::email_intelligence::{
-    EmailIntelligenceError, EmailIntelligenceService, EmailSummaryContract,
-};
-use crate::workflows::mail_background_sync::{
-    DEFAULT_MAIL_SYNC_BLOB_ROOT, MailBackgroundSyncService, MailSyncError, MailSyncRunResponse,
-    MailSyncSettings, MailSyncSettingsUpdate, MailSyncStatus, MailSyncStore, MailSyncTrigger,
-};
 
 use crate::app::api_support::*;
 use crate::app::{ApiError, AppState};

@@ -1,11 +1,11 @@
 use crate::domains::communications::core::StoredRawCommunicationRecord;
 use crate::domains::communications::ingestion::analyze_ingested_message;
 use crate::domains::communications::messages::{
-    MessageProjectionStore, ProjectedMessage, parse_raw_email_message_from_blob,
+    CommunicationMessageProjectionPort, ProjectedMessage, parse_raw_email_message_from_blob,
     project_parsed_raw_email_message,
 };
 use crate::domains::communications::storage::{
-    AttachmentSafetyScanner, CommunicationStorageStore, LocalCommunicationBlobStore,
+    AttachmentSafetyScanner, CommunicationBlobMetadataPort, LocalCommunicationBlobPort,
 };
 
 use super::attachments::project_attachments;
@@ -20,9 +20,9 @@ pub(crate) struct RawRecordProjectionReport {
 }
 
 pub(crate) async fn project_raw_records(
-    message_store: &MessageProjectionStore,
-    mail_store: &CommunicationStorageStore,
-    blob_store: &LocalCommunicationBlobStore,
+    message_store: &CommunicationMessageProjectionPort,
+    mail_store: &CommunicationBlobMetadataPort,
+    blob_store: &LocalCommunicationBlobPort,
     raw_records: &[StoredRawCommunicationRecord],
     attachment_scanner: &impl AttachmentSafetyScanner,
 ) -> Result<RawRecordProjectionReport, EmailSyncPipelineError> {

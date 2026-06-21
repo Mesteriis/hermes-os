@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::messages::ProjectedMessage;
-use crate::domains::persons::api::PersonProjectionStore;
+use crate::domains::persons::api::PersonProjectionPort;
 
 use super::errors::EmailSyncPipelineError;
 use super::organizations::project_email_participant_organization;
@@ -22,7 +22,7 @@ pub(crate) struct MessageKnowledgeReport {
 
 pub(crate) async fn project_message_knowledge(
     pool: &PgPool,
-    person_store: &PersonProjectionStore,
+    person_store: &PersonProjectionPort,
     messages: &[ProjectedMessage],
 ) -> Result<MessageKnowledgeReport, EmailSyncPipelineError> {
     let mut report = MessageKnowledgeReport::default();

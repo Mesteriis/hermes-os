@@ -16,7 +16,9 @@ pub use self::consumers::{
     EventDeadLetter, EventDeadLetterReviewState,
 };
 pub use self::cursors::ProjectionCursorStore;
+pub use self::errors::EventStoreError as EventLogPortError;
 pub use self::errors::{EventEnvelopeError, EventStoreError};
 pub use self::migrations::{MigrationSummary, expected_migration_summary, run_migrations};
 pub use self::models::{EventEnvelope, NewEventEnvelope, StoredEventEnvelope};
 pub use self::store::EventStore;
+pub use self::store::EventStore as EventLogPort;

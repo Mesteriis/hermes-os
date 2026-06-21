@@ -4,8 +4,8 @@ use chrono::Utc;
 use serde_json::Value;
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::CommunicationIngestionStore;
-use crate::domains::communications::core::CommunicationProviderAccountStore;
+use crate::domains::communications::core::CommunicationIngestionPort;
+use crate::domains::communications::core::CommunicationProviderAccountPort;
 use crate::platform::communications::{SharedEmailProviderSyncPort, plan_email_sync};
 use crate::vault::HostVault;
 
@@ -15,7 +15,7 @@ use super::models::{
     MailSyncTrigger, ProgressMode, SanitizedSyncFailure,
 };
 use super::provider::ProviderSyncContext;
-use super::store::MailSyncStore;
+use super::store::MailSyncStatePort;
 use super::validation::{next_run_at, require_unlocked_vault};
 
 #[derive(Clone)]
@@ -42,7 +42,7 @@ impl MailBackgroundSyncService {
     }
 
     pub async fn run_due_accounts(&self) -> Result<Vec<MailSyncRunResponse>, MailSyncError> {
-        let store = MailSyncStore::new(self.pool.clone());
+        let store = MailSyncStatePort::new(self.pool.clone());
         let accounts = store.due_accounts(Utc::now(), 20).await?;
         let mut responses = Vec::new();
         for account in accounts {
@@ -59,9 +59,9 @@ impl MailBackgroundSyncService {
         account_id: &str,
         trigger: MailSyncTrigger,
     ) -> Result<MailSyncRunResponse, MailSyncError> {
-        let store = MailSyncStore::new(self.pool.clone());
-        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let account = CommunicationProviderAccountStore::new(self.pool.clone())
+        let store = MailSyncStatePort::new(self.pool.clone());
+        let communication_store = CommunicationIngestionPort::new(self.pool.clone());
+        let account = CommunicationProviderAccountPort::new(self.pool.clone())
             .get(account_id)
             .await?
             .ok_or(MailSyncError::AccountNotFound)?;
@@ -200,8 +200,8 @@ impl MailBackgroundSyncService {
         &self,
         account_id: &str,
     ) -> Result<MailSyncRunResponse, MailSyncError> {
-        let communication_store = CommunicationIngestionStore::new(self.pool.clone());
-        let account = CommunicationProviderAccountStore::new(self.pool.clone())
+        let communication_store = CommunicationIngestionPort::new(self.pool.clone());
+        let account = CommunicationProviderAccountPort::new(self.pool.clone())
             .get(account_id)
             .await?
             .ok_or(MailSyncError::AccountNotFound)?;
@@ -222,7 +222,7 @@ impl MailBackgroundSyncService {
         checkpoint_before: Option<Value>,
         failure: SanitizedSyncFailure,
     ) -> Result<MailSyncRunResponse, MailSyncError> {
-        let store = MailSyncStore::new(self.pool.clone());
+        let store = MailSyncStatePort::new(self.pool.clone());
         let run = match store
             .start_run(account_id, trigger, settings, checkpoint_before)
             .await

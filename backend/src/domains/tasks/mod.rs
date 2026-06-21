@@ -5,6 +5,7 @@ mod command_service;
 pub mod core;
 pub mod health;
 pub mod intelligence;
+pub mod ports;
 pub mod rules;
 pub mod service;
 pub mod sync;

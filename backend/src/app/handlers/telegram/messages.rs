@@ -5,15 +5,16 @@ use serde_json::json;
 
 use super::helpers::{
     AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
-    telegram_message_snapshot_payload, telegram_runtime_event_bridge_context,
-    telegram_secret_store,
+    telegram_message_snapshot_payload,
 };
 use crate::app::api_support::{
-    TelegramListQuery, TelegramMessageListResponse, api_audit_log,
-    communication_provider_account_store, communication_provider_secret_binding_store,
-    telegram_store,
+    TelegramListQuery, TelegramMessageListResponse, api_audit_log, telegram_store,
 };
-use crate::app::{ApiError, AppState};
+use crate::app::workflow_services::provider_communication_projection::record_and_project_telegram_message;
+use crate::app::workflow_services::review_inbox::{
+    refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
+};
+use crate::app::{ApiError, AppState, telegram_application};
 use crate::integrations::telegram::client::NewTelegramMessage;
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::client::lifecycle;
@@ -23,14 +24,9 @@ use crate::integrations::telegram::client::models::messages::{
     TelegramMessageTombstoneListResponse, TelegramMessageVersionListResponse, TelegramPinRequest,
     TelegramReplyRequest, TelegramRestoreVisibilityRequest,
 };
-use crate::integrations::telegram::runtime::TelegramRuntimeOperationContext;
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
-use crate::workflows::provider_communication_projection::record_and_project_telegram_message;
-use crate::workflows::review_inbox::{
-    refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
-};
 
 mod mark_read;
 mod reactions;
@@ -164,23 +160,7 @@ pub(crate) async fn post_telegram_manual_send(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.send_text")
         .await?;
-    let provider_account_store = communication_provider_account_store(&state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
-    let telegram_projection_store = telegram_store(&state)?;
-    let secret_store = telegram_secret_store(&state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &telegram_projection_store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
-    };
-    let mut response = state
-        .telegram_runtime
-        .send_manual_message(&context, &request)
-        .await?;
+    let mut response = telegram_application::send_manual_message(&state, &request).await?;
     project_manual_send_response(&state, &mut response).await?;
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_message_send(
@@ -236,23 +216,7 @@ pub(crate) async fn post_telegram_message_reply(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.reply")
         .await?;
-    let provider_account_store = communication_provider_account_store(&state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
-    let telegram_projection_store = telegram_store(&state)?;
-    let secret_store = telegram_secret_store(&state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &telegram_projection_store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
-    };
-    let mut response = state
-        .telegram_runtime
-        .send_reply_message(&context, &request)
-        .await?;
+    let mut response = telegram_application::send_reply_message(&state, &request).await?;
     project_manual_send_response(&state, &mut response).await?;
 
     api_audit_log(&state)?
@@ -310,23 +274,7 @@ pub(crate) async fn post_telegram_message_forward(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.forward")
         .await?;
-    let provider_account_store = communication_provider_account_store(&state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
-    let telegram_projection_store = telegram_store(&state)?;
-    let secret_store = telegram_secret_store(&state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &telegram_projection_store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
-    };
-    let mut response = state
-        .telegram_runtime
-        .send_forward_message(&context, &request)
-        .await?;
+    let mut response = telegram_application::send_forward_message(&state, &request).await?;
     project_manual_send_response(&state, &mut response).await?;
 
     api_audit_log(&state)?
@@ -428,8 +376,7 @@ pub(crate) async fn post_telegram_message_edit(
     request.validate()?;
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.edit").await?;
     let store = telegram_store(&state)?;
-    let response =
-        lifecycle::record_edit(store.pool(), &request, &message_id, AUDIT_ACTOR_ID).await?;
+    let response = lifecycle::record_edit(&store, &request, &message_id, AUDIT_ACTOR_ID).await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_message_edit(
@@ -609,7 +556,7 @@ pub(crate) async fn post_telegram_message_pin(
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.pin").await?;
     let store = telegram_store(&state)?;
     let response =
-        lifecycle::record_pin_state(store.pool(), &request, &message_id, AUDIT_ACTOR_ID).await?;
+        lifecycle::record_pin_state(&store, &request, &message_id, AUDIT_ACTOR_ID).await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_message_pin(
@@ -685,22 +632,22 @@ use crate::integrations::telegram::client::models::messages::{
     TelegramForwardChainResponse, TelegramReplyChainResponse,
 };
 
-/// GET /api/v1/communications/telegram/messages/{message_id}/reply-chain
+/// GET /api/v1/communications/provider-messages/{message_id}/reply-chain
 pub(crate) async fn get_telegram_reply_chain(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
 ) -> Result<Json<TelegramReplyChainResponse>, ApiError> {
     let store = telegram_store(&state)?;
-    let chain = lifecycle::reply_chain(store.pool(), &message_id).await?;
+    let chain = lifecycle::reply_chain(&store, &message_id).await?;
     Ok(Json(chain))
 }
 
-/// GET /api/v1/communications/telegram/messages/{message_id}/forward-chain
+/// GET /api/v1/communications/provider-messages/{message_id}/forward-chain
 pub(crate) async fn get_telegram_forward_chain(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
 ) -> Result<Json<TelegramForwardChainResponse>, ApiError> {
     let store = telegram_store(&state)?;
-    let chain = lifecycle::forward_chain(store.pool(), &message_id).await?;
+    let chain = lifecycle::forward_chain(&store, &message_id).await?;
     Ok(Json(chain))
 }

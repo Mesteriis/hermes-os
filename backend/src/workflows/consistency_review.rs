@@ -5,16 +5,16 @@ use sqlx::{Postgres, Transaction};
 use thiserror::Error;
 
 use crate::domains::review::{
-    NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxStore, ReviewItemKind,
+    NewReviewItem, NewReviewItemEvidence, ReviewInboxError, ReviewInboxPort, ReviewItemKind,
     ReviewItemStatus,
 };
 use crate::engines::consistency::evidence::link_consistency_entity_in_transaction;
 use crate::engines::consistency::{
-    ConsistencyError, ContradictionObservation, ContradictionObservationStore,
+    ConsistencyError, ContradictionObservation, ContradictionObservationPort,
     ContradictionReviewState,
 };
 use crate::platform::observations::{
-    NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
+    NewObservation, ObservationOriginKind, ObservationPort, ObservationPortError,
 };
 
 #[derive(Clone)]
@@ -33,7 +33,7 @@ impl ContradictionReviewService {
         review_state: ContradictionReviewState,
         resolution: Option<&str>,
     ) -> Result<ContradictionObservation, ContradictionReviewServiceError> {
-        let review_observation = ObservationStore::new(self.pool.clone())
+        let review_observation = ObservationPort::new(self.pool.clone())
             .capture(
                 &NewObservation::new(
                     "REVIEW_TRANSITION",
@@ -55,7 +55,7 @@ impl ContradictionReviewService {
             )
             .await?;
 
-        let observation = ContradictionObservationStore::new(self.pool.clone())
+        let observation = ContradictionObservationPort::new(self.pool.clone())
             .set_review_state_with_observation(
                 observation_id,
                 review_state,
@@ -118,7 +118,7 @@ async fn ensure_contradiction_review_item_in_transaction(
             "mirrored_from": "contradictions",
             "contradiction_observation_id": contradiction.observation_id,
         }));
-    let _ = ReviewInboxStore::create_with_evidence_in_transaction(transaction, &item, &[evidence])
+    let _ = ReviewInboxPort::create_with_evidence_in_transaction(transaction, &item, &[evidence])
         .await?;
     Ok(())
 }
@@ -126,8 +126,8 @@ async fn ensure_contradiction_review_item_in_transaction(
 async fn capture_evidence_observation_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     contradiction: &ContradictionObservation,
-) -> Result<crate::platform::observations::Observation, ObservationStoreError> {
-    ObservationStore::capture_in_transaction(
+) -> Result<crate::platform::observations::Observation, ObservationPortError> {
+    ObservationPort::capture_in_transaction(
         transaction,
         &NewObservation::new(
             "CONTRADICTION_OBSERVATION",
@@ -157,7 +157,7 @@ async fn sync_contradiction_review_state_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     contradiction: &ContradictionObservation,
 ) -> Result<(), ContradictionReviewWorkflowError> {
-    let review_item = ReviewInboxStore::find_latest_by_kind_and_metadata_in_transaction(
+    let review_item = ReviewInboxPort::find_latest_by_kind_and_metadata_in_transaction(
         transaction,
         ReviewItemKind::ContradictionCandidate,
         &json!({
@@ -173,7 +173,7 @@ async fn sync_contradiction_review_state_in_transaction(
         ContradictionReviewState::UserRejected => ReviewItemStatus::Dismissed,
     };
 
-    let _ = ReviewInboxStore::transition_status_in_transaction(
+    let _ = ReviewInboxPort::transition_status_in_transaction(
         transaction,
         &review_item.review_item_id,
         status,
@@ -202,7 +202,7 @@ pub enum ContradictionReviewWorkflowError {
     ReviewInbox(#[from] ReviewInboxError),
 
     #[error(transparent)]
-    Observation(#[from] ObservationStoreError),
+    Observation(#[from] ObservationPortError),
 }
 
 #[derive(Debug, Error)]
@@ -211,7 +211,7 @@ pub enum ContradictionReviewServiceError {
     Consistency(#[from] ConsistencyError),
 
     #[error(transparent)]
-    Observation(#[from] ObservationStoreError),
+    Observation(#[from] ObservationPortError),
 
     #[error(transparent)]
     ReviewWorkflow(#[from] ContradictionReviewWorkflowError),

@@ -235,7 +235,10 @@ pub(super) fn mail_sync_service(
             crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort::new(
                 pool.clone(),
                 state.vault.clone(),
-                crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                std::sync::Arc::new(
+                    crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(pool.clone()),
+                ),
+                crate::app::workflow_services::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
             ),
         ),
     ))
@@ -262,8 +265,8 @@ pub(super) fn mail_sync_api_error(error: MailSyncError) -> ApiError {
             ApiError::InvalidCommunicationQuery("mail sync operation failed")
         }
         MailSyncError::EventEnvelope(error) => ApiError::InvalidEnvelope(error),
-        MailSyncError::EventStore(error) => ApiError::Store(error),
-        MailSyncError::ObservationStore(error) => {
+        MailSyncError::EventLogPort(error) => ApiError::Store(error),
+        MailSyncError::ObservationPort(error) => {
             tracing::error!(error = %error, "mail sync observation store failed");
             ApiError::InvalidCommunicationQuery("mail sync operation failed")
         }

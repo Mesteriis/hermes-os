@@ -5,5 +5,7 @@ pub mod domains;
 pub mod engines;
 pub mod integrations;
 pub mod platform;
+#[cfg(test)]
+pub(crate) mod test_support;
 pub mod vault;
 pub mod workflows;

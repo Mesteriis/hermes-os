@@ -1,8 +1,8 @@
 use serde_json::json;
 
-use crate::domains::communications::core::{CommunicationIngestionStore, NewIngestionCheckpoint};
+use crate::domains::communications::core::{CommunicationIngestionPort, NewIngestionCheckpoint};
 use crate::domains::communications::storage::{
-    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationBlob,
+    CommunicationBlobMetadataPort, LocalCommunicationBlobPort, NewCommunicationBlob,
 };
 use crate::platform::communications::{
     EmailSyncBatch, EmailSyncBlobImportReport, EmailSyncImportReport, NewRawCommunicationRecord,
@@ -13,7 +13,7 @@ use super::ids::{EMAIL_MESSAGE_RECORD_KIND, raw_record_id};
 use super::raw_payload::{payload_with_raw_blob_reference, raw_message_bytes};
 
 pub async fn record_email_sync_batch(
-    store: &CommunicationIngestionStore,
+    store: &CommunicationIngestionPort,
     account_id: &str,
     import_batch_id: &str,
     batch: &EmailSyncBatch,
@@ -60,9 +60,9 @@ pub async fn record_email_sync_batch(
 }
 
 pub async fn record_email_sync_batch_with_mail_blobs(
-    store: &CommunicationIngestionStore,
-    mail_store: &CommunicationStorageStore,
-    blob_store: &LocalCommunicationBlobStore,
+    store: &CommunicationIngestionPort,
+    mail_store: &CommunicationBlobMetadataPort,
+    blob_store: &LocalCommunicationBlobPort,
     account_id: &str,
     import_batch_id: &str,
     batch: &EmailSyncBatch,
@@ -124,7 +124,7 @@ pub async fn record_email_sync_batch_with_mail_blobs(
 }
 
 async fn save_checkpoint_if_present(
-    store: &CommunicationIngestionStore,
+    store: &CommunicationIngestionPort,
     account_id: &str,
     batch: &EmailSyncBatch,
 ) -> Result<bool, EmailSyncRecordError> {

@@ -14,3 +14,4 @@ pub use models::{
     PersonIdentityReviewCommand, PersonIdentityReviewCommandResult, PersonIdentityReviewState,
 };
 pub use store::PersonIdentityStore;
+pub use store::PersonIdentityStore as PersonIdentityPort;

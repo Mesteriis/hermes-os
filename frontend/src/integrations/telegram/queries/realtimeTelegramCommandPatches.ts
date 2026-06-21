@@ -1,4 +1,4 @@
-import { isRecord, numberValue, stringValue } from '../../../domains/communications/queries/realtimePatchShared'
+import { isRecord, numberValue, stringValue } from '../../../shared/communications/queries/realtimePatchShared'
 import type { TelegramProviderWriteCommand } from '../types/telegram'
 import type { TelegramEventPayload } from './realtimeTelegramPatchShared'
 

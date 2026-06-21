@@ -2,17 +2,9 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 
-use crate::app::api_support::{
-    communication_provider_account_store, communication_provider_secret_binding_store,
-    telegram_store,
-};
-use crate::app::{ApiError, AppState};
+use crate::app::api_support::telegram_store;
+use crate::app::{ApiError, AppState, telegram_application};
 use crate::integrations::telegram::client::models::TelegramChat;
-use crate::integrations::telegram::runtime::{
-    TelegramProviderSearchRequest, TelegramRuntimeOperationContext,
-};
-
-use super::helpers::{telegram_runtime_event_bridge_context, telegram_secret_store};
 
 #[derive(Deserialize)]
 pub(crate) struct TelegramMessageSearchQuery {
@@ -90,7 +82,7 @@ pub(crate) struct TelegramMediaSearchResponse {
     pub(crate) items: Vec<TelegramMediaItem>,
 }
 
-/// GET /api/v1/communications/telegram/search/messages?q=&account_id=&provider_chat_id=&limit=
+/// GET /api/v1/communications/provider-search/messages?q=&account_id=&provider_chat_id=&limit=
 pub(crate) async fn search_telegram_messages(
     State(state): State<AppState>,
     Query(query): Query<TelegramMessageSearchQuery>,
@@ -107,38 +99,24 @@ pub(crate) async fn search_telegram_messages(
         ));
     }
 
-    if let Some(account_id) = &query.account_id {
-        let provider_account_store = communication_provider_account_store(&state)?;
-        let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
-        let secret_store = telegram_secret_store(&state)?;
-        let context = TelegramRuntimeOperationContext {
-            provider_account_store: &provider_account_store,
-            provider_secret_binding_store: &provider_secret_binding_store,
-            telegram_store: &store,
-            secret_store: &secret_store,
-            secret_resolver: &state.vault,
-            config: &state.config,
-            event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
+    if let Some(account_id) = &query.account_id
+        && let Err(error) = telegram_application::refresh_provider_search(
+            &state,
+            account_id.clone(),
+            query.provider_chat_id.clone(),
+            search_q.clone(),
+            limit as i32,
+        )
+        .await
+    {
+        let ApiError::Telegram(error) = error else {
+            return Err(error);
         };
-        if let Err(error) = state
-            .telegram_runtime
-            .search_provider_messages(
-                &context,
-                &TelegramProviderSearchRequest {
-                    account_id: account_id.clone(),
-                    provider_chat_id: query.provider_chat_id.clone(),
-                    query: search_q.clone(),
-                    limit: limit as i32,
-                },
-            )
-            .await
-        {
-            tracing::debug!(
-                error = %error,
-                account_id = %account_id,
-                "search_telegram_messages: TDLib provider search failed, serving DB projection"
-            );
-        }
+        tracing::debug!(
+            error = %error,
+            account_id = %account_id,
+            "search_telegram_messages: TDLib provider search failed, serving DB projection"
+        );
     }
 
     let items = store
@@ -157,7 +135,7 @@ pub(crate) async fn search_telegram_messages(
     }))
 }
 
-/// POST /api/v1/communications/telegram/search/provider
+/// POST /api/v1/communications/provider-search/provider
 pub(crate) async fn search_telegram_messages_provider(
     State(state): State<AppState>,
     Json(payload): Json<TelegramProviderSearchCommand>,
@@ -183,31 +161,18 @@ pub(crate) async fn search_telegram_messages_provider(
         ));
     }
 
-    let provider_account_store = communication_provider_account_store(&state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
-    let secret_store = telegram_secret_store(&state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
-    };
-    if let Err(error) = state
-        .telegram_runtime
-        .search_provider_messages(
-            &context,
-            &TelegramProviderSearchRequest {
-                account_id: account_id.to_owned(),
-                provider_chat_id: payload.provider_chat_id.clone(),
-                query: search_q.clone(),
-                limit: limit as i32,
-            },
-        )
-        .await
+    if let Err(error) = telegram_application::refresh_provider_search(
+        &state,
+        account_id.to_owned(),
+        payload.provider_chat_id.clone(),
+        search_q.clone(),
+        limit as i32,
+    )
+    .await
     {
+        let ApiError::Telegram(error) = error else {
+            return Err(error);
+        };
         tracing::debug!(
             error = %error,
             account_id = %account_id,
@@ -231,7 +196,7 @@ pub(crate) async fn search_telegram_messages_provider(
     }))
 }
 
-/// GET /api/v1/communications/telegram/chats/search?q=&account_id=&limit=
+/// GET /api/v1/communications/provider-conversations/search?q=&account_id=&limit=
 pub(crate) async fn search_telegram_chats(
     State(state): State<AppState>,
     Query(query): Query<TelegramChatSearchQuery>,
@@ -259,7 +224,7 @@ pub(crate) async fn search_telegram_chats(
     }))
 }
 
-/// GET /api/v1/communications/telegram/chats/{telegram_chat_id}/pinned-messages?limit=
+/// GET /api/v1/communications/provider-conversations/{telegram_chat_id}/pinned-messages?limit=
 pub(crate) async fn get_telegram_pinned_messages(
     State(state): State<AppState>,
     Path(telegram_chat_id): Path<String>,
@@ -275,7 +240,7 @@ pub(crate) async fn get_telegram_pinned_messages(
     }))
 }
 
-/// GET /api/v1/communications/telegram/search/media?account_id=&provider_chat_id=&kind=&limit=
+/// GET /api/v1/communications/provider-search/media?account_id=&provider_chat_id=&kind=&limit=
 pub(crate) async fn search_telegram_media(
     State(state): State<AppState>,
     Query(query): Query<TelegramMediaSearchQuery>,
@@ -296,31 +261,18 @@ pub(crate) async fn search_telegram_media(
     if let (Some(account_id), Some(search_q)) = (query.account_id.as_deref(), search_q) {
         provider_search_attempted = true;
         source = "provider_refresh".to_owned();
-        let provider_account_store = communication_provider_account_store(&state)?;
-        let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
-        let secret_store = telegram_secret_store(&state)?;
-        let context = TelegramRuntimeOperationContext {
-            provider_account_store: &provider_account_store,
-            provider_secret_binding_store: &provider_secret_binding_store,
-            telegram_store: &store,
-            secret_store: &secret_store,
-            secret_resolver: &state.vault,
-            config: &state.config,
-            event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
-        };
-        if let Err(error) = state
-            .telegram_runtime
-            .search_provider_messages(
-                &context,
-                &TelegramProviderSearchRequest {
-                    account_id: account_id.to_owned(),
-                    provider_chat_id: query.provider_chat_id.clone(),
-                    query: search_q.to_owned(),
-                    limit: limit as i32,
-                },
-            )
-            .await
+        if let Err(error) = telegram_application::refresh_provider_search(
+            &state,
+            account_id.to_owned(),
+            query.provider_chat_id.clone(),
+            search_q.to_owned(),
+            limit as i32,
+        )
+        .await
         {
+            let ApiError::Telegram(error) = error else {
+                return Err(error);
+            };
             provider_search_error = Some(error.to_string());
             tracing::debug!(
                 error = %error,

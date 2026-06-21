@@ -44,7 +44,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/messages",
+        "/api/v1/communications/provider-messages",
         json!({
             "account_id": "acct-1",
             "provider_chat_id": "provider-chat-1",
@@ -64,7 +64,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
     let response = app
         .clone()
         .oneshot(get(
-            "/api/v1/communications/telegram/chats?account_id=acct-1&limit=10",
+            "/api/v1/communications/provider-conversations?account_id=acct-1&limit=10",
         ))
         .await
         .expect("chat list response");
@@ -94,7 +94,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
     let members_before = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/communications/telegram/chats/{telegram_chat_id}/members?limit=10"
+            "/api/v1/communications/provider-conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("members before response");
@@ -113,7 +113,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
     let members_after = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/communications/telegram/chats/{telegram_chat_id}/members?limit=10"
+            "/api/v1/communications/provider-conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("members after response");

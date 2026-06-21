@@ -6,18 +6,15 @@ use super::{
     publish_chat_folders_event, publish_chat_notification_settings_event,
     publish_chat_position_event, publish_chat_unread_event,
 };
-use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::{
     NewTelegramChat, TelegramChatKind, TelegramSyncState,
 };
-use crate::integrations::telegram::client::{TelegramChat, TelegramError, TelegramStore};
+use crate::integrations::telegram::client::{TelegramChat, TelegramError};
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibChatFolderSnapshot, TelegramTdlibChatNotificationSettingsSnapshot,
     TelegramTdlibChatPositionSnapshot, TelegramTdlibChatUnreadSnapshot,
 };
-use crate::platform::communications::EmailProviderKind;
-use crate::platform::communications::NewProviderAccount;
 use crate::platform::events::EventBus;
 use crate::platform::events::bus::telegram_event_types;
 
@@ -33,16 +30,14 @@ async fn seed_chat(
     account_id: &str,
     provider_chat_id: &str,
 ) -> Result<TelegramChat, TelegramError> {
-    CommunicationProviderAccountStore::new(pool.clone())
-        .upsert(&NewProviderAccount::new(
-            account_id,
-            EmailProviderKind::TelegramUser,
-            "Runtime Chat Account",
-            format!("telegram-ext-{account_id}"),
-        ))
-        .await
-        .expect("seed provider account");
-    TelegramStore::new(pool.clone())
+    crate::test_support::upsert_telegram_runtime_account(
+        pool,
+        account_id,
+        "Runtime Chat Account",
+        &format!("telegram-ext-{account_id}"),
+    )
+    .await;
+    crate::test_support::telegram_store(pool)
         .upsert_chat(&NewTelegramChat {
             account_id: account_id.to_owned(),
             provider_chat_id: provider_chat_id.to_owned(),
@@ -74,7 +69,7 @@ async fn publish_chat_notification_settings_event_appends_chat_updated_before_ch
     };
 
     publish_chat_notification_settings_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &snapshot,
@@ -125,7 +120,13 @@ async fn publish_chat_position_event_appends_chat_updated_before_flag_events() {
         source_event: "updateChatPosition".to_owned(),
     };
 
-    publish_chat_position_event(&Some(pool.clone()), &event_bus, account_id, &snapshot).await;
+    publish_chat_position_event(
+        &Some(crate::test_support::telegram_store(&pool)),
+        &event_bus,
+        account_id,
+        &snapshot,
+    )
+    .await;
 
     let rows: Vec<(String, serde_json::Value)> = sqlx::query_as(
         r#"
@@ -175,7 +176,13 @@ async fn publish_chat_position_event_emits_folder_filters_for_folder_membership_
         source_event: "updateChatPosition".to_owned(),
     };
 
-    publish_chat_position_event(&Some(pool.clone()), &event_bus, account_id, &snapshot).await;
+    publish_chat_position_event(
+        &Some(crate::test_support::telegram_store(&pool)),
+        &event_bus,
+        account_id,
+        &snapshot,
+    )
+    .await;
 
     let row: (String, serde_json::Value) = sqlx::query_as(
         r#"
@@ -214,7 +221,7 @@ async fn publish_chat_folders_event_emits_chat_updated_for_folder_label_projecti
     let event_bus = EventBus::new();
 
     publish_chat_position_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatPositionSnapshot {
@@ -229,7 +236,7 @@ async fn publish_chat_folders_event_emits_chat_updated_for_folder_label_projecti
     .await;
 
     publish_chat_folders_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &[TelegramTdlibChatFolderSnapshot {
@@ -281,7 +288,7 @@ async fn publish_chat_folders_event_refreshes_unknown_labels_when_folder_snapsho
     let event_bus = EventBus::new();
 
     publish_chat_position_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatPositionSnapshot {
@@ -296,7 +303,7 @@ async fn publish_chat_folders_event_refreshes_unknown_labels_when_folder_snapsho
     .await;
 
     publish_chat_folders_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &[TelegramTdlibChatFolderSnapshot {
@@ -313,7 +320,13 @@ async fn publish_chat_folders_event_refreshes_unknown_labels_when_folder_snapsho
     )
     .await;
 
-    publish_chat_folders_event(&Some(pool.clone()), &event_bus, account_id, &[]).await;
+    publish_chat_folders_event(
+        &Some(crate::test_support::telegram_store(&pool)),
+        &event_bus,
+        account_id,
+        &[],
+    )
+    .await;
 
     let row: (String, serde_json::Value) = sqlx::query_as(
         r#"
@@ -392,7 +405,7 @@ async fn publish_chat_position_event_reconciles_folder_add_and_remove_commands()
     .expect("seed folder_remove command");
 
     publish_chat_position_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatPositionSnapshot {
@@ -455,7 +468,7 @@ async fn publish_chat_position_event_reconciles_folder_add_and_remove_commands()
     assert_eq!(add_events[1].1["command_id"], json!(add_command_id));
 
     publish_chat_position_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatPositionSnapshot {
@@ -546,7 +559,7 @@ async fn publish_chat_unread_event_reconciles_mark_read_command_and_emits_events
 
     let event_bus = EventBus::new();
     publish_chat_unread_event(
-        &Some(pool.clone()),
+        &Some(crate::test_support::telegram_store(&pool)),
         &event_bus,
         account_id,
         &TelegramTdlibChatUnreadSnapshot {

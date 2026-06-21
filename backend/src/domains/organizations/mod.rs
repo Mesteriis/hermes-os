@@ -5,5 +5,6 @@ pub mod finance;
 pub mod health;
 pub mod investigator;
 pub mod memory;
+pub mod ports;
 pub mod service;
 pub mod workflows;

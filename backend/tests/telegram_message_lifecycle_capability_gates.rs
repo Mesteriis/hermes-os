@@ -78,7 +78,7 @@ async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_sid
     let edit_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/telegram/messages/{message_id}/edit"),
+            &format!("/api/v1/communications/provider-messages/{message_id}/edit"),
             json!({
                 "command_id": format!("edit-{suffix}"),
                 "account_id": account_id,
@@ -95,7 +95,7 @@ async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_sid
     let delete_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/telegram/messages/{message_id}/delete"),
+            &format!("/api/v1/communications/provider-messages/{message_id}/delete"),
             json!({
                 "command_id": format!("delete-{suffix}"),
                 "account_id": account_id,
@@ -114,7 +114,7 @@ async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_sid
     let restore_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/telegram/messages/{message_id}/restore-visibility"),
+            &format!("/api/v1/communications/provider-messages/{message_id}/restore-visibility"),
             json!({
                 "command_id": format!("restore-{suffix}"),
                 "account_id": account_id,
@@ -131,7 +131,7 @@ async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_sid
     let pin_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/telegram/messages/{message_id}/pin"),
+            &format!("/api/v1/communications/provider-messages/{message_id}/pin"),
             json!({
                 "command_id": format!("pin-{suffix}"),
                 "account_id": account_id,
@@ -148,7 +148,7 @@ async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_sid
     let add_reaction_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/telegram/messages/{message_id}/reactions"),
+            &format!("/api/v1/communications/provider-messages/{message_id}/reactions"),
             json!({
                 "command_id": format!("react-{suffix}"),
                 "account_id": account_id,
@@ -168,7 +168,7 @@ async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_sid
         .clone()
         .oneshot(delete_request_with_token(
             &format!(
-                "/api/v1/communications/telegram/messages/{message_id}/reactions?account_id={account_id}&provider_chat_id={provider_chat_id}&provider_message_id={provider_message_id}&reaction_emoji=%F0%9F%91%8D&sender_id=owner&sender_display_name=Owner&command_id=unreact-{suffix}"
+                "/api/v1/communications/provider-messages/{message_id}/reactions?account_id={account_id}&provider_chat_id={provider_chat_id}&provider_message_id={provider_message_id}&reaction_emoji=%F0%9F%91%8D&sender_id=owner&sender_display_name=Owner&command_id=unreact-{suffix}"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -311,7 +311,7 @@ async fn message_lifecycle_status_events_include_command_identity_for_realtime_c
     let edit_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/telegram/messages/{message_id}/edit"),
+            &format!("/api/v1/communications/provider-messages/{message_id}/edit"),
             json!({
                 "command_id": edit_command_id,
                 "account_id": account_id,
@@ -354,7 +354,7 @@ async fn message_lifecycle_status_events_include_command_identity_for_realtime_c
     let delete_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/telegram/messages/{message_id}/delete"),
+            &format!("/api/v1/communications/provider-messages/{message_id}/delete"),
             json!({
                 "command_id": delete_command_id,
                 "account_id": account_id,
@@ -446,7 +446,7 @@ where
 {
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v1/communications/telegram/messages?limit=20",
+            "/api/v1/communications/provider-messages?limit=20",
             LOCAL_API_TOKEN,
         ))
         .await

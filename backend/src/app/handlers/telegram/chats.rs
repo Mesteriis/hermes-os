@@ -5,23 +5,17 @@ use serde_json::json;
 
 use super::helpers::{
     AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
-    telegram_runtime_event_bridge_context, telegram_secret_store,
 };
 use crate::app::api_support::{
-    TelegramChatListResponse, TelegramListQuery, api_audit_log,
-    communication_provider_account_store, communication_provider_secret_binding_store,
-    telegram_store,
+    TelegramChatListResponse, TelegramListQuery, api_audit_log, telegram_store,
 };
-use crate::app::{ApiError, AppState};
+use crate::app::{ApiError, AppState, telegram_application};
 use crate::integrations::telegram::client::{
     TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramError,
 };
 use crate::integrations::telegram::runtime::{TelegramChatSyncRequest, TelegramChatSyncResponse};
 use crate::integrations::telegram::runtime::{
     TelegramHistorySyncRequest, TelegramHistorySyncResponse,
-};
-use crate::integrations::telegram::runtime::{
-    TelegramMemberSyncContext, TelegramRuntimeOperationContext,
 };
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
@@ -168,25 +162,7 @@ pub(crate) async fn post_telegram_chat_members_sync(
     );
     publish_telegram_event(&state, started).await?;
 
-    let secret_store = telegram_secret_store(&state)?;
-    let provider_account_store = communication_provider_account_store(&state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
-    let items = match state
-        .telegram_runtime
-        .sync_chat_members(
-            TelegramMemberSyncContext {
-                provider_account_store: &provider_account_store,
-                provider_secret_binding_store: &provider_secret_binding_store,
-                telegram_store: &telegram_store,
-                secret_store: &secret_store,
-                secret_resolver: &state.vault,
-                config: &state.config,
-                event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
-            },
-            &telegram_chat_id,
-        )
-        .await
-    {
+    let items = match telegram_application::sync_chat_members(&state, &telegram_chat_id).await {
         Ok(items) => items,
         Err(error) => {
             let failed = build_event(
@@ -200,7 +176,7 @@ pub(crate) async fn post_telegram_chat_members_sync(
                 }),
             );
             publish_telegram_event(&state, failed).await?;
-            return Err(error.into());
+            return Err(error);
         }
     };
 
@@ -261,20 +237,7 @@ pub(crate) async fn post_telegram_sync_chats(
     );
     publish_telegram_event(&state, started).await?;
 
-    let provider_account_store = communication_provider_account_store(&state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
-    let telegram_projection_store = telegram_store(&state)?;
-    let secret_store = telegram_secret_store(&state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &telegram_projection_store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
-    };
-    let response = match state.telegram_runtime.sync_chats(&context, &request).await {
+    let response = match telegram_application::sync_chats(&state, &request).await {
         Ok(response) => response,
         Err(error) => {
             let failed = build_event(
@@ -287,7 +250,7 @@ pub(crate) async fn post_telegram_sync_chats(
                 }),
             );
             publish_telegram_event(&state, failed).await?;
-            return Err(error.into());
+            return Err(error);
         }
     };
 
@@ -334,24 +297,7 @@ pub(crate) async fn post_telegram_sync_history(
     );
     publish_telegram_event(&state, started).await?;
 
-    let provider_account_store = communication_provider_account_store(&state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(&state)?;
-    let telegram_projection_store = telegram_store(&state)?;
-    let secret_store = telegram_secret_store(&state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &telegram_projection_store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(telegram_runtime_event_bridge_context(&state)),
-    };
-    let response = match state
-        .telegram_runtime
-        .sync_history(&context, &request)
-        .await
-    {
+    let response = match telegram_application::sync_history(&state, &request).await {
         Ok(response) => response,
         Err(error) => {
             let failed = build_event(
@@ -366,7 +312,7 @@ pub(crate) async fn post_telegram_sync_history(
                 }),
             );
             publish_telegram_event(&state, failed).await?;
-            return Err(error.into());
+            return Err(error);
         }
     };
 

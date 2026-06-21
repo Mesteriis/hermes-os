@@ -1,7 +1,7 @@
 use sqlx::{Postgres, Transaction};
 
 use crate::domains::graph::core::{
-    GraphNodeKind, GraphReviewState, GraphStore, NewGraphEdge, NewGraphNode, node_id,
+    GraphNodeKind, GraphProjectionPort, GraphReviewState, NewGraphEdge, NewGraphNode, node_id,
 };
 
 use super::errors::GraphProjectionError;
@@ -43,7 +43,7 @@ impl GraphProjectionService {
         report: &mut GraphProjectionReport,
     ) -> Result<(), GraphProjectionError> {
         let mut transaction = self.pool.begin().await?;
-        let message_node = GraphStore::upsert_node_in_transaction(
+        let message_node = GraphProjectionPort::upsert_node_in_transaction(
             &mut transaction,
             &NewGraphNode::new(
                 GraphNodeKind::Message,
@@ -138,7 +138,7 @@ impl GraphProjectionService {
             });
         }
 
-        let email = GraphStore::upsert_node_in_transaction(
+        let email = GraphProjectionPort::upsert_node_in_transaction(
             transaction,
             &NewGraphNode::new(
                 GraphNodeKind::EmailAddress,
@@ -179,7 +179,7 @@ impl GraphProjectionService {
         report: &mut GraphProjectionReport,
     ) -> Result<(), GraphProjectionError> {
         let relationship_type = endpoint.relationship_type(direction);
-        GraphStore::upsert_edge_with_evidence_in_transaction(
+        GraphProjectionPort::upsert_edge_with_evidence_in_transaction(
             transaction,
             &NewGraphEdge::new(
                 endpoint.node_id().to_owned(),

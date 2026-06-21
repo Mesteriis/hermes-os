@@ -98,13 +98,24 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
             "provider runtime/setup routes must live under integrations: {integration_prefix}"
         );
     }
-    for communication_prefix in [
+    for forbidden_communication_prefix in [
+        "\"/api/v1/communications/mail",
         "\"/api/v1/communications/telegram",
         "\"/api/v1/communications/whatsapp",
     ] {
         assert!(
+            !router_sources.contains(forbidden_communication_prefix),
+            "provider-specific communication route prefix remains: {forbidden_communication_prefix}"
+        );
+    }
+    for communication_prefix in [
+        "\"/api/v1/communications/provider-conversations",
+        "\"/api/v1/communications/provider-messages",
+        "\"/api/v1/communications/provider-web-messages",
+    ] {
+        assert!(
             router_sources.contains(communication_prefix),
-            "provider-scoped communication routes must live under communications: {communication_prefix}"
+            "provider projection routes must use provider-neutral communication resources: {communication_prefix}"
         );
     }
     assert!(

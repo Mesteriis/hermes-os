@@ -133,7 +133,7 @@ async fn send_via_gmail_api(
         .ok_or(ApiError::InvalidCommunicationQuery(
             "Gmail OAuth credential is unavailable for this account",
         ))?;
-    let account_setup = EmailAccountSetupService::new_with_host_vault(
+    let account_setup = EmailAccountSetupService::new_with_host_vault_for_token_refresh(
         pool.clone(),
         SecretReferenceStore::new(pool),
         state.vault.clone(),

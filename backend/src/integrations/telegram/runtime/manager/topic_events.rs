@@ -18,19 +18,19 @@ use super::realtime_events::{
 use super::topics::telegram_topic_id;
 
 pub(super) async fn publish_topic_event(
-    pool: &Option<PgPool>,
+    telegram_store: &Option<TelegramStore>,
     event_bus: &EventBus,
     account_id: &str,
     snapshot: &TelegramTdlibTopicUpdateSnapshot,
 ) {
-    let Some(pool) = pool else {
+    let Some(store) = telegram_store else {
         return;
     };
+    let pool = store.pool();
 
     let observed_at = Utc::now();
-    let store = TelegramStore::new(pool.clone());
     let topic = match upsert_topic_snapshot(
-        &store,
+        store,
         account_id,
         &snapshot.provider_chat_id,
         &snapshot.topic,
@@ -62,7 +62,7 @@ pub(super) async fn publish_topic_event(
             Vec::new()
         }
     };
-    let context = TelegramRuntimeEventBridgeContext::new(Some(pool.clone()), event_bus.clone());
+    let context = TelegramRuntimeEventBridgeContext::new(Some(store.clone()), event_bus.clone());
     for command in reconciled {
         publish_command_reconciled_events(Some(&context), &command, "updateForumTopicInfo").await;
     }
@@ -232,12 +232,10 @@ mod tests {
     use testkit::context::TestContext;
 
     use super::*;
-    use crate::domains::communications::core::CommunicationProviderAccountStore;
     use crate::integrations::telegram::client::lifecycle::insert_command;
     use crate::integrations::telegram::client::models::{
         NewTelegramChat, TelegramChatKind, TelegramSyncState,
     };
-    use crate::platform::communications::{EmailProviderKind, NewProviderAccount};
 
     #[test]
     fn topic_updated_event_contains_sanitized_projection_payload() {
@@ -278,17 +276,15 @@ mod tests {
         let provider_chat_id = "chat-1";
         let event_bus = EventBus::new();
 
-        CommunicationProviderAccountStore::new(pool.clone())
-            .upsert(&NewProviderAccount::new(
-                account_id,
-                EmailProviderKind::TelegramUser,
-                "Topic Runtime Account",
-                "telegram-ext-acct-1",
-            ))
-            .await
-            .expect("seed provider account");
+        crate::test_support::upsert_telegram_runtime_account(
+            &pool,
+            account_id,
+            "Topic Runtime Account",
+            "telegram-ext-acct-1",
+        )
+        .await;
 
-        let chat = TelegramStore::new(pool.clone())
+        let chat = crate::test_support::telegram_store(&pool)
             .upsert_chat(&NewTelegramChat {
                 account_id: account_id.to_owned(),
                 provider_chat_id: provider_chat_id.to_owned(),
@@ -342,7 +338,13 @@ mod tests {
             },
         };
 
-        publish_topic_event(&Some(pool.clone()), &event_bus, account_id, &snapshot).await;
+        publish_topic_event(
+            &Some(crate::test_support::telegram_store(&pool)),
+            &event_bus,
+            account_id,
+            &snapshot,
+        )
+        .await;
 
         let rows: Vec<(String, serde_json::Value, serde_json::Value)> = sqlx::query_as(
             r#"
@@ -416,7 +418,7 @@ mod tests {
             ORDER BY observation.captured_at ASC
             "#,
         )
-        .bind(&stored_topic_id)
+        .bind(stored_topic_id)
         .fetch_all(&pool)
         .await
         .expect("topic observations");

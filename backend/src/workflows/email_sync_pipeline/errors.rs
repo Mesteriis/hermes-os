@@ -5,7 +5,7 @@ use crate::domains::communications::messages::MessageProjectionError;
 use crate::domains::communications::storage::{
     AttachmentSafetyScanError, CommunicationStorageError,
 };
-use crate::domains::decisions::DecisionStoreError;
+use crate::domains::decisions::DecisionReviewPortError;
 use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::core::OrgCoreError;
 use crate::domains::persons::api::PersonProjectionError;
@@ -62,7 +62,7 @@ pub enum EmailSyncPipelineError {
     AttachmentScan(#[from] AttachmentSafetyScanError),
 
     #[error(transparent)]
-    Decision(#[from] DecisionStoreError),
+    Decision(#[from] DecisionReviewPortError),
 
     #[error(transparent)]
     Organization(#[from] OrganizationError),

@@ -31,7 +31,8 @@ pub(super) async fn publish_participant_updated_event(
         return;
     };
 
-    if let Some(pool) = &context.pool {
+    if let Some(store) = &context.telegram_store {
+        let pool = store.pool();
         let event_store = EventStore::new(pool.clone());
         if let Err(error) = event_store.append(&event).await {
             tracing::warn!(
