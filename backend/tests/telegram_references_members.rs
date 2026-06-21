@@ -239,9 +239,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let reply_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-messages/{reply_message_id}/reply-chain"
-            ),
+            &format!("/api/v1/communications/messages/{reply_message_id}/reply-chain"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -260,9 +258,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let root_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-messages/{root_message_id}/reply-chain"
-            ),
+            &format!("/api/v1/communications/messages/{root_message_id}/reply-chain"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -286,9 +282,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let leaf_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-messages/{leaf_message_id}/reply-chain"
-            ),
+            &format!("/api/v1/communications/messages/{leaf_message_id}/reply-chain"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -304,9 +298,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let forward_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-messages/{forward_message_id}/forward-chain"
-            ),
+            &format!("/api/v1/communications/messages/{forward_message_id}/forward-chain"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -325,9 +317,7 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let final_forward_chain_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-messages/{final_forward_message_id}/forward-chain"
-            ),
+            &format!("/api/v1/communications/messages/{final_forward_message_id}/forward-chain"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -447,9 +437,7 @@ async fn telegram_chat_detail_and_members_routes_return_projected_data() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -464,7 +452,7 @@ async fn telegram_chat_detail_and_members_routes_return_projected_data() {
     let detail_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}"),
+            &format!("/api/v1/communications/conversations/{telegram_chat_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -477,9 +465,7 @@ async fn telegram_chat_detail_and_members_routes_return_projected_data() {
     let members_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members?limit=10"
-            ),
+            &format!("/api/v1/communications/conversations/{telegram_chat_id}/members?limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await

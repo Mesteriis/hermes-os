@@ -244,6 +244,7 @@ async fn message_search_supports_any_mode_and_field_rules_against_postgres() {
             account_id: Some(&account_id),
             workflow_state: None,
             channel_kind: None,
+            conversation_id: None,
             query: None,
             match_mode: MessageSearchMatchMode::Any,
             search: MessageSearchQuery {
@@ -272,6 +273,7 @@ async fn message_search_supports_any_mode_and_field_rules_against_postgres() {
             account_id: Some(&account_id),
             workflow_state: None,
             channel_kind: None,
+            conversation_id: None,
             query: None,
             match_mode: MessageSearchMatchMode::All,
             search: MessageSearchQuery {

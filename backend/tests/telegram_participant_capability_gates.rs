@@ -65,7 +65,7 @@ async fn fixture_account_blocks_members_sync_before_audit_or_events() {
         .clone()
         .oneshot(json_post(
             &format!(
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members/sync"
+                "/api/v1/integrations/telegram/provider-sync/conversations/{telegram_chat_id}/members"
             ),
             json!({}),
         ))
@@ -147,7 +147,7 @@ async fn fixture_account_blocks_join_and_leave_before_command_enqueue() {
     let join_response = app
         .clone()
         .oneshot(json_post(
-            "/api/v1/integrations/telegram/provider-conversations/join",
+            "/api/v1/integrations/telegram/provider-commands/conversations/join",
             json!({
                 "account_id": "acct-1",
                 "provider_chat_id": "provider-chat-1"
@@ -161,7 +161,7 @@ async fn fixture_account_blocks_join_and_leave_before_command_enqueue() {
         .clone()
         .oneshot(json_post(
             &format!(
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/leave"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/leave"
             ),
             json!({
                 "account_id": "acct-1",
@@ -189,7 +189,7 @@ where
 {
     let response = app
         .oneshot(get(
-            "/api/v1/integrations/telegram/provider-conversations?account_id=acct-1&limit=10",
+            "/api/v1/communications/conversations?account_id=acct-1&limit=10",
         ))
         .await
         .expect("chat list response");

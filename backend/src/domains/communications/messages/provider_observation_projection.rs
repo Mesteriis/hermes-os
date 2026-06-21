@@ -1,366 +1,254 @@
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use sqlx::postgres::PgPool;
 
 use super::ProviderChannelMessageStore;
 use crate::platform::communications::{
     ProviderAttachmentDownloadStateUpdate, ProviderChannelMessage,
-    ProviderCommunicationMessagePortError, ProviderMessageObservationProjectionPort,
-    ProviderMessageProjectionObservationContext,
+    ProviderCommunicationMessagePortError, ProviderMessageProjectionObservationContext,
 };
-use crate::platform::events::{EventStore, NewEventEnvelope};
+use crate::platform::events::{EventStore, EventStoreError, NewEventEnvelope, StoredEventEnvelope};
+
+pub const COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER: &str =
+    "communication_provider_observation_projection";
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
-pub async fn record_telegram_message_metadata_observation(
+pub async fn project_provider_observation_event(
     pool: PgPool,
-    message_id: &str,
-    metadata: &Value,
-) -> Result<Option<ProviderChannelMessage>, ProviderCommunicationMessagePortError> {
-    let payload = json!({ "message_metadata": metadata });
-    let Some((store, should_project)) =
-        prepare_telegram_observation(pool, message_id, "metadata_observed", &payload, Utc::now())
-            .await?
-    else {
-        return Ok(None);
-    };
-    if !should_project {
-        return store
-            .message_by_id(message_id, TELEGRAM_CHANNEL_KINDS)
-            .await;
+    event: StoredEventEnvelope,
+) -> Result<(), EventStoreError> {
+    if !is_supported_provider_observation_event(&event.event.event_type) {
+        return Ok(());
     }
-    store
-        .apply_metadata(
-            message_id,
-            metadata,
-            telegram_projection_context(
-                "telegram_metadata_observed",
-                "domains.communications.messages.record_telegram_message_metadata_observation",
-            ),
-        )
+
+    let updated = project_telegram_observation(pool.clone(), &event)
         .await
+        .map_err(|error| EventStoreError::ConsumerHandlerFailed(error.to_string()))?;
+    if let Some(message) = updated {
+        append_communication_message_updated_event(pool, &event, &message).await?;
+    }
+
+    Ok(())
 }
 
-pub async fn record_telegram_message_delivery_observation(
-    pool: PgPool,
-    message_id: &str,
-    delivery_state: &str,
-    observed_at: DateTime<Utc>,
-) -> Result<Option<ProviderChannelMessage>, ProviderCommunicationMessagePortError> {
-    let payload = json!({
-        "delivery_state": delivery_state,
-        "observed_at": observed_at,
-    });
-    let Some((store, should_project)) = prepare_telegram_observation(
-        pool,
-        message_id,
-        "delivery_state_observed",
-        &payload,
-        observed_at,
+fn is_supported_provider_observation_event(event_type: &str) -> bool {
+    matches!(
+        event_type,
+        "integration.telegram.message.content_observed"
+            | "integration.telegram.message.metadata_observed"
+            | "integration.telegram.message.delivery_state_observed"
+            | "integration.telegram.message.pinned_state_observed"
+            | "integration.telegram.attachment.download_state_observed"
     )
-    .await?
-    else {
-        return Ok(None);
-    };
-    if !should_project {
-        return store
-            .message_by_id(message_id, TELEGRAM_CHANNEL_KINDS)
-            .await;
-    }
-    store
-        .set_delivery_state(
-            message_id,
-            delivery_state,
-            observed_at,
-            telegram_projection_context(
-                "telegram_delivery_state_observed",
-                "domains.communications.messages.record_telegram_message_delivery_observation",
-            ),
-        )
-        .await
 }
 
-pub async fn record_telegram_message_content_observation(
+async fn project_telegram_observation(
     pool: PgPool,
-    message_id: &str,
-    body_text: &str,
-    metadata: &Value,
-    observed_at: DateTime<Utc>,
+    event: &StoredEventEnvelope,
 ) -> Result<Option<ProviderChannelMessage>, ProviderCommunicationMessagePortError> {
-    let payload = json!({
-        "body_text": body_text,
-        "message_metadata": metadata,
-        "observed_at": observed_at,
-    });
-    let Some((store, should_project)) =
-        prepare_telegram_observation(pool, message_id, "content_observed", &payload, observed_at)
-            .await?
-    else {
-        return Ok(None);
-    };
-    if !should_project {
-        return store
-            .message_by_id(message_id, TELEGRAM_CHANNEL_KINDS)
-            .await;
-    }
-    store
-        .apply_content_update(
-            message_id,
-            body_text,
-            metadata,
-            observed_at,
-            telegram_projection_context(
-                "telegram_content_observed",
-                "domains.communications.messages.record_telegram_message_content_observation",
-            ),
+    let payload = &event.event.payload;
+    let event_kind = required_str(payload, "event_kind")?;
+    let message_id = required_str(payload, "message_id").or_else(|_| {
+        event
+            .event
+            .subject
+            .get("message_id")
+            .and_then(Value::as_str)
+            .ok_or_else(|| {
+                ProviderCommunicationMessagePortError::InvalidRequest(
+                    "provider observation is missing message_id".to_owned(),
+                )
+            })
+    })?;
+    let observed_at = parse_observed_at(payload)?;
+    let fact_payload = payload.get("payload").ok_or_else(|| {
+        ProviderCommunicationMessagePortError::InvalidRequest(
+            "provider observation is missing payload".to_owned(),
         )
-        .await
-}
+    })?;
+    let store = ProviderChannelMessageStore::new(pool);
+    let context = telegram_projection_context(event_kind);
 
-pub async fn record_telegram_message_pin_observation(
-    pool: PgPool,
-    message_id: &str,
-    is_pinned: bool,
-    observed_at: DateTime<Utc>,
-) -> Result<Option<ProviderChannelMessage>, ProviderCommunicationMessagePortError> {
-    let payload = json!({
-        "is_pinned": is_pinned,
-        "observed_at": observed_at,
-    });
-    let Some((store, should_project)) = prepare_telegram_observation(
-        pool,
-        message_id,
-        "pinned_state_observed",
-        &payload,
-        observed_at,
-    )
-    .await?
-    else {
-        return Ok(None);
-    };
-    if !should_project {
-        return store
-            .message_by_id(message_id, TELEGRAM_CHANNEL_KINDS)
-            .await;
+    match event_kind {
+        "metadata_observed" => {
+            let metadata = fact_payload.get("message_metadata").ok_or_else(|| {
+                ProviderCommunicationMessagePortError::InvalidRequest(
+                    "metadata observation is missing message_metadata".to_owned(),
+                )
+            })?;
+            store.apply_metadata(message_id, metadata, context).await
+        }
+        "delivery_state_observed" => {
+            let delivery_state = required_str(fact_payload, "delivery_state")?;
+            store
+                .set_delivery_state(message_id, delivery_state, observed_at, context)
+                .await
+        }
+        "content_observed" => {
+            let body_text = required_str(fact_payload, "body_text")?;
+            let metadata = fact_payload.get("message_metadata").ok_or_else(|| {
+                ProviderCommunicationMessagePortError::InvalidRequest(
+                    "content observation is missing message_metadata".to_owned(),
+                )
+            })?;
+            store
+                .apply_content_update(message_id, body_text, metadata, observed_at, context)
+                .await
+        }
+        "pinned_state_observed" => {
+            let is_pinned = fact_payload
+                .get("is_pinned")
+                .and_then(Value::as_bool)
+                .ok_or_else(|| {
+                    ProviderCommunicationMessagePortError::InvalidRequest(
+                        "pin observation is missing is_pinned".to_owned(),
+                    )
+                })?;
+            store
+                .apply_pinned_state(message_id, is_pinned, observed_at, context)
+                .await
+        }
+        "attachment_download_state_observed" => {
+            let update = ProviderAttachmentDownloadStateUpdate {
+                message_id,
+                provider_attachment_id: required_str(fact_payload, "provider_attachment_id")?,
+                provider_file_id: required_i64(fact_payload, "provider_file_id")?,
+                download_state: required_str(fact_payload, "download_state")?,
+                local_path: optional_str(fact_payload, "local_path"),
+                size_bytes: optional_i64(fact_payload, "size_bytes"),
+                content_type: required_str(fact_payload, "content_type")?,
+                filename: optional_str(fact_payload, "filename"),
+                observed_at,
+                context,
+            };
+            store.update_attachment_download_state(update).await
+        }
+        other => Err(ProviderCommunicationMessagePortError::InvalidRequest(
+            format!("unsupported provider observation event kind `{other}`"),
+        )),
     }
-    store
-        .apply_pinned_state(
-            message_id,
-            is_pinned,
-            observed_at,
-            telegram_projection_context(
-                "telegram_pinned_state_observed",
-                "domains.communications.messages.record_telegram_message_pin_observation",
-            ),
-        )
-        .await
-}
-
-pub async fn record_telegram_attachment_download_observation(
-    pool: PgPool,
-    update: ProviderAttachmentDownloadStateUpdate<'_>,
-) -> Result<Option<ProviderChannelMessage>, ProviderCommunicationMessagePortError> {
-    let payload = json!({
-        "provider_attachment_id": update.provider_attachment_id,
-        "provider_file_id": update.provider_file_id,
-        "download_state": update.download_state,
-        "local_path": update.local_path,
-        "size_bytes": update.size_bytes,
-        "content_type": update.content_type,
-        "filename": update.filename,
-        "observed_at": update.observed_at,
-    });
-    let Some((store, should_project)) = prepare_telegram_observation(
-        pool,
-        update.message_id,
-        "attachment_download_state_observed",
-        &payload,
-        update.observed_at,
-    )
-    .await?
-    else {
-        return Ok(None);
-    };
-    if !should_project {
-        return store
-            .message_by_id(update.message_id, TELEGRAM_CHANNEL_KINDS)
-            .await;
-    }
-    store.update_attachment_download_state(update).await
-}
-
-async fn prepare_telegram_observation(
-    pool: PgPool,
-    message_id: &str,
-    event_kind: &str,
-    payload: &Value,
-    observed_at: DateTime<Utc>,
-) -> Result<Option<(ProviderChannelMessageStore, bool)>, ProviderCommunicationMessagePortError> {
-    let store = ProviderChannelMessageStore::new(pool.clone());
-    let Some(current) = store
-        .message_by_id(message_id, TELEGRAM_CHANNEL_KINDS)
-        .await?
-    else {
-        return Ok(None);
-    };
-    let event = telegram_provider_observation_event(&current, event_kind, payload, observed_at)?;
-    let appended = EventStore::new(pool).append_idempotent(&event).await?;
-    Ok(Some((store, appended.is_some())))
 }
 
 fn telegram_projection_context(
-    relationship_kind: &'static str,
-    actor: &'static str,
+    event_kind: &str,
 ) -> ProviderMessageProjectionObservationContext<'static> {
     ProviderMessageProjectionObservationContext {
         channel_kinds: TELEGRAM_CHANNEL_KINDS,
-        relationship_kind,
-        actor,
+        relationship_kind: match event_kind {
+            "metadata_observed" => "telegram_metadata_observed",
+            "delivery_state_observed" => "telegram_delivery_state_observed",
+            "content_observed" => "telegram_content_observed",
+            "pinned_state_observed" => "telegram_pinned_state_observed",
+            "attachment_download_state_observed" => "telegram_attachment_download_state_observed",
+            _ => "telegram_provider_observed",
+        },
+        actor: "domains.communications.messages.communication_provider_observation_projection",
     }
 }
 
-fn telegram_provider_observation_event(
+async fn append_communication_message_updated_event(
+    pool: PgPool,
+    provider_event: &StoredEventEnvelope,
     message: &ProviderChannelMessage,
-    event_kind: &str,
-    payload: &Value,
-    observed_at: DateTime<Utc>,
-) -> Result<NewEventEnvelope, ProviderCommunicationMessagePortError> {
-    let payload_hash = sha256_json(payload)?;
-    let source_id = format!(
-        "telegram:{}:{}:{}:{}",
-        message.account_id, event_kind, message.provider_record_id, payload_hash
+) -> Result<(), EventStoreError> {
+    let event_id = format!(
+        "evt_communication_message_updated_{}",
+        provider_event.event.event_id
     );
-
-    Ok(NewEventEnvelope::builder(
-        format!("evt_provider_observation_{}", source_id.replace(':', "_")),
-        format!("integration.telegram.message.{event_kind}"),
-        observed_at,
+    let event = NewEventEnvelope::builder(
+        event_id,
+        "communication.message.updated",
+        Utc::now(),
         json!({
-            "kind": "provider_observation",
-            "provider": "telegram",
-            "account_id": message.account_id,
-            "source_id": source_id,
+            "kind": "communication_projection",
+            "consumer": COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
         }),
         json!({
-            "kind": "provider_message",
-            "provider": "telegram",
-            "id": message.provider_record_id,
-            "message_id": message.message_id,
+            "kind": "communication_message",
+            "id": message.message_id,
         }),
     )
     .payload(json!({
-        "provider_kind": message.channel_kind,
+        "message_id": message.message_id,
+        "raw_record_id": message.raw_record_id,
         "account_id": message.account_id,
-        "external_event_id": Value::Null,
-        "external_message_id": message.provider_record_id,
-        "event_kind": event_kind,
-        "observed_at": observed_at,
-        "payload_hash": payload_hash,
-        "payload": payload,
+        "provider_record_id": message.provider_record_id,
+        "channel_kind": message.channel_kind,
+        "conversation_id": message.conversation_id,
+        "delivery_state": message.delivery_state,
+        "message_metadata": message.message_metadata,
+        "provider_observation_event_id": provider_event.event.event_id,
+        "provider_observation_event_type": provider_event.event.event_type,
     }))
     .provenance(json!({
-        "provider": "telegram",
-        "runtime": "tdlib",
-        "ownership": "provider_observation_fact",
+        "ownership": "communications_projection",
+        "source_event_id": provider_event.event.event_id,
     }))
-    .correlation_id(source_id)
-    .build()?)
+    .causation_id(provider_event.event.event_id.clone())
+    .correlation_id(
+        provider_event
+            .event
+            .correlation_id
+            .clone()
+            .unwrap_or_else(|| provider_event.event.event_id.clone()),
+    )
+    .build()?;
+
+    EventStore::new(pool).append_idempotent(&event).await?;
+    Ok(())
 }
 
-fn sha256_json(value: &Value) -> Result<String, ProviderCommunicationMessagePortError> {
-    let encoded = serde_json::to_vec(value)?;
-    let mut hasher = Sha256::new();
-    hasher.update(encoded);
-    Ok(format!("sha256:{:x}", hasher.finalize()))
+fn parse_observed_at(
+    payload: &Value,
+) -> Result<DateTime<Utc>, ProviderCommunicationMessagePortError> {
+    let Some(value) = payload.get("observed_at") else {
+        return Ok(Utc::now());
+    };
+    let Some(value) = value.as_str() else {
+        return Err(ProviderCommunicationMessagePortError::InvalidRequest(
+            "observed_at must be an RFC3339 string".to_owned(),
+        ));
+    };
+    DateTime::parse_from_rfc3339(value)
+        .map(|value| value.with_timezone(&Utc))
+        .map_err(|error| {
+            ProviderCommunicationMessagePortError::InvalidRequest(format!(
+                "invalid observed_at: {error}"
+            ))
+        })
 }
 
-impl ProviderMessageObservationProjectionPort for ProviderChannelMessageStore {
-    fn record_telegram_message_metadata_observation<'a>(
-        &'a self,
-        message_id: &'a str,
-        metadata: &'a Value,
-    ) -> crate::platform::communications::ProviderChannelMessagePortFuture<
-        'a,
-        Option<ProviderChannelMessage>,
-    > {
-        Box::pin(async move {
-            record_telegram_message_metadata_observation(self.clone_pool(), message_id, metadata)
-                .await
+fn required_str<'a>(
+    value: &'a Value,
+    field: &str,
+) -> Result<&'a str, ProviderCommunicationMessagePortError> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            ProviderCommunicationMessagePortError::InvalidRequest(format!(
+                "{field} must be a non-empty string"
+            ))
         })
-    }
+}
 
-    fn record_telegram_message_delivery_observation<'a>(
-        &'a self,
-        message_id: &'a str,
-        delivery_state: &'a str,
-        observed_at: DateTime<Utc>,
-    ) -> crate::platform::communications::ProviderChannelMessagePortFuture<
-        'a,
-        Option<ProviderChannelMessage>,
-    > {
-        Box::pin(async move {
-            record_telegram_message_delivery_observation(
-                self.clone_pool(),
-                message_id,
-                delivery_state,
-                observed_at,
-            )
-            .await
-        })
-    }
+fn optional_str<'a>(value: &'a Value, field: &str) -> Option<&'a str> {
+    value
+        .get(field)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
 
-    fn record_telegram_message_content_observation<'a>(
-        &'a self,
-        message_id: &'a str,
-        body_text: &'a str,
-        metadata: &'a Value,
-        observed_at: DateTime<Utc>,
-    ) -> crate::platform::communications::ProviderChannelMessagePortFuture<
-        'a,
-        Option<ProviderChannelMessage>,
-    > {
-        Box::pin(async move {
-            record_telegram_message_content_observation(
-                self.clone_pool(),
-                message_id,
-                body_text,
-                metadata,
-                observed_at,
-            )
-            .await
-        })
-    }
+fn required_i64(value: &Value, field: &str) -> Result<i64, ProviderCommunicationMessagePortError> {
+    value.get(field).and_then(Value::as_i64).ok_or_else(|| {
+        ProviderCommunicationMessagePortError::InvalidRequest(format!("{field} must be an integer"))
+    })
+}
 
-    fn record_telegram_message_pin_observation<'a>(
-        &'a self,
-        message_id: &'a str,
-        is_pinned: bool,
-        observed_at: DateTime<Utc>,
-    ) -> crate::platform::communications::ProviderChannelMessagePortFuture<
-        'a,
-        Option<ProviderChannelMessage>,
-    > {
-        Box::pin(async move {
-            record_telegram_message_pin_observation(
-                self.clone_pool(),
-                message_id,
-                is_pinned,
-                observed_at,
-            )
-            .await
-        })
-    }
-
-    fn record_telegram_attachment_download_observation<'a>(
-        &'a self,
-        update: ProviderAttachmentDownloadStateUpdate<'a>,
-    ) -> crate::platform::communications::ProviderChannelMessagePortFuture<
-        'a,
-        Option<ProviderChannelMessage>,
-    > {
-        Box::pin(async move {
-            record_telegram_attachment_download_observation(self.clone_pool(), update).await
-        })
-    }
+fn optional_i64(value: &Value, field: &str) -> Option<i64> {
+    value.get(field).and_then(Value::as_i64)
 }

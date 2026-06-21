@@ -288,9 +288,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await

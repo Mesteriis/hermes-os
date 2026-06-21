@@ -20,6 +20,14 @@ import type {
   TelegramRestoreVisibilityRequest,
 } from '../types/telegram'
 
+function communicationBusinessApiMoved<T>(operation: string): Promise<T> {
+  return Promise.reject(
+    new Error(
+      `${operation} moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only`
+    )
+  )
+}
+
 function newCommandId(): string {
   return `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 }
@@ -129,19 +137,15 @@ export async function markTelegramMessageRead(params: {
 export async function fetchTelegramMessageVersions(
   messageId: string
 ): Promise<TelegramMessageVersionListResponse> {
-  return ApiClient.instance.get<TelegramMessageVersionListResponse>(
-    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/versions`,
-    'Telegram message versions request failed'
-  )
+  void messageId
+  return communicationBusinessApiMoved('Telegram message versions')
 }
 
 export async function fetchTelegramMessageTombstones(
   messageId: string
 ): Promise<TelegramMessageTombstoneListResponse> {
-  return ApiClient.instance.get<TelegramMessageTombstoneListResponse>(
-    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/tombstones`,
-    'Telegram message tombstones request failed'
-  )
+  void messageId
+  return communicationBusinessApiMoved('Telegram message tombstones')
 }
 
 export async function fetchTelegramCommands(
@@ -185,19 +189,15 @@ export async function retryTelegramCommand(
 export async function fetchTelegramReplyChain(
   messageId: string
 ): Promise<TelegramReplyChainResponse> {
-  return ApiClient.instance.get<TelegramReplyChainResponse>(
-    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/reply-chain`,
-    'Telegram reply chain request failed'
-  )
+  void messageId
+  return communicationBusinessApiMoved('Telegram reply chain')
 }
 
 export async function fetchTelegramForwardChain(
   messageId: string
 ): Promise<TelegramForwardChainResponse> {
-  return ApiClient.instance.get<TelegramForwardChainResponse>(
-    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/forward-chain`,
-    'Telegram forward chain request failed'
-  )
+  void messageId
+  return communicationBusinessApiMoved('Telegram forward chain')
 }
 
 export async function addTelegramReaction(
@@ -208,11 +208,9 @@ export async function addTelegramReaction(
     ...request,
     command_id: request.command_id ?? newCommandId()
   }
-  return ApiClient.instance.post<TelegramReactionResponse>(
-    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/reactions`,
-    payload,
-    'Telegram reaction add failed'
-  )
+  void messageId
+  void payload
+  return communicationBusinessApiMoved('Telegram reaction add')
 }
 
 export async function removeTelegramReaction(
@@ -231,19 +229,16 @@ export async function removeTelegramReaction(
   if (request.sender_display_name) {
     params.set('sender_display_name', request.sender_display_name)
   }
-  return ApiClient.instance.delete<TelegramReactionResponse>(
-    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/reactions?${params.toString()}`,
-    'Telegram reaction remove failed'
-  )
+  void messageId
+  void params
+  return communicationBusinessApiMoved('Telegram reaction remove')
 }
 
 export async function fetchTelegramReactions(
   messageId: string
 ): Promise<TelegramReactionListResponse> {
-  return ApiClient.instance.get<TelegramReactionListResponse>(
-    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/reactions`,
-    'Telegram reactions request failed'
-  )
+  void messageId
+  return communicationBusinessApiMoved('Telegram reactions')
 }
 
 export async function replyToTelegramMessage(params: {

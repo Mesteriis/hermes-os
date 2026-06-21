@@ -28,9 +28,7 @@ pub use projection::{
 };
 pub use provider_channel_store::ProviderChannelMessageStore;
 pub use provider_observation_projection::{
-    record_telegram_attachment_download_observation, record_telegram_message_content_observation,
-    record_telegram_message_delivery_observation, record_telegram_message_metadata_observation,
-    record_telegram_message_pin_observation,
+    COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER, project_provider_observation_event,
 };
 pub(crate) use query_parser::parse_communication_message_search_query;
 pub use search::{

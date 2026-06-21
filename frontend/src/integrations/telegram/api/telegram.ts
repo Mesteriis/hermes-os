@@ -36,6 +36,14 @@ import type {
   TelegramTopicListResponse
 } from '../types/telegram'
 
+function communicationBusinessApiMoved<T>(operation: string): Promise<T> {
+  return Promise.reject(
+    new Error(
+      `${operation} moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only`
+    )
+  )
+}
+
 // --- Capabilities ---
 export async function fetchTelegramCapabilities(): Promise<TelegramCapabilitiesResponse> {
   return ApiClient.instance.get<TelegramCapabilitiesResponse>(
@@ -99,21 +107,14 @@ export async function logoutTelegramAccount(accountId: string): Promise<Telegram
 
 // --- Chats ---
 export async function fetchTelegramChats(accountId?: string, limit = 50): Promise<TelegramChatListResponse> {
-  const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
-  if (accountId?.trim()) {
-    params.set('account_id', accountId.trim())
-  }
-  return ApiClient.instance.get<TelegramChatListResponse>(
-    `/api/v1/integrations/telegram/provider-conversations?${params.toString()}`,
-    'Telegram chats request failed'
-  )
+  void accountId
+  void limit
+  return communicationBusinessApiMoved('Telegram chat list')
 }
 
 export async function fetchTelegramChatDetail(telegramChatId: string): Promise<TelegramChatDetailResponse> {
-  return ApiClient.instance.get<TelegramChatDetailResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}`,
-    'Telegram chat detail request failed'
-  )
+  void telegramChatId
+  return communicationBusinessApiMoved('Telegram chat detail')
 }
 
 export async function fetchTelegramFolders(accountId?: string): Promise<TelegramChatGroupFilterListResponse> {
@@ -135,19 +136,17 @@ export async function fetchTelegramChatMembers(
   role?: string,
   cursor?: string
 ): Promise<TelegramChatMemberListResponse> {
-  const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
-  if (query?.trim()) params.set('query', query.trim())
-  if (role?.trim()) params.set('role', role.trim())
-  if (cursor?.trim()) params.set('cursor', cursor.trim())
-  return ApiClient.instance.get<TelegramChatMemberListResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/members?${params.toString()}`,
-    'Telegram chat members request failed'
-  )
+  void telegramChatId
+  void limit
+  void query
+  void role
+  void cursor
+  return communicationBusinessApiMoved('Telegram chat members')
 }
 
 export async function syncTelegramChatMembers(telegramChatId: string): Promise<TelegramChatMembersSyncResponse> {
   return ApiClient.instance.post<TelegramChatMembersSyncResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/members/sync`,
+    `/api/v1/integrations/telegram/provider-sync/conversations/${encodeURIComponent(telegramChatId)}/members`,
     {},
     'Telegram chat members sync failed'
   )
@@ -166,7 +165,7 @@ export async function pinTelegramChat(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatActionResponse> {
   return ApiClient.instance.post<TelegramChatActionResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/pin`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/pin`,
     request,
     'Telegram chat pin failed'
   )
@@ -177,7 +176,7 @@ export async function unpinTelegramChat(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatActionResponse> {
   return ApiClient.instance.post<TelegramChatActionResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/unpin`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/unpin`,
     request,
     'Telegram chat unpin failed'
   )
@@ -188,7 +187,7 @@ export async function archiveTelegramChat(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatActionResponse> {
   return ApiClient.instance.post<TelegramChatActionResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/archive`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/archive`,
     request,
     'Telegram chat archive failed'
   )
@@ -199,7 +198,7 @@ export async function unarchiveTelegramChat(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatActionResponse> {
   return ApiClient.instance.post<TelegramChatActionResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/unarchive`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/unarchive`,
     request,
     'Telegram chat unarchive failed'
   )
@@ -210,7 +209,7 @@ export async function muteTelegramChat(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatActionResponse> {
   return ApiClient.instance.post<TelegramChatActionResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/mute`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/mute`,
     request,
     'Telegram chat mute failed'
   )
@@ -222,7 +221,7 @@ export async function addTelegramChatToFolder(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatLifecycleCommandResponse> {
   return ApiClient.instance.post<TelegramChatLifecycleCommandResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/folders/${providerFolderId}`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/folders/${providerFolderId}`,
     request,
     'Telegram chat folder add failed'
   )
@@ -234,7 +233,7 @@ export async function removeTelegramChatFromFolder(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatLifecycleCommandResponse> {
   return ApiClient.instance.post<TelegramChatLifecycleCommandResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/folders/${providerFolderId}/remove`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/folders/${providerFolderId}/remove`,
     request,
     'Telegram chat folder remove failed'
   )
@@ -245,7 +244,7 @@ export async function reassignTelegramChatFolders(
   request: TelegramChatFolderReassignRequest
 ): Promise<TelegramChatFolderReassignResponse> {
   return ApiClient.instance.post<TelegramChatFolderReassignResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/folders/reassign`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/folders/reassign`,
     request,
     'Telegram chat folder reassignment failed'
   )
@@ -256,7 +255,7 @@ export async function unmuteTelegramChat(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatActionResponse> {
   return ApiClient.instance.post<TelegramChatActionResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/unmute`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/unmute`,
     request,
     'Telegram chat unmute failed'
   )
@@ -267,7 +266,7 @@ export async function markTelegramChatRead(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatActionResponse> {
   return ApiClient.instance.post<TelegramChatActionResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/read`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/read`,
     request,
     'Telegram chat mark read failed'
   )
@@ -278,7 +277,7 @@ export async function markTelegramChatUnread(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatActionResponse> {
   return ApiClient.instance.post<TelegramChatActionResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/unread`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/unread`,
     request,
     'Telegram chat mark unread failed'
   )
@@ -288,7 +287,7 @@ export async function joinTelegramChat(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatLifecycleCommandResponse> {
   return ApiClient.instance.post<TelegramChatLifecycleCommandResponse>(
-    '/api/v1/integrations/telegram/provider-conversations/join',
+    '/api/v1/integrations/telegram/provider-commands/conversations/join',
     request,
     'Telegram chat join failed'
   )
@@ -299,7 +298,7 @@ export async function leaveTelegramChat(
   request: TelegramChatActionRequest
 ): Promise<TelegramChatLifecycleCommandResponse> {
   return ApiClient.instance.post<TelegramChatLifecycleCommandResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/leave`,
+    `/api/v1/integrations/telegram/provider-commands/conversations/${encodeURIComponent(telegramChatId)}/leave`,
     request,
     'Telegram chat leave failed'
   )
@@ -311,17 +310,10 @@ export async function fetchTelegramMessages(
   providerChatId?: string,
   limit = 50
 ): Promise<TelegramMessageListResponse> {
-  const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
-  if (accountId?.trim()) {
-    params.set('account_id', accountId.trim())
-  }
-  if (providerChatId?.trim()) {
-    params.set('provider_chat_id', providerChatId.trim())
-  }
-  return ApiClient.instance.get<TelegramMessageListResponse>(
-    `/api/v1/integrations/telegram/provider-messages?${params.toString()}`,
-    'Telegram messages request failed'
-  )
+  void accountId
+  void providerChatId
+  void limit
+  return communicationBusinessApiMoved('Telegram messages')
 }
 
 export async function syncTelegramHistory(request: TelegramHistorySyncRequest): Promise<TelegramHistorySyncResponse> {
@@ -370,7 +362,7 @@ export async function downloadTelegramMedia(
   request: TelegramMediaDownloadRequest
 ): Promise<TelegramMediaDownloadResponse> {
   return ApiClient.instance.post<TelegramMediaDownloadResponse>(
-    '/api/v1/integrations/telegram/media/download',
+    '/api/v1/integrations/telegram/provider-media/download',
     request,
     'Telegram media download failed'
   )
@@ -480,19 +472,17 @@ export async function fetchTelegramTopics(
   telegramChatId: string,
   limit = 100
 ): Promise<TelegramTopicListResponse> {
-  return ApiClient.instance.get<TelegramTopicListResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/topics?limit=${limit}`,
-    'Telegram topics fetch failed'
-  )
+  void telegramChatId
+  void limit
+  return communicationBusinessApiMoved('Telegram topics')
 }
 export async function fetchTelegramTopicMessages(
   topicId: string,
   limit = 50
 ): Promise<TelegramMessageListResponse> {
-  return ApiClient.instance.get<TelegramMessageListResponse>(
-    `/api/v1/integrations/telegram/provider-topics/${encodeURIComponent(topicId)}/messages?limit=${limit}`,
-    'Telegram topic messages fetch failed'
-  )
+  void topicId
+  void limit
+  return communicationBusinessApiMoved('Telegram topic messages')
 }
 
 export { fetchTelegramTopicSearch } from './telegramTopics'

@@ -87,7 +87,7 @@ async fn telegram_private_members_sync_uses_tdlib_chat_metadata_and_records_audi
         .clone()
         .oneshot(json_post(
             &format!(
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members/sync"
+                "/api/v1/integrations/telegram/provider-sync/conversations/{telegram_chat_id}/members"
             ),
             json!({}),
         ))
@@ -113,7 +113,7 @@ async fn telegram_private_members_sync_uses_tdlib_chat_metadata_and_records_audi
     let members_response = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members?limit=10"
+            "/api/v1/communications/conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("members response");
@@ -231,7 +231,7 @@ where
 {
     let response = app
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
+            "/api/v1/communications/conversations?account_id={account_id}&limit=10"
         )))
         .await
         .expect("chat list response");

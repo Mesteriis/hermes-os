@@ -20,8 +20,8 @@ Shared Communication attachment and business read-model APIs live under:
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/v1/integrations/telegram/media/download` | Download TDLib media and persist local attachment/blob state |
-| POST | `/api/v1/integrations/telegram/media/upload` | Queue provider-side media send from a local attachment or blob |
+| POST | `/api/v1/integrations/telegram/provider-media/download` | Download TDLib media and persist local attachment/blob state |
+| POST | `/api/v1/integrations/telegram/provider-media/upload` | Queue provider-side media send from a local attachment or blob |
 | GET | `/api/v1/integrations/telegram/provider-search/media` | Provider-assisted media search/filter |
 | GET | `/api/v1/communications/attachments/{attachment_id}/preview` | Shared safe preview endpoint |
 | POST | `/api/v1/communications/attachments/import` | Shared local attachment import |
@@ -33,7 +33,7 @@ Shared Communication attachment and business read-model APIs live under:
 |---|---|---|
 | GET | `/api/v1/integrations/telegram/provider-search/messages` | Provider-assisted message search |
 | POST | `/api/v1/integrations/telegram/provider-search/provider` | Explicit provider search trigger |
-| GET | `/api/v1/integrations/telegram/provider-conversations/search` | Provider-assisted chat search |
+| GET | `/api/v1/communications/conversations/search` | Provider-assisted chat search |
 | GET | `/api/v1/communications/search` | Hermes business search over the projected read-model |
 | GET | `/api/v1/communications/saved-searches` | Shared saved-search surface |
 

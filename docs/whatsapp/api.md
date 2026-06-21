@@ -23,8 +23,8 @@ Communications business state stays provider-neutral and lives under:
 | GET | `/api/v1/integrations/whatsapp/capabilities` | Capability matrix |
 | POST | `/api/v1/integrations/whatsapp/fixtures/accounts` | Fixture account setup |
 | GET | `/api/v1/integrations/whatsapp/sessions` | Session/runtime list |
-| GET | `/api/v1/integrations/whatsapp/messages` | Projected WhatsApp integration message list |
-| POST | `/api/v1/integrations/whatsapp/messages` | Fixture message ingest |
+| GET | `/api/v1/communications/messages?channel_kind=whatsapp_web` | Projected WhatsApp message list |
+| POST | `/api/v1/integrations/whatsapp/fixtures/messages` | Fixture message ingest |
 
 ## Contract Notes
 

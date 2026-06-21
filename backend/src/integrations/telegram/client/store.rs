@@ -4,7 +4,7 @@ use sqlx::postgres::PgPool;
 
 use crate::platform::communications::{
     ProviderAccountCommandPort, ProviderChannelMessageLookupPort,
-    ProviderMessageObservationProjectionPort, ProviderSecretBindingCommandPort,
+    ProviderMessageObservationEventPort, ProviderSecretBindingCommandPort,
 };
 
 #[derive(Clone)]
@@ -13,7 +13,7 @@ pub struct TelegramStore {
     provider_account_store: Arc<dyn ProviderAccountCommandPort>,
     provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
     provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
-    provider_observation_projection: Arc<dyn ProviderMessageObservationProjectionPort>,
+    provider_observation_events: Arc<dyn ProviderMessageObservationEventPort>,
 }
 
 impl TelegramStore {
@@ -22,14 +22,14 @@ impl TelegramStore {
         provider_account_store: Arc<dyn ProviderAccountCommandPort>,
         provider_secret_binding_store: Arc<dyn ProviderSecretBindingCommandPort>,
         provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
-        provider_observation_projection: Arc<dyn ProviderMessageObservationProjectionPort>,
+        provider_observation_events: Arc<dyn ProviderMessageObservationEventPort>,
     ) -> Self {
         Self {
             pool,
             provider_account_store,
             provider_secret_binding_store,
             provider_channel_message_store,
-            provider_observation_projection,
+            provider_observation_events,
         }
     }
 
@@ -49,9 +49,9 @@ impl TelegramStore {
         self.provider_channel_message_store.as_ref()
     }
 
-    pub(in crate::integrations::telegram) fn provider_observation_projection(
+    pub(in crate::integrations::telegram) fn provider_observation_events(
         &self,
-    ) -> &dyn ProviderMessageObservationProjectionPort {
-        self.provider_observation_projection.as_ref()
+    ) -> &dyn ProviderMessageObservationEventPort {
+        self.provider_observation_events.as_ref()
     }
 }

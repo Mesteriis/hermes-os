@@ -1,11 +1,12 @@
-import { ApiClient } from '../../../platform/api'
 import type { TelegramRawMessageResponse } from '../types/telegramRawEvidence'
 
 export async function fetchTelegramRawMessageEvidence(
   messageId: string
 ): Promise<TelegramRawMessageResponse> {
-  return ApiClient.instance.get<TelegramRawMessageResponse>(
-    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/raw-evidence`,
-    'Telegram raw message evidence request failed'
+  void messageId
+  return Promise.reject(
+    new Error(
+      'Telegram raw evidence moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only'
+    )
   )
 }

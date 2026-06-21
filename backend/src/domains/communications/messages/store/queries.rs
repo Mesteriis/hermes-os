@@ -153,6 +153,7 @@ impl MessageProjectionStore {
                 account_id,
                 workflow_state,
                 channel_kind,
+                conversation_id: None,
                 query,
                 match_mode: MessageSearchMatchMode::All,
                 search: MessageSearchQuery::default(),
@@ -218,6 +219,10 @@ impl MessageProjectionStore {
         if let Some(channel_kind) = request.channel_kind {
             builder.push(" AND m.channel_kind = ");
             builder.push_bind(channel_kind);
+        }
+        if let Some(conversation_id) = request.conversation_id {
+            builder.push(" AND m.conversation_id = ");
+            builder.push_bind(conversation_id);
         }
         if let Some(local_state) = local_state_filter {
             builder.push(" AND m.local_state = ");

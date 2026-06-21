@@ -10,6 +10,7 @@ mod identifiers;
 pub mod lifecycle;
 mod messages;
 pub mod models;
+mod observations;
 pub mod participants;
 mod reactions;
 mod references;

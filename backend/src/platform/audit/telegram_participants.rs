@@ -33,7 +33,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.participants.sync",
             "POST",
-            "/api/v1/integrations/telegram/provider-conversations/{chat_id}/members/sync",
+            "/api/v1/integrations/telegram/provider-sync/conversations/{chat_id}/members",
             "telegram_chat",
             Some(telegram_chat_id),
             metadata,
@@ -59,7 +59,7 @@ mod tests {
         assert_eq!(record.method, "POST");
         assert_eq!(
             record.path_template,
-            "/api/v1/integrations/telegram/provider-conversations/{chat_id}/members/sync"
+            "/api/v1/integrations/telegram/provider-sync/conversations/{chat_id}/members"
         );
         assert_eq!(record.target_kind, "telegram_chat");
         assert_eq!(record.target_id.as_deref(), Some("telegram-chat-1"));

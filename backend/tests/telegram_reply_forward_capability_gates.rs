@@ -151,7 +151,7 @@ where
     let response = app
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/provider-messages?account_id={account_id}&provider_chat_id={provider_chat_id}"
+                "/api/v1/communications/messages?account_id={account_id}&conversation_id={provider_chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))

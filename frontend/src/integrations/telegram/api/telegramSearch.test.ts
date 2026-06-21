@@ -19,54 +19,31 @@ describe('telegram search API', () => {
     ApiClient.resetForTests()
   })
 
-  it('builds Telegram dialog search requests with scoped query params', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ query: 'alpha', items: [], total: 0 }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    )
+  it('rejects projected dialog search from integration clients', async () => {
+    const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    await searchTelegramChats({
+    await expect(searchTelegramChats({
       q: 'alpha',
       account_id: 'telegram-account-1',
       limit: 15,
-    })
+    })).rejects.toThrow('moved')
 
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/integrations/telegram/provider-conversations/search?')
-    expect(url).toContain('q=alpha')
-    expect(url).toContain('account_id=telegram-account-1')
-    expect(url).toContain('limit=15')
-    expect(init.method).toBe('GET')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it('builds Telegram message search requests with scoped query params', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ query: 'project alpha', items: [], total: 0 }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    )
+  it('rejects projected message search from integration clients', async () => {
+    const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    await searchTelegramMessages({
+    await expect(searchTelegramMessages({
       q: 'project alpha',
       account_id: 'telegram-account-1',
       provider_chat_id: 'chat-42',
       limit: 25,
-    })
+    })).rejects.toThrow('moved')
 
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/integrations/telegram/provider-search/messages?')
-    expect(url).toContain('q=project+alpha')
-    expect(url).toContain('account_id=telegram-account-1')
-    expect(url).toContain('provider_chat_id=chat-42')
-    expect(url).toContain('limit=25')
-    expect(init.method).toBe('GET')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('builds Telegram provider message search requests with required account scope', async () => {
@@ -134,24 +111,15 @@ describe('telegram search API', () => {
     expect(response.provider_search_attempted).toBe(true)
   })
 
-  it('builds Telegram pinned-message requests for a projected chat', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ items: [] }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    )
+  it('rejects projected pinned messages from integration clients', async () => {
+    const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    await fetchTelegramPinnedMessages({
+    await expect(fetchTelegramPinnedMessages({
       telegram_chat_id: 'tgchat-1',
       limit: 40,
-    })
+    })).rejects.toThrow('moved')
 
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/integrations/telegram/provider-conversations/tgchat-1/pinned-messages?')
-    expect(url).toContain('limit=40')
-    expect(init.method).toBe('GET')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

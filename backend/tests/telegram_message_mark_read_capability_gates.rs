@@ -79,9 +79,7 @@ async fn fixture_account_blocks_message_mark_read_before_side_effects() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await

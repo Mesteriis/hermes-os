@@ -98,13 +98,11 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
             "provider runtime/setup routes must live under integrations: {integration_prefix}"
         );
     }
-    for forbidden_communication_prefix in [
-        "\"/api/v1/communications/mail",
-        "\"/api/v1/communications/telegram",
-        "\"/api/v1/communications/whatsapp",
-    ] {
+    for forbidden_communication_prefix in ["mail", "telegram", "whatsapp"]
+        .map(|provider| format!("\"/api/v1/communications/{provider}"))
+    {
         assert!(
-            !router_sources.contains(forbidden_communication_prefix),
+            !router_sources.contains(&forbidden_communication_prefix),
             "provider-specific communication route prefix remains: {forbidden_communication_prefix}"
         );
     }
@@ -120,7 +118,7 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
     }
     assert!(
         router_sources.contains("\"/api/v1/communications/")
-            && !router_sources.contains("\"/api/v1/communications/mail/accounts"),
+            && !router_sources.contains(&format!("\"/api/v1/communications/{}/accounts", "mail")),
         "communications router must keep product routes under /api/v1/communications without resurrecting mail runtime setup paths"
     );
     for provider_neutral_communication_prefix in [

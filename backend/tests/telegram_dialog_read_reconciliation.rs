@@ -75,9 +75,7 @@ async fn mark_read_reconciliation_completes_targeted_read_commands_from_chat_rea
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await

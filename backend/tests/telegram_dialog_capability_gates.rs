@@ -69,9 +69,7 @@ async fn fixture_account_blocks_dialog_actions_before_side_effects() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -172,7 +170,7 @@ async fn fixture_account_blocks_dialog_actions_before_side_effects() {
             .clone()
             .oneshot(json_post_request_with_actor(
                 &format!(
-                    "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/{action}"
+                    "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/{action}"
                 ),
                 body,
                 LOCAL_API_TOKEN,
@@ -284,7 +282,7 @@ where
 {
     let response = app
         .oneshot(get_request_with_token(
-            &format!("/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}"),
+            &format!("/api/v1/communications/conversations/{telegram_chat_id}"),
             LOCAL_API_TOKEN,
         ))
         .await

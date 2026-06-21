@@ -195,7 +195,7 @@ pub(crate) async fn search_telegram_messages_provider(
     }))
 }
 
-/// GET /api/v1/integrations/telegram/provider-conversations/search?q=&account_id=&limit=
+/// GET /api/v1/communications/conversations/search?q=&account_id=&limit=
 pub(crate) async fn search_telegram_chats(
     State(state): State<AppState>,
     Query(query): Query<TelegramChatSearchQuery>,

@@ -6,31 +6,32 @@ import type {
   TelegramTopicListResponse,
 } from '../types/telegramTopics'
 
+function communicationBusinessApiMoved<T>(operation: string): Promise<T> {
+  return Promise.reject(
+    new Error(
+      `${operation} moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only`
+    )
+  )
+}
+
 export async function fetchTelegramTopicSearch(
   telegramChatId: string,
   q: string,
   limit = 50
 ): Promise<TelegramTopicListResponse> {
-  const params = new URLSearchParams({
-    q: q.trim(),
-    telegram_chat_id: telegramChatId.trim(),
-    limit: String(limit),
-  })
-  return ApiClient.instance.get<TelegramTopicListResponse>(
-    `/api/v1/integrations/telegram/provider-topics/search?${params}`,
-    'Telegram topic search failed'
-  )
+  void telegramChatId
+  void q
+  void limit
+  return communicationBusinessApiMoved('Telegram topic search')
 }
 
 export async function createTelegramTopic(
   telegramChatId: string,
   request: TelegramTopicCreateRequest
 ): Promise<TelegramTopicLifecycleResponse> {
-  return ApiClient.instance.post<TelegramTopicLifecycleResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/topics`,
-    request,
-    'Telegram topic create failed'
-  )
+  void telegramChatId
+  void request
+  return communicationBusinessApiMoved('Telegram topic create')
 }
 
 export async function toggleTelegramTopicClosed(

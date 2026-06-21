@@ -24,6 +24,7 @@ pub(crate) async fn get_v1_communication_messages(
             account_id: query.account_id.as_deref(),
             workflow_state,
             channel_kind: query.channel_kind.as_deref(),
+            conversation_id: query.conversation_id.as_deref(),
             query: query.q.as_deref(),
             match_mode: query.match_mode,
             search: query.search.clone(),

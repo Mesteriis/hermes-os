@@ -69,7 +69,7 @@ export async function uploadTelegramMedia(
   request: TelegramMediaUploadRequest
 ): Promise<TelegramMediaUploadResponse> {
   return ApiClient.instance.post<TelegramMediaUploadResponse>(
-    '/api/v1/integrations/telegram/media/upload',
+    '/api/v1/integrations/telegram/provider-media/upload',
     request,
     'Telegram media upload failed'
   )

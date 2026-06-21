@@ -214,16 +214,12 @@ pub async fn record_pin_state(
 ) -> Result<TelegramLifecycleResponse, TelegramError> {
     let pool = store.pool();
     let now = Utc::now();
-    let updated = store
-        .provider_observation_projection()
-        .record_telegram_message_pin_observation(message_id, request.is_pinned, now)
+    let message = store.message_by_id(message_id).await?.ok_or_else(|| {
+        TelegramError::InvalidRequest(format!("telegram message `{message_id}` was not found"))
+    })?;
+    store
+        .append_message_pin_observation(&message, request.is_pinned, now)
         .await?;
-
-    if updated.is_none() {
-        return Err(TelegramError::InvalidRequest(format!(
-            "telegram message `{message_id}` was not found"
-        )));
-    }
 
     let command_kind = if request.is_pinned {
         TelegramCommandKind::Pin

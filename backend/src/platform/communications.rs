@@ -5,6 +5,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::platform::observations::{ObservationOriginKind, ObservationStoreError};
@@ -177,6 +178,114 @@ pub struct ProviderAttachmentDownloadStateUpdate<'a> {
     pub filename: Option<&'a str>,
     pub observed_at: DateTime<Utc>,
     pub context: ProviderMessageProjectionObservationContext<'a>,
+}
+
+pub struct ProviderMessageObservationEvent<'a> {
+    pub provider: &'a str,
+    pub account_id: &'a str,
+    pub channel_kind: &'a str,
+    pub message_id: &'a str,
+    pub external_message_id: &'a str,
+    pub event_kind: &'a str,
+    pub observed_at: DateTime<Utc>,
+    pub external_event_id: Option<&'a str>,
+    pub payload: &'a Value,
+    pub causation_id: Option<&'a str>,
+}
+
+pub type ProviderMessageObservationEventFuture<'a> = Pin<
+    Box<
+        dyn Future<Output = Result<Option<i64>, ProviderCommunicationMessagePortError>> + Send + 'a,
+    >,
+>;
+
+pub trait ProviderMessageObservationEventPort: Send + Sync {
+    fn append_provider_message_observation<'a>(
+        &'a self,
+        observation: ProviderMessageObservationEvent<'a>,
+    ) -> ProviderMessageObservationEventFuture<'a>;
+}
+
+#[derive(Clone)]
+pub struct EventStoreProviderMessageObservationEventPort {
+    event_store: crate::platform::events::EventStore,
+}
+
+impl EventStoreProviderMessageObservationEventPort {
+    pub fn new(pool: sqlx::postgres::PgPool) -> Self {
+        Self {
+            event_store: crate::platform::events::EventStore::new(pool),
+        }
+    }
+}
+
+impl ProviderMessageObservationEventPort for EventStoreProviderMessageObservationEventPort {
+    fn append_provider_message_observation<'a>(
+        &'a self,
+        observation: ProviderMessageObservationEvent<'a>,
+    ) -> ProviderMessageObservationEventFuture<'a> {
+        Box::pin(async move {
+            validate_provider_observation_event(&observation).map_err(|error| {
+                ProviderCommunicationMessagePortError::InvalidRequest(error.to_string())
+            })?;
+            let payload_hash = sha256_json(observation.payload)?;
+            let idempotency_key = provider_observation_idempotency_key(
+                observation.provider,
+                observation.account_id,
+                observation.event_kind,
+                observation.external_message_id,
+                observation.external_event_id,
+                &payload_hash,
+            );
+            let event_type =
+                provider_observation_event_type(observation.provider, observation.event_kind);
+            let mut builder = crate::platform::events::NewEventEnvelope::builder(
+                format!(
+                    "evt_provider_observation_{}",
+                    stable_event_id_fragment(&idempotency_key)
+                ),
+                event_type,
+                observation.observed_at,
+                json!({
+                    "kind": "provider_observation",
+                    "provider": observation.provider,
+                    "account_id": observation.account_id,
+                    "source_id": idempotency_key,
+                }),
+                json!({
+                    "kind": "provider_message",
+                    "provider": observation.provider,
+                    "id": observation.external_message_id,
+                    "message_id": observation.message_id,
+                }),
+            )
+            .payload(json!({
+                "provider_kind": observation.channel_kind,
+                "account_id": observation.account_id,
+                "external_event_id": observation.external_event_id,
+                "external_message_id": observation.external_message_id,
+                "message_id": observation.message_id,
+                "event_kind": observation.event_kind,
+                "observed_at": observation.observed_at,
+                "payload_hash": payload_hash,
+                "payload": observation.payload,
+            }))
+            .provenance(json!({
+                "provider": observation.provider,
+                "ownership": "provider_observation_fact",
+            }))
+            .correlation_id(idempotency_key);
+            if let Some(causation_id) = observation.causation_id {
+                builder = builder.causation_id(causation_id);
+            }
+            let event = builder.build()?;
+
+            self.event_store
+                .append_idempotent(&event)
+                .await
+                .map_err(Into::into)
+        })
+    }
 }
 
 #[derive(Debug, Error)]
@@ -1007,41 +1116,6 @@ pub trait ProviderChannelMessageLookupPort: Send + Sync {
     ) -> ProviderChannelMessagePortFuture<'a, (i64, i64)>;
 }
 
-pub trait ProviderMessageObservationProjectionPort: Send + Sync {
-    fn record_telegram_message_metadata_observation<'a>(
-        &'a self,
-        message_id: &'a str,
-        metadata: &'a Value,
-    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
-
-    fn record_telegram_message_delivery_observation<'a>(
-        &'a self,
-        message_id: &'a str,
-        delivery_state: &'a str,
-        observed_at: DateTime<Utc>,
-    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
-
-    fn record_telegram_message_content_observation<'a>(
-        &'a self,
-        message_id: &'a str,
-        body_text: &'a str,
-        metadata: &'a Value,
-        observed_at: DateTime<Utc>,
-    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
-
-    fn record_telegram_message_pin_observation<'a>(
-        &'a self,
-        message_id: &'a str,
-        is_pinned: bool,
-        observed_at: DateTime<Utc>,
-    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
-
-    fn record_telegram_attachment_download_observation<'a>(
-        &'a self,
-        update: ProviderAttachmentDownloadStateUpdate<'a>,
-    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
-}
-
 pub trait ProviderChannelMessageCommandPort: ProviderChannelMessageLookupPort {
     fn apply_metadata<'a>(
         &'a self,
@@ -1119,6 +1193,62 @@ pub trait ProviderChannelMessageCommandPort: ProviderChannelMessageLookupPort {
         &'a self,
         update: ProviderAttachmentDownloadStateUpdate<'a>,
     ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
+}
+
+fn validate_provider_observation_event(
+    observation: &ProviderMessageObservationEvent<'_>,
+) -> Result<(), CommunicationContractError> {
+    validate_non_empty("provider", observation.provider)?;
+    validate_non_empty("account_id", observation.account_id)?;
+    validate_non_empty("channel_kind", observation.channel_kind)?;
+    validate_non_empty("message_id", observation.message_id)?;
+    validate_non_empty("external_message_id", observation.external_message_id)?;
+    validate_non_empty("event_kind", observation.event_kind)?;
+    validate_object("payload", observation.payload)
+}
+
+fn provider_observation_event_type(provider: &str, event_kind: &str) -> String {
+    if provider == "telegram" && event_kind == "attachment_download_state_observed" {
+        return "integration.telegram.attachment.download_state_observed".to_owned();
+    }
+    format!("integration.{provider}.message.{event_kind}")
+}
+
+fn provider_observation_idempotency_key(
+    provider: &str,
+    account_id: &str,
+    event_kind: &str,
+    external_message_id: &str,
+    external_event_id: Option<&str>,
+    payload_hash: &str,
+) -> String {
+    if let Some(external_event_id) = external_event_id
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return format!("{provider}:{account_id}:external_event:{external_event_id}");
+    }
+    format!("{provider}:{account_id}:{event_kind}:{external_message_id}:{payload_hash}")
+}
+
+fn stable_event_id_fragment(value: &str) -> String {
+    value
+        .chars()
+        .map(|char| {
+            if char.is_ascii_alphanumeric() {
+                char
+            } else {
+                '_'
+            }
+        })
+        .collect()
+}
+
+fn sha256_json(value: &Value) -> Result<String, ProviderCommunicationMessagePortError> {
+    let encoded = serde_json::to_vec(value)?;
+    let mut hasher = Sha256::new();
+    hasher.update(encoded);
+    Ok(format!("sha256:{:x}", hasher.finalize()))
 }
 
 fn validate_non_empty(field: &'static str, value: &str) -> Result<(), CommunicationContractError> {

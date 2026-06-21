@@ -112,7 +112,7 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/provider-messages?account_id={account_id}&provider_chat_id={chat_id}"
+                "/api/v1/communications/messages?account_id={account_id}&conversation_id={chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -126,7 +126,7 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
         .iter()
         .find(|message| message["delivery_state"] == "sent")
         .expect("sent message");
-    assert_eq!(sent_message["text"], json!(message_text));
+    assert_eq!(sent_message["body_text_preview"], json!(message_text));
     assert_eq!(sent_message["sender_display_name"], json!("Hermes"));
 
     let audit_metadata: Value = sqlx::query_scalar(
@@ -247,7 +247,7 @@ async fn telegram_raw_message_endpoint_returns_sanitized_source_evidence() {
 
     let raw_response = app
         .oneshot(get_request_with_token(
-            &format!("/api/v1/integrations/telegram/provider-messages/{message_id}/raw-evidence"),
+            &format!("/api/v1/communications/messages/{message_id}/raw-evidence"),
             LOCAL_API_TOKEN,
         ))
         .await

@@ -444,7 +444,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/whatsapp/provider-messages?account_id={account_id}&provider_chat_id={chat_id}"
+                "/api/v1/communications/messages?account_id={account_id}&conversation_id={chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))

@@ -40,16 +40,13 @@ export async function fetchWhatsappWebMessages(
   providerChatId?: string,
   limit = 50
 ): Promise<WhatsappWebMessageListResponse> {
-  const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
-  if (accountId?.trim()) {
-    params.set('account_id', accountId.trim())
-  }
-  if (providerChatId?.trim()) {
-    params.set('provider_chat_id', providerChatId.trim())
-  }
-  return ApiClient.instance.get<WhatsappWebMessageListResponse>(
-    `/api/v1/integrations/whatsapp/provider-messages?${params.toString()}`,
-    'WhatsApp Web messages request failed'
+  void accountId
+  void providerChatId
+  void limit
+  return Promise.reject(
+    new Error(
+      'WhatsApp Web messages moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only'
+    )
   )
 }
 

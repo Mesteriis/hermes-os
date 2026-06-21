@@ -6,7 +6,6 @@ use crate::integrations::telegram::client::lifecycle::{
     reconcile_message_pin_commands_from_provider_state, record_provider_delete_observation,
     record_provider_edit_observation,
 };
-use crate::integrations::telegram::client::rows::provider_channel_message_to_telegram_message;
 use crate::integrations::telegram::client::{
     TelegramReactionMessageRef, TelegramStore, derive_tdlib_chosen_reaction_emojis,
     derive_tdlib_provider_reactions, derive_tdlib_reaction_summary_metadata,
@@ -335,22 +334,20 @@ pub(super) async fn publish_message_pinned_event(
     };
 
     let observed_at = Utc::now();
-    let updated_message = match store
-        .provider_observation_projection()
-        .record_telegram_message_pin_observation(
-            &message.message_id,
-            snapshot.is_pinned,
-            observed_at,
-        )
+    if let Err(error) = store
+        .append_message_pin_observation(&message, snapshot.is_pinned, observed_at)
         .await
     {
-        Ok(Some(message)) => provider_channel_message_to_telegram_message(message),
-        Ok(None) => return,
-        Err(error) => {
-            tracing::warn!(error = %error, message_id = %message.message_id, "Telegram runtime event bridge: failed to project message pin state");
-            return;
-        }
-    };
+        tracing::warn!(error = %error, message_id = %message.message_id, "Telegram runtime event bridge: failed to append message pin observation");
+        return;
+    }
+    let mut updated_message = message;
+    if let Some(metadata) = updated_message.metadata.as_object_mut() {
+        metadata.insert(
+            "is_pinned".to_owned(),
+            serde_json::Value::Bool(snapshot.is_pinned),
+        );
+    }
 
     let reconciled = match reconcile_message_pin_commands_from_provider_state(
         pool,

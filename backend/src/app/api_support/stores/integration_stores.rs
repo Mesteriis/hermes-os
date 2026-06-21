@@ -21,7 +21,11 @@ pub(crate) fn telegram_store(state: &AppState) -> Result<TelegramStore, ApiError
                 pool.clone(),
             ),
         ),
-        Arc::new(crate::domains::communications::messages::ProviderChannelMessageStore::new(pool)),
+        Arc::new(
+            crate::platform::communications::EventStoreProviderMessageObservationEventPort::new(
+                pool,
+            ),
+        ),
     ))
 }
 

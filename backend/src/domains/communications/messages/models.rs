@@ -165,6 +165,7 @@ pub struct ProjectedMessagePageQuery<'a> {
     pub account_id: Option<&'a str>,
     pub workflow_state: Option<WorkflowState>,
     pub channel_kind: Option<&'a str>,
+    pub conversation_id: Option<&'a str>,
     pub query: Option<&'a str>,
     pub match_mode: MessageSearchMatchMode,
     pub search: MessageSearchQuery,

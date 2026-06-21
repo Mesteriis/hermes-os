@@ -64,7 +64,7 @@ async fn members_route_excludes_inactive_provider_roster_rows() {
     let response = app
         .clone()
         .oneshot(get(
-            "/api/v1/integrations/telegram/provider-conversations?account_id=acct-1&limit=10",
+            "/api/v1/communications/conversations?account_id=acct-1&limit=10",
         ))
         .await
         .expect("chat list response");
@@ -96,7 +96,7 @@ async fn members_route_excludes_inactive_provider_roster_rows() {
     let members = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members?limit=10"
+            "/api/v1/communications/conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("members response");

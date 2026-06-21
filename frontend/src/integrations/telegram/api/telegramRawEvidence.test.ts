@@ -13,20 +13,12 @@ describe('telegram raw evidence API', () => {
     ApiClient.resetForTests()
   })
 
-  it('fetches sanitized raw source evidence by message id', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ raw_record: { raw_record_id: 'raw-1' } }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      })
-    )
+  it('rejects projected raw evidence from integration clients', async () => {
+    const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
-    await fetchTelegramRawMessageEvidence('msg/raw 1')
+    await expect(fetchTelegramRawMessageEvidence('msg/raw 1')).rejects.toThrow('moved')
 
-    expect(fetchMock).toHaveBeenCalledOnce()
-    const [url, init] = fetchMock.mock.calls[0]
-    expect(url).toContain('/api/v1/integrations/telegram/provider-messages/msg%2Fraw%201/raw-evidence')
-    expect(init.method).toBe('GET')
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

@@ -20,26 +20,26 @@ Communications business state remains provider-neutral and lives under:
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v1/integrations/telegram/provider-conversations?account_id=&limit=` | Projected Telegram chat list |
-| GET | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}` | Projected chat detail |
-| GET | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members` | Projected member list |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members/sync` | Provider-backed member sync |
-| GET | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/pinned-messages` | Projected pinned messages |
-| GET | `/api/v1/integrations/telegram/provider-conversations/search` | Provider-scoped chat search assist |
+| GET | `/api/v1/communications/conversations?account_id=&limit=` | Projected Telegram chat list |
+| GET | `/api/v1/communications/conversations/{telegram_chat_id}` | Projected chat detail |
+| GET | `/api/v1/communications/conversations/{telegram_chat_id}/members` | Projected member list |
+| POST | `/api/v1/integrations/telegram/provider-sync/conversations/{telegram_chat_id}/members` | Provider-backed member sync |
+| GET | `/api/v1/communications/conversations/{telegram_chat_id}/pinned-messages` | Projected pinned messages |
+| GET | `/api/v1/communications/conversations/search` | Provider-scoped chat search assist |
 | GET | `/api/v1/integrations/telegram/conversation-folders` | Provider folder projection |
-| POST | `/api/v1/integrations/telegram/provider-conversations/join` | Join command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/leave` | Leave command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/pin` | Pin command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unpin` | Unpin command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/archive` | Archive command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unarchive` | Unarchive command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/mute` | Mute command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unmute` | Unmute command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/read` | Provider read reconciliation command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unread` | Provider unread reconciliation command |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}` | Add folder assignment |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove` | Remove folder assignment |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/reassign` | Replace folder assignments |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/join` | Join command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/leave` | Leave command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/pin` | Pin command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unpin` | Unpin command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/archive` | Archive command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unarchive` | Unarchive command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/mute` | Mute command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unmute` | Unmute command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/read` | Provider read reconciliation command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unread` | Provider unread reconciliation command |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}` | Add folder assignment |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove` | Remove folder assignment |
+| POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/reassign` | Replace folder assignments |
 | POST | `/api/v1/integrations/telegram/provider-sync/chats` | Provider chat sync |
 | POST | `/api/v1/integrations/telegram/provider-sync/history` | Provider history sync |
 
@@ -47,19 +47,19 @@ Communications business state remains provider-neutral and lives under:
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/topics` | Topic list |
-| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/topics` | Create topic command |
-| GET | `/api/v1/integrations/telegram/provider-topics/{topic_id}` | Topic detail |
+| GET | `/api/v1/communications/conversations/{telegram_chat_id}/topics` | Topic list |
+| POST | `/api/v1/communications/conversations/{telegram_chat_id}/topics` | Create topic command |
+| GET | `/api/v1/communications/topics/{topic_id}` | Topic detail |
 | POST | `/api/v1/integrations/telegram/provider-commands/topics/{topic_id}/close` | Close or reopen topic |
-| GET | `/api/v1/integrations/telegram/provider-topics/{topic_id}/messages` | Topic-scoped message list |
-| GET | `/api/v1/integrations/telegram/provider-topics/search` | Topic search |
+| GET | `/api/v1/communications/topics/{topic_id}/messages` | Topic-scoped message list |
+| GET | `/api/v1/communications/topics/search` | Topic search |
 
 ## Message Runtime Routes
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v1/integrations/telegram/provider-messages?account_id=&provider_chat_id=&limit=` | Projected Telegram message list |
-| POST | `/api/v1/integrations/telegram/provider-messages` | Fixture ingest |
+| GET | `/api/v1/communications/messages?account_id=&provider_chat_id=&limit=` | Projected Telegram message list |
+| POST | `/api/v1/integrations/telegram/fixtures/messages` | Fixture ingest |
 | POST | `/api/v1/integrations/telegram/provider-commands/messages/send` | Manual runtime send |
 | POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/reply` | Runtime reply |
 | POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/forward` | Runtime forward |
@@ -68,12 +68,12 @@ Communications business state remains provider-neutral and lives under:
 | POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/restore-visibility` | Restore visibility command |
 | POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/pin` | Pin command |
 | POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/mark-read` | Message-level read command |
-| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/versions` | Version list |
-| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/tombstones` | Tombstone list |
-| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/raw-evidence` | Sanitized raw evidence |
-| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/reply-chain` | Reply chain |
-| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/forward-chain` | Forward chain |
-| GET/POST/DELETE | `/api/v1/integrations/telegram/provider-messages/{message_id}/reactions` | Reaction projection and commands |
+| GET | `/api/v1/communications/messages/{message_id}/versions` | Version list |
+| GET | `/api/v1/communications/messages/{message_id}/tombstones` | Tombstone list |
+| GET | `/api/v1/communications/messages/{message_id}/raw-evidence` | Sanitized raw evidence |
+| GET | `/api/v1/communications/messages/{message_id}/reply-chain` | Reply chain |
+| GET | `/api/v1/communications/messages/{message_id}/forward-chain` | Forward chain |
+| GET/POST/DELETE | `/api/v1/communications/messages/{message_id}/reactions` | Reaction projection and commands |
 
 ## Notes
 

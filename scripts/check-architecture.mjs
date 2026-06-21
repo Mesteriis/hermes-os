@@ -601,14 +601,20 @@ function providerScopedCommunicationRouteFailuresForSource(relativePath, source)
 }
 
 function integrationBusinessCommunicationRouteFailuresForSource(relativePath, source) {
-	if (!/^backend\/src\/|^frontend\/src\//.test(relativePath)) return [];
-	if (!/\.(?:rs|ts|vue)$/.test(relativePath)) return [];
+	if (!/\.(?:rs|ts|vue|md)$/.test(relativePath)) return [];
 	const errors = [];
 	const forbiddenRoutePattern =
 		/\/api\/v1\/integrations\/(telegram|whatsapp)\/(conversations|messages|topics|search|sync)(?=\/|\?|['"`\s])/g;
 	for (const match of source.matchAll(forbiddenRoutePattern)) {
 		errors.push(
 			`${relativePath}: business Communication route "/api/v1/integrations/${match[1]}/${match[2]}" is forbidden; use provider-neutral /api/v1/communications/* or explicit provider-control /api/v1/integrations/${match[1]}/provider-*`
+		);
+	}
+	const forbiddenProviderShapedBusinessRoutePattern =
+		/\/api\/v1\/integrations\/(telegram|whatsapp|mail)\/provider-(conversations|messages|topics|reactions|reply-chain|forward-chain|raw-evidence|pinned-messages)(?=\/|\?|['"`\s])/g;
+	for (const match of source.matchAll(forbiddenProviderShapedBusinessRoutePattern)) {
+		errors.push(
+			`${relativePath}: provider-shaped business Communication route "/api/v1/integrations/${match[1]}/provider-${match[2]}" is forbidden; use provider-neutral /api/v1/communications/* or explicit provider-control /api/v1/integrations/${match[1]}/provider-commands|provider-search|provider-sync|provider-media/*`
 		);
 	}
 	return errors;
@@ -674,7 +680,7 @@ function integrationBusinessMutationBridgeFailuresForSource(relativePath, source
 	if (!relativePath.startsWith('backend/src/integrations/')) return [];
 	const errors = [];
 	const forbiddenMutationBridgePattern =
-		/\b(?:provider_message_state|ProviderChannelMessageCommandPort|apply_metadata|set_delivery_state|apply_content_update|apply_pinned_state|update_attachment_download_state)\b/g;
+		/\b(?:provider_message_state|ProviderChannelMessageCommandPort|ProviderMessageObservationProjectionPort|provider_observation_projection|apply_metadata|set_delivery_state|apply_content_update|apply_pinned_state|update_attachment_download_state|append_idempotent)\b/g;
 	for (const match of source.matchAll(forbiddenMutationBridgePattern)) {
 		errors.push(
 			`${relativePath}: integrations must publish immutable provider observations, not call Communication business mutation bridge "${match[0]}"`
@@ -1839,10 +1845,6 @@ async function checkLayerBoundaries() {
 				message
 			}))
 		);
-		backendViolations.push(...integrationBusinessCommunicationRouteFailuresForSource(file, source).map((message) => ({
-			file,
-			message
-		})));
 		backendViolations.push(...applicationAppImportFailuresForSource(file, source).map((message) => ({
 			file,
 			message
@@ -1872,10 +1874,6 @@ async function checkLayerBoundaries() {
 	for (const file of frontendFiles) {
 		const source = await readFile(path.join(repoRoot, file), 'utf8');
 		frontendViolations.push(...frontendBoundaryViolations(file, source));
-		frontendViolations.push(...integrationBusinessCommunicationRouteFailuresForSource(file, source).map((message) => ({
-			file,
-			message
-		})));
 		frontendViolations.push(...frontendDomainProviderControlRouteFailuresForSource(file, source).map((message) => ({
 			file,
 			message
@@ -1889,7 +1887,7 @@ async function checkLayerBoundaries() {
 	failures.push(...backendViolations.map((violation) => violation.message));
 	failures.push(...frontendViolations.map((violation) => violation.message));
 	failures.push(...await frontendProviderBusinessCacheRootFailures());
-	failures.push(...await providerScopedCommunicationRouteFailures());
+	failures.push(...await routeOwnershipFailures());
 }
 
 async function frontendProviderBusinessCacheRootFailures() {
@@ -1923,17 +1921,18 @@ function frontendProviderBusinessCacheRootFailuresForSource(relativePath, source
 	return errors;
 }
 
-async function providerScopedCommunicationRouteFailures() {
+async function routeOwnershipFailures() {
 	const files = [
 		...await collectFiles('backend/src', new Set(['.rs'])),
 		...await collectFiles('frontend/src', new Set(['.ts', '.vue'])),
 		...await collectFiles('docs', new Set(['.md'])),
-		...await collectFiles('scripts', new Set(['.mjs', '.js']))
+		...await collectFiles('backend/tests', new Set(['.rs']))
 	];
 	const errors = [];
 	for (const file of files) {
 		const source = await readFile(path.join(repoRoot, file), 'utf8');
 		errors.push(...providerScopedCommunicationRouteFailuresForSource(file, source));
+		errors.push(...integrationBusinessCommunicationRouteFailuresForSource(file, source));
 	}
 	return errors;
 }
@@ -2177,11 +2176,25 @@ function runSelfTests() {
 		).length === 1
 	);
 	assertSelfTest(
-		'integration provider-control route passes',
+		'integration provider-shaped business route fails',
 		integrationBusinessCommunicationRouteFailuresForSource(
 			'backend/src/app/router/routes/messaging.rs',
 			'"/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/pin"'
+		).length === 1
+	);
+	assertSelfTest(
+		'integration provider-command route passes',
+		integrationBusinessCommunicationRouteFailuresForSource(
+			'backend/src/app/router/routes/messaging.rs',
+			'"/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/pin"'
 		).length === 0
+	);
+	assertSelfTest(
+		'integration provider-shaped message subresource route fails',
+		integrationBusinessCommunicationRouteFailuresForSource(
+			'backend/src/app/router/routes/messaging.rs',
+			'"/api/v1/integrations/telegram/provider-messages/{message_id}/raw-evidence"'
+		).length === 1
 	);
 	assertSelfTest(
 		'frontend domain provider-control route fails',
@@ -2202,6 +2215,20 @@ function runSelfTests() {
 		applicationAppImportFailuresForSource(
 			'backend/src/application/telegram_runtime.rs',
 			'use crate::app::{ApiError, AppState};'
+		).length === 1
+	);
+	assertSelfTest(
+		'integration projection port leakage fails',
+		integrationBusinessMutationBridgeFailuresForSource(
+			'backend/src/integrations/telegram/client/store.rs',
+			'use crate::platform::communications::ProviderMessageObservationProjectionPort;'
+		).length === 1
+	);
+	assertSelfTest(
+		'integration idempotent event append leakage fails',
+		integrationBusinessMutationBridgeFailuresForSource(
+			'backend/src/integrations/telegram/runtime/manager/message_events/projection.rs',
+			'EventStore::new(pool).append_idempotent(&event).await?;'
 		).length === 1
 	);
 	assertSelfTest(

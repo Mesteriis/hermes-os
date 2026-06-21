@@ -6,22 +6,21 @@ import type {
   TelegramMessageSearchResponse,
 } from '../types/telegram'
 
+function communicationBusinessApiMoved<T>(operation: string): Promise<T> {
+  return Promise.reject(
+    new Error(
+      `${operation} moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only`
+    )
+  )
+}
+
 export async function searchTelegramChats(params: {
   q: string
   account_id?: string
   limit?: number
 }): Promise<TelegramChatSearchResponse> {
-  const query = new URLSearchParams({ q: params.q.trim() })
-  if (params.account_id?.trim()) {
-    query.set('account_id', params.account_id.trim())
-  }
-  if (params.limit != null) {
-    query.set('limit', String(Math.trunc(params.limit)))
-  }
-  return ApiClient.instance.get<TelegramChatSearchResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/search?${query.toString()}`,
-    'Telegram dialog search failed'
-  )
+  void params
+  return communicationBusinessApiMoved('Telegram dialog search')
 }
 
 export async function searchTelegramMessages(params: {
@@ -30,20 +29,8 @@ export async function searchTelegramMessages(params: {
   provider_chat_id?: string
   limit?: number
 }): Promise<TelegramMessageSearchResponse> {
-  const query = new URLSearchParams({ q: params.q.trim() })
-  if (params.account_id?.trim()) {
-    query.set('account_id', params.account_id.trim())
-  }
-  if (params.provider_chat_id?.trim()) {
-    query.set('provider_chat_id', params.provider_chat_id.trim())
-  }
-  if (params.limit != null) {
-    query.set('limit', String(Math.trunc(params.limit)))
-  }
-  return ApiClient.instance.get<TelegramMessageSearchResponse>(
-    `/api/v1/integrations/telegram/provider-search/messages?${query.toString()}`,
-    'Telegram message search failed'
-  )
+  void params
+  return communicationBusinessApiMoved('Telegram message search')
 }
 
 export async function searchTelegramProviderMessages(params: {
@@ -98,12 +85,6 @@ export async function fetchTelegramPinnedMessages(params: {
   telegram_chat_id: string
   limit?: number
 }): Promise<TelegramMessageListResponse> {
-  const query = new URLSearchParams()
-  if (params.limit != null) {
-    query.set('limit', String(Math.trunc(params.limit)))
-  }
-  return ApiClient.instance.get<TelegramMessageListResponse>(
-    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(params.telegram_chat_id)}/pinned-messages?${query.toString()}`,
-    'Telegram pinned messages query failed'
-  )
+  void params
+  return communicationBusinessApiMoved('Telegram pinned messages')
 }

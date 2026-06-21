@@ -25,42 +25,46 @@ impl NewApiAuditRecord {
             _ => "telegram.dialog.action",
         };
         let path_template = match command_kind {
-            "join" => "/api/v1/integrations/telegram/provider-conversations/join",
+            "join" => "/api/v1/integrations/telegram/provider-commands/conversations/join",
             "leave" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/leave"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/leave"
             }
-            "pin" => "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/pin",
+            "pin" => {
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/pin"
+            }
             "unpin" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unpin"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unpin"
             }
             "archive" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/archive"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/archive"
             }
             "unarchive" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unarchive"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unarchive"
             }
             "mute" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/mute"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/mute"
             }
             "unmute" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unmute"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unmute"
             }
             "folder_add" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}"
             }
             "folder_remove" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove"
             }
             "folder_reassign" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/reassign"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/reassign"
             }
             "mark_read" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/read"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/read"
             }
             "mark_unread" => {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unread"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unread"
             }
-            _ => "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/action",
+            _ => {
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/action"
+            }
         };
         let operation = match command_kind {
             "pin" => "telegram.chat.pin",
@@ -218,7 +222,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.chat.folder_reassign",
             "POST",
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/reassign",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/reassign",
             "telegram_chat",
             Some(telegram_chat_id.to_owned()),
             metadata,
@@ -260,9 +264,9 @@ impl NewApiAuditRecord {
             operation,
             method,
             if command_kind == "folder_remove" {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove"
             } else {
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}"
             },
             "telegram_chat",
             Some(telegram_chat_id.to_owned()),

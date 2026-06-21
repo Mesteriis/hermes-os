@@ -88,7 +88,7 @@ async fn telegram_dialog_search_returns_projected_chat_matches() {
     let response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/integrations/telegram/provider-conversations/search?q=Alpha&account_id={account_id}&limit=10"),
+            &format!("/api/v1/communications/conversations/search?q=Alpha&account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -321,9 +321,7 @@ async fn telegram_pinned_messages_route_returns_projection_backed_items() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -339,7 +337,7 @@ async fn telegram_pinned_messages_route_returns_projection_backed_items() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/pinned-messages?limit=10"
+                "/api/v1/communications/conversations/{telegram_chat_id}/pinned-messages?limit=10"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -408,9 +406,7 @@ async fn telegram_message_created_event_includes_projected_chat_snapshot() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -522,15 +518,25 @@ async fn telegram_message_pin_route_records_local_projection_command_and_audit()
     assert_eq!(body["operation"], json!("pin"));
     assert_eq!(body["status"], json!("pinned"));
 
-    let metadata: Value = sqlx::query_scalar(
-        "SELECT message_metadata FROM communication_messages WHERE message_id = $1",
+    let observation_payload: Value = sqlx::query_scalar(
+        r#"
+        SELECT payload
+        FROM event_log
+        WHERE event_type = 'integration.telegram.message.pinned_state_observed'
+          AND payload->>'message_id' = $1
+        ORDER BY event_id DESC
+        LIMIT 1
+        "#,
     )
     .bind(&message_id)
     .fetch_one(&pool)
     .await
-    .expect("message metadata");
-    assert_eq!(metadata["pinned"], json!(true));
-    assert_eq!(metadata["is_pinned"], json!(true));
+    .expect("pin observation event");
+    assert_eq!(observation_payload["payload"]["is_pinned"], json!(true));
+    assert_eq!(
+        observation_payload["external_message_id"],
+        json!(provider_message_id)
+    );
 
     let command_row = sqlx::query(
         r#"
@@ -593,40 +599,6 @@ async fn telegram_message_pin_route_records_local_projection_command_and_audit()
     assert_eq!(
         realtime_payload["message"]["provider_chat_id"],
         json!(chat_id)
-    );
-    assert_eq!(
-        realtime_payload["message"]["metadata"]["is_pinned"],
-        json!(true)
-    );
-    let pin_observation = sqlx::query(
-        r#"
-        SELECT kind.code AS kind_code, link.relationship_kind, observation.payload
-        FROM observation_links link
-        JOIN observations observation
-          ON observation.observation_id = link.observation_id
-        JOIN observation_kind_definitions kind
-          ON kind.kind_definition_id = observation.kind_definition_id
-        WHERE link.domain = 'communications'
-          AND link.entity_kind = 'communication_message'
-          AND link.entity_id = $1
-          AND link.relationship_kind = 'telegram_pinned_state_observed'
-        ORDER BY observation.captured_at DESC
-        LIMIT 1
-        "#,
-    )
-    .bind(&message_id)
-    .fetch_one(&pool)
-    .await
-    .expect("pin observation");
-    assert_eq!(
-        pin_observation.get::<String, _>("kind_code"),
-        "COMMUNICATION_MESSAGE"
-    );
-    let pin_payload = pin_observation.get::<Value, _>("payload");
-    assert_eq!(pin_payload["is_pinned"], json!(true));
-    assert_eq!(
-        pin_payload["provider_message_id"],
-        json!(provider_message_id)
     );
     assert!(
         realtime_payload["telegram_chat_id"]

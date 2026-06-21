@@ -80,9 +80,7 @@ async fn telegram_folder_add_action_records_provider_write_command() {
     let chats_response = app
         .clone()
         .oneshot(telegram_support::get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -97,7 +95,7 @@ async fn telegram_folder_add_action_records_provider_write_command() {
     let response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}"),
+            &format!("/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}"),
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id
@@ -206,9 +204,7 @@ async fn telegram_folder_remove_action_records_provider_write_command() {
     let chats_response = app
         .clone()
         .oneshot(telegram_support::get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -224,7 +220,7 @@ async fn telegram_folder_remove_action_records_provider_write_command() {
         .clone()
         .oneshot(json_post_request_with_actor(
             &format!(
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove"
             ),
             json!({
                 "account_id": account_id,
@@ -333,9 +329,7 @@ async fn telegram_folder_reassign_action_queues_add_and_remove_commands_from_cur
     let chats_response = app
         .clone()
         .oneshot(telegram_support::get_request_with_token(
-            &format!(
-                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
-            ),
+            &format!("/api/v1/communications/conversations?account_id={account_id}&limit=10"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -367,7 +361,7 @@ async fn telegram_folder_reassign_action_queues_add_and_remove_commands_from_cur
         .clone()
         .oneshot(json_post_request_with_actor(
             &format!(
-                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/reassign"
+                "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/reassign"
             ),
             json!({
                 "account_id": account_id,

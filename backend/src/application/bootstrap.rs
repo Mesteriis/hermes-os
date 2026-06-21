@@ -15,6 +15,8 @@ static MAIL_OUTBOX_DELIVERY_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
 static TELEGRAM_COMMAND_EXECUTOR_DATABASES: LazyLock<Mutex<HashSet<String>>> =
     LazyLock::new(|| Mutex::new(HashSet::new()));
+static COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER_DATABASES: LazyLock<Mutex<HashSet<String>>> =
+    LazyLock::new(|| Mutex::new(HashSet::new()));
 
 #[derive(Clone)]
 pub(crate) struct ApplicationBootstrapContext {
@@ -28,7 +30,8 @@ pub(crate) struct ApplicationBootstrapContext {
 pub(crate) fn start_background_services(context: ApplicationBootstrapContext) {
     start_mail_background_sync(context.clone());
     start_mail_outbox_delivery(context.clone());
-    start_telegram_command_executor(context);
+    start_telegram_command_executor(context.clone());
+    start_communication_provider_observation_projection(context);
 }
 
 fn start_mail_background_sync(context: ApplicationBootstrapContext) {
@@ -161,7 +164,11 @@ fn start_telegram_command_executor(context: ApplicationBootstrapContext) {
                 pool.clone(),
             ),
         ),
-        Arc::new(crate::domains::communications::messages::ProviderChannelMessageStore::new(pool)),
+        Arc::new(
+            crate::platform::communications::EventStoreProviderMessageObservationEventPort::new(
+                pool,
+            ),
+        ),
     );
 
     tokio::spawn(async move {
@@ -181,6 +188,48 @@ fn start_telegram_command_executor(context: ApplicationBootstrapContext) {
     });
 }
 
+fn start_communication_provider_observation_projection(context: ApplicationBootstrapContext) {
+    let Some(pool) = context.pool else {
+        return;
+    };
+    let Some(database_url) = context.database_url else {
+        return;
+    };
+    if !register_communication_provider_observation_consumer(&database_url) {
+        return;
+    }
+
+    tokio::spawn(async move {
+        let runner = crate::platform::events::EventConsumerRunner::new(
+            pool.clone(),
+            crate::platform::events::EventConsumerConfig::new(
+                crate::domains::communications::messages::COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER,
+            ),
+        );
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        loop {
+            tick.tick().await;
+            let handler_pool = pool.clone();
+            if let Err(error) = runner
+                .process_next_batch(|event| {
+                    crate::domains::communications::messages::project_provider_observation_event(
+                        handler_pool.clone(),
+                        event,
+                    )
+                })
+                .await
+            {
+                tracing::warn!(
+                    error = %error,
+                    "communication provider observation projection consumer tick failed"
+                );
+            }
+        }
+    });
+}
+
 fn register_telegram_command_executor(database_url: &str) -> bool {
     match TELEGRAM_COMMAND_EXECUTOR_DATABASES.lock() {
         Ok(mut databases) => databases.insert(database_url.to_owned()),
@@ -188,6 +237,19 @@ fn register_telegram_command_executor(database_url: &str) -> bool {
             tracing::warn!(
                 error = %error,
                 "telegram command executor registry is unavailable"
+            );
+            false
+        }
+    }
+}
+
+fn register_communication_provider_observation_consumer(database_url: &str) -> bool {
+    match COMMUNICATION_PROVIDER_OBSERVATION_CONSUMER_DATABASES.lock() {
+        Ok(mut databases) => databases.insert(database_url.to_owned()),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                "communication provider observation consumer registry is unavailable"
             );
             false
         }

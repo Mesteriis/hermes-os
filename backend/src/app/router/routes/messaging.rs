@@ -56,16 +56,17 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_qr_login_password),
         )
         .route("/api/v1/communications/conversations", get(get_telegram_chats))
-        .route("/api/v1/integrations/telegram/provider-conversations", get(get_telegram_chats))
-        .route("/api/v1/integrations/telegram/provider-conversations/join", post(post_telegram_chat_join))
-        .route("/api/v1/integrations/telegram/conversation-folders", get(get_telegram_folders))
-        .route("/api/v1/integrations/telegram/provider-conversations/search", get(search_telegram_chats))
         .route(
-            "/api/v1/communications/conversations/{telegram_chat_id}",
-            get(get_telegram_chat_detail),
+            "/api/v1/integrations/telegram/provider-commands/conversations/join",
+            post(post_telegram_chat_join),
+        )
+        .route("/api/v1/integrations/telegram/conversation-folders", get(get_telegram_folders))
+        .route(
+            "/api/v1/communications/conversations/search",
+            get(search_telegram_chats),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}",
+            "/api/v1/communications/conversations/{telegram_chat_id}",
             get(get_telegram_chat_detail),
         )
         .route(
@@ -73,19 +74,11 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_telegram_chat_members),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members",
-            get(get_telegram_chat_members),
-        )
-        .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members/sync",
+            "/api/v1/integrations/telegram/provider-sync/conversations/{telegram_chat_id}/members",
             post(post_telegram_chat_members_sync),
         )
         .route(
             "/api/v1/communications/conversations/{telegram_chat_id}/pinned-messages",
-            get(get_telegram_pinned_messages),
-        )
-        .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/pinned-messages",
             get(get_telegram_pinned_messages),
         )
         .route(
@@ -97,65 +90,65 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(search_telegram_messages),
         )
         .route(
+            "/api/v1/communications/search/messages",
+            get(search_telegram_messages),
+        )
+        .route(
             "/api/v1/integrations/telegram/provider-search/provider",
             post(search_telegram_messages_provider),
         )
         .route("/api/v1/integrations/telegram/provider-search/media", get(search_telegram_media))
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/pin",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/pin",
             post(post_telegram_chat_pin),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unpin",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unpin",
             post(post_telegram_chat_unpin),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/archive",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/archive",
             post(post_telegram_chat_archive),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unarchive",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unarchive",
             post(post_telegram_chat_unarchive),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/mute",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/mute",
             post(post_telegram_chat_mute),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}",
             post(post_telegram_chat_add_folder),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/{provider_folder_id}/remove",
             post(post_telegram_chat_remove_folder),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/folders/reassign",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/folders/reassign",
             post(post_telegram_chat_reassign_folders),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unmute",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unmute",
             post(post_telegram_chat_unmute),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/read",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/read",
             post(post_telegram_chat_mark_read),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/unread",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/unread",
             post(post_telegram_chat_mark_unread),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/leave",
+            "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/leave",
             post(post_telegram_chat_leave),
         )
         .route(
             "/api/v1/integrations/telegram/provider-sync/history",
             post(post_telegram_sync_history),
-        )
-        .route(
-            "/api/v1/integrations/telegram/provider-messages",
-            get(get_telegram_messages),
         )
         .route(
             "/api/v1/integrations/telegram/fixtures/messages",
@@ -166,11 +159,11 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_manual_send),
         )
         .route(
-            "/api/v1/integrations/telegram/media/download",
+            "/api/v1/integrations/telegram/provider-media/download",
             post(post_telegram_media_download),
         )
         .route(
-            "/api/v1/integrations/telegram/media/upload",
+            "/api/v1/integrations/telegram/provider-media/upload",
             post(post_telegram_media_upload),
         )
         .route(
@@ -222,15 +215,7 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_telegram_message_versions),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-messages/{message_id}/versions",
-            get(get_telegram_message_versions),
-        )
-        .route(
             "/api/v1/communications/messages/{message_id}/raw-evidence",
-            get(get_telegram_message_raw),
-        )
-        .route(
-            "/api/v1/integrations/telegram/provider-messages/{message_id}/raw-evidence",
             get(get_telegram_message_raw),
         )
         .route(
@@ -238,15 +223,7 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_telegram_message_tombstones),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-messages/{message_id}/tombstones",
-            get(get_telegram_message_tombstones),
-        )
-        .route(
             "/api/v1/communications/messages/{message_id}/reply-chain",
-            get(get_telegram_reply_chain),
-        )
-        .route(
-            "/api/v1/integrations/telegram/provider-messages/{message_id}/reply-chain",
             get(get_telegram_reply_chain),
         )
         .route(
@@ -254,17 +231,7 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_telegram_forward_chain),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-messages/{message_id}/forward-chain",
-            get(get_telegram_forward_chain),
-        )
-        .route(
             "/api/v1/communications/messages/{message_id}/reactions",
-            get(get_telegram_reactions)
-                .post(post_telegram_reaction)
-                .delete(delete_telegram_reaction),
-        )
-        .route(
-            "/api/v1/integrations/telegram/provider-messages/{message_id}/reactions",
             get(get_telegram_reactions)
                 .post(post_telegram_reaction)
                 .delete(delete_telegram_reaction),
@@ -279,23 +246,11 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_telegram_topics).post(post_telegram_topic_create),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/topics",
-            get(get_telegram_topics).post(post_telegram_topic_create),
-        )
-        .route(
             "/api/v1/communications/topics/search",
             get(search_telegram_topics),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-topics/search",
-            get(search_telegram_topics),
-        )
-        .route(
             "/api/v1/communications/topics/{topic_id}",
-            get(get_telegram_topic_detail),
-        )
-        .route(
-            "/api/v1/integrations/telegram/provider-topics/{topic_id}",
             get(get_telegram_topic_detail),
         )
         .route(
@@ -308,10 +263,6 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route(
             "/api/v1/communications/topics/{topic_id}/messages",
-            get(get_telegram_topic_messages),
-        )
-        .route(
-            "/api/v1/integrations/telegram/provider-topics/{topic_id}/messages",
             get(get_telegram_topic_messages),
         )
         .route(
@@ -330,7 +281,6 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route("/api/v1/integrations/whatsapp/fixtures/accounts", post(post_whatsapp_fixture_account))
         .route("/api/v1/integrations/whatsapp/sessions", get(get_whatsapp_sessions))
-        .route("/api/v1/integrations/whatsapp/provider-messages", get(get_whatsapp_messages))
         .route(
             "/api/v1/integrations/whatsapp/fixtures/messages",
             post(post_whatsapp_fixture_message),

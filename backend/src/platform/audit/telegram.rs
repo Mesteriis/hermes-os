@@ -164,7 +164,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.media.upload",
             "POST",
-            "/api/v1/integrations/telegram/media/upload",
+            "/api/v1/integrations/telegram/provider-media/upload",
             "telegram_media_upload_command",
             Some(command_id),
             metadata,

@@ -2,10 +2,8 @@ use chrono::Utc;
 
 use super::super::errors::TelegramError;
 use super::super::models::TelegramAttachmentAnchor;
+use super::super::observations::TelegramAttachmentDownloadObservation;
 use super::super::store::TelegramStore;
-use crate::platform::communications::{
-    ProviderAttachmentDownloadStateUpdate, ProviderMessageProjectionObservationContext,
-};
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
@@ -55,31 +53,29 @@ impl TelegramStore {
         &self,
         update: TelegramAttachmentDownloadStateUpdate<'_>,
     ) -> Result<(), TelegramError> {
-        let updated = self
-            .provider_observation_projection()
-            .record_telegram_attachment_download_observation(ProviderAttachmentDownloadStateUpdate {
-                message_id: update.message_id,
+        let message = self
+            .message_by_id(update.message_id)
+            .await?
+            .ok_or_else(|| {
+                TelegramError::InvalidRequest(format!(
+                    "Telegram message `{}` was not found",
+                    update.message_id
+                ))
+            })?;
+        self.append_attachment_download_observation(
+            &message,
+            TelegramAttachmentDownloadObservation {
                 provider_attachment_id: update.provider_attachment_id,
-                provider_file_id: update.tdlib_file_id,
+                tdlib_file_id: update.tdlib_file_id,
                 download_state: update.download_state,
                 local_path: update.local_path,
                 size_bytes: update.size_bytes,
                 content_type: update.content_type,
                 filename: update.filename,
                 observed_at: Utc::now(),
-                context: ProviderMessageProjectionObservationContext {
-                    channel_kinds: TELEGRAM_CHANNEL_KINDS,
-                    relationship_kind: "telegram_attachment_download_state_update",
-                    actor: "telegram.client.messages.attachments.update_message_attachment_download_state",
-                },
-            })
-            .await?;
-        if updated.is_none() {
-            return Err(TelegramError::InvalidRequest(format!(
-                "Telegram message `{}` was not found",
-                update.message_id
-            )));
-        }
+            },
+        )
+        .await?;
         Ok(())
     }
 }
