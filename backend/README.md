@@ -138,6 +138,12 @@ For the normal full-stack development loop, use `make dev` from the repository r
 Supported environment variables:
 
 - `HERMES_HTTP_ADDR` - backend bind address, defaults to `127.0.0.1:8080`.
+- `HERMES_BACKEND_STARTUP_ATTEMPTS` / `HERMES_BACKEND_STARTUP_SLEEP_SECONDS`
+  - `make dev` backend readiness polling controls, defaulting to 300 attempts
+  with 1 second between attempts to allow cold Rust builds after cache cleanup.
+- `HERMES_FRONTEND_STARTUP_ATTEMPTS` / `HERMES_FRONTEND_STARTUP_SLEEP_SECONDS`
+  - `make dev` frontend readiness polling controls, defaulting to 120 attempts
+  with 1 second between attempts.
 - `DATABASE_URL` - optional PostgreSQL URL. The current health endpoint does not require a database connection.
 - `HERMES_LOCAL_API_SECRET` - local shared secret required by the router-level
   guard for protected local API endpoints.
