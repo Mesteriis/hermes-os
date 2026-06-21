@@ -5,7 +5,7 @@ use hermes_hub_backend::domains::communications::core::NewRawCommunicationRecord
 use hermes_hub_backend::domains::communications::messages::{
     NewProjectedMessage, project_raw_email_message, project_raw_email_message_from_blob,
 };
-use hermes_hub_backend::domains::communications::storage::LocalMailBlobStore;
+use hermes_hub_backend::domains::communications::storage::LocalCommunicationBlobStore;
 
 use super::support::{
     live_projection_context, record_raw_email_message, store_provider_account, unique_suffix,
@@ -66,7 +66,7 @@ async fn message_projection_extracts_canonical_fields_from_raw_blob_against_post
     let raw_record_id = format!("raw_message_blob_projection_{suffix}");
     let provider_record_id = format!("provider-message-blob-{suffix}");
     let blob_root = tempfile::tempdir().expect("blob root");
-    let blob_store = LocalMailBlobStore::new(blob_root.path());
+    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
     let local_blob = blob_store
         .put_blob(
             b"Subject: Real MIME\r\nFrom: Alice <alice@example.com>\r\nTo: Bob <bob@example.com>\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHello=20from=20real=20mail.",

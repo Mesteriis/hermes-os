@@ -30,7 +30,7 @@ async fn telegram_qr_login_start_reports_tdlib_runtime_unavailable() {
 
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/login/qr/start",
+            "/api/v1/integrations/telegram/login/qr/start",
             json!({
                 "account_id": "telegram-qr",
                 "display_name": "Telegram QR",
@@ -69,7 +69,7 @@ async fn telegram_qr_login_start_uses_configured_app_credentials_when_payload_om
 
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/login/qr/start",
+            "/api/v1/integrations/telegram/login/qr/start",
             json!({
                 "account_id": "telegram-qr-configured",
                 "display_name": "Telegram QR Configured",
@@ -111,7 +111,7 @@ async fn telegram_live_smoke_syncs_configured_account_when_explicitly_enabled() 
     let start_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/runtime/start",
+            "/api/v1/integrations/telegram/runtime/start",
             json!({ "account_id": account_id }),
             &local_api_secret,
         ))
@@ -153,7 +153,7 @@ async fn telegram_qr_login_status_unknown_setup_returns_json_not_found() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v1/communications/telegram/login/qr/missing-setup",
+            "/api/v1/integrations/telegram/login/qr/missing-setup",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -173,7 +173,7 @@ async fn telegram_qr_login_password_unknown_setup_returns_json_not_found() {
 
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/login/qr/missing-setup/password",
+            "/api/v1/integrations/telegram/login/qr/missing-setup/password",
             json!({ "password": "test-password" }),
             LOCAL_API_TOKEN,
         ))
@@ -194,7 +194,7 @@ async fn telegram_qr_login_cancel_unknown_setup_returns_json_not_found() {
 
     let response = app
         .oneshot(delete_request_with_token(
-            "/api/v1/communications/telegram/login/qr/missing-setup",
+            "/api/v1/integrations/telegram/login/qr/missing-setup",
             LOCAL_API_TOKEN,
         ))
         .await

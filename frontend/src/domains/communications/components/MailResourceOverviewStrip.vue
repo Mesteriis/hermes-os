@@ -4,7 +4,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
 import type {
-  MailArchitectureBlocker,
+  CommunicationArchitectureBlocker,
   SenderStats,
   SubscriptionSource
 } from '../types/communications'
@@ -12,7 +12,7 @@ import type {
 const props = defineProps<{
   subscriptions: SubscriptionSource[]
   topSenders: SenderStats[]
-  blockers: MailArchitectureBlocker[]
+  blockers: CommunicationArchitectureBlocker[]
   isLoading: boolean
   hasMoreSubscriptions: boolean
   isLoadingMoreSubscriptions: boolean

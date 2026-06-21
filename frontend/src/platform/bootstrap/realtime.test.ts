@@ -43,7 +43,7 @@ describe('realtime bootstrap', () => {
     })
     options.onMessage?.({ id: '10', event: 'event', data: '{}' })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['communications-mail-list']
+      queryKey: ['communications-list']
     })
     options.onStatus?.({ transport: 'sse', state: 'connected' })
     expect(onStatus).toHaveBeenCalledWith({ transport: 'sse', state: 'connected' })
@@ -261,7 +261,7 @@ describe('realtime bootstrap', () => {
     )
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['communications-mail-list']
+      queryKey: ['communications-list']
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['communications', 'telegram', 'messages']
@@ -297,7 +297,7 @@ describe('realtime bootstrap', () => {
       queryKey: ['communications-ai-state']
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['communications-mail-list']
+      queryKey: ['communications-list']
     })
   })
 
@@ -407,7 +407,7 @@ describe('realtime bootstrap', () => {
       queryKey: ['communications-message']
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['communications-mail-list']
+      queryKey: ['communications-list']
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['communications-state-counts']
@@ -427,7 +427,7 @@ describe('realtime bootstrap', () => {
   })
 
   it('patches cached mail list and message detail for local message action events', () => {
-    const mailListKey = ['communications-mail-list', undefined, undefined, undefined, undefined, 'active']
+    const mailListKey = ['communications-list', undefined, undefined, undefined, undefined, 'active']
     const detailKey = ['communications-message', 'msg-1'] as const
     const mailListData = {
       pages: [
@@ -484,7 +484,7 @@ describe('realtime bootstrap', () => {
     )
 
     expect(queryClient.getQueriesData).toHaveBeenCalledWith({
-      queryKey: ['communications-mail-list']
+      queryKey: ['communications-list']
     })
     expect(queryClient.setQueryData).toHaveBeenCalledWith(mailListKey, expect.any(Function))
     expect(queryClient.setQueryData).toHaveBeenCalledWith(detailKey, expect.any(Function))

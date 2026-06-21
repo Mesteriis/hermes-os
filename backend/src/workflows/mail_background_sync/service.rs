@@ -5,8 +5,9 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::core::CommunicationIngestionStore;
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::platform::communications::{SharedEmailProviderSyncPort, plan_email_sync};
-use crate::vault::{CommunicationProviderAccountStore, HostVault};
+use crate::vault::HostVault;
 
 use super::errors::MailSyncError;
 use super::models::{

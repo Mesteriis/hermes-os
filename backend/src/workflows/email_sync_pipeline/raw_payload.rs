@@ -2,7 +2,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD as BASE64_STANDARD, URL_SAFE, URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
 
-use crate::domains::communications::storage::StoredMailBlob;
+use crate::domains::communications::storage::StoredCommunicationBlob;
 use crate::platform::communications::EmailProviderKind;
 
 use super::errors::EmailSyncRecordError;
@@ -41,7 +41,7 @@ pub(super) fn raw_message_bytes(
 
 pub(super) fn payload_with_raw_blob_reference(
     payload: &Value,
-    blob: &StoredMailBlob,
+    blob: &StoredCommunicationBlob,
 ) -> Result<Value, EmailSyncRecordError> {
     let Some(object) = payload.as_object() else {
         return Err(EmailSyncRecordError::InvalidRawPayloadObject);

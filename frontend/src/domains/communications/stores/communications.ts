@@ -11,7 +11,7 @@ import type {
   CommunicationDraft,
   ComposeFormModel,
   ComposeMode,
-  MailAccountOption,
+  CommunicationAccountOption,
   NavigatorMode,
   InspectorMode,
   MessageContextTab,

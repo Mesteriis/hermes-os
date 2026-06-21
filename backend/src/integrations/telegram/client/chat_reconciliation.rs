@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -6,6 +6,8 @@ use super::errors::TelegramError;
 use super::lifecycle::{mark_command_mismatch, mark_command_reconciled};
 use super::models::messages::TelegramProviderWriteCommand;
 use super::rows::row_to_telegram_provider_write_command;
+
+const PROVIDER_RECONCILIATION_CLOCK_SKEW: Duration = Duration::seconds(5);
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn reconcile_dialog_boolean_commands_from_provider_state(
@@ -38,7 +40,7 @@ pub(super) async fn reconcile_dialog_boolean_commands_from_provider_state(
     )
     .bind(account_id)
     .bind(provider_chat_id)
-    .bind(observed_at)
+    .bind(observed_at + PROVIDER_RECONCILIATION_CLOCK_SKEW)
     .fetch_all(pool)
     .await
     .map_err(TelegramError::from)?;

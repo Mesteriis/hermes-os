@@ -1,14 +1,14 @@
-import type { MailFolder } from '../types/folders'
+import type { CommunicationFolder } from '../types/folders'
 
-export type MailFolderDisplayRow = {
-  folder: MailFolder
+export type CommunicationFolderDisplayRow = {
+  folder: CommunicationFolder
   depth: number
   leafName: string
   pathPrefix: string
   pathParts: string[]
 }
 
-export type MailFolderHierarchyDeleteImpact = {
+export type CommunicationFolderHierarchyDeleteImpact = {
   descendantCount: number
   descendantLeafNames: string[]
 }
@@ -28,7 +28,7 @@ export function mailFolderColorClass(color: string | null): string {
   }
 }
 
-export function deriveMailFolderDisplayRow(folder: MailFolder): MailFolderDisplayRow {
+export function deriveCommunicationFolderDisplayRow(folder: CommunicationFolder): CommunicationFolderDisplayRow {
   const parts = folder.name
     .split('/')
     .map((part) => part.trim())
@@ -46,13 +46,13 @@ export function deriveMailFolderDisplayRow(folder: MailFolder): MailFolderDispla
   }
 }
 
-export function orderMailFolderDisplayRows(folders: ReadonlyArray<MailFolder>): MailFolderDisplayRow[] {
+export function orderCommunicationFolderDisplayRows(folders: ReadonlyArray<CommunicationFolder>): CommunicationFolderDisplayRow[] {
   return folders
-    .map((folder) => deriveMailFolderDisplayRow(folder))
-    .sort(compareMailFolderRows)
+    .map((folder) => deriveCommunicationFolderDisplayRow(folder))
+    .sort(compareCommunicationFolderRows)
 }
 
-export function createChildFolderDraft(folder: MailFolder): {
+export function createChildFolderDraft(folder: CommunicationFolder): {
   parentPath: string
   sortOrder: number
 } {
@@ -63,10 +63,10 @@ export function createChildFolderDraft(folder: MailFolder): {
 }
 
 export function mailFolderHierarchyDeleteImpact(
-  folders: ReadonlyArray<MailFolder>,
+  folders: ReadonlyArray<CommunicationFolder>,
   folderId: string
-): MailFolderHierarchyDeleteImpact {
-  const rows = orderMailFolderDisplayRows(folders)
+): CommunicationFolderHierarchyDeleteImpact {
+  const rows = orderCommunicationFolderDisplayRows(folders)
   const target = rows.find((row) => row.folder.folder_id === folderId)
   if (!target) {
     return {
@@ -85,7 +85,7 @@ export function mailFolderHierarchyDeleteImpact(
   }
 }
 
-function compareMailFolderRows(left: MailFolderDisplayRow, right: MailFolderDisplayRow): number {
+function compareCommunicationFolderRows(left: CommunicationFolderDisplayRow, right: CommunicationFolderDisplayRow): number {
   if (left.folder.sort_order !== right.folder.sort_order) {
     return left.folder.sort_order - right.folder.sort_order
   }

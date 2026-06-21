@@ -4,9 +4,7 @@ use super::super::errors::TelegramError;
 use super::super::models::TelegramAttachmentAnchor;
 use super::super::rows::provider_channel_message_to_telegram_message;
 use super::super::store::TelegramStore;
-use crate::platform::communications::{
-    ProviderChannelMessageStore, ProviderMessageProjectionObservationContext,
-};
+use crate::platform::communications::ProviderMessageProjectionObservationContext;
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
@@ -17,7 +15,8 @@ impl TelegramStore {
         provider_chat_id: &str,
         provider_message_id: &str,
     ) -> Result<TelegramAttachmentAnchor, TelegramError> {
-        let anchor = ProviderChannelMessageStore::new(self.pool.clone())
+        let anchor = self
+            .provider_channel_message_store()
             .attachment_anchor(
                 account_id,
                 provider_chat_id,
@@ -52,7 +51,7 @@ impl TelegramStore {
         content_type: &str,
         filename: Option<&str>,
     ) -> Result<(), TelegramError> {
-        let updated = ProviderChannelMessageStore::new(self.pool.clone())
+        let updated = self.provider_channel_message_store()
             .update_attachment_download_state(
                 message_id,
                 provider_attachment_id,

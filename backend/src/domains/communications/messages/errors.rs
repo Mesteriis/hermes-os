@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-use crate::domains::communications::storage::MailStorageError;
+use crate::domains::communications::storage::CommunicationStorageError;
 use crate::platform::communications::rfc822::EmailRfc822ParseError;
 use crate::platform::observations::ObservationStoreError;
 
@@ -10,7 +10,7 @@ pub enum MessageProjectionError {
     Sqlx(#[from] sqlx::Error),
 
     #[error(transparent)]
-    MailStorage(#[from] MailStorageError),
+    CommunicationStorage(#[from] CommunicationStorageError),
 
     #[error(transparent)]
     Rfc822(#[from] EmailRfc822ParseError),

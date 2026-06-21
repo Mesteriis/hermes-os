@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
-describe('MailFolderStrip folder management boundary', () => {
+describe('CommunicationFolderStrip folder management boundary', () => {
 	it('uses Zod/Vee folder forms and TanStack folder mutations', () => {
 		const source = readFileSync(
-			new URL('./MailFolderStrip.vue', import.meta.url),
+			new URL('./CommunicationFolderStrip.vue', import.meta.url),
 			'utf8'
 		)
 
 		expect(source).toContain("from 'vee-validate'")
 		expect(source).toContain("from '@tanstack/vue-virtual'")
 		expect(source).toContain('../forms/mailFolderForm')
-		expect(source).toContain('useMailFoldersQuery')
+		expect(source).toContain('useCommunicationFoldersQuery')
 		expect(source).toContain('useVirtualizer')
 		expect(source).toContain('horizontal: true')
 		expect(source).toContain('virtualFolders')
@@ -24,21 +24,21 @@ describe('MailFolderStrip folder management boundary', () => {
 		expect(source).toContain('handleFolderVirtualScroll')
 		expect(source).toContain('@scroll="handleFolderVirtualScroll"')
 		expect(source).toContain('useCopyMessageToFolderMutation')
-		expect(source).toContain('useCreateMailFolderMutation')
-		expect(source).toContain('useUpdateMailFolderMutation')
-		expect(source).toContain('useDeleteMailFolderMutation')
+		expect(source).toContain('useCreateCommunicationFolderMutation')
+		expect(source).toContain('useUpdateCommunicationFolderMutation')
+		expect(source).toContain('useDeleteCommunicationFolderMutation')
 		expect(source).toContain('useMoveMessageToFolderMutation')
-		expect(source).toContain('useMailFolderReorder')
-		expect(source).toContain('orderMailFolderDisplayRows')
+		expect(source).toContain('useCommunicationFolderReorder')
+		expect(source).toContain('orderCommunicationFolderDisplayRows')
 		expect(source).toContain('createChildFolderDraft')
 		expect(source).toContain('mailFolderHierarchyDeleteImpact')
 		expect(source).toContain('mailFolderParentPathOptions')
-		expect(source).toContain('splitMailFolderName')
-		expect(source).toContain('validateMailFolderParentPath')
+		expect(source).toContain('splitCommunicationFolderName')
+		expect(source).toContain('validateCommunicationFolderParentPath')
 		expect(source).toContain('const orderedFolders = computed(() => folderRows.value.map((row) => row.folder))')
 		expect(source).toContain('const parentPathOptions = computed(() => mailFolderParentPathOptions(orderedFolders.value, editingFolder.value))')
-		expect(source).toContain('const folderPathPreview = computed(() => composeMailFolderName(parentPath.value, leafName.value))')
-		expect(source).toContain('function openCreateChildDialog(folder: MailFolder)')
+		expect(source).toContain('const folderPathPreview = computed(() => composeCommunicationFolderName(parentPath.value, leafName.value))')
+		expect(source).toContain('function openCreateChildDialog(folder: CommunicationFolder)')
 		expect(source).toContain(':description="folderDialogDescription"')
 		expect(source).toContain(':description="deleteDialogDescription"')
 		expect(source).toContain('list="mail-folder-parent-path-options"')

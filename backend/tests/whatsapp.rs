@@ -77,7 +77,7 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/whatsapp/accounts/fixture",
+            "/api/v1/integrations/whatsapp/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "whatsapp_web",
@@ -294,7 +294,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let capabilities_response = app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v1/communications/whatsapp/capabilities",
+            "/api/v1/integrations/whatsapp/capabilities",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -337,7 +337,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/whatsapp/accounts/fixture",
+            "/api/v1/integrations/whatsapp/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "whatsapp_web",
@@ -392,7 +392,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let sessions_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/communications/whatsapp/sessions?account_id={account_id}"),
+            &format!("/api/v1/integrations/whatsapp/sessions?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await

@@ -12,7 +12,9 @@ use sqlx::Row;
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::domains::communications::storage::{LocalMailBlobStore, MailStorageStore};
+use hermes_hub_backend::domains::communications::storage::{
+    CommunicationStorageStore, LocalCommunicationBlobStore,
+};
 use hermes_hub_backend::integrations::mail::gmail::client::{
     GmailApiClient, GmailFetchOptions, ImapFetchOptions, ImapNetworkClient,
 };
@@ -233,9 +235,9 @@ async fn email_sync_records_provider_batches_with_mail_blobs_against_postgres() 
     };
 
     let pool = database.pool().expect("configured pool").clone();
-    let mail_store = MailStorageStore::new(pool.clone());
+    let mail_store = CommunicationStorageStore::new(pool.clone());
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalMailBlobStore::new(blob_root.path());
+    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
     let gmail_account_id = format!("acct_blob_gmail_{suffix}");
     let imap_account_id = format!("acct_blob_imap_{suffix}");
 

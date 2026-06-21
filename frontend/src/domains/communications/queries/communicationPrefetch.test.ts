@@ -3,16 +3,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { fetchCommunicationMessage, fetchCommunicationMessages, fetchThreadMessages } from '../api/communications'
 import type { CommunicationMessageDetailResponse, CommunicationMessagesResponse, ThreadMessagesResponse } from '../types/communications'
 import type { AttachmentSearchResult } from '../types/attachments'
-import type { MailSavedSearch } from '../types/savedSearches'
+import type { CommunicationSavedSearch } from '../types/savedSearches'
 import {
-  mailListQueryKey,
-  mailMessageQueryKey,
+  communicationListQueryKey,
+  communicationMessageQueryKey,
   prefetchCommunicationMessageForAttachmentResult,
-  prefetchMailListForSavedSearch,
+  prefetchCommunicationListForSavedSearch,
   prefetchCommunicationMessage,
   prefetchThreadMessages,
   threadMessagesQueryKey
-} from './mailPrefetch'
+} from './communicationPrefetch'
 
 vi.mock('../api/communications', () => ({
   fetchCommunicationMessage: vi.fn(),
@@ -72,7 +72,7 @@ function threadMessages(): ThreadMessagesResponse {
   }
 }
 
-function mailMessages(): CommunicationMessagesResponse {
+function communicationMessages(): CommunicationMessagesResponse {
   return {
     items: [],
     next_cursor: null,
@@ -80,7 +80,7 @@ function mailMessages(): CommunicationMessagesResponse {
   }
 }
 
-function savedSearch(overrides: Partial<MailSavedSearch> = {}): MailSavedSearch {
+function savedSearch(overrides: Partial<CommunicationSavedSearch> = {}): CommunicationSavedSearch {
   return {
     saved_search_id: 'search-1',
     name: 'Needs reply',
@@ -127,7 +127,7 @@ function attachmentSearchResult(overrides: Partial<AttachmentSearchResult> = {})
   }
 }
 
-describe('mail prefetch query helpers', () => {
+describe('communication prefetch query helpers', () => {
   beforeEach(() => {
     fetchCommunicationMessageMock.mockReset()
     fetchCommunicationMessagesMock.mockReset()
@@ -142,7 +142,7 @@ describe('mail prefetch query helpers', () => {
     await prefetchCommunicationMessage(client, ' msg-1 ')
 
     expect(fetchCommunicationMessageMock).toHaveBeenCalledWith('msg-1')
-    expect(client.getQueryData(mailMessageQueryKey('msg-1'))).toEqual(detail)
+    expect(client.getQueryData(communicationMessageQueryKey('msg-1'))).toEqual(detail)
   })
 
   it('ignores blank message ids', async () => {
@@ -172,12 +172,12 @@ describe('mail prefetch query helpers', () => {
     expect(fetchThreadMessagesMock).not.toHaveBeenCalled()
   })
 
-  it('prefetches the first mail list page for a saved search', async () => {
+  it('prefetches the first communication list page for a saved search', async () => {
     const client = queryClient()
-    const response = mailMessages()
+    const response = communicationMessages()
     fetchCommunicationMessagesMock.mockResolvedValueOnce(response)
 
-    await prefetchMailListForSavedSearch(client, savedSearch(), 'fallback-account')
+    await prefetchCommunicationListForSavedSearch(client, savedSearch(), 'fallback-account')
 
     expect(fetchCommunicationMessagesMock).toHaveBeenCalledWith(
       'account-1',
@@ -188,7 +188,7 @@ describe('mail prefetch query helpers', () => {
       250,
       null
     )
-    expect(client.getQueryData(mailListQueryKey('account-1', 'needs_action', 'email', 'quarterly', 'active'))).toEqual(response)
+    expect(client.getQueryData(communicationListQueryKey('account-1', 'needs_action', 'email', 'quarterly', 'active'))).toEqual(response)
   })
 
   it('prefetches the parent message for an attachment search result', async () => {
@@ -199,6 +199,6 @@ describe('mail prefetch query helpers', () => {
     await prefetchCommunicationMessageForAttachmentResult(client, attachmentSearchResult())
 
     expect(fetchCommunicationMessageMock).toHaveBeenCalledWith('msg-attachment-1')
-    expect(client.getQueryData(mailMessageQueryKey('msg-attachment-1'))).toEqual(detail)
+    expect(client.getQueryData(communicationMessageQueryKey('msg-attachment-1'))).toEqual(detail)
   })
 })

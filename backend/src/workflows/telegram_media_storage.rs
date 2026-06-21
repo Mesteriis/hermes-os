@@ -6,8 +6,9 @@ use thiserror::Error;
 
 use crate::domains::communications::storage::{
     AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, AttachmentSafetyScanner,
-    ImportedCommunicationAttachment, LocalMailBlobStore, MailAttachmentDisposition,
-    MailStorageStore, NewMailAttachment, NewMailBlob, NoopAttachmentSafetyScanner,
+    CommunicationAttachmentDisposition, CommunicationStorageStore, ImportedCommunicationAttachment,
+    LocalCommunicationBlobStore, NewCommunicationAttachment, NewCommunicationBlob,
+    NoopAttachmentSafetyScanner,
 };
 use crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 
@@ -162,14 +163,16 @@ pub(crate) async fn persist_downloaded_media(
             "failed to read downloaded Telegram file `{local_path}`: {error}"
         ))
     })?;
-    let blob_store = LocalMailBlobStore::new(blob_root);
+    let blob_store = LocalCommunicationBlobStore::new(blob_root);
     let local_blob = blob_store.put_blob(&bytes).await.map_err(|error| {
         TelegramMediaStorageError::Storage(format!("failed to store Telegram media blob: {error}"))
     })?;
-    let mail_store = MailStorageStore::new(pool);
+    let mail_store = CommunicationStorageStore::new(pool);
     let content_type = request.content_type();
     let stored_blob = mail_store
-        .upsert_blob(&NewMailBlob::from_local_blob(&local_blob).content_type(content_type.clone()))
+        .upsert_blob(
+            &NewCommunicationBlob::from_local_blob(&local_blob).content_type(content_type.clone()),
+        )
         .await
         .map_err(|error| {
             TelegramMediaStorageError::Storage(format!(
@@ -198,7 +201,7 @@ pub(crate) async fn persist_downloaded_media(
             "completed Telegram media download requires a communication message anchor".to_owned(),
         )
     })?;
-    let mut attachment = NewMailAttachment::new(
+    let mut attachment = NewCommunicationAttachment::new(
         anchor.message_id,
         anchor.raw_record_id,
         stored_blob.blob_id.clone(),
@@ -207,7 +210,7 @@ pub(crate) async fn persist_downloaded_media(
         local_blob.size_bytes,
         local_blob.sha256.clone(),
     )
-    .disposition(MailAttachmentDisposition::Attachment)
+    .disposition(CommunicationAttachmentDisposition::Attachment)
     .scan_report(scan_report);
     if let Some(filename) = filename {
         attachment = attachment.filename(filename);
@@ -241,7 +244,7 @@ pub(crate) async fn media_send_request(
         ));
     }
 
-    let mail_store = MailStorageStore::new(pool.clone());
+    let mail_store = CommunicationStorageStore::new(pool.clone());
     let imported = if let Some(attachment_id) = attachment_id.as_deref() {
         mail_store
             .imported_attachment_by_id(attachment_id)

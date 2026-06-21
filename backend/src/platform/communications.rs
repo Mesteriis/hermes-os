@@ -7,17 +7,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use thiserror::Error;
 
+use crate::platform::observations::ObservationStoreError;
 use crate::platform::secrets::{ResolvedSecret, SecretKind, SecretReference};
 
-mod channel_messages;
 mod email_sync;
 pub mod rfc822;
 
-pub use channel_messages::{
-    ProviderChannelMessage, ProviderChannelMessageStore, ProviderCommunicationMessagePortError,
-    ProviderHeuristicMember, ProviderMessageAttachmentAnchor,
-    ProviderMessageProjectionObservationContext, ProviderMessageReferenceSummary,
-};
 pub use email_sync::{EmailSyncPlanError, imap_mailbox_stream_id, plan_email_sync};
 
 pub const DEFAULT_MAIL_SYNC_BLOB_ROOT: &str = "docker/data/mail";
@@ -115,6 +110,69 @@ impl ProviderAccountUsage {
     pub fn has_retained_evidence(&self) -> bool {
         self.raw_record_count > 0 || self.message_count > 0
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderChannelMessage {
+    pub message_id: String,
+    pub raw_record_id: String,
+    pub account_id: String,
+    pub provider_record_id: String,
+    pub subject: String,
+    pub sender: String,
+    pub body_text: String,
+    pub occurred_at: Option<DateTime<Utc>>,
+    pub projected_at: DateTime<Utc>,
+    pub channel_kind: String,
+    pub conversation_id: String,
+    pub sender_display_name: Option<String>,
+    pub delivery_state: String,
+    pub message_metadata: Value,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderMessageAttachmentAnchor {
+    pub message_id: String,
+    pub raw_record_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderMessageReferenceSummary {
+    pub message_id: String,
+    pub provider_record_id: String,
+    pub conversation_id: Option<String>,
+    pub subject: String,
+    pub sender: String,
+    pub sender_display_name: Option<String>,
+    pub body_text: String,
+    pub occurred_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProviderHeuristicMember {
+    pub sender_id: String,
+    pub sender_display_name: Option<String>,
+    pub message_count: i64,
+    pub last_message_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Copy)]
+pub struct ProviderMessageProjectionObservationContext<'a> {
+    pub channel_kinds: &'a [&'a str],
+    pub relationship_kind: &'a str,
+    pub actor: &'a str,
+}
+
+#[derive(Debug, Error)]
+pub enum ProviderCommunicationMessagePortError {
+    #[error("invalid provider communication message request: {0}")]
+    InvalidRequest(String),
+
+    #[error(transparent)]
+    ObservationStore(#[from] ObservationStoreError),
+
+    #[error(transparent)]
+    Sqlx(#[from] sqlx::Error),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

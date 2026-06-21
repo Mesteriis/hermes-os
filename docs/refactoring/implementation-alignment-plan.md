@@ -69,6 +69,17 @@ implementation evidence:
   from legacy database-vault compatibility, describe email networking under
   ADR-0055 read/write capability boundaries, and use Persona-compatible identity
   wording instead of target-level Contact terminology.
+- Provider runtime/setup/account-control APIs now live under
+  `/api/v1/integrations/*`, while product/business Communications read/write
+  APIs remain under `/api/v1/communications/*`.
+- Vault ownership is now constrained to host vault lifecycle, encrypted secret
+  payload storage, secret references, resolver contracts and provider session
+  secret storage. Domain-owned provider account/account-binding stores live
+  under their owning domains instead of `backend/src/vault/`.
+- Workflow coordination is being tightened around explicit command/query ports
+  rather than concrete store imports, and communications-domain generic
+  `Mail*` naming is being retired incrementally in favor of neutral
+  `Communication*` symbols.
 - `backend/migrations/0059_persona_owner_type_constraints.sql` and
   `backend/src/domains/persons/api.rs` now provide the first compatibility-layer
   implementation of `PersonaType` and single Owner Persona semantics on the

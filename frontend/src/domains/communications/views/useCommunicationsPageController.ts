@@ -14,7 +14,7 @@ import {
 import { useFolderMailList } from '../queries/folderMailList'
 import { useOutboxStatusStrip } from '../queries/outboxStatusStrip'
 import { useMailResourceOverview } from './useMailResourceOverview'
-import { draftToComposeForm } from '../helpers/mailPageModels'
+import { draftToComposeForm } from '../helpers/communicationPageModels'
 import {
   communicationSectionWorkflowState,
   communicationWorkflowStateSectionId,
@@ -26,7 +26,7 @@ import type {
   CommunicationDraft,
   CommunicationThreadSummary
 } from '../types/communications'
-import type { MailSavedSearch } from '../types/savedSearches'
+import type { CommunicationSavedSearch } from '../types/savedSearches'
 import { useMailSyncActions } from './useMailSyncActions'
 import { useThreadReplyActions } from './useThreadReplyActions'
 import { useSelectedMessageActions } from './useSelectedMessageActions'
@@ -296,7 +296,7 @@ export function useCommunicationsPageController() {
     resetSelectedMessageContext()
   }
 
-  function handleSavedSearchSelect(savedSearch: MailSavedSearch) {
+  function handleSavedSearchSelect(savedSearch: CommunicationSavedSearch) {
     activeSavedSearchId.value = savedSearch.saved_search_id
     activeFolderId.value = ''
     savedSearchChannelKind.value = savedSearch.channel_kind ?? undefined
@@ -306,7 +306,7 @@ export function useCommunicationsPageController() {
     resetSelectedMessageContext()
   }
 
-  function handleSavedSearchDeleted(savedSearch: MailSavedSearch) {
+  function handleSavedSearchDeleted(savedSearch: CommunicationSavedSearch) {
     if (activeSavedSearchId.value !== savedSearch.saved_search_id) return
     activeSavedSearchId.value = ''
     savedSearchChannelKind.value = undefined

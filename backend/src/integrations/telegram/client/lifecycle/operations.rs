@@ -13,7 +13,6 @@ use crate::integrations::telegram::client::models::messages::{
     TelegramCommandKind, TelegramDeleteRequest, TelegramEditRequest, TelegramLifecycleResponse,
     TelegramPinRequest, TelegramRestoreVisibilityRequest,
 };
-use crate::platform::communications::ProviderChannelMessageStore;
 
 pub async fn record_edit(
     pool: &PgPool,
@@ -82,7 +81,8 @@ async fn previous_message_body(
         return Ok(version.body_text);
     }
 
-    Ok(ProviderChannelMessageStore::new(pool.clone())
+    Ok(TelegramStore::new(pool.clone())
+        .provider_channel_message_store()
         .body_text(message_id)
         .await?)
 }

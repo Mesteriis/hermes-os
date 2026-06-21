@@ -13,7 +13,8 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::communications::storage::{
-    LocalMailBlobStore, MailAttachmentDisposition, MailStorageStore, NewMailAttachment, NewMailBlob,
+    CommunicationAttachmentDisposition, CommunicationStorageStore, LocalCommunicationBlobStore,
+    NewCommunicationAttachment, NewCommunicationBlob,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -82,7 +83,7 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
 
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let message_store = MessageProjectionStore::new(pool.clone());
-    let mail_store = MailStorageStore::new(pool.clone());
+    let mail_store = CommunicationStorageStore::new(pool.clone());
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
@@ -118,18 +119,18 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
         .expect("project message");
 
     let blob_root = tempfile::tempdir().expect("blob root");
-    let local_blob_store = LocalMailBlobStore::new(blob_root.path());
+    let local_blob_store = LocalCommunicationBlobStore::new(blob_root.path());
     let local_blob = local_blob_store
         .put_blob(b"attachment bytes")
         .await
         .expect("write attachment blob");
     let blob = mail_store
-        .upsert_blob(&NewMailBlob::from_local_blob(&local_blob).content_type("text/plain"))
+        .upsert_blob(&NewCommunicationBlob::from_local_blob(&local_blob).content_type("text/plain"))
         .await
         .expect("blob metadata");
     mail_store
         .upsert_attachment(
-            &NewMailAttachment::new(
+            &NewCommunicationAttachment::new(
                 &message.message_id,
                 &raw.raw_record_id,
                 &blob.blob_id,
@@ -139,7 +140,7 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
                 &blob.sha256,
             )
             .filename("notes.txt")
-            .disposition(MailAttachmentDisposition::Attachment),
+            .disposition(CommunicationAttachmentDisposition::Attachment),
         )
         .await
         .expect("attachment metadata");

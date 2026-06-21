@@ -39,7 +39,7 @@ Version 4.0 is complete when Hermes Hub provides a desktop-configurable Telegram
 - [x] Automated-send dry-run rejects sends outside enabled policies.
 - [x] Automated-send dry-run records auditable preview metadata without storing secret values.
 - [x] Call transcript storage preserves account, call and source provenance.
-- [x] Protected `/api/v1/communications/telegram/capabilities` exposes fixture-ready, live-blocked and Telegram unsupported capabilities.
+- [x] Protected `/api/v1/integrations/telegram/capabilities` exposes fixture-ready, live-blocked and Telegram unsupported capabilities.
 - [x] Desktop Telegram account, policy, call transcript and runtime guardrail surfaces call protected backend APIs.
 - [x] `make backend-telegram-smoke-dev` covers Telegram fixture runtime, policy and transcript storage.
 - [x] `make validate`, `make frontend-check` and `make frontend-build` pass after Telegram UI integration.

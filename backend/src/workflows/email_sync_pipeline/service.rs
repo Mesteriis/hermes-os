@@ -3,7 +3,7 @@ use sqlx::postgres::PgPool;
 use crate::domains::communications::core::CommunicationIngestionStore;
 use crate::domains::communications::messages::MessageProjectionStore;
 use crate::domains::communications::storage::{
-    HeuristicAttachmentSafetyScanner, LocalMailBlobStore, MailStorageStore,
+    CommunicationStorageStore, HeuristicAttachmentSafetyScanner, LocalCommunicationBlobStore,
 };
 use crate::domains::persons::api::PersonProjectionStore;
 use crate::platform::communications::EmailSyncBatch;
@@ -17,13 +17,13 @@ use super::report::EmailSyncPipelineReport;
 
 pub async fn project_email_sync_batch_with_mail_blobs(
     pool: PgPool,
-    blob_store: &LocalMailBlobStore,
+    blob_store: &LocalCommunicationBlobStore,
     account_id: &str,
     import_batch_id: impl AsRef<str>,
     batch: &EmailSyncBatch,
 ) -> Result<EmailSyncPipelineReport, EmailSyncPipelineError> {
     let communication_store = CommunicationIngestionStore::new(pool.clone());
-    let mail_store = MailStorageStore::new(pool.clone());
+    let mail_store = CommunicationStorageStore::new(pool.clone());
     let message_store = MessageProjectionStore::new(pool.clone());
     let person_store = PersonProjectionStore::new(pool.clone());
     let attachment_scanner = HeuristicAttachmentSafetyScanner;

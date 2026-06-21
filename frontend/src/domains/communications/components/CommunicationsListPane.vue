@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import Icon from '../../../shared/ui/Icon.vue'
 import CommunicationsConversationList from './CommunicationsConversationList.vue'
-import MailList from './MailList.vue'
+import CommunicationList from './CommunicationList.vue'
 import type { CommunicationMessageSummary, CommunicationThreadSummary, NavigatorMode } from '../types/communications'
 
 defineProps<{
@@ -63,7 +63,7 @@ function forwardToggleSelection(messageId: string, extendRange: boolean) {
         @update:navigator-mode="emit('update:navigatorMode', $event)"
       />
     </div>
-    <MailList
+    <CommunicationList
       v-else
       :messages="messages"
       :selected-index="selectedIndex"

@@ -3,7 +3,6 @@ use super::super::models::TelegramMessage;
 use super::super::rows::provider_channel_message_to_telegram_message;
 use super::super::store::TelegramStore;
 use super::super::validation::validate_message_list_limit;
-use crate::platform::communications::ProviderChannelMessageStore;
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
@@ -12,7 +11,8 @@ impl TelegramStore {
         &self,
         message_id: &str,
     ) -> Result<Option<TelegramMessage>, TelegramError> {
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .message_by_id(message_id, TELEGRAM_CHANNEL_KINDS)
             .await?
             .map(provider_channel_message_to_telegram_message))
@@ -29,7 +29,8 @@ impl TelegramStore {
         let provider_chat_id = provider_chat_id
             .map(str::trim)
             .filter(|value| !value.is_empty());
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .recent_messages(account_id, provider_chat_id, TELEGRAM_CHANNEL_KINDS, limit)
             .await?
             .into_iter()
@@ -44,7 +45,8 @@ impl TelegramStore {
         if message_ids.is_empty() {
             return Ok(vec![]);
         }
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .messages_by_ids(message_ids, TELEGRAM_CHANNEL_KINDS)
             .await?
             .into_iter()

@@ -2,7 +2,6 @@ use chrono::Utc;
 use serde_json::json;
 
 use crate::platform::observations::ObservationOriginKind;
-use crate::vault::CommunicationProviderAccountStore;
 
 use super::super::errors::TelegramError;
 use super::super::identifiers::{
@@ -18,7 +17,8 @@ impl TelegramStore {
         &self,
         include_removed: bool,
     ) -> Result<Vec<TelegramAccount>, TelegramError> {
-        let accounts = CommunicationProviderAccountStore::new(self.pool.clone())
+        let accounts = self
+            .provider_account_store()
             .list()
             .await
             .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?;
@@ -78,7 +78,8 @@ impl TelegramStore {
             _ => {}
         }
 
-        let updated = CommunicationProviderAccountStore::new(self.pool.clone())
+        let updated = self
+            .provider_account_store()
             .update_config_with_origin(
                 &account.account_id,
                 &config,

@@ -8,12 +8,14 @@ use super::outbox::{
     CommunicationOutboxStore, NewOutboxDeliveryStatus, OutboxDeliveryStatus,
     OutboxDeliveryStatusRecord,
 };
-use super::read_receipts::{MailReadReceipt, MailReadReceiptStore, NewMailReadReceipt};
+use super::read_receipts::{
+    CommunicationReadReceipt, CommunicationReadReceiptStore, NewCommunicationReadReceipt,
+};
 
 const MAX_NOTIFICATION_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct NewMailDeliveryNotification {
+pub struct NewCommunicationDeliveryNotification {
     pub account_id: String,
     pub raw_message: String,
     pub received_at: Option<DateTime<Utc>>,
@@ -65,37 +67,38 @@ pub struct NewProviderDeliveryEvent {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum MailDeliveryNotificationKind {
+pub enum CommunicationDeliveryNotificationKind {
     DeliveryStatus,
     ReadReceipt,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MailDeliveryNotificationRecord {
-    pub notification_kind: MailDeliveryNotificationKind,
+pub struct CommunicationDeliveryNotificationRecord {
+    pub notification_kind: CommunicationDeliveryNotificationKind,
     pub account_id: String,
     pub outbox_id: Option<String>,
     pub provider_message_id: String,
     pub delivery_status: Option<OutboxDeliveryStatus>,
     pub smtp_status: Option<String>,
     pub source_kind: String,
-    pub read_receipt: Option<MailReadReceipt>,
+    pub read_receipt: Option<CommunicationReadReceipt>,
 }
 
 #[derive(Clone)]
-pub struct MailDeliveryNotificationStore {
+pub struct CommunicationDeliveryNotificationStore {
     pool: PgPool,
 }
 
-impl MailDeliveryNotificationStore {
+impl CommunicationDeliveryNotificationStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     pub async fn record(
         &self,
-        notification: NewMailDeliveryNotification,
-    ) -> Result<MailDeliveryNotificationRecord, MailDeliveryNotificationError> {
+        notification: NewCommunicationDeliveryNotification,
+    ) -> Result<CommunicationDeliveryNotificationRecord, CommunicationDeliveryNotificationError>
+    {
         let account_id = normalize_required("account_id", &notification.account_id)?;
         let received_at = notification.received_at.unwrap_or_else(Utc::now);
         let provider_record_id = normalize_optional(notification.provider_record_id);
@@ -127,8 +130,8 @@ impl MailDeliveryNotificationStore {
                 recipient,
                 reporting_ua,
             } => {
-                let receipt = MailReadReceiptStore::new(self.pool.clone())
-                    .record(NewMailReadReceipt {
+                let receipt = CommunicationReadReceiptStore::new(self.pool.clone())
+                    .record(NewCommunicationReadReceipt {
                         receipt_id: None,
                         account_id,
                         provider_message_id,
@@ -148,7 +151,8 @@ impl MailDeliveryNotificationStore {
     pub async fn record_provider_event(
         &self,
         event: NewProviderDeliveryEvent,
-    ) -> Result<MailDeliveryNotificationRecord, MailDeliveryNotificationError> {
+    ) -> Result<CommunicationDeliveryNotificationRecord, CommunicationDeliveryNotificationError>
+    {
         let account_id = normalize_required("account_id", &event.account_id)?;
         let provider_message_id =
             normalize_required("provider_message_id", &event.provider_message_id)?;
@@ -175,9 +179,9 @@ impl MailDeliveryNotificationStore {
         }
 
         let recipient = normalize_optional(event.recipient)
-            .ok_or(MailDeliveryNotificationError::Invalid("recipient"))?;
-        let receipt = MailReadReceiptStore::new(self.pool.clone())
-            .record(NewMailReadReceipt {
+            .ok_or(CommunicationDeliveryNotificationError::Invalid("recipient"))?;
+        let receipt = CommunicationReadReceiptStore::new(self.pool.clone())
+            .record(NewCommunicationReadReceipt {
                 receipt_id: None,
                 account_id,
                 provider_message_id,
@@ -194,9 +198,11 @@ impl MailDeliveryNotificationStore {
     }
 }
 
-fn delivery_status_response(record: OutboxDeliveryStatusRecord) -> MailDeliveryNotificationRecord {
-    MailDeliveryNotificationRecord {
-        notification_kind: MailDeliveryNotificationKind::DeliveryStatus,
+fn delivery_status_response(
+    record: OutboxDeliveryStatusRecord,
+) -> CommunicationDeliveryNotificationRecord {
+    CommunicationDeliveryNotificationRecord {
+        notification_kind: CommunicationDeliveryNotificationKind::DeliveryStatus,
         account_id: record.account_id,
         outbox_id: record.outbox_id,
         provider_message_id: record.provider_message_id,
@@ -207,9 +213,11 @@ fn delivery_status_response(record: OutboxDeliveryStatusRecord) -> MailDeliveryN
     }
 }
 
-fn read_receipt_response(receipt: MailReadReceipt) -> MailDeliveryNotificationRecord {
-    MailDeliveryNotificationRecord {
-        notification_kind: MailDeliveryNotificationKind::ReadReceipt,
+fn read_receipt_response(
+    receipt: CommunicationReadReceipt,
+) -> CommunicationDeliveryNotificationRecord {
+    CommunicationDeliveryNotificationRecord {
+        notification_kind: CommunicationDeliveryNotificationKind::ReadReceipt,
         account_id: receipt.account_id.clone(),
         outbox_id: receipt.outbox_id.clone(),
         provider_message_id: receipt.provider_message_id.clone(),
@@ -236,12 +244,16 @@ enum ParsedDeliveryNotification {
 
 fn parse_delivery_notification(
     raw_message: &str,
-) -> Result<ParsedDeliveryNotification, MailDeliveryNotificationError> {
+) -> Result<ParsedDeliveryNotification, CommunicationDeliveryNotificationError> {
     if raw_message.trim().is_empty() {
-        return Err(MailDeliveryNotificationError::Invalid("raw_message"));
+        return Err(CommunicationDeliveryNotificationError::Invalid(
+            "raw_message",
+        ));
     }
     if raw_message.len() > MAX_NOTIFICATION_BYTES {
-        return Err(MailDeliveryNotificationError::Invalid("raw_message"));
+        return Err(CommunicationDeliveryNotificationError::Invalid(
+            "raw_message",
+        ));
     }
 
     let fields = unfolded_fields(raw_message);
@@ -255,8 +267,8 @@ fn parse_delivery_notification(
         });
     }
 
-    let action =
-        first_field(&fields, "action").ok_or(MailDeliveryNotificationError::Invalid("action"))?;
+    let action = first_field(&fields, "action")
+        .ok_or(CommunicationDeliveryNotificationError::Invalid("action"))?;
     Ok(ParsedDeliveryNotification::DeliveryStatus {
         provider_message_id: original_message_id(&fields)?,
         delivery_status: delivery_status_from_action(&action)?,
@@ -291,32 +303,34 @@ fn unfolded_fields(raw_message: &str) -> Vec<(String, String)> {
 
 fn original_message_id(
     fields: &[(String, String)],
-) -> Result<String, MailDeliveryNotificationError> {
+) -> Result<String, CommunicationDeliveryNotificationError> {
     first_field(fields, "original-message-id")
         .or_else(|| first_field(fields, "message-id"))
         .and_then(|value| normalize_message_id(&value))
-        .ok_or(MailDeliveryNotificationError::Invalid(
+        .ok_or(CommunicationDeliveryNotificationError::Invalid(
             "original-message-id",
         ))
 }
 
 fn recipient_from_fields(
     fields: &[(String, String)],
-) -> Result<String, MailDeliveryNotificationError> {
+) -> Result<String, CommunicationDeliveryNotificationError> {
     first_field(fields, "final-recipient")
         .or_else(|| first_field(fields, "original-recipient"))
         .and_then(|value| recipient_from_report_field(&value))
-        .ok_or(MailDeliveryNotificationError::Invalid("final-recipient"))
+        .ok_or(CommunicationDeliveryNotificationError::Invalid(
+            "final-recipient",
+        ))
 }
 
 fn delivery_status_from_action(
     action: &str,
-) -> Result<OutboxDeliveryStatus, MailDeliveryNotificationError> {
+) -> Result<OutboxDeliveryStatus, CommunicationDeliveryNotificationError> {
     match action.trim().to_ascii_lowercase().as_str() {
         "delivered" | "relayed" | "expanded" => Ok(OutboxDeliveryStatus::Delivered),
         "delayed" => Ok(OutboxDeliveryStatus::Delayed),
         "failed" => Ok(OutboxDeliveryStatus::Failed),
-        _ => Err(MailDeliveryNotificationError::Invalid("action")),
+        _ => Err(CommunicationDeliveryNotificationError::Invalid("action")),
     }
 }
 
@@ -354,8 +368,9 @@ fn recipient_from_report_field(value: &str) -> Option<String> {
 fn normalize_required(
     field_name: &'static str,
     value: &str,
-) -> Result<String, MailDeliveryNotificationError> {
-    normalize_optional(Some(value)).ok_or(MailDeliveryNotificationError::Invalid(field_name))
+) -> Result<String, CommunicationDeliveryNotificationError> {
+    normalize_optional(Some(value))
+        .ok_or(CommunicationDeliveryNotificationError::Invalid(field_name))
 }
 
 fn normalize_optional(value: Option<impl AsRef<str>>) -> Option<String> {
@@ -365,11 +380,11 @@ fn normalize_optional(value: Option<impl AsRef<str>>) -> Option<String> {
 }
 
 #[derive(Debug, Error)]
-pub enum MailDeliveryNotificationError {
+pub enum CommunicationDeliveryNotificationError {
     #[error(transparent)]
     Outbox(#[from] super::outbox::CommunicationOutboxError),
     #[error(transparent)]
-    ReadReceipt(#[from] super::read_receipts::MailReadReceiptError),
+    ReadReceipt(#[from] super::read_receipts::CommunicationReadReceiptError),
     #[error("invalid mail delivery notification field: {0}")]
     Invalid(&'static str),
 }

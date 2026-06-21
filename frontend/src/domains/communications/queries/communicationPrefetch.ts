@@ -2,16 +2,16 @@ import { useQueryClient, type QueryClient } from '@tanstack/vue-query'
 import { fetchCommunicationMessage, fetchCommunicationMessages, fetchThreadMessages } from '../api/communications'
 import type { LocalMessageState, CommunicationMessageDetailResponse, CommunicationMessagesResponse, ThreadMessagesResponse, WorkflowState } from '../types/communications'
 import type { AttachmentSearchResult } from '../types/attachments'
-import type { MailSavedSearch } from '../types/savedSearches'
+import type { CommunicationSavedSearch } from '../types/savedSearches'
 
 const MESSAGE_PREFETCH_STALE_MS = 30_000
 const THREAD_MESSAGES_PREFETCH_STALE_MS = 30_000
 
-export function mailMessageQueryKey(messageId: string) {
+export function communicationMessageQueryKey(messageId: string) {
   return ['communications-message', messageId] as const
 }
 
-export function mailListQueryKey(
+export function communicationListQueryKey(
   accountId?: string,
   workflowState?: WorkflowState | '',
   channelKind?: string,
@@ -19,7 +19,7 @@ export function mailListQueryKey(
   localState?: LocalMessageState
 ) {
   return [
-    'communications-mail-list',
+    'communications-list',
     accountId,
     workflowState,
     channelKind,
@@ -40,7 +40,7 @@ export async function prefetchCommunicationMessage(
   if (!normalizedMessageId) return
 
   await queryClient.prefetchQuery<CommunicationMessageDetailResponse>({
-    queryKey: mailMessageQueryKey(normalizedMessageId),
+    queryKey: communicationMessageQueryKey(normalizedMessageId),
     queryFn: () => fetchCommunicationMessage(normalizedMessageId),
     staleTime: MESSAGE_PREFETCH_STALE_MS
   })
@@ -84,9 +84,9 @@ export function useThreadMessagesPrefetch() {
   return (accountId: string, subject: string) => prefetchThreadMessages(queryClient, accountId, subject)
 }
 
-export async function prefetchMailListForSavedSearch(
+export async function prefetchCommunicationListForSavedSearch(
   queryClient: QueryClient,
-  savedSearch: MailSavedSearch,
+  savedSearch: CommunicationSavedSearch,
   fallbackAccountId?: string | null
 ): Promise<void> {
   const accountId = savedSearch.account_id?.trim() || fallbackAccountId?.trim() || undefined
@@ -96,13 +96,13 @@ export async function prefetchMailListForSavedSearch(
   const localState = savedSearch.local_state
 
   await queryClient.prefetchQuery<CommunicationMessagesResponse>({
-    queryKey: mailListQueryKey(accountId, workflowState, channelKind, query, localState),
+    queryKey: communicationListQueryKey(accountId, workflowState, channelKind, query, localState),
     queryFn: () => fetchCommunicationMessages(accountId, workflowState, channelKind, query, localState, 250, null),
     staleTime: MESSAGE_PREFETCH_STALE_MS
   })
 }
 
-export function useSavedSearchMailListPrefetch(accountId: () => string | null | undefined) {
+export function useSavedSearchCommunicationListPrefetch(accountId: () => string | null | undefined) {
   const queryClient = useQueryClient()
-  return (savedSearch: MailSavedSearch) => prefetchMailListForSavedSearch(queryClient, savedSearch, accountId())
+  return (savedSearch: CommunicationSavedSearch) => prefetchCommunicationListForSavedSearch(queryClient, savedSearch, accountId())
 }

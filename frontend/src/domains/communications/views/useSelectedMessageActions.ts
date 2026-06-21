@@ -25,7 +25,7 @@ import {
   newComposeForm,
   replyAllComposeForm,
   replyComposeForm
-} from '../helpers/mailPageModels'
+} from '../helpers/communicationPageModels'
 import type { useCommunicationsStore } from '../stores/communications'
 import type {
   AiReplyResponse,

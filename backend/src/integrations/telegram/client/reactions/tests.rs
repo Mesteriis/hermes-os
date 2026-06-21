@@ -2,8 +2,9 @@ use sqlx::Row;
 use testkit::context::TestContext;
 
 use super::*;
+use crate::domains::communications::core::CommunicationProviderAccountStore;
+use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::telegram::client::models::messages::TelegramReactionRequest;
-use crate::vault::CommunicationProviderAccountStore;
 
 #[tokio::test]
 async fn provider_state_sync_deactivates_absent_self_reactions() {

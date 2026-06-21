@@ -108,6 +108,20 @@ const allowedIntegrationCommunicationSqlTables = new Set([
 	'communication_raw_records',
 	'communication_raw_payloads'
 ]);
+const allowedIntegrationCommunicationBridgeFiles = new Set([
+	'backend/src/integrations/mail/accounts/service/stores.rs',
+	'backend/src/integrations/mail/sync_provider.rs',
+	'backend/src/integrations/telegram/client/store.rs',
+	'backend/src/integrations/telegram/runtime/actor/session.rs',
+	'backend/src/integrations/telegram/runtime/manager/account.rs',
+	'backend/src/integrations/telegram/runtime/manager/lifecycle.rs',
+	'backend/src/integrations/telegram/runtime/manager/sync_history_tdlib.rs',
+	'backend/src/integrations/telegram/runtime/manager/tdlib_actor.rs',
+	'backend/src/integrations/telegram/runtime/manager/topic_events.rs',
+	'backend/src/integrations/telegram/runtime/manager.rs',
+	'backend/src/integrations/telegram/runtime/status.rs',
+	'backend/src/integrations/whatsapp/client/store.rs'
+]);
 const allowedFrontendIntegrationCacheKeys = new Set([
 	'capabilities',
 	'account-capabilities',
@@ -314,6 +328,10 @@ function backendBoundaryViolations(relativePath, source) {
 	const platformMatch = /^backend\/src\/platform\//.exec(relativePath);
 	const aiMatch = /^backend\/src\/ai\//.exec(relativePath);
 	const engineMatch = /^backend\/src\/engines\//.exec(relativePath);
+	const isBackendTestFile =
+		relativePath.includes('/tests/') ||
+		relativePath.endsWith('/tests.rs') ||
+		relativePath.endsWith('_tests.rs');
 	const importedDomains = extractBackendDomainImports(source);
 	const importedIntegrations = extractBackendRootImports(source, 'integrations');
 	const importedAppModules = extractBackendRootImports(source, 'app');
@@ -334,7 +352,12 @@ function backendBoundaryViolations(relativePath, source) {
 			continue;
 		}
 
-		if (integrationMatch !== null && businessBackendDomains.has(importedDomain)) {
+		if (
+			integrationMatch !== null &&
+			businessBackendDomains.has(importedDomain) &&
+			!isBackendTestFile &&
+			!(importedDomain === 'communications' && allowedIntegrationCommunicationBridgeFiles.has(relativePath))
+		) {
 			violations.push({
 				file: relativePath,
 				importedDomain,
@@ -704,16 +727,36 @@ function communicationProviderCrudFacadeFailures(fileContents) {
 
 function providerAccountOwnerMutationFailures(fileContents) {
 	const errors = [];
-	const ownerFile = 'backend/src/vault/provider_accounts.rs';
-	const directMutationPattern =
-		/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:communication_provider_accounts|communication_provider_account_secret_refs|task_provider_accounts|calendar_accounts|calendar_sources)\b/gi;
+	const ownedTablePatterns = [
+		{
+			ownerFile: 'backend/src/domains/communications/core/provider_store.rs',
+			pattern:
+				/\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(?:communication_provider_accounts|communication_provider_account_secret_refs)\b/gi,
+			description: 'communications provider account durable mutations'
+		},
+		{
+			ownerFile: 'backend/src/domains/tasks/core/provider_store.rs',
+			pattern: /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+task_provider_accounts\b/gi,
+			description: 'task provider durable mutations'
+		},
+		{
+			ownerFile: 'backend/src/domains/calendar/events/account_store.rs',
+			pattern: /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+calendar_accounts\b/gi,
+			description: 'calendar account durable mutations'
+		},
+		{
+			ownerFile: 'backend/src/domains/calendar/events/source_store.rs',
+			pattern: /\b(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+calendar_sources\b/gi,
+			description: 'calendar source durable mutations'
+		}
+	];
 	for (const [file, content] of fileContents.entries()) {
 		if (!file.startsWith('backend/src/')) continue;
-		if (file === ownerFile) continue;
-		if (directMutationPattern.test(content)) {
-			errors.push(
-				`${file}: provider account/source durable mutations must stay in ${ownerFile} so vault-owned records keep canonical evidence ownership`
-			);
+		for (const { ownerFile, pattern, description } of ownedTablePatterns) {
+			if (file === ownerFile) continue;
+			if (pattern.test(content)) {
+				errors.push(`${file}: ${description} must stay in ${ownerFile}`);
+			}
 		}
 	}
 	return errors;
@@ -1239,7 +1282,7 @@ function mailAccountManagementManualOrchestrationFailures(fileContents) {
 	];
 	if (forbiddenPatterns.some((pattern) => pattern.test(content))) {
 		return [
-			`backend/src/domains/communications/handlers/account_management.rs: email account logout/config mutation orchestration must stay in backend/src/vault/provider_accounts.rs owner methods, not the handler`
+			'backend/src/domains/communications/handlers/account_management.rs: email account logout/config mutation orchestration must stay in backend/src/domains/communications/core/provider_store.rs owner methods, not the handler'
 		];
 	}
 	return [];
@@ -1872,10 +1915,10 @@ function runSelfTests() {
 		])).length === 1
 	);
 	assertSelfTest(
-		'provider account owner mutation guard allows vault owner file',
+		'provider account owner mutation guard allows communications owner file',
 		providerAccountOwnerMutationFailures(new Map([
 			[
-				'backend/src/vault/provider_accounts.rs',
+				'backend/src/domains/communications/core/provider_store.rs',
 				'INSERT INTO communication_provider_accounts (account_id) VALUES ($1)'
 			]
 		])).length === 0

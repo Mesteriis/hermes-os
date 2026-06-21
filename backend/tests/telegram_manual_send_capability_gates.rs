@@ -36,7 +36,7 @@ async fn removed_account_blocks_manual_send_before_message_audit_and_events() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -74,7 +74,7 @@ async fn removed_account_blocks_manual_send_before_message_audit_and_events() {
             axum::http::Request::builder()
                 .method("DELETE")
                 .uri(format!(
-                    "/api/v1/communications/telegram/accounts/{account_id}"
+                    "/api/v1/integrations/telegram/accounts/{account_id}"
                 ))
                 .header("x-hermes-secret", LOCAL_API_TOKEN)
                 .body(axum::body::Body::empty())

@@ -38,6 +38,7 @@ const checkedExtensions = new Set([
 	'.svelte',
 	'.toml',
 	'.ts',
+	'.vue',
 	'.yaml',
 	'.yml'
 ]);
@@ -91,6 +92,10 @@ function isFrontendTemplateFile(relativePath) {
 		relativePath.startsWith('frontend/src/') &&
 		(relativePath.endsWith('.vue') || relativePath.endsWith('.html'))
 	);
+}
+
+function isVueSfcFile(relativePath) {
+	return relativePath.startsWith('frontend/src/') && relativePath.endsWith('.vue');
 }
 
 async function collectFiles(relativeRoot) {
@@ -159,7 +164,7 @@ async function checkSourceFiles() {
 				failures.push(`${location}: inline style attributes are forbidden; move styles to CSS files`);
 			}
 
-			if (isFrontendTemplateFile(file) && /<style(\s|>)/i.test(line)) {
+			if (isFrontendTemplateFile(file) && !isVueSfcFile(file) && /<style(\s|>)/i.test(line)) {
 				failures.push(`${location}: embedded style blocks are forbidden; move styles to CSS files`);
 			}
 		}

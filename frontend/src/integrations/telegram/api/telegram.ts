@@ -39,7 +39,7 @@ import type {
 // --- Capabilities ---
 export async function fetchTelegramCapabilities(): Promise<TelegramCapabilitiesResponse> {
   return ApiClient.instance.get<TelegramCapabilitiesResponse>(
-    '/api/v1/communications/telegram/capabilities',
+    '/api/v1/integrations/telegram/capabilities',
     'Telegram capabilities request failed'
   )
 }
@@ -48,7 +48,7 @@ export async function fetchTelegramAccountCapabilities(
   accountId: string
 ): Promise<TelegramCapabilitiesResponse> {
   return ApiClient.instance.get<TelegramCapabilitiesResponse>(
-    `/api/v1/communications/telegram/accounts/${encodeURIComponent(accountId)}/capabilities`,
+    `/api/v1/integrations/telegram/accounts/${encodeURIComponent(accountId)}/capabilities`,
     'Telegram account capabilities request failed'
   )
 }
@@ -57,7 +57,7 @@ export async function fetchTelegramAccountCapabilities(
 export async function fetchTelegramAccounts(query?: string): Promise<TelegramAccountListResponse> {
   const qs = query?.trim() ? `?${query}` : ''
   return ApiClient.instance.get<TelegramAccountListResponse>(
-    `/api/v1/communications/telegram/accounts${qs}`,
+    `/api/v1/integrations/telegram/accounts${qs}`,
     'Telegram account list request failed'
   )
 }
@@ -76,7 +76,7 @@ export async function setupTelegramAccount(request: {
   transcription_enabled: boolean
 }): Promise<TelegramAccountSetupResponse> {
   return ApiClient.instance.post<TelegramAccountSetupResponse>(
-    '/api/v1/communications/telegram/accounts',
+    '/api/v1/integrations/telegram/accounts',
     request,
     'Telegram account setup failed'
   )
@@ -84,14 +84,14 @@ export async function setupTelegramAccount(request: {
 
 export async function removeTelegramAccount(accountId: string): Promise<TelegramAccountLifecycleResponse> {
   return ApiClient.instance.delete<TelegramAccountLifecycleResponse>(
-    `/api/v1/communications/telegram/accounts/${encodeURIComponent(accountId)}`,
+    `/api/v1/integrations/telegram/accounts/${encodeURIComponent(accountId)}`,
     'Telegram account remove failed'
   )
 }
 
 export async function logoutTelegramAccount(accountId: string): Promise<TelegramAccountLifecycleResponse> {
   return ApiClient.instance.post<TelegramAccountLifecycleResponse>(
-    `/api/v1/communications/telegram/accounts/${encodeURIComponent(accountId)}/logout`,
+    `/api/v1/integrations/telegram/accounts/${encodeURIComponent(accountId)}/logout`,
     {},
     'Telegram account logout failed'
   )
@@ -336,14 +336,14 @@ export async function syncTelegramHistory(request: TelegramHistorySyncRequest): 
 export async function fetchTelegramRuntimeStatus(accountId: string): Promise<TelegramRuntimeStatus> {
   const params = new URLSearchParams({ account_id: accountId.trim() })
   return ApiClient.instance.get<TelegramRuntimeStatus>(
-    `/api/v1/communications/telegram/runtime/status?${params.toString()}`,
+    `/api/v1/integrations/telegram/runtime/status?${params.toString()}`,
     'Telegram runtime status request failed'
   )
 }
 
 export async function startTelegramRuntime(request: TelegramRuntimeStartRequest): Promise<TelegramRuntimeStatus> {
   return ApiClient.instance.post<TelegramRuntimeStatus>(
-    '/api/v1/communications/telegram/runtime/start',
+    '/api/v1/integrations/telegram/runtime/start',
     request,
     'Telegram runtime start failed'
   )
@@ -351,7 +351,7 @@ export async function startTelegramRuntime(request: TelegramRuntimeStartRequest)
 
 export async function stopTelegramRuntime(request: TelegramRuntimeStopRequest): Promise<TelegramRuntimeStatus> {
   return ApiClient.instance.post<TelegramRuntimeStatus>(
-    '/api/v1/communications/telegram/runtime/stop',
+    '/api/v1/integrations/telegram/runtime/stop',
     request,
     'Telegram runtime stop failed'
   )
@@ -359,7 +359,7 @@ export async function stopTelegramRuntime(request: TelegramRuntimeStopRequest): 
 
 export async function restartTelegramRuntime(request: TelegramRuntimeRestartRequest): Promise<TelegramRuntimeStatus> {
   return ApiClient.instance.post<TelegramRuntimeStatus>(
-    '/api/v1/communications/telegram/runtime/restart',
+    '/api/v1/integrations/telegram/runtime/restart',
     request,
     'Telegram runtime restart failed'
   )
@@ -426,7 +426,7 @@ export async function startTelegramQrLogin(
   request: TelegramQrLoginStartRequest
 ): Promise<TelegramQrLoginStatusResponse> {
   return ApiClient.instance.post<TelegramQrLoginStatusResponse>(
-    '/api/v1/communications/telegram/login/qr/start',
+    '/api/v1/integrations/telegram/login/qr/start',
     request,
     'Telegram QR login start failed'
   )
@@ -434,14 +434,14 @@ export async function startTelegramQrLogin(
 
 export async function getTelegramQrLoginStatus(setupId: string): Promise<TelegramQrLoginStatusResponse> {
   return ApiClient.instance.get<TelegramQrLoginStatusResponse>(
-    `/api/v1/communications/telegram/login/qr/${encodeURIComponent(setupId)}`,
+    `/api/v1/integrations/telegram/login/qr/${encodeURIComponent(setupId)}`,
     'Telegram QR login status request failed'
   )
 }
 
 export async function cancelTelegramQrLogin(setupId: string): Promise<{ setup_id: string; cancelled: boolean }> {
   return ApiClient.instance.delete<{ setup_id: string; cancelled: boolean }>(
-    `/api/v1/communications/telegram/login/qr/${encodeURIComponent(setupId)}`,
+    `/api/v1/integrations/telegram/login/qr/${encodeURIComponent(setupId)}`,
     'Telegram QR login cancel failed'
   )
 }
@@ -451,7 +451,7 @@ export async function submitTelegramQrPassword(
   request: TelegramQrLoginPasswordRequest
 ): Promise<TelegramQrLoginStatusResponse> {
   return ApiClient.instance.post<TelegramQrLoginStatusResponse>(
-    `/api/v1/communications/telegram/login/qr/${encodeURIComponent(setupId)}/password`,
+    `/api/v1/integrations/telegram/login/qr/${encodeURIComponent(setupId)}/password`,
     request,
     'Telegram QR password submit failed'
   )

@@ -4,7 +4,6 @@ use super::errors::TelegramError;
 use super::models::{TelegramChat, TelegramMessage};
 use super::rows::{provider_channel_message_to_telegram_message, row_to_telegram_chat};
 use super::store::TelegramStore;
-use crate::platform::communications::ProviderChannelMessageStore;
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
@@ -24,7 +23,8 @@ impl TelegramStore {
                 ))
             })?;
 
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .pinned_messages(
                 &chat.account_id,
                 &chat.provider_chat_id,
@@ -48,7 +48,8 @@ impl TelegramStore {
         let account_id = account_id.map(str::trim).filter(|v| !v.is_empty());
         let provider_chat_id = provider_chat_id.map(str::trim).filter(|v| !v.is_empty());
 
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .search_messages(
                 account_id,
                 provider_chat_id,

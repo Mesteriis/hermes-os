@@ -3,7 +3,7 @@ use axum::extract::{Path, State};
 
 use crate::app::api_support::TelegramCapabilitiesResponse;
 use crate::app::{ApiError, AppState};
-use crate::vault::CommunicationProviderAccountStore;
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 
 pub(crate) async fn get_telegram_capabilities(
     State(state): State<AppState>,

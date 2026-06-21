@@ -15,7 +15,10 @@ import type {
   MessageContextTab,
   MessageExportFormat
 } from '../types/communications'
-import type { MailAiState, MailAiStateTransitionRequest } from '../types/aiState'
+import type {
+  CommunicationAiState,
+  CommunicationAiStateTransitionRequest
+} from '../types/aiState'
 import {
   useMessageAiStateQuery,
   useUpdateMessageAiStateMutation
@@ -88,11 +91,11 @@ function setTab(tabId: string) {
   emit('update:activeTab', tabId as MessageContextTab)
 }
 
-function transitionAiState(aiState: MailAiState): void {
+function transitionAiState(aiState: CommunicationAiState): void {
   const id = messageId.value
   if (!id || isAiStateUpdating.value) return
 
-  let request: MailAiStateTransitionRequest = { ai_state: aiState }
+  let request: CommunicationAiStateTransitionRequest = { ai_state: aiState }
   if (aiState === 'REVIEW_REQUIRED') {
     request = { ai_state: aiState, review_reason: 'Manual review requested from Mail UI' }
   }

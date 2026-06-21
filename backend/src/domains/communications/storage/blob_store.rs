@@ -4,23 +4,27 @@ use chrono::Utc;
 use sha2::{Digest, Sha256};
 
 use super::constants::{LOCAL_FS_STORAGE_KIND, SHA256_PREFIX};
-use super::errors::MailStorageError;
+use super::errors::CommunicationStorageError;
 use super::validation::validate_storage_path;
 
 #[derive(Clone, Debug)]
-pub struct LocalMailBlobStore {
+pub struct LocalCommunicationBlobStore {
     root: PathBuf,
 }
 
-impl LocalMailBlobStore {
+impl LocalCommunicationBlobStore {
     pub fn new(root: impl AsRef<Path>) -> Self {
         Self {
             root: root.as_ref().to_path_buf(),
         }
     }
 
-    pub async fn put_blob(&self, bytes: &[u8]) -> Result<LocalMailBlob, MailStorageError> {
-        let size_bytes = i64::try_from(bytes.len()).map_err(|_| MailStorageError::BlobTooLarge)?;
+    pub async fn put_blob(
+        &self,
+        bytes: &[u8],
+    ) -> Result<LocalCommunicationBlob, CommunicationStorageError> {
+        let size_bytes =
+            i64::try_from(bytes.len()).map_err(|_| CommunicationStorageError::BlobTooLarge)?;
         let digest_hex = sha256_hex(bytes);
         let storage_path = relative_blob_path(&digest_hex);
         let absolute_path = self.root.join(&storage_path);
@@ -41,16 +45,16 @@ impl LocalMailBlobStore {
 
         let metadata = tokio::fs::metadata(&absolute_path).await?;
         let actual_size =
-            i64::try_from(metadata.len()).map_err(|_| MailStorageError::BlobTooLarge)?;
+            i64::try_from(metadata.len()).map_err(|_| CommunicationStorageError::BlobTooLarge)?;
         if actual_size != size_bytes {
-            return Err(MailStorageError::BlobSizeMismatch {
+            return Err(CommunicationStorageError::BlobSizeMismatch {
                 path: absolute_path,
                 expected: size_bytes,
                 actual: actual_size,
             });
         }
 
-        Ok(LocalMailBlob {
+        Ok(LocalCommunicationBlob {
             storage_kind: LOCAL_FS_STORAGE_KIND.to_owned(),
             storage_path,
             sha256: format!("{SHA256_PREFIX}{digest_hex}"),
@@ -58,14 +62,17 @@ impl LocalMailBlobStore {
         })
     }
 
-    pub async fn read_blob(&self, storage_path: &str) -> Result<Vec<u8>, MailStorageError> {
+    pub async fn read_blob(
+        &self,
+        storage_path: &str,
+    ) -> Result<Vec<u8>, CommunicationStorageError> {
         let storage_path = validate_storage_path(storage_path)?;
         Ok(tokio::fs::read(self.root.join(storage_path)).await?)
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LocalMailBlob {
+pub struct LocalCommunicationBlob {
     pub storage_kind: String,
     pub storage_path: String,
     pub sha256: String,

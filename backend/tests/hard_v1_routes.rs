@@ -35,7 +35,7 @@ async fn telegram_and_whatsapp_capabilities_are_split_under_v1() {
     let telegram = app
         .clone()
         .oneshot(get_request_with_secret(
-            "/api/v1/communications/telegram/capabilities",
+            "/api/v1/integrations/telegram/capabilities",
         ))
         .await
         .expect("telegram capabilities response");
@@ -48,7 +48,7 @@ async fn telegram_and_whatsapp_capabilities_are_split_under_v1() {
 
     let whatsapp = app
         .oneshot(get_request_with_secret(
-            "/api/v1/communications/whatsapp/capabilities",
+            "/api/v1/integrations/whatsapp/capabilities",
         ))
         .await
         .expect("whatsapp capabilities response");

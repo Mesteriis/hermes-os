@@ -1,7 +1,9 @@
 use serde_json::json;
 
 use crate::domains::communications::core::{CommunicationIngestionStore, NewIngestionCheckpoint};
-use crate::domains::communications::storage::{LocalMailBlobStore, MailStorageStore, NewMailBlob};
+use crate::domains::communications::storage::{
+    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationBlob,
+};
 use crate::platform::communications::{
     EmailSyncBatch, EmailSyncBlobImportReport, EmailSyncImportReport, NewRawCommunicationRecord,
 };
@@ -59,8 +61,8 @@ pub async fn record_email_sync_batch(
 
 pub async fn record_email_sync_batch_with_mail_blobs(
     store: &CommunicationIngestionStore,
-    mail_store: &MailStorageStore,
-    blob_store: &LocalMailBlobStore,
+    mail_store: &CommunicationStorageStore,
+    blob_store: &LocalCommunicationBlobStore,
     account_id: &str,
     import_batch_id: &str,
     batch: &EmailSyncBatch,
@@ -76,7 +78,9 @@ pub async fn record_email_sync_batch_with_mail_blobs(
         let raw_bytes = raw_message_bytes(batch.provider_kind, &message.payload)?;
         let local_blob = blob_store.put_blob(&raw_bytes).await?;
         let stored_blob = mail_store
-            .upsert_blob(&NewMailBlob::from_local_blob(&local_blob).content_type("message/rfc822"))
+            .upsert_blob(
+                &NewCommunicationBlob::from_local_blob(&local_blob).content_type("message/rfc822"),
+            )
             .await?;
         let payload = payload_with_raw_blob_reference(&message.payload, &stored_blob)?;
 

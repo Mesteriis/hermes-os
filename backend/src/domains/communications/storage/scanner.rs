@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
-use super::errors::{AttachmentSafetyScanError, MailStorageError};
+use super::errors::{AttachmentSafetyScanError, CommunicationStorageError};
 use super::validation::validate_non_empty;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -24,7 +24,7 @@ impl AttachmentSafetyScanReport {
         }
     }
 
-    pub(crate) fn validate(&self) -> Result<Self, MailStorageError> {
+    pub(crate) fn validate(&self) -> Result<Self, CommunicationStorageError> {
         let engine = self
             .engine
             .as_deref()
@@ -36,13 +36,13 @@ impl AttachmentSafetyScanReport {
             .map(|value| validate_non_empty("scan_summary", value))
             .transpose()?;
         if !self.metadata.is_object() {
-            return Err(MailStorageError::NonObjectJson("scan_metadata"));
+            return Err(CommunicationStorageError::NonObjectJson("scan_metadata"));
         }
 
         if self.status == AttachmentSafetyScanStatus::NotScanned
             && (engine.is_some() || self.checked_at.is_some() || summary.is_some())
         {
-            return Err(MailStorageError::InvalidNotScannedReport);
+            return Err(CommunicationStorageError::InvalidNotScannedReport);
         }
 
         Ok(Self {
@@ -77,7 +77,7 @@ impl AttachmentSafetyScanStatus {
 }
 
 impl TryFrom<&str> for AttachmentSafetyScanStatus {
-    type Error = MailStorageError;
+    type Error = CommunicationStorageError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
@@ -86,7 +86,9 @@ impl TryFrom<&str> for AttachmentSafetyScanStatus {
             "suspicious" => Ok(Self::Suspicious),
             "malicious" => Ok(Self::Malicious),
             "failed" => Ok(Self::Failed),
-            other => Err(MailStorageError::InvalidScanStatus(other.to_owned())),
+            other => Err(CommunicationStorageError::InvalidScanStatus(
+                other.to_owned(),
+            )),
         }
     }
 }

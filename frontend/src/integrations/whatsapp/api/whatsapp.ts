@@ -14,7 +14,7 @@ import type {
 // --- Capabilities ---
 export async function fetchWhatsappCapabilities(): Promise<WhatsappCapabilitiesResponse> {
   return ApiClient.instance.get<WhatsappCapabilitiesResponse>(
-    '/api/v1/communications/whatsapp/capabilities',
+    '/api/v1/integrations/whatsapp/capabilities',
     'WhatsApp capabilities request failed'
   )
 }
@@ -29,7 +29,7 @@ export async function fetchWhatsappWebSessions(
     params.set('account_id', accountId.trim())
   }
   return ApiClient.instance.get<WhatsappWebSessionListResponse>(
-    `/api/v1/communications/whatsapp/sessions?${params.toString()}`,
+    `/api/v1/integrations/whatsapp/sessions?${params.toString()}`,
     'WhatsApp Web sessions request failed'
   )
 }
@@ -58,7 +58,7 @@ export async function setupWhatsappWebFixtureAccount(
   request: WhatsappWebAccountSetupRequest
 ): Promise<WhatsappWebAccountSetupResponse> {
   return ApiClient.instance.post<WhatsappWebAccountSetupResponse>(
-    '/api/v1/communications/whatsapp/accounts/fixture',
+    '/api/v1/integrations/whatsapp/accounts/fixture',
     request,
     'WhatsApp Web account setup request failed'
   )

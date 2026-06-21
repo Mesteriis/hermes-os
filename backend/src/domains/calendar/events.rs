@@ -1,10 +1,12 @@
+mod account_store;
 mod errors;
 mod event_store;
 mod models;
 mod queries;
 mod rows;
+mod source_store;
 
-pub use crate::vault::{CalendarAccountStore, CalendarSourceStore};
+pub use account_store::CalendarAccountStore;
 pub use errors::CalendarError;
 pub use event_store::CalendarEventStore;
 pub use models::{
@@ -12,3 +14,4 @@ pub use models::{
     NewCalendarEvent,
 };
 pub use queries::CalendarEventListQuery;
+pub use source_store::CalendarSourceStore;

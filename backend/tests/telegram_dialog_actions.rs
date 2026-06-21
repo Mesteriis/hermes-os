@@ -37,7 +37,7 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -127,7 +127,7 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
     let commands_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/communications/telegram/commands?account_id={account_id}&limit=20"),
+            &format!("/api/v1/integrations/telegram/commands?account_id={account_id}&limit=20"),
             LOCAL_API_TOKEN,
         ))
         .await

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
-describe('MailViewer boundary', () => {
+describe('CommunicationViewer boundary', () => {
   it('passes bilingual reply send events from MessageBodyTab', () => {
-    const source = readFileSync(new URL('./MailViewer.vue', import.meta.url), 'utf8')
+    const source = readFileSync(new URL('./CommunicationViewer.vue', import.meta.url), 'utf8')
 
     expect(source).toContain('send-bilingual-reply')
     expect(source).toContain('MessageBodyTab')

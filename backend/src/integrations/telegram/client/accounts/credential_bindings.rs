@@ -2,7 +2,6 @@ use serde_json::json;
 
 use crate::platform::communications::NewProviderAccountSecretBinding;
 use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
-use crate::vault::CommunicationProviderSecretBindingStore;
 
 use super::super::errors::TelegramError;
 use super::super::identifiers::telegram_secret_ref;
@@ -34,7 +33,7 @@ impl TelegramStore {
             )
             .await?;
         vault.store_secret(&secret_ref, &credential).await?;
-        CommunicationProviderSecretBindingStore::new(self.pool.clone())
+        self.provider_secret_binding_store()
             .bind(&NewProviderAccountSecretBinding::new(
                 credential.account_id,
                 credential.secret_purpose,

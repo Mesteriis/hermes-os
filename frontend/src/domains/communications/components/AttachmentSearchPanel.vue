@@ -6,7 +6,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import Icon from '../../../shared/ui/Icon.vue'
 import { attachmentIcon } from '../stores/communications'
 import { useAttachmentSearchQuery } from '../queries/useCommunicationsQuery'
-import { useAttachmentSearchResultPrefetch } from '../queries/mailPrefetch'
+import { useAttachmentSearchResultPrefetch } from '../queries/communicationPrefetch'
 import {
   attachmentScanStatusOptions,
   attachmentSearchFormDefaults,

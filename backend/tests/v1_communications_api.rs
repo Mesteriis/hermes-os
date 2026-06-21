@@ -129,7 +129,7 @@ v1_read_test!(v1_rich_templates, "/api/v1/communications/templates/rich");
 v1_read_test!(v1_blockers, "/api/v1/communications/blockers");
 v1_read_test!(
     v1_sync_status,
-    "/api/v1/communications/mail/accounts/sync-status"
+    "/api/v1/integrations/mail/accounts/sync-status"
 );
 
 // ── Write-like endpoints (may fail gracefully without data) ────────────────
@@ -201,7 +201,7 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
         .expect("store provider account");
 
     let r = router(&db).await;
-    let settings_path = format!("/api/v1/communications/mail/accounts/{account_id}/sync-settings");
+    let settings_path = format!("/api/v1/integrations/mail/accounts/{account_id}/sync-settings");
     let resp = r
         .clone()
         .oneshot(get(&settings_path))
@@ -241,7 +241,7 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
     let resp = r
         .clone()
         .oneshot(pget(
-            &format!("/api/v1/communications/mail/accounts/{account_id}/sync-now"),
+            &format!("/api/v1/integrations/mail/accounts/{account_id}/sync-now"),
             json!({}),
         ))
         .await
@@ -336,7 +336,7 @@ async fn v1_sync_settings_default_update_and_manual_sync_status_against_postgres
 
     let resp = r
         .oneshot(pget(
-            &format!("/api/v1/communications/mail/accounts/{account_id}/sync-full-resync"),
+            &format!("/api/v1/integrations/mail/accounts/{account_id}/sync-full-resync"),
             json!({}),
         ))
         .await

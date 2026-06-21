@@ -2,7 +2,9 @@ use thiserror::Error;
 
 use crate::domains::communications::core::CommunicationIngestionError;
 use crate::domains::communications::messages::MessageProjectionError;
-use crate::domains::communications::storage::{AttachmentSafetyScanError, MailStorageError};
+use crate::domains::communications::storage::{
+    AttachmentSafetyScanError, CommunicationStorageError,
+};
 use crate::domains::decisions::DecisionStoreError;
 use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::core::OrgCoreError;
@@ -20,7 +22,7 @@ pub enum EmailSyncRecordError {
     Communication(#[from] CommunicationIngestionError),
 
     #[error(transparent)]
-    MailStorage(#[from] MailStorageError),
+    CommunicationStorage(#[from] CommunicationStorageError),
 
     #[error("email sync payload must be a JSON object before raw blob projection")]
     InvalidRawPayloadObject,
@@ -54,7 +56,7 @@ pub enum EmailSyncPipelineError {
     PersonMemory(#[from] PersonMemoryError),
 
     #[error(transparent)]
-    MailStorage(#[from] MailStorageError),
+    CommunicationStorage(#[from] CommunicationStorageError),
 
     #[error(transparent)]
     AttachmentScan(#[from] AttachmentSafetyScanError),

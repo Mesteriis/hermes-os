@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { InfiniteData } from '@tanstack/vue-query'
-import type { MailFolder, MailFolderListResponse } from '../types/folders'
+import type { CommunicationFolder, CommunicationFolderListResponse } from '../types/folders'
 import {
 	optimisticFolderFromUpdate,
 	removeFolderFromFolderList,
 	upsertFolderInFolderList
 } from './optimisticFolderUpdates'
 
-function folder(overrides: Partial<MailFolder> = {}): MailFolder {
+function folder(overrides: Partial<CommunicationFolder> = {}): CommunicationFolder {
 	return {
 		folder_id: 'folder-1',
 		account_id: 'account-1',
@@ -22,7 +22,7 @@ function folder(overrides: Partial<MailFolder> = {}): MailFolder {
 	}
 }
 
-function folderList(items: MailFolder[]): InfiniteData<MailFolderListResponse> {
+function folderList(items: CommunicationFolder[]): InfiniteData<CommunicationFolderListResponse> {
 	return {
 		pages: [
 			{

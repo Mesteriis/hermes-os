@@ -278,7 +278,7 @@ Implemented route groups include:
 - `/api/v1/communications/whatsapp/*`;
 - `/api/v1/policies/*`;
 - `/api/v1/calls/*`;
-- `/api/v1/communications/mail/accounts/*`;
+- `/api/v1/integrations/mail/accounts/*`;
 - `/api/v1/events/*` and `/api/v1/audit/events`.
 
 This route list is implementation evidence only. It is not the target product

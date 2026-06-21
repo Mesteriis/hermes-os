@@ -3,10 +3,10 @@ use serde_json::json;
 use testkit::context::TestContext;
 
 use super::*;
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::integrations::telegram::client::{
     NewTelegramMessage, TelegramChatKind, TelegramDeliveryState,
 };
-use crate::vault::CommunicationProviderAccountStore;
 
 async fn seed_runtime_account(pool: &sqlx::PgPool, account_id: &str, external: &str) {
     CommunicationProviderAccountStore::new(pool.clone())

@@ -3,7 +3,7 @@ use sqlx::PgPool;
 use super::errors::TelegramError;
 use super::models::TelegramMessage;
 use super::rows::provider_channel_message_to_telegram_message;
-use crate::platform::communications::ProviderChannelMessageStore;
+use super::store::TelegramStore;
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
@@ -14,7 +14,7 @@ pub async fn search_messages(
     query: &str,
     limit: i64,
 ) -> Result<Vec<TelegramMessage>, TelegramError> {
-    Ok(ProviderChannelMessageStore::new(pool.clone())
+    Ok(TelegramStore::new(pool.clone()).provider_channel_message_store()
         .search_messages(account_id, provider_chat_id, query, TELEGRAM_CHANNEL_KINDS, limit)
         .await?
         .into_iter()

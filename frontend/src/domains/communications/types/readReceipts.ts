@@ -1,12 +1,12 @@
-export type MailReadReceiptKind = 'read'
+export type CommunicationReadReceiptKind = 'read'
 
-export type MailReadReceipt = {
+export type CommunicationReadReceipt = {
   receipt_id: string
   account_id: string
   outbox_id: string | null
   provider_message_id: string
   recipient: string
-  receipt_kind: MailReadReceiptKind
+  receipt_kind: CommunicationReadReceiptKind
   read_at: string
   source_kind: string
   provider_record_id: string | null
@@ -15,7 +15,7 @@ export type MailReadReceipt = {
   created_at: string
 }
 
-export type NewMailReadReceipt = {
+export type NewCommunicationReadReceipt = {
   receipt_id?: string
   account_id: string
   provider_message_id: string

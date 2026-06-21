@@ -7,7 +7,7 @@ use sqlx::postgres::{PgPool, PgRow};
 use thiserror::Error;
 
 use crate::domains::communications::storage::{
-    AttachmentSafetyScanStatus, MailAttachmentDisposition,
+    AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
 };
 
 #[derive(Clone, Debug)]
@@ -42,7 +42,7 @@ pub struct AttachmentSearchResult {
     pub content_type: String,
     pub size_bytes: i64,
     pub sha256: String,
-    pub disposition: MailAttachmentDispositionDto,
+    pub disposition: CommunicationAttachmentDispositionDto,
     pub scan_status: AttachmentSafetyScanStatusDto,
     pub scan_engine: Option<String>,
     pub scan_checked_at: Option<DateTime<Utc>>,
@@ -55,18 +55,18 @@ pub struct AttachmentSearchResult {
 
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum MailAttachmentDispositionDto {
+pub enum CommunicationAttachmentDispositionDto {
     Attachment,
     Inline,
     Unknown,
 }
 
-impl From<MailAttachmentDisposition> for MailAttachmentDispositionDto {
-    fn from(value: MailAttachmentDisposition) -> Self {
+impl From<CommunicationAttachmentDisposition> for CommunicationAttachmentDispositionDto {
+    fn from(value: CommunicationAttachmentDisposition) -> Self {
         match value {
-            MailAttachmentDisposition::Attachment => Self::Attachment,
-            MailAttachmentDisposition::Inline => Self::Inline,
-            MailAttachmentDisposition::Unknown => Self::Unknown,
+            CommunicationAttachmentDisposition::Attachment => Self::Attachment,
+            CommunicationAttachmentDisposition::Inline => Self::Inline,
+            CommunicationAttachmentDisposition::Unknown => Self::Unknown,
         }
     }
 }
@@ -232,7 +232,7 @@ fn row_to_attachment_search_result(
         content_type: row.try_get("content_type")?,
         size_bytes: row.try_get("size_bytes")?,
         sha256: row.try_get("sha256")?,
-        disposition: MailAttachmentDisposition::try_from(disposition.as_str())?.into(),
+        disposition: CommunicationAttachmentDisposition::try_from(disposition.as_str())?.into(),
         scan_status: AttachmentSafetyScanStatus::try_from(scan_status.as_str())?.into(),
         scan_engine: row.try_get("scan_engine")?,
         scan_checked_at: row.try_get("scan_checked_at")?,
@@ -289,7 +289,9 @@ pub enum AttachmentSearchError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]
-    MailStorage(#[from] crate::domains::communications::storage::MailStorageError),
+    CommunicationStorage(
+        #[from] crate::domains::communications::storage::CommunicationStorageError,
+    ),
     #[error("invalid attachment search cursor")]
     InvalidCursor,
 }

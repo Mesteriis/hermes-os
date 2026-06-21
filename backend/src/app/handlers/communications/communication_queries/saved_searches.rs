@@ -1,9 +1,9 @@
 use super::super::*;
 use crate::domains::communications::saved_searches::{
-    MailSavedSearch, MailSavedSearchListQuery, MailSavedSearchStore, NewMailSavedSearch,
-    UpdateMailSavedSearch,
+    CommunicationSavedSearch, CommunicationSavedSearchListQuery, CommunicationSavedSearchStore,
+    NewCommunicationSavedSearch, UpdateCommunicationSavedSearch,
 };
-use crate::domains::communications::service::MailCommandService;
+use crate::domains::communications::service::CommunicationCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct SavedSearchesQuery {
@@ -15,7 +15,7 @@ pub(crate) struct SavedSearchesQuery {
 
 #[derive(Serialize)]
 pub(crate) struct SavedSearchListResponse {
-    pub(crate) items: Vec<MailSavedSearch>,
+    pub(crate) items: Vec<CommunicationSavedSearch>,
     pub(crate) next_cursor: Option<String>,
     pub(crate) has_more: bool,
 }
@@ -30,7 +30,7 @@ pub(crate) async fn get_v1_saved_searches(
     Query(query): Query<SavedSearchesQuery>,
 ) -> Result<Json<SavedSearchListResponse>, ApiError> {
     let page = saved_search_store(&state)?
-        .list(MailSavedSearchListQuery {
+        .list(CommunicationSavedSearchListQuery {
             account_id: query.account_id.as_deref(),
             is_smart_folder: query.smart_folder,
             cursor: query.cursor.as_deref(),
@@ -46,14 +46,14 @@ pub(crate) async fn get_v1_saved_searches(
 
 pub(crate) async fn post_v1_saved_search(
     State(state): State<AppState>,
-    Json(request): Json<NewMailSavedSearch>,
-) -> Result<Json<MailSavedSearch>, ApiError> {
+    Json(request): Json<NewCommunicationSavedSearch>,
+) -> Result<Json<CommunicationSavedSearch>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let saved_search = MailCommandService::new(pool)
+    let saved_search = CommunicationCommandService::new(pool)
         .create_saved_search(request)
         .await?;
     Ok(Json(saved_search))
@@ -62,14 +62,14 @@ pub(crate) async fn post_v1_saved_search(
 pub(crate) async fn put_v1_saved_search(
     State(state): State<AppState>,
     Path(saved_search_id): Path<String>,
-    Json(request): Json<UpdateMailSavedSearch>,
-) -> Result<Json<MailSavedSearch>, ApiError> {
+    Json(request): Json<UpdateCommunicationSavedSearch>,
+) -> Result<Json<CommunicationSavedSearch>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let Some(saved_search) = MailCommandService::new(pool)
+    let Some(saved_search) = CommunicationCommandService::new(pool)
         .update_saved_search(&saved_search_id, request)
         .await?
     else {
@@ -87,15 +87,15 @@ pub(crate) async fn delete_v1_saved_search(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let deleted = MailCommandService::new(pool)
+    let deleted = CommunicationCommandService::new(pool)
         .delete_saved_search(&saved_search_id)
         .await?;
     Ok(Json(SavedSearchDeleteResponse { deleted }))
 }
 
-fn saved_search_store(state: &AppState) -> Result<MailSavedSearchStore, ApiError> {
+fn saved_search_store(state: &AppState) -> Result<CommunicationSavedSearchStore, ApiError> {
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(MailSavedSearchStore::new(pool))
+    Ok(CommunicationSavedSearchStore::new(pool))
 }

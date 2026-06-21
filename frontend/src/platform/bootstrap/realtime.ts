@@ -43,7 +43,7 @@ export type RealtimeBootstrapOptions = {
 const REALTIME_CURSOR_STORAGE_KEY = 'hermes.realtime.lastEventId'
 
 const REALTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
-	['communications-mail-list'],
+	['communications-list'],
 	['communications-state-counts'],
 	['communications-drafts'],
 	['communications-outbox'],
@@ -257,13 +257,13 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 	if (!eventType) return REALTIME_QUERY_KEYS
 
 	if (eventType === 'mail.ai_state.changed') {
-		return [['communications-ai-state'], ['communications-message'], ['communications-mail-list']]
+		return [['communications-ai-state'], ['communications-message'], ['communications-list']]
 	}
 	if (eventType === 'mail.read_receipt.recorded') {
-		return [['communications-outbox'], ['communications-message'], ['communications-mail-list']]
+		return [['communications-outbox'], ['communications-message'], ['communications-list']]
 	}
 	if (eventType.startsWith('mail.outbox.')) {
-		return [['communications-outbox'], ['communications-mail-list']]
+		return [['communications-outbox'], ['communications-list']]
 	}
 	if (eventType.startsWith('mail.sync.')) {
 		return [['communications', 'mail', 'sync-statuses']]
@@ -271,7 +271,7 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 	if (eventType.startsWith('mail.message.')) {
 		return [
 			['communications-message'],
-			['communications-mail-list'],
+			['communications-list'],
 			['communications-state-counts'],
 			['communications-threads'],
 			['communications-saved-searches'],
@@ -289,7 +289,7 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 		return [
 			['communications-folders'],
 			['communications-folder-messages'],
-			['communications-mail-list']
+			['communications-list']
 		]
 	}
 	if (eventType.startsWith('mail.folder.')) {

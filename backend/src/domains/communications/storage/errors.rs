@@ -4,7 +4,7 @@ use crate::platform::observations::ObservationStoreError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum MailStorageError {
+pub enum CommunicationStorageError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
 

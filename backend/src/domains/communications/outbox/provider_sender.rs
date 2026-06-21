@@ -5,14 +5,13 @@ use serde_json::Value;
 use sqlx::postgres::PgPool;
 
 use crate::domains::communications::core::{
-    EmailProviderKind, ProviderAccount, ProviderAccountSecretPurpose,
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore, EmailProviderKind,
+    ProviderAccount, ProviderAccountSecretPurpose,
 };
 use crate::platform::communications::{
     GmailOutboxSendRequest, GmailOutboxTransport, SmtpTransport,
 };
-use crate::vault::{
-    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore, HostVault,
-};
+use crate::vault::HostVault;
 
 use super::smtp_sender::SmtpOutboxEmailSender;
 use super::{

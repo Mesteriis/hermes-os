@@ -13,8 +13,8 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, MailAttachmentDisposition,
-    MailStorageStore, NewMailAttachment, NewMailBlob,
+    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
+    CommunicationStorageStore, NewCommunicationAttachment, NewCommunicationBlob,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -90,7 +90,7 @@ async fn seed_message_with_attachment(pool: sqlx::PgPool) -> SeededAttachment {
     let provider_record_id = format!("provider-attachment-translation-{suffix}");
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let message_store = MessageProjectionStore::new(pool.clone());
-    let storage_store = MailStorageStore::new(pool);
+    let storage_store = CommunicationStorageStore::new(pool);
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
@@ -124,7 +124,7 @@ async fn seed_message_with_attachment(pool: sqlx::PgPool) -> SeededAttachment {
     let sha256 = format!("sha256:{:0>64}", "d");
     let blob = storage_store
         .upsert_blob(
-            &NewMailBlob::new(
+            &NewCommunicationBlob::new(
                 "local_fs",
                 format!("attachments/{provider_record_id}/contrato.txt"),
                 &sha256,
@@ -136,7 +136,7 @@ async fn seed_message_with_attachment(pool: sqlx::PgPool) -> SeededAttachment {
         .expect("store blob");
     let attachment = storage_store
         .upsert_attachment(
-            &NewMailAttachment::new(
+            &NewCommunicationAttachment::new(
                 &message_id,
                 &raw.raw_record_id,
                 blob.blob_id,
@@ -146,7 +146,7 @@ async fn seed_message_with_attachment(pool: sqlx::PgPool) -> SeededAttachment {
                 sha256,
             )
             .filename("contrato.txt")
-            .disposition(MailAttachmentDisposition::Attachment)
+            .disposition(CommunicationAttachmentDisposition::Attachment)
             .scan_report(AttachmentSafetyScanReport {
                 status: AttachmentSafetyScanStatus::NotScanned,
                 engine: None,

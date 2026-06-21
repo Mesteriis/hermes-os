@@ -82,25 +82,36 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
         format!("\"/api/v1/{}", "telegram"),
         format!("\"/api/v1/{}", "whatsapp"),
         format!("\"/api/v1/{}", "email-accounts"),
-        format!("\"/api/v1/integrations/{}", "telegram"),
-        format!("\"/api/v1/integrations/{}", "whatsapp"),
-        format!("\"/api/v1/integrations/{}", "mail"),
     ] {
         assert!(
             !router_sources.contains(&legacy_prefix),
             "legacy user-facing provider route prefix remains: {legacy_prefix}"
         );
     }
+    for integration_prefix in [
+        "\"/api/v1/integrations/telegram",
+        "\"/api/v1/integrations/whatsapp",
+        "\"/api/v1/integrations/mail",
+    ] {
+        assert!(
+            router_sources.contains(integration_prefix),
+            "provider runtime/setup routes must live under integrations: {integration_prefix}"
+        );
+    }
     for communication_prefix in [
         "\"/api/v1/communications/telegram",
         "\"/api/v1/communications/whatsapp",
-        "\"/api/v1/communications/mail",
     ] {
         assert!(
             router_sources.contains(communication_prefix),
             "provider-scoped communication routes must live under communications: {communication_prefix}"
         );
     }
+    assert!(
+        router_sources.contains("\"/api/v1/communications/")
+            && !router_sources.contains("\"/api/v1/communications/mail/accounts"),
+        "communications router must keep product routes under /api/v1/communications without resurrecting mail runtime setup paths"
+    );
 
     let frontend_router = read(root.join("frontend/src/app/router.ts"));
     assert!(

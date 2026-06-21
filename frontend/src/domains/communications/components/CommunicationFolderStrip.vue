@@ -6,39 +6,39 @@ import Dialog from '../../../shared/ui/Dialog.vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import {
   useCopyMessageToFolderMutation,
-  useCreateMailFolderMutation,
-  useDeleteMailFolderMutation,
-  useMailFoldersQuery,
+  useCreateCommunicationFolderMutation,
+  useDeleteCommunicationFolderMutation,
+  useCommunicationFoldersQuery,
   useMoveMessageToFolderMutation,
-  useUpdateMailFolderMutation
+  useUpdateCommunicationFolderMutation
 } from '../queries/useCommunicationsQuery'
 import {
-  composeMailFolderName,
+  composeCommunicationFolderName,
   mailFolderDeleteDialogCopy,
   mailFolderFormDefaults,
   mailFolderFormToInput,
   mailFolderParentPathOptions,
   mailFolderMessageCountLabel,
   mailFolderVeeValidationSchema,
-  splitMailFolderName,
-  validateMailFolderParentPath,
-  type MailFolderFormValues
+  splitCommunicationFolderName,
+  validateCommunicationFolderParentPath,
+  type CommunicationFolderFormValues
 } from '../forms/mailFolderForm'
 import {
   MAIL_MESSAGE_DRAG_TYPE,
   hasCommunicationMessageDragType,
   parseCommunicationMessageDragPayload
 } from './mailDragDrop'
-import './MailFolderStrip.css'
+import './CommunicationFolderStrip.css'
 import {
   createChildFolderDraft,
   mailFolderHierarchyDeleteImpact,
   mailFolderColorClass,
-  orderMailFolderDisplayRows,
-  type MailFolderDisplayRow
+  orderCommunicationFolderDisplayRows,
+  type CommunicationFolderDisplayRow
 } from './mailFolderPresentation'
-import { useMailFolderReorder } from './useMailFolderReorder'
-import type { MailFolder } from '../types/folders'
+import { useCommunicationFolderReorder } from './useCommunicationFolderReorder'
+import type { CommunicationFolder } from '../types/folders'
 
 const props = defineProps<{
   accountId: string | null
@@ -46,7 +46,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   select: [folderId: string]
-  deleted: [folder: MailFolder]
+  deleted: [folder: CommunicationFolder]
 }>()
 
 const {
@@ -55,17 +55,17 @@ const {
   hasNextPage,
   isFetchingNextPage,
   isLoading
-} = useMailFoldersQuery(() => props.accountId || undefined)
+} = useCommunicationFoldersQuery(() => props.accountId || undefined)
 const folders = computed(() => folderData.value ?? [])
-const createMutation = useCreateMailFolderMutation()
-const updateMutation = useUpdateMailFolderMutation()
-const deleteMutation = useDeleteMailFolderMutation()
+const createMutation = useCreateCommunicationFolderMutation()
+const updateMutation = useUpdateCommunicationFolderMutation()
+const deleteMutation = useDeleteCommunicationFolderMutation()
 const copyMessageMutation = useCopyMessageToFolderMutation()
 const moveMessageMutation = useMoveMessageToFolderMutation()
 const dialogOpen = ref(false)
-const editingFolder = ref<MailFolder | null>(null)
+const editingFolder = ref<CommunicationFolder | null>(null)
 const deleteDialogOpen = ref(false)
-const deletingFolder = ref<MailFolder | null>(null)
+const deletingFolder = ref<CommunicationFolder | null>(null)
 const deleteError = ref('')
 const folderPathError = ref('')
 const dropTargetId = ref('')
@@ -113,21 +113,21 @@ const {
   resetForm,
   setFieldValue,
   values: formValues
-} = useForm<MailFolderFormValues>({
+} = useForm<CommunicationFolderFormValues>({
   validationSchema: mailFolderVeeValidationSchema,
   initialValues: mailFolderFormDefaults()
 })
 
-const folderRows = computed<MailFolderDisplayRow[]>(() => orderMailFolderDisplayRows(folders.value))
+const folderRows = computed<CommunicationFolderDisplayRow[]>(() => orderCommunicationFolderDisplayRows(folders.value))
 const orderedFolders = computed(() => folderRows.value.map((row) => row.folder))
-const folderReorder = useMailFolderReorder(orderedFolders, updateMutation.mutateAsync)
-const folderPathPreview = computed(() => composeMailFolderName(parentPath.value, leafName.value))
+const folderReorder = useCommunicationFolderReorder(orderedFolders, updateMutation.mutateAsync)
+const folderPathPreview = computed(() => composeCommunicationFolderName(parentPath.value, leafName.value))
 const parentPathOptions = computed(() => mailFolderParentPathOptions(orderedFolders.value, editingFolder.value))
-const parentPathValidationMessage = computed(() => validateMailFolderParentPath(parentPath.value, editingFolder.value))
+const parentPathValidationMessage = computed(() => validateCommunicationFolderParentPath(parentPath.value, editingFolder.value))
 
 const folderIndentUnit = 0.75
 
-function folderIndent(folder: MailFolderDisplayRow): string {
+function folderIndent(folder: CommunicationFolderDisplayRow): string {
   return `${Math.min(folder.depth, 8) * folderIndentUnit}rem`
 }
 
@@ -155,7 +155,7 @@ function openCreateDialog() {
   dialogOpen.value = true
 }
 
-function openCreateChildDialog(folder: MailFolder) {
+function openCreateChildDialog(folder: CommunicationFolder) {
   editingFolder.value = null
   const draft = createChildFolderDraft(folder)
   resetForm({
@@ -176,14 +176,14 @@ function openCreateChildDialog(folder: MailFolder) {
   dialogOpen.value = true
 }
 
-function openEditDialog(folder: MailFolder) {
+function openEditDialog(folder: CommunicationFolder) {
   editingFolder.value = folder
   resetForm({ values: mailFolderFormDefaults(folder) })
   syncFolderNameParts(folder.name)
   dialogOpen.value = true
 }
 
-function openDeleteDialog(folder: MailFolder) {
+function openDeleteDialog(folder: CommunicationFolder) {
   deletingFolder.value = folder
   deleteError.value = ''
   deleteDialogOpen.value = true
@@ -219,7 +219,7 @@ async function confirmDeleteFolder() {
   }
 }
 
-function updateField(key: keyof MailFolderFormValues, event: Event) {
+function updateField(key: keyof CommunicationFolderFormValues, event: Event) {
   const input = event.target as HTMLInputElement
   setFieldValue(key, key === 'sort_order' ? Number(input.value) : input.value)
 }
@@ -233,10 +233,10 @@ function updateLeafName(event: Event) {
 }
 
 function syncFolderNameParts(name: string) {
-  const parts = splitMailFolderName(name)
+  const parts = splitCommunicationFolderName(name)
   parentPath.value = parts.parentPath
   leafName.value = parts.leafName
-  setFieldValue('name', composeMailFolderName(parts.parentPath, parts.leafName))
+  setFieldValue('name', composeCommunicationFolderName(parts.parentPath, parts.leafName))
   folderPathError.value = ''
 }
 
@@ -260,7 +260,7 @@ function handleFolderVirtualScroll() {
   }
 }
 
-async function handleFolderDrop(event: DragEvent, folder: MailFolder) {
+async function handleFolderDrop(event: DragEvent, folder: CommunicationFolder) {
   if (!event.dataTransfer || isDropping.value) return
   if (await folderReorder.handleDrop(event, folder)) {
     dropStatus.value = ''

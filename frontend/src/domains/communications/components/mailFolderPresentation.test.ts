@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   createChildFolderDraft,
-  deriveMailFolderDisplayRow,
+  deriveCommunicationFolderDisplayRow,
   mailFolderHierarchyDeleteImpact,
-  orderMailFolderDisplayRows
+  orderCommunicationFolderDisplayRows
 } from './mailFolderPresentation'
-import type { MailFolder } from '../types/folders'
+import type { CommunicationFolder } from '../types/folders'
 
-function folder(overrides: Partial<MailFolder>): MailFolder {
+function folder(overrides: Partial<CommunicationFolder>): CommunicationFolder {
   return {
     folder_id: 'folder-1',
     account_id: 'account-1',
@@ -24,7 +24,7 @@ function folder(overrides: Partial<MailFolder>): MailFolder {
 
 describe('mail folder presentation helpers', () => {
   it('parses root folder names as a single depth entry', () => {
-    const row = deriveMailFolderDisplayRow(folder({ name: 'Inbox' }))
+    const row = deriveCommunicationFolderDisplayRow(folder({ name: 'Inbox' }))
 
     expect(row.depth).toBe(0)
     expect(row.leafName).toBe('Inbox')
@@ -32,7 +32,7 @@ describe('mail folder presentation helpers', () => {
   })
 
   it('derives path depth, leaf and prefix from slash-delimited names', () => {
-    const row = deriveMailFolderDisplayRow(folder({
+    const row = deriveCommunicationFolderDisplayRow(folder({
       folder_id: 'folder-2',
       name: 'Projects / Client A / Q1'
     }))
@@ -43,7 +43,7 @@ describe('mail folder presentation helpers', () => {
   })
 
   it('normalizes blank segments and trims whitespace in folder paths', () => {
-    const row = deriveMailFolderDisplayRow(folder({
+    const row = deriveCommunicationFolderDisplayRow(folder({
       folder_id: 'folder-3',
       name: '  Archives //  2026 // ' 
     }))
@@ -54,7 +54,7 @@ describe('mail folder presentation helpers', () => {
   })
 
   it('orders folders by sort order and hierarchy so parents stay ahead of children', () => {
-    const rows = orderMailFolderDisplayRows([
+    const rows = orderCommunicationFolderDisplayRows([
       folder({ folder_id: 'folder-4', name: 'Projects / Client A / Q1', sort_order: 100 }),
       folder({ folder_id: 'folder-2', name: 'Projects', sort_order: 100 }),
       folder({ folder_id: 'folder-3', name: 'Projects / Client A', sort_order: 100 }),

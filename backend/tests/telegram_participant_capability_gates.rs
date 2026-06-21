@@ -29,7 +29,7 @@ async fn fixture_account_blocks_members_sync_before_audit_or_events() {
 
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",
@@ -109,7 +109,7 @@ async fn fixture_account_blocks_join_and_leave_before_command_enqueue() {
 
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",

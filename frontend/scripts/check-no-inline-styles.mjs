@@ -21,8 +21,8 @@ const forbiddenStylePatterns = [
 const dynamicLayoutStyleAllowlist = new Set([
 	'src/domains/communications/components/AttachmentSearchPanel.vue',
 	'src/domains/communications/components/DraftStrip.vue',
-	'src/domains/communications/components/MailFolderStrip.vue',
-	'src/domains/communications/components/MailList.vue',
+	'src/domains/communications/components/CommunicationFolderStrip.vue',
+	'src/domains/communications/components/CommunicationList.vue',
 	'src/domains/communications/components/MailResourceOverviewStrip.vue',
 	'src/domains/communications/components/SavedSearchStrip.vue',
 	'src/domains/documents/components/DocumentsList.vue',

@@ -131,8 +131,8 @@ impl CommunicationTemplateStore {
     pub fn render_mail_merge_preview(
         &self,
         template: &CommunicationTemplate,
-        rows: Vec<MailMergePreviewRow>,
-    ) -> Result<MailMergePreview, CommunicationTemplateError> {
+        rows: Vec<CommunicationMergePreviewRow>,
+    ) -> Result<CommunicationMergePreview, CommunicationTemplateError> {
         let template_has_blocking_diagnostics = !template.undeclared_variables.is_empty()
             || !template.malformed_placeholders.is_empty();
         let items = rows
@@ -143,7 +143,7 @@ impl CommunicationTemplateStore {
                     && rendered.missing_variables.is_empty()
                     && rendered.unresolved_variables.is_empty()
                     && rendered.malformed_placeholders.is_empty();
-                Ok(MailMergePreviewItem {
+                Ok(CommunicationMergePreviewItem {
                     row_id: row.row_id,
                     ready,
                     rendered,
@@ -152,7 +152,7 @@ impl CommunicationTemplateStore {
             .collect::<Result<Vec<_>, CommunicationTemplateError>>()?;
         let ready_count = items.iter().filter(|item| item.ready).count();
         let row_count = items.len();
-        Ok(MailMergePreview {
+        Ok(CommunicationMergePreview {
             template_id: template.template_id.clone(),
             row_count,
             ready_count,
@@ -201,22 +201,22 @@ pub struct RenderedTemplate {
 }
 
 #[derive(Clone, Debug)]
-pub struct MailMergePreviewRow {
+pub struct CommunicationMergePreviewRow {
     pub row_id: String,
     pub variables: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MailMergePreview {
+pub struct CommunicationMergePreview {
     pub template_id: String,
     pub row_count: usize,
     pub ready_count: usize,
     pub blocked_count: usize,
-    pub items: Vec<MailMergePreviewItem>,
+    pub items: Vec<CommunicationMergePreviewItem>,
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MailMergePreviewItem {
+pub struct CommunicationMergePreviewItem {
     pub row_id: String,
     pub ready: bool,
     pub rendered: RenderedTemplate,

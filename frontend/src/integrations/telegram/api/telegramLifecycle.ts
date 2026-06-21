@@ -167,7 +167,7 @@ export async function fetchTelegramCommands(
     params.set('command_kinds', commandKinds.join(','))
   }
   return ApiClient.instance.get<TelegramCommandListResponse>(
-    `/api/v1/communications/telegram/commands?${params.toString()}`,
+    `/api/v1/integrations/telegram/commands?${params.toString()}`,
     'Telegram commands request failed'
   )
 }
@@ -176,7 +176,7 @@ export async function retryTelegramCommand(
   commandId: string
 ): Promise<TelegramProviderWriteCommand> {
   return ApiClient.instance.post<TelegramProviderWriteCommand>(
-    `/api/v1/communications/telegram/commands/${encodeURIComponent(commandId)}/retry`,
+    `/api/v1/integrations/telegram/commands/${encodeURIComponent(commandId)}/retry`,
     {},
     'Telegram command retry failed'
   )

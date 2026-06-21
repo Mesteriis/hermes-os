@@ -6,6 +6,7 @@ use super::{
     publish_chat_folders_event, publish_chat_notification_settings_event,
     publish_chat_position_event, publish_chat_unread_event,
 };
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::{
     NewTelegramChat, TelegramChatKind, TelegramSyncState,
@@ -19,7 +20,6 @@ use crate::platform::communications::EmailProviderKind;
 use crate::platform::communications::NewProviderAccount;
 use crate::platform::events::EventBus;
 use crate::platform::events::bus::telegram_event_types;
-use crate::vault::CommunicationProviderAccountStore;
 
 #[cfg(test)]
 mod archive_reconciliation;

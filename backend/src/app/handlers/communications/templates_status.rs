@@ -1,6 +1,6 @@
 use super::*;
 use crate::domains::communications::templates::{
-    CommunicationTemplateStore, MailMergePreviewRow, NewCommunicationTemplate,
+    CommunicationMergePreviewRow, CommunicationTemplateStore, NewCommunicationTemplate,
 };
 
 const MAX_MAIL_MERGE_PREVIEW_ROWS: usize = 250;
@@ -160,7 +160,7 @@ pub(crate) async fn post_v1_rich_template_mail_merge_preview(
             if row_id.is_empty() {
                 return Err(ApiError::InvalidCommunicationQuery("row_id is required"));
             }
-            Ok(MailMergePreviewRow {
+            Ok(CommunicationMergePreviewRow {
                 row_id,
                 variables: row.variables.unwrap_or_default(),
             })

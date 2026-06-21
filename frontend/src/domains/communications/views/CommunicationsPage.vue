@@ -7,7 +7,7 @@ import CommunicationsListPane from '../components/CommunicationsListPane.vue'
 import CommunicationsRailPane from '../components/CommunicationsRailPane.vue'
 import CommunicationsWorkbench from '../components/CommunicationsWorkbench.vue'
 import ComposeDrawer from '../components/ComposeDrawer.vue'
-import MailFolderStrip from '../components/MailFolderStrip.vue'
+import CommunicationFolderStrip from '../components/CommunicationFolderStrip.vue'
 import OutboxStatusStrip from '../components/OutboxStatusStrip.vue'
 import SavedSearchStrip from '../components/SavedSearchStrip.vue'
 import { communicationSectionTabs } from '../constants/sectionTabs'
@@ -188,7 +188,7 @@ const {
             @select="handleSavedSearchSelect"
             @deleted="handleSavedSearchDeleted"
           />
-          <MailFolderStrip
+          <CommunicationFolderStrip
             :account-id="store.selectedMailAccountId || null"
             :active-id="activeFolderId"
             @select="handleFolderSelect"

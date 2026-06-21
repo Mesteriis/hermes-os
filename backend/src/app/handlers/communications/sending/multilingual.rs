@@ -120,7 +120,7 @@ pub(crate) async fn post_v1_translate_attachment(
         ));
     }
 
-    let attachment = mail_storage_store(&state)?
+    let attachment = communication_storage_store(&state)?
         .attachment_by_id(&attachment_id)
         .await?
         .ok_or(ApiError::NotFound)?;

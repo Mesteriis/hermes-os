@@ -1,16 +1,16 @@
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
-import type { MailFolder, MailFolderInput } from '../types/folders'
+import type { CommunicationFolder, CommunicationFolderInput } from '../types/folders'
 
 const HEX_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/
 
-export type MailFolderFormValues = z.infer<typeof mailFolderFormSchema>
-export type MailFolderDeleteDialogCopy = {
+export type CommunicationFolderFormValues = z.infer<typeof mailFolderFormSchema>
+export type CommunicationFolderDeleteDialogCopy = {
 	title: string
 	message: string
 	confirmLabel: string
 }
-export type MailFolderNameParts = {
+export type CommunicationFolderNameParts = {
 	parentPath: string
 	leafName: string
 }
@@ -32,7 +32,7 @@ export const mailFolderFormSchema = z.object({
 
 export const mailFolderVeeValidationSchema = toTypedSchema(mailFolderFormSchema)
 
-export function mailFolderFormDefaults(folder?: MailFolder | null): MailFolderFormValues {
+export function mailFolderFormDefaults(folder?: CommunicationFolder | null): CommunicationFolderFormValues {
 	return {
 		name: folder?.name ?? '',
 		description: folder?.description ?? '',
@@ -41,8 +41,8 @@ export function mailFolderFormDefaults(folder?: MailFolder | null): MailFolderFo
 	}
 }
 
-export function splitMailFolderName(name: string): MailFolderNameParts {
-	const parts = normalizeMailFolderPathParts(name)
+export function splitCommunicationFolderName(name: string): CommunicationFolderNameParts {
+	const parts = normalizeCommunicationFolderPathParts(name)
 	if (parts.length === 0) {
 		return {
 			parentPath: '',
@@ -56,24 +56,24 @@ export function splitMailFolderName(name: string): MailFolderNameParts {
 	}
 }
 
-export function composeMailFolderName(parentPath: string, leafName: string): string {
+export function composeCommunicationFolderName(parentPath: string, leafName: string): string {
 	const parts = [
-		...normalizeMailFolderPathParts(parentPath),
-		...normalizeMailFolderPathParts(leafName)
+		...normalizeCommunicationFolderPathParts(parentPath),
+		...normalizeCommunicationFolderPathParts(leafName)
 	]
 	return parts.join(' / ')
 }
 
 export function mailFolderParentPathOptions(
-	folders: ReadonlyArray<Pick<MailFolder, 'folder_id' | 'name'>>,
-	editingFolder?: Pick<MailFolder, 'folder_id' | 'name'> | null
+	folders: ReadonlyArray<Pick<CommunicationFolder, 'folder_id' | 'name'>>,
+	editingFolder?: Pick<CommunicationFolder, 'folder_id' | 'name'> | null
 ): string[] {
-	const currentPath = normalizeMailFolderPath(editingFolder?.name ?? '')
+	const currentPath = normalizeCommunicationFolderPath(editingFolder?.name ?? '')
 	const unique = new Set<string>()
 	const options: string[] = []
 
 	for (const folder of folders) {
-		const normalizedPath = normalizeMailFolderPath(folder.name)
+		const normalizedPath = normalizeCommunicationFolderPath(folder.name)
 		if (!normalizedPath) continue
 		if (currentPath && isSameOrDescendantPath(normalizedPath, currentPath)) continue
 		if (unique.has(normalizedPath)) continue
@@ -84,12 +84,12 @@ export function mailFolderParentPathOptions(
 	return options
 }
 
-export function validateMailFolderParentPath(
+export function validateCommunicationFolderParentPath(
 	parentPath: string,
-	editingFolder?: Pick<MailFolder, 'name'> | null
+	editingFolder?: Pick<CommunicationFolder, 'name'> | null
 ): string {
-	const normalizedParentPath = normalizeMailFolderPath(parentPath)
-	const currentPath = normalizeMailFolderPath(editingFolder?.name ?? '')
+	const normalizedParentPath = normalizeCommunicationFolderPath(parentPath)
+	const currentPath = normalizeCommunicationFolderPath(editingFolder?.name ?? '')
 	if (!normalizedParentPath || !currentPath) return ''
 	if (normalizedParentPath === currentPath) return 'Folder cannot be its own parent'
 	if (isSameOrDescendantPath(normalizedParentPath, currentPath)) {
@@ -99,9 +99,9 @@ export function validateMailFolderParentPath(
 }
 
 export function mailFolderFormToInput(
-	values: MailFolderFormValues,
+	values: CommunicationFolderFormValues,
 	accountId: string | null
-): MailFolderInput {
+): CommunicationFolderInput {
 	const parsed = mailFolderFormSchema.parse(values)
 	return {
 		account_id: accountId?.trim() || null,
@@ -113,8 +113,8 @@ export function mailFolderFormToInput(
 }
 
 export function mailFolderDeleteDialogCopy(
-	folder: Pick<MailFolder, 'name'>
-): MailFolderDeleteDialogCopy {
+	folder: Pick<CommunicationFolder, 'name'>
+): CommunicationFolderDeleteDialogCopy {
 	return {
 		title: 'Delete folder',
 		message: `Delete the folder "${folder.name}"? This does not delete messages.`,
@@ -123,16 +123,16 @@ export function mailFolderDeleteDialogCopy(
 }
 
 export function mailFolderMessageCountLabel(
-	folder: Pick<MailFolder, 'message_count'>
+	folder: Pick<CommunicationFolder, 'message_count'>
 ): string {
 	return String(Math.max(0, Math.trunc(folder.message_count)))
 }
 
-function normalizeMailFolderPath(value: string): string {
-	return normalizeMailFolderPathParts(value).join(' / ')
+function normalizeCommunicationFolderPath(value: string): string {
+	return normalizeCommunicationFolderPathParts(value).join(' / ')
 }
 
-function normalizeMailFolderPathParts(value: string): string[] {
+function normalizeCommunicationFolderPathParts(value: string): string[] {
 	return value
 		.split('/')
 		.map((part) => part.trim())

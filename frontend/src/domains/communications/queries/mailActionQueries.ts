@@ -48,11 +48,11 @@ import type { ThreadTranslationResponse } from '../types/multilingual'
 
 function invalidateMessageViews(queryClient: ReturnType<typeof useQueryClient>, messageId: string) {
   queryClient.invalidateQueries({ queryKey: ['communications-message', messageId] })
-  queryClient.invalidateQueries({ queryKey: ['communications-mail-list'] })
+  queryClient.invalidateQueries({ queryKey: ['communications-list'] })
 }
 
 function invalidateSyncViews(queryClient: ReturnType<typeof useQueryClient>) {
-  queryClient.invalidateQueries({ queryKey: ['communications-mail-list'] })
+  queryClient.invalidateQueries({ queryKey: ['communications-list'] })
   queryClient.invalidateQueries({ queryKey: ['communications-state-counts'] })
   queryClient.invalidateQueries({ queryKey: ['communications', 'mail', 'sync-statuses'] })
   queryClient.invalidateQueries({ queryKey: ['communications', 'mail', 'mailbox-health'] })

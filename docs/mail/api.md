@@ -11,25 +11,25 @@ Base: `/api/v1/communications/`
 
 | Метод | Путь | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/mail/accounts` | Список email provider accounts с capability flags |
-| GET | `/api/v1/communications/mail/accounts/{account_id}` | Детали email account и capability flags |
-| DELETE | `/api/v1/communications/mail/accounts/{account_id}` | Удалить только unused account metadata; retained raw/messages block deletion |
-| POST | `/api/v1/communications/mail/accounts/{account_id}/logout` | Локально выйти: пометить account logged_out и выключить sync |
-| GET | `/api/v1/communications/mail/accounts/{account_id}/export` | Экспорт sanitized settings без credentials и secret refs |
-| POST | `/api/v1/communications/mail/accounts/import` | Импорт sanitized account metadata и sync settings; secret-bearing payload rejected |
-| POST | `/api/v1/communications/mail/accounts/gmail/oauth/start` | Начать Gmail OAuth setup |
-| POST | `/api/v1/communications/mail/accounts/gmail/oauth/complete` | Завершить Gmail OAuth setup |
-| POST | `/api/v1/communications/mail/accounts/imap` | Создать iCloud/generic IMAP+SMTP account |
-| GET | `/api/v1/communications/mail/accounts/sync-status` | Account-scoped sync status list |
-| GET/PUT | `/api/v1/communications/mail/accounts/{account_id}/sync-settings` | Read/update sync settings |
-| POST | `/api/v1/communications/mail/accounts/{account_id}/sync-now` | Manual sync |
-| POST | `/api/v1/communications/mail/accounts/{account_id}/sync-full-resync` | Manual full resync |
+| GET | `/api/v1/integrations/mail/accounts` | Список email provider accounts с capability flags |
+| GET | `/api/v1/integrations/mail/accounts/{account_id}` | Детали email account и capability flags |
+| DELETE | `/api/v1/integrations/mail/accounts/{account_id}` | Удалить только unused account metadata; retained raw/messages block deletion |
+| POST | `/api/v1/integrations/mail/accounts/{account_id}/logout` | Локально выйти: пометить account logged_out и выключить sync |
+| GET | `/api/v1/integrations/mail/accounts/{account_id}/export` | Экспорт sanitized settings без credentials и secret refs |
+| POST | `/api/v1/integrations/mail/accounts/import` | Импорт sanitized account metadata и sync settings; secret-bearing payload rejected |
+| POST | `/api/v1/integrations/mail/accounts/gmail/oauth/start` | Начать Gmail OAuth setup |
+| POST | `/api/v1/integrations/mail/accounts/gmail/oauth/complete` | Завершить Gmail OAuth setup |
+| POST | `/api/v1/integrations/mail/accounts/imap` | Создать iCloud/generic IMAP+SMTP account |
+| GET | `/api/v1/integrations/mail/accounts/sync-status` | Account-scoped sync status list |
+| GET/PUT | `/api/v1/integrations/mail/accounts/{account_id}/sync-settings` | Read/update sync settings |
+| POST | `/api/v1/integrations/mail/accounts/{account_id}/sync-now` | Manual sync |
+| POST | `/api/v1/integrations/mail/accounts/{account_id}/sync-full-resync` | Manual full resync |
 
 Account export/import never includes credential values. Import rejects payloads
 that contain secret-like keys such as `password`, `secret_ref`, `token` or
 `credential`; credentials must be reconnected through account setup.
 
-`POST /api/v1/communications/mail/accounts/imap` accepts optional SMTP settings
+`POST /api/v1/integrations/mail/accounts/imap` accepts optional SMTP settings
 (`smtp_host`, `smtp_port`, `smtp_tls`, `smtp_starttls`, `smtp_username`) for
 IMAP-backed sending. Credential values are still stored through the configured
 secret resolver; account config stores only non-secret SMTP metadata.

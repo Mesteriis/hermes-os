@@ -1,7 +1,6 @@
 use serde_json::json;
 
 use crate::platform::communications::{CommunicationProviderKind, NewProviderAccount};
-use crate::vault::CommunicationProviderAccountStore;
 
 use super::WhatsappWebStore;
 use crate::integrations::whatsapp::client::errors::WhatsappWebError;
@@ -34,7 +33,8 @@ impl WhatsappWebStore {
             "local_state_path": request.local_state_path,
             "device_name": request.device_name,
         }));
-        let stored_account = CommunicationProviderAccountStore::new(self.pool.clone())
+        let stored_account = self
+            .provider_account_store()
             .upsert(&account)
             .await
             .map_err(|error| WhatsappWebError::ProviderAccountStore(error.to_string()))?;

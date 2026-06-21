@@ -3,59 +3,59 @@ use super::support::*;
 pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
     router
         .route(
-            "/api/v1/communications/telegram/capabilities",
+            "/api/v1/integrations/telegram/capabilities",
             get(get_telegram_capabilities),
         )
         .route(
-            "/api/v1/communications/whatsapp/capabilities",
+            "/api/v1/integrations/whatsapp/capabilities",
             get(get_whatsapp_capabilities),
         )
         .route(
-            "/api/v1/communications/telegram/accounts/fixture",
+            "/api/v1/integrations/telegram/accounts/fixture",
             post(post_telegram_fixture_account),
         )
         .route(
-            "/api/v1/communications/telegram/accounts",
+            "/api/v1/integrations/telegram/accounts",
             get(get_telegram_accounts).post(post_telegram_account),
         )
         .route(
-            "/api/v1/communications/telegram/accounts/{account_id}/capabilities",
+            "/api/v1/integrations/telegram/accounts/{account_id}/capabilities",
             get(get_telegram_account_capabilities),
         )
         .route(
-            "/api/v1/communications/telegram/accounts/{account_id}",
+            "/api/v1/integrations/telegram/accounts/{account_id}",
             delete(delete_telegram_account),
         )
         .route(
-            "/api/v1/communications/telegram/accounts/{account_id}/logout",
+            "/api/v1/integrations/telegram/accounts/{account_id}/logout",
             post(post_telegram_account_logout),
         )
         .route(
-            "/api/v1/communications/telegram/runtime/status",
+            "/api/v1/integrations/telegram/runtime/status",
             get(get_telegram_runtime_status),
         )
         .route(
-            "/api/v1/communications/telegram/runtime/start",
+            "/api/v1/integrations/telegram/runtime/start",
             post(post_telegram_runtime_start),
         )
         .route(
-            "/api/v1/communications/telegram/runtime/stop",
+            "/api/v1/integrations/telegram/runtime/stop",
             post(post_telegram_runtime_stop),
         )
         .route(
-            "/api/v1/communications/telegram/runtime/restart",
+            "/api/v1/integrations/telegram/runtime/restart",
             post(post_telegram_runtime_restart),
         )
         .route(
-            "/api/v1/communications/telegram/login/qr/start",
+            "/api/v1/integrations/telegram/login/qr/start",
             post(post_telegram_qr_login_start),
         )
         .route(
-            "/api/v1/communications/telegram/login/qr/{setup_id}",
+            "/api/v1/integrations/telegram/login/qr/{setup_id}",
             get(get_telegram_qr_login_status).delete(delete_telegram_qr_login),
         )
         .route(
-            "/api/v1/communications/telegram/login/qr/{setup_id}/password",
+            "/api/v1/integrations/telegram/login/qr/{setup_id}/password",
             post(post_telegram_qr_login_password),
         )
         .route("/api/v1/communications/telegram/chats", get(get_telegram_chats))
@@ -213,9 +213,9 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
                 .post(post_telegram_reaction)
                 .delete(delete_telegram_reaction),
         )
-        .route("/api/v1/communications/telegram/commands", get(get_telegram_commands))
+        .route("/api/v1/integrations/telegram/commands", get(get_telegram_commands))
         .route(
-            "/api/v1/communications/telegram/commands/{command_id}/retry",
+            "/api/v1/integrations/telegram/commands/{command_id}/retry",
             post(post_telegram_command_retry),
         )
         .route(
@@ -253,10 +253,10 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(get_call_transcript).post(post_call_transcript_fixture),
         )
         .route(
-            "/api/v1/communications/whatsapp/accounts/fixture",
+            "/api/v1/integrations/whatsapp/accounts/fixture",
             post(post_whatsapp_fixture_account),
         )
-        .route("/api/v1/communications/whatsapp/sessions", get(get_whatsapp_sessions))
+        .route("/api/v1/integrations/whatsapp/sessions", get(get_whatsapp_sessions))
         .route(
             "/api/v1/communications/whatsapp/messages",
             get(get_whatsapp_messages).post(post_whatsapp_fixture_message),

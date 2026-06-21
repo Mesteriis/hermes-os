@@ -1,6 +1,6 @@
 import type { LocalMessageState, WorkflowState } from './communications'
 
-export type MailSavedSearch = {
+export type CommunicationSavedSearch = {
   saved_search_id: string
   name: string
   description: string | null
@@ -17,7 +17,7 @@ export type MailSavedSearch = {
 }
 
 export type SavedSearchListResponse = {
-  items: MailSavedSearch[]
+  items: CommunicationSavedSearch[]
   next_cursor: string | null
   has_more: boolean
 }

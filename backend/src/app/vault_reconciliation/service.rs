@@ -1,11 +1,12 @@
 use sqlx::postgres::PgPool;
 
-use crate::domains::communications::core::{NewProviderAccount, NewProviderAccountSecretBinding};
-use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
-use crate::vault::{
-    CalendarAccountStore, CommunicationProviderAccountStore,
-    CommunicationProviderSecretBindingStore, HostVault,
+use crate::domains::calendar::events::CalendarAccountStore;
+use crate::domains::communications::core::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore, NewProviderAccount,
+    NewProviderAccountSecretBinding,
 };
+use crate::platform::secrets::{NewSecretReference, SecretReferenceStore};
+use crate::vault::HostVault;
 
 use super::calendar_restore::restore_linked_calendar_account;
 use super::errors::HostVaultReconciliationError;

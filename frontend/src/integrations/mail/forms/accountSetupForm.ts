@@ -134,5 +134,5 @@ export function accountSetupFormToGmailOAuthStart(
 }
 
 function gmailOAuthRedirectUri(apiBaseUrl: string): string {
-	return `${apiBaseUrl.replace(/\/+$/, '')}/api/v1/communications/mail/accounts/gmail/oauth/callback`
+	return `${apiBaseUrl.replace(/\/+$/, '')}/api/v1/integrations/mail/accounts/gmail/oauth/callback`
 }

@@ -1,11 +1,11 @@
 use chrono::Utc;
 use serde_json::Value;
 
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::tdjson::TdJsonLibrary;
 use crate::platform::communications::{CommunicationProviderKind, ProviderAccount};
 use crate::platform::config::AppConfig;
-use crate::vault::CommunicationProviderAccountStore;
 
 use super::models::TelegramRuntimeStatus;
 use super::state::{TelegramRuntimeActorState, TelegramRuntimeState};

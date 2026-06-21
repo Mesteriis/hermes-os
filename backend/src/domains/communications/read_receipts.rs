@@ -15,11 +15,11 @@ const EVENT_TYPE_RECORDED: &str = "mail.read_receipt.recorded";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum MailReadReceiptKind {
+pub enum CommunicationReadReceiptKind {
     Read,
 }
 
-impl MailReadReceiptKind {
+impl CommunicationReadReceiptKind {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Read => "read",
@@ -27,25 +27,25 @@ impl MailReadReceiptKind {
     }
 }
 
-impl TryFrom<&str> for MailReadReceiptKind {
-    type Error = MailReadReceiptError;
+impl TryFrom<&str> for CommunicationReadReceiptKind {
+    type Error = CommunicationReadReceiptError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "read" => Ok(Self::Read),
-            _ => Err(MailReadReceiptError::Invalid("receipt_kind")),
+            _ => Err(CommunicationReadReceiptError::Invalid("receipt_kind")),
         }
     }
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MailReadReceipt {
+pub struct CommunicationReadReceipt {
     pub receipt_id: String,
     pub account_id: String,
     pub outbox_id: Option<String>,
     pub provider_message_id: String,
     pub recipient: String,
-    pub receipt_kind: MailReadReceiptKind,
+    pub receipt_kind: CommunicationReadReceiptKind,
     pub read_at: DateTime<Utc>,
     pub source_kind: String,
     pub provider_record_id: Option<String>,
@@ -55,7 +55,7 @@ pub struct MailReadReceipt {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct NewMailReadReceipt {
+pub struct NewCommunicationReadReceipt {
     pub receipt_id: Option<String>,
     pub account_id: String,
     pub provider_message_id: String,
@@ -68,20 +68,20 @@ pub struct NewMailReadReceipt {
 }
 
 #[derive(Clone)]
-pub struct MailReadReceiptStore {
+pub struct CommunicationReadReceiptStore {
     pool: PgPool,
 }
 
-impl MailReadReceiptStore {
+impl CommunicationReadReceiptStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     pub async fn record(
         &self,
-        receipt: NewMailReadReceipt,
-    ) -> Result<MailReadReceipt, MailReadReceiptError> {
-        let normalized = NormalizedMailReadReceipt::from_new(receipt)?;
+        receipt: NewCommunicationReadReceipt,
+    ) -> Result<CommunicationReadReceipt, CommunicationReadReceiptError> {
+        let normalized = NormalizedCommunicationReadReceipt::from_new(receipt)?;
         let mut transaction = self.pool.begin().await?;
         ensure_canonical_account_in_transaction(
             &mut transaction,
@@ -106,8 +106,8 @@ impl MailReadReceiptStore {
 
 async fn capture_read_receipt_observation(
     transaction: &mut Transaction<'_, Postgres>,
-    receipt: &MailReadReceipt,
-) -> Result<(), MailReadReceiptError> {
+    receipt: &CommunicationReadReceipt,
+) -> Result<(), CommunicationReadReceiptError> {
     let observation = ObservationStore::capture_in_transaction(
         transaction,
         &NewObservation::new(
@@ -180,7 +180,7 @@ async fn capture_read_receipt_observation(
 }
 
 #[derive(Debug)]
-struct NormalizedMailReadReceipt {
+struct NormalizedCommunicationReadReceipt {
     receipt_id: String,
     account_id: String,
     provider_message_id: String,
@@ -192,8 +192,10 @@ struct NormalizedMailReadReceipt {
     metadata: Value,
 }
 
-impl NormalizedMailReadReceipt {
-    fn from_new(receipt: NewMailReadReceipt) -> Result<Self, MailReadReceiptError> {
+impl NormalizedCommunicationReadReceipt {
+    fn from_new(
+        receipt: NewCommunicationReadReceipt,
+    ) -> Result<Self, CommunicationReadReceiptError> {
         let account_id = normalize_required("account_id", &receipt.account_id)?;
         let provider_message_id =
             normalize_required("provider_message_id", &receipt.provider_message_id)?;
@@ -204,7 +206,7 @@ impl NormalizedMailReadReceipt {
         };
         let metadata = receipt.metadata.unwrap_or_else(|| json!({}));
         if !metadata.is_object() {
-            return Err(MailReadReceiptError::Invalid("metadata"));
+            return Err(CommunicationReadReceiptError::Invalid("metadata"));
         }
 
         Ok(Self {
@@ -226,7 +228,7 @@ async fn correlate_outbox(
     transaction: &mut Transaction<'_, Postgres>,
     account_id: &str,
     provider_message_id: &str,
-) -> Result<Option<String>, MailReadReceiptError> {
+) -> Result<Option<String>, CommunicationReadReceiptError> {
     Ok(sqlx::query_scalar::<_, String>(
         r#"
         SELECT outbox_id
@@ -245,9 +247,9 @@ async fn correlate_outbox(
 
 async fn insert_receipt(
     transaction: &mut Transaction<'_, Postgres>,
-    receipt: &NormalizedMailReadReceipt,
+    receipt: &NormalizedCommunicationReadReceipt,
     outbox_id: Option<&str>,
-) -> Result<MailReadReceipt, MailReadReceiptError> {
+) -> Result<CommunicationReadReceipt, CommunicationReadReceiptError> {
     let row = sqlx::query(
         r#"
         INSERT INTO communication_read_receipts (
@@ -298,7 +300,7 @@ async fn insert_receipt(
 async fn ensure_canonical_account_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     account_id: Option<&str>,
-) -> Result<(), MailReadReceiptError> {
+) -> Result<(), CommunicationReadReceiptError> {
     let Some(account_id) = account_id else {
         return Ok(());
     };
@@ -329,15 +331,15 @@ async fn ensure_canonical_account_in_transaction(
     Ok(())
 }
 
-fn row_to_receipt(row: PgRow) -> Result<MailReadReceipt, MailReadReceiptError> {
+fn row_to_receipt(row: PgRow) -> Result<CommunicationReadReceipt, CommunicationReadReceiptError> {
     let receipt_kind: String = row.try_get("receipt_kind")?;
-    Ok(MailReadReceipt {
+    Ok(CommunicationReadReceipt {
         receipt_id: row.try_get("receipt_id")?,
         account_id: row.try_get("account_id")?,
         outbox_id: row.try_get("outbox_id")?,
         provider_message_id: row.try_get("provider_message_id")?,
         recipient: row.try_get("recipient")?,
-        receipt_kind: MailReadReceiptKind::try_from(receipt_kind.as_str())?,
+        receipt_kind: CommunicationReadReceiptKind::try_from(receipt_kind.as_str())?,
         read_at: row.try_get("read_at")?,
         source_kind: row.try_get("source_kind")?,
         provider_record_id: row.try_get("provider_record_id")?,
@@ -347,7 +349,9 @@ fn row_to_receipt(row: PgRow) -> Result<MailReadReceipt, MailReadReceiptError> {
     })
 }
 
-fn read_receipt_event(receipt: &MailReadReceipt) -> Result<NewEventEnvelope, MailReadReceiptError> {
+fn read_receipt_event(
+    receipt: &CommunicationReadReceipt,
+) -> Result<NewEventEnvelope, CommunicationReadReceiptError> {
     Ok(NewEventEnvelope::builder(
         format!(
             "mail_read_receipt_event:{}:{}",
@@ -387,15 +391,20 @@ fn read_receipt_event(receipt: &MailReadReceipt) -> Result<NewEventEnvelope, Mai
     .build()?)
 }
 
-fn normalize_required(field: &'static str, value: &str) -> Result<String, MailReadReceiptError> {
+fn normalize_required(
+    field: &'static str,
+    value: &str,
+) -> Result<String, CommunicationReadReceiptError> {
     let value = value.trim();
     if value.is_empty() {
-        return Err(MailReadReceiptError::Invalid(field));
+        return Err(CommunicationReadReceiptError::Invalid(field));
     }
     Ok(value.to_owned())
 }
 
-fn normalize_optional(value: Option<String>) -> Result<Option<String>, MailReadReceiptError> {
+fn normalize_optional(
+    value: Option<String>,
+) -> Result<Option<String>, CommunicationReadReceiptError> {
     match value {
         Some(value) => {
             let value = value.trim();
@@ -420,7 +429,7 @@ fn generate_receipt_id(account_id: &str, provider_record_id: Option<&str>) -> St
 }
 
 #[derive(Debug, Error)]
-pub enum MailReadReceiptError {
+pub enum CommunicationReadReceiptError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]

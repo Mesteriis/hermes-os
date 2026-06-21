@@ -27,7 +27,7 @@ export {
   fetchDrafts,
   searchEmails,
   fetchSubscriptions,
-  fetchMailBlockers,
+  fetchCommunicationBlockers,
   fetchPersonas,
   fetchRichTemplates,
   saveRichTemplate,
@@ -44,10 +44,10 @@ export {
   deleteSavedSearch
 } from './savedSearchApi'
 export {
-  fetchMailFolders,
-  createMailFolder,
-  updateMailFolder,
-  deleteMailFolder,
+  fetchCommunicationFolders,
+  createCommunicationFolder,
+  updateCommunicationFolder,
+  deleteCommunicationFolder,
   fetchFolderMessages,
   copyMessageToFolder,
   moveMessageToFolder

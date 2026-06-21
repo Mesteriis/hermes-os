@@ -17,7 +17,7 @@ pub(super) fn parts(error: ApiError) -> ErrorParts {
             "communication_account_store_error",
             "communication account store operation failed",
         ),
-        ApiError::MailStorage(error) => internal_store(
+        ApiError::CommunicationStorage(error) => internal_store(
             error,
             "communication attachment API store operation failed",
             "communication_attachment_store_error",

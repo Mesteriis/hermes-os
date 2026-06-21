@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import MailViewer from './MailViewer.vue'
+import CommunicationViewer from './CommunicationViewer.vue'
 import ThreadConversationView from './ThreadConversationView.vue'
 import type {
   AiReplyResponse,
@@ -70,7 +70,7 @@ const emit = defineEmits<{
       @save-reply-draft="(message, bodyHtml, draftId) => emit('saveThreadReplyDraft', message, bodyHtml, draftId)"
       @send-reply="(message, bodyHtml, draftId) => emit('sendThreadReply', message, bodyHtml, draftId)"
     />
-    <MailViewer
+    <CommunicationViewer
       v-else
       :detail="detail"
       :insight="insight"

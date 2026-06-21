@@ -22,7 +22,7 @@ const EVENT_TYPE_UPDATED: &str = "mail.saved_search.updated";
 const EVENT_TYPE_DELETED: &str = "mail.saved_search.deleted";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MailSavedSearch {
+pub struct CommunicationSavedSearch {
     pub saved_search_id: String,
     pub name: String,
     pub description: Option<String>,
@@ -39,7 +39,7 @@ pub struct MailSavedSearch {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct NewMailSavedSearch {
+pub struct NewCommunicationSavedSearch {
     pub saved_search_id: Option<String>,
     pub name: String,
     pub description: Option<String>,
@@ -53,7 +53,7 @@ pub struct NewMailSavedSearch {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct UpdateMailSavedSearch {
+pub struct UpdateCommunicationSavedSearch {
     pub name: Option<String>,
     pub description: Option<String>,
     pub account_id: Option<String>,
@@ -66,14 +66,14 @@ pub struct UpdateMailSavedSearch {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MailSavedSearchListPage {
-    pub items: Vec<MailSavedSearch>,
+pub struct CommunicationSavedSearchListPage {
+    pub items: Vec<CommunicationSavedSearch>,
     pub next_cursor: Option<String>,
     pub has_more: bool,
 }
 
 #[derive(Clone, Debug)]
-pub struct MailSavedSearchListQuery<'a> {
+pub struct CommunicationSavedSearchListQuery<'a> {
     pub account_id: Option<&'a str>,
     pub is_smart_folder: Option<bool>,
     pub cursor: Option<&'a str>,
@@ -81,7 +81,7 @@ pub struct MailSavedSearchListQuery<'a> {
 }
 
 #[derive(Clone)]
-pub struct MailSavedSearchStore {
+pub struct CommunicationSavedSearchStore {
     pool: PgPool,
 }
 
@@ -101,15 +101,15 @@ pub(crate) struct SavedSearchRecord {
     pub(crate) updated_at: DateTime<Utc>,
 }
 
-impl MailSavedSearchStore {
+impl CommunicationSavedSearchStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     pub async fn list(
         &self,
-        query: MailSavedSearchListQuery<'_>,
-    ) -> Result<MailSavedSearchListPage, MailSavedSearchError> {
+        query: CommunicationSavedSearchListQuery<'_>,
+    ) -> Result<CommunicationSavedSearchListPage, CommunicationSavedSearchError> {
         let limit = query.limit.clamp(1, 1000);
         let account_id = normalize_optional(query.account_id.map(str::to_owned))?;
         let cursor = query
@@ -178,7 +178,7 @@ impl MailSavedSearchStore {
                 let count = *counts.get(record.saved_search_id.as_str()).unwrap_or(&0);
                 Ok(saved_search_from_record(record, count))
             })
-            .collect::<Result<Vec<_>, MailSavedSearchError>>()?;
+            .collect::<Result<Vec<_>, CommunicationSavedSearchError>>()?;
         let next_cursor = if has_more {
             items
                 .last()
@@ -188,7 +188,7 @@ impl MailSavedSearchStore {
             None
         };
 
-        Ok(MailSavedSearchListPage {
+        Ok(CommunicationSavedSearchListPage {
             items,
             next_cursor,
             has_more,
@@ -197,19 +197,19 @@ impl MailSavedSearchStore {
 
     pub async fn create(
         &self,
-        input: NewMailSavedSearch,
-    ) -> Result<MailSavedSearch, MailSavedSearchError> {
+        input: NewCommunicationSavedSearch,
+    ) -> Result<CommunicationSavedSearch, CommunicationSavedSearchError> {
         self.create_with_observation(input, None, "saved_search_upsert", None)
             .await
     }
 
     pub async fn create_with_observation(
         &self,
-        input: NewMailSavedSearch,
+        input: NewCommunicationSavedSearch,
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<MailSavedSearch, MailSavedSearchError> {
+    ) -> Result<CommunicationSavedSearch, CommunicationSavedSearchError> {
         let normalized = NormalizedMailSavedSearchInput::from_new(input)?;
         let mut transaction = self.pool.begin().await?;
         ensure_canonical_account_in_transaction(&mut transaction, normalized.account_id.as_deref())
@@ -244,8 +244,8 @@ impl MailSavedSearchStore {
     pub async fn update(
         &self,
         saved_search_id: &str,
-        update: UpdateMailSavedSearch,
-    ) -> Result<Option<MailSavedSearch>, MailSavedSearchError> {
+        update: UpdateCommunicationSavedSearch,
+    ) -> Result<Option<CommunicationSavedSearch>, CommunicationSavedSearchError> {
         self.update_with_observation(saved_search_id, update, None, "saved_search_upsert", None)
             .await
     }
@@ -253,11 +253,11 @@ impl MailSavedSearchStore {
     pub async fn update_with_observation(
         &self,
         saved_search_id: &str,
-        update: UpdateMailSavedSearch,
+        update: UpdateCommunicationSavedSearch,
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<Option<MailSavedSearch>, MailSavedSearchError> {
+    ) -> Result<Option<CommunicationSavedSearch>, CommunicationSavedSearchError> {
         let saved_search_id = normalize_required("saved_search_id", saved_search_id)?;
         let normalized = NormalizedMailSavedSearchUpdate::from_update(update)?;
         let mut transaction = self.pool.begin().await?;
@@ -295,7 +295,10 @@ impl MailSavedSearchStore {
         Ok(Some(saved_search))
     }
 
-    pub async fn delete(&self, saved_search_id: &str) -> Result<bool, MailSavedSearchError> {
+    pub async fn delete(
+        &self,
+        saved_search_id: &str,
+    ) -> Result<bool, CommunicationSavedSearchError> {
         self.delete_with_observation(saved_search_id, None, "saved_search_delete", None)
             .await
     }
@@ -306,7 +309,7 @@ impl MailSavedSearchStore {
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<bool, MailSavedSearchError> {
+    ) -> Result<bool, CommunicationSavedSearchError> {
         let saved_search_id = normalize_required("saved_search_id", saved_search_id)?;
         let mut transaction = self.pool.begin().await?;
         let Some(saved_search) = delete_saved_search(&mut transaction, &saved_search_id).await?
@@ -354,7 +357,7 @@ struct NormalizedMailSavedSearchInput {
 }
 
 impl NormalizedMailSavedSearchInput {
-    fn from_new(input: NewMailSavedSearch) -> Result<Self, MailSavedSearchError> {
+    fn from_new(input: NewCommunicationSavedSearch) -> Result<Self, CommunicationSavedSearchError> {
         let saved_search_id = match input.saved_search_id {
             Some(value) => normalize_required("saved_search_id", &value)?,
             None => generate_saved_search_id(),
@@ -396,7 +399,9 @@ struct NormalizedMailSavedSearchUpdate {
 }
 
 impl NormalizedMailSavedSearchUpdate {
-    fn from_update(update: UpdateMailSavedSearch) -> Result<Self, MailSavedSearchError> {
+    fn from_update(
+        update: UpdateCommunicationSavedSearch,
+    ) -> Result<Self, CommunicationSavedSearchError> {
         Ok(Self {
             name: normalize_optional(update.name)?,
             description: normalize_optional(update.description)?,
@@ -414,7 +419,7 @@ impl NormalizedMailSavedSearchUpdate {
 async fn ensure_canonical_account_in_transaction(
     transaction: &mut Transaction<'_, sqlx::Postgres>,
     account_id: Option<&str>,
-) -> Result<(), MailSavedSearchError> {
+) -> Result<(), CommunicationSavedSearchError> {
     let Some(account_id) = account_id else {
         return Ok(());
     };
@@ -448,7 +453,7 @@ async fn ensure_canonical_account_in_transaction(
 async fn insert_saved_search(
     transaction: &mut Transaction<'_, sqlx::Postgres>,
     input: &NormalizedMailSavedSearchInput,
-) -> Result<MailSavedSearch, MailSavedSearchError> {
+) -> Result<CommunicationSavedSearch, CommunicationSavedSearchError> {
     let row = sqlx::query(
         r#"
         WITH inserted AS (
@@ -497,7 +502,7 @@ async fn update_saved_search(
     transaction: &mut Transaction<'_, sqlx::Postgres>,
     saved_search_id: &str,
     update: &NormalizedMailSavedSearchUpdate,
-) -> Result<Option<MailSavedSearch>, MailSavedSearchError> {
+) -> Result<Option<CommunicationSavedSearch>, CommunicationSavedSearchError> {
     let row = sqlx::query(
         r#"
         WITH updated AS (
@@ -558,7 +563,7 @@ async fn update_saved_search(
 async fn delete_saved_search(
     transaction: &mut Transaction<'_, sqlx::Postgres>,
     saved_search_id: &str,
-) -> Result<Option<MailSavedSearch>, MailSavedSearchError> {
+) -> Result<Option<CommunicationSavedSearch>, CommunicationSavedSearchError> {
     let row = sqlx::query(
         r#"
         WITH deleted AS (
@@ -599,8 +604,8 @@ async fn delete_saved_search(
 
 fn saved_search_event(
     event_type: &str,
-    saved_search: &MailSavedSearch,
-) -> Result<NewEventEnvelope, MailSavedSearchError> {
+    saved_search: &CommunicationSavedSearch,
+) -> Result<NewEventEnvelope, CommunicationSavedSearchError> {
     Ok(NewEventEnvelope::builder(
         generate_saved_search_event_id(event_type, &saved_search.saved_search_id),
         event_type,
@@ -631,8 +636,8 @@ struct SavedSearchListCursor {
 }
 
 fn encode_saved_search_list_cursor(
-    saved_search: &MailSavedSearch,
-) -> Result<String, MailSavedSearchError> {
+    saved_search: &CommunicationSavedSearch,
+) -> Result<String, CommunicationSavedSearchError> {
     let cursor = SavedSearchListCursor {
         is_smart_folder: saved_search.is_smart_folder,
         sort_order: saved_search.sort_order,
@@ -640,25 +645,28 @@ fn encode_saved_search_list_cursor(
         updated_at: saved_search.updated_at,
         saved_search_id: saved_search.saved_search_id.clone(),
     };
-    let bytes = serde_json::to_vec(&cursor).map_err(|_| MailSavedSearchError::InvalidCursor)?;
+    let bytes =
+        serde_json::to_vec(&cursor).map_err(|_| CommunicationSavedSearchError::InvalidCursor)?;
     Ok(URL_SAFE_NO_PAD.encode(bytes))
 }
 
 fn decode_saved_search_list_cursor(
     cursor: &str,
-) -> Result<SavedSearchListCursor, MailSavedSearchError> {
+) -> Result<SavedSearchListCursor, CommunicationSavedSearchError> {
     let bytes = URL_SAFE_NO_PAD
         .decode(cursor)
-        .map_err(|_| MailSavedSearchError::InvalidCursor)?;
+        .map_err(|_| CommunicationSavedSearchError::InvalidCursor)?;
     let cursor: SavedSearchListCursor =
-        serde_json::from_slice(&bytes).map_err(|_| MailSavedSearchError::InvalidCursor)?;
+        serde_json::from_slice(&bytes).map_err(|_| CommunicationSavedSearchError::InvalidCursor)?;
     if cursor.name_lower.trim().is_empty() || cursor.saved_search_id.trim().is_empty() {
-        return Err(MailSavedSearchError::InvalidCursor);
+        return Err(CommunicationSavedSearchError::InvalidCursor);
     }
     Ok(cursor)
 }
 
-fn row_to_saved_search_record(row: PgRow) -> Result<SavedSearchRecord, MailSavedSearchError> {
+fn row_to_saved_search_record(
+    row: PgRow,
+) -> Result<SavedSearchRecord, CommunicationSavedSearchError> {
     let workflow_state: Option<String> = row.try_get("workflow_state")?;
     let local_state: String = row.try_get("local_state")?;
     Ok(SavedSearchRecord {
@@ -671,10 +679,10 @@ fn row_to_saved_search_record(row: PgRow) -> Result<SavedSearchRecord, MailSaved
             .as_deref()
             .map(str::parse::<WorkflowState>)
             .transpose()
-            .map_err(|_| MailSavedSearchError::Invalid("invalid workflow_state"))?,
+            .map_err(|_| CommunicationSavedSearchError::Invalid("invalid workflow_state"))?,
         local_state: local_state
             .parse::<LocalMessageState>()
-            .map_err(|_| MailSavedSearchError::Invalid("invalid local_state"))?,
+            .map_err(|_| CommunicationSavedSearchError::Invalid("invalid local_state"))?,
         channel_kind: row.try_get("channel_kind")?,
         is_smart_folder: row.try_get("is_smart_folder")?,
         sort_order: row.try_get("sort_order")?,
@@ -683,8 +691,11 @@ fn row_to_saved_search_record(row: PgRow) -> Result<SavedSearchRecord, MailSaved
     })
 }
 
-fn saved_search_from_record(record: SavedSearchRecord, message_count: i64) -> MailSavedSearch {
-    MailSavedSearch {
+fn saved_search_from_record(
+    record: SavedSearchRecord,
+    message_count: i64,
+) -> CommunicationSavedSearch {
+    CommunicationSavedSearch {
         saved_search_id: record.saved_search_id,
         name: record.name,
         description: record.description,
@@ -701,15 +712,20 @@ fn saved_search_from_record(record: SavedSearchRecord, message_count: i64) -> Ma
     }
 }
 
-fn normalize_required(field: &'static str, value: &str) -> Result<String, MailSavedSearchError> {
+fn normalize_required(
+    field: &'static str,
+    value: &str,
+) -> Result<String, CommunicationSavedSearchError> {
     let value = value.trim();
     if value.is_empty() {
-        return Err(MailSavedSearchError::Invalid(field));
+        return Err(CommunicationSavedSearchError::Invalid(field));
     }
     Ok(value.to_owned())
 }
 
-fn normalize_optional(value: Option<String>) -> Result<Option<String>, MailSavedSearchError> {
+fn normalize_optional(
+    value: Option<String>,
+) -> Result<Option<String>, CommunicationSavedSearchError> {
     match value {
         Some(value) => {
             let value = value.trim();
@@ -729,14 +745,16 @@ fn validate_has_filter(
     local_state: LocalMessageState,
     channel_kind: Option<&str>,
     account_id: Option<&str>,
-) -> Result<(), MailSavedSearchError> {
+) -> Result<(), CommunicationSavedSearchError> {
     if query.trim().is_empty()
         && workflow_state.is_none()
         && channel_kind.is_none()
         && account_id.is_none()
         && local_state == LocalMessageState::Active
     {
-        return Err(MailSavedSearchError::Invalid("saved search filter"));
+        return Err(CommunicationSavedSearchError::Invalid(
+            "saved search filter",
+        ));
     }
     Ok(())
 }
@@ -760,7 +778,7 @@ fn system_time_nanos() -> u128 {
 }
 
 #[derive(Debug, Error)]
-pub enum MailSavedSearchError {
+pub enum CommunicationSavedSearchError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]

@@ -15,7 +15,7 @@ use super::evidence::link_mail_entity_in_transaction;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum MailAiState {
+pub enum CommunicationAiState {
     New,
     Processing,
     Processed,
@@ -24,7 +24,7 @@ pub enum MailAiState {
     Archived,
 }
 
-impl MailAiState {
+impl CommunicationAiState {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::New => "NEW",
@@ -37,8 +37,8 @@ impl MailAiState {
     }
 }
 
-impl TryFrom<&str> for MailAiState {
-    type Error = MailAiStateError;
+impl TryFrom<&str> for CommunicationAiState {
+    type Error = CommunicationAiStateError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
@@ -48,15 +48,15 @@ impl TryFrom<&str> for MailAiState {
             "REVIEW_REQUIRED" => Ok(Self::ReviewRequired),
             "FAILED" => Ok(Self::Failed),
             "ARCHIVED" => Ok(Self::Archived),
-            _ => Err(MailAiStateError::Invalid("ai_state")),
+            _ => Err(CommunicationAiStateError::Invalid("ai_state")),
         }
     }
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MailAiStateRecord {
+pub struct CommunicationAiStateRecord {
     pub message_id: String,
-    pub ai_state: MailAiState,
+    pub ai_state: CommunicationAiState,
     pub review_reason: Option<String>,
     pub last_error: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -64,18 +64,18 @@ pub struct MailAiStateRecord {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct MailAiStateTransitionRequest {
-    pub ai_state: MailAiState,
+pub struct CommunicationAiStateTransitionRequest {
+    pub ai_state: CommunicationAiState,
     pub review_reason: Option<String>,
     pub last_error: Option<String>,
 }
 
 #[derive(Clone)]
-pub struct MailAiStateStore {
+pub struct CommunicationAiStateStore {
     pool: PgPool,
 }
 
-impl MailAiStateStore {
+impl CommunicationAiStateStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
@@ -83,7 +83,7 @@ impl MailAiStateStore {
     pub async fn current(
         &self,
         message_id: &str,
-    ) -> Result<Option<MailAiStateRecord>, MailAiStateError> {
+    ) -> Result<Option<CommunicationAiStateRecord>, CommunicationAiStateError> {
         let message_id = normalize_required("message_id", message_id)?;
         let row = sqlx::query(
             r#"
@@ -109,8 +109,8 @@ impl MailAiStateStore {
     pub async fn transition(
         &self,
         message_id: &str,
-        request: MailAiStateTransitionRequest,
-    ) -> Result<Option<MailAiStateRecord>, MailAiStateError> {
+        request: CommunicationAiStateTransitionRequest,
+    ) -> Result<Option<CommunicationAiStateRecord>, CommunicationAiStateError> {
         self.transition_with_observation(message_id, request, None, "ai_state_transition", None)
             .await
     }
@@ -118,13 +118,13 @@ impl MailAiStateStore {
     pub async fn transition_with_observation(
         &self,
         message_id: &str,
-        request: MailAiStateTransitionRequest,
+        request: CommunicationAiStateTransitionRequest,
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<Option<MailAiStateRecord>, MailAiStateError> {
+    ) -> Result<Option<CommunicationAiStateRecord>, CommunicationAiStateError> {
         let message_id = normalize_required("message_id", message_id)?;
-        let update = NormalizedMailAiStateTransition::from_request(request)?;
+        let update = NormalizedCommunicationAiStateTransition::from_request(request)?;
         let mut transaction = self.pool.begin().await?;
 
         let Some(previous) = select_current_ai_state(&mut transaction, &message_id).await? else {
@@ -176,35 +176,37 @@ impl MailAiStateStore {
 }
 
 #[derive(Debug)]
-struct NormalizedMailAiStateTransition {
-    ai_state: MailAiState,
+struct NormalizedCommunicationAiStateTransition {
+    ai_state: CommunicationAiState,
     review_reason: Option<String>,
     last_error: Option<String>,
 }
 
-impl NormalizedMailAiStateTransition {
-    fn from_request(request: MailAiStateTransitionRequest) -> Result<Self, MailAiStateError> {
+impl NormalizedCommunicationAiStateTransition {
+    fn from_request(
+        request: CommunicationAiStateTransitionRequest,
+    ) -> Result<Self, CommunicationAiStateError> {
         let review_reason = normalize_optional(request.review_reason)?;
         let last_error = normalize_optional(request.last_error)?;
 
         match request.ai_state {
-            MailAiState::ReviewRequired if review_reason.is_none() => {
-                return Err(MailAiStateError::Invalid("review_reason"));
+            CommunicationAiState::ReviewRequired if review_reason.is_none() => {
+                return Err(CommunicationAiStateError::Invalid("review_reason"));
             }
-            MailAiState::Failed if last_error.is_none() => {
-                return Err(MailAiStateError::Invalid("last_error"));
+            CommunicationAiState::Failed if last_error.is_none() => {
+                return Err(CommunicationAiStateError::Invalid("last_error"));
             }
             _ => {}
         }
 
         Ok(Self {
             ai_state: request.ai_state,
-            review_reason: if request.ai_state == MailAiState::ReviewRequired {
+            review_reason: if request.ai_state == CommunicationAiState::ReviewRequired {
                 review_reason
             } else {
                 None
             },
-            last_error: if request.ai_state == MailAiState::Failed {
+            last_error: if request.ai_state == CommunicationAiState::Failed {
                 last_error
             } else {
                 None
@@ -216,7 +218,7 @@ impl NormalizedMailAiStateTransition {
 async fn select_current_ai_state(
     transaction: &mut Transaction<'_, Postgres>,
     message_id: &str,
-) -> Result<Option<MailAiStateRecord>, MailAiStateError> {
+) -> Result<Option<CommunicationAiStateRecord>, CommunicationAiStateError> {
     let row = sqlx::query(
         r#"
         SELECT
@@ -238,11 +240,11 @@ async fn select_current_ai_state(
     row.map(row_to_ai_state).transpose()
 }
 
-fn row_to_ai_state(row: PgRow) -> Result<MailAiStateRecord, MailAiStateError> {
+fn row_to_ai_state(row: PgRow) -> Result<CommunicationAiStateRecord, CommunicationAiStateError> {
     let ai_state: String = row.try_get("ai_state")?;
-    Ok(MailAiStateRecord {
+    Ok(CommunicationAiStateRecord {
         message_id: row.try_get("message_id")?,
-        ai_state: MailAiState::try_from(ai_state.as_str())?,
+        ai_state: CommunicationAiState::try_from(ai_state.as_str())?,
         review_reason: row.try_get("review_reason")?,
         last_error: row.try_get("last_error")?,
         created_at: row.try_get("created_at")?,
@@ -251,9 +253,9 @@ fn row_to_ai_state(row: PgRow) -> Result<MailAiStateRecord, MailAiStateError> {
 }
 
 fn ai_state_changed_event(
-    record: &MailAiStateRecord,
-    previous_ai_state: MailAiState,
-) -> Result<NewEventEnvelope, MailAiStateError> {
+    record: &CommunicationAiStateRecord,
+    previous_ai_state: CommunicationAiState,
+) -> Result<NewEventEnvelope, CommunicationAiStateError> {
     Ok(NewEventEnvelope::builder(
         format!(
             "mail_ai_state_event:{}:{:x}",
@@ -285,15 +287,18 @@ fn ai_state_changed_event(
     .build()?)
 }
 
-fn normalize_required(field: &'static str, value: &str) -> Result<String, MailAiStateError> {
+fn normalize_required(
+    field: &'static str,
+    value: &str,
+) -> Result<String, CommunicationAiStateError> {
     let value = value.trim();
     if value.is_empty() {
-        return Err(MailAiStateError::Invalid(field));
+        return Err(CommunicationAiStateError::Invalid(field));
     }
     Ok(value.to_owned())
 }
 
-fn normalize_optional(value: Option<String>) -> Result<Option<String>, MailAiStateError> {
+fn normalize_optional(value: Option<String>) -> Result<Option<String>, CommunicationAiStateError> {
     match value {
         Some(value) => {
             let value = value.trim();
@@ -315,7 +320,7 @@ fn system_time_nanos() -> u128 {
 }
 
 #[derive(Debug, Error)]
-pub enum MailAiStateError {
+pub enum CommunicationAiStateError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]

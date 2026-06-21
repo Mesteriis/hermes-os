@@ -8,8 +8,9 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanStatus, LocalMailBlobStore, MailAttachmentDisposition, MailStorageError,
-    MailStorageStore, NewMailAttachment, NewMailBlob,
+    AttachmentSafetyScanStatus, CommunicationAttachmentDisposition, CommunicationStorageError,
+    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
+    NewCommunicationBlob,
 };
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::json;
@@ -17,7 +18,7 @@ use serde_json::json;
 #[tokio::test]
 async fn local_mail_blob_store_writes_content_addressed_blob_under_root() {
     let temp_dir = tempfile::tempdir().expect("tempdir");
-    let store = LocalMailBlobStore::new(temp_dir.path());
+    let store = LocalCommunicationBlobStore::new(temp_dir.path());
     let first = store
         .put_blob(b"raw message bytes")
         .await
@@ -49,9 +50,9 @@ async fn mail_storage_records_attachment_metadata_against_postgres() {
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let message_store = MessageProjectionStore::new(pool.clone());
-    let mail_store = MailStorageStore::new(pool.clone());
+    let mail_store = CommunicationStorageStore::new(pool.clone());
     let blob_root = tempfile::tempdir().expect("blob root");
-    let local_blob_store = LocalMailBlobStore::new(blob_root.path());
+    let local_blob_store = LocalCommunicationBlobStore::new(blob_root.path());
     let suffix = unique_suffix();
     let account_id = format!("acct_mail_storage_{suffix}");
     let provider_record_id = format!("mail-storage-message-{suffix}");
@@ -94,12 +95,14 @@ async fn mail_storage_records_attachment_metadata_against_postgres() {
         .await
         .expect("write local attachment blob");
     let blob = mail_store
-        .upsert_blob(&NewMailBlob::from_local_blob(&local_blob).content_type("application/pdf"))
+        .upsert_blob(
+            &NewCommunicationBlob::from_local_blob(&local_blob).content_type("application/pdf"),
+        )
         .await
         .expect("upsert blob");
     let attachment = mail_store
         .upsert_attachment(
-            &NewMailAttachment::new(
+            &NewCommunicationAttachment::new(
                 &message.message_id,
                 &raw.raw_record_id,
                 &blob.blob_id,
@@ -109,7 +112,7 @@ async fn mail_storage_records_attachment_metadata_against_postgres() {
                 &blob.sha256,
             )
             .filename("invoice.pdf")
-            .disposition(MailAttachmentDisposition::Attachment),
+            .disposition(CommunicationAttachmentDisposition::Attachment),
         )
         .await
         .expect("upsert attachment");
@@ -122,7 +125,7 @@ async fn mail_storage_records_attachment_metadata_against_postgres() {
     assert_eq!(attachment.size_bytes, 12);
     assert_eq!(
         attachment.disposition,
-        MailAttachmentDisposition::Attachment
+        CommunicationAttachmentDisposition::Attachment
     );
     assert_eq!(
         attachment.scan_status,
@@ -145,9 +148,10 @@ async fn mail_storage_records_attachment_metadata_against_postgres() {
 
 #[tokio::test]
 async fn mail_blob_metadata_rejects_unsafe_storage_path_before_database_write() {
-    let store = MailStorageStore::new(sqlx::PgPool::connect_lazy("postgres://unused").unwrap());
+    let store =
+        CommunicationStorageStore::new(sqlx::PgPool::connect_lazy("postgres://unused").unwrap());
     let error = store
-        .upsert_blob(&NewMailBlob::new(
+        .upsert_blob(&NewCommunicationBlob::new(
             "local_fs",
             "../outside.blob",
             "sha256:unsafe",
@@ -157,7 +161,7 @@ async fn mail_blob_metadata_rejects_unsafe_storage_path_before_database_write() 
         .expect_err("unsafe path must fail");
 
     assert!(
-        matches!(error, MailStorageError::UnsafeStoragePath(ref path) if path == "../outside.blob"),
+        matches!(error, CommunicationStorageError::UnsafeStoragePath(ref path) if path == "../outside.blob"),
         "expected UnsafeStoragePath, got {error:?}"
     );
 }

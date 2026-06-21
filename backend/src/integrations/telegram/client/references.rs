@@ -10,7 +10,7 @@ use super::models::messages::{
     TelegramReplyChainResponse, TelegramReplyRef,
 };
 use super::rows::{row_to_telegram_forward_ref, row_to_telegram_reply_ref};
-use crate::platform::communications::ProviderChannelMessageStore;
+use super::store::TelegramStore;
 
 const MAX_REFERENCE_CHAIN_DEPTH: usize = 16;
 const MAX_REFERENCE_CHAIN_EDGES: usize = 128;
@@ -342,7 +342,8 @@ async fn local_forward_origin_message_id(
     let Some(origin_provider_message_id) = item.forward_origin_message_id.as_deref() else {
         return Ok(None);
     };
-    Ok(ProviderChannelMessageStore::new(pool.clone())
+    Ok(TelegramStore::new(pool.clone())
+        .provider_channel_message_store()
         .message_id_by_provider_record_id(
             &item.account_id,
             origin_provider_message_id,
@@ -359,7 +360,8 @@ async fn reference_message_summaries(
         return Ok(HashMap::new());
     }
     let message_ids: Vec<String> = message_ids.into_iter().map(ToOwned::to_owned).collect();
-    let summaries = ProviderChannelMessageStore::new(pool.clone())
+    let summaries = TelegramStore::new(pool.clone())
+        .provider_channel_message_store()
         .reference_summaries(&message_ids)
         .await?;
 

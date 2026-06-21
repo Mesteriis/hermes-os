@@ -1,6 +1,6 @@
 import type { LocalMessageState, WorkflowState } from './communications'
 
-export type MailFolder = {
+export type CommunicationFolder = {
   folder_id: string
   account_id: string | null
   name: string
@@ -12,13 +12,13 @@ export type MailFolder = {
   updated_at: string
 }
 
-export type MailFolderListResponse = {
-  items: MailFolder[]
+export type CommunicationFolderListResponse = {
+  items: CommunicationFolder[]
   next_cursor: string | null
   has_more: boolean
 }
 
-export type MailFolderInput = {
+export type CommunicationFolderInput = {
   folder_id?: string
   account_id?: string | null
   name: string
@@ -27,7 +27,7 @@ export type MailFolderInput = {
   sort_order?: number
 }
 
-export type MailFolderUpdate = Partial<MailFolderInput>
+export type CommunicationFolderUpdate = Partial<CommunicationFolderInput>
 
 export type FolderDeleteResponse = {
   deleted: boolean

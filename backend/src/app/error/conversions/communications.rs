@@ -1,8 +1,8 @@
 use super::super::types::ApiError;
 use crate::domains::communications::core::CommunicationIngestionError;
 use crate::domains::communications::messages::MessageProjectionError;
-use crate::domains::communications::service::MailCommandServiceError;
-use crate::domains::communications::storage::MailStorageError;
+use crate::domains::communications::service::CommunicationCommandServiceError;
+use crate::domains::communications::storage::CommunicationStorageError;
 use crate::integrations::mail::accounts::EmailAccountSetupError;
 use crate::workflows::email_intelligence::EmailIntelligenceError;
 
@@ -18,9 +18,9 @@ impl From<MessageProjectionError> for ApiError {
     }
 }
 
-impl From<MailStorageError> for ApiError {
-    fn from(error: MailStorageError) -> Self {
-        Self::MailStorage(error)
+impl From<CommunicationStorageError> for ApiError {
+    fn from(error: CommunicationStorageError) -> Self {
+        Self::CommunicationStorage(error)
     }
 }
 
@@ -100,13 +100,17 @@ impl From<crate::domains::communications::bulk_actions::BulkMessageActionError> 
     }
 }
 
-impl From<crate::domains::communications::saved_searches::MailSavedSearchError> for ApiError {
-    fn from(error: crate::domains::communications::saved_searches::MailSavedSearchError) -> Self {
+impl From<crate::domains::communications::saved_searches::CommunicationSavedSearchError>
+    for ApiError
+{
+    fn from(
+        error: crate::domains::communications::saved_searches::CommunicationSavedSearchError,
+    ) -> Self {
         match error {
-            crate::domains::communications::saved_searches::MailSavedSearchError::Invalid(_) => {
+            crate::domains::communications::saved_searches::CommunicationSavedSearchError::Invalid(_) => {
                 ApiError::InvalidCommunicationQuery("invalid saved search request")
             }
-            crate::domains::communications::saved_searches::MailSavedSearchError::InvalidCursor => {
+            crate::domains::communications::saved_searches::CommunicationSavedSearchError::InvalidCursor => {
                 ApiError::InvalidCommunicationQuery("invalid saved search cursor")
             }
             error => {
@@ -117,13 +121,13 @@ impl From<crate::domains::communications::saved_searches::MailSavedSearchError> 
     }
 }
 
-impl From<crate::domains::communications::folders::MailFolderError> for ApiError {
-    fn from(error: crate::domains::communications::folders::MailFolderError) -> Self {
+impl From<crate::domains::communications::folders::CommunicationFolderError> for ApiError {
+    fn from(error: crate::domains::communications::folders::CommunicationFolderError) -> Self {
         match error {
-            crate::domains::communications::folders::MailFolderError::Invalid(_) => {
+            crate::domains::communications::folders::CommunicationFolderError::Invalid(_) => {
                 ApiError::InvalidCommunicationQuery("invalid mail folder request")
             }
-            crate::domains::communications::folders::MailFolderError::InvalidCursor => {
+            crate::domains::communications::folders::CommunicationFolderError::InvalidCursor => {
                 ApiError::InvalidCommunicationQuery("invalid mail folder cursor")
             }
             error => {
@@ -134,10 +138,10 @@ impl From<crate::domains::communications::folders::MailFolderError> for ApiError
     }
 }
 
-impl From<crate::domains::communications::ai_state::MailAiStateError> for ApiError {
-    fn from(error: crate::domains::communications::ai_state::MailAiStateError) -> Self {
+impl From<crate::domains::communications::ai_state::CommunicationAiStateError> for ApiError {
+    fn from(error: crate::domains::communications::ai_state::CommunicationAiStateError) -> Self {
         match error {
-            crate::domains::communications::ai_state::MailAiStateError::Invalid(_) => {
+            crate::domains::communications::ai_state::CommunicationAiStateError::Invalid(_) => {
                 ApiError::InvalidCommunicationQuery("invalid mail AI state request")
             }
             error => {
@@ -148,10 +152,14 @@ impl From<crate::domains::communications::ai_state::MailAiStateError> for ApiErr
     }
 }
 
-impl From<crate::domains::communications::read_receipts::MailReadReceiptError> for ApiError {
-    fn from(error: crate::domains::communications::read_receipts::MailReadReceiptError) -> Self {
+impl From<crate::domains::communications::read_receipts::CommunicationReadReceiptError>
+    for ApiError
+{
+    fn from(
+        error: crate::domains::communications::read_receipts::CommunicationReadReceiptError,
+    ) -> Self {
         match error {
-            crate::domains::communications::read_receipts::MailReadReceiptError::Invalid(_) => {
+            crate::domains::communications::read_receipts::CommunicationReadReceiptError::Invalid(_) => {
                 ApiError::InvalidCommunicationQuery("invalid mail read receipt request")
             }
             error => {
@@ -176,14 +184,14 @@ impl From<crate::domains::communications::templates::CommunicationTemplateError>
     }
 }
 
-impl From<crate::domains::communications::delivery_notifications::MailDeliveryNotificationError>
+impl From<crate::domains::communications::delivery_notifications::CommunicationDeliveryNotificationError>
     for ApiError
 {
     fn from(
-        error: crate::domains::communications::delivery_notifications::MailDeliveryNotificationError,
+        error: crate::domains::communications::delivery_notifications::CommunicationDeliveryNotificationError,
     ) -> Self {
         match error {
-            crate::domains::communications::delivery_notifications::MailDeliveryNotificationError::Invalid(_) => {
+            crate::domains::communications::delivery_notifications::CommunicationDeliveryNotificationError::Invalid(_) => {
                 ApiError::InvalidCommunicationQuery("invalid mail delivery notification request")
             }
             error => {
@@ -273,32 +281,32 @@ impl From<crate::domains::communications::attachment_search::AttachmentSearchErr
     }
 }
 
-impl From<MailCommandServiceError> for ApiError {
-    fn from(error: MailCommandServiceError) -> Self {
+impl From<CommunicationCommandServiceError> for ApiError {
+    fn from(error: CommunicationCommandServiceError) -> Self {
         match error {
-            MailCommandServiceError::ObservationCapture { operation, source } => {
+            CommunicationCommandServiceError::ObservationCapture { operation, source } => {
                 tracing::error!(error = %source, operation, "mail command observation capture failed");
                 ApiError::InvalidCommunicationQuery("mail command observation capture failed")
             }
-            MailCommandServiceError::InvalidRequest(message) => {
+            CommunicationCommandServiceError::InvalidRequest(message) => {
                 ApiError::InvalidCommunicationQuery(message)
             }
-            MailCommandServiceError::Draft(inner) => ApiError::from(inner),
-            MailCommandServiceError::Folder(inner) => ApiError::from(inner),
-            MailCommandServiceError::SavedSearch(inner) => ApiError::from(inner),
-            MailCommandServiceError::Outbox(inner) => ApiError::from(inner),
-            MailCommandServiceError::MailStorage(inner) => ApiError::from(inner),
-            MailCommandServiceError::AttachmentScan(source) => {
+            CommunicationCommandServiceError::Draft(inner) => ApiError::from(inner),
+            CommunicationCommandServiceError::Folder(inner) => ApiError::from(inner),
+            CommunicationCommandServiceError::SavedSearch(inner) => ApiError::from(inner),
+            CommunicationCommandServiceError::Outbox(inner) => ApiError::from(inner),
+            CommunicationCommandServiceError::CommunicationStorage(inner) => ApiError::from(inner),
+            CommunicationCommandServiceError::AttachmentScan(source) => {
                 tracing::warn!(error = %source, "attachment safety scan failed");
                 ApiError::InvalidCommunicationQuery("attachment safety scan failed")
             }
-            MailCommandServiceError::ProviderSendStore(source) => {
+            CommunicationCommandServiceError::ProviderSendStore(source) => {
                 tracing::error!(error = %source, "provider send observation persistence failed");
                 ApiError::InvalidCommunicationQuery("provider send observation persistence failed")
             }
-            MailCommandServiceError::MessageProjection(inner) => ApiError::from(inner),
-            MailCommandServiceError::MailAiState(inner) => ApiError::from(inner),
-            MailCommandServiceError::MessageFlags(inner) => ApiError::from(inner),
+            CommunicationCommandServiceError::MessageProjection(inner) => ApiError::from(inner),
+            CommunicationCommandServiceError::CommunicationAiState(inner) => ApiError::from(inner),
+            CommunicationCommandServiceError::MessageFlags(inner) => ApiError::from(inner),
         }
     }
 }

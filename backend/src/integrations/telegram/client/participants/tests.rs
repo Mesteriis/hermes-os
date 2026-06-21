@@ -116,8 +116,8 @@ fn derives_inactive_roster_membership_state_from_status_or_role() {
 
 #[tokio::test]
 async fn marks_stale_tdlib_participants_as_absent_from_exhaustive_roster() {
+    use crate::domains::communications::core::CommunicationProviderAccountStore;
     use crate::platform::storage::Database;
-    use crate::vault::CommunicationProviderAccountStore;
     use testkit::context::TestContext;
 
     let ctx = TestContext::new().await;
@@ -126,7 +126,8 @@ async fn marks_stale_tdlib_participants_as_absent_from_exhaustive_roster() {
         .expect("database connection");
     let pool = database.pool().expect("pool").clone();
 
-    CommunicationProviderAccountStore::new(pool.clone())
+    TelegramStore::new(pool.clone())
+        .provider_account_store()
         .upsert_runtime_account(
             "acct-1",
             "telegram_user",

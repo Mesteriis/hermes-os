@@ -5,7 +5,9 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
-use super::ai_state::{MailAiStateRecord, MailAiStateStore, MailAiStateTransitionRequest};
+use super::ai_state::{
+    CommunicationAiStateRecord, CommunicationAiStateStore, CommunicationAiStateTransitionRequest,
+};
 use super::core::ProviderAccount;
 use super::drafts::{
     CommunicationDraft, CommunicationDraftError, CommunicationDraftStore, DraftStatus,
@@ -13,8 +15,8 @@ use super::drafts::{
 };
 use super::flags::{MessageFlags, MessageFlagsError};
 use super::folders::{
-    FolderMessageActionResponse, MailFolder, MailFolderError, MailFolderStore, NewMailFolder,
-    UpdateMailFolder,
+    CommunicationFolder, CommunicationFolderError, CommunicationFolderStore,
+    FolderMessageActionResponse, NewCommunicationFolder, UpdateCommunicationFolder,
 };
 use super::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, WorkflowState,
@@ -25,14 +27,14 @@ use super::outbox::{
     ProviderSendStoreError,
 };
 use super::saved_searches::{
-    MailSavedSearch, MailSavedSearchError, MailSavedSearchStore, NewMailSavedSearch,
-    UpdateMailSavedSearch,
+    CommunicationSavedSearch, CommunicationSavedSearchError, CommunicationSavedSearchStore,
+    NewCommunicationSavedSearch, UpdateCommunicationSavedSearch,
 };
 use super::storage::{
     AttachmentSafetyScanError, AttachmentSafetyScanRequest, AttachmentSafetyScanner,
-    HeuristicAttachmentSafetyScanner, ImportedCommunicationAttachment, LocalMailBlobStore,
-    MailStorageError, MailStorageStore, NewCommunicationAttachmentImport, NewMailBlob,
-    new_communication_attachment_import_id,
+    CommunicationStorageError, CommunicationStorageStore, HeuristicAttachmentSafetyScanner,
+    ImportedCommunicationAttachment, LocalCommunicationBlobStore, NewCommunicationAttachmentImport,
+    NewCommunicationBlob, new_communication_attachment_import_id,
 };
 use crate::platform::communications::{DEFAULT_MAIL_SYNC_BLOB_ROOT, OutgoingEmail};
 use crate::platform::observations::{
@@ -43,19 +45,19 @@ const MAX_ATTACHMENT_IMPORT_BYTES: usize = 50 * 1024 * 1024;
 const LOCAL_IMPORT_ACTOR_ID: &str = "hermes-frontend";
 
 #[derive(Clone)]
-pub struct MailCommandService {
+pub struct CommunicationCommandService {
     pool: PgPool,
 }
 
-impl MailCommandService {
+impl CommunicationCommandService {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     pub async fn upsert_draft(
         &self,
-        command: MailDraftUpsertCommand,
-    ) -> Result<CommunicationDraft, MailCommandServiceError> {
+        command: CommunicationDraftUpsertCommand,
+    ) -> Result<CommunicationDraft, CommunicationCommandServiceError> {
         let metadata = command.metadata.clone().unwrap_or_else(|| json!({}));
         let status = command
             .status
@@ -123,7 +125,10 @@ impl MailCommandService {
             .await?)
     }
 
-    pub async fn delete_draft(&self, draft_id: &str) -> Result<bool, MailCommandServiceError> {
+    pub async fn delete_draft(
+        &self,
+        draft_id: &str,
+    ) -> Result<bool, CommunicationCommandServiceError> {
         let store = CommunicationDraftStore::new(self.pool.clone());
         let Some(existing_draft) = store.get(draft_id).await? else {
             return Ok(false);
@@ -161,8 +166,8 @@ impl MailCommandService {
 
     pub async fn create_folder(
         &self,
-        request: NewMailFolder,
-    ) -> Result<MailFolder, MailCommandServiceError> {
+        request: NewCommunicationFolder,
+    ) -> Result<CommunicationFolder, CommunicationCommandServiceError> {
         let observation = self
             .capture_observation(
                 "folder create",
@@ -183,7 +188,7 @@ impl MailCommandService {
             )
             .await?;
 
-        Ok(MailFolderStore::new(self.pool.clone())
+        Ok(CommunicationFolderStore::new(self.pool.clone())
             .create_with_observation(
                 request,
                 Some(&observation.observation_id),
@@ -196,8 +201,8 @@ impl MailCommandService {
     pub async fn update_folder(
         &self,
         folder_id: &str,
-        request: UpdateMailFolder,
-    ) -> Result<Option<MailFolder>, MailCommandServiceError> {
+        request: UpdateCommunicationFolder,
+    ) -> Result<Option<CommunicationFolder>, CommunicationCommandServiceError> {
         let observation = self
             .capture_observation(
                 "folder update",
@@ -219,7 +224,7 @@ impl MailCommandService {
             )
             .await?;
 
-        Ok(MailFolderStore::new(self.pool.clone())
+        Ok(CommunicationFolderStore::new(self.pool.clone())
             .update_with_observation(
                 folder_id,
                 request,
@@ -230,7 +235,10 @@ impl MailCommandService {
             .await?)
     }
 
-    pub async fn delete_folder(&self, folder_id: &str) -> Result<bool, MailCommandServiceError> {
+    pub async fn delete_folder(
+        &self,
+        folder_id: &str,
+    ) -> Result<bool, CommunicationCommandServiceError> {
         let observation = self
             .capture_observation(
                 "folder delete",
@@ -247,7 +255,7 @@ impl MailCommandService {
             )
             .await?;
 
-        Ok(MailFolderStore::new(self.pool.clone())
+        Ok(CommunicationFolderStore::new(self.pool.clone())
             .delete_with_observation(
                 folder_id,
                 Some(&observation.observation_id),
@@ -261,7 +269,7 @@ impl MailCommandService {
         &self,
         folder_id: &str,
         message_id: &str,
-    ) -> Result<Option<FolderMessageActionResponse>, MailCommandServiceError> {
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationCommandServiceError> {
         let observation = self
             .capture_observation(
                 "folder message copy",
@@ -279,7 +287,7 @@ impl MailCommandService {
             )
             .await?;
 
-        Ok(MailFolderStore::new(self.pool.clone())
+        Ok(CommunicationFolderStore::new(self.pool.clone())
             .copy_message_with_observation(
                 folder_id,
                 message_id,
@@ -294,7 +302,7 @@ impl MailCommandService {
         &self,
         folder_id: &str,
         message_id: &str,
-    ) -> Result<Option<FolderMessageActionResponse>, MailCommandServiceError> {
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationCommandServiceError> {
         let observation = self
             .capture_observation(
                 "folder message move",
@@ -312,7 +320,7 @@ impl MailCommandService {
             )
             .await?;
 
-        Ok(MailFolderStore::new(self.pool.clone())
+        Ok(CommunicationFolderStore::new(self.pool.clone())
             .move_message_with_observation(
                 folder_id,
                 message_id,
@@ -325,8 +333,8 @@ impl MailCommandService {
 
     pub async fn create_saved_search(
         &self,
-        request: NewMailSavedSearch,
-    ) -> Result<MailSavedSearch, MailCommandServiceError> {
+        request: NewCommunicationSavedSearch,
+    ) -> Result<CommunicationSavedSearch, CommunicationCommandServiceError> {
         let observation = self
             .capture_observation(
                 "saved search create",
@@ -351,7 +359,7 @@ impl MailCommandService {
             )
             .await?;
 
-        Ok(MailSavedSearchStore::new(self.pool.clone())
+        Ok(CommunicationSavedSearchStore::new(self.pool.clone())
             .create_with_observation(
                 request,
                 Some(&observation.observation_id),
@@ -364,8 +372,8 @@ impl MailCommandService {
     pub async fn update_saved_search(
         &self,
         saved_search_id: &str,
-        request: UpdateMailSavedSearch,
-    ) -> Result<Option<MailSavedSearch>, MailCommandServiceError> {
+        request: UpdateCommunicationSavedSearch,
+    ) -> Result<Option<CommunicationSavedSearch>, CommunicationCommandServiceError> {
         let observation = self
             .capture_observation(
                 "saved search update",
@@ -391,7 +399,7 @@ impl MailCommandService {
             )
             .await?;
 
-        Ok(MailSavedSearchStore::new(self.pool.clone())
+        Ok(CommunicationSavedSearchStore::new(self.pool.clone())
             .update_with_observation(
                 saved_search_id,
                 request,
@@ -405,7 +413,7 @@ impl MailCommandService {
     pub async fn delete_saved_search(
         &self,
         saved_search_id: &str,
-    ) -> Result<bool, MailCommandServiceError> {
+    ) -> Result<bool, CommunicationCommandServiceError> {
         let observation = self
             .capture_observation(
                 "saved search delete",
@@ -422,7 +430,7 @@ impl MailCommandService {
             )
             .await?;
 
-        Ok(MailSavedSearchStore::new(self.pool.clone())
+        Ok(CommunicationSavedSearchStore::new(self.pool.clone())
             .delete_with_observation(
                 saved_search_id,
                 Some(&observation.observation_id),
@@ -435,7 +443,7 @@ impl MailCommandService {
     pub async fn undo_outbox(
         &self,
         outbox_id: &str,
-    ) -> Result<CommunicationOutboxItem, MailCommandServiceError> {
+    ) -> Result<CommunicationOutboxItem, CommunicationCommandServiceError> {
         let observation = self
             .capture_observation(
                 "outbox undo",
@@ -467,8 +475,8 @@ impl MailCommandService {
         &self,
         account: &ProviderAccount,
         email: &OutgoingEmail,
-        command: &MailOutboxSendCommand,
-    ) -> Result<CommunicationOutboxItem, MailCommandServiceError> {
+        command: &CommunicationOutboxSendCommand,
+    ) -> Result<CommunicationOutboxItem, CommunicationCommandServiceError> {
         let now = Utc::now();
         let undo_deadline_at = command
             .undo_send_seconds
@@ -552,7 +560,7 @@ impl MailCommandService {
         email: &OutgoingEmail,
         transport: &str,
         provider_message_id: &str,
-    ) -> Result<(), MailCommandServiceError> {
+    ) -> Result<(), CommunicationCommandServiceError> {
         let operation = match transport.trim() {
             "smtp" => "provider_send_smtp".to_owned(),
             "gmail" => "provider_send_gmail".to_owned(),
@@ -596,7 +604,7 @@ impl MailCommandService {
         message_id: &str,
         new_state: WorkflowState,
         actor_id: &str,
-    ) -> Result<MailWorkflowStateTransitionResult, MailCommandServiceError> {
+    ) -> Result<CommunicationWorkflowStateTransitionResult, CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -604,7 +612,7 @@ impl MailCommandService {
             .ok_or(MessageProjectionError::MessageNotFound)?;
 
         if !WorkflowState::is_valid_transition(&current.workflow_state, &new_state) {
-            return Err(MailCommandServiceError::InvalidRequest(
+            return Err(CommunicationCommandServiceError::InvalidRequest(
                 "invalid workflow state transition",
             ));
         }
@@ -640,7 +648,7 @@ impl MailCommandService {
             )
             .await?;
 
-        Ok(MailWorkflowStateTransitionResult {
+        Ok(CommunicationWorkflowStateTransitionResult {
             updated,
             previous_state,
         })
@@ -649,7 +657,7 @@ impl MailCommandService {
     pub async fn mark_message_imap_read(
         &self,
         message_id: &str,
-    ) -> Result<ProjectedMessage, MailCommandServiceError> {
+    ) -> Result<ProjectedMessage, CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -690,7 +698,7 @@ impl MailCommandService {
         message_id: &str,
         operation: &'static str,
         reason: &'static str,
-    ) -> Result<ProjectedMessage, MailCommandServiceError> {
+    ) -> Result<ProjectedMessage, CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -729,7 +737,7 @@ impl MailCommandService {
     pub async fn restore_message_from_local_trash(
         &self,
         message_id: &str,
-    ) -> Result<ProjectedMessage, MailCommandServiceError> {
+    ) -> Result<ProjectedMessage, CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -766,9 +774,9 @@ impl MailCommandService {
     pub async fn transition_message_ai_state(
         &self,
         message_id: &str,
-        request: MailAiStateTransitionRequest,
-    ) -> Result<MailAiStateRecord, MailCommandServiceError> {
-        let store = MailAiStateStore::new(self.pool.clone());
+        request: CommunicationAiStateTransitionRequest,
+    ) -> Result<CommunicationAiStateRecord, CommunicationCommandServiceError> {
+        let store = CommunicationAiStateStore::new(self.pool.clone());
         let current = store
             .current(message_id)
             .await?
@@ -813,7 +821,7 @@ impl MailCommandService {
     pub async fn toggle_message_pin(
         &self,
         message_id: &str,
-    ) -> Result<bool, MailCommandServiceError> {
+    ) -> Result<bool, CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -844,7 +852,7 @@ impl MailCommandService {
     pub async fn toggle_message_important(
         &self,
         message_id: &str,
-    ) -> Result<bool, MailCommandServiceError> {
+    ) -> Result<bool, CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -876,7 +884,7 @@ impl MailCommandService {
         &self,
         message_id: &str,
         until: DateTime<Utc>,
-    ) -> Result<(), MailCommandServiceError> {
+    ) -> Result<(), CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -909,7 +917,7 @@ impl MailCommandService {
     pub async fn toggle_message_mute(
         &self,
         message_id: &str,
-    ) -> Result<bool, MailCommandServiceError> {
+    ) -> Result<bool, CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -941,7 +949,7 @@ impl MailCommandService {
         &self,
         message_id: &str,
         label: &str,
-    ) -> Result<(), MailCommandServiceError> {
+    ) -> Result<(), CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -976,7 +984,7 @@ impl MailCommandService {
         &self,
         message_id: &str,
         label: &str,
-    ) -> Result<(), MailCommandServiceError> {
+    ) -> Result<(), CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let current = store
             .message(message_id)
@@ -1013,7 +1021,7 @@ impl MailCommandService {
         to: Vec<String>,
         cc: Vec<String>,
         bcc: Vec<String>,
-    ) -> Result<CommunicationOutboxItem, MailCommandServiceError> {
+    ) -> Result<CommunicationOutboxItem, CommunicationCommandServiceError> {
         let store = MessageProjectionStore::new(self.pool.clone());
         let msg = store
             .message(message_id)
@@ -1080,16 +1088,16 @@ impl MailCommandService {
 
     pub async fn import_attachment(
         &self,
-        request: MailAttachmentImportCommand,
-    ) -> Result<ImportedCommunicationAttachment, MailCommandServiceError> {
+        request: CommunicationAttachmentImportCommand,
+    ) -> Result<ImportedCommunicationAttachment, CommunicationCommandServiceError> {
         let bytes = decode_import_bytes(&request.content_base64)?;
         if bytes.is_empty() {
-            return Err(MailCommandServiceError::InvalidRequest(
+            return Err(CommunicationCommandServiceError::InvalidRequest(
                 "attachment import bytes must not be empty",
             ));
         }
         if bytes.len() > MAX_ATTACHMENT_IMPORT_BYTES {
-            return Err(MailCommandServiceError::InvalidRequest(
+            return Err(CommunicationCommandServiceError::InvalidRequest(
                 "attachment import exceeds the local size limit",
             ));
         }
@@ -1109,16 +1117,18 @@ impl MailCommandService {
             .map(ToOwned::to_owned);
         let metadata = request.metadata.clone().unwrap_or_else(|| json!({}));
         if !metadata.is_object() {
-            return Err(MailCommandServiceError::InvalidRequest(
+            return Err(CommunicationCommandServiceError::InvalidRequest(
                 "attachment import metadata must be an object",
             ));
         }
 
-        let blob_store = LocalMailBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+        let blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
         let local_blob = blob_store.put_blob(&bytes).await?;
-        let mail_store = MailStorageStore::new(self.pool.clone());
+        let mail_store = CommunicationStorageStore::new(self.pool.clone());
         let stored_blob = mail_store
-            .upsert_blob(&NewMailBlob::from_local_blob(&local_blob).content_type(&content_type))
+            .upsert_blob(
+                &NewCommunicationBlob::from_local_blob(&local_blob).content_type(&content_type),
+            )
             .await?;
         let scanner = HeuristicAttachmentSafetyScanner;
         let scan_report = scanner.scan(&AttachmentSafetyScanRequest {
@@ -1210,7 +1220,7 @@ impl MailCommandService {
         payload: Value,
         source_ref: String,
         provenance: Value,
-    ) -> Result<crate::platform::observations::Observation, MailCommandServiceError> {
+    ) -> Result<crate::platform::observations::Observation, CommunicationCommandServiceError> {
         ObservationStore::new(self.pool.clone())
             .capture(
                 &NewObservation::new(
@@ -1223,7 +1233,9 @@ impl MailCommandService {
                 .provenance(provenance),
             )
             .await
-            .map_err(|source| MailCommandServiceError::ObservationCapture { operation, source })
+            .map_err(
+                |source| CommunicationCommandServiceError::ObservationCapture { operation, source },
+            )
     }
 
     async fn capture_message_flag_observation(
@@ -1231,7 +1243,7 @@ impl MailCommandService {
         message_id: &str,
         operation: &'static str,
         payload: Value,
-    ) -> Result<crate::platform::observations::Observation, MailCommandServiceError> {
+    ) -> Result<crate::platform::observations::Observation, CommunicationCommandServiceError> {
         self.capture_observation(
             "message flag action",
             "COMMUNICATION_MESSAGE",
@@ -1251,7 +1263,7 @@ impl MailCommandService {
 }
 
 #[derive(Clone, Debug)]
-pub struct MailDraftUpsertCommand {
+pub struct CommunicationDraftUpsertCommand {
     pub draft_id: String,
     pub account_id: String,
     pub persona_id: Option<String>,
@@ -1269,7 +1281,7 @@ pub struct MailDraftUpsertCommand {
 }
 
 #[derive(Clone, Debug)]
-pub struct MailAttachmentImportCommand {
+pub struct CommunicationAttachmentImportCommand {
     pub account_id: Option<String>,
     pub channel_kind: Option<String>,
     pub filename: Option<String>,
@@ -1280,20 +1292,20 @@ pub struct MailAttachmentImportCommand {
 }
 
 #[derive(Clone, Debug)]
-pub struct MailOutboxSendCommand {
+pub struct CommunicationOutboxSendCommand {
     pub draft_id: Option<String>,
     pub scheduled_send_at: Option<DateTime<Utc>>,
     pub undo_send_seconds: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
-pub struct MailWorkflowStateTransitionResult {
+pub struct CommunicationWorkflowStateTransitionResult {
     pub updated: ProjectedMessage,
     pub previous_state: String,
 }
 
 #[derive(Debug, Error)]
-pub enum MailCommandServiceError {
+pub enum CommunicationCommandServiceError {
     #[error("{operation} observation capture failed")]
     ObservationCapture {
         operation: &'static str,
@@ -1308,16 +1320,16 @@ pub enum MailCommandServiceError {
     Draft(#[from] CommunicationDraftError),
 
     #[error(transparent)]
-    Folder(#[from] MailFolderError),
+    Folder(#[from] CommunicationFolderError),
 
     #[error(transparent)]
-    SavedSearch(#[from] MailSavedSearchError),
+    SavedSearch(#[from] CommunicationSavedSearchError),
 
     #[error(transparent)]
     Outbox(#[from] CommunicationOutboxError),
 
     #[error(transparent)]
-    MailStorage(#[from] MailStorageError),
+    CommunicationStorage(#[from] CommunicationStorageError),
 
     #[error(transparent)]
     AttachmentScan(#[from] AttachmentSafetyScanError),
@@ -1329,19 +1341,19 @@ pub enum MailCommandServiceError {
     MessageProjection(#[from] MessageProjectionError),
 
     #[error(transparent)]
-    MailAiState(#[from] super::ai_state::MailAiStateError),
+    CommunicationAiState(#[from] super::ai_state::CommunicationAiStateError),
 
     #[error(transparent)]
     MessageFlags(#[from] MessageFlagsError),
 }
 
-fn decode_import_bytes(content_base64: &str) -> Result<Vec<u8>, MailCommandServiceError> {
+fn decode_import_bytes(content_base64: &str) -> Result<Vec<u8>, CommunicationCommandServiceError> {
     let encoded = content_base64
         .split_once(',')
         .map(|(_, value)| value)
         .unwrap_or(content_base64)
         .trim();
-    BASE64_STANDARD
-        .decode(encoded)
-        .map_err(|_| MailCommandServiceError::InvalidRequest("invalid attachment import base64"))
+    BASE64_STANDARD.decode(encoded).map_err(|_| {
+        CommunicationCommandServiceError::InvalidRequest("invalid attachment import base64")
+    })
 }

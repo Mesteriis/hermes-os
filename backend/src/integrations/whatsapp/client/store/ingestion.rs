@@ -1,7 +1,6 @@
 use serde_json::json;
 
 use crate::platform::communications::NewRawCommunicationRecord;
-use crate::vault::CommunicationProviderAccountStore;
 
 use super::WhatsappWebStore;
 use crate::integrations::whatsapp::client::constants::WHATSAPP_WEB_MESSAGE_RECORD_KIND;
@@ -17,7 +16,8 @@ impl WhatsappWebStore {
         message: &NewWhatsappWebMessage,
     ) -> Result<WhatsappWebObservedMessage, WhatsappWebError> {
         message.validate()?;
-        let provider_account = CommunicationProviderAccountStore::new(self.pool.clone())
+        let provider_account = self
+            .provider_account_store()
             .get(&message.account_id)
             .await
             .map_err(|error| WhatsappWebError::ProviderAccountStore(error.to_string()))?
