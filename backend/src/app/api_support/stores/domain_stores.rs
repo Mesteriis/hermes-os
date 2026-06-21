@@ -1,5 +1,126 @@
 use super::super::*;
 use super::database::database_pool;
+use crate::application::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
+use crate::domains::communications::storage::LocalCommunicationBlobStore;
+use sqlx::PgPool;
+
+pub(crate) trait AppStoreFactory: Sized {
+    fn from_pool(pool: PgPool) -> Self;
+}
+
+pub(crate) fn app_store<S: AppStoreFactory>(pool: PgPool) -> S {
+    S::from_pool(pool)
+}
+
+macro_rules! impl_app_store_factory {
+    ($($store:path),+ $(,)?) => {
+        $(
+            impl AppStoreFactory for $store {
+                fn from_pool(pool: PgPool) -> Self {
+                    <$store>::new(pool)
+                }
+            }
+        )+
+    };
+}
+
+impl_app_store_factory!(
+    crate::domains::calendar::core::EventAgendaStore,
+    crate::domains::calendar::core::EventChecklistStore,
+    crate::domains::calendar::core::EventContextPackStore,
+    crate::domains::calendar::core::EventParticipantStore,
+    crate::domains::calendar::core::EventRelationStore,
+    crate::domains::calendar::events::CalendarAccountStore,
+    crate::domains::calendar::events::CalendarEventStore,
+    crate::domains::calendar::events::CalendarSourceStore,
+    crate::domains::calendar::meetings::EventRecordingStore,
+    crate::domains::calendar::meetings::EventTranscriptStore,
+    crate::domains::calendar::meetings::MeetingNoteStore,
+    crate::domains::calendar::meetings::MeetingOutcomeStore,
+    crate::domains::calendar::reminders::CalendarReminderStore,
+    crate::domains::calendar::rules::CalendarRuleStore,
+    crate::domains::calendar::scheduling::DeadlineStore,
+    crate::domains::calendar::scheduling::FocusBlockStore,
+    crate::domains::communications::ai_state::CommunicationAiStateStore,
+    crate::domains::communications::analytics::EmailAnalyticsStore,
+    crate::domains::communications::attachment_dedup::AttachmentDedupStore,
+    crate::domains::communications::attachment_search::AttachmentSearchStore,
+    crate::domains::communications::bulk_actions::BulkMessageActionStore,
+    crate::domains::communications::core::CommunicationProviderAccountStore,
+    crate::domains::communications::core::CommunicationProviderSecretBindingStore,
+    crate::domains::communications::delivery_notifications::CommunicationDeliveryNotificationStore,
+    crate::domains::communications::drafts::CommunicationDraftStore,
+    crate::domains::communications::finance::CommunicationFinanceStore,
+    crate::domains::communications::folders::CommunicationFolderStore,
+    crate::domains::communications::legal::LegalDocumentStore,
+    crate::domains::communications::messages::MessageProjectionStore,
+    crate::domains::communications::outbox::CommunicationOutboxStore,
+    crate::domains::communications::personas::CommunicationPersonaStore,
+    crate::domains::communications::read_receipts::CommunicationReadReceiptStore,
+    crate::domains::communications::saved_searches::CommunicationSavedSearchStore,
+    crate::domains::communications::signatures::CertificateStore,
+    crate::domains::communications::subscriptions::SubscriptionStore,
+    crate::domains::communications::templates::CommunicationTemplateStore,
+    crate::domains::communications::threads::CommunicationThreadStore,
+    crate::domains::decisions::DecisionStore,
+    crate::domains::documents::processing::DocumentProcessingStore,
+    crate::domains::obligations::ObligationStore,
+    crate::domains::organizations::api::OrganizationStore,
+    crate::domains::organizations::core::OrgAliasStore,
+    crate::domains::organizations::core::OrgContactLinkStore,
+    crate::domains::organizations::core::OrgDepartmentStore,
+    crate::domains::organizations::core::OrgDomainStore,
+    crate::domains::organizations::core::OrgIdentityStore,
+    crate::domains::organizations::core::RelatedOrgStore,
+    crate::domains::organizations::enrichment::OrgEnrichmentStore,
+    crate::domains::organizations::finance::OrgComplianceStore,
+    crate::domains::organizations::finance::OrgContractStore,
+    crate::domains::organizations::finance::OrgFinancialStore,
+    crate::domains::organizations::finance::OrgProductStore,
+    crate::domains::organizations::finance::OrgServiceStore,
+    crate::domains::organizations::health::OrgHealthStore,
+    crate::domains::organizations::health::OrgRiskStore,
+    crate::domains::organizations::workflows::OrgPlaybookStore,
+    crate::domains::organizations::workflows::OrgPortalStore,
+    crate::domains::organizations::workflows::OrgProcedureStore,
+    crate::domains::organizations::workflows::OrgTemplateStore,
+    crate::domains::organizations::workflows::OrgTimelineStore,
+    crate::domains::persons::api::PersonProjectionStore,
+    crate::domains::persons::core::PersonPersonaStore,
+    crate::domains::persons::core::PersonRoleStore,
+    crate::domains::persons::core::PersonsIdentityStore,
+    crate::domains::persons::enrichment::PersonEnrichmentStore,
+    crate::domains::persons::enrichment_engine::EnrichmentResultStore,
+    crate::domains::persons::expertise::PersonExpertiseStore,
+    crate::domains::persons::health::PersonHealthStore,
+    crate::domains::persons::memory::PersonFactStore,
+    crate::domains::persons::memory::PersonMemoryCardStore,
+    crate::domains::persons::memory::PersonPreferenceStore,
+    crate::domains::persons::memory::PersonSnapshotStore,
+    crate::domains::persons::memory::RelationshipEventStore,
+    crate::domains::persons::trust::PersonPromiseStore,
+    crate::domains::persons::trust::PersonRiskStore,
+    crate::domains::relationships::RelationshipStore,
+    crate::domains::review::ReviewInboxStore,
+    crate::domains::tasks::api::TaskStore,
+    crate::domains::tasks::core::ExternalTaskIdentityStore,
+    crate::domains::tasks::core::TaskChecklistStore,
+    crate::domains::tasks::core::TaskContextPackStore,
+    crate::domains::tasks::core::TaskEvidenceStore,
+    crate::domains::tasks::core::TaskProviderStore,
+    crate::domains::tasks::core::TaskRelationStore,
+    crate::domains::tasks::core::TaskSubtaskStore,
+    crate::domains::tasks::rules::TaskRuleStore,
+    crate::domains::tasks::rules::TaskTemplateStore,
+    crate::engines::consistency::ContradictionObservationStore,
+    crate::platform::events::EventStore,
+    crate::platform::observations::ObservationStore,
+    crate::application::mail_background_sync::MailSyncStore,
+);
+
+pub(crate) fn communication_blob_store() -> LocalCommunicationBlobStore {
+    LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
+}
 
 pub(crate) fn event_store(state: &AppState) -> Result<EventStore, ApiError> {
     Ok(EventStore::new(database_pool(state)?))

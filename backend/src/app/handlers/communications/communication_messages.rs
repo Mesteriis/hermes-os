@@ -120,7 +120,7 @@ async fn rich_email_message_detail_for_message(
         return Ok(RichCommunicationMessageDetail::default());
     }
 
-    let blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let blob_store = crate::app::api_support::communication_blob_store();
     match parse_raw_email_message_from_blob(&blob_store, &raw).await {
         Ok(parsed) => Ok(RichCommunicationMessageDetail {
             body_html: parsed.body_html.filter(|value| !value.trim().is_empty()),

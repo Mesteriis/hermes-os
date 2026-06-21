@@ -1,7 +1,7 @@
 use super::super::*;
 use crate::application::communication_provider_writes::{
     CommunicationForwardRequest, CommunicationProviderMessageCommandResponse,
-    CommunicationReplyRequest, TelegramMessageWriteApplicationService,
+    CommunicationReplyRequest, new_telegram_command_id,
 };
 use crate::domains::communications::service::CommunicationCommandService;
 
@@ -21,17 +21,12 @@ pub(crate) async fn post_v1_reply(
         let command_id = request
             .command_id
             .clone()
-            .unwrap_or_else(crate::integrations::telegram::client::lifecycle::new_command_id);
+            .unwrap_or_else(new_telegram_command_id);
         request.command_id = Some(command_id.clone());
         let runtime_context = telegram_runtime_use_case_context(&state)?;
-        let response = TelegramMessageWriteApplicationService::new(
-            telegram_store(&state)?,
-            api_audit_log(&state)?,
-            event_store(&state)?,
-            state.event_bus.clone(),
-        )
-        .reply_to_message(&runtime_context, &message_id, request)
-        .await?;
+        let response = telegram_message_write_service(&state)?
+            .reply_to_message(&runtime_context, &message_id, request)
+            .await?;
         return Ok(Json(json!(
             CommunicationProviderMessageCommandResponse::telegram(command_id, &response)
         )));
@@ -91,17 +86,12 @@ pub(crate) async fn post_v1_forward(
         let command_id = request
             .command_id
             .clone()
-            .unwrap_or_else(crate::integrations::telegram::client::lifecycle::new_command_id);
+            .unwrap_or_else(new_telegram_command_id);
         request.command_id = Some(command_id.clone());
         let runtime_context = telegram_runtime_use_case_context(&state)?;
-        let response = TelegramMessageWriteApplicationService::new(
-            telegram_store(&state)?,
-            api_audit_log(&state)?,
-            event_store(&state)?,
-            state.event_bus.clone(),
-        )
-        .forward_message(&runtime_context, &message_id, request)
-        .await?;
+        let response = telegram_message_write_service(&state)?
+            .forward_message(&runtime_context, &message_id, request)
+            .await?;
         return Ok(Json(json!(
             CommunicationProviderMessageCommandResponse::telegram(command_id, &response)
         )));

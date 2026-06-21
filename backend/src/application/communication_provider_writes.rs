@@ -21,6 +21,10 @@ use crate::platform::events::{EventBus, EventStore, NewEventEnvelope};
 
 const AUDIT_ACTOR_ID: &str = "hermes-frontend";
 
+pub(crate) fn new_telegram_command_id() -> String {
+    lifecycle::new_command_id()
+}
+
 #[derive(Clone)]
 pub(crate) struct TelegramMessageWriteApplicationService {
     store: TelegramStore,

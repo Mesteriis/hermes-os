@@ -104,19 +104,6 @@ const mailCommandServiceOwner = 'backend/src/domains/communications/service.rs';
 const emailSyncPipelineOrganizationOwner = 'backend/src/workflows/email_sync_pipeline/organizations.rs';
 const emailSyncPipelineParticipantsOwner = 'backend/src/workflows/email_sync_pipeline/participants.rs';
 const emailSyncPipelineRelationshipsOwner = 'backend/src/workflows/email_sync_pipeline/relationships.rs';
-const allowedIntegrationCommunicationSqlTables = new Set([
-	'communication_raw_records',
-	'communication_raw_payloads'
-]);
-const allowedFrontendIntegrationCacheKeys = new Set([
-	'capabilities',
-	'account-capabilities',
-	'accounts',
-	'runtime',
-	'commands',
-	'qr-login-status',
-	'automation'
-]);
 
 const sharedBackendDomainModules = new Set();
 const businessBackendDomains = new Set([
@@ -503,7 +490,6 @@ function integrationCommunicationBusinessSqlFailuresForSource(relativePath, sour
 		/\b(?:FROM|JOIN|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(communication_[a-zA-Z0-9_]*)\b/gi;
 	for (const match of source.matchAll(sqlTablePattern)) {
 		const tableName = match[1];
-		if (allowedIntegrationCommunicationSqlTables.has(tableName)) continue;
 		errors.push(
 			`${relativePath}: integration code must not read or mutate business communication table "${tableName}"; use Communications query/command ports or provider-neutral platform raw records`
 		);
@@ -657,6 +643,18 @@ function frontendDomainProviderControlRouteFailuresForSource(relativePath, sourc
 	return errors;
 }
 
+function frontendCommunicationsDomainIntegrationRouteFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('frontend/src/domains/communications/')) return [];
+	const errors = [];
+	const forbiddenRoutePattern = /\/api\/v1\/integrations\/(?:mail|telegram|whatsapp)\b/g;
+	for (const match of source.matchAll(forbiddenRoutePattern)) {
+		errors.push(
+			`${relativePath}: Communications domain must not call provider integration route "${match[0]}"; compose provider-control actions outside the domain`
+		);
+	}
+	return errors;
+}
+
 function frontendIntegrationCommunicationBusinessRouteFailuresForSource(relativePath, source) {
 	if (!relativePath.startsWith('frontend/src/integrations/')) return [];
 	const errors = [];
@@ -665,6 +663,36 @@ function frontendIntegrationCommunicationBusinessRouteFailuresForSource(relative
 	for (const match of source.matchAll(forbiddenRoutePattern)) {
 		errors.push(
 			`${relativePath}: frontend integration code must not read Communication business route "${match[0]}"; pass business data through app/shared composition`
+		);
+	}
+	return errors;
+}
+
+function frontendSharedCommunicationBusinessLayerFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('frontend/src/shared/communications/')) return [];
+	const errors = [];
+	const forbiddenPattern = /\/api\/v1\/communications|\buseQuery\b|\bqueryKey\b|\[\s*['"]communications['"]|\bfetch\(/g;
+	for (const match of source.matchAll(forbiddenPattern)) {
+		errors.push(
+			`${relativePath}: shared communication modules must stay DTO/helper-only; business API/query/cache token "${match[0]}" belongs in frontend/src/domains/communications`
+		);
+	}
+	return errors;
+}
+
+function frontendIntegrationBusinessOwnershipFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('frontend/src/integrations/')) return [];
+	const errors = [];
+	const forbiddenSharedBusinessPattern = /shared\/communications\/.*Business/g;
+	const forbiddenBusinessComponentPattern = /MessageThread|ChatList|MediaGallery|RawEvidence|ReplyChain|ForwardChain|Reactions|Topics/g;
+	for (const match of source.matchAll(forbiddenSharedBusinessPattern)) {
+		errors.push(
+			`${relativePath}: integration UI must not import shared Communication business module "${match[0]}"; move business hooks/components to Communications domain`
+		);
+	}
+	for (const match of source.matchAll(forbiddenBusinessComponentPattern)) {
+		errors.push(
+			`${relativePath}: integration UI must not own Communication business component/token "${match[0]}"; provider panels are runtime/setup/control/debug only`
 		);
 	}
 	return errors;
@@ -695,6 +723,21 @@ function providerClientLeakFailuresForSource(relativePath, source) {
 	for (const match of source.matchAll(forbiddenProviderRuntimePattern)) {
 		errors.push(
 			`${relativePath}: app/application/domain code must not construct or depend on provider runtime/client symbol "${match[0]}"; use application ports, provider commands, or integration workers`
+		);
+	}
+	return errors;
+}
+
+function appMessagingHandlerIntegrationImportFailuresForSource(relativePath, source) {
+	const isTelegramHandler = relativePath.startsWith('backend/src/app/handlers/telegram/');
+	const isWhatsappHandler = relativePath === 'backend/src/app/handlers/whatsapp.rs'
+		|| relativePath.startsWith('backend/src/app/handlers/whatsapp/');
+	if (!isTelegramHandler && !isWhatsappHandler) return [];
+	const errors = [];
+	const forbiddenPattern = /\b(?:use\s+)?crate::integrations::/g;
+	for (const match of source.matchAll(forbiddenPattern)) {
+		errors.push(
+			`${relativePath}: app messaging handlers must not import integration runtime/store code "${match[0]}"; call one application service and map the response`
 		);
 	}
 	return errors;
@@ -1849,7 +1892,8 @@ async function checkLayerBoundaries() {
 	const backendFiles = await collectFiles('backend/src', new Set(['.rs']));
 	const frontendFiles = [
 		...await collectFiles('frontend/src/domains', new Set(['.ts', '.vue'])),
-		...await collectFiles('frontend/src/integrations', new Set(['.ts', '.vue']))
+		...await collectFiles('frontend/src/integrations', new Set(['.ts', '.vue'])),
+		...await collectFiles('frontend/src/shared/communications', new Set(['.ts', '.vue']))
 	];
 	const backendViolations = [];
 	const frontendViolations = [];
@@ -1874,6 +1918,10 @@ async function checkLayerBoundaries() {
 			message
 		})));
 		backendViolations.push(...providerClientLeakFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		backendViolations.push(...appMessagingHandlerIntegrationImportFailuresForSource(file, source).map((message) => ({
 			file,
 			message
 		})));
@@ -1902,7 +1950,19 @@ async function checkLayerBoundaries() {
 			file,
 			message
 		})));
+		frontendViolations.push(...frontendSharedCommunicationBusinessLayerFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		frontendViolations.push(...frontendIntegrationBusinessOwnershipFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
 		frontendViolations.push(...frontendDomainProviderControlRouteFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		frontendViolations.push(...frontendCommunicationsDomainIntegrationRouteFailuresForSource(file, source).map((message) => ({
 			file,
 			message
 		})));
@@ -1941,12 +2001,16 @@ function frontendProviderBusinessCacheRootFailuresForSource(relativePath, source
 	}
 	for (const match of source.matchAll(forbiddenIntegrationBusinessRootPattern)) {
 		const cacheKey = match[2];
-		if (allowedFrontendIntegrationCacheKeys.has(cacheKey)) continue;
+		if (isFrontendIntegrationRuntimeCacheRoot(cacheKey)) continue;
 		errors.push(
-			`${relativePath}: provider query/cache key ["integrations", "${match[1]}", "${cacheKey}"] is forbidden by the integration cache allowlist; use ["communications", ...] for business/read-model data`
+			`${relativePath}: provider query/cache key ["integrations", "${match[1]}", "${cacheKey}"] is not a runtime/setup/control cache root; use ["communications", ...] for business/read-model data`
 		);
 	}
 	return errors;
+}
+
+function isFrontendIntegrationRuntimeCacheRoot(cacheKey) {
+	return /^(?:capabilities|account-capabilities|accounts|runtime|commands|qr-login-status|automation|sessions|conversation-folders|provider-(?:sync|search|media|commands|conversations|conversation-detail|conversation-members|folders|calls|call-transcript))$/.test(cacheKey);
 }
 
 async function routeOwnershipFailures() {
@@ -2107,11 +2171,11 @@ function runSelfTests() {
 		).length === 1
 	);
 	assertSelfTest(
-		'integration raw communication SQL passes',
+		'integration raw communication SQL fails without table allowlists',
 		integrationCommunicationBusinessSqlFailuresForSource(
 			'backend/src/integrations/telegram/client/messages/raw_records.rs',
 			'INSERT INTO communication_raw_records (raw_record_id) VALUES ($1)'
-		).length === 0
+		).length === 1
 	);
 	assertSelfTest(
 		'platform business SQL fails',
@@ -2140,6 +2204,48 @@ function runSelfTests() {
 			'frontend/src/integrations/telegram/queries/useTelegramLifecycleQuery.ts',
 			"queryKey: ['integrations', 'telegram', 'commands', accountId]"
 		).length === 0
+	);
+	assertSelfTest(
+		'frontend integration communications query key fails with double quotes',
+		frontendProviderBusinessCacheRootFailuresForSource(
+			'frontend/src/integrations/telegram/queries/useTelegramBusinessQuery.ts',
+			'queryKey: ["integrations", "telegram", "message-versions", messageId]'
+		).length === 1
+	);
+	assertSelfTest(
+		'frontend shared communications business query token fails',
+		frontendSharedCommunicationBusinessLayerFailuresForSource(
+			'frontend/src/shared/communications/hiddenBusinessQueries.ts',
+			"import { useQuery } from '@tanstack/vue-query'; const queryKey = ['communications', 'messages'];"
+		).length >= 1
+	);
+	assertSelfTest(
+		'frontend integration shared business import fails',
+		frontendIntegrationBusinessOwnershipFailuresForSource(
+			'frontend/src/integrations/telegram/components/Panel.vue',
+			"import { useTelegramBusinessMessages } from '../../../shared/communications/telegramBusinessQueries'"
+		).length === 1
+	);
+	assertSelfTest(
+		'frontend integration business component token fails',
+		frontendIntegrationBusinessOwnershipFailuresForSource(
+			'frontend/src/integrations/telegram/components/TelegramRuntimePanel.vue',
+			'import TelegramMessageThread from "./TelegramMessageThread.vue"'
+		).length === 2
+	);
+	assertSelfTest(
+		'frontend communications domain integration route fails',
+		frontendCommunicationsDomainIntegrationRouteFailuresForSource(
+			'frontend/src/domains/communications/api/providerControl.ts',
+			'"/api/v1/integrations/telegram/provider-commands/conversations/123/pin"'
+		).length === 1
+	);
+	assertSelfTest(
+		'app messaging handler integration import fails',
+		appMessagingHandlerIntegrationImportFailuresForSource(
+			'backend/src/app/handlers/telegram/messages.rs',
+			'use crate::integrations::telegram::client::TelegramStore;'
+		).length === 1
 	);
 	assertSelfTest(
 		'same backend domain import passes',

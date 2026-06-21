@@ -85,7 +85,9 @@ fn relationship_store(state: &AppState) -> Result<RelationshipStore, ApiError> {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(RelationshipStore::new(pool.clone()))
+    Ok(crate::app::api_support::app_store::<RelationshipStore>(
+        pool.clone(),
+    ))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {

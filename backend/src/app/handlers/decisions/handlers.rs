@@ -82,7 +82,9 @@ fn decision_store(state: &AppState) -> Result<DecisionStore, ApiError> {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(DecisionStore::new(pool.clone()))
+    Ok(crate::app::api_support::app_store::<DecisionStore>(
+        pool.clone(),
+    ))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {

@@ -18,7 +18,7 @@ pub(crate) async fn get_task_context_pack(
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let pack = TaskContextPackStore::new(pool)
+    let pack = crate::app::api_support::app_store::<TaskContextPackStore>(pool)
         .get(&task_id)
         .await
         .map_err(ApiError::from)?;
@@ -40,7 +40,7 @@ pub(crate) async fn post_task_context_pack(
     Json(req): Json<UpsertContextPackRequest>,
 ) -> Result<Json<TaskContextPack>, ApiError> {
     let pool = database_pool(&state)?;
-    let pack = TaskContextPackStore::new(pool)
+    let pack = crate::app::api_support::app_store::<TaskContextPackStore>(pool)
         .upsert(
             &task_id,
             req.summary.as_deref(),
@@ -64,7 +64,7 @@ pub(crate) async fn get_task_evidence(
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskEvidenceResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = TaskEvidenceStore::new(pool)
+    let items = crate::app::api_support::app_store::<TaskEvidenceStore>(pool)
         .list(&task_id)
         .await
         .map_err(ApiError::from)?;
@@ -107,7 +107,7 @@ pub(crate) async fn get_task_relations(
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskRelationsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = TaskRelationStore::new(pool)
+    let items = crate::app::api_support::app_store::<TaskRelationStore>(pool)
         .list(&task_id)
         .await
         .map_err(ApiError::from)?;
@@ -143,7 +143,7 @@ pub(crate) async fn get_task_checklist(
     Path(task_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let checklist = TaskChecklistStore::new(pool)
+    let checklist = crate::app::api_support::app_store::<TaskChecklistStore>(pool)
         .get(&task_id)
         .await
         .map_err(ApiError::from)?;
@@ -179,7 +179,7 @@ pub(crate) async fn get_task_subtasks(
     Path(task_id): Path<String>,
 ) -> Result<Json<TaskSubtasksResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = TaskSubtaskStore::new(pool)
+    let items = crate::app::api_support::app_store::<TaskSubtaskStore>(pool)
         .list(&task_id)
         .await
         .map_err(ApiError::from)?;
@@ -214,7 +214,7 @@ pub(crate) async fn get_task_external(
     Path(task_id): Path<String>,
 ) -> Result<Json<ExtIdentitiesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = ExternalTaskIdentityStore::new(pool)
+    let items = crate::app::api_support::app_store::<ExternalTaskIdentityStore>(pool)
         .list(&task_id)
         .await
         .map_err(ApiError::from)?;

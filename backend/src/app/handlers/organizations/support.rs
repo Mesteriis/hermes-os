@@ -12,5 +12,7 @@ pub(super) fn database_pool(state: &AppState) -> Result<PgPool, ApiError> {
 }
 
 pub(super) fn observation_store(state: &AppState) -> Result<ObservationStore, ApiError> {
-    Ok(ObservationStore::new(database_pool(state)?))
+    Ok(crate::app::api_support::app_store::<ObservationStore>(
+        database_pool(state)?,
+    ))
 }

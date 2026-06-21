@@ -1,6 +1,57 @@
-import { isRecord, numberValue, stringValue } from '../../../shared/communications/queries/realtimePatchShared'
+import {
+  isRecord,
+  numberValue,
+  storedEventEnvelope,
+  stringValue,
+} from '../../../shared/communications/queries/realtimePatchShared'
 import type { TelegramProviderWriteCommand } from '../types/telegram'
-import type { TelegramEventPayload } from './realtimeTelegramPatchShared'
+
+type TelegramEventPayload = Record<string, unknown>
+type TelegramStoredEventEnvelope = {
+  event?: {
+    event_type?: unknown
+    payload?: unknown
+  }
+}
+
+export type TelegramCommandRealtimePatchQueryClient = {
+  getQueriesData?: <TData>(filters: { queryKey: readonly unknown[] }) => Array<
+    [readonly unknown[], TData | undefined]
+  >
+  setQueryData?: <TData>(
+    queryKey: readonly unknown[],
+    updater: TData | ((data: TData | undefined) => TData | undefined)
+  ) => unknown
+}
+
+export function applyTelegramCommandRealtimePatch(
+  eventData: string,
+  queryClient: TelegramCommandRealtimePatchQueryClient
+): boolean {
+  const { getQueriesData, setQueryData } = queryClient
+  if (!getQueriesData || !setQueryData) return false
+
+  const envelope = storedEventEnvelope(eventData) as TelegramStoredEventEnvelope | null
+  const eventType = stringValue(envelope?.event?.event_type)
+  if (!eventType || !eventType.startsWith('telegram.')) return false
+
+  const payload = isRecord(envelope?.event?.payload)
+    ? (envelope?.event?.payload as TelegramEventPayload)
+    : undefined
+
+  let patched = false
+  for (const [queryKey, data] of getQueriesData<TelegramProviderWriteCommand[]>({
+    queryKey: ['integrations', 'telegram', 'commands']
+  })) {
+    const updated = patchTelegramCommandList(queryKey, data, eventType, payload)
+    if (updated !== data) {
+      setQueryData(queryKey, updated)
+      patched = true
+    }
+  }
+
+  return patched
+}
 
 export function patchTelegramCommandList(
   queryKey: readonly unknown[],

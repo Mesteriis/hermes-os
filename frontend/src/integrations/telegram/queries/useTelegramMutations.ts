@@ -81,7 +81,6 @@ export function useSyncTelegramHistoryMutation() {
   return useMutation({
     mutationFn: (request: TelegramHistorySyncRequest) => syncTelegramHistory(request),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
     },
   })
@@ -93,7 +92,6 @@ export function useIngestTelegramFixtureMutation() {
     mutationFn: (request: Parameters<typeof ingestTelegramFixtureMessage>[0]) =>
       ingestTelegramFixtureMessage(request),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
     },
   })
@@ -104,7 +102,7 @@ export function useDownloadTelegramMediaMutation() {
   return useMutation({
     mutationFn: (request: TelegramMediaDownloadRequest) => downloadTelegramMedia(request),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
+      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
     },
   })
 }

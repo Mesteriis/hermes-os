@@ -77,7 +77,9 @@ fn contradiction_store(state: &AppState) -> Result<ContradictionObservationStore
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(ContradictionObservationStore::new(pool.clone()))
+    Ok(crate::app::api_support::app_store::<
+        ContradictionObservationStore,
+    >(pool.clone()))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {

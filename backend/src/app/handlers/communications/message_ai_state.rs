@@ -34,5 +34,7 @@ fn ai_state_store(state: &AppState) -> Result<CommunicationAiStateStore, ApiErro
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(CommunicationAiStateStore::new(pool))
+    Ok(crate::app::api_support::app_store::<
+        CommunicationAiStateStore,
+    >(pool))
 }

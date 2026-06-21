@@ -14,7 +14,9 @@ pub(crate) async fn get_v1_analytics_health(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::analytics::EmailAnalyticsStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::analytics::EmailAnalyticsStore,
+    >(pool);
     let health = store.mailbox_health(query.account_id.as_deref()).await?;
     Ok(Json(health))
 }
@@ -42,7 +44,9 @@ pub(crate) async fn get_v1_analytics_senders(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::analytics::EmailAnalyticsStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::analytics::EmailAnalyticsStore,
+    >(pool);
     let page = store
         .top_senders_page(
             query.account_id.as_deref(),

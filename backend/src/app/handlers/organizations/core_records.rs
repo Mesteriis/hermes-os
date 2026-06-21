@@ -23,7 +23,7 @@ pub(crate) async fn get_org_identities(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgIdentitiesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgIdentityStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgIdentityStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -66,7 +66,7 @@ pub(crate) async fn get_org_aliases(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgAliasesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgAliasStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgAliasStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -104,7 +104,7 @@ pub(crate) async fn get_org_domains(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgDomainsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgDomainStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgDomainStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -121,7 +121,7 @@ pub(crate) async fn get_org_departments(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgDepartmentsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgDepartmentStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgDepartmentStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -163,7 +163,7 @@ pub(crate) async fn get_org_contacts(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgContactsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgContactLinkStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgContactLinkStore>(pool)
         .list_by_org(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -208,7 +208,7 @@ pub(crate) async fn get_org_related(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgRelatedResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = RelatedOrgStore::new(pool)
+    let items = crate::app::api_support::app_store::<RelatedOrgStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;

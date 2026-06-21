@@ -63,13 +63,13 @@ pub(crate) async fn post_v1_outbox_undo(
 pub(super) fn outbox_store(
     state: &AppState,
 ) -> Result<crate::domains::communications::outbox::CommunicationOutboxStore, ApiError> {
-    Ok(
-        crate::domains::communications::outbox::CommunicationOutboxStore::new(
-            state
-                .database
-                .pool()
-                .ok_or(ApiError::DatabaseNotConfigured)?
-                .clone(),
-        ),
-    )
+    Ok(crate::app::api_support::app_store::<
+        crate::domains::communications::outbox::CommunicationOutboxStore,
+    >(
+        state
+            .database
+            .pool()
+            .ok_or(ApiError::DatabaseNotConfigured)?
+            .clone(),
+    ))
 }

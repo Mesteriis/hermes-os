@@ -97,5 +97,7 @@ fn saved_search_store(state: &AppState) -> Result<CommunicationSavedSearchStore,
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(CommunicationSavedSearchStore::new(pool))
+    Ok(crate::app::api_support::app_store::<
+        CommunicationSavedSearchStore,
+    >(pool))
 }

@@ -8,8 +8,9 @@ import type {
 } from '../sse'
 import type { FrontendConfig } from '../config/env'
 import { applyMailRealtimePatch } from '../../domains/communications/queries/realtimeMailPatches'
-import { applyTelegramParticipantRealtimePatch } from '../../integrations/telegram/queries/realtimeTelegramParticipantPatches'
-import { applyTelegramRealtimePatch } from '../../integrations/telegram/queries/realtimeTelegramPatches'
+import { applyTelegramParticipantRealtimePatch } from '../../domains/communications/queries/realtimeTelegramParticipantPatches'
+import { applyTelegramRealtimePatch } from '../../domains/communications/queries/realtimeTelegramPatches'
+import { applyTelegramCommandRealtimePatch } from '../../integrations/telegram/queries/realtimeTelegramCommandPatches'
 
 export type RealtimeClient = {
 	connect: () => void
@@ -242,6 +243,7 @@ export function handleRealtimeEvent(
 	applyMailRealtimePatch(event.data, queryClient)
 	applyTelegramRealtimePatch(event.data, queryClient)
 	applyTelegramParticipantRealtimePatch(event.data, queryClient)
+	applyTelegramCommandRealtimePatch(event.data, queryClient)
 
 	for (const queryKey of queryKeysForRealtimeEvent(event)) {
 		void queryClient.invalidateQueries({ queryKey })

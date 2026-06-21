@@ -207,7 +207,9 @@ pub(crate) async fn post_v1_translate_thread(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let thread_store = crate::domains::communications::threads::CommunicationThreadStore::new(pool);
+    let thread_store = crate::app::api_support::app_store::<
+        crate::domains::communications::threads::CommunicationThreadStore,
+    >(pool);
     let messages = thread_store
         .thread_messages(account_id, subject, query.limit.unwrap_or(50))
         .await?;

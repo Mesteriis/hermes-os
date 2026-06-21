@@ -17,7 +17,9 @@ pub(crate) async fn get_owner_persona(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let owner_persona = PersonProjectionStore::new(pool).owner_persona().await?;
+    let owner_persona = crate::app::api_support::app_store::<PersonProjectionStore>(pool)
+        .owner_persona()
+        .await?;
     Ok(Json(OwnerPersonaResponse { owner_persona }))
 }
 

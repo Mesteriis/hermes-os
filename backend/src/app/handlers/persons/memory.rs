@@ -16,7 +16,7 @@ pub(crate) async fn get_person_facts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = PersonFactStore::new(pool)
+    let items = crate::app::api_support::app_store::<PersonFactStore>(pool)
         .list(&person_id)
         .await
         .map_err(ApiError::from)?;
@@ -71,7 +71,7 @@ pub(crate) async fn get_person_memory_cards(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = PersonMemoryCardStore::new(pool)
+    let items = crate::app::api_support::app_store::<PersonMemoryCardStore>(pool)
         .list(&person_id)
         .await
         .map_err(ApiError::from)?;
@@ -126,7 +126,7 @@ pub(crate) async fn get_person_preferences(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = PersonPreferenceStore::new(pool)
+    let items = crate::app::api_support::app_store::<PersonPreferenceStore>(pool)
         .list(&person_id)
         .await
         .map_err(ApiError::from)?;
@@ -180,7 +180,7 @@ pub(crate) async fn get_person_timeline(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = RelationshipEventStore::new(pool)
+    let items = crate::app::api_support::app_store::<RelationshipEventStore>(pool)
         .timeline(&person_id, query.limit.unwrap_or(50))
         .await
         .map_err(ApiError::from)?;

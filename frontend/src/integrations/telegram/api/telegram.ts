@@ -402,17 +402,7 @@ export async function fetchTelegramCallTranscript(callId: string): Promise<Teleg
   )
 }
 
-export { fetchTelegramTopicSearch } from './telegramTopics'
 export {
-  addTelegramReaction,
-  deleteTelegramMessage,
-  editTelegramMessage,
   fetchTelegramCommands,
-  fetchTelegramMessageTombstones,
-  fetchTelegramMessageVersions,
-  fetchTelegramReactions,
-  forwardTelegramMessage,
-  removeTelegramReaction,
-  replyToTelegramMessage,
-  restoreTelegramMessageVisibility,
+  retryTelegramCommand,
 } from './telegramLifecycle'

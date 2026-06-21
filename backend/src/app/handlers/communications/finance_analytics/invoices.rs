@@ -36,7 +36,9 @@ pub(crate) async fn get_v1_invoices(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::finance::CommunicationFinanceStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::finance::CommunicationFinanceStore,
+    >(pool);
     let status = query
         .status
         .as_deref()
@@ -54,7 +56,9 @@ pub(crate) async fn post_v1_invoice(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::finance::CommunicationFinanceStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::finance::CommunicationFinanceStore,
+    >(pool);
     let invoice = store
         .upsert_invoice(&crate::domains::communications::finance::NewInvoiceRecord {
             invoice_id: req.invoice_id,

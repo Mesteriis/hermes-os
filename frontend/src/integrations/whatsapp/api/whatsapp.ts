@@ -1,16 +1,13 @@
 import { ApiClient } from '../../../platform/api/ApiClient'
 import type {
   WhatsappCapabilitiesResponse,
-  WhatsappWebMessageListResponse,
   WhatsappWebSessionListResponse,
   WhatsappWebAccountSetupRequest,
   WhatsappWebAccountSetupResponse,
   WhatsappWebFixtureMessageRequest,
   WhatsappWebMessageIngestResponse,
   WhatsappWebSession,
-  WhatsappWebMessage
 } from '../types/whatsapp'
-import { fetchWhatsappWebBusinessMessages } from '../../../shared/communications/whatsappBusinessApi'
 
 // --- Capabilities ---
 export async function fetchWhatsappCapabilities(): Promise<WhatsappCapabilitiesResponse> {
@@ -35,15 +32,6 @@ export async function fetchWhatsappWebSessions(
   )
 }
 
-// --- Messages ---
-export async function fetchWhatsappWebMessages(
-  accountId?: string,
-  providerChatId?: string,
-  limit = 50
-): Promise<WhatsappWebMessageListResponse> {
-  return fetchWhatsappWebBusinessMessages(accountId, providerChatId, limit)
-}
-
 // --- Account setup ---
 export async function setupWhatsappWebFixtureAccount(
   request: WhatsappWebAccountSetupRequest
@@ -66,35 +54,18 @@ export async function ingestWhatsappWebFixtureMessage(
   )
 }
 
-// --- Service functions ---
-
-export function whatsappMessageTime(message: WhatsappWebMessage): string {
-  const date = message.occurred_at ?? message.projected_at
-  if (!date) return ''
-  try {
-    return new Date(date).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  } catch {
-    return ''
-  }
-}
-
 export async function loadWhatsappWebWorkspace(
   selectedSessionId: string
 ): Promise<{
   capabilities: WhatsappCapabilitiesResponse | null
   sessions: WhatsappWebSession[]
-  messages: WhatsappWebMessage[]
   selectedSessionId: string
   error: string
 }> {
   try {
-    const [capabilityResponse, sessionResponse, messageResponse] = await Promise.all([
+    const [capabilityResponse, sessionResponse] = await Promise.all([
       fetchWhatsappCapabilities(),
       fetchWhatsappWebSessions(),
-      fetchWhatsappWebMessages()
     ])
 
     const sessions = sessionResponse.items
@@ -106,7 +77,6 @@ export async function loadWhatsappWebWorkspace(
     return {
       capabilities: capabilityResponse,
       sessions,
-      messages: messageResponse.items,
       selectedSessionId: nextSessionId,
       error: ''
     }
@@ -114,7 +84,6 @@ export async function loadWhatsappWebWorkspace(
     return {
       capabilities: null,
       sessions: [],
-      messages: [],
       selectedSessionId,
       error: error instanceof Error ? error.message : 'Unknown WhatsApp Web workspace error'
     }

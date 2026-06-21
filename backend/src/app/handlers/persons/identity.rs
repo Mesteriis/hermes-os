@@ -19,7 +19,7 @@ pub(crate) async fn get_person_identities(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonsIdentityStore::new(pool);
+    let store = crate::app::api_support::app_store::<PersonsIdentityStore>(pool);
     let items = store
         .list_by_person(&person_id)
         .await
@@ -48,7 +48,7 @@ pub(crate) async fn get_identity_traces(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonsIdentityStore::new(pool);
+    let store = crate::app::api_support::app_store::<PersonsIdentityStore>(pool);
     let items = store
         .list_unattached(query.limit.unwrap_or(50))
         .await

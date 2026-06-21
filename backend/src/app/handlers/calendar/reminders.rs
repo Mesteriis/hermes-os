@@ -16,7 +16,7 @@ pub(crate) async fn get_event_reminders(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = CalendarReminderStore::new(pool)
+    let items = crate::app::api_support::app_store::<CalendarReminderStore>(pool)
         .list(&event_id)
         .await
         .map_err(ApiError::from)?;

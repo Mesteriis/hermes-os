@@ -77,10 +77,12 @@ pub(crate) async fn get_person_snapshots(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = crate::domains::persons::memory::PersonSnapshotStore::new(pool)
-        .list(&person_id)
-        .await
-        .map_err(ApiError::from)?;
+    let items = crate::app::api_support::app_store::<
+        crate::domains::persons::memory::PersonSnapshotStore,
+    >(pool)
+    .list(&person_id)
+    .await
+    .map_err(ApiError::from)?;
     Ok(Json(PersonSnapshotsResponse { items }))
 }
 
@@ -106,10 +108,12 @@ pub(crate) async fn get_person_history_diff(
     let to_date = DateTime::parse_from_rfc3339(&query.to)
         .map_err(|_| ApiError::InvalidCommunicationQuery("invalid to date"))?
         .with_timezone(&Utc);
-    let diff = crate::domains::persons::memory::PersonSnapshotStore::new(pool)
-        .history_diff(&person_id, from_date, to_date)
-        .await
-        .map_err(ApiError::from)?;
+    let diff = crate::app::api_support::app_store::<
+        crate::domains::persons::memory::PersonSnapshotStore,
+    >(pool)
+    .history_diff(&person_id, from_date, to_date)
+    .await
+    .map_err(ApiError::from)?;
     Ok(Json(serde_json::to_value(&diff).unwrap_or_default()))
 }
 

@@ -57,6 +57,22 @@ pub(crate) fn telegram_runtime_use_case_context(
     )
 }
 
+pub(crate) fn telegram_message_write_service(
+    state: &AppState,
+) -> Result<
+    crate::application::communication_provider_writes::TelegramMessageWriteApplicationService,
+    ApiError,
+> {
+    Ok(
+        crate::application::communication_provider_writes::TelegramMessageWriteApplicationService::new(
+            telegram_store(state)?,
+            api_audit_log(state)?,
+            event_store(state)?,
+            state.event_bus.clone(),
+        ),
+    )
+}
+
 pub(crate) fn whatsapp_web_store(state: &AppState) -> Result<WhatsappWebStore, ApiError> {
     let pool = database_pool(state)?;
     Ok(WhatsappWebStore::new(

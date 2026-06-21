@@ -15,7 +15,7 @@ pub(crate) async fn get_person_roles(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonRoleStore::new(pool);
+    let store = crate::app::api_support::app_store::<PersonRoleStore>(pool);
     let items = store
         .list_by_person(&person_id)
         .await
@@ -76,7 +76,7 @@ pub(crate) async fn get_person_personas(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonPersonaStore::new(pool);
+    let store = crate::app::api_support::app_store::<PersonPersonaStore>(pool);
     let items = store
         .list_by_person(&person_id)
         .await

@@ -19,7 +19,7 @@ pub(crate) async fn get_org_enrichment(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgEnrichmentResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgEnrichmentStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgEnrichmentStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;

@@ -9,7 +9,9 @@ pub(crate) async fn get_v1_legal_docs(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::legal::LegalDocumentStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::legal::LegalDocumentStore,
+    >(pool);
     let dt = query
         .document_type
         .as_deref()
@@ -48,7 +50,9 @@ pub(crate) async fn post_v1_legal_doc(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::legal::LegalDocumentStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::legal::LegalDocumentStore,
+    >(pool);
     let doc = store
         .upsert(&crate::domains::communications::legal::NewLegalDocument {
             document_id: req.document_id,

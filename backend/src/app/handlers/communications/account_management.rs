@@ -8,7 +8,7 @@ pub(crate) async fn get_v1_email_accounts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let accounts = CommunicationProviderAccountStore::new(pool)
+    let accounts = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
         .list()
         .await?
         .into_iter()
@@ -85,7 +85,7 @@ pub(crate) async fn post_v1_email_account_import(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let account = CommunicationProviderAccountStore::new(pool)
+    let account = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
         .upsert(
             &crate::domains::communications::core::NewProviderAccount::new(
                 request.account.account_id,
@@ -142,10 +142,11 @@ pub(crate) async fn post_v1_email_account_logout(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let updated_account = CommunicationProviderAccountStore::new(pool)
-        .mark_logged_out(&account.account_id)
-        .await?
-        .ok_or(ApiError::NotFound)?;
+    let updated_account =
+        crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
+            .mark_logged_out(&account.account_id)
+            .await?
+            .ok_or(ApiError::NotFound)?;
     let current_settings = mail_sync_store(&state)
         .map_err(mail_sync_api_error)?
         .settings_for_account(&account.account_id)
@@ -181,7 +182,7 @@ pub(crate) async fn delete_v1_email_account(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = CommunicationProviderAccountStore::new(pool);
+    let store = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool);
     let usage = store.usage(&account.account_id).await?;
     if usage.has_retained_evidence() {
         return Err(ApiError::EmailAccountDeleteConflict);

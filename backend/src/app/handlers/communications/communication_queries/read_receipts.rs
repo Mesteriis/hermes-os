@@ -38,7 +38,9 @@ fn read_receipt_store(state: &AppState) -> Result<CommunicationReadReceiptStore,
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(CommunicationReadReceiptStore::new(pool))
+    Ok(crate::app::api_support::app_store::<
+        CommunicationReadReceiptStore,
+    >(pool))
 }
 
 fn delivery_notification_store(
@@ -47,5 +49,7 @@ fn delivery_notification_store(
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(CommunicationDeliveryNotificationStore::new(pool))
+    Ok(crate::app::api_support::app_store::<
+        CommunicationDeliveryNotificationStore,
+    >(pool))
 }

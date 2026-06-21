@@ -2,7 +2,6 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type {
   WhatsappWebSession,
-  WhatsappWebMessage,
   WhatsappCapabilitiesResponse
 } from '../types/whatsapp'
 
@@ -22,7 +21,6 @@ export interface WhatsappMessageForm {
 export const useWhatsappStore = defineStore('whatsapp-ui', () => {
   // Data state
   const whatsappSessions = ref<WhatsappWebSession[]>([])
-  const whatsappMessages = ref<WhatsappWebMessage[]>([])
   const whatsappCapabilities = ref<WhatsappCapabilitiesResponse | null>(null)
 
   // Selection state
@@ -55,13 +53,6 @@ export const useWhatsappStore = defineStore('whatsapp-ui', () => {
     null
   )
 
-  const selectedWhatsappMessages = computed(() => {
-    if (!selectedWhatsappSession.value) return whatsappMessages.value
-    return whatsappMessages.value.filter(
-      (msg) => msg.account_id === selectedWhatsappSession.value!.account_id
-    )
-  })
-
   const whatsappClosureCapabilities = computed(() =>
     whatsappCapabilities.value?.capabilities.filter((c) => c.closure_gate) ?? []
   )
@@ -73,13 +64,11 @@ export const useWhatsappStore = defineStore('whatsapp-ui', () => {
   // Actions
   function setWhatsappData(data: {
     sessions: WhatsappWebSession[]
-    messages: WhatsappWebMessage[]
     capabilities: WhatsappCapabilitiesResponse | null
     selectedSessionId: string
     error: string
   }) {
     whatsappSessions.value = data.sessions
-    whatsappMessages.value = data.messages
     whatsappCapabilities.value = data.capabilities
     selectedWhatsappSessionId.value = data.selectedSessionId
     whatsappError.value = data.error
@@ -127,7 +116,6 @@ export const useWhatsappStore = defineStore('whatsapp-ui', () => {
   return {
     // State
     whatsappSessions,
-    whatsappMessages,
     whatsappCapabilities,
     selectedWhatsappSessionId,
     whatsappError,
@@ -137,7 +125,6 @@ export const useWhatsappStore = defineStore('whatsapp-ui', () => {
     whatsappMessageForm,
     // Derived
     selectedWhatsappSession,
-    selectedWhatsappMessages,
     whatsappClosureCapabilities,
     whatsappBlockedCapabilities,
     // Actions

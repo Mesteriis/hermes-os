@@ -19,7 +19,9 @@ pub(crate) async fn get_v1_certs(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::signatures::CertificateStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::signatures::CertificateStore,
+    >(pool);
     Ok(Json(CertsListResponse {
         items: store.list().await?,
     }))
@@ -54,7 +56,9 @@ pub(crate) async fn post_v1_cert(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::signatures::CertificateStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::signatures::CertificateStore,
+    >(pool);
     Ok(Json(
         store
             .upsert(&crate::domains::communications::signatures::NewCertificate {
@@ -111,7 +115,9 @@ pub(crate) async fn get_v1_certs_expiring(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::signatures::CertificateStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::signatures::CertificateStore,
+    >(pool);
     Ok(Json(CertsListResponse {
         items: store.expiring_soon(query.days.unwrap_or(90)).await?,
     }))

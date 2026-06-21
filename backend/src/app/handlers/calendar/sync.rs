@@ -44,7 +44,7 @@ pub(crate) async fn post_calendar_import(
                 .get("source_event_id")
                 .and_then(|v| v.as_str())
                 .map(ToOwned::to_owned);
-            let _ = CalendarEventStore::new(pool.clone())
+            let _ = crate::app::api_support::app_store::<CalendarEventStore>(pool.clone())
                 .create_file_import(
                     &NewCalendarEvent {
                         source_event_id,
@@ -96,7 +96,7 @@ pub(crate) async fn get_event_export(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let event = CalendarEventStore::new(pool)
+    let event = crate::app::api_support::app_store::<CalendarEventStore>(pool)
         .get(&event_id)
         .await?
         .ok_or(ApiError::NotFound)?;

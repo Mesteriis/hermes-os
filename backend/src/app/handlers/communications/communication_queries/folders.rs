@@ -142,5 +142,5 @@ fn folder_store(state: &AppState) -> Result<CommunicationFolderStore, ApiError> 
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(CommunicationFolderStore::new(pool))
+    Ok(crate::app::api_support::app_store::<CommunicationFolderStore>(pool))
 }

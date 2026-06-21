@@ -17,7 +17,7 @@ pub(crate) async fn get_task_rules(
     State(state): State<AppState>,
 ) -> Result<Json<TaskRulesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = TaskRuleStore::new(pool)
+    let items = crate::app::api_support::app_store::<TaskRuleStore>(pool)
         .list()
         .await
         .map_err(ApiError::from)?;
@@ -41,7 +41,7 @@ pub(crate) async fn post_task_rule(
     let pool = database_pool(&state)?;
     let dsl = req.dsl.or(req.config).unwrap_or_else(|| json!({}));
     let description = req.description.or(req.rule_type);
-    let rule = TaskRuleStore::new(pool)
+    let rule = crate::app::api_support::app_store::<TaskRuleStore>(pool)
         .create(
             &req.name,
             description.as_deref(),
@@ -58,7 +58,7 @@ pub(crate) async fn delete_task_rule(
     Path(rule_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    TaskRuleStore::new(pool)
+    crate::app::api_support::app_store::<TaskRuleStore>(pool)
         .delete(&rule_id)
         .await
         .map_err(ApiError::from)?;
@@ -74,7 +74,7 @@ pub(crate) async fn get_task_templates(
     State(state): State<AppState>,
 ) -> Result<Json<TaskTemplatesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = TaskTemplateStore::new(pool)
+    let items = crate::app::api_support::app_store::<TaskTemplateStore>(pool)
         .list()
         .await
         .map_err(ApiError::from)?;

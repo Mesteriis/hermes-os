@@ -26,7 +26,9 @@ pub(crate) async fn get_v1_personas(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::personas::CommunicationPersonaStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::personas::CommunicationPersonaStore,
+    >(pool);
     let items = store.list().await?;
     Ok(Json(PersonaListResponse { items }))
 }
@@ -40,7 +42,9 @@ pub(crate) async fn post_v1_persona(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::personas::CommunicationPersonaStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::personas::CommunicationPersonaStore,
+    >(pool);
     let persona = store
         .upsert(
             &crate::domains::communications::personas::NewCommunicationPersona {

@@ -83,7 +83,9 @@ fn obligation_store(state: &AppState) -> Result<ObligationStore, ApiError> {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(ObligationStore::new(pool.clone()))
+    Ok(crate::app::api_support::app_store::<ObligationStore>(
+        pool.clone(),
+    ))
 }
 
 fn api_audit_log(state: &AppState) -> Result<ApiAuditLog, ApiError> {

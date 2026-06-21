@@ -16,7 +16,7 @@ pub(crate) async fn get_org_financial(
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let info = OrgFinancialStore::new(pool)
+    let info = crate::app::api_support::app_store::<OrgFinancialStore>(pool)
         .get(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -33,7 +33,7 @@ pub(crate) async fn get_org_contracts(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgContractsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgContractStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgContractStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -50,7 +50,7 @@ pub(crate) async fn get_org_compliance(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgComplianceResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgComplianceStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgComplianceStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -67,7 +67,7 @@ pub(crate) async fn get_org_services(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgServicesResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgServiceStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgServiceStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -84,7 +84,7 @@ pub(crate) async fn get_org_products(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgProductsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgProductStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgProductStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;

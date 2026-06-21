@@ -15,7 +15,7 @@ pub(crate) async fn get_person_enrichment(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = EnrichmentResultStore::new(pool)
+    let items = crate::app::api_support::app_store::<EnrichmentResultStore>(pool)
         .list(&person_id)
         .await
         .map_err(ApiError::from)?;
@@ -68,7 +68,7 @@ pub(crate) async fn get_person_expertise(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = PersonExpertiseStore::new(pool)
+    let items = crate::app::api_support::app_store::<PersonExpertiseStore>(pool)
         .list(&person_id)
         .await
         .map_err(ApiError::from)?;
@@ -90,7 +90,7 @@ pub(crate) async fn get_person_expertise_search(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = PersonExpertiseStore::new(pool)
+    let items = crate::app::api_support::app_store::<PersonExpertiseStore>(pool)
         .search_by_skill(&query.skill, query.limit.unwrap_or(20))
         .await
         .map_err(ApiError::from)?;
@@ -113,7 +113,7 @@ pub(crate) async fn get_person_promises(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = PersonPromiseStore::new(pool)
+    let items = crate::app::api_support::app_store::<PersonPromiseStore>(pool)
         .list(&person_id)
         .await
         .map_err(ApiError::from)?;
@@ -136,7 +136,7 @@ pub(crate) async fn get_person_risks(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = PersonRiskStore::new(pool)
+    let items = crate::app::api_support::app_store::<PersonRiskStore>(pool)
         .list(&person_id)
         .await
         .map_err(ApiError::from)?;

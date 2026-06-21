@@ -9,7 +9,9 @@ pub(crate) async fn get_v1_threads(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::threads::CommunicationThreadStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::threads::CommunicationThreadStore,
+    >(pool);
     let page = store
         .list_threads_page(
             query.account_id.as_deref(),
@@ -44,7 +46,9 @@ pub(crate) async fn get_v1_thread_messages(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::communications::threads::CommunicationThreadStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::communications::threads::CommunicationThreadStore,
+    >(pool);
     let items = store
         .thread_messages(account_id, subject, query.limit.unwrap_or(50))
         .await?;

@@ -10,9 +10,14 @@ import ComposeDrawer from '../components/ComposeDrawer.vue'
 import CommunicationFolderStrip from '../components/CommunicationFolderStrip.vue'
 import OutboxStatusStrip from '../components/OutboxStatusStrip.vue'
 import SavedSearchStrip from '../components/SavedSearchStrip.vue'
+import TelegramCommunicationsPanel from '../providers/telegram/views/TelegramCommunicationsPanel.vue'
+import WhatsAppCommunicationsPanel from '../providers/whatsapp/views/WhatsAppCommunicationsPanel.vue'
 import { communicationSectionTabs } from '../constants/sectionTabs'
 import AccountSetupModal from '../../../shared/mailSetup/AccountSetupModal.vue'
+import { useNavigationStore } from '../../../shared/stores/navigation'
 import { useCommunicationsPageController } from './useCommunicationsPageController'
+
+const nav = useNavigationStore()
 
 const {
   activeFolderId,
@@ -114,6 +119,9 @@ const {
 
 <template>
   <section class="communications-page">
+    <TelegramCommunicationsPanel v-if="nav.activeCommunicationSection === 'telegram'" />
+    <WhatsAppCommunicationsPanel v-else-if="nav.activeCommunicationSection === 'whatsapp'" />
+    <template v-else>
     <CommunicationsActionBar
       :search-query="store.messageSearchQuery"
       :section-tabs="communicationSectionTabs"
@@ -277,6 +285,7 @@ const {
 
     <ComposeDrawer v-if="store.isComposeOpen" />
     <AccountSetupModal v-if="isAccountSetupOpen" @close="isAccountSetupOpen = false" />
+    </template>
   </section>
 </template>
 

@@ -143,8 +143,9 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
 
     let frontend_communications_domain =
         read_all_sources(root.join("frontend/src/domains/communications"));
-    let frontend_integration_runtime = read_all_sources(root.join("frontend/src/integrations"))
-        + &read_all_sources(root.join("frontend/src/platform/bootstrap"));
+    let frontend_integration_runtime = read_all_sources(root.join("frontend/src/integrations"));
+    let frontend_platform_bootstrap =
+        read_all_sources(root.join("frontend/src/platform/bootstrap"));
     let frontend_layout_scopes = read(root.join("frontend/src/shared/stores/layoutEditor.ts"));
     let legacy_telegram_key = format!("['{}'", "telegram");
     let legacy_whatsapp_key = format!("['{}'", "whatsapp");
@@ -167,10 +168,28 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
         );
     }
     assert!(
-        frontend_integration_runtime.contains("['communications', 'telegram', 'messages'")
-            && frontend_integration_runtime.contains("['communications', 'telegram', 'chats'")
-            && frontend_integration_runtime.contains("['communications', 'whatsapp', 'messages'"),
-        "Telegram/WhatsApp business caches must be communication-scoped"
+        frontend_communications_domain.contains("['communications', 'telegram', 'messages'")
+            && frontend_communications_domain.contains("['communications', 'telegram', 'chats'")
+            && frontend_communications_domain.contains("['communications', 'whatsapp', 'messages'"),
+        "Telegram/WhatsApp business caches must be owned by the Communications domain"
+    );
+    assert!(
+        !frontend_integration_runtime.contains("['communications', 'telegram'")
+            && !frontend_integration_runtime.contains("['communications', 'whatsapp'")
+            && !frontend_integration_runtime.contains("\"/api/v1/communications/messages")
+            && !frontend_integration_runtime.contains("\"/api/v1/communications/conversations")
+            && !frontend_integration_runtime.contains("\"/api/v1/communications/search")
+            && !frontend_integration_runtime.contains("\"/api/v1/communications/topics"),
+        "integration modules must not own Communications business cache keys or business routes"
+    );
+    assert!(
+        frontend_platform_bootstrap
+            .contains("domains/communications/queries/realtimeTelegramPatches")
+            && frontend_platform_bootstrap
+                .contains("domains/communications/queries/realtimeTelegramParticipantPatches")
+            && frontend_platform_bootstrap
+                .contains("integrations/telegram/queries/realtimeTelegramCommandPatches"),
+        "platform realtime bootstrap must compose Communications business patching separately from Telegram integration runtime patching"
     );
     assert!(
         frontend_integration_runtime.contains("['integrations', 'telegram'"),
@@ -184,6 +203,41 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
         frontend_layout_scopes.contains("viewScope: ['communications', 'telegram']")
             && frontend_layout_scopes.contains("viewScope: ['communications', 'whatsapp']"),
         "communications workspace must keep Telegram and WhatsApp as communication filters/scopes"
+    );
+}
+
+#[test]
+fn app_messaging_handlers_are_thin() {
+    let root = repo_root();
+    let telegram_handler_root = root.join("backend/src/app/handlers/telegram");
+    let telegram_handler_facade = read(root.join("backend/src/app/handlers/telegram.rs"));
+    let whatsapp_handler = read(root.join("backend/src/app/handlers/whatsapp.rs"));
+    let all_handler_sources = read_all_sources(root.join("backend/src/app/handlers"));
+
+    let telegram_handler_sources = read_all_sources(telegram_handler_root);
+    assert!(
+        telegram_handler_sources.trim().is_empty(),
+        "backend/src/app/handlers/telegram must not contain provider runtime/store implementation files"
+    );
+    assert!(
+        telegram_handler_facade.contains("provider_runtime_handlers::telegram")
+            && whatsapp_handler.contains("provider_runtime_handlers::whatsapp"),
+        "messaging app handlers must be thin facades over the provider runtime composition root"
+    );
+    for forbidden in [
+        "telegram_store(",
+        "whatsapp_store(",
+        "crate::integrations::telegram::client::lifecycle",
+    ] {
+        assert!(
+            !all_handler_sources.contains(forbidden),
+            "app handlers must not call provider runtime/store helper directly: {forbidden}"
+        );
+    }
+    let telegram_facade_sources = telegram_handler_facade + &whatsapp_handler;
+    assert!(
+        !telegram_facade_sources.contains("crate::integrations::"),
+        "Telegram/WhatsApp handler facades must not import integrations directly"
     );
 }
 

@@ -16,7 +16,7 @@ pub(crate) async fn get_person_health(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    PersonHealthStore::new(pool)
+    crate::app::api_support::app_store::<PersonHealthStore>(pool)
         .get(&person_id)
         .await
         .map_err(ApiError::from)?
@@ -32,7 +32,7 @@ pub(crate) async fn get_persons_health(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = PersonHealthStore::new(pool)
+    let items = crate::app::api_support::app_store::<PersonHealthStore>(pool)
         .list_health()
         .await
         .map_err(ApiError::from)?;
@@ -47,7 +47,7 @@ pub(crate) async fn get_persons_watchlist(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = PersonHealthStore::new(pool)
+    let items = crate::app::api_support::app_store::<PersonHealthStore>(pool)
         .list_watchlist()
         .await
         .map_err(ApiError::from)?;

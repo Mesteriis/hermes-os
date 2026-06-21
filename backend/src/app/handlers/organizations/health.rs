@@ -19,7 +19,7 @@ pub(crate) async fn get_org_risks(
     Path(org_id): Path<String>,
 ) -> Result<Json<OrgRisksResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrgRiskStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrgRiskStore>(pool)
         .list(&org_id)
         .await
         .map_err(ApiError::from)?;
@@ -31,7 +31,7 @@ pub(crate) async fn get_org_health(
     Path(org_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let health = OrgHealthStore::new(pool)
+    let health = crate::app::api_support::app_store::<OrgHealthStore>(pool)
         .get(&org_id)
         .await
         .map_err(ApiError::from)?;

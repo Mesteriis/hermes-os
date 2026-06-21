@@ -153,7 +153,7 @@ pub(crate) async fn post_v1_review_item_promote(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let observation = ObservationStore::new(pool.clone())
+    let observation = crate::app::api_support::app_store::<ObservationStore>(pool.clone())
         .capture(
             &NewObservation::new(
                 "REVIEW_TRANSITION",
@@ -222,7 +222,9 @@ fn review_store(state: &AppState) -> Result<ReviewInboxStore, ApiError> {
         return Err(ApiError::DatabaseNotConfigured);
     };
 
-    Ok(ReviewInboxStore::new(pool.clone()))
+    Ok(crate::app::api_support::app_store::<ReviewInboxStore>(
+        pool.clone(),
+    ))
 }
 
 fn parse_item_kind(value: &str) -> Result<ReviewItemKind, ApiError> {

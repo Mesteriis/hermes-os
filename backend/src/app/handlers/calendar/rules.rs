@@ -15,7 +15,7 @@ pub(crate) async fn get_calendar_rules(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = CalendarRuleStore::new(pool)
+    let items = crate::app::api_support::app_store::<CalendarRuleStore>(pool)
         .list()
         .await
         .map_err(ApiError::from)?;

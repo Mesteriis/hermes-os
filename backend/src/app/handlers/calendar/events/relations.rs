@@ -14,7 +14,7 @@ pub(crate) async fn get_event_relations(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = EventRelationStore::new(pool)
+    let items = crate::app::api_support::app_store::<EventRelationStore>(pool)
         .list(&event_id)
         .await
         .map_err(ApiError::from)?;

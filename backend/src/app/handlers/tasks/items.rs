@@ -27,7 +27,7 @@ pub(crate) async fn get_tasks(
     Query(q): Query<TaskListQueryParams>,
 ) -> Result<Json<TaskRecordsResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = TaskStore::new(pool)
+    let items = crate::app::api_support::app_store::<TaskStore>(pool)
         .list(&TaskListQuery {
             status: q.status,
             project_id: q.project_id,
@@ -54,7 +54,7 @@ pub(crate) async fn get_task(
     Path(task_id): Path<String>,
 ) -> Result<Json<Task>, ApiError> {
     let pool = database_pool(&state)?;
-    TaskStore::new(pool)
+    crate::app::api_support::app_store::<TaskStore>(pool)
         .get(&task_id)
         .await?
         .map(Json)

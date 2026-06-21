@@ -29,13 +29,13 @@ pub(crate) async fn post_v1_workflow_action(
 
     let command_id = normalize_non_empty("command_id", &request.command_id)?;
     let event_id = format!("workflow_action:{command_id}");
-    let event_store = EventStore::new(pool.clone());
+    let event_store = crate::app::api_support::app_store::<EventStore>(pool.clone());
     if let Some(existing) = event_store.get_by_id(&event_id).await? {
         return Ok(Json(response_from_event(existing)?));
     }
 
     let actor_id = actor_id_from_headers(&headers);
-    let message_store = MessageProjectionStore::new(pool.clone());
+    let message_store = crate::app::api_support::app_store::<MessageProjectionStore>(pool.clone());
     let source_message = load_source_message(&message_store, request.source.as_ref()).await?;
     let mut transaction = pool
         .begin()

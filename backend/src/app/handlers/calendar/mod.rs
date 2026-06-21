@@ -145,16 +145,6 @@ use crate::integrations::mail::accounts::{
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
-use crate::integrations::telegram::client::{
-    NewTelegramMessage, ProviderCommunicationMessage, TelegramAccountSetupRequest,
-    TelegramAccountSetupResponse, TelegramChat, TelegramError, TelegramMessageIngestResult,
-    TelegramStore,
-};
-use crate::integrations::whatsapp::client::{
-    NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
-    WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
-    WhatsappWebStore,
-};
 use crate::platform::events::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };

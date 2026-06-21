@@ -40,7 +40,9 @@ pub(crate) async fn get_v1_rich_templates(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let templates = CommunicationTemplateStore::new(pool.clone()).list().await?;
+    let templates = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone())
+        .list()
+        .await?;
     Ok(Json(serde_json::json!({ "templates": templates })))
 }
 
@@ -51,7 +53,7 @@ pub(crate) async fn post_v1_rich_template(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let template = CommunicationTemplateStore::new(pool.clone())
+    let template = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone())
         .upsert(&NewCommunicationTemplate {
             template_id: req
                 .template_id
@@ -89,7 +91,7 @@ pub(crate) async fn delete_v1_rich_template(
             "template_id is required",
         ));
     }
-    let deleted = CommunicationTemplateStore::new(pool.clone())
+    let deleted = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone())
         .delete(template_id)
         .await?;
     if !deleted {
@@ -115,7 +117,7 @@ pub(crate) async fn post_v1_render_template(
     let Some(pool) = state.database.pool() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let store = CommunicationTemplateStore::new(pool.clone());
+    let store = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone());
     let template_id = req.template_id.trim();
     let Some(template) = store.get(template_id).await? else {
         return Err(ApiError::NotFound);
@@ -166,7 +168,7 @@ pub(crate) async fn post_v1_rich_template_mail_merge_preview(
             })
         })
         .collect::<Result<Vec<_>, ApiError>>()?;
-    let store = CommunicationTemplateStore::new(pool.clone());
+    let store = crate::app::api_support::app_store::<CommunicationTemplateStore>(pool.clone());
     let Some(template) = store.get(template_id).await? else {
         return Err(ApiError::NotFound);
     };

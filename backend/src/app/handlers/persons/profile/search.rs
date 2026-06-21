@@ -19,7 +19,9 @@ pub(crate) async fn get_person_search(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::persons::enrichment::PersonEnrichmentStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::persons::enrichment::PersonEnrichmentStore,
+    >(pool);
     let items = store
         .search_persons(&query.q, query.limit.unwrap_or(20))
         .await?;

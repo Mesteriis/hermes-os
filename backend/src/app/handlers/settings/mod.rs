@@ -118,16 +118,6 @@ use crate::integrations::mail::accounts::{
     GmailOAuthSetupRequest, ImapAccountSetupRequest,
 };
 use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
-use crate::integrations::telegram::client::{
-    NewTelegramMessage, ProviderCommunicationMessage, TelegramAccountSetupRequest,
-    TelegramAccountSetupResponse, TelegramChat, TelegramError, TelegramMessageIngestResult,
-    TelegramStore,
-};
-use crate::integrations::whatsapp::client::{
-    NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
-    WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
-    WhatsappWebStore,
-};
 use crate::platform::events::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };
@@ -159,7 +149,9 @@ pub(crate) async fn get_application_settings_accounts(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = CommunicationProviderAccountStore::new(pool).list().await?;
+    let items = crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
+        .list()
+        .await?;
 
     Ok(Json(ApplicationAccountsResponse { items }))
 }

@@ -29,7 +29,7 @@ pub(crate) async fn get_v1_attachment_search(
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let store = AttachmentSearchStore::new(pool);
+    let store = crate::app::api_support::app_store::<AttachmentSearchStore>(pool);
     Ok(Json(
         store
             .search(AttachmentSearchQuery {
@@ -93,7 +93,7 @@ pub(crate) async fn get_v1_attachment_preview(
             "attachment preview supports text and image attachments only",
         ))?;
 
-    let bytes = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
+    let bytes = crate::app::api_support::communication_blob_store()
         .read_blob(&attachment.storage_path)
         .await?;
     let byte_count = bytes.len();
@@ -183,7 +183,7 @@ pub(crate) async fn get_v1_attachment_archive_inspection(
         ));
     }
 
-    let bytes = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
+    let bytes = crate::app::api_support::communication_blob_store()
         .read_blob(&attachment.storage_path)
         .await?;
     let report =

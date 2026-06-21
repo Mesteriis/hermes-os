@@ -16,7 +16,9 @@ pub(crate) async fn get_persons(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::persons::enrichment::PersonEnrichmentStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::persons::enrichment::PersonEnrichmentStore,
+    >(pool);
     let items = store
         .list_enriched(
             query.favorites_only.unwrap_or(false),
@@ -35,7 +37,9 @@ pub(crate) async fn get_person(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = crate::domains::persons::enrichment::PersonEnrichmentStore::new(pool);
+    let store = crate::app::api_support::app_store::<
+        crate::domains::persons::enrichment::PersonEnrichmentStore,
+    >(pool);
     match store.get_enriched(&person_id).await? {
         Some(person) => Ok(Json(person)),
         None => Err(ApiError::PersonIdentityNotFound),

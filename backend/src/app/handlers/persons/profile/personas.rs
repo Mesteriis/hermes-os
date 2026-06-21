@@ -25,7 +25,7 @@ pub(crate) async fn get_personas(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonProjectionStore::new(pool);
+    let store = crate::app::api_support::app_store::<PersonProjectionStore>(pool);
     let items = store
         .list_personas(query.limit.unwrap_or(50))
         .await?
@@ -44,7 +44,7 @@ pub(crate) async fn get_persona(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = PersonProjectionStore::new(pool);
+    let store = crate::app::api_support::app_store::<PersonProjectionStore>(pool);
     match store.get_persona(&persona_id).await? {
         Some(persona) => Ok(Json(persona_read_model(persona))),
         None => Err(ApiError::PersonIdentityNotFound),

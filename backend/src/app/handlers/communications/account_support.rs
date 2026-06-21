@@ -82,9 +82,10 @@ pub(super) async fn email_account_or_not_found(
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let Some(account) = CommunicationProviderAccountStore::new(pool)
-        .get(account_id)
-        .await?
+    let Some(account) =
+        crate::app::api_support::app_store::<CommunicationProviderAccountStore>(pool)
+            .get(account_id)
+            .await?
     else {
         return Err(ApiError::NotFound);
     };
@@ -214,7 +215,9 @@ pub(super) fn mail_sync_store(state: &AppState) -> Result<MailSyncStore, MailSyn
         });
     };
 
-    Ok(MailSyncStore::new(pool.clone()))
+    Ok(crate::app::api_support::app_store::<MailSyncStore>(
+        pool.clone(),
+    ))
 }
 
 pub(super) fn mail_sync_service(
@@ -235,9 +238,9 @@ pub(super) fn mail_sync_service(
             crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort::new(
                 pool.clone(),
                 state.vault.clone(),
-                std::sync::Arc::new(
-                    crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(pool.clone()),
-                ),
+                std::sync::Arc::new(crate::app::api_support::app_store::<
+                    crate::domains::communications::core::CommunicationProviderSecretBindingStore,
+                >(pool.clone())),
                 crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
             ),
         ),

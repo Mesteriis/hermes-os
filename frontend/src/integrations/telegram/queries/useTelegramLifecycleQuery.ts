@@ -26,7 +26,6 @@ export function useTelegramCommandsQuery(
       return [
         'integrations',
         'telegram',
-        'runtime',
         'commands',
         toValue(accountId) ?? 'none',
         toValue(limit),

@@ -22,7 +22,7 @@ pub(crate) async fn get_deadlines(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = DeadlineStore::new(pool)
+    let items = crate::app::api_support::app_store::<DeadlineStore>(pool)
         .list(query.status.as_deref(), query.limit.unwrap_or(50))
         .await
         .map_err(ApiError::from)?;
@@ -83,7 +83,7 @@ pub(crate) async fn get_focus_blocks(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let items = FocusBlockStore::new(pool)
+    let items = crate::app::api_support::app_store::<FocusBlockStore>(pool)
         .list(query.from, query.to, query.limit.unwrap_or(50))
         .await
         .map_err(ApiError::from)?;
@@ -140,7 +140,7 @@ pub(crate) async fn post_smart_schedule(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let events = CalendarEventStore::new(pool)
+    let events = crate::app::api_support::app_store::<CalendarEventStore>(pool)
         .list(&CalendarEventListQuery {
             limit: Some(200),
             ..Default::default()

@@ -25,7 +25,7 @@ pub(crate) async fn get_organizations(
     Query(query): Query<OrganizationListQuery>,
 ) -> Result<Json<OrganizationListResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let items = OrganizationStore::new(pool)
+    let items = crate::app::api_support::app_store::<OrganizationStore>(pool)
         .list(query.org_type.as_deref(), query.limit.unwrap_or(50))
         .await?;
     Ok(Json(OrganizationListResponse { items }))
@@ -53,7 +53,7 @@ pub(crate) async fn get_organization(
     Path(org_id): Path<String>,
 ) -> Result<Json<Organization>, ApiError> {
     let pool = database_pool(&state)?;
-    OrganizationStore::new(pool)
+    crate::app::api_support::app_store::<OrganizationStore>(pool)
         .get(&org_id)
         .await?
         .map(Json)
@@ -83,7 +83,7 @@ pub(crate) async fn get_organization_search(
     Query(query): Query<OrganizationSearchQuery>,
 ) -> Result<Json<OrganizationListResponse>, ApiError> {
     let pool = database_pool(&state)?;
-    let store = OrganizationStore::new(pool);
+    let store = crate::app::api_support::app_store::<OrganizationStore>(pool);
     let all = store.list(None, 200).await?;
     let q = query.q.trim().to_lowercase();
     let items: Vec<_> = all

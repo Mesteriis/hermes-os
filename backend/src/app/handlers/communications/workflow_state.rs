@@ -110,7 +110,7 @@ pub(crate) async fn post_v1_message_analyze(
     Path(message_id): Path<String>,
 ) -> Result<Json<MessageAnalyzeResponse>, ApiError> {
     let store = message_store(&state)?;
-    let ai_state_store = CommunicationAiStateStore::new(
+    let ai_state_store = crate::app::api_support::app_store::<CommunicationAiStateStore>(
         state
             .database
             .pool()

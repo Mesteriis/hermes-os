@@ -32,7 +32,7 @@ pub(crate) async fn get_v1_email_search(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let store = MessageProjectionStore::new(pool.clone());
+    let store = crate::app::api_support::app_store::<MessageProjectionStore>(pool.clone());
 
     let search_path: Option<String> = std::env::var("HERMES_SEARCH_INDEX_PATH").ok();
     if let Some(path) = search_path {

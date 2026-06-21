@@ -9,10 +9,11 @@ pub(crate) async fn post_person_fingerprint(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let messages =
-        crate::domains::communications::messages::MessageProjectionStore::new(pool.clone())
-            .recent_messages(50)
-            .await?;
+    let messages = crate::app::api_support::app_store::<
+        crate::domains::communications::messages::MessageProjectionStore,
+    >(pool.clone())
+    .recent_messages(50)
+    .await?;
     let person_messages = messages
         .into_iter()
         .filter(|message| {

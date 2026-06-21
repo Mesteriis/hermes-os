@@ -2,6 +2,7 @@ pub(crate) mod api_support;
 pub(crate) mod error;
 pub(crate) mod guard;
 pub(crate) mod handlers;
+pub(crate) mod provider_runtime_handlers;
 pub(crate) mod router;
 pub(crate) mod state;
 pub(crate) mod vault_reconciliation;

@@ -41,7 +41,7 @@ pub(crate) async fn get_task_export(
     Query(q): Query<TaskExportQuery>,
 ) -> Result<Json<Value>, ApiError> {
     let pool = database_pool(&state)?;
-    let task = TaskStore::new(pool)
+    let task = crate::app::api_support::app_store::<TaskStore>(pool)
         .get(&task_id)
         .await?
         .ok_or(ApiError::NotFound)?;
