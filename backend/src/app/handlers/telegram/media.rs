@@ -10,8 +10,8 @@ use crate::app::api_support::{
     api_audit_log, communication_provider_account_store, communication_storage_store,
     telegram_store,
 };
-use crate::app::telegram_application::TelegramMediaDownloadApplicationError;
-use crate::app::{ApiError, AppState, telegram_application};
+use crate::app::{ApiError, AppState};
+use crate::application::telegram_runtime::{self, TelegramMediaDownloadApplicationError};
 use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::domains::communications::storage::AttachmentSafetyScanStatus;
 use crate::integrations::telegram::client::lifecycle;
@@ -344,7 +344,7 @@ pub(crate) async fn post_telegram_media_download(
     publish_telegram_event(&state, started).await?;
 
     let telegram_store = telegram_store(&state)?;
-    let response = match telegram_application::download_media(&state, &request).await {
+    let response = match telegram_runtime::download_media(&state, &request).await {
         Ok(response) => response,
         Err(TelegramMediaDownloadApplicationError::Setup(error)) => return Err(error),
         Err(TelegramMediaDownloadApplicationError::Runtime(error)) => {

@@ -63,7 +63,7 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/provider-messages",
+            "/api/v1/integrations/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -256,7 +256,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/provider-messages",
+            "/api/v1/integrations/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -286,7 +286,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/communications/provider-conversations?account_id={account_id}"),
+            &format!("/api/v1/integrations/telegram/conversations?account_id={account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await

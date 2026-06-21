@@ -3,8 +3,8 @@ use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::app::workflow_services::consistency_review::ContradictionReviewService;
 use crate::app::{ApiError, AppState};
+use crate::application::consistency_review::ContradictionReviewService;
 use crate::engines::consistency::{
     ContradictionObservation, ContradictionObservationStore, ContradictionReviewState,
 };

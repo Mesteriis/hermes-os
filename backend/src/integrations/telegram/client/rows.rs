@@ -44,7 +44,7 @@ pub(super) fn row_to_telegram_message(row: PgRow) -> Result<TelegramMessage, Tel
     })
 }
 
-pub(super) fn provider_channel_message_to_telegram_message(
+pub(in crate::integrations::telegram) fn provider_channel_message_to_telegram_message(
     message: ProviderChannelMessage,
 ) -> TelegramMessage {
     TelegramMessage {

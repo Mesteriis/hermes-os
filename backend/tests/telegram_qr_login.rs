@@ -126,7 +126,7 @@ async fn telegram_live_smoke_syncs_configured_account_when_explicitly_enabled() 
     let history_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/provider-sync/history",
+            "/api/v1/integrations/telegram/provider-sync/history",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,

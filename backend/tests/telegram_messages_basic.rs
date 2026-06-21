@@ -55,7 +55,7 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/communications/provider-messages",
+        "/api/v1/integrations/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": chat_id,
@@ -75,7 +75,7 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
     let send_response = app
         .clone()
         .oneshot(json_post_request_with_explicit_actor_header(
-            "/api/v1/communications/provider-messages/send",
+            "/api/v1/integrations/telegram/messages/send",
             json!({
                 "command_id": command_id,
                 "account_id": account_id,
@@ -111,7 +111,7 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/communications/provider-messages?account_id={account_id}&provider_chat_id={chat_id}"
+                "/api/v1/integrations/telegram/messages?account_id={account_id}&provider_chat_id={chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -245,7 +245,7 @@ async fn telegram_raw_message_endpoint_returns_sanitized_source_evidence() {
 
     let raw_response = app
         .oneshot(get_request_with_token(
-            &format!("/api/v1/communications/provider-messages/{message_id}/raw"),
+            &format!("/api/v1/integrations/telegram/messages/{message_id}/raw"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -316,7 +316,7 @@ async fn telegram_fixture_sync_chats_returns_account_chat_metadata() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/communications/provider-messages",
+        "/api/v1/integrations/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": chat_id,
@@ -336,7 +336,7 @@ async fn telegram_fixture_sync_chats_returns_account_chat_metadata() {
     let sync_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/provider-sync/chats",
+            "/api/v1/integrations/telegram/provider-sync/chats",
             json!({
                 "account_id": account_id,
                 "limit": 25
@@ -391,7 +391,7 @@ async fn telegram_fixture_sync_selected_history_returns_projected_messages() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/communications/provider-messages",
+        "/api/v1/integrations/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": selected_chat_id,
@@ -409,7 +409,7 @@ async fn telegram_fixture_sync_selected_history_returns_projected_messages() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/communications/provider-messages",
+        "/api/v1/integrations/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": other_chat_id,
@@ -429,7 +429,7 @@ async fn telegram_fixture_sync_selected_history_returns_projected_messages() {
     let sync_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/provider-sync/history",
+            "/api/v1/integrations/telegram/provider-sync/history",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": selected_chat_id,

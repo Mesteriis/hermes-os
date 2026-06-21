@@ -54,7 +54,7 @@ async fn mark_read_reconciliation_completes_targeted_read_commands_from_chat_rea
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/communications/provider-messages",
+        "/api/v1/integrations/telegram/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -75,7 +75,7 @@ async fn mark_read_reconciliation_completes_targeted_read_commands_from_chat_rea
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/communications/provider-conversations?account_id={account_id}&limit=10"
+                "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
             ),
             LOCAL_API_TOKEN,
         ))

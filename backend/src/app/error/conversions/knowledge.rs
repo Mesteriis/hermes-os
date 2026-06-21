@@ -1,4 +1,6 @@
 use super::super::types::ApiError;
+use crate::application::consistency_review::ContradictionReviewServiceError;
+use crate::application::review_promotion::ReviewPromotionError;
 use crate::domains::decisions::{DecisionCommandServiceError, DecisionStoreError};
 use crate::domains::obligations::{ObligationCommandServiceError, ObligationStoreError};
 use crate::domains::projects::core::ProjectStoreError;
@@ -9,8 +11,6 @@ use crate::domains::relationships::{RelationshipCommandServiceError, Relationshi
 use crate::domains::review::{ReviewInboxError, ReviewInboxServiceError};
 use crate::domains::tasks::candidates::{TaskCandidateError, TaskCandidateReviewServiceError};
 use crate::engines::consistency::ConsistencyError;
-use crate::workflows::consistency_review::ContradictionReviewServiceError;
-use crate::workflows::review_promotion::ReviewPromotionError;
 
 impl From<crate::domains::graph::core::GraphStoreError> for ApiError {
     fn from(error: crate::domains::graph::core::GraphStoreError) -> Self {

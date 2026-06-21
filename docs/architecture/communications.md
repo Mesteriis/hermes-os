@@ -158,7 +158,7 @@ Public channel-scoped API routes use:
 ```text
 /api/v1/integrations/mail/*
 /api/v1/integrations/telegram/*
-/api/v1/communications/provider-web/*
+/api/v1/integrations/whatsapp/*
 ```
 
 Removed public route families:

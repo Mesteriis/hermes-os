@@ -39,7 +39,7 @@ describe('telegram lifecycle reference API', () => {
     await fetchTelegramReplyChain('msg-1')
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-messages/msg-1/reply-chain')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/messages/msg-1/reply-chain')
   })
 
   it('fetches projected forward chains by message id', async () => {
@@ -54,7 +54,7 @@ describe('telegram lifecycle reference API', () => {
     await fetchTelegramForwardChain('msg-1')
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-messages/msg-1/forward-chain')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/messages/msg-1/forward-chain')
   })
 
   it('sends forward commands with a generated command id', async () => {
@@ -75,7 +75,7 @@ describe('telegram lifecycle reference API', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-messages/msg-forward-1/forward')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/messages/msg-forward-1/forward')
     const [, init] = fetchMock.mock.calls[0]
     const body = JSON.parse(String(init?.body))
     expect(body.command_id).toMatch(/^cmd_/)
@@ -104,8 +104,8 @@ describe('telegram lifecycle reference API', () => {
     await fetchTelegramMessageVersions('msg-1')
     await fetchTelegramMessageTombstones('msg-1')
 
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-messages/msg-1/versions')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/communications/provider-messages/msg-1/tombstones')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/messages/msg-1/versions')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/integrations/telegram/messages/msg-1/tombstones')
   })
 
   it('fetches account command rows and message reactions', async () => {
@@ -136,7 +136,7 @@ describe('telegram lifecycle reference API', () => {
     expect(fetchMock.mock.calls[0][0]).toContain('provider_chat_id=chat-42')
     expect(fetchMock.mock.calls[0][0]).toContain('provider_message_id=chat-42%3A77')
     expect(fetchMock.mock.calls[0][0]).toContain('command_kinds=mark_read%2Cmark_unread')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/communications/provider-messages/msg-1/reactions')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/integrations/telegram/messages/msg-1/reactions')
   })
 
   it('sends manual retry through the provider command outbox endpoint', async () => {
@@ -217,7 +217,7 @@ describe('telegram lifecycle reference API', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-messages/msg-read-1/mark-read')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/messages/msg-read-1/mark-read')
     const [, init] = fetchMock.mock.calls[0]
     expect(init?.method).toBe('POST')
     expect(JSON.parse(String(init?.body))).toEqual({

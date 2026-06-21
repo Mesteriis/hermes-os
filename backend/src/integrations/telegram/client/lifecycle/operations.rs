@@ -6,6 +6,7 @@ use super::message_versions::{
     insert_message_version, latest_message_version, latest_version_number, local_edit_diff,
 };
 use super::tombstones::insert_tombstone;
+use crate::application::provider_message_state::observe_telegram_message_pin_state;
 use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::errors::TelegramError;
@@ -214,9 +215,9 @@ pub async fn record_pin_state(
 ) -> Result<TelegramLifecycleResponse, TelegramError> {
     let pool = store.pool();
     let now = Utc::now();
-    let updated = store
-        .apply_message_pinned_state(message_id, request.is_pinned, now)
-        .await?;
+    let updated =
+        observe_telegram_message_pin_state(pool.clone(), message_id, request.is_pinned, now)
+            .await?;
 
     if updated.is_none() {
         return Err(TelegramError::InvalidRequest(format!(

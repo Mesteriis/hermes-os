@@ -2,8 +2,8 @@ use chrono::Utc;
 
 use super::super::errors::TelegramError;
 use super::super::models::TelegramAttachmentAnchor;
-use super::super::rows::provider_channel_message_to_telegram_message;
 use super::super::store::TelegramStore;
+use crate::application::provider_message_state::observe_telegram_attachment_download;
 use crate::platform::communications::{
     ProviderAttachmentDownloadStateUpdate, ProviderMessageProjectionObservationContext,
 };
@@ -56,9 +56,9 @@ impl TelegramStore {
         &self,
         update: TelegramAttachmentDownloadStateUpdate<'_>,
     ) -> Result<(), TelegramError> {
-        let updated = self
-            .provider_channel_message_store()
-            .update_attachment_download_state(ProviderAttachmentDownloadStateUpdate {
+        let updated = observe_telegram_attachment_download(
+            self.pool().clone(),
+            ProviderAttachmentDownloadStateUpdate {
                 message_id: update.message_id,
                 provider_attachment_id: update.provider_attachment_id,
                 provider_file_id: update.tdlib_file_id,
@@ -73,15 +73,15 @@ impl TelegramStore {
                     relationship_kind: "telegram_attachment_download_state_update",
                     actor: "telegram.client.messages.attachments.update_message_attachment_download_state",
                 },
-            })
-            .await?;
+            },
+        )
+        .await?;
         if updated.is_none() {
             return Err(TelegramError::InvalidRequest(format!(
                 "Telegram message `{}` was not found",
                 update.message_id
             )));
         }
-        let _ = updated.map(provider_channel_message_to_telegram_message);
         Ok(())
     }
 }

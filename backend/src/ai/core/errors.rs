@@ -1,9 +1,9 @@
 use thiserror::Error;
 
+use crate::application::review_inbox::ReviewInboxWorkflowError;
 use crate::integrations::ai_runtime::AiRuntimeError;
 use crate::platform::events::EventStoreError;
 use crate::platform::observations::ObservationStoreError;
-use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
 use super::service::AiPersonaAttributionError;
 

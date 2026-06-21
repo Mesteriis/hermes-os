@@ -95,7 +95,7 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/provider-web-messages",
+            "/api/v1/integrations/whatsapp/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -363,7 +363,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/provider-web-messages",
+            "/api/v1/integrations/whatsapp/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -442,7 +442,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/communications/provider-web-messages?account_id={account_id}&provider_chat_id={chat_id}"
+                "/api/v1/integrations/whatsapp/messages?account_id={account_id}&provider_chat_id={chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))

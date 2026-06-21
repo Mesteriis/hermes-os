@@ -12,7 +12,7 @@ use super::super::runs::{AiRunStore, NewAiRun};
 use super::super::types::{AiTaskCandidateRefreshRequest, AiTaskCandidateRefreshResponse};
 use super::core::AiService;
 use super::events::AiRunEvent;
-use crate::workflows::review_inbox::sync_ai_run_task_candidates_to_review;
+use crate::application::review_inbox::sync_ai_run_task_candidates_to_review;
 
 impl AiService {
     pub async fn refresh_task_candidates(

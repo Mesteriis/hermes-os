@@ -25,7 +25,7 @@ Communications business routes as an intermediate migration shape:
 ```text
 /api/v1/integrations/mail/*
 /api/v1/integrations/telegram/*
-/api/v1/communications/provider-web/*
+/api/v1/integrations/whatsapp/*
 ```
 
 That intermediate shape leaves provider identity in the product API and makes it
@@ -62,7 +62,7 @@ compatibility aliases:
 ```text
 /api/v1/integrations/mail/*
 /api/v1/integrations/telegram/*
-/api/v1/communications/provider-web/*
+/api/v1/integrations/whatsapp/*
 ```
 
 Boundary rules are strict:

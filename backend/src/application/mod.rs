@@ -1,0 +1,23 @@
+pub(crate) mod communication_send;
+pub(crate) mod consistency_review;
+pub(crate) mod email_intelligence;
+pub(crate) mod mail_background_sync;
+pub(crate) mod provider_communication_projection;
+pub(crate) mod provider_message_state;
+pub(crate) mod review_inbox;
+pub(crate) mod review_promotion;
+pub(crate) mod task_creation;
+pub(crate) mod telegram_runtime;
+pub(crate) mod workflow_action_person_projection;
+
+pub(crate) use communication_send::*;
+pub(crate) use consistency_review::*;
+pub(crate) use email_intelligence::*;
+pub(crate) use mail_background_sync::*;
+pub(crate) use provider_communication_projection::*;
+pub(crate) use provider_message_state::*;
+pub(crate) use review_inbox::*;
+pub(crate) use review_promotion::*;
+pub(crate) use task_creation::*;
+pub(crate) use telegram_runtime::*;
+pub(crate) use workflow_action_person_projection::*;

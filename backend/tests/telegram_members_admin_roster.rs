@@ -43,7 +43,7 @@ async fn members_route_returns_admin_only_provider_roster_rows() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/communications/provider-messages",
+        "/api/v1/integrations/telegram/messages",
         json!({
             "account_id": "acct-1",
             "provider_chat_id": "provider-chat-1",
@@ -63,7 +63,7 @@ async fn members_route_returns_admin_only_provider_roster_rows() {
     let response = app
         .clone()
         .oneshot(get(
-            "/api/v1/communications/provider-conversations?account_id=acct-1&limit=10",
+            "/api/v1/integrations/telegram/conversations?account_id=acct-1&limit=10",
         ))
         .await
         .expect("chat list response");
@@ -93,7 +93,7 @@ async fn members_route_returns_admin_only_provider_roster_rows() {
     let members = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/communications/provider-conversations/{telegram_chat_id}/members?limit=10"
+            "/api/v1/integrations/telegram/conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("members response");

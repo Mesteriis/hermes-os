@@ -10,11 +10,12 @@ use super::helpers::{
 use crate::app::api_support::{
     TelegramListQuery, TelegramMessageListResponse, api_audit_log, telegram_store,
 };
-use crate::app::workflow_services::provider_communication_projection::record_and_project_telegram_message;
-use crate::app::workflow_services::review_inbox::{
+use crate::app::{ApiError, AppState};
+use crate::application::provider_communication_projection::record_and_project_telegram_message;
+use crate::application::review_inbox::{
     refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
 };
-use crate::app::{ApiError, AppState, telegram_application};
+use crate::application::telegram_runtime;
 use crate::integrations::telegram::client::NewTelegramMessage;
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::client::lifecycle;
@@ -160,7 +161,7 @@ pub(crate) async fn post_telegram_manual_send(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.send_text")
         .await?;
-    let mut response = telegram_application::send_manual_message(&state, &request).await?;
+    let mut response = telegram_runtime::send_manual_message(&state, &request).await?;
     project_manual_send_response(&state, &mut response).await?;
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_message_send(
@@ -216,7 +217,7 @@ pub(crate) async fn post_telegram_message_reply(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.reply")
         .await?;
-    let mut response = telegram_application::send_reply_message(&state, &request).await?;
+    let mut response = telegram_runtime::send_reply_message(&state, &request).await?;
     project_manual_send_response(&state, &mut response).await?;
 
     api_audit_log(&state)?
@@ -274,7 +275,7 @@ pub(crate) async fn post_telegram_message_forward(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.forward")
         .await?;
-    let mut response = telegram_application::send_forward_message(&state, &request).await?;
+    let mut response = telegram_runtime::send_forward_message(&state, &request).await?;
     project_manual_send_response(&state, &mut response).await?;
 
     api_audit_log(&state)?
@@ -632,7 +633,7 @@ use crate::integrations::telegram::client::models::messages::{
     TelegramForwardChainResponse, TelegramReplyChainResponse,
 };
 
-/// GET /api/v1/communications/provider-messages/{message_id}/reply-chain
+/// GET /api/v1/integrations/telegram/messages/{message_id}/reply-chain
 pub(crate) async fn get_telegram_reply_chain(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
@@ -642,7 +643,7 @@ pub(crate) async fn get_telegram_reply_chain(
     Ok(Json(chain))
 }
 
-/// GET /api/v1/communications/provider-messages/{message_id}/forward-chain
+/// GET /api/v1/integrations/telegram/messages/{message_id}/forward-chain
 pub(crate) async fn get_telegram_forward_chain(
     State(state): State<AppState>,
     Path(message_id): Path<String>,

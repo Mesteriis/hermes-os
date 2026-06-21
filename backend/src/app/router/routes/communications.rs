@@ -67,7 +67,7 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_v1_delivery_notification),
         )
         .route(
-            "/api/v1/communications/provider-delivery-events",
+            "/api/v1/integrations/mail/provider-delivery-events",
             post(post_v1_provider_delivery_event),
         )
         .route(

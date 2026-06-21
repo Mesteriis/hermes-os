@@ -79,11 +79,11 @@ fn spawn_mail_background_sync_scheduler(state: &AppState) {
     let vault = state.vault.clone();
 
     tokio::spawn(async move {
-        let store = crate::workflows::mail_background_sync::MailSyncStore::new(pool.clone());
-        let service = crate::workflows::mail_background_sync::MailBackgroundSyncService::new(
+        let store = crate::application::mail_background_sync::MailSyncStore::new(pool.clone());
+        let service = crate::application::mail_background_sync::MailBackgroundSyncService::new(
             pool.clone(),
             vault.clone(),
-            crate::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
+            crate::application::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT,
             std::sync::Arc::new(
                 crate::integrations::mail::sync_provider::LiveEmailProviderSyncPort::new(
                     pool.clone(),
@@ -91,7 +91,7 @@ fn spawn_mail_background_sync_scheduler(state: &AppState) {
                     std::sync::Arc::new(
                         crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(pool),
                     ),
-                    crate::workflows::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                    crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
                 ),
             ),
         );

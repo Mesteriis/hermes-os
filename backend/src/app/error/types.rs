@@ -2,6 +2,7 @@ use std::io;
 
 use crate::ai::control_center::AiControlCenterError;
 use crate::ai::core::AiError;
+use crate::application::review_promotion::ReviewPromotionError;
 use crate::domains::calendar::events::CalendarError;
 use crate::domains::communications::core::CommunicationIngestionError;
 use crate::domains::communications::messages::MessageProjectionError;
@@ -28,7 +29,6 @@ use crate::platform::events::{EventEnvelopeError, EventStoreError};
 use crate::platform::settings::SettingsError;
 use crate::platform::storage::StorageError;
 use crate::vault::HostVaultError;
-use crate::workflows::review_promotion::ReviewPromotionError;
 
 pub enum ApiError {
     DatabaseNotConfigured,

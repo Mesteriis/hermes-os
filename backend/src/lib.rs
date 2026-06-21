@@ -1,6 +1,7 @@
 #![allow(dead_code, unused_imports, unused_variables)]
 pub mod ai;
 pub mod app;
+pub mod application;
 pub mod domains;
 pub mod engines;
 pub mod integrations;

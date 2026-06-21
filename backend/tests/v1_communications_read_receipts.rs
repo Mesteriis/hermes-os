@@ -266,7 +266,7 @@ async fn v1_provider_delivery_event_records_delivery_status_against_postgres() {
     let r = router(&context.connection_string()).await;
     let response = r
         .oneshot(post(
-            "/api/v1/communications/provider-delivery-events",
+            "/api/v1/integrations/mail/provider-delivery-events",
             json!({
                 "account_id": account_id,
                 "provider_message_id": provider_message_id,
@@ -349,7 +349,7 @@ async fn v1_provider_delivery_event_records_read_receipt_against_postgres() {
     let r = router(&context.connection_string()).await;
     let response = r
         .oneshot(post(
-            "/api/v1/communications/provider-delivery-events",
+            "/api/v1/integrations/mail/provider-delivery-events",
             json!({
                 "account_id": account_id,
                 "provider_message_id": provider_message_id,

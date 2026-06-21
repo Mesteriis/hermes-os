@@ -4,7 +4,8 @@ use serde::Deserialize;
 
 use super::helpers::AUDIT_ACTOR_ID;
 use crate::app::api_support::api_audit_log;
-use crate::app::{ApiError, AppState, telegram_application};
+use crate::app::{ApiError, AppState};
+use crate::application::telegram_runtime;
 use crate::integrations::telegram::runtime::{
     TelegramRuntimeRestartRequest, TelegramRuntimeStartRequest, TelegramRuntimeStatus,
     TelegramRuntimeStopRequest,
@@ -21,7 +22,7 @@ pub(crate) async fn get_telegram_runtime_status(
     Query(query): Query<TelegramRuntimeStatusQuery>,
 ) -> Result<Json<TelegramRuntimeStatus>, ApiError> {
     Ok(Json(
-        telegram_application::runtime_status(&state, &query.account_id).await?,
+        telegram_runtime::runtime_status(&state, &query.account_id).await?,
     ))
 }
 
@@ -30,7 +31,7 @@ pub(crate) async fn post_telegram_runtime_start(
     Json(request): Json<TelegramRuntimeStartRequest>,
 ) -> Result<Json<TelegramRuntimeStatus>, ApiError> {
     Ok(Json(
-        telegram_application::start_runtime(&state, &request).await?,
+        telegram_runtime::start_runtime(&state, &request).await?,
     ))
 }
 
@@ -38,7 +39,7 @@ pub(crate) async fn post_telegram_runtime_stop(
     State(state): State<AppState>,
     Json(request): Json<TelegramRuntimeStopRequest>,
 ) -> Result<Json<TelegramRuntimeStatus>, ApiError> {
-    let status = telegram_application::stop_runtime(&state, &request).await?;
+    let status = telegram_runtime::stop_runtime(&state, &request).await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_runtime_stop(
@@ -57,7 +58,7 @@ pub(crate) async fn post_telegram_runtime_restart(
     State(state): State<AppState>,
     Json(request): Json<TelegramRuntimeRestartRequest>,
 ) -> Result<Json<TelegramRuntimeStatus>, ApiError> {
-    let status = telegram_application::restart_runtime(&state, &request).await?;
+    let status = telegram_runtime::restart_runtime(&state, &request).await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_runtime_restart(

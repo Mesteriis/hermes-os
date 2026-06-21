@@ -275,7 +275,7 @@ Implemented route groups include:
 - `/api/v1/settings/*`;
 - `/api/v1/ai/*`;
 - `/api/v1/integrations/telegram/*`;
-- `/api/v1/communications/provider-web/*`;
+- `/api/v1/integrations/whatsapp/*`;
 - `/api/v1/policies/*`;
 - `/api/v1/calls/*`;
 - `/api/v1/integrations/mail/accounts/*`;

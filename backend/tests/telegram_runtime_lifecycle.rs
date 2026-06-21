@@ -324,7 +324,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/provider-messages",
+            "/api/v1/integrations/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,

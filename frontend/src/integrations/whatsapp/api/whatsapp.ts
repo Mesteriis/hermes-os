@@ -48,7 +48,7 @@ export async function fetchWhatsappWebMessages(
     params.set('provider_chat_id', providerChatId.trim())
   }
   return ApiClient.instance.get<WhatsappWebMessageListResponse>(
-    `/api/v1/communications/provider-web-messages?${params.toString()}`,
+    `/api/v1/integrations/whatsapp/messages?${params.toString()}`,
     'WhatsApp Web messages request failed'
   )
 }
@@ -69,7 +69,7 @@ export async function ingestWhatsappWebFixtureMessage(
   request: WhatsappWebFixtureMessageRequest
 ): Promise<WhatsappWebMessageIngestResponse> {
   return ApiClient.instance.post<WhatsappWebMessageIngestResponse>(
-    '/api/v1/communications/provider-web-messages',
+    '/api/v1/integrations/whatsapp/messages',
     request,
     'WhatsApp Web fixture message request failed'
   )

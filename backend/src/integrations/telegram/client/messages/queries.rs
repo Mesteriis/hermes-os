@@ -7,6 +7,18 @@ use super::super::validation::validate_message_list_limit;
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
 impl TelegramStore {
+    pub(in crate::integrations::telegram) async fn message_by_provider_message_id(
+        &self,
+        account_id: &str,
+        provider_message_id: &str,
+    ) -> Result<Option<TelegramMessage>, TelegramError> {
+        Ok(self
+            .provider_channel_message_store()
+            .message_by_provider_record_id(account_id, provider_message_id, TELEGRAM_CHANNEL_KINDS)
+            .await?
+            .map(provider_channel_message_to_telegram_message))
+    }
+
     pub async fn message_by_id(
         &self,
         message_id: &str,

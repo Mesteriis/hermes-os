@@ -64,7 +64,7 @@ Rules:
 ```text
 /api/v1/integrations/mail/*
 /api/v1/integrations/telegram/*
-/api/v1/communications/provider-web/*
+/api/v1/integrations/whatsapp/*
 ```
 
 - Public legacy route families are removed:

@@ -101,9 +101,9 @@ describe('telegram dialog action API', () => {
     await syncTelegramChatMembers('tgchat-1')
 
     expect(fetchMock).toHaveBeenCalledTimes(3)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/members?limit=25&query=owner&role=admin&cursor=50')
-    expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/members/sync')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/members?limit=25&query=owner&role=admin&cursor=50')
+    expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/members/sync')
     expect(fetchMock.mock.calls[0][1].method).toBe('GET')
     expect(fetchMock.mock.calls[1][1].method).toBe('GET')
     expect(fetchMock.mock.calls[2][1].method).toBe('POST')
@@ -121,7 +121,7 @@ describe('telegram dialog action API', () => {
     await fetchTelegramFolders('acc-1')
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-conversation-folders?account_id=acc-1')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/conversation-folders?account_id=acc-1')
     expect(fetchMock.mock.calls[0][1].method).toBe('GET')
   })
 
@@ -237,8 +237,8 @@ describe('telegram dialog action API', () => {
     await unpinTelegramChat('tgchat-1', { account_id: 'acc-1', provider_chat_id: 'provider-chat-1' })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/pin')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/unpin')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/pin')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/unpin')
   })
 
   it('posts archive/mute dialog lifecycle requests', async () => {
@@ -258,10 +258,10 @@ describe('telegram dialog action API', () => {
     await unmuteTelegramChat('tgchat-1', { account_id: 'acc-1', provider_chat_id: 'provider-chat-1' })
 
     expect(fetchMock).toHaveBeenCalledTimes(4)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/archive')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/unarchive')
-    expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/mute')
-    expect(fetchMock.mock.calls[3][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/unmute')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/archive')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/unarchive')
+    expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/mute')
+    expect(fetchMock.mock.calls[3][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/unmute')
     for (const [, init] of fetchMock.mock.calls) {
       expect(init.method).toBe('POST')
       expect(JSON.parse(init.body as string)).toEqual({
@@ -294,7 +294,7 @@ describe('telegram dialog action API', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/folders/7')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/folders/7')
     expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
       account_id: 'acc-1',
@@ -325,7 +325,7 @@ describe('telegram dialog action API', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/folders/7/remove')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/folders/7/remove')
     expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
       account_id: 'acc-1',
@@ -359,7 +359,7 @@ describe('telegram dialog action API', () => {
     })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/folders/reassign')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/folders/reassign')
     expect(fetchMock.mock.calls[0][1]?.method).toBe('POST')
     expect(JSON.parse(fetchMock.mock.calls[0][1]?.body as string)).toEqual({
       account_id: 'acc-1',
@@ -401,8 +401,8 @@ describe('telegram dialog action API', () => {
     await leaveTelegramChat('tgchat-1', { account_id: 'acc-1', provider_chat_id: 'provider-chat-1' })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-conversations/join')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/leave')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/conversations/join')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/leave')
     for (const [, init] of fetchMock.mock.calls) {
       expect(init.method).toBe('POST')
       expect(JSON.parse(init.body as string)).toEqual({
@@ -431,8 +431,8 @@ describe('telegram dialog action API', () => {
     await markTelegramChatUnread('tgchat-1', { account_id: 'acc-1', provider_chat_id: 'provider-chat-1' })
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/read')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/communications/provider-conversations/tgchat-1/unread')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/read')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/integrations/telegram/conversations/tgchat-1/unread')
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({
       account_id: 'acc-1',

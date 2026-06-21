@@ -1,7 +1,7 @@
 use sqlx::{Postgres, Transaction};
 
 use crate::app::ApiError;
-use crate::app::workflow_services::workflow_action_person_projection::create_person_projection_in_transaction;
+use crate::application::workflow_action_person_projection::create_person_projection_in_transaction;
 use crate::domains::communications::messages::ProjectedMessage;
 
 use super::super::models::{

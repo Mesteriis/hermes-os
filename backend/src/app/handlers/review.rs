@@ -4,8 +4,8 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::app::workflow_services::review_promotion::ReviewPromotionService;
 use crate::app::{ApiError, AppState};
+use crate::application::review_promotion::ReviewPromotionService;
 use crate::domains::review::{
     NewReviewItem, NewReviewItemEvidence, ReviewInboxService, ReviewInboxStore, ReviewItem,
     ReviewItemKind, ReviewItemStatus, ReviewPromotionTarget,

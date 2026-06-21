@@ -3,7 +3,8 @@ use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 
 use crate::app::api_support::telegram_store;
-use crate::app::{ApiError, AppState, telegram_application};
+use crate::app::{ApiError, AppState};
+use crate::application::telegram_runtime;
 use crate::integrations::telegram::client::models::TelegramChat;
 
 #[derive(Deserialize)]
@@ -82,7 +83,7 @@ pub(crate) struct TelegramMediaSearchResponse {
     pub(crate) items: Vec<TelegramMediaItem>,
 }
 
-/// GET /api/v1/communications/provider-search/messages?q=&account_id=&provider_chat_id=&limit=
+/// GET /api/v1/integrations/telegram/provider-search/messages?q=&account_id=&provider_chat_id=&limit=
 pub(crate) async fn search_telegram_messages(
     State(state): State<AppState>,
     Query(query): Query<TelegramMessageSearchQuery>,
@@ -100,7 +101,7 @@ pub(crate) async fn search_telegram_messages(
     }
 
     if let Some(account_id) = &query.account_id
-        && let Err(error) = telegram_application::refresh_provider_search(
+        && let Err(error) = telegram_runtime::refresh_provider_search(
             &state,
             account_id.clone(),
             query.provider_chat_id.clone(),
@@ -135,7 +136,7 @@ pub(crate) async fn search_telegram_messages(
     }))
 }
 
-/// POST /api/v1/communications/provider-search/provider
+/// POST /api/v1/integrations/telegram/provider-search/provider
 pub(crate) async fn search_telegram_messages_provider(
     State(state): State<AppState>,
     Json(payload): Json<TelegramProviderSearchCommand>,
@@ -161,7 +162,7 @@ pub(crate) async fn search_telegram_messages_provider(
         ));
     }
 
-    if let Err(error) = telegram_application::refresh_provider_search(
+    if let Err(error) = telegram_runtime::refresh_provider_search(
         &state,
         account_id.to_owned(),
         payload.provider_chat_id.clone(),
@@ -196,7 +197,7 @@ pub(crate) async fn search_telegram_messages_provider(
     }))
 }
 
-/// GET /api/v1/communications/provider-conversations/search?q=&account_id=&limit=
+/// GET /api/v1/integrations/telegram/provider-conversations/search?q=&account_id=&limit=
 pub(crate) async fn search_telegram_chats(
     State(state): State<AppState>,
     Query(query): Query<TelegramChatSearchQuery>,
@@ -224,7 +225,7 @@ pub(crate) async fn search_telegram_chats(
     }))
 }
 
-/// GET /api/v1/communications/provider-conversations/{telegram_chat_id}/pinned-messages?limit=
+/// GET /api/v1/integrations/telegram/conversations/{telegram_chat_id}/pinned-messages?limit=
 pub(crate) async fn get_telegram_pinned_messages(
     State(state): State<AppState>,
     Path(telegram_chat_id): Path<String>,
@@ -240,7 +241,7 @@ pub(crate) async fn get_telegram_pinned_messages(
     }))
 }
 
-/// GET /api/v1/communications/provider-search/media?account_id=&provider_chat_id=&kind=&limit=
+/// GET /api/v1/integrations/telegram/provider-search/media?account_id=&provider_chat_id=&kind=&limit=
 pub(crate) async fn search_telegram_media(
     State(state): State<AppState>,
     Query(query): Query<TelegramMediaSearchQuery>,
@@ -261,7 +262,7 @@ pub(crate) async fn search_telegram_media(
     if let (Some(account_id), Some(search_q)) = (query.account_id.as_deref(), search_q) {
         provider_search_attempted = true;
         source = "provider_refresh".to_owned();
-        if let Err(error) = telegram_application::refresh_provider_search(
+        if let Err(error) = telegram_runtime::refresh_provider_search(
             &state,
             account_id.to_owned(),
             query.provider_chat_id.clone(),

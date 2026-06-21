@@ -50,7 +50,7 @@ async fn fixture_account_blocks_message_mark_read_before_side_effects() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/provider-messages",
+            "/api/v1/integrations/telegram/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,
@@ -79,7 +79,7 @@ async fn fixture_account_blocks_message_mark_read_before_side_effects() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/communications/provider-conversations?account_id={account_id}&limit=10"
+                "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -97,7 +97,7 @@ async fn fixture_account_blocks_message_mark_read_before_side_effects() {
     let response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/communications/provider-messages/{message_id}/mark-read"),
+            &format!("/api/v1/integrations/telegram/messages/{message_id}/mark-read"),
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,

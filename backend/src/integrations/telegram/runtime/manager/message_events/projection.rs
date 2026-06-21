@@ -1,6 +1,10 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
+use crate::application::provider_message_state::{
+    observe_telegram_message_content, observe_telegram_message_metadata,
+};
+use crate::integrations::telegram::client::rows::provider_channel_message_to_telegram_message;
 use crate::integrations::telegram::client::{
     TelegramError, TelegramMessage, TelegramStore, derive_tdlib_reaction_summary_metadata,
 };
@@ -26,12 +30,13 @@ pub(super) async fn update_message_reaction_summary(
         metadata_map.remove("reaction_summary");
     }
 
-    store
-        .apply_message_metadata(&message.message_id, &metadata)
+    observe_telegram_message_metadata(store.pool().clone(), &message.message_id, &metadata)
         .await
+        .map(|message| message.map(provider_channel_message_to_telegram_message))
+        .map_err(Into::into)
 }
 
-pub(super) async fn apply_provider_message_content_update(
+pub(super) async fn project_provider_message_content_observation(
     store: &TelegramStore,
     message: &TelegramMessage,
     snapshot: &TelegramTdlibMessageContentSnapshot,
@@ -50,17 +55,19 @@ pub(super) async fn apply_provider_message_content_update(
         Value::String(snapshot.source_event.clone()),
     );
 
-    store
-        .apply_message_projection_update(
-            &message.message_id,
-            &snapshot.text,
-            &metadata,
-            observed_at,
-        )
-        .await
+    observe_telegram_message_content(
+        store.pool().clone(),
+        &message.message_id,
+        &snapshot.text,
+        &metadata,
+        observed_at,
+    )
+    .await
+    .map(|message| message.map(provider_channel_message_to_telegram_message))
+    .map_err(Into::into)
 }
 
-pub(super) async fn apply_provider_message_edit_metadata(
+pub(super) async fn project_provider_message_edit_observation(
     store: &TelegramStore,
     message: &TelegramMessage,
     snapshot: &TelegramTdlibMessageEditedSnapshot,
@@ -83,9 +90,10 @@ pub(super) async fn apply_provider_message_edit_metadata(
         metadata_map.insert("tdlib_reply_markup".to_owned(), reply_markup.clone());
     }
 
-    store
-        .apply_message_metadata(&message.message_id, &metadata)
+    observe_telegram_message_metadata(store.pool().clone(), &message.message_id, &metadata)
         .await
+        .map(|message| message.map(provider_channel_message_to_telegram_message))
+        .map_err(Into::into)
 }
 
 pub(super) fn observed_edit_timestamp(

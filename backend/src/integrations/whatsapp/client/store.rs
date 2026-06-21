@@ -10,21 +10,21 @@ use std::sync::Arc;
 use sqlx::postgres::PgPool;
 
 use crate::platform::communications::{
-    ProviderAccountCommandPort, ProviderChannelMessageCommandPort,
+    ProviderAccountCommandPort, ProviderChannelMessageLookupPort,
 };
 
 #[derive(Clone)]
 pub struct WhatsappWebStore {
     pub(in crate::integrations::whatsapp::client::store) pool: PgPool,
     provider_account_store: Arc<dyn ProviderAccountCommandPort>,
-    provider_channel_message_store: Arc<dyn ProviderChannelMessageCommandPort>,
+    provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
 }
 
 impl WhatsappWebStore {
     pub fn new(
         pool: PgPool,
         provider_account_store: Arc<dyn ProviderAccountCommandPort>,
-        provider_channel_message_store: Arc<dyn ProviderChannelMessageCommandPort>,
+        provider_channel_message_store: Arc<dyn ProviderChannelMessageLookupPort>,
     ) -> Self {
         Self {
             pool,
@@ -41,7 +41,7 @@ impl WhatsappWebStore {
 
     pub(in crate::integrations::whatsapp::client) fn provider_channel_message_store(
         &self,
-    ) -> &dyn ProviderChannelMessageCommandPort {
+    ) -> &dyn ProviderChannelMessageLookupPort {
         self.provider_channel_message_store.as_ref()
     }
 }

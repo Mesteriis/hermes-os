@@ -238,7 +238,7 @@ pub(super) fn mail_sync_service(
                 std::sync::Arc::new(
                     crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(pool.clone()),
                 ),
-                crate::app::workflow_services::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
+                crate::application::mail_background_sync::DEFAULT_GMAIL_API_BASE_URL,
             ),
         ),
     ))

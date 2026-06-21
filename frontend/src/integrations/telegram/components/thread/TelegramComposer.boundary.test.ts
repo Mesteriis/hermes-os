@@ -36,6 +36,6 @@ describe('TelegramComposer dry-run boundary', () => {
     expect(source).toContain("emit('uploadMedia', file)")
     expect(source).not.toContain('fetch(')
     expect(source).not.toContain('ApiClient')
-    expect(source).not.toContain('/api/v1/communications/provider-media/upload')
+    expect(source).not.toContain('/api/v1/integrations/telegram/media/upload')
   })
 })

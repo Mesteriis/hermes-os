@@ -9,7 +9,8 @@ use super::helpers::{
 use crate::app::api_support::{
     TelegramChatListResponse, TelegramListQuery, api_audit_log, telegram_store,
 };
-use crate::app::{ApiError, AppState, telegram_application};
+use crate::app::{ApiError, AppState};
+use crate::application::telegram_runtime;
 use crate::integrations::telegram::client::{
     TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramError,
 };
@@ -162,7 +163,7 @@ pub(crate) async fn post_telegram_chat_members_sync(
     );
     publish_telegram_event(&state, started).await?;
 
-    let items = match telegram_application::sync_chat_members(&state, &telegram_chat_id).await {
+    let items = match telegram_runtime::sync_chat_members(&state, &telegram_chat_id).await {
         Ok(items) => items,
         Err(error) => {
             let failed = build_event(
@@ -237,7 +238,7 @@ pub(crate) async fn post_telegram_sync_chats(
     );
     publish_telegram_event(&state, started).await?;
 
-    let response = match telegram_application::sync_chats(&state, &request).await {
+    let response = match telegram_runtime::sync_chats(&state, &request).await {
         Ok(response) => response,
         Err(error) => {
             let failed = build_event(
@@ -297,7 +298,7 @@ pub(crate) async fn post_telegram_sync_history(
     );
     publish_telegram_event(&state, started).await?;
 
-    let response = match telegram_application::sync_history(&state, &request).await {
+    let response = match telegram_runtime::sync_history(&state, &request).await {
         Ok(response) => response,
         Err(error) => {
             let failed = build_event(

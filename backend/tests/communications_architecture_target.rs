@@ -108,14 +108,14 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
             "provider-specific communication route prefix remains: {forbidden_communication_prefix}"
         );
     }
-    for communication_prefix in [
+    for removed_provider_communication_prefix in [
         "\"/api/v1/communications/provider-conversations",
         "\"/api/v1/communications/provider-messages",
         "\"/api/v1/communications/provider-web-messages",
     ] {
         assert!(
-            router_sources.contains(communication_prefix),
-            "provider projection routes must use provider-neutral communication resources: {communication_prefix}"
+            !router_sources.contains(removed_provider_communication_prefix),
+            "removed provider-shaped communication route still exists: {removed_provider_communication_prefix}"
         );
     }
     assert!(
@@ -123,6 +123,15 @@ fn channel_providers_are_not_product_domains_or_user_routes() {
             && !router_sources.contains("\"/api/v1/communications/mail/accounts"),
         "communications router must keep product routes under /api/v1/communications without resurrecting mail runtime setup paths"
     );
+    for provider_neutral_communication_prefix in [
+        "\"/api/v1/communications/messages",
+        "\"/api/v1/communications/search",
+    ] {
+        assert!(
+            router_sources.contains(provider_neutral_communication_prefix),
+            "communications router must expose provider-neutral communication routes: {provider_neutral_communication_prefix}"
+        );
+    }
 
     let frontend_router = read(root.join("frontend/src/app/router.ts"));
     assert!(

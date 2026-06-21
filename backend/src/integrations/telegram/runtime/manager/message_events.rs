@@ -1,11 +1,13 @@
 use chrono::Utc;
 use serde_json::json;
 
+use crate::application::provider_message_state::observe_telegram_message_pin_state;
 use crate::integrations::telegram::client::lifecycle::{
     reconcile_delete_commands_from_provider_state, reconcile_edit_commands_from_provider_state,
     reconcile_message_pin_commands_from_provider_state, record_provider_delete_observation,
     record_provider_edit_observation,
 };
+use crate::integrations::telegram::client::rows::provider_channel_message_to_telegram_message;
 use crate::integrations::telegram::client::{
     TelegramReactionMessageRef, TelegramStore, derive_tdlib_chosen_reaction_emojis,
     derive_tdlib_provider_reactions, derive_tdlib_reaction_summary_metadata,
@@ -32,8 +34,8 @@ use envelopes::{
     reaction_changed_event,
 };
 use projection::{
-    apply_provider_message_content_update, apply_provider_message_edit_metadata,
-    observed_edit_timestamp, update_message_reaction_summary,
+    observed_edit_timestamp, project_provider_message_content_observation,
+    project_provider_message_edit_observation, update_message_reaction_summary,
 };
 
 pub(super) async fn publish_message_created_event(
@@ -175,7 +177,7 @@ pub(super) async fn publish_message_content_updated_event(
 
     let previous_text = message.text.clone();
     let observed_at = Utc::now();
-    let updated_message = match apply_provider_message_content_update(
+    let updated_message = match project_provider_message_content_observation(
         store,
         &message,
         snapshot,
@@ -279,7 +281,7 @@ pub(super) async fn publish_message_edited_event(
         return;
     };
 
-    let updated_message = match apply_provider_message_edit_metadata(store, &message, snapshot)
+    let updated_message = match project_provider_message_edit_observation(store, &message, snapshot)
         .await
     {
         Ok(Some(message)) => message,
@@ -334,11 +336,15 @@ pub(super) async fn publish_message_pinned_event(
     };
 
     let observed_at = Utc::now();
-    let updated_message = match store
-        .apply_message_pinned_state(&message.message_id, snapshot.is_pinned, observed_at)
-        .await
+    let updated_message = match observe_telegram_message_pin_state(
+        store.pool().clone(),
+        &message.message_id,
+        snapshot.is_pinned,
+        observed_at,
+    )
+    .await
     {
-        Ok(Some(message)) => message,
+        Ok(Some(message)) => provider_channel_message_to_telegram_message(message),
         Ok(None) => return,
         Err(error) => {
             tracing::warn!(error = %error, message_id = %message.message_id, "Telegram runtime event bridge: failed to project message pin state");

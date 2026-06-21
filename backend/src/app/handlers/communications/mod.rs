@@ -89,10 +89,10 @@ use crate::domains::persons::identity::{
     PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
 };
 
-use crate::app::workflow_services::email_intelligence::{
+use crate::application::email_intelligence::{
     EmailIntelligenceError, EmailIntelligenceService, EmailSummaryContract,
 };
-use crate::app::workflow_services::mail_background_sync::{
+use crate::application::mail_background_sync::{
     DEFAULT_MAIL_SYNC_BLOB_ROOT, MailBackgroundSyncService, MailSyncError, MailSyncRunResponse,
     MailSyncSettings, MailSyncSettingsUpdate, MailSyncStatus, MailSyncStore, MailSyncTrigger,
 };

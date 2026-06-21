@@ -72,7 +72,7 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
 
     let result = assert_ok(
         app.clone(),
-        "/api/v1/communications/provider-messages",
+        "/api/v1/integrations/telegram/messages",
         json!({
             "account_id": account_id.clone(),
             "provider_chat_id": chat_id.clone(),
