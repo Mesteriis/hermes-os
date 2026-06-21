@@ -9,16 +9,16 @@ mod scanner;
 mod store;
 mod validation;
 
-pub use blob_store::{LocalMailBlob, LocalMailBlobStore};
-pub use errors::{AttachmentSafetyScanError, MailStorageError};
+pub use blob_store::{LocalCommunicationBlob, LocalCommunicationBlobStore};
+pub use errors::{AttachmentSafetyScanError, CommunicationStorageError};
 pub use imports::new_communication_attachment_import_id;
 pub use models::{
-    ImportedCommunicationAttachment, MailAttachmentDisposition, NewCommunicationAttachmentImport,
-    NewMailAttachment, NewMailBlob, StoredMailAttachment, StoredMailAttachmentWithBlob,
-    StoredMailBlob,
+    CommunicationAttachmentDisposition, ImportedCommunicationAttachment,
+    NewCommunicationAttachment, NewCommunicationAttachmentImport, NewCommunicationBlob,
+    StoredCommunicationAttachment, StoredCommunicationAttachmentWithBlob, StoredCommunicationBlob,
 };
 pub use scanner::{
     AttachmentSafetyScanReport, AttachmentSafetyScanRequest, AttachmentSafetyScanStatus,
     AttachmentSafetyScanner, HeuristicAttachmentSafetyScanner, NoopAttachmentSafetyScanner,
 };
-pub use store::MailStorageStore;
+pub use store::CommunicationStorageStore;

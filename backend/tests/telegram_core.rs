@@ -45,7 +45,7 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts/fixture",
+            "/api/v1/integrations/telegram/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -172,7 +172,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let capabilities_response = app
         .clone()
         .oneshot(get_request_with_token(
-            "/api/v1/communications/telegram/capabilities",
+            "/api/v1/integrations/telegram/capabilities",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -235,7 +235,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts/fixture",
+            "/api/v1/integrations/telegram/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",

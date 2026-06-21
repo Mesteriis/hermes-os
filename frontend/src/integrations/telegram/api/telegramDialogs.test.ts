@@ -46,7 +46,7 @@ describe('telegram dialog action API', () => {
     await restartTelegramRuntime({ account_id: 'acc-1' })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/telegram/runtime/restart')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/runtime/restart')
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ account_id: 'acc-1' })
   })
@@ -63,7 +63,7 @@ describe('telegram dialog action API', () => {
     await stopTelegramRuntime({ account_id: 'acc-1' })
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/telegram/runtime/stop')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/runtime/stop')
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
     expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ account_id: 'acc-1' })
   })
@@ -137,7 +137,7 @@ describe('telegram dialog action API', () => {
     await fetchTelegramAccountCapabilities('acc-1')
 
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/telegram/accounts/acc-1/capabilities')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/accounts/acc-1/capabilities')
     expect(fetchMock.mock.calls[0][1].method).toBe('GET')
   })
 
@@ -203,9 +203,9 @@ describe('telegram dialog action API', () => {
     await logoutTelegramAccount('acc-1')
     await removeTelegramAccount('acc-1')
 
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/telegram/accounts')
-    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/communications/telegram/accounts/acc-1/logout')
-    expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/communications/telegram/accounts/acc-1')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/accounts')
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/integrations/telegram/accounts/acc-1/logout')
+    expect(fetchMock.mock.calls[2][0]).toContain('/api/v1/integrations/telegram/accounts/acc-1')
     expect(fetchMock.mock.calls[0][1].method).toBe('POST')
     expect(fetchMock.mock.calls[1][1].method).toBe('POST')
     expect(fetchMock.mock.calls[2][1].method).toBe('DELETE')

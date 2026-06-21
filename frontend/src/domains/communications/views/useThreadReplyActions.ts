@@ -7,7 +7,7 @@ import { buildComposeDraftPayload } from '../forms/composeDraftAutosave'
 import {
   composeFormToSendRequest,
   threadReplyComposeForm
-} from '../helpers/mailPageModels'
+} from '../helpers/communicationPageModels'
 import type { ThreadMessage } from '../types/communications'
 import type { useCommunicationsStore } from '../stores/communications'
 

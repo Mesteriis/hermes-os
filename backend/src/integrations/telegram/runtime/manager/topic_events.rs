@@ -232,12 +232,12 @@ mod tests {
     use testkit::context::TestContext;
 
     use super::*;
+    use crate::domains::communications::core::CommunicationProviderAccountStore;
     use crate::integrations::telegram::client::lifecycle::insert_command;
     use crate::integrations::telegram::client::models::{
         NewTelegramChat, TelegramChatKind, TelegramSyncState,
     };
     use crate::platform::communications::{EmailProviderKind, NewProviderAccount};
-    use crate::vault::CommunicationProviderAccountStore;
 
     #[test]
     fn topic_updated_event_contains_sanitized_projection_payload() {

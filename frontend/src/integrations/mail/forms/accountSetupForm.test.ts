@@ -96,7 +96,7 @@ describe('account setup form', () => {
 			account_id: 'mail-gmail-user-gmail-com',
 			display_name: 'user@gmail.com',
 			external_account_id: 'user@gmail.com',
-			redirect_uri: 'http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/callback'
+			redirect_uri: 'http://127.0.0.1:8080/api/v1/integrations/mail/accounts/gmail/oauth/callback'
 		})
 	})
 

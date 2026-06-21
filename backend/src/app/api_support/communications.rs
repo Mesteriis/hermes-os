@@ -151,8 +151,8 @@ pub(crate) struct CommunicationAttachmentResponse {
     pub(crate) updated_at: DateTime<Utc>,
 }
 
-impl From<StoredMailAttachmentWithBlob> for CommunicationAttachmentResponse {
-    fn from(record: StoredMailAttachmentWithBlob) -> Self {
+impl From<StoredCommunicationAttachmentWithBlob> for CommunicationAttachmentResponse {
+    fn from(record: StoredCommunicationAttachmentWithBlob) -> Self {
         let attachment = record.attachment;
         Self {
             attachment_id: attachment.attachment_id,

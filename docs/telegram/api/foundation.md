@@ -21,8 +21,8 @@
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/telegram/capabilities` | Detailed per-operation capability matrix with `operation`, `category`, `status`, `action_class`, `reason`, `confirmation_required`, `closure_gate` |
-| GET | `/api/v1/communications/telegram/accounts/{account_id}/capabilities` | Account-scoped capability matrix with the same operation contract plus selected-account scope metadata and runtime/provider overrides |
+| GET | `/api/v1/integrations/telegram/capabilities` | Detailed per-operation capability matrix with `operation`, `category`, `status`, `action_class`, `reason`, `confirmation_required`, `closure_gate` |
+| GET | `/api/v1/integrations/telegram/accounts/{account_id}/capabilities` | Account-scoped capability matrix with the same operation contract plus selected-account scope metadata and runtime/provider overrides |
 
 ### Целевые capability states
 
@@ -79,11 +79,11 @@ alongside the existing capability-gated controls.
 
 | Method | Path | Описание |
 |---|---|---|
-| POST | `/api/v1/communications/telegram/accounts/fixture` | Создать fixture `telegram_user` или `telegram_bot` account metadata |
-| GET | `/api/v1/communications/telegram/accounts?include_removed=` | Список Telegram provider accounts |
-| POST | `/api/v1/communications/telegram/accounts` | Создать live/live-blocked/QR-authorized Telegram account metadata и secret bindings |
-| DELETE | `/api/v1/communications/telegram/accounts/{account_id}` | Mark account `removed`, stop runtime actor, preserve local evidence |
-| POST | `/api/v1/communications/telegram/accounts/{account_id}/logout` | Mark account `logged_out`, stop runtime actor |
+| POST | `/api/v1/integrations/telegram/accounts/fixture` | Создать fixture `telegram_user` или `telegram_bot` account metadata |
+| GET | `/api/v1/integrations/telegram/accounts?include_removed=` | Список Telegram provider accounts |
+| POST | `/api/v1/integrations/telegram/accounts` | Создать live/live-blocked/QR-authorized Telegram account metadata и secret bindings |
+| DELETE | `/api/v1/integrations/telegram/accounts/{account_id}` | Mark account `removed`, stop runtime actor, preserve local evidence |
+| POST | `/api/v1/integrations/telegram/accounts/{account_id}/logout` | Mark account `logged_out`, stop runtime actor |
 
 Account config хранит non-secret metadata. Credential payloads resolved через
 host-vault/secret references. Telegram workbench `About` inspector tab now
@@ -94,15 +94,15 @@ header `Add Account` action opens that account-management surface.
 
 | Method | Path | Назначение |
 |---|---|---|
-| GET | `/api/v1/communications/telegram/accounts/{account_id}/capabilities` | Account-scoped detailed capability matrix |
+| GET | `/api/v1/integrations/telegram/accounts/{account_id}/capabilities` | Account-scoped detailed capability matrix |
 
 ### Недостающие маршруты
 
 | Method | Path | Назначение |
 |---|---|---|
-| GET | `/api/v1/communications/telegram/accounts/{account_id}/export-session` | Sanitized session bundle export без secrets unless explicitly encrypted |
-| POST | `/api/v1/communications/telegram/accounts/import-session` | Import encrypted session bundle |
-| GET/PUT | `/api/v1/communications/telegram/accounts/{account_id}/proxy` | Proxy / MTProxy / SOCKS5 profile binding |
+| GET | `/api/v1/integrations/telegram/accounts/{account_id}/export-session` | Sanitized session bundle export без secrets unless explicitly encrypted |
+| POST | `/api/v1/integrations/telegram/accounts/import-session` | Import encrypted session bundle |
+| GET/PUT | `/api/v1/integrations/telegram/accounts/{account_id}/proxy` | Proxy / MTProxy / SOCKS5 profile binding |
 
 ## Runtime
 
@@ -110,10 +110,10 @@ header `Add Account` action opens that account-management surface.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/telegram/runtime/status?account_id=` | Account-scoped runtime status, runtime kind, TDLib readiness, split Telegram app-credential flags, TDLib probe error and derived runtime blockers |
-| POST | `/api/v1/communications/telegram/runtime/start` | Start fixture или TDLib QR-authorized runtime actor |
-| POST | `/api/v1/communications/telegram/runtime/stop` | Stop the account-scoped runtime actor idempotently and return the current runtime status with local audit evidence |
-| POST | `/api/v1/communications/telegram/runtime/restart` | Stop then start the account-scoped runtime actor and return the current runtime status with local audit evidence |
+| GET | `/api/v1/integrations/telegram/runtime/status?account_id=` | Account-scoped runtime status, runtime kind, TDLib readiness, split Telegram app-credential flags, TDLib probe error and derived runtime blockers |
+| POST | `/api/v1/integrations/telegram/runtime/start` | Start fixture или TDLib QR-authorized runtime actor |
+| POST | `/api/v1/integrations/telegram/runtime/stop` | Stop the account-scoped runtime actor idempotently and return the current runtime status with local audit evidence |
+| POST | `/api/v1/integrations/telegram/runtime/restart` | Stop then start the account-scoped runtime actor and return the current runtime status with local audit evidence |
 
 Runtime kinds observed:
 
@@ -143,10 +143,10 @@ are ADR-0094 planned initiatives.
 
 | Method | Path | Описание |
 |---|---|---|
-| POST | `/api/v1/communications/telegram/login/qr/start` | Start TDLib QR login setup |
-| GET | `/api/v1/communications/telegram/login/qr/{setup_id}` | Poll QR login status |
-| DELETE | `/api/v1/communications/telegram/login/qr/{setup_id}` | Cancel pending QR login session |
-| POST | `/api/v1/communications/telegram/login/qr/{setup_id}/password` | Submit 2-step verification password |
+| POST | `/api/v1/integrations/telegram/login/qr/start` | Start TDLib QR login setup |
+| GET | `/api/v1/integrations/telegram/login/qr/{setup_id}` | Poll QR login status |
+| DELETE | `/api/v1/integrations/telegram/login/qr/{setup_id}` | Cancel pending QR login session |
+| POST | `/api/v1/integrations/telegram/login/qr/{setup_id}/password` | Submit 2-step verification password |
 
 QR statuses:
 

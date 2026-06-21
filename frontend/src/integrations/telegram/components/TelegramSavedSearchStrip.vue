@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import SavedSearchStrip from '../../../domains/communications/components/SavedSearchStrip.vue'
-import type { MailSavedSearch } from '../../../domains/communications/types/savedSearches'
+import type { CommunicationSavedSearch } from '../../../domains/communications/types/savedSearches'
 import { useTelegramStore } from '../stores/telegram'
 
 const props = defineProps<{
@@ -12,12 +12,12 @@ const props = defineProps<{
 const store = useTelegramStore()
 const activeSavedSearchId = ref('')
 
-function selectSavedSearch(savedSearch: MailSavedSearch) {
+function selectSavedSearch(savedSearch: CommunicationSavedSearch) {
   activeSavedSearchId.value = savedSearch.saved_search_id
   store.telegramSearchQuery = savedSearch.query
 }
 
-function clearDeletedSavedSearch(savedSearch: MailSavedSearch) {
+function clearDeletedSavedSearch(savedSearch: CommunicationSavedSearch) {
   if (activeSavedSearchId.value !== savedSearch.saved_search_id) return
   activeSavedSearchId.value = ''
   store.telegramSearchQuery = ''

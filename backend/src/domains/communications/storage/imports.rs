@@ -1,16 +1,16 @@
-use super::errors::MailStorageError;
+use super::errors::CommunicationStorageError;
 use super::ids::communication_attachment_import_id;
 use super::models::{ImportedCommunicationAttachment, NewCommunicationAttachmentImport};
 use super::rows::{row_to_imported_attachment, row_to_mail_blob};
-use super::store::MailStorageStore;
+use super::store::CommunicationStorageStore;
 use super::validation::validate_non_empty;
 use crate::domains::communications::evidence::link_mail_entity_in_transaction;
 
-impl MailStorageStore {
+impl CommunicationStorageStore {
     pub async fn upsert_imported_attachment(
         &self,
         import: &NewCommunicationAttachmentImport,
-    ) -> Result<ImportedCommunicationAttachment, MailStorageError> {
+    ) -> Result<ImportedCommunicationAttachment, CommunicationStorageError> {
         self.upsert_imported_attachment_with_observation(import, None, "attachment_import", None)
             .await
     }
@@ -21,7 +21,7 @@ impl MailStorageStore {
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<ImportedCommunicationAttachment, MailStorageError> {
+    ) -> Result<ImportedCommunicationAttachment, CommunicationStorageError> {
         let import = import.validate()?;
         let mut transaction = self.pool.begin().await?;
         sqlx::query(imported_attachment_upsert_sql())
@@ -52,7 +52,7 @@ impl MailStorageStore {
         let imported = row
             .map(row_to_imported_attachment)
             .transpose()?
-            .ok_or_else(|| MailStorageError::Sqlx(sqlx::Error::RowNotFound))?;
+            .ok_or_else(|| CommunicationStorageError::Sqlx(sqlx::Error::RowNotFound))?;
         if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
             link_mail_entity_in_transaction(
                 &mut transaction,
@@ -77,7 +77,7 @@ impl MailStorageStore {
     pub async fn imported_attachment_by_id(
         &self,
         attachment_id: &str,
-    ) -> Result<Option<ImportedCommunicationAttachment>, MailStorageError> {
+    ) -> Result<Option<ImportedCommunicationAttachment>, CommunicationStorageError> {
         let attachment_id = validate_non_empty("attachment_id", attachment_id)?;
         let sql = imported_attachment_select_sql("i.attachment_id = $1");
         let row = sqlx::query(&sql)
@@ -91,7 +91,7 @@ impl MailStorageStore {
     pub async fn imported_attachment_by_blob_id(
         &self,
         blob_id: &str,
-    ) -> Result<Option<ImportedCommunicationAttachment>, MailStorageError> {
+    ) -> Result<Option<ImportedCommunicationAttachment>, CommunicationStorageError> {
         let blob_id = validate_non_empty("blob_id", blob_id)?;
         let sql = imported_attachment_select_sql("i.blob_id = $1");
         let row = sqlx::query(&sql)
@@ -105,7 +105,7 @@ impl MailStorageStore {
     pub async fn blob_by_id(
         &self,
         blob_id: &str,
-    ) -> Result<Option<super::models::StoredMailBlob>, MailStorageError> {
+    ) -> Result<Option<super::models::StoredCommunicationBlob>, CommunicationStorageError> {
         let blob_id = validate_non_empty("blob_id", blob_id)?;
         let row = sqlx::query(
             r#"

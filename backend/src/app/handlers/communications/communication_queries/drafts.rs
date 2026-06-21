@@ -1,5 +1,7 @@
 use super::super::*;
-use crate::domains::communications::service::{MailCommandService, MailDraftUpsertCommand};
+use crate::domains::communications::service::{
+    CommunicationCommandService, CommunicationDraftUpsertCommand,
+};
 
 #[derive(Deserialize)]
 pub(crate) struct DraftListQuery {
@@ -72,8 +74,8 @@ pub(crate) async fn post_v1_draft(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let draft = MailCommandService::new(pool)
-        .upsert_draft(MailDraftUpsertCommand {
+    let draft = CommunicationCommandService::new(pool)
+        .upsert_draft(CommunicationDraftUpsertCommand {
             draft_id: req.draft_id,
             account_id: req.account_id,
             persona_id: req.persona_id,
@@ -119,7 +121,7 @@ pub(crate) async fn delete_v1_draft(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let deleted = MailCommandService::new(pool)
+    let deleted = CommunicationCommandService::new(pool)
         .delete_draft(&draft_id)
         .await?;
     Ok(Json(serde_json::json!({"deleted": deleted})))

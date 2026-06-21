@@ -90,7 +90,7 @@ fn parts(error: ApiError) -> ErrorParts {
         | ApiError::PersonIdentity(_) => persons::parts(error),
         ApiError::Messages(_)
         | ApiError::CommunicationIngestion(_)
-        | ApiError::MailStorage(_)
+        | ApiError::CommunicationStorage(_)
         | ApiError::InvalidCommunicationQuery(_)
         | ApiError::EmailAccountDeleteConflict
         | ApiError::ProviderWriteConfirmationRequired

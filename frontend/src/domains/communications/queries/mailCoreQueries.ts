@@ -29,13 +29,13 @@ import type {
   WorkflowState,
   WorkflowStateCountItem
 } from '../types/communications'
-import type { MailAiStateRecord } from '../types/aiState'
-import { mailListQueryKey, mailMessageQueryKey, threadMessagesQueryKey } from './mailPrefetch'
+import type { CommunicationAiStateRecord } from '../types/aiState'
+import { communicationListQueryKey, communicationMessageQueryKey, threadMessagesQueryKey } from './communicationPrefetch'
 import {
-  mailDetailQueryOptions,
-  mailRealtimeQueryOptions,
-  mailReferenceQueryOptions
-} from './mailQueryPolicies'
+  communicationDetailQueryOptions,
+  communicationRealtimeQueryOptions,
+  communicationReferenceQueryOptions
+} from './communicationQueryPolicies'
 import type { NullableQueryParam, QueryParam } from './queryTypes'
 
 export function useMailListQuery(
@@ -46,7 +46,7 @@ export function useMailListQuery(
   localState?: QueryParam<LocalMessageState>
 ) {
   return useInfiniteQuery<CommunicationMessagesResponse, Error, CommunicationMessageSummary[], readonly unknown[], string | null>({
-    queryKey: computed(() => mailListQueryKey(
+    queryKey: computed(() => communicationListQueryKey(
       toValue(accountId),
       toValue(workflowState),
       toValue(channelKind),
@@ -69,7 +69,7 @@ export function useMailListQuery(
     select: (data) => {
       return data.pages.flatMap((page) => page.items)
     },
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -77,7 +77,7 @@ export function useMessageQuery(messageId: NullableQueryParam<string>) {
   return useQuery<CommunicationMessageDetailResponse | null>({
     queryKey: computed(() => {
       const id = toValue(messageId)
-      return id ? mailMessageQueryKey(id) : ['communications-message', null] as const
+      return id ? communicationMessageQueryKey(id) : ['communications-message', null] as const
     }),
     queryFn: async () => {
       const id = toValue(messageId)
@@ -85,12 +85,12 @@ export function useMessageQuery(messageId: NullableQueryParam<string>) {
       return fetchCommunicationMessage(id)
     },
     enabled: computed(() => !!toValue(messageId)),
-    ...mailDetailQueryOptions
+    ...communicationDetailQueryOptions
   })
 }
 
 export function useMessageAiStateQuery(messageId: NullableQueryParam<string>) {
-  return useQuery<MailAiStateRecord | null>({
+  return useQuery<CommunicationAiStateRecord | null>({
     queryKey: computed(() => {
       const id = toValue(messageId)
       return id ? ['communications-ai-state', id] as const : ['communications-ai-state', null] as const
@@ -101,7 +101,7 @@ export function useMessageAiStateQuery(messageId: NullableQueryParam<string>) {
       return fetchMessageAiState(id)
     },
     enabled: computed(() => !!toValue(messageId)),
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -112,7 +112,7 @@ export function useStateCountsQuery(accountId?: QueryParam<string>, localState?:
       const res = await fetchMessageStateCounts(toValue(accountId), toValue(localState))
       return res.counts
     },
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -123,7 +123,7 @@ export function useSyncStatusesQuery() {
       const res = await fetchMailSyncStatus()
       return res.items
     },
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -141,7 +141,7 @@ export function useMailSyncSettingsQuery(accountId: NullableQueryParam<string>) 
       return fetchMailSyncSettings(id)
     },
     enabled: computed(() => Boolean(toValue(accountId))),
-    ...mailReferenceQueryOptions
+    ...communicationReferenceQueryOptions
   })
 }
 
@@ -166,7 +166,7 @@ export function useMailboxHealthQuery(accountId?: QueryParam<string>) {
     queryFn: async () => {
       return fetchMailboxHealth(toValue(accountId))
     },
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -177,7 +177,7 @@ export function useConversationsQuery(accountId?: QueryParam<string>) {
     queryFn: async ({ pageParam }) => fetchThreads(toValue(accountId), 50, pageParam),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -197,7 +197,7 @@ export function useThreadMessagesQuery(accountId: NullableQueryParam<string>, su
       return fetchThreadMessages(currentAccountId, currentSubject, 100)
     },
     enabled: computed(() => Boolean(toValue(accountId)?.trim() && toValue(subject)?.trim())),
-    ...mailDetailQueryOptions
+    ...communicationDetailQueryOptions
   })
 }
 
@@ -208,6 +208,6 @@ export function usePersonasQuery() {
       const res = await fetchPersonas()
       return res.items
     },
-    ...mailReferenceQueryOptions
+    ...communicationReferenceQueryOptions
   })
 }

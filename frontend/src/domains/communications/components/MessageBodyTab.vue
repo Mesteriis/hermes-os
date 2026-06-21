@@ -16,9 +16,9 @@ import type { AiReplyResponse, CommunicationMessageDetailResponse, Communication
 import type { BilingualReplyFlowResponse } from '../types/bilingualReplyFlow'
 import {
   aiSummaryContractFromMetadata,
-  mailExtractionSectionsFromInsight,
-  mailKnowledgeSectionsFromSummaryContract
-} from '../helpers/mailPageModels'
+  communicationExtractionSectionsFromInsight,
+  communicationKnowledgeSectionsFromSummaryContract
+} from '../helpers/communicationPageModels'
 
 const frontendConfig = loadFrontendConfig()
 
@@ -60,8 +60,8 @@ const summarySections = computed(() => {
     { title: 'Deadlines', items: contract.deadlines }
   ].filter((section) => section.items.length > 0)
 })
-const extractionSections = computed(() => mailExtractionSectionsFromInsight(props.insight))
-const knowledgeSections = computed(() => mailKnowledgeSectionsFromSummaryContract(summaryContract.value))
+const extractionSections = computed(() => communicationExtractionSectionsFromInsight(props.insight))
+const knowledgeSections = computed(() => communicationKnowledgeSectionsFromSummaryContract(summaryContract.value))
 
 const bodyText = computed(() => {
   if (!message.value) return ''

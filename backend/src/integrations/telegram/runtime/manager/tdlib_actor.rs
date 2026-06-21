@@ -2,11 +2,11 @@ use std::sync::mpsc::Sender;
 
 use chrono::Utc;
 
+use crate::domains::communications::core::CommunicationProviderSecretBindingStore;
 use crate::integrations::telegram::client::TelegramError;
 use crate::platform::communications::ProviderAccount;
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
-use crate::vault::CommunicationProviderSecretBindingStore;
 
 use super::super::actor::{optional_telegram_session_key, spawn_tdlib_actor};
 use super::super::state::{TelegramRuntimeActorHandle, TelegramRuntimeCommand};

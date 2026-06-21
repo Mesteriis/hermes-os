@@ -9,7 +9,7 @@ use sqlx::Row;
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::domains::communications::storage::LocalMailBlobStore;
+use hermes_hub_backend::domains::communications::storage::LocalCommunicationBlobStore;
 use hermes_hub_backend::integrations::mail::sync::{
     EmailSyncBatch, FetchedCommunicationSourceMessage,
 };
@@ -36,7 +36,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
     let sender_email = format!("sender-{suffix}@{sender_domain}");
     let recipient_email = format!("recipient-{suffix}@{recipient_domain}");
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalMailBlobStore::new(blob_root.path());
+    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
 
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
@@ -362,7 +362,7 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
     let decision_rationale = "communication ingestion must build context";
     let obligation_statement = format!("send the candidate refresh summary {suffix}");
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalMailBlobStore::new(blob_root.path());
+    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
 
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
@@ -612,7 +612,7 @@ async fn email_sync_pipeline_extracts_attachment_metadata_with_initial_scan_stat
     let account_id = format!("acct_sync_attachment_{suffix}");
     let provider_record_id = format!("sync-attachment-message-{suffix}");
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalMailBlobStore::new(blob_root.path());
+    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
 
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
@@ -750,7 +750,7 @@ async fn email_sync_pipeline_marks_executable_attachment_payloads_malicious() {
     let account_id = format!("acct_sync_malicious_attachment_{suffix}");
     let provider_record_id = format!("sync-malicious-attachment-message-{suffix}");
     let blob_root = tempfile::tempdir().expect("mail blob root");
-    let blob_store = LocalMailBlobStore::new(blob_root.path());
+    let blob_store = LocalCommunicationBlobStore::new(blob_root.path());
 
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(

@@ -1,5 +1,7 @@
 use super::super::*;
-use crate::domains::communications::service::{MailCommandService, MailOutboxSendCommand};
+use crate::domains::communications::service::{
+    CommunicationCommandService, CommunicationOutboxSendCommand,
+};
 use crate::platform::communications::OutgoingEmail;
 
 pub(crate) async fn post_v1_send(
@@ -15,12 +17,13 @@ pub(crate) async fn post_v1_send(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let account = crate::vault::CommunicationProviderAccountStore::new(pool.clone())
-        .get(&req.account_id)
-        .await?
-        .ok_or(ApiError::InvalidCommunicationQuery(
-            "provider account was not found",
-        ))?;
+    let account =
+        crate::domains::communications::core::CommunicationProviderAccountStore::new(pool.clone())
+            .get(&req.account_id)
+            .await?
+            .ok_or(ApiError::InvalidCommunicationQuery(
+                "provider account was not found",
+            ))?;
     let email = OutgoingEmail {
         from: account.external_account_id.clone(),
         to: req.to.clone(),
@@ -61,7 +64,9 @@ pub(crate) async fn post_v1_send(
         crate::domains::communications::outbox::smtp_config_for_provider_account(&account)
             .map_err(outbox_delivery_api_error)?;
     let credential_reader = ProviderCredentialReader::new(
-        crate::vault::CommunicationProviderSecretBindingStore::new(pool.clone()),
+        crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            pool.clone(),
+        ),
         SecretReferenceStore::new(pool),
         &state.vault,
     );
@@ -83,7 +88,7 @@ pub(crate) async fn post_v1_send(
     let result = crate::integrations::mail::send::SmtpClient::new()
         .send(&smtp_config, &credential.secret, &email)
         .await?;
-    MailCommandService::new(
+    CommunicationCommandService::new(
         state
             .database
             .pool()
@@ -116,7 +121,10 @@ async fn send_via_gmail_api(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let binding = crate::vault::CommunicationProviderSecretBindingStore::new(pool.clone())
+    let binding =
+        crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            pool.clone(),
+        )
         .get_for_account(
             &account.account_id,
             ProviderAccountSecretPurpose::OauthToken,
@@ -148,7 +156,7 @@ async fn send_via_gmail_api(
     .send_message(&access_token, &email)
     .await
     .map_err(gmail_send_api_error)?;
-    MailCommandService::new(
+    CommunicationCommandService::new(
         state
             .database
             .pool()
@@ -178,7 +186,7 @@ async fn enqueue_outbox_send(
     req: SendRequest,
 ) -> Result<Json<SendResponse>, ApiError> {
     let recipient_count = email.to.len() + email.cc.len() + email.bcc.len();
-    let item = MailCommandService::new(
+    let item = CommunicationCommandService::new(
         state
             .database
             .pool()
@@ -188,7 +196,7 @@ async fn enqueue_outbox_send(
     .enqueue_outbox_send(
         account,
         &email,
-        &MailOutboxSendCommand {
+        &CommunicationOutboxSendCommand {
             draft_id: req.draft_id,
             scheduled_send_at: req.scheduled_send_at,
             undo_send_seconds: req.undo_send_seconds,

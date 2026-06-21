@@ -1,18 +1,18 @@
 import { ref, type ComputedRef } from 'vue'
-import type { MailFolder, MailFolderUpdate } from '../types/folders'
+import type { CommunicationFolder, CommunicationFolderUpdate } from '../types/folders'
 import {
   MAIL_FOLDER_REORDER_DRAG_TYPE,
-  buildMailFolderReorderUpdates,
-  createMailFolderReorderPayload,
-  hasMailFolderReorderDragType,
+  buildCommunicationFolderReorderUpdates,
+  createCommunicationFolderReorderPayload,
+  hasCommunicationFolderReorderDragType,
   mailFolderReorderStatus,
-  parseMailFolderReorderPayload
+  parseCommunicationFolderReorderPayload
 } from './mailFolderOrdering'
 
-type UpdateFolder = (variables: { folderId: string; request: MailFolderUpdate }) => Promise<MailFolder>
+type UpdateFolder = (variables: { folderId: string; request: CommunicationFolderUpdate }) => Promise<CommunicationFolder>
 
-export function useMailFolderReorder(
-  folders: ComputedRef<MailFolder[]>,
+export function useCommunicationFolderReorder(
+  folders: ComputedRef<CommunicationFolder[]>,
   updateFolder: UpdateFolder
 ) {
   const sourceId = ref('')
@@ -22,16 +22,16 @@ export function useMailFolderReorder(
   const isReordering = ref(false)
 
   function canHandleDragOver(event: DragEvent): boolean {
-    return Boolean(event.dataTransfer && hasMailFolderReorderDragType(event.dataTransfer.types) && !isReordering.value)
+    return Boolean(event.dataTransfer && hasCommunicationFolderReorderDragType(event.dataTransfer.types) && !isReordering.value)
   }
 
-  function handleDragStart(event: DragEvent, folder: MailFolder) {
+  function handleDragStart(event: DragEvent, folder: CommunicationFolder) {
     if (!event.dataTransfer) return
     sourceId.value = folder.folder_id
     status.value = ''
     error.value = ''
     event.dataTransfer.effectAllowed = 'move'
-    event.dataTransfer.setData(MAIL_FOLDER_REORDER_DRAG_TYPE, createMailFolderReorderPayload(folder.folder_id))
+    event.dataTransfer.setData(MAIL_FOLDER_REORDER_DRAG_TYPE, createCommunicationFolderReorderPayload(folder.folder_id))
   }
 
   function handleDragEnd() {
@@ -39,12 +39,12 @@ export function useMailFolderReorder(
     targetId.value = ''
   }
 
-  async function handleDrop(event: DragEvent, folder: MailFolder): Promise<boolean> {
+  async function handleDrop(event: DragEvent, folder: CommunicationFolder): Promise<boolean> {
     if (!event.dataTransfer || isReordering.value) return false
-    const payload = parseMailFolderReorderPayload(event.dataTransfer.getData(MAIL_FOLDER_REORDER_DRAG_TYPE))
+    const payload = parseCommunicationFolderReorderPayload(event.dataTransfer.getData(MAIL_FOLDER_REORDER_DRAG_TYPE))
     if (!payload) return false
 
-    const updates = buildMailFolderReorderUpdates(folders.value, payload.folder_id, folder.folder_id)
+    const updates = buildCommunicationFolderReorderUpdates(folders.value, payload.folder_id, folder.folder_id)
     if (updates.length === 0) return true
 
     targetId.value = folder.folder_id

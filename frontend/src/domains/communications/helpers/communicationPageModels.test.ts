@@ -5,16 +5,16 @@ import {
   composeFormToSendRequest,
   draftToComposeForm,
   emptyCommunicationMessageInsight,
-  mailMessageLabelsFromMetadata,
-  mailMessageSnoozeUntilFromMetadata,
-  mailKnowledgeSectionsFromSummaryContract,
-  mailExtractionSectionsFromInsight,
+  communicationMessageLabelsFromMetadata,
+  communicationMessageSnoozeUntilFromMetadata,
+  communicationKnowledgeSectionsFromSummaryContract,
+  communicationExtractionSectionsFromInsight,
   forwardComposeForm,
   newComposeForm,
   replyComposeForm,
   replyAllComposeForm,
   threadReplyComposeForm
-} from './mailPageModels'
+} from './communicationPageModels'
 
 function message(overrides: Partial<CommunicationMessageSummary> = {}): CommunicationMessageSummary {
   return {
@@ -167,7 +167,7 @@ describe('mail page model helpers', () => {
       }
     })
 
-    expect(mailKnowledgeSectionsFromSummaryContract(contract)).toEqual([
+    expect(communicationKnowledgeSectionsFromSummaryContract(contract)).toEqual([
       {
         kind: 'event',
         title: 'Event candidates',
@@ -197,18 +197,18 @@ describe('mail page model helpers', () => {
   })
 
   it('extracts message labels and snooze metadata safely', () => {
-    expect(mailMessageLabelsFromMetadata({
+    expect(communicationMessageLabelsFromMetadata({
       labels: ['finance', ' urgent ', 42, '', 'finance']
     })).toEqual(['finance', 'urgent'])
 
-    expect(mailMessageLabelsFromMetadata({ labels: 'finance' })).toEqual([])
-    expect(mailMessageSnoozeUntilFromMetadata({ snooze_until: '2026-06-20T10:00:00Z' }))
+    expect(communicationMessageLabelsFromMetadata({ labels: 'finance' })).toEqual([])
+    expect(communicationMessageSnoozeUntilFromMetadata({ snooze_until: '2026-06-20T10:00:00Z' }))
       .toBe('2026-06-20T10:00:00Z')
-    expect(mailMessageSnoozeUntilFromMetadata({ snooze_until: 42 })).toBeNull()
+    expect(communicationMessageSnoozeUntilFromMetadata({ snooze_until: 42 })).toBeNull()
   })
 
   it('builds review sections for extracted mail task and note candidates', () => {
-    const sections = mailExtractionSectionsFromInsight({
+    const sections = communicationExtractionSectionsFromInsight({
       ...emptyCommunicationMessageInsight('msg-1'),
       tasks: [
         {
@@ -254,7 +254,7 @@ describe('mail page model helpers', () => {
       }
     ])
 
-    expect(mailExtractionSectionsFromInsight(null)).toEqual([])
+    expect(communicationExtractionSectionsFromInsight(null)).toEqual([])
   })
 
   it('builds compose form models for new, reply and persisted draft flows', () => {

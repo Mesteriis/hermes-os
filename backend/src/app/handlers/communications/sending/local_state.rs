@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::domains::communications::service::MailCommandService;
+use crate::domains::communications::service::CommunicationCommandService;
 
 pub(crate) async fn post_v1_imap_mark_read(
     State(state): State<AppState>,
@@ -10,7 +10,7 @@ pub(crate) async fn post_v1_imap_mark_read(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    MailCommandService::new(pool)
+    CommunicationCommandService::new(pool)
         .mark_message_imap_read(&message_id)
         .await?;
     Ok(Json(serde_json::json!({"marked_read": true})))
@@ -25,7 +25,7 @@ pub(crate) async fn post_v1_imap_delete(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let updated = MailCommandService::new(pool)
+    let updated = CommunicationCommandService::new(pool)
         .move_message_to_local_trash(&message_id, "imap_delete_alias", "imap-delete-alias")
         .await?;
     Ok(Json(serde_json::json!({
@@ -44,7 +44,7 @@ pub(crate) async fn post_v1_message_trash(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let updated = MailCommandService::new(pool)
+    let updated = CommunicationCommandService::new(pool)
         .move_message_to_local_trash(&message_id, "message_trash", "user_deleted")
         .await?;
     Ok(Json(serde_json::json!({
@@ -63,7 +63,7 @@ pub(crate) async fn post_v1_message_restore(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let updated = MailCommandService::new(pool)
+    let updated = CommunicationCommandService::new(pool)
         .restore_message_from_local_trash(&message_id)
         .await?;
     Ok(Json(serde_json::json!({

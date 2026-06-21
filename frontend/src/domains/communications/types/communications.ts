@@ -483,7 +483,7 @@ export type CommunicationMessageInsight = {
   translation: TranslationResponse | null
 }
 
-export type MailResourceSnapshot = {
+export type CommunicationResourceSnapshot = {
   subscriptions: SubscriptionSource[]
   duplicates: DuplicateAttachmentGroup[]
   invoices: unknown[]
@@ -495,7 +495,7 @@ export type MailResourceSnapshot = {
   blockers: unknown[]
 }
 
-export type MailResourceSummary = {
+export type CommunicationResourceSummary = {
   subscriptions: number
   duplicates: number
   invoices: number
@@ -538,7 +538,7 @@ export type {
   RichTemplateUpsertResponse
 } from './templates'
 
-export type MailArchitectureBlocker = {
+export type CommunicationArchitectureBlocker = {
   section: string
   feature: string
   reason: string
@@ -565,7 +565,7 @@ export type ComposeFormModel = {
   inReplyTo: string | null
 }
 
-export type MailAccountOption = {
+export type CommunicationAccountOption = {
   account_id: string
   label: string
   provider_kind: string

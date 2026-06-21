@@ -76,12 +76,13 @@ use crate::domains::calendar::scheduling::{
     DeadlineStore, FocusBlockStore, SchedulingError, SmartSchedulingService,
 };
 use crate::domains::calendar::sync::{export_event_ics, export_event_md};
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::domains::communications::messages::{
     MessageProjectionError, MessageProjectionStore, ProjectedMessage, ProjectedMessageSummary,
     WorkflowState,
 };
 use crate::domains::communications::storage::{
-    MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob,
+    CommunicationStorageError, CommunicationStorageStore, StoredCommunicationAttachmentWithBlob,
 };
 use crate::domains::documents::processing::{
     DocumentProcessingError, DocumentProcessingJob, DocumentProcessingRecord,
@@ -137,7 +138,6 @@ use crate::platform::settings::{
 use crate::platform::storage::{
     Database, DatabaseReadiness, MigrationReadiness, ReadinessStatus, StorageError,
 };
-use crate::vault::CommunicationProviderAccountStore;
 use crate::workflows::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
 
 use crate::app::api_support::*;

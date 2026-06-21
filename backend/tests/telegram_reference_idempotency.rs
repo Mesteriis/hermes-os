@@ -35,7 +35,7 @@ async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",

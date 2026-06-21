@@ -1,5 +1,5 @@
+use hermes_hub_backend::domains::communications::core::CommunicationProviderAccountStore;
 use hermes_hub_backend::domains::communications::core::NewProviderAccount;
-use hermes_hub_backend::vault::CommunicationProviderAccountStore;
 use serde_json::json;
 
 use crate::config::DevEmailSyncConfig;

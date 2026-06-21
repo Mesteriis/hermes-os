@@ -37,7 +37,7 @@ async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_sid
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts/fixture",
+            "/api/v1/integrations/telegram/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -65,7 +65,7 @@ async fn removed_account_blocks_message_lifecycle_and_reaction_routes_before_sid
     let account_delete_response = app
         .clone()
         .oneshot(delete_request_with_token(
-            &format!("/api/v1/communications/telegram/accounts/{account_id}"),
+            &format!("/api/v1/integrations/telegram/accounts/{account_id}"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -282,7 +282,7 @@ async fn message_lifecycle_status_events_include_command_identity_for_realtime_c
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts/fixture",
+            "/api/v1/integrations/telegram/accounts/fixture",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",

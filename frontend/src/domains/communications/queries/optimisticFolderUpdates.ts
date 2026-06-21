@@ -1,11 +1,11 @@
 import type { InfiniteData } from '@tanstack/vue-query'
-import type { MailFolder, MailFolderListResponse, MailFolderUpdate } from '../types/folders'
+import type { CommunicationFolder, CommunicationFolderListResponse, CommunicationFolderUpdate } from '../types/folders'
 
 export function upsertFolderInFolderList(
-	data: InfiniteData<MailFolderListResponse> | undefined,
+	data: InfiniteData<CommunicationFolderListResponse> | undefined,
 	queryKey: readonly unknown[],
-	folder: MailFolder
-): InfiniteData<MailFolderListResponse> | undefined {
+	folder: CommunicationFolder
+): InfiniteData<CommunicationFolderListResponse> | undefined {
 	if (!data) return data
 	if (!folderMatchesQuery(queryKey, folder)) {
 		return removeFolderFromFolderList(data, folder.folder_id)
@@ -40,9 +40,9 @@ export function upsertFolderInFolderList(
 }
 
 export function removeFolderFromFolderList(
-	data: InfiniteData<MailFolderListResponse> | undefined,
+	data: InfiniteData<CommunicationFolderListResponse> | undefined,
 	folderId: string
-): InfiniteData<MailFolderListResponse> | undefined {
+): InfiniteData<CommunicationFolderListResponse> | undefined {
 	if (!data) return data
 
 	let changed = false
@@ -57,10 +57,10 @@ export function removeFolderFromFolderList(
 }
 
 export function optimisticFolderFromUpdate(
-	existing: MailFolder,
-	update: MailFolderUpdate,
+	existing: CommunicationFolder,
+	update: CommunicationFolderUpdate,
 	updatedAt: string
-): MailFolder {
+): CommunicationFolder {
 	return {
 		...existing,
 		account_id: typeof update.account_id === 'undefined' ? existing.account_id : update.account_id,
@@ -72,13 +72,13 @@ export function optimisticFolderFromUpdate(
 	}
 }
 
-export function folderMatchesQuery(queryKey: readonly unknown[], folder: MailFolder): boolean {
+export function folderMatchesQuery(queryKey: readonly unknown[], folder: CommunicationFolder): boolean {
 	const accountId = queryKey[1]
 	if (typeof accountId !== 'string' || !accountId.trim()) return true
 	return folder.account_id === accountId
 }
 
-function sortFolders(folders: MailFolder[]): MailFolder[] {
+function sortFolders(folders: CommunicationFolder[]): CommunicationFolder[] {
 	return folders
 		.slice()
 		.sort((left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name))

@@ -2,8 +2,8 @@ use crate::domains::communications::core::StoredRawCommunicationRecord;
 use crate::domains::communications::messages::ProjectedMessage;
 use crate::domains::communications::storage::{
     AttachmentSafetyScanRequest, AttachmentSafetyScanStatus, AttachmentSafetyScanner,
-    LocalMailBlobStore, MailAttachmentDisposition, MailStorageStore, NewMailAttachment,
-    NewMailBlob,
+    CommunicationAttachmentDisposition, CommunicationStorageStore, LocalCommunicationBlobStore,
+    NewCommunicationAttachment, NewCommunicationBlob,
 };
 use crate::platform::communications::rfc822::{
     ParsedEmailAttachment, ParsedEmailAttachmentDisposition,
@@ -19,8 +19,8 @@ pub(crate) struct AttachmentProjectionReport {
 }
 
 pub(crate) async fn project_attachments(
-    mail_store: &MailStorageStore,
-    blob_store: &LocalMailBlobStore,
+    mail_store: &CommunicationStorageStore,
+    blob_store: &LocalCommunicationBlobStore,
     raw_record: &StoredRawCommunicationRecord,
     message: &ProjectedMessage,
     attachments: &[ParsedEmailAttachment],
@@ -32,7 +32,7 @@ pub(crate) async fn project_attachments(
         let local_blob = blob_store.put_blob(&parsed_attachment.body_bytes).await?;
         let blob = mail_store
             .upsert_blob(
-                &NewMailBlob::from_local_blob(&local_blob)
+                &NewCommunicationBlob::from_local_blob(&local_blob)
                     .content_type(&parsed_attachment.content_type),
             )
             .await?;
@@ -48,7 +48,7 @@ pub(crate) async fn project_attachments(
         })?;
         let scan_status = scan_report.status;
 
-        let mut attachment = NewMailAttachment::new(
+        let mut attachment = NewCommunicationAttachment::new(
             &message.message_id,
             &raw_record.raw_record_id,
             &blob.blob_id,
@@ -77,10 +77,12 @@ pub(crate) async fn project_attachments(
 
 fn mail_attachment_disposition(
     disposition: ParsedEmailAttachmentDisposition,
-) -> MailAttachmentDisposition {
+) -> CommunicationAttachmentDisposition {
     match disposition {
-        ParsedEmailAttachmentDisposition::Attachment => MailAttachmentDisposition::Attachment,
-        ParsedEmailAttachmentDisposition::Inline => MailAttachmentDisposition::Inline,
-        ParsedEmailAttachmentDisposition::Unknown => MailAttachmentDisposition::Unknown,
+        ParsedEmailAttachmentDisposition::Attachment => {
+            CommunicationAttachmentDisposition::Attachment
+        }
+        ParsedEmailAttachmentDisposition::Inline => CommunicationAttachmentDisposition::Inline,
+        ParsedEmailAttachmentDisposition::Unknown => CommunicationAttachmentDisposition::Unknown,
     }
 }

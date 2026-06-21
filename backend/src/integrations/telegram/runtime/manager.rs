@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use crate::domains::communications::core::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
 use crate::integrations::telegram::client::TelegramStore;
 use crate::platform::communications::DEFAULT_MAIL_SYNC_BLOB_ROOT;
 use crate::platform::config::AppConfig;
 use crate::platform::events::EventBus;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
-use crate::vault::{CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore};
 use sqlx::PgPool;
 
 use super::state::TelegramRuntimeActorHandle;

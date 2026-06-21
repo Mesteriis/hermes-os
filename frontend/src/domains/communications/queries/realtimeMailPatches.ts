@@ -11,11 +11,11 @@ import type {
 import type {
 	FolderMessage,
 	FolderMessageListResponse,
-	MailFolder,
-	MailFolderListResponse
+	CommunicationFolder,
+	CommunicationFolderListResponse
 } from '../types/folders'
-import type { MailSavedSearch, SavedSearchListResponse } from '../types/savedSearches'
-import type { MailAiStateRecord } from '../types/aiState'
+import type { CommunicationSavedSearch, SavedSearchListResponse } from '../types/savedSearches'
+import type { CommunicationAiStateRecord } from '../types/aiState'
 import {
 	applyBulkMessageActionToMailDetail,
 	applyBulkMessageActionToMailList
@@ -73,7 +73,7 @@ export function applyMailRealtimePatch(
 
 	let patched = false
 	for (const [queryKey, data] of availableQueryClient.getQueriesData<InfiniteData<CommunicationMessagesResponse>>({
-		queryKey: ['communications-mail-list']
+		queryKey: ['communications-list']
 	})) {
 		availableQueryClient.setQueryData(queryKey, () =>
 			applyBulkMessageActionToMailList(data, request, queryKey)
@@ -104,7 +104,7 @@ function applyAiStateRealtimePatch(
 	const aiState = aiStateValue(payload?.ai_state)
 	if (!messageId || !aiState) return false
 
-	queryClient.setQueryData<MailAiStateRecord | null | undefined>(
+	queryClient.setQueryData<CommunicationAiStateRecord | null | undefined>(
 		['communications-ai-state', messageId],
 		(data) => ({
 			message_id: messageId,
@@ -336,7 +336,7 @@ function patchSavedSearchList(
 	data: InfiniteData<SavedSearchListResponse> | undefined,
 	queryKey: readonly unknown[],
 	eventType: string,
-	savedSearch: MailSavedSearch
+	savedSearch: CommunicationSavedSearch
 ): InfiniteData<SavedSearchListResponse> | undefined {
 	if (!data) return data
 
@@ -384,7 +384,7 @@ function removeSavedSearchFromPages(
 	return changed ? { ...data, pages } : data
 }
 
-function savedSearchMatchesQuery(queryKey: readonly unknown[], savedSearch: MailSavedSearch): boolean {
+function savedSearchMatchesQuery(queryKey: readonly unknown[], savedSearch: CommunicationSavedSearch): boolean {
 	const isSmartFolder = queryKey[1]
 	if (typeof isSmartFolder === 'boolean' && savedSearch.is_smart_folder !== isSmartFolder) {
 		return false
@@ -398,7 +398,7 @@ function savedSearchMatchesQuery(queryKey: readonly unknown[], savedSearch: Mail
 	return true
 }
 
-function sortSavedSearches(items: MailSavedSearch[]): MailSavedSearch[] {
+function sortSavedSearches(items: CommunicationSavedSearch[]): CommunicationSavedSearch[] {
 	return items
 		.slice()
 		.sort((left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name))
@@ -423,7 +423,7 @@ function applyFolderRealtimePatch(
 	if (!folder) return false
 
 	let patched = false
-	for (const [queryKey, data] of queryClient.getQueriesData<InfiniteData<MailFolderListResponse>>({
+	for (const [queryKey, data] of queryClient.getQueriesData<InfiniteData<CommunicationFolderListResponse>>({
 		queryKey: ['communications-folders']
 	})) {
 		const updated = patchFolderList(data, queryKey, eventType, folder)
@@ -437,11 +437,11 @@ function applyFolderRealtimePatch(
 }
 
 function patchFolderList(
-	data: InfiniteData<MailFolderListResponse> | undefined,
+	data: InfiniteData<CommunicationFolderListResponse> | undefined,
 	queryKey: readonly unknown[],
 	eventType: string,
-	folder: MailFolder
-): InfiniteData<MailFolderListResponse> | undefined {
+	folder: CommunicationFolder
+): InfiniteData<CommunicationFolderListResponse> | undefined {
 	if (!data || !folderMatchesFolderQuery(queryKey, folder)) return data
 
 	let changed = false
@@ -481,13 +481,13 @@ function patchFolderList(
 	return changed ? { ...data, pages } : data
 }
 
-function folderMatchesFolderQuery(queryKey: readonly unknown[], folder: MailFolder): boolean {
+function folderMatchesFolderQuery(queryKey: readonly unknown[], folder: CommunicationFolder): boolean {
 	const accountId = queryKey[1]
 	if (typeof accountId !== 'string' || !accountId.trim()) return true
 	return folder.account_id === accountId
 }
 
-function sortFolders(folders: MailFolder[]): MailFolder[] {
+function sortFolders(folders: CommunicationFolder[]): CommunicationFolder[] {
 	return folders
 		.slice()
 		.sort((left, right) => left.sort_order - right.sort_order || left.name.localeCompare(right.name))

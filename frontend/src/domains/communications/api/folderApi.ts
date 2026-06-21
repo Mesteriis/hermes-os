@@ -3,46 +3,46 @@ import type {
   FolderDeleteResponse,
   FolderMessageActionResponse,
   FolderMessageListResponse,
-  MailFolder,
-  MailFolderInput,
-  MailFolderListResponse,
-  MailFolderUpdate
+  CommunicationFolder,
+  CommunicationFolderInput,
+  CommunicationFolderListResponse,
+  CommunicationFolderUpdate
 } from '../types/folders'
 
-export async function fetchMailFolders(
+export async function fetchCommunicationFolders(
   accountId?: string,
   limit = 500,
   cursor?: string | null
-): Promise<MailFolderListResponse> {
+): Promise<CommunicationFolderListResponse> {
   const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
   if (accountId?.trim()) params.set('account_id', accountId.trim())
   if (cursor?.trim()) params.set('cursor', cursor.trim())
-  return ApiClient.instance.get<MailFolderListResponse>(
+  return ApiClient.instance.get<CommunicationFolderListResponse>(
     `/api/v1/communications/folders?${params.toString()}`,
     'Mail folders request failed'
   )
 }
 
-export async function createMailFolder(request: MailFolderInput): Promise<MailFolder> {
-  return ApiClient.instance.post<MailFolder>(
+export async function createCommunicationFolder(request: CommunicationFolderInput): Promise<CommunicationFolder> {
+  return ApiClient.instance.post<CommunicationFolder>(
     '/api/v1/communications/folders',
     request,
     'Mail folder creation failed'
   )
 }
 
-export async function updateMailFolder(
+export async function updateCommunicationFolder(
   folderId: string,
-  request: MailFolderUpdate
-): Promise<MailFolder> {
-  return ApiClient.instance.put<MailFolder>(
+  request: CommunicationFolderUpdate
+): Promise<CommunicationFolder> {
+  return ApiClient.instance.put<CommunicationFolder>(
     `/api/v1/communications/folders/${encodeURIComponent(folderId)}`,
     request,
     'Mail folder update failed'
   )
 }
 
-export async function deleteMailFolder(folderId: string): Promise<FolderDeleteResponse> {
+export async function deleteCommunicationFolder(folderId: string): Promise<FolderDeleteResponse> {
   return ApiClient.instance.delete<FolderDeleteResponse>(
     `/api/v1/communications/folders/${encodeURIComponent(folderId)}`,
     'Mail folder deletion failed'

@@ -27,7 +27,10 @@ import type {
   SendCommunicationRequest,
   SendCommunicationResponse
 } from '../types/communications'
-import type { MailAiStateRecord, MailAiStateTransitionRequest } from '../types/aiState'
+import type {
+  CommunicationAiStateRecord,
+  CommunicationAiStateTransitionRequest
+} from '../types/aiState'
 import {
   applyBulkMessageActionToMailDetail,
   applyBulkMessageActionToMailList,
@@ -35,8 +38,8 @@ import {
   removeDraftFromDraftList,
   upsertDraftInDraftList
 } from './optimisticMailUpdates'
-import { mailMessageQueryKey } from './mailPrefetch'
-import { mailRealtimeQueryOptions } from './mailQueryPolicies'
+import { communicationMessageQueryKey } from './communicationPrefetch'
+import { communicationRealtimeQueryOptions } from './communicationQueryPolicies'
 import type { QueryParam } from './queryTypes'
 import type { ComposeDraftPayload } from '../forms/composeDraftAutosave'
 
@@ -63,7 +66,7 @@ export function useDraftsQuery(accountId?: QueryParam<string>) {
     queryFn: async ({ pageParam }) => fetchDrafts(toValue(accountId), undefined, 50, pageParam),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -74,7 +77,7 @@ export function useOutboxQuery(accountId?: QueryParam<string>, status?: QueryPar
     queryFn: async ({ pageParam }) => fetchOutboxItems(toValue(accountId), toValue(status), 100, pageParam),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -102,7 +105,7 @@ export function useSendMailMutation() {
       restoreDraftLists(queryClient, context)
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['communications-mail-list'] })
+      queryClient.invalidateQueries({ queryKey: ['communications-list'] })
       queryClient.invalidateQueries({ queryKey: ['communications-drafts'] })
       queryClient.invalidateQueries({ queryKey: ['communications-outbox'] })
     }
@@ -417,16 +420,16 @@ function outboxQueryMatches(queryKey: readonly unknown[], item: CommunicationOut
 export function useUpdateMessageAiStateMutation() {
   const queryClient = useQueryClient()
   return useMutation<
-    MailAiStateRecord,
+    CommunicationAiStateRecord,
     Error,
-    { messageId: string; request: MailAiStateTransitionRequest }
+    { messageId: string; request: CommunicationAiStateTransitionRequest }
   >({
     mutationFn: async ({ messageId, request }) => updateMessageAiState(messageId, request),
     onSuccess: (record) => {
       queryClient.setQueryData(['communications-ai-state', record.message_id], record)
       queryClient.invalidateQueries({ queryKey: ['communications-ai-state', record.message_id] })
       queryClient.invalidateQueries({ queryKey: ['communications-message', record.message_id] })
-      queryClient.invalidateQueries({ queryKey: ['communications-mail-list'] })
+      queryClient.invalidateQueries({ queryKey: ['communications-list'] })
     }
   })
 }
@@ -444,17 +447,17 @@ export function useBulkMessageActionMutation() {
     },
     onMutate: async (request) => {
       const messageQueryKeys = request.message_ids.map((messageId) => {
-        return mailMessageQueryKey(messageId)
+        return communicationMessageQueryKey(messageId)
       })
 
       await Promise.all([
-        queryClient.cancelQueries({ queryKey: ['communications-mail-list'] }),
+        queryClient.cancelQueries({ queryKey: ['communications-list'] }),
         ...messageQueryKeys.map((queryKey) => queryClient.cancelQueries({ queryKey }))
       ])
 
       const previousMailLists =
         queryClient.getQueriesData<InfiniteData<CommunicationMessagesResponse>>({
-          queryKey: ['communications-mail-list']
+          queryKey: ['communications-list']
         })
       const previousMessages = messageQueryKeys.map((queryKey) => {
         return [
@@ -490,7 +493,7 @@ export function useBulkMessageActionMutation() {
       }
     },
     onSettled: (_result, _error, request) => {
-      queryClient.invalidateQueries({ queryKey: ['communications-mail-list'] })
+      queryClient.invalidateQueries({ queryKey: ['communications-list'] })
       queryClient.invalidateQueries({ queryKey: ['communications-state-counts'] })
       queryClient.invalidateQueries({ queryKey: ['communications-threads'] })
       for (const messageId of request.message_ids) {

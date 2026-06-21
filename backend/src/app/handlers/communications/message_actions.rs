@@ -1,5 +1,5 @@
 use super::*;
-use crate::domains::communications::service::MailCommandService;
+use crate::domains::communications::service::CommunicationCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct BulkMessageActionRequest {
@@ -94,7 +94,7 @@ pub(crate) async fn post_v1_message_pin(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let pinned = MailCommandService::new(pool)
+    let pinned = CommunicationCommandService::new(pool)
         .toggle_message_pin(&message_id)
         .await?;
     Ok(Json(PinToggleResponse { message_id, pinned }))
@@ -109,7 +109,7 @@ pub(crate) async fn post_v1_message_important(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let important = MailCommandService::new(pool)
+    let important = CommunicationCommandService::new(pool)
         .toggle_message_important(&message_id)
         .await?;
     Ok(Json(ImportantToggleResponse {
@@ -137,7 +137,7 @@ pub(crate) async fn post_v1_message_snooze(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    MailCommandService::new(pool)
+    CommunicationCommandService::new(pool)
         .snooze_message(&message_id, until)
         .await?;
     Ok(Json(serde_json::json!({"snoozed": true})))
@@ -152,7 +152,7 @@ pub(crate) async fn post_v1_message_mute(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let muted = MailCommandService::new(pool)
+    let muted = CommunicationCommandService::new(pool)
         .toggle_message_mute(&message_id)
         .await?;
     Ok(Json(PinToggleResponse {
@@ -176,7 +176,7 @@ pub(crate) async fn post_v1_message_label(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    MailCommandService::new(pool)
+    CommunicationCommandService::new(pool)
         .add_message_label(&message_id, &req.label)
         .await?;
     Ok(Json(serde_json::json!({"labeled": true})))
@@ -192,7 +192,7 @@ pub(crate) async fn delete_v1_message_label(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    MailCommandService::new(pool)
+    CommunicationCommandService::new(pool)
         .remove_message_label(&message_id, &req.label)
         .await?;
     Ok(Json(serde_json::json!({"removed": true})))

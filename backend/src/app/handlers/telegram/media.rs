@@ -11,9 +11,10 @@ use super::helpers::{
 };
 use crate::app::api_support::{
     api_audit_log, communication_provider_account_store,
-    communication_provider_secret_binding_store, mail_storage_store, telegram_store,
+    communication_provider_secret_binding_store, communication_storage_store, telegram_store,
 };
 use crate::app::{ApiError, AppState};
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::domains::communications::storage::AttachmentSafetyScanStatus;
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::TelegramCommandKind;
@@ -25,7 +26,6 @@ use crate::integrations::telegram::runtime::{
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
-use crate::vault::CommunicationProviderAccountStore;
 
 fn build_event(
     event_type: &str,
@@ -169,7 +169,7 @@ pub(crate) async fn post_telegram_media_upload(
         .into());
     }
 
-    let mail_store = mail_storage_store(&state)?;
+    let mail_store = communication_storage_store(&state)?;
     let attachment = resolve_upload_attachment(&mail_store, &request).await?;
     let audit_metadata = json!({
         "capability": "telegram.media.upload",
@@ -481,7 +481,7 @@ fn validate_media_upload_request(
 }
 
 async fn resolve_upload_attachment(
-    mail_store: &crate::domains::communications::storage::MailStorageStore,
+    mail_store: &crate::domains::communications::storage::CommunicationStorageStore,
     request: &ValidatedMediaUploadRequest,
 ) -> Result<UploadAttachmentRef, TelegramError> {
     if let Some(attachment_id) = request.attachment_id.as_deref() {

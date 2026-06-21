@@ -1,5 +1,7 @@
+use crate::domains::communications::core::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
 use crate::platform::secrets::SecretReferenceStore;
-use crate::vault::{CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore};
 use sqlx::postgres::PgPool;
 
 use super::super::errors::EmailAccountSetupError;

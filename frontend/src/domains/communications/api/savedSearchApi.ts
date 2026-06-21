@@ -4,7 +4,7 @@ import type {
   SavedSearchInput,
   SavedSearchListResponse,
   SavedSearchUpdate,
-  MailSavedSearch
+  CommunicationSavedSearch
 } from '../types/savedSearches'
 
 export async function fetchSavedSearches(
@@ -24,8 +24,8 @@ export async function fetchSavedSearches(
   )
 }
 
-export async function createSavedSearch(request: SavedSearchInput): Promise<MailSavedSearch> {
-  return ApiClient.instance.post<MailSavedSearch>(
+export async function createSavedSearch(request: SavedSearchInput): Promise<CommunicationSavedSearch> {
+  return ApiClient.instance.post<CommunicationSavedSearch>(
     '/api/v1/communications/saved-searches',
     request,
     'Saved search creation failed'
@@ -35,8 +35,8 @@ export async function createSavedSearch(request: SavedSearchInput): Promise<Mail
 export async function updateSavedSearch(
   savedSearchId: string,
   request: SavedSearchUpdate
-): Promise<MailSavedSearch> {
-  return ApiClient.instance.put<MailSavedSearch>(
+): Promise<CommunicationSavedSearch> {
+  return ApiClient.instance.put<CommunicationSavedSearch>(
     `/api/v1/communications/saved-searches/${encodeURIComponent(savedSearchId)}`,
     request,
     'Saved search update failed'

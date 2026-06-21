@@ -1,5 +1,4 @@
 use crate::platform::communications::ProviderAccount;
-use crate::vault::CommunicationProviderAccountStore;
 
 use super::super::errors::TelegramError;
 use super::super::store::TelegramStore;
@@ -9,7 +8,8 @@ impl TelegramStore {
         &self,
         account_id: &str,
     ) -> Result<ProviderAccount, TelegramError> {
-        let provider_account = CommunicationProviderAccountStore::new(self.pool.clone())
+        let provider_account = self
+            .provider_account_store()
             .get(account_id)
             .await
             .map_err(|error| TelegramError::ProviderAccountStore(error.to_string()))?

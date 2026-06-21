@@ -1,5 +1,8 @@
 use super::super::{TelegramMemberSyncContext, TelegramRuntimeEventBridgeContext};
 use super::sync_provider_roster_snapshots;
+use crate::domains::communications::core::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
 use crate::integrations::telegram::client::TelegramChat;
 use crate::integrations::telegram::client::commands::insert_command;
 use crate::integrations::telegram::client::models::{
@@ -14,7 +17,6 @@ use crate::platform::config::AppConfig;
 use crate::platform::events::EventBus;
 use crate::platform::events::bus::telegram_event_types;
 use crate::platform::secrets::{InMemorySecretResolver, SecretReferenceStore};
-use crate::vault::CommunicationProviderAccountStore;
 use serde_json::json;
 use sqlx::{PgPool, Row};
 use testkit::context::TestContext;
@@ -78,8 +80,7 @@ async fn sync_provider_roster_snapshots_appends_join_reconciliation_after_partic
     .expect("seed join command");
 
     let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
-    let provider_secret_binding_store =
-        crate::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
+    let provider_secret_binding_store = CommunicationProviderSecretBindingStore::new(pool.clone());
     let telegram_store = TelegramStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool.clone());
     let secret_resolver = InMemorySecretResolver::new();
@@ -240,8 +241,7 @@ async fn sync_provider_roster_snapshots_appends_leave_reconciliation_after_absen
     .expect("seed leave command");
 
     let provider_account_store = CommunicationProviderAccountStore::new(pool.clone());
-    let provider_secret_binding_store =
-        crate::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
+    let provider_secret_binding_store = CommunicationProviderSecretBindingStore::new(pool.clone());
     let telegram_store = TelegramStore::new(pool.clone());
     let secret_store = SecretReferenceStore::new(pool.clone());
     let secret_resolver = InMemorySecretResolver::new();

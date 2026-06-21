@@ -132,7 +132,7 @@ describe('telegram lifecycle reference API', () => {
     })
     await fetchTelegramReactions('msg-1')
 
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/telegram/commands?account_id=acct-1&limit=25')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/commands?account_id=acct-1&limit=25')
     expect(fetchMock.mock.calls[0][0]).toContain('provider_chat_id=chat-42')
     expect(fetchMock.mock.calls[0][0]).toContain('provider_message_id=chat-42%3A77')
     expect(fetchMock.mock.calls[0][0]).toContain('command_kinds=mark_read%2Cmark_unread')
@@ -151,7 +151,7 @@ describe('telegram lifecycle reference API', () => {
     await retryTelegramCommand('cmd-retry-1')
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/communications/telegram/commands/cmd-retry-1/retry')
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/v1/integrations/telegram/commands/cmd-retry-1/retry')
     const [, init] = fetchMock.mock.calls[0]
     expect(init?.method).toBe('POST')
   })

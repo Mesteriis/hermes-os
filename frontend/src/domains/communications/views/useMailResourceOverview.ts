@@ -1,6 +1,6 @@
 import { computed } from 'vue'
 import {
-  useMailBlockersQuery,
+  useCommunicationBlockersQuery,
   useSubscriptionsQuery,
   useTopSendersQuery
 } from '../queries/mailWorkspaceQueries'
@@ -24,7 +24,7 @@ export function useMailResourceOverview(accountId?: QueryParam<string>) {
   const {
     data: blockersData,
     isLoading: isBlockersLoading
-  } = useMailBlockersQuery()
+  } = useCommunicationBlockersQuery()
 
   const subscriptions = computed(() => subscriptionsData.value ?? [])
   const topSenders = computed(() => topSendersData.value ?? [])

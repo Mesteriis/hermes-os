@@ -42,7 +42,7 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -186,7 +186,7 @@ async fn telegram_raw_message_endpoint_returns_sanitized_source_evidence() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -303,7 +303,7 @@ async fn telegram_fixture_sync_chats_returns_account_chat_metadata() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -378,7 +378,7 @@ async fn telegram_fixture_sync_selected_history_returns_projected_messages() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",

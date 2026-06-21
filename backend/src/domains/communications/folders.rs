@@ -24,7 +24,7 @@ use events::{
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MailFolder {
+pub struct CommunicationFolder {
     pub folder_id: String,
     pub account_id: Option<String>,
     pub name: String,
@@ -37,7 +37,7 @@ pub struct MailFolder {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct NewMailFolder {
+pub struct NewCommunicationFolder {
     pub folder_id: Option<String>,
     pub account_id: Option<String>,
     pub name: String,
@@ -47,7 +47,7 @@ pub struct NewMailFolder {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct UpdateMailFolder {
+pub struct UpdateCommunicationFolder {
     pub account_id: Option<String>,
     pub name: Option<String>,
     pub description: Option<String>,
@@ -56,14 +56,14 @@ pub struct UpdateMailFolder {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct MailFolderListPage {
-    pub items: Vec<MailFolder>,
+pub struct CommunicationFolderListPage {
+    pub items: Vec<CommunicationFolder>,
     pub next_cursor: Option<String>,
     pub has_more: bool,
 }
 
 #[derive(Clone, Debug)]
-pub struct MailFolderListQuery<'a> {
+pub struct CommunicationFolderListQuery<'a> {
     pub account_id: Option<&'a str>,
     pub cursor: Option<&'a str>,
     pub limit: i64,
@@ -123,19 +123,19 @@ pub struct FolderMessageListQuery<'a> {
 }
 
 #[derive(Clone)]
-pub struct MailFolderStore {
+pub struct CommunicationFolderStore {
     pool: PgPool,
 }
 
-impl MailFolderStore {
+impl CommunicationFolderStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     pub async fn list(
         &self,
-        query: MailFolderListQuery<'_>,
-    ) -> Result<MailFolderListPage, MailFolderError> {
+        query: CommunicationFolderListQuery<'_>,
+    ) -> Result<CommunicationFolderListPage, CommunicationFolderError> {
         let limit = validate_limit(query.limit);
         let account_id = normalize_optional(query.account_id.map(str::to_owned))?;
         let cursor = query
@@ -190,26 +190,29 @@ impl MailFolderStore {
             None
         };
 
-        Ok(MailFolderListPage {
+        Ok(CommunicationFolderListPage {
             items,
             next_cursor,
             has_more,
         })
     }
 
-    pub async fn create(&self, input: NewMailFolder) -> Result<MailFolder, MailFolderError> {
+    pub async fn create(
+        &self,
+        input: NewCommunicationFolder,
+    ) -> Result<CommunicationFolder, CommunicationFolderError> {
         self.create_with_observation(input, None, "folder_upsert", None)
             .await
     }
 
     pub async fn create_with_observation(
         &self,
-        input: NewMailFolder,
+        input: NewCommunicationFolder,
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<MailFolder, MailFolderError> {
-        let normalized = NormalizedMailFolderInput::from_new(input)?;
+    ) -> Result<CommunicationFolder, CommunicationFolderError> {
+        let normalized = NormalizedCommunicationFolderInput::from_new(input)?;
         let mut transaction = self.pool.begin().await?;
         ensure_canonical_account_in_transaction(&mut transaction, normalized.account_id.as_deref())
             .await?;
@@ -242,8 +245,8 @@ impl MailFolderStore {
     pub async fn update(
         &self,
         folder_id: &str,
-        update: UpdateMailFolder,
-    ) -> Result<Option<MailFolder>, MailFolderError> {
+        update: UpdateCommunicationFolder,
+    ) -> Result<Option<CommunicationFolder>, CommunicationFolderError> {
         self.update_with_observation(folder_id, update, None, "folder_upsert", None)
             .await
     }
@@ -251,13 +254,13 @@ impl MailFolderStore {
     pub async fn update_with_observation(
         &self,
         folder_id: &str,
-        update: UpdateMailFolder,
+        update: UpdateCommunicationFolder,
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<Option<MailFolder>, MailFolderError> {
+    ) -> Result<Option<CommunicationFolder>, CommunicationFolderError> {
         let folder_id = normalize_required("folder_id", folder_id)?;
-        let normalized = NormalizedMailFolderUpdate::from_update(update)?;
+        let normalized = NormalizedCommunicationFolderUpdate::from_update(update)?;
         let mut transaction = self.pool.begin().await?;
         ensure_canonical_account_in_transaction(&mut transaction, normalized.account_id.as_deref())
             .await?;
@@ -290,7 +293,7 @@ impl MailFolderStore {
         Ok(Some(folder))
     }
 
-    pub async fn delete(&self, folder_id: &str) -> Result<bool, MailFolderError> {
+    pub async fn delete(&self, folder_id: &str) -> Result<bool, CommunicationFolderError> {
         self.delete_with_observation(folder_id, None, "folder_delete", None)
             .await
     }
@@ -301,7 +304,7 @@ impl MailFolderStore {
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<bool, MailFolderError> {
+    ) -> Result<bool, CommunicationFolderError> {
         let folder_id = normalize_required("folder_id", folder_id)?;
         let mut transaction = self.pool.begin().await?;
         let Some(folder) = delete_folder(&mut transaction, &folder_id).await? else {
@@ -335,7 +338,7 @@ impl MailFolderStore {
     pub async fn list_messages(
         &self,
         query: FolderMessageListQuery<'_>,
-    ) -> Result<FolderMessagePage, MailFolderError> {
+    ) -> Result<FolderMessagePage, CommunicationFolderError> {
         let folder_id = normalize_required("folder_id", query.folder_id)?;
         let limit = validate_limit(query.limit);
         let cursor = query
@@ -412,7 +415,7 @@ impl MailFolderStore {
         &self,
         folder_id: &str,
         message_id: &str,
-    ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationFolderError> {
         self.copy_message_with_observation(
             folder_id,
             message_id,
@@ -430,7 +433,7 @@ impl MailFolderStore {
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationFolderError> {
         self.apply_message_action_with_observation(
             folder_id,
             message_id,
@@ -446,7 +449,7 @@ impl MailFolderStore {
         &self,
         folder_id: &str,
         message_id: &str,
-    ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationFolderError> {
         self.move_message_with_observation(
             folder_id,
             message_id,
@@ -464,7 +467,7 @@ impl MailFolderStore {
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationFolderError> {
         self.apply_message_action_with_observation(
             folder_id,
             message_id,
@@ -481,7 +484,7 @@ impl MailFolderStore {
         folder_id: &str,
         message_id: &str,
         operation: FolderMessageOperation,
-    ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationFolderError> {
         self.apply_message_action_with_observation(
             folder_id,
             message_id,
@@ -501,7 +504,7 @@ impl MailFolderStore {
         observation_id: Option<&str>,
         relationship_kind: &str,
         metadata: Option<serde_json::Value>,
-    ) -> Result<Option<FolderMessageActionResponse>, MailFolderError> {
+    ) -> Result<Option<FolderMessageActionResponse>, CommunicationFolderError> {
         let folder_id = normalize_required("folder_id", folder_id)?;
         let message_id = normalize_required("message_id", message_id)?;
         let mut transaction = self.pool.begin().await?;
@@ -566,7 +569,7 @@ impl MailFolderStore {
 }
 
 #[derive(Debug)]
-struct NormalizedMailFolderInput {
+struct NormalizedCommunicationFolderInput {
     folder_id: String,
     account_id: Option<String>,
     name: String,
@@ -575,8 +578,8 @@ struct NormalizedMailFolderInput {
     sort_order: i32,
 }
 
-impl NormalizedMailFolderInput {
-    fn from_new(input: NewMailFolder) -> Result<Self, MailFolderError> {
+impl NormalizedCommunicationFolderInput {
+    fn from_new(input: NewCommunicationFolder) -> Result<Self, CommunicationFolderError> {
         Ok(Self {
             folder_id: match input.folder_id {
                 Some(value) => normalize_required("folder_id", &value)?,
@@ -592,7 +595,7 @@ impl NormalizedMailFolderInput {
 }
 
 #[derive(Debug)]
-struct NormalizedMailFolderUpdate {
+struct NormalizedCommunicationFolderUpdate {
     account_id: Option<String>,
     name: Option<String>,
     description: Option<String>,
@@ -600,8 +603,8 @@ struct NormalizedMailFolderUpdate {
     sort_order: Option<i32>,
 }
 
-impl NormalizedMailFolderUpdate {
-    fn from_update(update: UpdateMailFolder) -> Result<Self, MailFolderError> {
+impl NormalizedCommunicationFolderUpdate {
+    fn from_update(update: UpdateCommunicationFolder) -> Result<Self, CommunicationFolderError> {
         Ok(Self {
             account_id: normalize_optional(update.account_id)?,
             name: normalize_optional(update.name)?,
@@ -615,7 +618,7 @@ impl NormalizedMailFolderUpdate {
 async fn ensure_canonical_account_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     account_id: Option<&str>,
-) -> Result<(), MailFolderError> {
+) -> Result<(), CommunicationFolderError> {
     let Some(account_id) = account_id else {
         return Ok(());
     };
@@ -648,8 +651,8 @@ async fn ensure_canonical_account_in_transaction(
 
 async fn insert_folder(
     transaction: &mut Transaction<'_, Postgres>,
-    input: &NormalizedMailFolderInput,
-) -> Result<MailFolder, MailFolderError> {
+    input: &NormalizedCommunicationFolderInput,
+) -> Result<CommunicationFolder, CommunicationFolderError> {
     let row = sqlx::query(
         r#"
         WITH inserted AS (
@@ -689,8 +692,8 @@ async fn insert_folder(
 async fn update_folder(
     transaction: &mut Transaction<'_, Postgres>,
     folder_id: &str,
-    update: &NormalizedMailFolderUpdate,
-) -> Result<Option<MailFolder>, MailFolderError> {
+    update: &NormalizedCommunicationFolderUpdate,
+) -> Result<Option<CommunicationFolder>, CommunicationFolderError> {
     let row = sqlx::query(
         r#"
         WITH updated AS (
@@ -734,7 +737,7 @@ async fn update_folder(
 async fn delete_folder(
     transaction: &mut Transaction<'_, Postgres>,
     folder_id: &str,
-) -> Result<Option<MailFolder>, MailFolderError> {
+) -> Result<Option<CommunicationFolder>, CommunicationFolderError> {
     let row = sqlx::query(
         r#"
         WITH target AS (
@@ -771,7 +774,7 @@ async fn delete_folder(
 async fn folder_exists(
     transaction: &mut Transaction<'_, Postgres>,
     folder_id: &str,
-) -> Result<bool, MailFolderError> {
+) -> Result<bool, CommunicationFolderError> {
     Ok(sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (SELECT 1 FROM communication_folders WHERE folder_id = $1)",
     )
@@ -783,7 +786,7 @@ async fn folder_exists(
 async fn message_exists(
     transaction: &mut Transaction<'_, Postgres>,
     message_id: &str,
-) -> Result<bool, MailFolderError> {
+) -> Result<bool, CommunicationFolderError> {
     Ok(sqlx::query_scalar::<_, bool>(
         "SELECT EXISTS (SELECT 1 FROM communication_messages WHERE message_id = $1)",
     )
@@ -797,7 +800,7 @@ async fn upsert_folder_message(
     folder_id: &str,
     message_id: &str,
     operation: &str,
-) -> Result<(), MailFolderError> {
+) -> Result<(), CommunicationFolderError> {
     sqlx::query(
         r#"
         INSERT INTO communication_folder_messages (folder_id, message_id, added_at, last_operation)
@@ -820,7 +823,7 @@ async fn load_folder_message(
     transaction: &mut Transaction<'_, Postgres>,
     folder_id: &str,
     message_id: &str,
-) -> Result<FolderMessage, MailFolderError> {
+) -> Result<FolderMessage, CommunicationFolderError> {
     let row = sqlx::query(
         r#"
         SELECT
@@ -860,8 +863,8 @@ async fn load_folder_message(
     row_to_folder_message(row)
 }
 
-fn row_to_folder(row: PgRow) -> Result<MailFolder, MailFolderError> {
-    Ok(MailFolder {
+fn row_to_folder(row: PgRow) -> Result<CommunicationFolder, CommunicationFolderError> {
+    Ok(CommunicationFolder {
         folder_id: row.try_get("folder_id")?,
         account_id: row.try_get("account_id")?,
         name: row.try_get("name")?,
@@ -874,7 +877,7 @@ fn row_to_folder(row: PgRow) -> Result<MailFolder, MailFolderError> {
     })
 }
 
-fn row_to_folder_message(row: PgRow) -> Result<FolderMessage, MailFolderError> {
+fn row_to_folder_message(row: PgRow) -> Result<FolderMessage, CommunicationFolderError> {
     let workflow_state: String = row.try_get("workflow_state")?;
     let local_state: String = row.try_get("local_state")?;
 
@@ -888,10 +891,10 @@ fn row_to_folder_message(row: PgRow) -> Result<FolderMessage, MailFolderError> {
         projected_at: row.try_get("projected_at")?,
         workflow_state: workflow_state
             .parse::<WorkflowState>()
-            .map_err(|_| MailFolderError::Invalid("workflow_state"))?,
+            .map_err(|_| CommunicationFolderError::Invalid("workflow_state"))?,
         local_state: local_state
             .parse::<LocalMessageState>()
-            .map_err(|_| MailFolderError::Invalid("local_state"))?,
+            .map_err(|_| CommunicationFolderError::Invalid("local_state"))?,
         added_at: row.try_get("added_at")?,
         attachment_count: row.try_get("attachment_count")?,
     })
@@ -901,15 +904,18 @@ fn validate_limit(limit: i64) -> i64 {
     limit.clamp(1, 1000)
 }
 
-fn normalize_required(field: &'static str, value: &str) -> Result<String, MailFolderError> {
+fn normalize_required(
+    field: &'static str,
+    value: &str,
+) -> Result<String, CommunicationFolderError> {
     let value = value.trim();
     if value.is_empty() {
-        return Err(MailFolderError::Invalid(field));
+        return Err(CommunicationFolderError::Invalid(field));
     }
     Ok(value.to_owned())
 }
 
-fn normalize_optional(value: Option<String>) -> Result<Option<String>, MailFolderError> {
+fn normalize_optional(value: Option<String>) -> Result<Option<String>, CommunicationFolderError> {
     match value {
         Some(value) => {
             let value = value.trim();
@@ -935,7 +941,7 @@ fn system_time_nanos() -> u128 {
 }
 
 #[derive(Debug, Error)]
-pub enum MailFolderError {
+pub enum CommunicationFolderError {
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
     #[error(transparent)]

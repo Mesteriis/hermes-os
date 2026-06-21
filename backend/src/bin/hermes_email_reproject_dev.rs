@@ -7,7 +7,7 @@ use hermes_hub_backend::domains::communications::core::StoredRawCommunicationRec
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, parse_raw_email_message_from_blob, project_parsed_raw_email_message,
 };
-use hermes_hub_backend::domains::communications::storage::LocalMailBlobStore;
+use hermes_hub_backend::domains::communications::storage::LocalCommunicationBlobStore;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::mail_background_sync::DEFAULT_MAIL_SYNC_BLOB_ROOT;
@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .pool()
         .ok_or(ReprojectDevError::MissingDatabaseUrl)?
         .clone();
-    let blob_store = LocalMailBlobStore::new(&config.blob_root);
+    let blob_store = LocalCommunicationBlobStore::new(&config.blob_root);
     let message_store = MessageProjectionStore::new(pool.clone());
     let raw_records = email_blob_records_for_reprojection(
         &pool,

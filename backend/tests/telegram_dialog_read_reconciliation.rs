@@ -41,7 +41,7 @@ async fn mark_read_reconciliation_completes_targeted_read_commands_from_chat_rea
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -160,7 +160,7 @@ async fn dialog_pin_reconciliation_marks_mismatched_unpin_command_failed() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -250,7 +250,7 @@ async fn dialog_archive_reconciliation_marks_mismatched_unarchive_command_failed
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -339,7 +339,7 @@ async fn dialog_mute_reconciliation_marks_mismatched_unmute_command_failed() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -430,7 +430,7 @@ async fn dialog_mark_unread_reconciliation_completes_matching_command() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -507,7 +507,7 @@ async fn dialog_mark_unread_reconciliation_marks_provider_read_state_as_mismatch
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",

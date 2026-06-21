@@ -15,8 +15,9 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, LocalMailBlobStore,
-    MailAttachmentDisposition, MailStorageStore, NewMailAttachment, NewMailBlob,
+    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
+    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
+    NewCommunicationBlob,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -71,7 +72,7 @@ async fn seed_zip_attachment(pool: sqlx::PgPool) -> SeededAttachment {
     let provider_record_id = format!("provider-archive-inspection-{suffix}");
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let message_store = MessageProjectionStore::new(pool.clone());
-    let storage_store = MailStorageStore::new(pool);
+    let storage_store = CommunicationStorageStore::new(pool);
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
@@ -107,18 +108,20 @@ async fn seed_zip_attachment(pool: sqlx::PgPool) -> SeededAttachment {
         ("docs/readme.txt", b"hello" as &[u8]),
         ("invoice.txt", b"invoice data" as &[u8]),
     ]);
-    let local_blob_store = LocalMailBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let local_blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
     let local_blob = local_blob_store
         .put_blob(&zip_bytes)
         .await
         .expect("write zip blob");
     let blob = storage_store
-        .upsert_blob(&NewMailBlob::from_local_blob(&local_blob).content_type("application/zip"))
+        .upsert_blob(
+            &NewCommunicationBlob::from_local_blob(&local_blob).content_type("application/zip"),
+        )
         .await
         .expect("store zip blob metadata");
     let attachment = storage_store
         .upsert_attachment(
-            &NewMailAttachment::new(
+            &NewCommunicationAttachment::new(
                 &message_id,
                 &raw.raw_record_id,
                 blob.blob_id,
@@ -128,7 +131,7 @@ async fn seed_zip_attachment(pool: sqlx::PgPool) -> SeededAttachment {
                 local_blob.sha256,
             )
             .filename("evidence.zip")
-            .disposition(MailAttachmentDisposition::Attachment)
+            .disposition(CommunicationAttachmentDisposition::Attachment)
             .scan_report(AttachmentSafetyScanReport {
                 status: AttachmentSafetyScanStatus::NotScanned,
                 engine: None,

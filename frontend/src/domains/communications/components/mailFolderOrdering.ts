@@ -1,30 +1,30 @@
-import type { MailFolder } from '../types/folders'
+import type { CommunicationFolder } from '../types/folders'
 
 export const MAIL_FOLDER_REORDER_DRAG_TYPE = 'application/x-hermes-mail-folder-reorder'
 const SORT_ORDER_STEP = 1000
 
-export type MailFolderReorderPayload = {
+export type CommunicationFolderReorderPayload = {
   kind: 'mail-folder-reorder'
   folder_id: string
 }
 
-export type MailFolderOrderUpdate = {
+export type CommunicationFolderOrderUpdate = {
   folderId: string
   sortOrder: number
 }
 
-export function createMailFolderReorderPayload(folderId: string): string {
+export function createCommunicationFolderReorderPayload(folderId: string): string {
   return JSON.stringify({
     kind: 'mail-folder-reorder',
     folder_id: folderId.trim()
-  } satisfies MailFolderReorderPayload)
+  } satisfies CommunicationFolderReorderPayload)
 }
 
-export function parseMailFolderReorderPayload(value: string): MailFolderReorderPayload | null {
+export function parseCommunicationFolderReorderPayload(value: string): CommunicationFolderReorderPayload | null {
   if (!value.trim()) return null
 
   try {
-    const parsed = JSON.parse(value) as Partial<MailFolderReorderPayload>
+    const parsed = JSON.parse(value) as Partial<CommunicationFolderReorderPayload>
     if (parsed.kind !== 'mail-folder-reorder') return null
     if (typeof parsed.folder_id !== 'string' || !parsed.folder_id.trim()) return null
     return {
@@ -36,15 +36,15 @@ export function parseMailFolderReorderPayload(value: string): MailFolderReorderP
   }
 }
 
-export function hasMailFolderReorderDragType(types: readonly string[] | DOMStringList): boolean {
+export function hasCommunicationFolderReorderDragType(types: readonly string[] | DOMStringList): boolean {
   return Array.from(types).includes(MAIL_FOLDER_REORDER_DRAG_TYPE)
 }
 
-export function buildMailFolderReorderUpdates(
-  folders: Pick<MailFolder, 'folder_id' | 'sort_order'>[],
+export function buildCommunicationFolderReorderUpdates(
+  folders: Pick<CommunicationFolder, 'folder_id' | 'sort_order'>[],
   sourceFolderId: string,
   targetFolderId: string
-): MailFolderOrderUpdate[] {
+): CommunicationFolderOrderUpdate[] {
   const sourceId = sourceFolderId.trim()
   const targetId = targetFolderId.trim()
   if (!sourceId || !targetId || sourceId === targetId) return []
@@ -75,7 +75,7 @@ export function buildMailFolderReorderUpdates(
 }
 
 export function mailFolderReorderStatus(
-  folders: Pick<MailFolder, 'folder_id' | 'name'>[],
+  folders: Pick<CommunicationFolder, 'folder_id' | 'name'>[],
   sourceFolderId: string,
   targetFolderId: string
 ): string {
@@ -85,8 +85,8 @@ export function mailFolderReorderStatus(
 }
 
 function sameFolderOrder(
-  left: Pick<MailFolder, 'folder_id'>[],
-  right: Pick<MailFolder, 'folder_id'>[]
+  left: Pick<CommunicationFolder, 'folder_id'>[],
+  right: Pick<CommunicationFolder, 'folder_id'>[]
 ): boolean {
   return left.length === right.length && left.every((folder, index) => folder.folder_id === right[index]?.folder_id)
 }

@@ -49,7 +49,7 @@ async fn imap_send_api_sends_via_configured_smtp_against_postgres() {
     let setup_response = app
         .clone()
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/communications/mail/accounts/imap",
+            "/api/v1/integrations/mail/accounts/imap",
             json!({
                 "account_id": account_id,
                 "provider_kind": "imap",
@@ -243,7 +243,7 @@ async fn imap_send_api_requires_smtp_password_binding_against_postgres() {
     let setup_response = app
         .clone()
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/communications/mail/accounts/imap",
+            "/api/v1/integrations/mail/accounts/imap",
             json!({
                 "account_id": account_id,
                 "provider_kind": "imap",
@@ -336,7 +336,7 @@ async fn imap_send_api_does_not_send_when_audit_record_fails_against_postgres() 
     let setup_response = app
         .clone()
         .oneshot(json_request_with_token_and_actor(
-            "/api/v1/communications/mail/accounts/imap",
+            "/api/v1/integrations/mail/accounts/imap",
             json!({
                 "account_id": account_id,
                 "provider_kind": "imap",

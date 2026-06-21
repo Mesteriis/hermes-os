@@ -2,56 +2,16 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 use sqlx::postgres::{PgPool, PgRow};
 use sqlx::{Postgres, Row, Transaction};
-use thiserror::Error;
 
+use crate::platform::communications::{
+    ProviderChannelMessage, ProviderCommunicationMessagePortError, ProviderHeuristicMember,
+    ProviderMessageAttachmentAnchor, ProviderMessageProjectionObservationContext,
+    ProviderMessageReferenceSummary,
+};
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
     link_domain_entity_in_transaction,
 };
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProviderChannelMessage {
-    pub message_id: String,
-    pub raw_record_id: String,
-    pub account_id: String,
-    pub provider_record_id: String,
-    pub subject: String,
-    pub sender: String,
-    pub body_text: String,
-    pub occurred_at: Option<DateTime<Utc>>,
-    pub projected_at: DateTime<Utc>,
-    pub channel_kind: String,
-    pub conversation_id: String,
-    pub sender_display_name: Option<String>,
-    pub delivery_state: String,
-    pub message_metadata: Value,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProviderMessageAttachmentAnchor {
-    pub message_id: String,
-    pub raw_record_id: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProviderMessageReferenceSummary {
-    pub message_id: String,
-    pub provider_record_id: String,
-    pub conversation_id: Option<String>,
-    pub subject: String,
-    pub sender: String,
-    pub sender_display_name: Option<String>,
-    pub body_text: String,
-    pub occurred_at: Option<DateTime<Utc>>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ProviderHeuristicMember {
-    pub sender_id: String,
-    pub sender_display_name: Option<String>,
-    pub message_count: i64,
-    pub last_message_at: Option<DateTime<Utc>>,
-}
 
 #[derive(Clone)]
 pub struct ProviderChannelMessageStore {
@@ -1032,13 +992,6 @@ impl ProviderChannelMessageStore {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct ProviderMessageProjectionObservationContext<'a> {
-    pub channel_kinds: &'a [&'a str],
-    pub relationship_kind: &'a str,
-    pub actor: &'a str,
-}
-
 async fn capture_projection_observation_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     message: &ProviderChannelMessage,
@@ -1113,16 +1066,4 @@ fn provider_from_channel_kind(channel_kind: &str) -> &'static str {
         "whatsapp_web" => "whatsapp_web",
         _ => "provider",
     }
-}
-
-#[derive(Debug, Error)]
-pub enum ProviderCommunicationMessagePortError {
-    #[error("invalid provider communication message request: {0}")]
-    InvalidRequest(String),
-
-    #[error(transparent)]
-    ObservationStore(#[from] ObservationStoreError),
-
-    #[error(transparent)]
-    Sqlx(#[from] sqlx::Error),
 }

@@ -1,0 +1,805 @@
+use serde_json::json;
+use sqlx::Row;
+use sqlx::postgres::{PgPool, PgRow};
+use sqlx::{Postgres, Transaction};
+
+use super::errors::CommunicationIngestionError;
+use super::models::{
+    DeletedProviderAccount, NewProviderAccount, NewProviderAccountSecretBinding, ProviderAccount,
+    ProviderAccountSecretBinding, ProviderAccountSecretPurpose, ProviderAccountUsage,
+};
+use crate::platform::observations::{
+    NewObservation, ObservationOriginKind, ObservationStore, link_domain_entity_in_transaction,
+};
+
+#[derive(Clone)]
+pub struct CommunicationProviderAccountStore {
+    pool: PgPool,
+}
+
+impl CommunicationProviderAccountStore {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn upsert_runtime_account(
+        &self,
+        account_id: impl Into<String>,
+        provider_kind: &str,
+        display_name: impl Into<String>,
+        external_account_id: impl Into<String>,
+        config: serde_json::Value,
+    ) -> Result<ProviderAccount, CommunicationIngestionError> {
+        let provider_kind =
+            crate::domains::communications::core::CommunicationProviderKind::try_from(
+                provider_kind,
+            )?;
+        self.upsert(
+            &NewProviderAccount::new(account_id, provider_kind, display_name, external_account_id)
+                .config(config),
+        )
+        .await
+    }
+
+    pub async fn upsert(
+        &self,
+        account: &NewProviderAccount,
+    ) -> Result<ProviderAccount, CommunicationIngestionError> {
+        self.upsert_with_origin(
+            account,
+            ObservationOriginKind::LocalRuntime,
+            "vault.communication_provider_accounts.upsert",
+        )
+        .await
+    }
+
+    pub async fn restore(
+        &self,
+        account: &NewProviderAccount,
+    ) -> Result<ProviderAccount, CommunicationIngestionError> {
+        self.upsert_with_origin(
+            account,
+            ObservationOriginKind::VaultSource,
+            "vault_reconciliation.restore_provider_account",
+        )
+        .await
+    }
+
+    pub async fn upsert_with_origin(
+        &self,
+        account: &NewProviderAccount,
+        origin_kind: ObservationOriginKind,
+        actor: &str,
+    ) -> Result<ProviderAccount, CommunicationIngestionError> {
+        validate_provider_account(account)?;
+        let mut transaction = self.pool.begin().await?;
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &NewObservation::new(
+                "COMMUNICATION_PROVIDER_ACCOUNT",
+                origin_kind,
+                chrono::Utc::now(),
+                json!({
+                    "account_id": account.account_id.trim(),
+                    "provider_kind": account.provider_kind.as_str(),
+                    "display_name": account.display_name.trim(),
+                    "external_account_id": account.external_account_id.trim(),
+                    "config": account.config,
+                    "action": "upsert_communication_provider_account",
+                }),
+                format!(
+                    "communication-provider-account://{}",
+                    account.account_id.trim()
+                ),
+            )
+            .provenance(json!({
+                "captured_by": actor,
+                "action": "upsert_communication_provider_account",
+                "provider_kind": account.provider_kind.as_str(),
+            })),
+        )
+        .await?;
+        let row = sqlx::query(
+            r#"
+            INSERT INTO communication_provider_accounts (
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, now())
+            ON CONFLICT (account_id)
+            DO UPDATE SET
+                provider_kind = EXCLUDED.provider_kind,
+                display_name = EXCLUDED.display_name,
+                external_account_id = EXCLUDED.external_account_id,
+                config = EXCLUDED.config,
+                updated_at = now()
+            RETURNING
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(account.account_id.trim())
+        .bind(account.provider_kind.as_str())
+        .bind(account.display_name.trim())
+        .bind(account.external_account_id.trim())
+        .bind(&account.config)
+        .fetch_one(&mut *transaction)
+        .await?;
+        link_vault_owned_entity_in_transaction(
+            &mut transaction,
+            VaultOwnedEntityLink {
+                observation_id: observation.observation_id.clone(),
+                domain: "vault",
+                entity_kind: "communication_provider_account",
+                entity_id: account.account_id.trim().to_owned(),
+                relationship_kind: "upsert",
+                base_metadata: json!({
+                    "provider_kind": account.provider_kind.as_str(),
+                    "external_account_id": account.external_account_id.trim(),
+                }),
+                extra_metadata: None,
+            },
+        )
+        .await?;
+        transaction.commit().await?;
+
+        row_to_provider_account(row)
+    }
+
+    pub async fn get(
+        &self,
+        account_id: &str,
+    ) -> Result<Option<ProviderAccount>, CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            FROM communication_provider_accounts
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_provider_account).transpose()
+    }
+
+    pub async fn list(&self) -> Result<Vec<ProviderAccount>, CommunicationIngestionError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            FROM communication_provider_accounts
+            ORDER BY provider_kind ASC, display_name ASC, account_id ASC
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter().map(row_to_provider_account).collect()
+    }
+
+    pub async fn update_config(
+        &self,
+        account_id: &str,
+        config: &serde_json::Value,
+    ) -> Result<Option<ProviderAccount>, CommunicationIngestionError> {
+        self.update_config_with_origin(
+            account_id,
+            config,
+            ObservationOriginKind::LocalRuntime,
+            "vault.communication_provider_accounts.update_config",
+            "update_config",
+        )
+        .await
+    }
+
+    pub async fn mark_logged_out(
+        &self,
+        account_id: &str,
+    ) -> Result<Option<ProviderAccount>, CommunicationIngestionError> {
+        let Some(current) = self.get(account_id).await? else {
+            return Ok(None);
+        };
+        let mut config = current.config;
+        let config_object = config
+            .as_object_mut()
+            .ok_or(CommunicationIngestionError::NonObjectJson("config"))?;
+        config_object.insert("auth_state".to_owned(), json!("logged_out"));
+        config_object.insert("logged_out_at".to_owned(), json!(chrono::Utc::now()));
+
+        self.update_config_with_origin(
+            account_id,
+            &config,
+            ObservationOriginKind::LocalRuntime,
+            "vault.communication_provider_accounts.mark_logged_out",
+            "logout",
+        )
+        .await
+    }
+
+    pub async fn update_config_with_origin(
+        &self,
+        account_id: &str,
+        config: &serde_json::Value,
+        origin_kind: ObservationOriginKind,
+        actor: &str,
+        action: &str,
+    ) -> Result<Option<ProviderAccount>, CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+        if !config.is_object() {
+            return Err(CommunicationIngestionError::NonObjectJson("config"));
+        }
+
+        let mut transaction = self.pool.begin().await?;
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &NewObservation::new(
+                "COMMUNICATION_PROVIDER_ACCOUNT_CONFIG_MUTATION",
+                origin_kind,
+                chrono::Utc::now(),
+                json!({
+                    "account_id": account_id.trim(),
+                    "config": config,
+                    "action": action,
+                }),
+                format!(
+                    "communication-provider-account://{}/config",
+                    account_id.trim()
+                ),
+            )
+            .provenance(json!({
+                "captured_by": actor,
+                "action": action,
+            })),
+        )
+        .await?;
+
+        let row = sqlx::query(
+            r#"
+            UPDATE communication_provider_accounts
+            SET config = $2,
+                updated_at = now()
+            WHERE account_id = $1
+            RETURNING
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(config)
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        if row.is_some() {
+            link_vault_owned_entity_in_transaction(
+                &mut transaction,
+                VaultOwnedEntityLink {
+                    observation_id: observation.observation_id.clone(),
+                    domain: "vault",
+                    entity_kind: "communication_provider_account",
+                    entity_id: account_id.trim().to_owned(),
+                    relationship_kind: "config_update",
+                    base_metadata: json!({
+                        "account_id": account_id.trim(),
+                        "action": action,
+                    }),
+                    extra_metadata: None,
+                },
+            )
+            .await?;
+            transaction.commit().await?;
+        } else {
+            transaction.rollback().await?;
+        }
+
+        row.map(row_to_provider_account).transpose()
+    }
+
+    pub async fn usage(
+        &self,
+        account_id: &str,
+    ) -> Result<ProviderAccountUsage, CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT
+                (SELECT count(*) FROM communication_raw_records WHERE account_id = $1) AS raw_record_count,
+                (SELECT count(*) FROM communication_messages WHERE account_id = $1) AS message_count,
+                (SELECT count(*) FROM communication_ingestion_checkpoints WHERE account_id = $1) AS checkpoint_count
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(ProviderAccountUsage {
+            raw_record_count: row.try_get("raw_record_count")?,
+            message_count: row.try_get("message_count")?,
+            checkpoint_count: row.try_get("checkpoint_count")?,
+        })
+    }
+
+    pub async fn delete_metadata(
+        &self,
+        account_id: &str,
+    ) -> Result<DeletedProviderAccount, CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+
+        let mut transaction = self.pool.begin().await?;
+
+        let binding_rows = sqlx::query(
+            r#"
+            DELETE FROM communication_provider_account_secret_refs
+            WHERE account_id = $1
+            RETURNING account_id, secret_purpose, secret_ref
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_all(&mut *transaction)
+        .await?;
+        let mut removed_bindings = Vec::with_capacity(binding_rows.len());
+        let unbound_secret_refs = binding_rows
+            .into_iter()
+            .map(|row| {
+                let removed_account_id: String = row.try_get("account_id")?;
+                let secret_purpose: String = row.try_get("secret_purpose")?;
+                let secret_ref: String = row.try_get("secret_ref")?;
+                removed_bindings.push((removed_account_id, secret_purpose, secret_ref.clone()));
+                Ok(secret_ref)
+            })
+            .collect::<Result<Vec<String>, sqlx::Error>>()?;
+
+        for (removed_account_id, secret_purpose, secret_ref) in &removed_bindings {
+            let observation = ObservationStore::capture_in_transaction(
+                &mut transaction,
+                &NewObservation::new(
+                    "COMMUNICATION_PROVIDER_SECRET_BINDING_REMOVED",
+                    ObservationOriginKind::LocalRuntime,
+                    chrono::Utc::now(),
+                    json!({
+                        "account_id": removed_account_id,
+                        "secret_purpose": secret_purpose,
+                        "secret_ref": secret_ref,
+                        "action": "remove_provider_account_secret_binding",
+                    }),
+                    format!(
+                        "communication-provider-account://{removed_account_id}/secret-binding/{secret_purpose}/delete"
+                    ),
+                )
+                .provenance(json!({
+                    "captured_by": "vault.communication_provider_accounts.delete_metadata",
+                    "action": "remove_provider_account_secret_binding",
+                })),
+            )
+            .await?;
+            link_vault_owned_entity_in_transaction(
+                &mut transaction,
+                VaultOwnedEntityLink {
+                    observation_id: observation.observation_id.clone(),
+                    domain: "vault",
+                    entity_kind: "communication_provider_secret_binding",
+                    entity_id: format!("{removed_account_id}:{secret_purpose}"),
+                    relationship_kind: "remove",
+                    base_metadata: json!({
+                        "account_id": removed_account_id,
+                        "secret_purpose": secret_purpose,
+                        "secret_ref": secret_ref,
+                    }),
+                    extra_metadata: None,
+                },
+            )
+            .await?;
+        }
+
+        sqlx::query(
+            r#"
+            DELETE FROM communication_ingestion_checkpoints
+            WHERE account_id = $1
+            "#,
+        )
+        .bind(account_id.trim())
+        .execute(&mut *transaction)
+        .await?;
+
+        let account_row = sqlx::query(
+            r#"
+            DELETE FROM communication_provider_accounts
+            WHERE account_id = $1
+            RETURNING
+                account_id,
+                provider_kind,
+                display_name,
+                external_account_id,
+                config,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_optional(&mut *transaction)
+        .await?;
+
+        if let Some(account) = account_row.as_ref() {
+            let deleted_account = row_ref_to_provider_account(account)?;
+            let observation = ObservationStore::capture_in_transaction(
+                &mut transaction,
+                &NewObservation::new(
+                    "COMMUNICATION_PROVIDER_ACCOUNT_DELETED",
+                    ObservationOriginKind::LocalRuntime,
+                    chrono::Utc::now(),
+                    json!({
+                        "account_id": deleted_account.account_id,
+                        "provider_kind": deleted_account.provider_kind.as_str(),
+                        "display_name": deleted_account.display_name,
+                        "external_account_id": deleted_account.external_account_id,
+                        "config": deleted_account.config,
+                        "action": "delete_communication_provider_account",
+                    }),
+                    format!(
+                        "communication-provider-account://{}/delete",
+                        deleted_account.account_id
+                    ),
+                )
+                .provenance(json!({
+                    "captured_by": "vault.communication_provider_accounts.delete_metadata",
+                    "action": "delete_communication_provider_account",
+                    "provider_kind": deleted_account.provider_kind.as_str(),
+                })),
+            )
+            .await?;
+            link_vault_owned_entity_in_transaction(
+                &mut transaction,
+                VaultOwnedEntityLink {
+                    observation_id: observation.observation_id.clone(),
+                    domain: "vault",
+                    entity_kind: "communication_provider_account",
+                    entity_id: deleted_account.account_id.clone(),
+                    relationship_kind: "delete",
+                    base_metadata: json!({
+                        "provider_kind": deleted_account.provider_kind.as_str(),
+                        "external_account_id": deleted_account.external_account_id,
+                    }),
+                    extra_metadata: None,
+                },
+            )
+            .await?;
+        }
+
+        transaction.commit().await?;
+
+        Ok(DeletedProviderAccount {
+            account: account_row.map(row_to_provider_account).transpose()?,
+            unbound_secret_refs,
+        })
+    }
+}
+
+#[derive(Clone)]
+pub struct CommunicationProviderSecretBindingStore {
+    pool: PgPool,
+}
+
+impl CommunicationProviderSecretBindingStore {
+    pub fn new(pool: PgPool) -> Self {
+        Self { pool }
+    }
+
+    pub async fn bind(
+        &self,
+        binding: &NewProviderAccountSecretBinding,
+    ) -> Result<ProviderAccountSecretBinding, CommunicationIngestionError> {
+        self.bind_with_origin(
+            binding,
+            ObservationOriginKind::LocalRuntime,
+            "vault.communication_provider_secret_bindings.bind",
+        )
+        .await
+    }
+
+    pub async fn restore(
+        &self,
+        binding: &NewProviderAccountSecretBinding,
+    ) -> Result<ProviderAccountSecretBinding, CommunicationIngestionError> {
+        self.bind_with_origin(
+            binding,
+            ObservationOriginKind::VaultSource,
+            "vault_reconciliation.restore_provider_account_secret_binding",
+        )
+        .await
+    }
+
+    pub async fn bind_with_origin(
+        &self,
+        binding: &NewProviderAccountSecretBinding,
+        origin_kind: ObservationOriginKind,
+        actor: &str,
+    ) -> Result<ProviderAccountSecretBinding, CommunicationIngestionError> {
+        validate_provider_secret_binding(binding)?;
+        let binding_entity_id = format!(
+            "{}:{}",
+            binding.account_id.trim(),
+            binding.secret_purpose.as_str()
+        );
+        let mut transaction = self.pool.begin().await?;
+        let observation = ObservationStore::capture_in_transaction(
+            &mut transaction,
+            &NewObservation::new(
+                "COMMUNICATION_PROVIDER_SECRET_BINDING",
+                origin_kind,
+                chrono::Utc::now(),
+                json!({
+                    "account_id": binding.account_id.trim(),
+                    "secret_purpose": binding.secret_purpose.as_str(),
+                    "secret_ref": binding.secret_ref.trim(),
+                    "action": "bind_provider_account_secret",
+                }),
+                format!(
+                    "communication-provider-account://{}/secret-binding/{}",
+                    binding.account_id.trim(),
+                    binding.secret_purpose.as_str()
+                ),
+            )
+            .provenance(json!({
+                "captured_by": actor,
+                "action": "bind_provider_account_secret",
+            })),
+        )
+        .await?;
+        let row = sqlx::query(
+            r#"
+            INSERT INTO communication_provider_account_secret_refs (
+                account_id,
+                secret_purpose,
+                secret_ref,
+                updated_at
+            )
+            VALUES ($1, $2, $3, now())
+            ON CONFLICT (account_id, secret_purpose)
+            DO UPDATE SET
+                secret_ref = EXCLUDED.secret_ref,
+                updated_at = now()
+            RETURNING
+                account_id,
+                secret_purpose,
+                secret_ref,
+                created_at,
+                updated_at
+            "#,
+        )
+        .bind(binding.account_id.trim())
+        .bind(binding.secret_purpose.as_str())
+        .bind(binding.secret_ref.trim())
+        .fetch_one(&mut *transaction)
+        .await?;
+        link_vault_owned_entity_in_transaction(
+            &mut transaction,
+            VaultOwnedEntityLink {
+                observation_id: observation.observation_id.clone(),
+                domain: "vault",
+                entity_kind: "communication_provider_secret_binding",
+                entity_id: binding_entity_id,
+                relationship_kind: "bind",
+                base_metadata: json!({
+                    "account_id": binding.account_id.trim(),
+                    "secret_purpose": binding.secret_purpose.as_str(),
+                    "secret_ref": binding.secret_ref.trim(),
+                }),
+                extra_metadata: None,
+            },
+        )
+        .await?;
+        transaction.commit().await?;
+
+        row_to_provider_secret_binding(row)
+    }
+
+    pub async fn list_for_account(
+        &self,
+        account_id: &str,
+    ) -> Result<Vec<ProviderAccountSecretBinding>, CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+
+        let rows = sqlx::query(
+            r#"
+            SELECT
+                account_id,
+                secret_purpose,
+                secret_ref,
+                created_at,
+                updated_at
+            FROM communication_provider_account_secret_refs
+            WHERE account_id = $1
+            ORDER BY secret_purpose ASC
+            "#,
+        )
+        .bind(account_id.trim())
+        .fetch_all(&self.pool)
+        .await?;
+
+        rows.into_iter()
+            .map(row_to_provider_secret_binding)
+            .collect()
+    }
+
+    pub async fn get_for_account(
+        &self,
+        account_id: &str,
+        secret_purpose: ProviderAccountSecretPurpose,
+    ) -> Result<Option<ProviderAccountSecretBinding>, CommunicationIngestionError> {
+        validate_non_empty_field("account_id", account_id)?;
+
+        let row = sqlx::query(
+            r#"
+            SELECT
+                account_id,
+                secret_purpose,
+                secret_ref,
+                created_at,
+                updated_at
+            FROM communication_provider_account_secret_refs
+            WHERE account_id = $1
+              AND secret_purpose = $2
+            "#,
+        )
+        .bind(account_id.trim())
+        .bind(secret_purpose.as_str())
+        .fetch_optional(&self.pool)
+        .await?;
+
+        row.map(row_to_provider_secret_binding).transpose()
+    }
+}
+struct VaultOwnedEntityLink {
+    observation_id: String,
+    domain: &'static str,
+    entity_kind: &'static str,
+    entity_id: String,
+    relationship_kind: &'static str,
+    base_metadata: serde_json::Value,
+    extra_metadata: Option<serde_json::Value>,
+}
+
+async fn link_vault_owned_entity_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    request: VaultOwnedEntityLink,
+) -> Result<(), crate::platform::observations::ObservationStoreError> {
+    let metadata = match request.extra_metadata {
+        Some(extra) if request.base_metadata.is_object() && extra.is_object() => {
+            let mut merged = request.base_metadata;
+            if let (Some(base), Some(extra)) = (merged.as_object_mut(), extra.as_object()) {
+                for (key, value) in extra {
+                    base.insert(key.clone(), value.clone());
+                }
+            }
+            merged
+        }
+        Some(extra) => extra,
+        None => request.base_metadata,
+    };
+
+    link_domain_entity_in_transaction(
+        transaction,
+        &request.observation_id,
+        request.domain,
+        request.entity_kind,
+        request.entity_id,
+        Some(request.relationship_kind),
+        None,
+        Some(metadata),
+    )
+    .await
+}
+fn row_to_provider_account(row: PgRow) -> Result<ProviderAccount, CommunicationIngestionError> {
+    Ok(ProviderAccount {
+        account_id: row.try_get("account_id")?,
+        provider_kind: row
+            .try_get::<String, _>("provider_kind")?
+            .as_str()
+            .try_into()?,
+        display_name: row.try_get("display_name")?,
+        external_account_id: row.try_get("external_account_id")?,
+        config: row.try_get("config")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn row_ref_to_provider_account(
+    row: &PgRow,
+) -> Result<ProviderAccount, CommunicationIngestionError> {
+    Ok(ProviderAccount {
+        account_id: row.try_get("account_id")?,
+        provider_kind: row
+            .try_get::<String, _>("provider_kind")?
+            .as_str()
+            .try_into()?,
+        display_name: row.try_get("display_name")?,
+        external_account_id: row.try_get("external_account_id")?,
+        config: row.try_get("config")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn row_to_provider_secret_binding(
+    row: PgRow,
+) -> Result<ProviderAccountSecretBinding, CommunicationIngestionError> {
+    Ok(ProviderAccountSecretBinding {
+        account_id: row.try_get("account_id")?,
+        secret_purpose: ProviderAccountSecretPurpose::try_from(
+            row.try_get::<String, _>("secret_purpose")?.as_str(),
+        )?,
+        secret_ref: row.try_get("secret_ref")?,
+        created_at: row.try_get("created_at")?,
+        updated_at: row.try_get("updated_at")?,
+    })
+}
+
+fn validate_provider_account(
+    account: &NewProviderAccount,
+) -> Result<(), CommunicationIngestionError> {
+    validate_non_empty_field("account_id", &account.account_id)?;
+    validate_non_empty_field("display_name", &account.display_name)?;
+    validate_non_empty_field("external_account_id", &account.external_account_id)?;
+    if !account.config.is_object() {
+        return Err(CommunicationIngestionError::NonObjectJson("config"));
+    }
+    Ok(())
+}
+
+fn validate_provider_secret_binding(
+    binding: &NewProviderAccountSecretBinding,
+) -> Result<(), CommunicationIngestionError> {
+    validate_non_empty_field("account_id", &binding.account_id)?;
+    validate_non_empty_field("secret_ref", &binding.secret_ref)?;
+    Ok(())
+}
+
+fn validate_non_empty_field(
+    field: &'static str,
+    value: &str,
+) -> Result<(), CommunicationIngestionError> {
+    if value.trim().is_empty() {
+        return Err(CommunicationIngestionError::EmptyField(field));
+    }
+    Ok(())
+}
+
+fn next_id(prefix: &str) -> String {
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    format!("{prefix}:v1:{ts:x}")
+}

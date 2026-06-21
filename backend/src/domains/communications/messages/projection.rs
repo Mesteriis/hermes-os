@@ -1,7 +1,7 @@
 use serde_json::json;
 
 use crate::domains::communications::core::StoredRawCommunicationRecord;
-use crate::domains::communications::storage::LocalMailBlobStore;
+use crate::domains::communications::storage::LocalCommunicationBlobStore;
 use crate::platform::communications::rfc822::{
     ParsedCommunicationSourceMessage, parse_rfc822_message,
 };
@@ -42,7 +42,7 @@ pub async fn project_raw_email_message(
 
 pub async fn project_raw_email_message_from_blob(
     store: &MessageProjectionStore,
-    blob_store: &LocalMailBlobStore,
+    blob_store: &LocalCommunicationBlobStore,
     raw: &StoredRawCommunicationRecord,
 ) -> Result<ProjectedMessage, MessageProjectionError> {
     let parsed = parse_raw_email_message_from_blob(blob_store, raw).await?;
@@ -50,7 +50,7 @@ pub async fn project_raw_email_message_from_blob(
 }
 
 pub async fn parse_raw_email_message_from_blob(
-    blob_store: &LocalMailBlobStore,
+    blob_store: &LocalCommunicationBlobStore,
     raw: &StoredRawCommunicationRecord,
 ) -> Result<ParsedCommunicationSourceMessage, MessageProjectionError> {
     let storage_kind = required_payload_string(&raw.payload, "raw_blob_storage_kind")?;

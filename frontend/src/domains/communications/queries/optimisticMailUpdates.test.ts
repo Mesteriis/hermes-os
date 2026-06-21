@@ -135,7 +135,7 @@ describe('optimistic mail updates', () => {
 				action: 'archive',
 				message_ids: ['msg-1']
 			},
-			['communications-mail-list', 'account-1', 'new', 'email', undefined, undefined]
+			['communications-list', 'account-1', 'new', 'email', undefined, undefined]
 		)
 		const trashed = applyBulkMessageActionToMailList(
 			mailList([first, second]),
@@ -143,7 +143,7 @@ describe('optimistic mail updates', () => {
 				action: 'trash',
 				message_ids: ['msg-2']
 			},
-			['communications-mail-list', 'account-1', undefined, 'email', undefined, undefined]
+			['communications-list', 'account-1', undefined, 'email', undefined, undefined]
 		)
 
 		expect(archived?.pages[0]?.items).toEqual([second])

@@ -30,7 +30,7 @@ async fn fixture_account_allows_topic_list_but_blocks_topic_writes() {
 
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",

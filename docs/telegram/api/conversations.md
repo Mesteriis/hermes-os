@@ -174,8 +174,8 @@ closed-state transition and emits `telegram.command.reconciled`.
 | GET | `/api/v1/communications/telegram/messages/{message_id}/raw` | Sanitized raw provider evidence record for the projected Telegram message |
 | GET | `/api/v1/communications/telegram/messages/{message_id}/reply-chain` | Read current reply-chain projection |
 | GET | `/api/v1/communications/telegram/messages/{message_id}/forward-chain` | Read current forward-chain projection |
-| GET | `/api/v1/communications/telegram/commands?account_id=&limit=` | List durable Telegram command rows; inspector context now surfaces them as a local audit panel with current-chat filter and text search |
-| POST | `/api/v1/communications/telegram/commands/{command_id}/retry` | Manually requeue an eligible failed/dead-letter/retrying provider command row through the durable outbox runtime |
+| GET | `/api/v1/integrations/telegram/commands?account_id=&limit=` | List durable Telegram command rows; inspector context now surfaces them as a local audit panel with current-chat filter and text search |
+| POST | `/api/v1/integrations/telegram/commands/{command_id}/retry` | Manually requeue an eligible failed/dead-letter/retrying provider command row through the durable outbox runtime |
 
 These endpoints persist lifecycle evidence and command metadata. Provider-side
 edit/delete/reaction/pin/forward command dispatch is handled by the TDLib

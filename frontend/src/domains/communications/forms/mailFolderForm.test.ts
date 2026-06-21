@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
-	composeMailFolderName,
+	composeCommunicationFolderName,
 	mailFolderDeleteDialogCopy,
 	mailFolderFormDefaults,
 	mailFolderParentPathOptions,
 	mailFolderFormSchema,
 	mailFolderFormToInput,
 	mailFolderMessageCountLabel,
-	splitMailFolderName,
-	validateMailFolderParentPath
+	splitCommunicationFolderName,
+	validateCommunicationFolderParentPath
 } from './mailFolderForm'
-import type { MailFolder } from '../types/folders'
+import type { CommunicationFolder } from '../types/folders'
 
 describe('mail folder form', () => {
 	it('normalizes form values into a custom folder input payload', () => {
@@ -76,12 +76,12 @@ describe('mail folder form', () => {
 	})
 
 	it('splits and composes hierarchy-aware folder names', () => {
-		expect(splitMailFolderName('Projects / Client A / Q1')).toEqual({
+		expect(splitCommunicationFolderName('Projects / Client A / Q1')).toEqual({
 			parentPath: 'Projects / Client A',
 			leafName: 'Q1'
 		})
-		expect(composeMailFolderName(' Projects / Client A ', ' Q1 ')).toBe('Projects / Client A / Q1')
-		expect(composeMailFolderName('', 'Inbox')).toBe('Inbox')
+		expect(composeCommunicationFolderName(' Projects / Client A ', ' Q1 ')).toBe('Projects / Client A / Q1')
+		expect(composeCommunicationFolderName('', 'Inbox')).toBe('Inbox')
 	})
 
 	it('builds parent path suggestions and rejects self-descendant parents', () => {
@@ -92,11 +92,11 @@ describe('mail folder form', () => {
 		]
 
 		expect(mailFolderParentPathOptions(folders, folders[0])).toEqual(['Finance'])
-		expect(validateMailFolderParentPath('Clients', folders[0])).toBe('Folder cannot be its own parent')
-		expect(validateMailFolderParentPath('Clients / Acme', folders[0])).toBe(
+		expect(validateCommunicationFolderParentPath('Clients', folders[0])).toBe('Folder cannot be its own parent')
+		expect(validateCommunicationFolderParentPath('Clients / Acme', folders[0])).toBe(
 			'Folder cannot move inside one of its child paths'
 		)
-		expect(validateMailFolderParentPath('Finance', folders[0])).toBe('')
+		expect(validateCommunicationFolderParentPath('Finance', folders[0])).toBe('')
 	})
 
 	it('builds delete confirmation copy and compact message counts', () => {
@@ -110,7 +110,7 @@ describe('mail folder form', () => {
 	})
 })
 
-function folder(): MailFolder {
+function folder(): CommunicationFolder {
 	return {
 		folder_id: 'mail_folder:1',
 		account_id: 'account-1',

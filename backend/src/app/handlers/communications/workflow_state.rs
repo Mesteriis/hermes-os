@@ -1,8 +1,8 @@
 use super::*;
 use crate::domains::communications::ai_state::{
-    MailAiState, MailAiStateStore, MailAiStateTransitionRequest,
+    CommunicationAiState, CommunicationAiStateStore, CommunicationAiStateTransitionRequest,
 };
-use crate::domains::communications::service::MailCommandService;
+use crate::domains::communications::service::CommunicationCommandService;
 use crate::workflows::review_inbox::refresh_message_knowledge_candidates_into_review;
 
 #[derive(Deserialize)]
@@ -57,7 +57,7 @@ pub(crate) async fn put_v1_message_workflow_state(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let result = MailCommandService::new(pool)
+    let result = CommunicationCommandService::new(pool)
         .transition_message_workflow_state(&message_id, new_state, &actor_id)
         .await?;
 
@@ -110,7 +110,7 @@ pub(crate) async fn post_v1_message_analyze(
     Path(message_id): Path<String>,
 ) -> Result<Json<MessageAnalyzeResponse>, ApiError> {
     let store = message_store(&state)?;
-    let ai_state_store = MailAiStateStore::new(
+    let ai_state_store = CommunicationAiStateStore::new(
         state
             .database
             .pool()
@@ -127,8 +127,8 @@ pub(crate) async fn post_v1_message_analyze(
     let _ = ai_state_store
         .transition(
             &message_id,
-            MailAiStateTransitionRequest {
-                ai_state: MailAiState::Processing,
+            CommunicationAiStateTransitionRequest {
+                ai_state: CommunicationAiState::Processing,
                 review_reason: None,
                 last_error: None,
             },
@@ -164,8 +164,8 @@ pub(crate) async fn post_v1_message_analyze(
     let _ = ai_state_store
         .transition(
             &message_id,
-            MailAiStateTransitionRequest {
-                ai_state: MailAiState::Processed,
+            CommunicationAiStateTransitionRequest {
+                ai_state: CommunicationAiState::Processed,
                 review_reason: None,
                 last_error: None,
             },

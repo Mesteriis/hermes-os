@@ -3,7 +3,6 @@ use chrono::{DateTime, Utc};
 use super::super::errors::TelegramError;
 use super::super::models::TelegramChat;
 use super::TelegramStore;
-use crate::platform::communications::ProviderChannelMessageStore;
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
@@ -113,7 +112,8 @@ impl TelegramStore {
             .and_then(serde_json::Value::as_str)
             .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
             .map(|value| value.with_timezone(&Utc));
-        let (unread_count, mention_count) = ProviderChannelMessageStore::new(self.pool.clone())
+        let (unread_count, mention_count) = self
+            .provider_channel_message_store()
             .unread_counts(
                 &chat.account_id,
                 &chat.provider_chat_id,

@@ -1,28 +1,28 @@
 use sqlx::postgres::PgPool;
 
-use super::errors::MailStorageError;
+use super::errors::CommunicationStorageError;
 use super::ids::{mail_attachment_id, mail_blob_id};
 use super::models::{
-    NewMailAttachment, NewMailBlob, StoredMailAttachment, StoredMailAttachmentWithBlob,
-    StoredMailBlob,
+    NewCommunicationAttachment, NewCommunicationBlob, StoredCommunicationAttachment,
+    StoredCommunicationAttachmentWithBlob, StoredCommunicationBlob,
 };
 use super::rows::{row_to_mail_attachment, row_to_mail_attachment_with_blob, row_to_mail_blob};
 use super::validation::validate_non_empty;
 
 #[derive(Clone)]
-pub struct MailStorageStore {
+pub struct CommunicationStorageStore {
     pub(crate) pool: PgPool,
 }
 
-impl MailStorageStore {
+impl CommunicationStorageStore {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
 
     pub async fn upsert_blob(
         &self,
-        blob: &NewMailBlob,
-    ) -> Result<StoredMailBlob, MailStorageError> {
+        blob: &NewCommunicationBlob,
+    ) -> Result<StoredCommunicationBlob, CommunicationStorageError> {
         let blob = blob.validate()?;
         let blob_id = mail_blob_id(&blob.sha256);
 
@@ -64,8 +64,8 @@ impl MailStorageStore {
 
     pub async fn upsert_attachment(
         &self,
-        attachment: &NewMailAttachment,
-    ) -> Result<StoredMailAttachment, MailStorageError> {
+        attachment: &NewCommunicationAttachment,
+    ) -> Result<StoredCommunicationAttachment, CommunicationStorageError> {
         let attachment = attachment.validate()?;
         let attachment_id =
             mail_attachment_id(&attachment.message_id, &attachment.provider_attachment_id);
@@ -150,7 +150,7 @@ impl MailStorageStore {
     pub async fn attachments_for_message(
         &self,
         message_id: &str,
-    ) -> Result<Vec<StoredMailAttachmentWithBlob>, MailStorageError> {
+    ) -> Result<Vec<StoredCommunicationAttachmentWithBlob>, CommunicationStorageError> {
         let message_id = validate_non_empty("message_id", message_id)?;
         let rows = sqlx::query(
             r#"
@@ -192,7 +192,7 @@ impl MailStorageStore {
     pub async fn attachment_by_id(
         &self,
         attachment_id: &str,
-    ) -> Result<Option<StoredMailAttachmentWithBlob>, MailStorageError> {
+    ) -> Result<Option<StoredCommunicationAttachmentWithBlob>, CommunicationStorageError> {
         let attachment_id = validate_non_empty("attachment_id", attachment_id)?;
         let row = sqlx::query(
             r#"

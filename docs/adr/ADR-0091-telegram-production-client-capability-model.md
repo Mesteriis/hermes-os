@@ -372,6 +372,6 @@ Risk handling:
 - Add migrations and implementation ADRs before introducing tombstone/message
   version persistence, proxy persistence, outbox persistence, call runtime or
   session bundle schemas.
-- Extend `/api/v1/communications/telegram/capabilities` before exposing new UI controls.
+- Extend `/api/v1/integrations/telegram/capabilities` before exposing new UI controls.
 - Add fixture tests for every new capability state and opt-in smoke tests for
   live TDLib flows.

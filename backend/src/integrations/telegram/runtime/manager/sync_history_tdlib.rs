@@ -1,3 +1,6 @@
+use crate::domains::communications::core::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
+};
 use crate::integrations::telegram::client::participants::{
     reconcile_participant_commands_from_message_evidence, tdlib_self_membership_lifecycle,
 };
@@ -8,7 +11,6 @@ use crate::integrations::telegram::client::{
 use crate::platform::communications::ProviderAccount;
 use crate::platform::config::AppConfig;
 use crate::platform::secrets::{SecretReferenceStore, SecretResolver};
-use crate::vault::{CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore};
 
 use super::super::actor::oldest_tdlib_message_id;
 use super::super::commands::request_actor_history;

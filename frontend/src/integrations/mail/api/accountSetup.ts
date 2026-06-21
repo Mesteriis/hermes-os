@@ -55,7 +55,7 @@ export async function startGmailOAuthSetup(
 	request: GmailOAuthStartRequest
 ): Promise<GmailOAuthStartResponse> {
 	return ApiClient.instance.post<GmailOAuthStartResponse>(
-		'/api/v1/communications/mail/accounts/gmail/oauth/start',
+		'/api/v1/integrations/mail/accounts/gmail/oauth/start',
 		request,
 		'Gmail OAuth setup start failed'
 	)
@@ -65,7 +65,7 @@ export async function setupImapEmailAccount(
 	request: ImapEmailAccountSetupRequest
 ): Promise<EmailAccountSetupResponse> {
 	return ApiClient.instance.post<EmailAccountSetupResponse>(
-		'/api/v1/communications/mail/accounts/imap',
+		'/api/v1/integrations/mail/accounts/imap',
 		request,
 		'IMAP account setup failed'
 	)

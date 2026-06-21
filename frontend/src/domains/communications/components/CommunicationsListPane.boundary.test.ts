@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
 describe('CommunicationsListPane folder browsing boundary', () => {
-  it('can force the virtualized MailList for custom folder message results', () => {
+  it('can force the virtualized CommunicationList for custom folder message results', () => {
     const source = readFileSync(
       new URL('./CommunicationsListPane.vue', import.meta.url),
       'utf8'
@@ -16,7 +16,7 @@ describe('CommunicationsListPane folder browsing boundary', () => {
     expect(source).toContain('selectThread: [thread: CommunicationThreadSummary]')
     expect(source).toContain('@load-more-threads="emit(')
     expect(source).toContain('v-else-if="!isFolderMode && (navigatorMode ===')
-    expect(source).toContain('<MailList')
+    expect(source).toContain('<CommunicationList')
     expect(source).toContain(':account-id="accountId"')
     expect(source).toContain('@load-more="emit(')
   })

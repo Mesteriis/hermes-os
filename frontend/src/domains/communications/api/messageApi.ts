@@ -32,7 +32,7 @@ import type {
   ExtractNotesResponse,
   CommunicationSearchResponse,
   SubscriptionListResponse,
-  MailArchitectureBlocker,
+  CommunicationArchitectureBlocker,
   CommunicationPersona,
   CommunicationTemplate,
   RichTemplateDeleteResponse,
@@ -431,8 +431,8 @@ export async function previewRichTemplateMailMerge(
   )
 }
 
-export async function fetchMailBlockers(): Promise<MailArchitectureBlocker[]> {
-  return ApiClient.instance.get<MailArchitectureBlocker[]>(
+export async function fetchCommunicationBlockers(): Promise<CommunicationArchitectureBlocker[]> {
+  return ApiClient.instance.get<CommunicationArchitectureBlocker[]>(
     '/api/v1/communications/blockers',
     'Mail blockers request failed'
   )

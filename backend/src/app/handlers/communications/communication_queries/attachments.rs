@@ -73,7 +73,7 @@ pub(crate) async fn get_v1_attachment_preview(
     State(state): State<AppState>,
     Path(attachment_id): Path<String>,
 ) -> Result<Json<AttachmentPreviewResponse>, ApiError> {
-    let attachment = mail_storage_store(&state)?
+    let attachment = communication_storage_store(&state)?
         .attachment_by_id(&attachment_id)
         .await?
         .ok_or(ApiError::NotFound)?;
@@ -93,7 +93,7 @@ pub(crate) async fn get_v1_attachment_preview(
             "attachment preview supports text and image attachments only",
         ))?;
 
-    let bytes = LocalMailBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
+    let bytes = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
         .read_blob(&attachment.storage_path)
         .await?;
     let byte_count = bytes.len();
@@ -105,7 +105,7 @@ pub(crate) async fn get_v1_attachment_preview(
 }
 
 fn text_attachment_preview(
-    attachment: StoredMailAttachmentWithBlob,
+    attachment: StoredCommunicationAttachmentWithBlob,
     bytes: Vec<u8>,
     byte_count: usize,
 ) -> Result<Json<AttachmentPreviewResponse>, ApiError> {
@@ -133,7 +133,7 @@ fn text_attachment_preview(
 }
 
 fn image_attachment_preview(
-    attachment: StoredMailAttachmentWithBlob,
+    attachment: StoredCommunicationAttachmentWithBlob,
     bytes: Vec<u8>,
     byte_count: usize,
 ) -> Result<Json<AttachmentPreviewResponse>, ApiError> {
@@ -167,7 +167,7 @@ pub(crate) async fn get_v1_attachment_archive_inspection(
     State(state): State<AppState>,
     Path(attachment_id): Path<String>,
 ) -> Result<Json<AttachmentArchiveInspectionResponse>, ApiError> {
-    let attachment = mail_storage_store(&state)?
+    let attachment = communication_storage_store(&state)?
         .attachment_by_id(&attachment_id)
         .await?
         .ok_or(ApiError::NotFound)?;
@@ -183,7 +183,7 @@ pub(crate) async fn get_v1_attachment_archive_inspection(
         ));
     }
 
-    let bytes = LocalMailBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
+    let bytes = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT)
         .read_blob(&attachment.storage_path)
         .await?;
     let report =
@@ -206,7 +206,7 @@ pub(crate) async fn get_v1_attachment_archive_inspection(
     }))
 }
 
-fn is_preview_allowed_by_scan_status(attachment: &StoredMailAttachmentWithBlob) -> bool {
+fn is_preview_allowed_by_scan_status(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
     matches!(
         attachment.attachment.scan_status.as_str(),
         "not_scanned" | "clean"
@@ -219,7 +219,7 @@ enum AttachmentPreviewKind {
 }
 
 fn attachment_preview_kind(
-    attachment: &StoredMailAttachmentWithBlob,
+    attachment: &StoredCommunicationAttachmentWithBlob,
 ) -> Option<AttachmentPreviewKind> {
     if is_previewable_text_attachment(attachment) {
         return Some(AttachmentPreviewKind::Text);
@@ -230,7 +230,7 @@ fn attachment_preview_kind(
     None
 }
 
-fn is_previewable_text_attachment(attachment: &StoredMailAttachmentWithBlob) -> bool {
+fn is_previewable_text_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
     let content_type = attachment
         .attachment
         .content_type
@@ -259,11 +259,13 @@ fn is_previewable_text_attachment(attachment: &StoredMailAttachmentWithBlob) -> 
         .unwrap_or(false)
 }
 
-fn is_previewable_image_attachment(attachment: &StoredMailAttachmentWithBlob) -> bool {
+fn is_previewable_image_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
     preview_image_content_type(attachment).is_some()
 }
 
-fn preview_image_content_type(attachment: &StoredMailAttachmentWithBlob) -> Option<&'static str> {
+fn preview_image_content_type(
+    attachment: &StoredCommunicationAttachmentWithBlob,
+) -> Option<&'static str> {
     let content_type = attachment
         .attachment
         .content_type
@@ -295,7 +297,7 @@ fn preview_image_content_type(attachment: &StoredMailAttachmentWithBlob) -> Opti
     }
 }
 
-fn is_zip_attachment(attachment: &StoredMailAttachmentWithBlob) -> bool {
+fn is_zip_attachment(attachment: &StoredCommunicationAttachmentWithBlob) -> bool {
     let content_type = attachment
         .attachment
         .content_type

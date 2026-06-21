@@ -1,23 +1,23 @@
 use super::super::*;
 use crate::domains::communications::delivery_notifications::{
-    MailDeliveryNotificationRecord, MailDeliveryNotificationStore, NewMailDeliveryNotification,
-    NewProviderDeliveryEvent,
+    CommunicationDeliveryNotificationRecord, CommunicationDeliveryNotificationStore,
+    NewCommunicationDeliveryNotification, NewProviderDeliveryEvent,
 };
 use crate::domains::communications::read_receipts::{
-    MailReadReceipt, MailReadReceiptStore, NewMailReadReceipt,
+    CommunicationReadReceipt, CommunicationReadReceiptStore, NewCommunicationReadReceipt,
 };
 
 pub(crate) async fn post_v1_read_receipt(
     State(state): State<AppState>,
-    Json(request): Json<NewMailReadReceipt>,
-) -> Result<Json<MailReadReceipt>, ApiError> {
+    Json(request): Json<NewCommunicationReadReceipt>,
+) -> Result<Json<CommunicationReadReceipt>, ApiError> {
     Ok(Json(read_receipt_store(&state)?.record(request).await?))
 }
 
 pub(crate) async fn post_v1_delivery_notification(
     State(state): State<AppState>,
-    Json(request): Json<NewMailDeliveryNotification>,
-) -> Result<Json<MailDeliveryNotificationRecord>, ApiError> {
+    Json(request): Json<NewCommunicationDeliveryNotification>,
+) -> Result<Json<CommunicationDeliveryNotificationRecord>, ApiError> {
     Ok(Json(
         delivery_notification_store(&state)?.record(request).await?,
     ))
@@ -26,7 +26,7 @@ pub(crate) async fn post_v1_delivery_notification(
 pub(crate) async fn post_v1_provider_delivery_event(
     State(state): State<AppState>,
     Json(request): Json<NewProviderDeliveryEvent>,
-) -> Result<Json<MailDeliveryNotificationRecord>, ApiError> {
+) -> Result<Json<CommunicationDeliveryNotificationRecord>, ApiError> {
     Ok(Json(
         delivery_notification_store(&state)?
             .record_provider_event(request)
@@ -34,18 +34,18 @@ pub(crate) async fn post_v1_provider_delivery_event(
     ))
 }
 
-fn read_receipt_store(state: &AppState) -> Result<MailReadReceiptStore, ApiError> {
+fn read_receipt_store(state: &AppState) -> Result<CommunicationReadReceiptStore, ApiError> {
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(MailReadReceiptStore::new(pool))
+    Ok(CommunicationReadReceiptStore::new(pool))
 }
 
 fn delivery_notification_store(
     state: &AppState,
-) -> Result<MailDeliveryNotificationStore, ApiError> {
+) -> Result<CommunicationDeliveryNotificationStore, ApiError> {
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(MailDeliveryNotificationStore::new(pool))
+    Ok(CommunicationDeliveryNotificationStore::new(pool))
 }

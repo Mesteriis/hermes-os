@@ -73,7 +73,7 @@ async fn telegram_live_account_setup_stores_bot_token_in_host_vault() {
     let response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts",
+            "/api/v1/integrations/telegram/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_bot",
@@ -183,7 +183,7 @@ async fn telegram_qr_authorized_account_setup_persists_metadata_without_host_vau
     let response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts",
+            "/api/v1/integrations/telegram/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -276,7 +276,7 @@ async fn telegram_finalized_qr_account_setup_infers_qr_authorized_runtime() {
     let response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts",
+            "/api/v1/integrations/telegram/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -324,7 +324,7 @@ async fn telegram_live_account_setup_api_requires_configured_database() {
 
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts",
+            "/api/v1/integrations/telegram/accounts",
             json!({
                 "account_id": "telegram-no-db",
                 "provider_kind": "telegram_bot",
@@ -360,7 +360,7 @@ async fn telegram_capabilities_report_qr_login_readiness_inputs() {
 
     let response = app
         .oneshot(get_request_with_token(
-            "/api/v1/communications/telegram/capabilities",
+            "/api/v1/integrations/telegram/capabilities",
             LOCAL_API_TOKEN,
         ))
         .await
@@ -395,7 +395,7 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": user_account_id,
             "provider_kind": "telegram_user",
@@ -408,7 +408,7 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": bot_account_id,
             "provider_kind": "telegram_bot",
@@ -423,7 +423,7 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
     let user_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/communications/telegram/accounts/{user_account_id}/capabilities"),
+            &format!("/api/v1/integrations/telegram/accounts/{user_account_id}/capabilities"),
             LOCAL_API_TOKEN,
         ))
         .await
@@ -491,7 +491,7 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
     let bot_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/communications/telegram/accounts/{bot_account_id}/capabilities"),
+            &format!("/api/v1/integrations/telegram/accounts/{bot_account_id}/capabilities"),
             LOCAL_API_TOKEN,
         ))
         .await

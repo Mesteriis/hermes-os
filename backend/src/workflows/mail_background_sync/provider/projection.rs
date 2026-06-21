@@ -1,4 +1,4 @@
-use crate::domains::communications::storage::LocalMailBlobStore;
+use crate::domains::communications::storage::LocalCommunicationBlobStore;
 use crate::platform::communications::EmailSyncBatch;
 use crate::workflows::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
 use crate::workflows::graph_projection::GraphProjectionService;
@@ -37,7 +37,7 @@ impl MailBackgroundSyncService {
             })
             .await?;
 
-        let blob_store = LocalMailBlobStore::new(&self.blob_root);
+        let blob_store = LocalCommunicationBlobStore::new(&self.blob_root);
         let report = project_email_sync_batch_with_mail_blobs(
             self.pool.clone(),
             &blob_store,

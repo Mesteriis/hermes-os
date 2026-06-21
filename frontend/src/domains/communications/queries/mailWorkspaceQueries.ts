@@ -3,16 +3,16 @@ import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
   copyMessageToFolder,
   createMailCertificate,
-  createMailFolder,
+  createCommunicationFolder,
   createSavedSearch,
-  deleteMailFolder,
+  deleteCommunicationFolder,
   deleteRichTemplate,
   deleteSavedSearch,
   fetchFolderMessages,
-  fetchMailBlockers,
+  fetchCommunicationBlockers,
   fetchExpiringMailCertificates,
   fetchMailCertificates,
-  fetchMailFolders,
+  fetchCommunicationFolders,
   fetchRichTemplates,
   fetchSavedSearches,
   fetchSubscriptions,
@@ -25,12 +25,12 @@ import {
   saveRichTemplate,
   searchAttachments,
   translateAttachment,
-  updateMailFolder,
+  updateCommunicationFolder,
   updateSavedSearch
 } from '../api/communications'
 import type {
   CommunicationTemplate,
-  MailArchitectureBlocker,
+  CommunicationArchitectureBlocker,
   RichTemplateDeleteResponse,
   RichTemplateMailMergePreviewRequest,
   RichTemplateMailMergePreviewResponse,
@@ -61,13 +61,13 @@ import type {
   FolderMessage,
   FolderMessageActionResponse,
   FolderMessageListResponse,
-  MailFolder,
-  MailFolderInput,
-  MailFolderListResponse,
-  MailFolderUpdate
+  CommunicationFolder,
+  CommunicationFolderInput,
+  CommunicationFolderListResponse,
+  CommunicationFolderUpdate
 } from '../types/folders'
 import type {
-  MailSavedSearch,
+  CommunicationSavedSearch,
   SavedSearchDeleteResponse,
   SavedSearchInput,
   SavedSearchListResponse,
@@ -75,10 +75,10 @@ import type {
 } from '../types/savedSearches'
 import type { NullableQueryParam, QueryParam } from './queryTypes'
 import {
-  mailDetailQueryOptions,
-  mailRealtimeQueryOptions,
-  mailReferenceQueryOptions
-} from './mailQueryPolicies'
+  communicationDetailQueryOptions,
+  communicationRealtimeQueryOptions,
+  communicationReferenceQueryOptions
+} from './communicationQueryPolicies'
 import {
   optimisticFolderFromUpdate,
   removeFolderFromFolderList,
@@ -93,7 +93,7 @@ import {
 } from './optimisticFolderMessageUpdates'
 
 type FolderMutationContext = {
-  previousFolderLists: Array<[readonly unknown[], InfiniteData<MailFolderListResponse> | undefined]>
+  previousFolderLists: Array<[readonly unknown[], InfiniteData<CommunicationFolderListResponse> | undefined]>
 }
 
 type FolderMessageMutationContext = {
@@ -107,7 +107,7 @@ export function useRichTemplatesQuery() {
       const res = await fetchRichTemplates()
       return res.templates
     },
-    ...mailReferenceQueryOptions
+    ...communicationReferenceQueryOptions
   })
 }
 
@@ -118,7 +118,7 @@ export function useSubscriptionsQuery(accountId?: QueryParam<string>) {
     queryFn: async ({ pageParam }) => fetchSubscriptions(toValue(accountId), 25, pageParam),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -129,15 +129,15 @@ export function useTopSendersQuery(accountId?: QueryParam<string>) {
     queryFn: async ({ pageParam }) => fetchTopSenders(toValue(accountId), 25, pageParam),
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
-export function useMailBlockersQuery() {
-  return useQuery<MailArchitectureBlocker[]>({
+export function useCommunicationBlockersQuery() {
+  return useQuery<CommunicationArchitectureBlocker[]>({
     queryKey: ['communications-mail-blockers'],
-    queryFn: async () => fetchMailBlockers(),
-    ...mailReferenceQueryOptions
+    queryFn: async () => fetchCommunicationBlockers(),
+    ...communicationReferenceQueryOptions
   })
 }
 
@@ -148,7 +148,7 @@ export function useMailCertificatesQuery() {
       const res = await fetchMailCertificates()
       return res.items
     },
-    ...mailReferenceQueryOptions
+    ...communicationReferenceQueryOptions
   })
 }
 
@@ -159,7 +159,7 @@ export function useExpiringMailCertificatesQuery(days: QueryParam<number> = 90) 
       const res = await fetchExpiringMailCertificates(toValue(days))
       return res.items
     },
-    ...mailReferenceQueryOptions
+    ...communicationReferenceQueryOptions
   })
 }
 
@@ -175,7 +175,7 @@ export function useCreateMailCertificateMutation() {
 }
 
 export function useSavedSearchesQuery(isSmartFolder?: QueryParam<boolean>, accountId?: QueryParam<string>) {
-  return useInfiniteQuery<SavedSearchListResponse, Error, MailSavedSearch[], readonly unknown[], string | null>({
+  return useInfiniteQuery<SavedSearchListResponse, Error, CommunicationSavedSearch[], readonly unknown[], string | null>({
     queryKey: computed(() => ['communications-saved-searches', toValue(isSmartFolder), toValue(accountId)]),
     initialPageParam: null,
     queryFn: async ({ pageParam }) => {
@@ -183,20 +183,20 @@ export function useSavedSearchesQuery(isSmartFolder?: QueryParam<boolean>, accou
     },
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
-export function useMailFoldersQuery(accountId?: QueryParam<string>) {
-  return useInfiniteQuery<MailFolderListResponse, Error, MailFolder[], readonly unknown[], string | null>({
+export function useCommunicationFoldersQuery(accountId?: QueryParam<string>) {
+  return useInfiniteQuery<CommunicationFolderListResponse, Error, CommunicationFolder[], readonly unknown[], string | null>({
     queryKey: computed(() => ['communications-folders', toValue(accountId)]),
     initialPageParam: null,
     queryFn: async ({ pageParam }) => {
-      return fetchMailFolders(toValue(accountId), 500, pageParam)
+      return fetchCommunicationFolders(toValue(accountId), 500, pageParam)
     },
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -217,7 +217,7 @@ export function useFolderMessagesQuery(
     },
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
-    ...mailRealtimeQueryOptions
+    ...communicationRealtimeQueryOptions
   })
 }
 
@@ -244,7 +244,7 @@ export function useAttachmentSearchQuery(
     },
     getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     select: (data) => data.pages.flatMap((page) => page.items),
-    ...mailDetailQueryOptions
+    ...communicationDetailQueryOptions
   })
 }
 
@@ -260,7 +260,7 @@ export function useAttachmentArchiveInspectionQuery(
       return inspectAttachmentArchive(id)
     },
     enabled: computed(() => Boolean(toValue(attachmentId)) && toValue(enabled)),
-    ...mailDetailQueryOptions
+    ...communicationDetailQueryOptions
   })
 }
 
@@ -276,7 +276,7 @@ export function useAttachmentPreviewQuery(
       return previewAttachment(id)
     },
     enabled: computed(() => Boolean(toValue(attachmentId)) && toValue(enabled)),
-    ...mailDetailQueryOptions
+    ...communicationDetailQueryOptions
   })
 }
 
@@ -328,7 +328,7 @@ export function usePreviewRichTemplateMailMergeMutation() {
 
 export function useCreateSavedSearchMutation() {
   const queryClient = useQueryClient()
-  return useMutation<MailSavedSearch, Error, SavedSearchInput>({
+  return useMutation<CommunicationSavedSearch, Error, SavedSearchInput>({
     mutationFn: async (request: SavedSearchInput) => createSavedSearch(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['communications-saved-searches'] })
@@ -339,7 +339,7 @@ export function useCreateSavedSearchMutation() {
 export function useUpdateSavedSearchMutation() {
   const queryClient = useQueryClient()
   return useMutation<
-    MailSavedSearch,
+    CommunicationSavedSearch,
     Error,
     { savedSearchId: string; request: SavedSearchUpdate }
   >({
@@ -360,14 +360,14 @@ export function useDeleteSavedSearchMutation() {
   })
 }
 
-export function useCreateMailFolderMutation() {
+export function useCreateCommunicationFolderMutation() {
   const queryClient = useQueryClient()
-  return useMutation<MailFolder, Error, MailFolderInput, FolderMutationContext>({
-    mutationFn: async (request: MailFolderInput) => createMailFolder(request),
+  return useMutation<CommunicationFolder, Error, CommunicationFolderInput, FolderMutationContext>({
+    mutationFn: async (request: CommunicationFolderInput) => createCommunicationFolder(request),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ['communications-folders'] })
       return {
-        previousFolderLists: queryClient.getQueriesData<InfiniteData<MailFolderListResponse>>({
+        previousFolderLists: queryClient.getQueriesData<InfiniteData<CommunicationFolderListResponse>>({
           queryKey: ['communications-folders']
         })
       }
@@ -382,18 +382,18 @@ export function useCreateMailFolderMutation() {
   })
 }
 
-export function useUpdateMailFolderMutation() {
+export function useUpdateCommunicationFolderMutation() {
   const queryClient = useQueryClient()
   return useMutation<
-    MailFolder,
+    CommunicationFolder,
     Error,
-    { folderId: string; request: MailFolderUpdate },
+    { folderId: string; request: CommunicationFolderUpdate },
     FolderMutationContext
   >({
-    mutationFn: async ({ folderId, request }) => updateMailFolder(folderId, request),
+    mutationFn: async ({ folderId, request }) => updateCommunicationFolder(folderId, request),
     onMutate: async ({ folderId, request }) => {
       await queryClient.cancelQueries({ queryKey: ['communications-folders'] })
-      const previousFolderLists = queryClient.getQueriesData<InfiniteData<MailFolderListResponse>>({
+      const previousFolderLists = queryClient.getQueriesData<InfiniteData<CommunicationFolderListResponse>>({
         queryKey: ['communications-folders']
       })
       const optimisticFolder = findCachedFolder(previousFolderLists, folderId)
@@ -418,13 +418,13 @@ export function useUpdateMailFolderMutation() {
   })
 }
 
-export function useDeleteMailFolderMutation() {
+export function useDeleteCommunicationFolderMutation() {
   const queryClient = useQueryClient()
   return useMutation<FolderDeleteResponse, Error, string, FolderMutationContext>({
-    mutationFn: async (folderId: string) => deleteMailFolder(folderId),
+    mutationFn: async (folderId: string) => deleteCommunicationFolder(folderId),
     onMutate: async (folderId) => {
       await queryClient.cancelQueries({ queryKey: ['communications-folders'] })
-      const previousFolderLists = queryClient.getQueriesData<InfiniteData<MailFolderListResponse>>({
+      const previousFolderLists = queryClient.getQueriesData<InfiniteData<CommunicationFolderListResponse>>({
         queryKey: ['communications-folders']
       })
 
@@ -446,9 +446,9 @@ export function useDeleteMailFolderMutation() {
 
 function patchFolderLists(
   queryClient: ReturnType<typeof useQueryClient>,
-  folder: MailFolder
+  folder: CommunicationFolder
 ): void {
-  for (const [queryKey, data] of queryClient.getQueriesData<InfiniteData<MailFolderListResponse>>({
+  for (const [queryKey, data] of queryClient.getQueriesData<InfiniteData<CommunicationFolderListResponse>>({
     queryKey: ['communications-folders']
   })) {
     queryClient.setQueryData(queryKey, upsertFolderInFolderList(data, queryKey, folder))
@@ -466,9 +466,9 @@ function restoreFolderLists(
 }
 
 function findCachedFolder(
-  folderLists: Array<[readonly unknown[], InfiniteData<MailFolderListResponse> | undefined]>,
+  folderLists: Array<[readonly unknown[], InfiniteData<CommunicationFolderListResponse> | undefined]>,
   folderId: string
-): MailFolder | undefined {
+): CommunicationFolder | undefined {
   for (const [, data] of folderLists) {
     for (const page of data?.pages ?? []) {
       const folder = page.items.find((item) => item.folder_id === folderId)
@@ -551,7 +551,7 @@ export function useMoveMessageToFolderMutation() {
     onSuccess: (result, variables) => {
       patchFolderMessageMoveLists(queryClient, result.message, variables.messageId)
       queryClient.invalidateQueries({ queryKey: ['communications-folder-messages'] })
-      queryClient.invalidateQueries({ queryKey: ['communications-mail-list'] })
+      queryClient.invalidateQueries({ queryKey: ['communications-list'] })
       queryClient.invalidateQueries({ queryKey: ['communications-message', variables.messageId] })
     }
   })

@@ -1,7 +1,7 @@
 import { toTypedSchema } from '@vee-validate/zod'
 import { z } from 'zod'
 import type { LocalMessageState, WorkflowState } from '../types/communications'
-import type { MailSavedSearch, SavedSearchInput } from '../types/savedSearches'
+import type { CommunicationSavedSearch, SavedSearchInput } from '../types/savedSearches'
 import {
   composeSavedSearchQuery,
   composeSavedSearchRuleTreeQuery,
@@ -150,7 +150,7 @@ const savedSearchRuleOperatorLabels: Record<SavedSearchRuleOperator, string> = {
 }
 
 export function savedSearchFormDefaults(
-  savedSearch?: MailSavedSearch | null,
+  savedSearch?: CommunicationSavedSearch | null,
   isSmartFolder = false
 ): SavedSearchFormValues {
   return {
@@ -224,7 +224,7 @@ export function savedSearchFilterChips(
 }
 
 export function savedSearchDeleteDialogCopy(
-  savedSearch: Pick<MailSavedSearch, 'name' | 'is_smart_folder'>
+  savedSearch: Pick<CommunicationSavedSearch, 'name' | 'is_smart_folder'>
 ): SavedSearchDeleteDialogCopy {
   const kind = savedSearch.is_smart_folder ? 'smart folder' : 'saved search'
   return {
@@ -235,7 +235,7 @@ export function savedSearchDeleteDialogCopy(
 }
 
 export function savedSearchMessageCountLabel(
-  savedSearch: Pick<MailSavedSearch, 'message_count'>
+  savedSearch: Pick<CommunicationSavedSearch, 'message_count'>
 ): string {
   return String(Math.max(0, Math.trunc(savedSearch.message_count)))
 }

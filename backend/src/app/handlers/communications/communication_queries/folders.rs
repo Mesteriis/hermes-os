@@ -1,9 +1,10 @@
 use super::super::*;
 use crate::domains::communications::folders::{
-    FolderMessageActionResponse, FolderMessageListQuery, FolderMessagePage, MailFolder,
-    MailFolderListPage, MailFolderListQuery, MailFolderStore, NewMailFolder, UpdateMailFolder,
+    CommunicationFolder, CommunicationFolderListPage, CommunicationFolderListQuery,
+    CommunicationFolderStore, FolderMessageActionResponse, FolderMessageListQuery,
+    FolderMessagePage, NewCommunicationFolder, UpdateCommunicationFolder,
 };
-use crate::domains::communications::service::MailCommandService;
+use crate::domains::communications::service::CommunicationCommandService;
 
 #[derive(Deserialize)]
 pub(crate) struct FoldersQuery {
@@ -26,9 +27,9 @@ pub(crate) struct FolderDeleteResponse {
 pub(crate) async fn get_v1_mail_folders(
     State(state): State<AppState>,
     Query(query): Query<FoldersQuery>,
-) -> Result<Json<MailFolderListPage>, ApiError> {
+) -> Result<Json<CommunicationFolderListPage>, ApiError> {
     let page = folder_store(&state)?
-        .list(MailFolderListQuery {
+        .list(CommunicationFolderListQuery {
             account_id: query.account_id.as_deref(),
             cursor: query.cursor.as_deref(),
             limit: query.limit.unwrap_or(500),
@@ -39,28 +40,30 @@ pub(crate) async fn get_v1_mail_folders(
 
 pub(crate) async fn post_v1_mail_folder(
     State(state): State<AppState>,
-    Json(request): Json<NewMailFolder>,
-) -> Result<Json<MailFolder>, ApiError> {
+    Json(request): Json<NewCommunicationFolder>,
+) -> Result<Json<CommunicationFolder>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let folder = MailCommandService::new(pool).create_folder(request).await?;
+    let folder = CommunicationCommandService::new(pool)
+        .create_folder(request)
+        .await?;
     Ok(Json(folder))
 }
 
 pub(crate) async fn put_v1_mail_folder(
     State(state): State<AppState>,
     Path(folder_id): Path<String>,
-    Json(request): Json<UpdateMailFolder>,
-) -> Result<Json<MailFolder>, ApiError> {
+    Json(request): Json<UpdateCommunicationFolder>,
+) -> Result<Json<CommunicationFolder>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let Some(folder) = MailCommandService::new(pool)
+    let Some(folder) = CommunicationCommandService::new(pool)
         .update_folder(&folder_id, request)
         .await?
     else {
@@ -78,7 +81,7 @@ pub(crate) async fn delete_v1_mail_folder(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let deleted = MailCommandService::new(pool)
+    let deleted = CommunicationCommandService::new(pool)
         .delete_folder(&folder_id)
         .await?;
     Ok(Json(FolderDeleteResponse { deleted }))
@@ -108,7 +111,7 @@ pub(crate) async fn post_v1_copy_message_to_folder(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let Some(response) = MailCommandService::new(pool)
+    let Some(response) = CommunicationCommandService::new(pool)
         .copy_message_to_folder(&folder_id, &message_id)
         .await?
     else {
@@ -126,7 +129,7 @@ pub(crate) async fn post_v1_move_message_to_folder(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let Some(response) = MailCommandService::new(pool)
+    let Some(response) = CommunicationCommandService::new(pool)
         .move_message_to_folder(&folder_id, &message_id)
         .await?
     else {
@@ -135,9 +138,9 @@ pub(crate) async fn post_v1_move_message_to_folder(
     Ok(Json(response))
 }
 
-fn folder_store(state: &AppState) -> Result<MailFolderStore, ApiError> {
+fn folder_store(state: &AppState) -> Result<CommunicationFolderStore, ApiError> {
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(MailFolderStore::new(pool))
+    Ok(CommunicationFolderStore::new(pool))
 }

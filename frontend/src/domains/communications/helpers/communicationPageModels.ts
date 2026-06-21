@@ -22,19 +22,19 @@ export type AiSummaryContract = {
   agreement_candidates: CommunicationKnowledgeCandidate[]
 }
 
-export type MailExtractionReviewItem = {
+export type CommunicationExtractionReviewItem = {
   title: string
   meta: string[]
   body: string
 }
 
-export type MailExtractionReviewSection = {
+export type CommunicationExtractionReviewSection = {
   kind: 'task' | 'note'
   title: string
-  items: MailExtractionReviewItem[]
+  items: CommunicationExtractionReviewItem[]
 }
 
-export type MailKnowledgeReviewSection = {
+export type CommunicationKnowledgeReviewSection = {
   kind: 'event' | 'persona' | 'organization' | 'document' | 'agreement'
   title: string
   items: CommunicationKnowledgeCandidate[]
@@ -55,11 +55,11 @@ export function emptyCommunicationMessageInsight(messageId: string): Communicati
   }
 }
 
-export function mailExtractionSectionsFromInsight(
+export function communicationExtractionSectionsFromInsight(
   insight: CommunicationMessageInsight | null
-): MailExtractionReviewSection[] {
+): CommunicationExtractionReviewSection[] {
   if (!insight) return []
-  const sections: MailExtractionReviewSection[] = []
+  const sections: CommunicationExtractionReviewSection[] = []
   if (insight.tasks.length > 0) {
     sections.push({
       kind: 'task',
@@ -89,9 +89,9 @@ export function mailExtractionSectionsFromInsight(
   return sections
 }
 
-export function mailKnowledgeSectionsFromSummaryContract(
+export function communicationKnowledgeSectionsFromSummaryContract(
   contract: AiSummaryContract | null
-): MailKnowledgeReviewSection[] {
+): CommunicationKnowledgeReviewSection[] {
   if (!contract) return []
   return [
     { kind: 'event' as const, title: 'Event candidates', items: contract.event_candidates },
@@ -106,7 +106,7 @@ export function mailKnowledgeSectionsFromSummaryContract(
   ].filter((section) => section.items.length > 0)
 }
 
-export function mailMessageLabelsFromMetadata(metadata: Record<string, unknown>): string[] {
+export function communicationMessageLabelsFromMetadata(metadata: Record<string, unknown>): string[] {
   const labels = metadata.labels
   if (!Array.isArray(labels)) return []
   return [...new Set(labels
@@ -114,7 +114,7 @@ export function mailMessageLabelsFromMetadata(metadata: Record<string, unknown>)
     .map((label) => label.trim()))]
 }
 
-export function mailMessageSnoozeUntilFromMetadata(metadata: Record<string, unknown>): string | null {
+export function communicationMessageSnoozeUntilFromMetadata(metadata: Record<string, unknown>): string | null {
   return typeof metadata.snooze_until === 'string' && metadata.snooze_until.trim().length > 0
     ? metadata.snooze_until.trim()
     : null

@@ -1,9 +1,9 @@
 use hermes_hub_backend::domains::communications::core::CommunicationIngestionStore;
-use hermes_hub_backend::domains::communications::storage::LocalMailBlobStore;
+use hermes_hub_backend::domains::communications::core::CommunicationProviderAccountStore;
+use hermes_hub_backend::domains::communications::storage::LocalCommunicationBlobStore;
 use hermes_hub_backend::integrations::mail::sync::imap_mailbox_stream_id;
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
-use hermes_hub_backend::vault::CommunicationProviderAccountStore;
 use hermes_hub_backend::workflows::email_sync_pipeline::project_email_sync_batch_with_mail_blobs;
 
 use crate::account::upsert_dev_provider_account;
@@ -36,7 +36,7 @@ pub(super) async fn run_dev_email_sync(
     let batch = fetch_raw_messages(&config, checkpoint_uid).await?;
     let fetched_messages = batch.messages.len();
     let checkpoint = batch.checkpoint.clone();
-    let blob_store = LocalMailBlobStore::new(&config.blob_root);
+    let blob_store = LocalCommunicationBlobStore::new(&config.blob_root);
     let pipeline = project_email_sync_batch_with_mail_blobs(
         pool,
         &blob_store,

@@ -5,16 +5,16 @@ use super::models::{
     NewProviderAccountSecretBinding, ProviderAccountSecretBinding, ProviderAccountSecretPurpose,
     ProviderCredential,
 };
+use super::provider_store::CommunicationProviderSecretBindingStore;
 use super::store::CommunicationIngestionStore;
 use super::validation::validate_non_empty;
-use crate::vault::CommunicationProviderSecretBindingStore;
 
 impl CommunicationIngestionStore {
     pub async fn bind_provider_account_secret(
         &self,
         binding: &NewProviderAccountSecretBinding,
     ) -> Result<ProviderAccountSecretBinding, CommunicationIngestionError> {
-        crate::vault::CommunicationProviderSecretBindingStore::new(self.pool.clone())
+        CommunicationProviderSecretBindingStore::new(self.pool.clone())
             .bind(binding)
             .await
     }
@@ -23,7 +23,7 @@ impl CommunicationIngestionStore {
         &self,
         account_id: &str,
     ) -> Result<Vec<ProviderAccountSecretBinding>, CommunicationIngestionError> {
-        crate::vault::CommunicationProviderSecretBindingStore::new(self.pool.clone())
+        CommunicationProviderSecretBindingStore::new(self.pool.clone())
             .list_for_account(account_id)
             .await
     }
@@ -33,7 +33,7 @@ impl CommunicationIngestionStore {
         account_id: &str,
         secret_purpose: ProviderAccountSecretPurpose,
     ) -> Result<Option<ProviderAccountSecretBinding>, CommunicationIngestionError> {
-        crate::vault::CommunicationProviderSecretBindingStore::new(self.pool.clone())
+        CommunicationProviderSecretBindingStore::new(self.pool.clone())
             .get_for_account(account_id, secret_purpose)
             .await
     }

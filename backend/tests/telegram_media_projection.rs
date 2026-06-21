@@ -118,7 +118,7 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",

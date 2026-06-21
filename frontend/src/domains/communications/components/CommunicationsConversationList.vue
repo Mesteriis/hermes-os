@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import Icon from '../../../shared/ui/Icon.vue'
 import type { CommunicationMessageSummary, CommunicationThreadSummary, NavigatorMode } from '../types/communications'
 import { senderLabel, messageTime } from '../stores/communications'
-import { useThreadMessagesPrefetch } from '../queries/mailPrefetch'
+import { useThreadMessagesPrefetch } from '../queries/communicationPrefetch'
 
 const props = defineProps<{
   accountId: string

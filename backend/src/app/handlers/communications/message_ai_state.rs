@@ -1,13 +1,13 @@
 use super::*;
 use crate::domains::communications::ai_state::{
-    MailAiStateRecord, MailAiStateStore, MailAiStateTransitionRequest,
+    CommunicationAiStateRecord, CommunicationAiStateStore, CommunicationAiStateTransitionRequest,
 };
-use crate::domains::communications::service::MailCommandService;
+use crate::domains::communications::service::CommunicationCommandService;
 
 pub(crate) async fn get_v1_message_ai_state(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
-) -> Result<Json<MailAiStateRecord>, ApiError> {
+) -> Result<Json<CommunicationAiStateRecord>, ApiError> {
     let Some(record) = ai_state_store(&state)?.current(&message_id).await? else {
         return Err(ApiError::NotFound);
     };
@@ -17,22 +17,22 @@ pub(crate) async fn get_v1_message_ai_state(
 pub(crate) async fn put_v1_message_ai_state(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
-    Json(request): Json<MailAiStateTransitionRequest>,
-) -> Result<Json<MailAiStateRecord>, ApiError> {
+    Json(request): Json<CommunicationAiStateTransitionRequest>,
+) -> Result<Json<CommunicationAiStateRecord>, ApiError> {
     let pool = state
         .database
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let record = MailCommandService::new(pool)
+    let record = CommunicationCommandService::new(pool)
         .transition_message_ai_state(&message_id, request)
         .await?;
     Ok(Json(record))
 }
 
-fn ai_state_store(state: &AppState) -> Result<MailAiStateStore, ApiError> {
+fn ai_state_store(state: &AppState) -> Result<CommunicationAiStateStore, ApiError> {
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    Ok(MailAiStateStore::new(pool))
+    Ok(CommunicationAiStateStore::new(pool))
 }

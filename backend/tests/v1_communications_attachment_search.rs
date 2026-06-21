@@ -13,8 +13,8 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, MailAttachmentDisposition,
-    MailStorageStore, NewMailAttachment, NewMailBlob,
+    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
+    CommunicationStorageStore, NewCommunicationAttachment, NewCommunicationBlob,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -145,7 +145,7 @@ struct SeedAttachmentMessage {
 async fn seed_message_with_attachment(pool: sqlx::PgPool, seed: SeedAttachmentMessage) -> String {
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let message_store = MessageProjectionStore::new(pool.clone());
-    let storage_store = MailStorageStore::new(pool);
+    let storage_store = CommunicationStorageStore::new(pool);
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &seed.account_id,
@@ -179,7 +179,7 @@ async fn seed_message_with_attachment(pool: sqlx::PgPool, seed: SeedAttachmentMe
     let sha256 = format!("sha256:{:0>64}", seed.hex_digit);
     let blob = storage_store
         .upsert_blob(
-            &NewMailBlob::new(
+            &NewCommunicationBlob::new(
                 "local_fs",
                 format!("attachments/{}/{}", seed.provider_record_id, seed.filename),
                 &sha256,
@@ -191,7 +191,7 @@ async fn seed_message_with_attachment(pool: sqlx::PgPool, seed: SeedAttachmentMe
         .expect("store blob");
     storage_store
         .upsert_attachment(
-            &NewMailAttachment::new(
+            &NewCommunicationAttachment::new(
                 &message_id,
                 &raw.raw_record_id,
                 blob.blob_id,
@@ -201,7 +201,7 @@ async fn seed_message_with_attachment(pool: sqlx::PgPool, seed: SeedAttachmentMe
                 sha256,
             )
             .filename(&seed.filename)
-            .disposition(MailAttachmentDisposition::Attachment)
+            .disposition(CommunicationAttachmentDisposition::Attachment)
             .scan_report(AttachmentSafetyScanReport {
                 status: seed.scan_status,
                 engine: None,

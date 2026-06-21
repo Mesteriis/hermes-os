@@ -43,7 +43,7 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
 
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",

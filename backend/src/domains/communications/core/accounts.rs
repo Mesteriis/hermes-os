@@ -4,6 +4,7 @@ use super::errors::CommunicationIngestionError;
 use super::models::{
     DeletedProviderAccount, NewProviderAccount, ProviderAccount, ProviderAccountUsage,
 };
+use super::provider_store::CommunicationProviderAccountStore;
 use super::store::CommunicationIngestionStore;
 use serde_json::Value;
 
@@ -12,7 +13,7 @@ impl CommunicationIngestionStore {
         &self,
         account: &NewProviderAccount,
     ) -> Result<ProviderAccount, CommunicationIngestionError> {
-        crate::vault::CommunicationProviderAccountStore::new(self.pool.clone())
+        CommunicationProviderAccountStore::new(self.pool.clone())
             .upsert(account)
             .await
     }
@@ -21,7 +22,7 @@ impl CommunicationIngestionStore {
         &self,
         account_id: &str,
     ) -> Result<Option<ProviderAccount>, CommunicationIngestionError> {
-        crate::vault::CommunicationProviderAccountStore::new(self.pool.clone())
+        CommunicationProviderAccountStore::new(self.pool.clone())
             .get(account_id)
             .await
     }
@@ -29,7 +30,7 @@ impl CommunicationIngestionStore {
     pub async fn list_provider_accounts(
         &self,
     ) -> Result<Vec<ProviderAccount>, CommunicationIngestionError> {
-        crate::vault::CommunicationProviderAccountStore::new(self.pool.clone())
+        CommunicationProviderAccountStore::new(self.pool.clone())
             .list()
             .await
     }
@@ -39,7 +40,7 @@ impl CommunicationIngestionStore {
         account_id: &str,
         config: &Value,
     ) -> Result<Option<ProviderAccount>, CommunicationIngestionError> {
-        crate::vault::CommunicationProviderAccountStore::new(self.pool.clone())
+        CommunicationProviderAccountStore::new(self.pool.clone())
             .update_config(account_id, config)
             .await
     }
@@ -48,7 +49,7 @@ impl CommunicationIngestionStore {
         &self,
         account_id: &str,
     ) -> Result<ProviderAccountUsage, CommunicationIngestionError> {
-        crate::vault::CommunicationProviderAccountStore::new(self.pool.clone())
+        CommunicationProviderAccountStore::new(self.pool.clone())
             .usage(account_id)
             .await
     }
@@ -57,7 +58,7 @@ impl CommunicationIngestionStore {
         &self,
         account_id: &str,
     ) -> Result<DeletedProviderAccount, CommunicationIngestionError> {
-        crate::vault::CommunicationProviderAccountStore::new(self.pool.clone())
+        CommunicationProviderAccountStore::new(self.pool.clone())
             .delete_metadata(account_id)
             .await
     }

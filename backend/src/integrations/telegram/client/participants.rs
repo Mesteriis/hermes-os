@@ -8,8 +8,8 @@ use super::lifecycle::mark_command_reconciled;
 use super::models::messages::TelegramProviderWriteCommand;
 use super::models::{NewTelegramChatParticipant, TelegramChatMember};
 use super::rows::row_to_telegram_provider_write_command;
+use super::store::TelegramStore;
 use super::validation::validate_chat_list_limit;
-use crate::platform::communications::ProviderChannelMessageStore;
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
@@ -537,7 +537,7 @@ pub async fn reconcile_participant_commands_from_message_evidence(
     .bind(account_id)
     .bind(provider_chat_id)
     .bind(&lifecycle.command_kind)
-    .bind(observed_at)
+    .bind(observed_at + chrono::Duration::seconds(5))
     .fetch_all(pool)
     .await
     .map_err(TelegramError::from)?;
@@ -631,7 +631,8 @@ pub async fn list_message_heuristic_members(
 
     let limit = validate_chat_list_limit(limit)?;
     let query = normalized_query(query);
-    let members = ProviderChannelMessageStore::new(pool.clone())
+    let members = TelegramStore::new(pool.clone())
+        .provider_channel_message_store()
         .heuristic_members(
             account_id,
             provider_chat_id,

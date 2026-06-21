@@ -23,7 +23,7 @@ describe('account setup API', () => {
 					setup_id: 'setup-1',
 					authorization_url: 'https://accounts.google.com/o/oauth2/v2/auth?state=oauth-state',
 					state: 'oauth-state',
-					redirect_uri: 'http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/callback'
+					redirect_uri: 'http://127.0.0.1:8080/api/v1/integrations/mail/accounts/gmail/oauth/callback'
 				}),
 				{ status: 200, headers: { 'Content-Type': 'application/json' } }
 			)
@@ -34,20 +34,20 @@ describe('account setup API', () => {
 			account_id: 'mail-gmail-user-gmail-com',
 			display_name: 'user@gmail.com',
 			external_account_id: 'user@gmail.com',
-			redirect_uri: 'http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/callback'
+			redirect_uri: 'http://127.0.0.1:8080/api/v1/integrations/mail/accounts/gmail/oauth/callback'
 		})
 
 		expect(response.setup_id).toBe('setup-1')
 		expect(fetchMock).toHaveBeenCalledOnce()
 		const [url, init] = fetchMock.mock.calls[0]
-		expect(url).toBe('http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/start')
+		expect(url).toBe('http://127.0.0.1:8080/api/v1/integrations/mail/accounts/gmail/oauth/start')
 		expect(init.method).toBe('POST')
 		expect(init.headers['X-Hermes-Secret']).toBe('test-secret')
 		expect(JSON.parse(init.body as string)).toEqual({
 			account_id: 'mail-gmail-user-gmail-com',
 			display_name: 'user@gmail.com',
 			external_account_id: 'user@gmail.com',
-			redirect_uri: 'http://127.0.0.1:8080/api/v1/communications/mail/accounts/gmail/oauth/callback'
+			redirect_uri: 'http://127.0.0.1:8080/api/v1/integrations/mail/accounts/gmail/oauth/callback'
 		})
 	})
 
@@ -82,7 +82,7 @@ describe('account setup API', () => {
 		expect(response.account_id).toBe('mail-imap-user-example-com')
 		expect(fetchMock).toHaveBeenCalledOnce()
 		const [url, init] = fetchMock.mock.calls[0]
-		expect(url).toBe('http://127.0.0.1:8080/api/v1/communications/mail/accounts/imap')
+		expect(url).toBe('http://127.0.0.1:8080/api/v1/integrations/mail/accounts/imap')
 		expect(init.method).toBe('POST')
 		expect(JSON.parse(init.body as string)).toMatchObject({
 			account_id: 'mail-imap-user-example-com',

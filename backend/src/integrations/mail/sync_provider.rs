@@ -3,6 +3,9 @@ use std::pin::Pin;
 
 use sqlx::postgres::PgPool;
 
+use crate::domains::communications::core::{
+    CommunicationProviderSecretBindingStore, ProviderCredentialReader,
+};
 use crate::integrations::mail::accounts::EmailAccountSetupService;
 use crate::integrations::mail::gmail::client::{
     EmailProviderNetworkError, GmailApiClient, GmailFetchOptions, GmailHistoryFetchOptions,
@@ -13,7 +16,7 @@ use crate::platform::communications::{
     GmailMessageListFetchRequest, ImapMessageFetchRequest, ProviderAccountSecretPurpose,
 };
 use crate::platform::secrets::{ResolvedSecret, SecretReferenceStore};
-use crate::vault::{CommunicationProviderSecretBindingStore, HostVault, ProviderCredentialReader};
+use crate::vault::HostVault;
 
 #[derive(Clone)]
 pub struct LiveEmailProviderSyncPort {

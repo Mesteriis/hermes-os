@@ -11,7 +11,7 @@ import MailSyncSettingsStrip from '../../../integrations/mail/components/MailSyn
 import type {
   CommunicationSectionId,
   CommunicationDraft,
-  MailArchitectureBlocker,
+  CommunicationArchitectureBlocker,
   MailSyncSettings,
   MailSyncSettingsUpdate,
   MailboxHealth,
@@ -41,7 +41,7 @@ const props = defineProps<{
   health: MailboxHealth | null
   subscriptions: SubscriptionSource[]
   topSenders: SenderStats[]
-  blockers: MailArchitectureBlocker[]
+  blockers: CommunicationArchitectureBlocker[]
   areResourcesLoading: boolean
   hasMoreSubscriptions: boolean
   isLoadingMoreSubscriptions: boolean

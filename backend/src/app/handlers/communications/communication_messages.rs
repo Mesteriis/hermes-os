@@ -57,7 +57,7 @@ pub(crate) async fn get_v1_communication_message(
         &message.message_metadata,
         rich_detail.headers.as_slice(),
     );
-    let attachments = mail_storage_store(&state)?
+    let attachments = communication_storage_store(&state)?
         .attachments_for_message(&message.message_id)
         .await?
         .into_iter()
@@ -119,7 +119,7 @@ async fn rich_email_message_detail_for_message(
         return Ok(RichCommunicationMessageDetail::default());
     }
 
-    let blob_store = LocalMailBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
     match parse_raw_email_message_from_blob(&blob_store, &raw).await {
         Ok(parsed) => Ok(RichCommunicationMessageDetail {
             body_html: parsed.body_html.filter(|value| !value.trim().is_empty()),

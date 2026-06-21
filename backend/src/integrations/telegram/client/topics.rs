@@ -5,7 +5,7 @@ use sqlx::{PgPool, Postgres, Transaction};
 use super::errors::TelegramError;
 use super::evidence::link_telegram_entity_in_transaction;
 use super::models::topics::{NewTelegramTopic, TelegramTopic};
-use crate::platform::communications::ProviderChannelMessageStore;
+use super::store::TelegramStore;
 use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationStore};
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
@@ -205,7 +205,8 @@ pub async fn list_topic_message_ids(
     topic_id: &str,
     limit: i64,
 ) -> Result<Vec<String>, TelegramError> {
-    Ok(ProviderChannelMessageStore::new(pool.clone())
+    Ok(TelegramStore::new(pool.clone())
+        .provider_channel_message_store()
         .message_ids_by_metadata_string("forum_topic_id", topic_id, TELEGRAM_CHANNEL_KINDS, limit)
         .await?)
 }

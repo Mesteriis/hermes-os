@@ -1,12 +1,12 @@
 use crate::app::api_support::{TelegramCapabilitiesResponse, event_store};
 use crate::app::{ApiError, AppState};
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::integrations::telegram::client::TelegramError;
 use crate::integrations::telegram::client::{TelegramStore, telegram_chat_id};
 use crate::integrations::telegram::runtime::TelegramRuntimeEventBridgeContext;
 use crate::platform::config::AppConfig;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::secrets::SecretReferenceStore;
-use crate::vault::CommunicationProviderAccountStore;
 use serde_json::json;
 
 pub(super) const AUDIT_ACTOR_ID: &str = "hermes-frontend";

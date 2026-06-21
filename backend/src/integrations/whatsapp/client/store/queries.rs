@@ -3,7 +3,6 @@ use crate::integrations::whatsapp::client::errors::WhatsappWebError;
 use crate::integrations::whatsapp::client::models::WhatsappWebMessage;
 use crate::integrations::whatsapp::client::rows::provider_channel_message_to_whatsapp_web_message;
 use crate::integrations::whatsapp::client::validation::validate_limit;
-use crate::platform::communications::ProviderChannelMessageStore;
 
 const WHATSAPP_WEB_CHANNEL_KINDS: &[&str] = &["whatsapp_web"];
 
@@ -19,7 +18,8 @@ impl WhatsappWebStore {
         let provider_chat_id = provider_chat_id
             .map(str::trim)
             .filter(|value| !value.is_empty());
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .recent_messages(
                 account_id,
                 provider_chat_id,

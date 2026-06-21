@@ -30,7 +30,7 @@ async fn members_route_returns_admin_only_provider_roster_rows() {
 
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",

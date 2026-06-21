@@ -3,6 +3,7 @@ use serde_json::json;
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::domains::communications::core::{
     CommunicationIngestionError, CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
@@ -16,7 +17,6 @@ use crate::domains::graph::core::{GraphStore, GraphStoreError, GraphSummary};
 use crate::domains::persons::api::{
     PersonProjectionError, PersonProjectionStore, upsert_persons_from_message_participants,
 };
-use crate::vault::CommunicationProviderAccountStore;
 use crate::workflows::graph_projection::{
     GraphProjectionError, GraphProjectionReport, GraphProjectionService,
 };

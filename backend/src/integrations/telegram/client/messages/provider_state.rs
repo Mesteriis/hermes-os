@@ -5,9 +5,7 @@ use super::super::errors::TelegramError;
 use super::super::models::TelegramMessage;
 use super::super::rows::provider_channel_message_to_telegram_message;
 use super::super::store::TelegramStore;
-use crate::platform::communications::{
-    ProviderChannelMessageStore, ProviderMessageProjectionObservationContext,
-};
+use crate::platform::communications::ProviderMessageProjectionObservationContext;
 
 const TELEGRAM_CHANNEL_KINDS: &[&str] = &["telegram_user", "telegram_bot"];
 
@@ -17,7 +15,8 @@ impl TelegramStore {
         account_id: &str,
         provider_message_id: &str,
     ) -> Result<Option<TelegramMessage>, TelegramError> {
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .message_by_provider_record_id(account_id, provider_message_id, TELEGRAM_CHANNEL_KINDS)
             .await?
             .map(provider_channel_message_to_telegram_message))
@@ -33,7 +32,8 @@ impl TelegramStore {
                 "telegram message metadata must be a JSON object".to_owned(),
             ));
         }
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .apply_metadata(
                 message_id,
                 metadata,
@@ -53,7 +53,8 @@ impl TelegramStore {
         delivery_state: &str,
         observed_at: DateTime<Utc>,
     ) -> Result<Option<TelegramMessage>, TelegramError> {
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .set_delivery_state(
                 message_id,
                 delivery_state,
@@ -80,7 +81,7 @@ impl TelegramStore {
                 "telegram message metadata must be a JSON object".to_owned(),
             ));
         }
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self.provider_channel_message_store()
             .apply_content_update(
                 message_id,
                 body_text,
@@ -102,7 +103,8 @@ impl TelegramStore {
         is_pinned: bool,
         observed_at: DateTime<Utc>,
     ) -> Result<Option<TelegramMessage>, TelegramError> {
-        Ok(ProviderChannelMessageStore::new(self.pool.clone())
+        Ok(self
+            .provider_channel_message_store()
             .apply_pinned_state(
                 message_id,
                 is_pinned,

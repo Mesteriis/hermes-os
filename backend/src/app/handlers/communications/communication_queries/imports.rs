@@ -1,5 +1,7 @@
 use super::super::*;
-use crate::domains::communications::service::{MailAttachmentImportCommand, MailCommandService};
+use crate::domains::communications::service::{
+    CommunicationAttachmentImportCommand, CommunicationCommandService,
+};
 use crate::domains::communications::storage::ImportedCommunicationAttachment;
 
 #[derive(Deserialize)]
@@ -37,8 +39,8 @@ pub(crate) async fn post_v1_attachment_import(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let imported = MailCommandService::new(pool)
-        .import_attachment(MailAttachmentImportCommand {
+    let imported = CommunicationCommandService::new(pool)
+        .import_attachment(CommunicationAttachmentImportCommand {
             account_id: request.account_id,
             channel_kind: request.channel_kind,
             filename: request.filename,

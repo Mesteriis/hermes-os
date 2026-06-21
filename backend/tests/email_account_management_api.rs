@@ -106,7 +106,7 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
         .clone()
         .oneshot(request(
             Method::GET,
-            "/api/v1/communications/mail/accounts",
+            "/api/v1/integrations/mail/accounts",
             None,
         ))
         .await
@@ -125,7 +125,7 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
         .clone()
         .oneshot(request(
             Method::GET,
-            "/api/v1/communications/mail/accounts/fastmail-primary",
+            "/api/v1/integrations/mail/accounts/fastmail-primary",
             None,
         ))
         .await
@@ -138,7 +138,7 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
         .clone()
         .oneshot(request(
             Method::GET,
-            "/api/v1/communications/mail/accounts/fastmail-primary/export",
+            "/api/v1/integrations/mail/accounts/fastmail-primary/export",
             None,
         ))
         .await
@@ -155,7 +155,7 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
         .clone()
         .oneshot(request(
             Method::POST,
-            "/api/v1/communications/mail/accounts/fastmail-primary/logout",
+            "/api/v1/integrations/mail/accounts/fastmail-primary/logout",
             None,
         ))
         .await
@@ -202,7 +202,7 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
         .clone()
         .oneshot(request(
             Method::DELETE,
-            "/api/v1/communications/mail/accounts/fastmail-primary",
+            "/api/v1/integrations/mail/accounts/fastmail-primary",
             None,
         ))
         .await
@@ -278,7 +278,7 @@ async fn email_account_management_lists_gets_exports_logs_out_and_deletes_unused
     let response = app
         .oneshot(request(
             Method::GET,
-            "/api/v1/communications/mail/accounts/fastmail-primary",
+            "/api/v1/integrations/mail/accounts/fastmail-primary",
             None,
         ))
         .await
@@ -316,7 +316,7 @@ async fn email_account_delete_rejects_accounts_with_retained_raw_records() {
     let response = app
         .oneshot(request(
             Method::DELETE,
-            "/api/v1/communications/mail/accounts/imap-with-evidence",
+            "/api/v1/integrations/mail/accounts/imap-with-evidence",
             None,
         ))
         .await
@@ -336,7 +336,7 @@ async fn email_account_import_creates_sanitized_account_and_rejects_secrets() {
         .clone()
         .oneshot(request(
             Method::POST,
-            "/api/v1/communications/mail/accounts/import",
+            "/api/v1/integrations/mail/accounts/import",
             Some(json!({
                 "account": {
                     "account_id": "proton-bridge",
@@ -369,7 +369,7 @@ async fn email_account_import_creates_sanitized_account_and_rejects_secrets() {
     let response = app
         .oneshot(request(
             Method::POST,
-            "/api/v1/communications/mail/accounts/import",
+            "/api/v1/integrations/mail/accounts/import",
             Some(json!({
                 "account": {
                     "account_id": "bad-secret-import",

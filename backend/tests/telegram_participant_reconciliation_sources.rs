@@ -37,7 +37,7 @@ async fn telegram_basic_group_roster_reconciliation_records_observed_source() {
 
     post_ok(
         app.clone(),
-        "/api/v1/communications/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/accounts/fixture",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",

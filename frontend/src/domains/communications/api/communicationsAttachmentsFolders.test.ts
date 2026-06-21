@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiClient } from '../../../platform/api/ApiClient'
 import {
   copyMessageToFolder,
-  createMailFolder,
+  createCommunicationFolder,
   fetchFolderMessages,
-  fetchMailFolders,
+  fetchCommunicationFolders,
   inspectAttachmentArchive,
   moveMessageToFolder,
   previewAttachment,
@@ -193,8 +193,8 @@ describe('communications API attachment and folder helpers', () => {
       )
     vi.stubGlobal('fetch', fetchMock)
 
-    const folders = await fetchMailFolders('account-1', 50)
-    await createMailFolder({
+    const folders = await fetchCommunicationFolders('account-1', 50)
+    await createCommunicationFolder({
       name: 'Clients',
       account_id: 'account-1',
       color: '#3b82f6',

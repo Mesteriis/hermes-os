@@ -1,5 +1,5 @@
 use super::super::*;
-use crate::domains::communications::service::MailCommandService;
+use crate::domains::communications::service::CommunicationCommandService;
 
 pub(crate) async fn post_v1_reply(
     State(state): State<AppState>,
@@ -167,7 +167,7 @@ pub(crate) async fn post_v1_redirect(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let outbox = MailCommandService::new(pool)
+    let outbox = CommunicationCommandService::new(pool)
         .enqueue_redirect_message(&msg.message_id, to.clone(), cc, bcc)
         .await?;
 

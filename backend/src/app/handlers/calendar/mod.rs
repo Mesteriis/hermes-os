@@ -109,7 +109,7 @@ use crate::domains::communications::messages::{
     WorkflowState,
 };
 use crate::domains::communications::storage::{
-    MailStorageError, MailStorageStore, StoredMailAttachmentWithBlob,
+    CommunicationStorageError, CommunicationStorageStore, StoredCommunicationAttachmentWithBlob,
 };
 use crate::domains::documents::processing::{
     DocumentProcessingError, DocumentProcessingJob, DocumentProcessingRecord,

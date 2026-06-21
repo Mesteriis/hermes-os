@@ -35,7 +35,7 @@ async fn telegram_folder_add_action_records_provider_write_command() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts",
+            "/api/v1/integrations/telegram/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -158,7 +158,7 @@ async fn telegram_folder_remove_action_records_provider_write_command() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts",
+            "/api/v1/integrations/telegram/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -282,7 +282,7 @@ async fn telegram_folder_reassign_action_queues_add_and_remove_commands_from_cur
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/communications/telegram/accounts",
+            "/api/v1/integrations/telegram/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",

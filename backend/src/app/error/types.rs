@@ -5,7 +5,7 @@ use crate::ai::core::AiError;
 use crate::domains::calendar::events::CalendarError;
 use crate::domains::communications::core::CommunicationIngestionError;
 use crate::domains::communications::messages::MessageProjectionError;
-use crate::domains::communications::storage::MailStorageError;
+use crate::domains::communications::storage::CommunicationStorageError;
 use crate::domains::decisions::DecisionStoreError;
 use crate::domains::documents::processing::DocumentProcessingError;
 use crate::domains::obligations::ObligationStoreError;
@@ -86,7 +86,7 @@ pub enum ApiError {
     PersonIdentity(PersonIdentityError),
     Messages(MessageProjectionError),
     CommunicationIngestion(CommunicationIngestionError),
-    MailStorage(MailStorageError),
+    CommunicationStorage(CommunicationStorageError),
     InvalidCommunicationQuery(&'static str),
     EmailAccountDeleteConflict,
     ProviderWriteConfirmationRequired,

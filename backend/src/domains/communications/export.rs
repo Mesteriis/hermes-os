@@ -1,5 +1,7 @@
 use crate::domains::communications::messages::{MessageProjectionError, MessageProjectionStore};
-use crate::domains::communications::storage::{MailStorageError, MailStorageStore};
+use crate::domains::communications::storage::{
+    CommunicationStorageError, CommunicationStorageStore,
+};
 
 #[derive(Debug, Clone)]
 pub struct CommunicationExport {
@@ -34,7 +36,7 @@ impl ExportFormat {
 
 pub async fn export_message(
     message_store: &MessageProjectionStore,
-    attachment_store: &MailStorageStore,
+    attachment_store: &CommunicationStorageStore,
     message_id: &str,
     format: ExportFormat,
 ) -> Result<CommunicationExport, CommunicationExportError> {
@@ -87,7 +89,7 @@ pub enum CommunicationExportError {
     #[error(transparent)]
     MessageProjection(#[from] MessageProjectionError),
     #[error(transparent)]
-    MailStorage(#[from] MailStorageError),
+    CommunicationStorage(#[from] CommunicationStorageError),
     #[error("message not found")]
     NotFound,
 }

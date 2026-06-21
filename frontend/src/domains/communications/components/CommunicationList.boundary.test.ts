@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 
-describe('MailList keyboard multi-select boundary', () => {
+describe('CommunicationList keyboard multi-select boundary', () => {
   it('supports keyboard selection without direct API access', () => {
-    const source = readFileSync(new URL('./MailList.vue', import.meta.url), 'utf8')
+    const source = readFileSync(new URL('./CommunicationList.vue', import.meta.url), 'utf8')
 
     expect(source).toContain('handleKeydown')
     expect(source).toContain('@keydown="handleKeydown"')

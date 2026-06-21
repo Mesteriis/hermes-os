@@ -12,8 +12,16 @@ ADR-0056. Browser WebSocket clients передают local secret через `he
 
 ## Base
 
+Business/read-model routes stay under:
+
 ```text
 /api/v1/communications/whatsapp
+```
+
+Runtime/setup/account-control routes stay under:
+
+```text
+/api/v1/integrations/whatsapp
 ```
 
 Provider kind:
@@ -35,8 +43,8 @@ whatsapp_business
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/capabilities` | Global operation-level capability matrix |
-| GET | `/api/v1/communications/whatsapp/accounts/{account_id}/capabilities` | Account-scoped capability matrix with lifecycle/runtime overrides |
+| GET | `/api/v1/integrations/whatsapp/capabilities` | Global operation-level capability matrix |
+| GET | `/api/v1/integrations/whatsapp/accounts/{account_id}/capabilities` | Account-scoped capability matrix with lifecycle/runtime overrides |
 
 ### Целевые capability states
 
@@ -112,10 +120,10 @@ provider_kind
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/accounts?include_removed=` | List WhatsApp account metadata |
-| POST | `/api/v1/communications/whatsapp/accounts` | Create account metadata and secret/session references |
-| DELETE | `/api/v1/communications/whatsapp/accounts/{account_id}` | Mark account removed, stop runtime, preserve evidence |
-| POST | `/api/v1/communications/whatsapp/accounts/{account_id}/logout` | End local session, stop runtime, preserve evidence |
+| GET | `/api/v1/integrations/whatsapp/accounts?include_removed=` | List WhatsApp account metadata |
+| POST | `/api/v1/integrations/whatsapp/accounts` | Create account metadata and secret/session references |
+| DELETE | `/api/v1/integrations/whatsapp/accounts/{account_id}` | Mark account removed, stop runtime, preserve evidence |
+| POST | `/api/v1/integrations/whatsapp/accounts/{account_id}/logout` | End local session, stop runtime, preserve evidence |
 
 Account config stores non-secret metadata only.
 
@@ -142,13 +150,13 @@ ADR and host-vault-backed secret policy.
 
 | Method | Path | Описание |
 |---|---|---|
-| POST | `/api/v1/communications/whatsapp/sessions/link/start` | Start owner-visible WhatsApp Web link flow |
-| GET | `/api/v1/communications/whatsapp/sessions/link/{setup_id}` | Poll link status |
-| DELETE | `/api/v1/communications/whatsapp/sessions/link/{setup_id}` | Cancel pending link flow |
-| GET | `/api/v1/communications/whatsapp/sessions?account_id=` | List local session metadata |
-| POST | `/api/v1/communications/whatsapp/runtime/start` | Start account-scoped companion runtime |
-| POST | `/api/v1/communications/whatsapp/runtime/stop` | Stop account-scoped companion runtime |
-| GET | `/api/v1/communications/whatsapp/runtime/status?account_id=` | Runtime status, blockers and capability diagnostics |
+| POST | `/api/v1/integrations/whatsapp/sessions/link/start` | Start owner-visible WhatsApp Web link flow |
+| GET | `/api/v1/integrations/whatsapp/sessions/link/{setup_id}` | Poll link status |
+| DELETE | `/api/v1/integrations/whatsapp/sessions/link/{setup_id}` | Cancel pending link flow |
+| GET | `/api/v1/integrations/whatsapp/sessions?account_id=` | List local session metadata |
+| POST | `/api/v1/integrations/whatsapp/runtime/start` | Start account-scoped companion runtime |
+| POST | `/api/v1/integrations/whatsapp/runtime/stop` | Stop account-scoped companion runtime |
+| GET | `/api/v1/integrations/whatsapp/runtime/status?account_id=` | Runtime status, blockers and capability diagnostics |
 
 Target runtime states:
 
@@ -405,9 +413,9 @@ evidence candidates until raw source records are preserved.
 
 | Method | Path | Описание |
 |---|---|---|
-| GET | `/api/v1/communications/whatsapp/commands?account_id=&chat_id=&status=&limit=&cursor=` | List provider-write command rows |
-| GET | `/api/v1/communications/whatsapp/commands/{command_id}` | Read command state and redacted result metadata |
-| POST | `/api/v1/communications/whatsapp/commands/{command_id}/retry` | Retry failed or dead-letter command when policy allows |
+| GET | `/api/v1/integrations/whatsapp/commands?account_id=&chat_id=&status=&limit=&cursor=` | List provider-write command rows |
+| GET | `/api/v1/integrations/whatsapp/commands/{command_id}` | Read command state and redacted result metadata |
+| POST | `/api/v1/integrations/whatsapp/commands/{command_id}/retry` | Retry failed or dead-letter command when policy allows |
 
 Required command states:
 

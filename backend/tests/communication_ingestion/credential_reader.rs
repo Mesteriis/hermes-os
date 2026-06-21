@@ -12,7 +12,9 @@ async fn provider_credential_reader_resolves_bound_account_secret_against_postgr
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let secret_binding_store =
-        hermes_hub_backend::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
+        hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            pool.clone(),
+        );
     let secret_store = SecretReferenceStore::new(pool);
     let suffix = unique_suffix();
     let account_id = format!("acct_credential_reader_{suffix}");
@@ -82,7 +84,9 @@ async fn provider_credential_reader_reports_missing_binding_against_postgres() {
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let secret_binding_store =
-        hermes_hub_backend::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
+        hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            pool.clone(),
+        );
     let secret_store = SecretReferenceStore::new(pool);
     let suffix = unique_suffix();
     let account_id = format!("acct_missing_credential_binding_{suffix}");
@@ -129,7 +133,9 @@ async fn provider_credential_reader_propagates_resolver_failures_against_postgre
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let secret_binding_store =
-        hermes_hub_backend::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
+        hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            pool.clone(),
+        );
     let secret_store = SecretReferenceStore::new(pool);
     let suffix = unique_suffix();
     let account_id = format!("acct_resolver_failure_{suffix}");
@@ -193,7 +199,9 @@ async fn provider_credential_reader_rejects_incompatible_secret_kind_against_pos
     let pool = database.pool().expect("configured pool").clone();
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let secret_binding_store =
-        hermes_hub_backend::vault::CommunicationProviderSecretBindingStore::new(pool.clone());
+        hermes_hub_backend::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+            pool.clone(),
+        );
     let secret_store = SecretReferenceStore::new(pool);
     let suffix = unique_suffix();
     let account_id = format!("acct_incompatible_credential_kind_{suffix}");

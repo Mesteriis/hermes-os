@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde_json::json;
 use sqlx::PgPool;
 
@@ -11,6 +11,8 @@ use super::errors::TelegramError;
 use super::lifecycle::mark_command_reconciled;
 use super::models::messages::TelegramProviderWriteCommand;
 use super::rows::row_to_telegram_provider_write_command;
+
+const PROVIDER_RECONCILIATION_CLOCK_SKEW: Duration = Duration::seconds(5);
 use super::store::TelegramStore;
 
 const DIALOG_PIN_PROVIDER_MISMATCH_ERROR: &str =
@@ -266,7 +268,7 @@ pub async fn reconcile_mark_read_commands_from_provider_state(
     )
     .bind(account_id)
     .bind(provider_chat_id)
-    .bind(observed_at)
+    .bind(observed_at + PROVIDER_RECONCILIATION_CLOCK_SKEW)
     .fetch_all(pool)
     .await
     .map_err(TelegramError::from)?;
@@ -385,7 +387,7 @@ pub async fn reconcile_folder_add_commands_from_provider_state(
     .bind(account_id)
     .bind(provider_chat_id)
     .bind(provider_folder_id)
-    .bind(observed_at)
+    .bind(observed_at + PROVIDER_RECONCILIATION_CLOCK_SKEW)
     .fetch_all(pool)
     .await
     .map_err(TelegramError::from)?;
@@ -443,7 +445,7 @@ pub async fn reconcile_folder_remove_commands_from_provider_state(
     .bind(account_id)
     .bind(provider_chat_id)
     .bind(provider_folder_id)
-    .bind(observed_at)
+    .bind(observed_at + PROVIDER_RECONCILIATION_CLOCK_SKEW)
     .fetch_all(pool)
     .await
     .map_err(TelegramError::from)?;

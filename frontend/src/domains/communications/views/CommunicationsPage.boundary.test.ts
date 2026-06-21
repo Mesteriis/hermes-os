@@ -57,7 +57,7 @@ describe('CommunicationsPage folder management integration', () => {
 		expect(controllerSource).toContain('useMailResourceOverview')
 		expect(resourceOverviewSource).toContain('useSubscriptionsQuery')
 		expect(resourceOverviewSource).toContain('useTopSendersQuery')
-		expect(resourceOverviewSource).toContain('useMailBlockersQuery')
+		expect(resourceOverviewSource).toContain('useCommunicationBlockersQuery')
 		expect(resourceOverviewSource).toContain('handleLoadMoreSubscriptions')
 		expect(resourceOverviewSource).toContain('handleLoadMoreTopSenders')
 		expect(controllerSource).toContain('handleGenerateAiReply')
@@ -154,7 +154,7 @@ describe('CommunicationsPage folder management integration', () => {
 			'utf8'
 		)
 
-		expect(source).toContain('MailFolderStrip')
+		expect(source).toContain('CommunicationFolderStrip')
 		expect(source).toContain('savedSearchChannelKind')
 		expect(source).toContain('AttachmentSearchPanel')
 		expect(source).toContain(':account-id="store.selectedMailAccountId || null"')

@@ -4,9 +4,9 @@ import type {
 	LocalMessageState,
 	WorkflowState
 } from '../types/communications'
-import type { FolderMessage, MailFolder } from '../types/folders'
-import type { MailAiState } from '../types/aiState'
-import type { MailSavedSearch } from '../types/savedSearches'
+import type { FolderMessage, CommunicationFolder } from '../types/folders'
+import type { CommunicationAiState } from '../types/aiState'
+import type { CommunicationSavedSearch } from '../types/savedSearches'
 
 export type MailRealtimePatchQueryClient = {
 	getQueriesData?: <TData>(filters: { queryKey: readonly unknown[] }) => Array<[
@@ -88,7 +88,7 @@ export type SyncPatchPayload = {
 	next_run_at?: unknown
 }
 
-const AI_STATES = new Set<MailAiState>([
+const AI_STATES = new Set<CommunicationAiState>([
 	'NEW',
 	'PROCESSING',
 	'PROCESSED',
@@ -167,9 +167,9 @@ export function outboxStatusValue(value: unknown): CommunicationOutboxItem['stat
 	return null
 }
 
-export function aiStateValue(value: unknown): MailAiState | null {
+export function aiStateValue(value: unknown): CommunicationAiState | null {
 	if (typeof value !== 'string') return null
-	return AI_STATES.has(value as MailAiState) ? (value as MailAiState) : null
+	return AI_STATES.has(value as CommunicationAiState) ? (value as CommunicationAiState) : null
 }
 
 function workflowStateValue(value: unknown): WorkflowState | null {
@@ -200,7 +200,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
-export function folderValue(value: unknown): MailFolder | null {
+export function folderValue(value: unknown): CommunicationFolder | null {
 	if (!isRecord(value)) return null
 	const folderId = stringValue(value.folder_id)
 	const name = stringValue(value.name)
@@ -267,7 +267,7 @@ export function folderMessageValue(value: unknown): FolderMessage | null {
 	}
 }
 
-export function savedSearchValue(value: unknown): MailSavedSearch | null {
+export function savedSearchValue(value: unknown): CommunicationSavedSearch | null {
 	if (!isRecord(value)) return null
 	const savedSearchId = stringValue(value.saved_search_id)
 	const name = stringValue(value.name)

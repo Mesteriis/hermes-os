@@ -5,7 +5,7 @@ use crate::domains::communications::messages::{
     project_parsed_raw_email_message,
 };
 use crate::domains::communications::storage::{
-    AttachmentSafetyScanner, LocalMailBlobStore, MailStorageStore,
+    AttachmentSafetyScanner, CommunicationStorageStore, LocalCommunicationBlobStore,
 };
 
 use super::attachments::project_attachments;
@@ -21,8 +21,8 @@ pub(crate) struct RawRecordProjectionReport {
 
 pub(crate) async fn project_raw_records(
     message_store: &MessageProjectionStore,
-    mail_store: &MailStorageStore,
-    blob_store: &LocalMailBlobStore,
+    mail_store: &CommunicationStorageStore,
+    blob_store: &LocalCommunicationBlobStore,
     raw_records: &[StoredRawCommunicationRecord],
     attachment_scanner: &impl AttachmentSafetyScanner,
 ) -> Result<RawRecordProjectionReport, EmailSyncPipelineError> {

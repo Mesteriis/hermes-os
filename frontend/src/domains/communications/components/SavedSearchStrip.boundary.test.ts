@@ -46,7 +46,7 @@ describe('SavedSearchStrip prefetch boundary', () => {
     expect(source).toContain('handleSavedSearchVirtualScroll')
     expect(source).toContain('@scroll="handleSmartFolderVirtualScroll"')
     expect(source).toContain('@scroll="handleSavedSearchVirtualScroll"')
-    expect(source).toContain('useSavedSearchMailListPrefetch')
+    expect(source).toContain('useSavedSearchCommunicationListPrefetch')
     expect(source).toContain('handleSavedSearchPrefetch')
     expect(source).toContain('@mouseenter="handleSavedSearchPrefetch(smartFolders[virtualItem.index])"')
     expect(source).toContain('@focus="handleSavedSearchPrefetch(savedSearches[virtualItem.index])"')

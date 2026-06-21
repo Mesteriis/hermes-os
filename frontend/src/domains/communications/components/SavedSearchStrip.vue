@@ -32,8 +32,8 @@ import {
   type SavedSearchPresetOption,
   type SavedSearchFormValues
 } from '../forms/savedSearchForm'
-import { useSavedSearchMailListPrefetch } from '../queries/mailPrefetch'
-import type { MailSavedSearch } from '../types/savedSearches'
+import { useSavedSearchCommunicationListPrefetch } from '../queries/communicationPrefetch'
+import type { CommunicationSavedSearch } from '../types/savedSearches'
 import type { LocalMessageState, WorkflowState } from '../types/communications'
 import './SavedSearchStrip.css'
 
@@ -47,8 +47,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  select: [savedSearch: MailSavedSearch]
-  deleted: [savedSearch: MailSavedSearch]
+  select: [savedSearch: CommunicationSavedSearch]
+  deleted: [savedSearch: CommunicationSavedSearch]
 }>()
 
 const {
@@ -70,15 +70,15 @@ const smartFolders = computed(() => smartFolderData.value ?? [])
 const savedSearches = computed(() => savedSearchData.value ?? [])
 const isLoading = computed(() => isSmartFolderLoading.value || isSavedSearchLoading.value)
 const dialogOpen = ref(false)
-const editingSearch = ref<MailSavedSearch | null>(null)
+const editingSearch = ref<CommunicationSavedSearch | null>(null)
 const deleteDialogOpen = ref(false)
-const deletingSearch = ref<MailSavedSearch | null>(null)
+const deletingSearch = ref<CommunicationSavedSearch | null>(null)
 const searchRuleTree = ref<SavedSearchRuleGroup>(createSavedSearchRuleGroup('all'))
 const deleteError = ref('')
 const createMutation = useCreateSavedSearchMutation()
 const updateMutation = useUpdateSavedSearchMutation()
 const deleteMutation = useDeleteSavedSearchMutation()
-const prefetchSavedSearchMailList = useSavedSearchMailListPrefetch(() => props.accountId)
+const prefetchSavedSearchCommunicationList = useSavedSearchCommunicationListPrefetch(() => props.accountId)
 const smartFolderVirtualScrollRef = ref<HTMLDivElement | null>(null)
 const savedSearchVirtualScrollRef = ref<HTMLDivElement | null>(null)
 const {
@@ -150,14 +150,14 @@ function openCreateDialog(isSmartFolder: boolean) {
   dialogOpen.value = true
 }
 
-function openEditDialog(savedSearch: MailSavedSearch) {
+function openEditDialog(savedSearch: CommunicationSavedSearch) {
   editingSearch.value = savedSearch
   resetForm({ values: savedSearchFormDefaults(savedSearch) })
   syncRuleTreeFromQuery(savedSearch.query)
   dialogOpen.value = true
 }
 
-function openDeleteDialog(savedSearch: MailSavedSearch) {
+function openDeleteDialog(savedSearch: CommunicationSavedSearch) {
   deletingSearch.value = savedSearch
   deleteError.value = ''
   deleteDialogOpen.value = true
@@ -173,8 +173,8 @@ function currentSearchDefaults(isSmartFolder: boolean): SavedSearchFormValues {
   }
 }
 
-function handleSavedSearchPrefetch(savedSearch: MailSavedSearch) {
-  void prefetchSavedSearchMailList(savedSearch)
+function handleSavedSearchPrefetch(savedSearch: CommunicationSavedSearch) {
+  void prefetchSavedSearchCommunicationList(savedSearch)
 }
 
 function applyPreset(preset: SavedSearchPresetOption) {

@@ -1,5 +1,5 @@
+use crate::domains::calendar::events::CalendarAccountStore;
 use crate::domains::communications::core::EmailProviderKind;
-use crate::vault::CalendarAccountStore;
 
 use super::errors::HostVaultReconciliationError;
 use super::provider_recovery::RecoverableProviderSecret;

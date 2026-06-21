@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 
-use super::blob_store::LocalMailBlob;
-use super::errors::MailStorageError;
+use super::blob_store::LocalCommunicationBlob;
+use super::errors::CommunicationStorageError;
 use super::scanner::{AttachmentSafetyScanReport, AttachmentSafetyScanStatus};
 use super::validation::{
     validate_non_empty, validate_sha256, validate_size_bytes, validate_storage_kind,
@@ -10,7 +10,7 @@ use super::validation::{
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct NewMailBlob {
+pub struct NewCommunicationBlob {
     pub storage_kind: String,
     pub storage_path: String,
     pub sha256: String,
@@ -18,7 +18,7 @@ pub struct NewMailBlob {
     pub content_type: Option<String>,
 }
 
-impl NewMailBlob {
+impl NewCommunicationBlob {
     pub fn new(
         storage_kind: impl Into<String>,
         storage_path: impl Into<String>,
@@ -34,7 +34,7 @@ impl NewMailBlob {
         }
     }
 
-    pub fn from_local_blob(blob: &LocalMailBlob) -> Self {
+    pub fn from_local_blob(blob: &LocalCommunicationBlob) -> Self {
         Self::new(
             &blob.storage_kind,
             &blob.storage_path,
@@ -48,7 +48,7 @@ impl NewMailBlob {
         self
     }
 
-    pub(crate) fn validate(&self) -> Result<ValidatedMailBlob, MailStorageError> {
+    pub(crate) fn validate(&self) -> Result<ValidatedCommunicationBlob, CommunicationStorageError> {
         let storage_kind = validate_storage_kind(&self.storage_kind)?;
         let storage_path = validate_storage_path(&self.storage_path)?;
         let sha256 = validate_sha256(&self.sha256)?;
@@ -59,7 +59,7 @@ impl NewMailBlob {
             .map(|value| validate_non_empty("content_type", value))
             .transpose()?;
 
-        Ok(ValidatedMailBlob {
+        Ok(ValidatedCommunicationBlob {
             storage_kind,
             storage_path,
             sha256,
@@ -70,7 +70,7 @@ impl NewMailBlob {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct ValidatedMailBlob {
+pub(crate) struct ValidatedCommunicationBlob {
     pub(crate) storage_kind: String,
     pub(crate) storage_path: String,
     pub(crate) sha256: String,
@@ -79,7 +79,7 @@ pub(crate) struct ValidatedMailBlob {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StoredMailBlob {
+pub struct StoredCommunicationBlob {
     pub blob_id: String,
     pub storage_kind: String,
     pub storage_path: String,
@@ -161,7 +161,7 @@ impl NewCommunicationAttachmentImport {
         self
     }
 
-    pub(crate) fn validate(&self) -> Result<Self, MailStorageError> {
+    pub(crate) fn validate(&self) -> Result<Self, CommunicationStorageError> {
         let attachment_id = validate_non_empty("attachment_id", &self.attachment_id)?;
         let account_id = self
             .account_id
@@ -186,7 +186,7 @@ impl NewCommunicationAttachmentImport {
         let imported_by = validate_non_empty("imported_by", &self.imported_by)?;
         let scan_report = self.scan_report.validate()?;
         if !self.metadata.is_object() {
-            return Err(MailStorageError::NonObjectJson("metadata"));
+            return Err(CommunicationStorageError::NonObjectJson("metadata"));
         }
 
         Ok(Self {
@@ -231,7 +231,7 @@ pub struct ImportedCommunicationAttachment {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct NewMailAttachment {
+pub struct NewCommunicationAttachment {
     pub message_id: String,
     pub raw_record_id: String,
     pub blob_id: String,
@@ -240,11 +240,11 @@ pub struct NewMailAttachment {
     pub content_type: String,
     pub size_bytes: i64,
     pub sha256: String,
-    pub disposition: MailAttachmentDisposition,
+    pub disposition: CommunicationAttachmentDisposition,
     pub scan_report: AttachmentSafetyScanReport,
 }
 
-impl NewMailAttachment {
+impl NewCommunicationAttachment {
     pub fn new(
         message_id: impl Into<String>,
         raw_record_id: impl Into<String>,
@@ -263,7 +263,7 @@ impl NewMailAttachment {
             content_type: content_type.into(),
             size_bytes,
             sha256: sha256.into(),
-            disposition: MailAttachmentDisposition::Unknown,
+            disposition: CommunicationAttachmentDisposition::Unknown,
             scan_report: AttachmentSafetyScanReport::not_scanned(),
         }
     }
@@ -273,7 +273,7 @@ impl NewMailAttachment {
         self
     }
 
-    pub fn disposition(mut self, disposition: MailAttachmentDisposition) -> Self {
+    pub fn disposition(mut self, disposition: CommunicationAttachmentDisposition) -> Self {
         self.disposition = disposition;
         self
     }
@@ -283,7 +283,9 @@ impl NewMailAttachment {
         self
     }
 
-    pub(crate) fn validate(&self) -> Result<ValidatedMailAttachment, MailStorageError> {
+    pub(crate) fn validate(
+        &self,
+    ) -> Result<ValidatedCommunicationAttachment, CommunicationStorageError> {
         let message_id = validate_non_empty("message_id", &self.message_id)?;
         let raw_record_id = validate_non_empty("raw_record_id", &self.raw_record_id)?;
         let blob_id = validate_non_empty("blob_id", &self.blob_id)?;
@@ -299,7 +301,7 @@ impl NewMailAttachment {
         let sha256 = validate_sha256(&self.sha256)?;
         let scan_report = self.scan_report.validate()?;
 
-        Ok(ValidatedMailAttachment {
+        Ok(ValidatedCommunicationAttachment {
             message_id,
             raw_record_id,
             blob_id,
@@ -315,7 +317,7 @@ impl NewMailAttachment {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct ValidatedMailAttachment {
+pub(crate) struct ValidatedCommunicationAttachment {
     pub(crate) message_id: String,
     pub(crate) raw_record_id: String,
     pub(crate) blob_id: String,
@@ -324,12 +326,12 @@ pub(crate) struct ValidatedMailAttachment {
     pub(crate) content_type: String,
     pub(crate) size_bytes: i64,
     pub(crate) sha256: String,
-    pub(crate) disposition: MailAttachmentDisposition,
+    pub(crate) disposition: CommunicationAttachmentDisposition,
     pub(crate) scan_report: AttachmentSafetyScanReport,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct StoredMailAttachment {
+pub struct StoredCommunicationAttachment {
     pub attachment_id: String,
     pub message_id: String,
     pub raw_record_id: String,
@@ -339,7 +341,7 @@ pub struct StoredMailAttachment {
     pub content_type: String,
     pub size_bytes: i64,
     pub sha256: String,
-    pub disposition: MailAttachmentDisposition,
+    pub disposition: CommunicationAttachmentDisposition,
     pub scan_status: AttachmentSafetyScanStatus,
     pub scan_engine: Option<String>,
     pub scan_checked_at: Option<DateTime<Utc>>,
@@ -350,20 +352,20 @@ pub struct StoredMailAttachment {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct StoredMailAttachmentWithBlob {
-    pub attachment: StoredMailAttachment,
+pub struct StoredCommunicationAttachmentWithBlob {
+    pub attachment: StoredCommunicationAttachment,
     pub storage_kind: String,
     pub storage_path: String,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum MailAttachmentDisposition {
+pub enum CommunicationAttachmentDisposition {
     Attachment,
     Inline,
     Unknown,
 }
 
-impl MailAttachmentDisposition {
+impl CommunicationAttachmentDisposition {
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Attachment => "attachment",
@@ -373,15 +375,17 @@ impl MailAttachmentDisposition {
     }
 }
 
-impl TryFrom<&str> for MailAttachmentDisposition {
-    type Error = MailStorageError;
+impl TryFrom<&str> for CommunicationAttachmentDisposition {
+    type Error = CommunicationStorageError;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "attachment" => Ok(Self::Attachment),
             "inline" => Ok(Self::Inline),
             "unknown" => Ok(Self::Unknown),
-            other => Err(MailStorageError::InvalidDisposition(other.to_owned())),
+            other => Err(CommunicationStorageError::InvalidDisposition(
+                other.to_owned(),
+            )),
         }
     }
 }

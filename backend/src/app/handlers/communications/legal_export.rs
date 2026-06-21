@@ -94,7 +94,7 @@ pub(crate) async fn get_v1_message_export(
     Query(query): Query<MessageExportQuery>,
 ) -> Result<Json<ExportResponse>, ApiError> {
     let msg_store = message_store(&state)?;
-    let att_store = mail_storage_store(&state)?;
+    let att_store = communication_storage_store(&state)?;
     let format = match query.format.as_deref().unwrap_or("markdown") {
         "eml" => crate::domains::communications::export::ExportFormat::Eml,
         "json" => crate::domains::communications::export::ExportFormat::Json,

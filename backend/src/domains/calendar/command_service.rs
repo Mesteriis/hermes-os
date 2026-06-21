@@ -3,10 +3,10 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use thiserror::Error;
 
+use crate::domains::calendar::events::{CalendarAccountStore, CalendarSourceStore};
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
 };
-use crate::vault::{CalendarAccountStore, CalendarSourceStore};
 
 use super::core::{
     CalendarCoreError, EventAgenda, EventAgendaStore, EventChecklist, EventChecklistStore,

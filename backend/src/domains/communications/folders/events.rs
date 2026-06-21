@@ -3,7 +3,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chrono::Utc;
 use serde_json::json;
 
-use super::{FolderMessageActionResponse, FolderMessageOperation, MailFolder, MailFolderError};
+use super::{
+    CommunicationFolder, CommunicationFolderError, FolderMessageActionResponse,
+    FolderMessageOperation,
+};
 use crate::platform::events::NewEventEnvelope;
 
 pub(super) const EVENT_TYPE_FOLDER_CREATED: &str = "mail.folder.created";
@@ -15,8 +18,8 @@ const EVENT_TYPE_MESSAGE_MOVED: &str = "mail.folder_message.moved";
 
 pub(super) fn folder_event(
     event_type: &str,
-    folder: &MailFolder,
-) -> Result<NewEventEnvelope, MailFolderError> {
+    folder: &CommunicationFolder,
+) -> Result<NewEventEnvelope, CommunicationFolderError> {
     Ok(NewEventEnvelope::builder(
         generate_folder_event_id(event_type, &folder.folder_id),
         event_type,
@@ -39,7 +42,7 @@ pub(super) fn folder_event(
 
 pub(super) fn folder_message_event(
     response: &FolderMessageActionResponse,
-) -> Result<NewEventEnvelope, MailFolderError> {
+) -> Result<NewEventEnvelope, CommunicationFolderError> {
     let event_type = match response.operation {
         FolderMessageOperation::Copy => EVENT_TYPE_MESSAGE_COPIED,
         FolderMessageOperation::Move => EVENT_TYPE_MESSAGE_MOVED,

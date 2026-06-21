@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import MailListItem from './MailListItem.vue'
-import { useCommunicationMessagePrefetch } from '../queries/mailPrefetch'
+import CommunicationListItem from './CommunicationListItem.vue'
+import { useCommunicationMessagePrefetch } from '../queries/communicationPrefetch'
 import type { CommunicationMessageSummary } from '../types/communications'
 
 const props = defineProps<{
@@ -129,7 +129,7 @@ watch(() => props.selectedIndex, (idx) => {
           height: `${vitem.size}px`
         }"
       >
-        <MailListItem
+        <CommunicationListItem
           :message="messages[vitem.index]"
           :is-selected="vitem.index === selectedIndex"
           :is-checked="selectedMessageIdSet.has(messages[vitem.index].message_id)"

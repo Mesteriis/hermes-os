@@ -19,7 +19,7 @@ describe('CommunicationsDetailPane boundary', () => {
     expect(source).toContain('markMessageRead')
     expect(source).toContain('markMessageUnread')
     expect(source).toContain('deleteFromProvider')
-    expect(source).toContain('MailViewer')
+    expect(source).toContain('CommunicationViewer')
     expect(source).toContain('@send-bilingual-reply')
     expect(source).toContain('@export-message')
     expect(source).toContain('@add-label')

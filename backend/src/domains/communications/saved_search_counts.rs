@@ -5,12 +5,14 @@ use sqlx::{Postgres, QueryBuilder, Row};
 
 use crate::domains::communications::messages::parse_communication_message_search_query;
 use crate::domains::communications::messages::{MessageSearchQuery, append_message_search_filter};
-use crate::domains::communications::saved_searches::{MailSavedSearchError, SavedSearchRecord};
+use crate::domains::communications::saved_searches::{
+    CommunicationSavedSearchError, SavedSearchRecord,
+};
 
 pub(crate) async fn count_messages_for_saved_search<'e, E>(
     executor: E,
     record: &SavedSearchRecord,
-) -> Result<i64, MailSavedSearchError>
+) -> Result<i64, CommunicationSavedSearchError>
 where
     E: sqlx::Executor<'e, Database = sqlx::Postgres>,
 {
@@ -25,7 +27,7 @@ where
 pub(crate) async fn load_message_counts_for_saved_searches(
     pool: &PgPool,
     records: &[SavedSearchRecord],
-) -> Result<HashMap<String, i64>, MailSavedSearchError> {
+) -> Result<HashMap<String, i64>, CommunicationSavedSearchError> {
     if records.is_empty() {
         return Ok(HashMap::new());
     }

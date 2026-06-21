@@ -1,4 +1,4 @@
-export type MailAiState =
+export type CommunicationAiState =
   | 'NEW'
   | 'PROCESSING'
   | 'PROCESSED'
@@ -6,17 +6,17 @@ export type MailAiState =
   | 'FAILED'
   | 'ARCHIVED'
 
-export type MailAiStateRecord = {
+export type CommunicationAiStateRecord = {
   message_id: string
-  ai_state: MailAiState
+  ai_state: CommunicationAiState
   review_reason: string | null
   last_error: string | null
   created_at: string
   updated_at: string
 }
 
-export type MailAiStateTransitionRequest = {
-  ai_state: MailAiState
+export type CommunicationAiStateTransitionRequest = {
+  ai_state: CommunicationAiState
   review_reason?: string | null
   last_error?: string | null
 }

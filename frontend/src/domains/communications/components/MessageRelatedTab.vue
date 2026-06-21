@@ -4,9 +4,9 @@ import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
 import type { CommunicationMessageDetailResponse, MessageExportFormat } from '../types/communications'
 import {
-  mailMessageLabelsFromMetadata,
-  mailMessageSnoozeUntilFromMetadata
-} from '../helpers/mailPageModels'
+  communicationMessageLabelsFromMetadata,
+  communicationMessageSnoozeUntilFromMetadata
+} from '../helpers/communicationPageModels'
 
 const props = defineProps<{
   detail: CommunicationMessageDetailResponse | null
@@ -37,10 +37,10 @@ const exportFormats: { format: MessageExportFormat; label: string }[] = [
 
 const quickLabels = ['Follow up', 'Finance', 'Legal']
 const labels = computed(() =>
-  props.detail ? mailMessageLabelsFromMetadata(props.detail.message.message_metadata) : []
+  props.detail ? communicationMessageLabelsFromMetadata(props.detail.message.message_metadata) : []
 )
 const snoozeUntil = computed(() =>
-  props.detail ? mailMessageSnoozeUntilFromMetadata(props.detail.message.message_metadata) : null
+  props.detail ? communicationMessageSnoozeUntilFromMetadata(props.detail.message.message_metadata) : null
 )
 
 function snoozePreset(days: number): string {

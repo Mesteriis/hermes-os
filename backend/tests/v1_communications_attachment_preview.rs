@@ -13,8 +13,9 @@ use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
 use hermes_hub_backend::domains::communications::storage::{
-    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, LocalMailBlobStore,
-    MailAttachmentDisposition, MailStorageStore, NewMailAttachment, NewMailBlob,
+    AttachmentSafetyScanReport, AttachmentSafetyScanStatus, CommunicationAttachmentDisposition,
+    CommunicationStorageStore, LocalCommunicationBlobStore, NewCommunicationAttachment,
+    NewCommunicationBlob,
 };
 use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
@@ -138,7 +139,7 @@ async fn seed_text_attachment(
     let provider_record_id = format!("provider-attachment-preview-{suffix}");
     let communication_store = CommunicationIngestionStore::new(pool.clone());
     let message_store = MessageProjectionStore::new(pool.clone());
-    let storage_store = MailStorageStore::new(pool);
+    let storage_store = CommunicationStorageStore::new(pool);
     communication_store
         .upsert_provider_account(&NewProviderAccount::new(
             &account_id,
@@ -170,18 +171,18 @@ async fn seed_text_attachment(
         .expect("project message")
         .message_id;
 
-    let local_blob_store = LocalMailBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
+    let local_blob_store = LocalCommunicationBlobStore::new(DEFAULT_MAIL_SYNC_BLOB_ROOT);
     let local_blob = local_blob_store
         .put_blob(bytes)
         .await
         .expect("write text blob");
     let blob = storage_store
-        .upsert_blob(&NewMailBlob::from_local_blob(&local_blob).content_type(content_type))
+        .upsert_blob(&NewCommunicationBlob::from_local_blob(&local_blob).content_type(content_type))
         .await
         .expect("store text blob metadata");
     let attachment = storage_store
         .upsert_attachment(
-            &NewMailAttachment::new(
+            &NewCommunicationAttachment::new(
                 &message_id,
                 &raw.raw_record_id,
                 blob.blob_id,
@@ -191,7 +192,7 @@ async fn seed_text_attachment(
                 local_blob.sha256,
             )
             .filename(filename)
-            .disposition(MailAttachmentDisposition::Attachment)
+            .disposition(CommunicationAttachmentDisposition::Attachment)
             .scan_report(AttachmentSafetyScanReport {
                 status: scan_status,
                 engine: None,
