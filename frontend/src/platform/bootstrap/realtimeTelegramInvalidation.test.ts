@@ -20,10 +20,10 @@ describe('telegram realtime invalidation handling', () => {
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'messages'],
+      queryKey: ['communications', 'telegram', 'messages'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'chats'],
+      queryKey: ['communications', 'telegram', 'chats'],
     })
   })
 
@@ -45,10 +45,10 @@ describe('telegram realtime invalidation handling', () => {
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(3)
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'chats'],
+      queryKey: ['communications', 'telegram', 'chats'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'messages'],
+      queryKey: ['communications', 'telegram', 'messages'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['integrations', 'telegram', 'runtime'],
@@ -73,7 +73,7 @@ describe('telegram realtime invalidation handling', () => {
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(3)
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'messages'],
+      queryKey: ['communications', 'telegram', 'messages'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['integrations', 'telegram', 'runtime'],
@@ -101,10 +101,10 @@ describe('telegram realtime invalidation handling', () => {
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'messages'],
+      queryKey: ['communications', 'telegram', 'messages'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'search', 'media'],
+      queryKey: ['communications', 'telegram', 'search', 'media'],
     })
   })
 
@@ -151,7 +151,7 @@ describe('telegram realtime invalidation handling', () => {
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'chats'],
+      queryKey: ['communications', 'telegram', 'chats'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
       queryKey: ['integrations', 'telegram', 'runtime'],
@@ -176,10 +176,10 @@ describe('telegram realtime invalidation handling', () => {
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledTimes(2)
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'chat-members'],
+      queryKey: ['communications', 'telegram', 'chat-members'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'chats'],
+      queryKey: ['communications', 'telegram', 'chats'],
     })
   })
 
@@ -206,10 +206,10 @@ describe('telegram realtime invalidation handling', () => {
     )
 
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'folders'],
+      queryKey: ['communications', 'telegram', 'folders'],
     })
     expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
-      queryKey: ['integrations', 'telegram', 'chats'],
+      queryKey: ['communications', 'telegram', 'chats'],
     })
   })
 })

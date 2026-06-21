@@ -14,7 +14,7 @@ export function useTelegramReplyChainQuery(
   enabled: MaybeRefOrGetter<boolean> = true
 ) {
   return useQuery<TelegramReplyChainResponse>({
-    queryKey: computed(() => ['integrations', 'telegram', 'reply-chain', toValue(messageId)]),
+    queryKey: computed(() => ['communications', 'messages', toValue(messageId), 'reply-chain']),
     queryFn: () => fetchTelegramReplyChain(toValue(messageId) as string),
     enabled: computed(() => Boolean(toValue(messageId)) && Boolean(toValue(enabled))),
   })
@@ -25,7 +25,7 @@ export function useTelegramForwardChainQuery(
   enabled: MaybeRefOrGetter<boolean> = true
 ) {
   return useQuery<TelegramForwardChainResponse>({
-    queryKey: computed(() => ['integrations', 'telegram', 'forward-chain', toValue(messageId)]),
+    queryKey: computed(() => ['communications', 'messages', toValue(messageId), 'forward-chain']),
     queryFn: () => fetchTelegramForwardChain(toValue(messageId) as string),
     enabled: computed(() => Boolean(toValue(messageId)) && Boolean(toValue(enabled))),
   })

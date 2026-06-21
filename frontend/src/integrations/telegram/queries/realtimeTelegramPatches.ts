@@ -70,7 +70,7 @@ export function applyTelegramRealtimePatch(
 
   let patched = false
   for (const [queryKey, data] of getQueriesData<TelegramMessage[]>({
-    queryKey: ['integrations', 'telegram', 'messages']
+    queryKey: ['communications', 'telegram', 'messages']
   })) {
     const updated = patchMessageList(queryKey, data, eventType, subjectId, payload, snapshot)
     if (updated !== data) {
@@ -80,7 +80,7 @@ export function applyTelegramRealtimePatch(
   }
 
   for (const [queryKey, data] of getQueriesData<TelegramMessageListResponse>({
-    queryKey: ['integrations', 'telegram', 'chats']
+    queryKey: ['communications', 'telegram', 'chats']
   })) {
     if (!isTelegramPinnedMessagesQueryKey(queryKey)) continue
     const updated = patchPinnedMessages(queryKey, data, eventType, subjectId, payload, snapshot)
@@ -91,7 +91,7 @@ export function applyTelegramRealtimePatch(
   }
 
   for (const [queryKey, data] of getQueriesData<TelegramChat[]>({
-    queryKey: ['integrations', 'telegram', 'chats']
+    queryKey: ['communications', 'telegram', 'chats']
   })) {
     if (isTelegramPinnedMessagesQueryKey(queryKey)) continue
     const updated = patchChatList(queryKey, data, eventType, payload, chatSnapshot, occurredAt)
@@ -102,7 +102,7 @@ export function applyTelegramRealtimePatch(
   }
 
   for (const [queryKey, data] of getQueriesData<TelegramChat | null>({
-    queryKey: ['integrations', 'telegram', 'chat-detail']
+    queryKey: ['communications', 'telegram', 'chat-detail']
   })) {
     const updated = patchChatDetail(queryKey, data, eventType, payload, chatSnapshot, occurredAt)
     if (updated !== data) {
@@ -112,7 +112,7 @@ export function applyTelegramRealtimePatch(
   }
 
   for (const [queryKey, data] of getQueriesData<TelegramChatGroupFilter[]>({
-    queryKey: ['integrations', 'telegram', 'folders']
+    queryKey: ['communications', 'telegram', 'folders']
   })) {
     const updated = patchFolderFilters(queryKey, data, eventType, payload, metadata)
     if (updated !== data) {
@@ -122,7 +122,7 @@ export function applyTelegramRealtimePatch(
   }
 
   for (const [queryKey, data] of getQueriesData<TelegramMessageSearchResponse>({
-    queryKey: ['integrations', 'telegram', 'search', 'messages']
+    queryKey: ['communications', 'telegram', 'search', 'messages']
   })) {
     const updated = patchMessageSearch(queryKey, data, eventType, subjectId, payload, snapshot)
     if (updated !== data) {
@@ -132,7 +132,7 @@ export function applyTelegramRealtimePatch(
   }
 
   for (const [queryKey, data] of getQueriesData<TelegramMediaSearchResponse>({
-    queryKey: ['integrations', 'telegram', 'search', 'media']
+    queryKey: ['communications', 'telegram', 'search', 'media']
   })) {
     const updated = patchTelegramMediaSearch(queryKey, data, eventType, payload, snapshot)
     if (updated !== data) {
@@ -152,7 +152,7 @@ export function applyTelegramRealtimePatch(
   }
 
   for (const [queryKey, data] of getQueriesData<TelegramReactionListResponse>({
-    queryKey: ['integrations', 'telegram', 'message-reactions']
+    queryKey: ['communications', 'telegram', 'message-reactions']
   })) {
     const updated = patchReactionDetail(queryKey, data, eventType, subjectId, payload)
     if (updated !== data) {
@@ -162,7 +162,7 @@ export function applyTelegramRealtimePatch(
   }
 
   for (const [queryKey, data] of getQueriesData<TelegramTopicListResponse>({
-    queryKey: ['integrations', 'telegram']
+    queryKey: ['communications', 'telegram']
   })) {
     const updated = patchTelegramTopicList(queryKey, data, eventType, payload)
     if (updated !== data) {
@@ -361,7 +361,7 @@ function patchFolderFilters(
   metadata: Record<string, unknown> | undefined
 ): TelegramChatGroupFilter[] | undefined {
   if (!filters || !payload) return filters
-  if (queryKey[0] !== 'integrations' || queryKey[1] !== 'telegram' || queryKey[2] !== 'folders') return filters
+  if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram' || queryKey[2] !== 'folders') return filters
   const queryAccountId = typeof queryKey[3] === 'string' ? queryKey[3] : 'all'
   const eventAccountId = stringValue(payload.account_id) ?? stringValue(metadata?.account_id)
   if (queryAccountId !== 'all' && eventAccountId && queryAccountId !== eventAccountId) {
@@ -459,7 +459,7 @@ function patchChatDetail(
   occurredAt: string | null
 ): TelegramChat | null | undefined {
   if (!chat || !payload) return chat
-  if (queryKey[0] !== 'integrations' || queryKey[1] !== 'telegram' || queryKey[2] !== 'chat-detail') return chat
+  if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram' || queryKey[2] !== 'chat-detail') return chat
 
   if (eventType === 'telegram.typing.changed') {
     return matchesTypingChat(chat, payload) ? patchTypingChat(chat, payload, occurredAt) : chat
@@ -527,7 +527,7 @@ function patchTypingChat(chat: TelegramChat, payload: TelegramEventPayload, occu
 }
 
 function isTelegramPinnedMessagesQueryKey(queryKey: readonly unknown[]): boolean {
-  return queryKey[0] === 'integrations' && queryKey[1] === 'telegram' && queryKey[2] === 'chats' && queryKey[4] === 'pinned-messages'
+  return queryKey[0] === 'communications' && queryKey[1] === 'telegram' && queryKey[2] === 'chats' && queryKey[4] === 'pinned-messages'
 }
 
 function patchPinnedMessages(
@@ -573,7 +573,7 @@ function patchMessageSearch(
   snapshot: TelegramMessage | null
 ): TelegramMessageSearchResponse | undefined {
   if (!response || !snapshot) return response
-  if (queryKey[0] !== 'integrations' || queryKey[1] !== 'telegram' || queryKey[2] !== 'search' || queryKey[3] !== 'messages') return response
+  if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram' || queryKey[2] !== 'search' || queryKey[3] !== 'messages') return response
 
   const query = typeof queryKey[4] === 'string' ? queryKey[4].trim().toLowerCase() : ''
   const accountId = typeof queryKey[5] === 'string' && queryKey[5] !== 'all' ? queryKey[5] : null
@@ -608,7 +608,7 @@ function patchReactionDetail(
   payload: TelegramEventPayload | undefined
 ): TelegramReactionListResponse | undefined {
   if (!detail || eventType !== 'telegram.reaction.changed' || !payload) return detail
-  if (queryKey[0] !== 'integrations' || queryKey[1] !== 'telegram' || queryKey[2] !== 'message-reactions') return detail
+  if (queryKey[0] !== 'communications' || queryKey[1] !== 'telegram' || queryKey[2] !== 'message-reactions') return detail
 
   const queryMessageId = typeof queryKey[3] === 'string' ? queryKey[3] : null
   const targetMessageId = subjectId ?? stringValue(payload.message_id)

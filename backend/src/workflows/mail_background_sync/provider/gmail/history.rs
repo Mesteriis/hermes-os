@@ -1,0 +1,74 @@
+use serde_json::Value;
+
+use crate::platform::communications::GmailHistoryFetchRequest;
+
+use super::super::super::errors::ProviderSyncError;
+use super::super::super::models::{MailSyncPhase, ProgressMode, ProgressUpdate};
+use super::super::super::service::MailBackgroundSyncService;
+use super::super::{ProviderSyncContext, ProviderSyncSummary};
+
+impl MailBackgroundSyncService {
+    pub(in crate::workflows::mail_background_sync::provider::gmail) async fn sync_gmail_history_pages(
+        &self,
+        context: &ProviderSyncContext<'_>,
+        summary: &mut ProviderSyncSummary,
+        start_history_id: &str,
+        mut page_token: Option<String>,
+    ) -> Result<bool, ProviderSyncError> {
+        loop {
+            context
+                .store
+                .update_progress(ProgressUpdate {
+                    run_id: context.run_id,
+                    phase: MailSyncPhase::Listing,
+                    progress_mode: ProgressMode::Indeterminate,
+                    progress_percent: None,
+                    processed_messages: summary.processed_messages,
+                    estimated_total_messages: summary.estimated_total_messages,
+                    current_batch_size: context.settings.batch_size,
+                })
+                .await?;
+            let history_batch = self
+                .provider_sync
+                .fetch_gmail_history(GmailHistoryFetchRequest {
+                    account_id: context.account.account_id.clone(),
+                    start_history_id: start_history_id.to_owned(),
+                    max_results: context.settings.batch_size as u16,
+                    page_token,
+                })
+                .await;
+            let batch = match history_batch {
+                Ok(batch) => batch,
+                Err(error) if error.history_expired => {
+                    context
+                        .store
+                        .mark_recoverable_full_resync(context.run_id, "gmail_history_expired")
+                        .await?;
+                    return Ok(true);
+                }
+                Err(error) => return Err(error.into()),
+            };
+            page_token = batch
+                .checkpoint
+                .as_ref()
+                .and_then(|checkpoint| checkpoint.get("next_page_token"))
+                .and_then(Value::as_str)
+                .map(str::to_owned);
+            let fetched_count = batch.messages.len();
+            self.project_batch(
+                context.store,
+                context.run_id,
+                context.settings,
+                summary,
+                &context.account.account_id,
+                batch,
+            )
+            .await?;
+            if page_token.is_none() || fetched_count == 0 {
+                break;
+            }
+        }
+
+        Ok(false)
+    }
+}

@@ -22,7 +22,7 @@ describe('telegram members sync realtime handling', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'messages'])) return []
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'messages'])) return []
         return [[runtimeKey, runtimeStatus]]
       }),
       setQueryData

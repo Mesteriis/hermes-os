@@ -1,0 +1,162 @@
+use axum::body::{Body, to_bytes};
+use axum::http::{Request, StatusCode, header};
+use serde_json::{Value, json};
+use sqlx::query;
+use tower::ServiceExt;
+
+use hermes_hub_backend::app::build_router_with_database;
+use hermes_hub_backend::integrations::telegram::client::mark_absent_members_from_exhaustive_roster;
+use hermes_hub_backend::platform::config::AppConfig;
+use hermes_hub_backend::platform::storage::Database;
+use testkit::context::TestContext;
+
+const LOCAL_API_TOKEN: &str = "telegram-members-absence-test-secret";
+
+#[tokio::test]
+async fn members_route_hides_absent_exhaustive_participants_after_roster_reconciliation() {
+    let ctx = TestContext::new().await;
+    let database_url = ctx.connection_string();
+    let database = Database::connect(Some(&database_url))
+        .await
+        .expect("database connection");
+    let app = build_router_with_database(
+        AppConfig::from_pairs([
+            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("DATABASE_URL", database_url.as_str()),
+        ])
+        .expect("config"),
+        database.clone(),
+    );
+    let pool = database.pool().expect("configured pool").clone();
+
+    post_ok(
+        app.clone(),
+        "/api/v1/communications/telegram/accounts/fixture",
+        json!({
+            "account_id": "acct-1",
+            "provider_kind": "telegram_user",
+            "display_name": "Telegram Member Absence",
+            "external_account_id": "telegram:12345",
+            "tdlib_data_path": "docker/data/telegram/test-members-absence",
+            "transcription_enabled": false
+        }),
+    )
+    .await;
+    post_ok(
+        app.clone(),
+        "/api/v1/communications/telegram/messages",
+        json!({
+            "account_id": "acct-1",
+            "provider_chat_id": "provider-chat-1",
+            "provider_message_id": "seed-message-1",
+            "chat_kind": "group",
+            "chat_title": "Roster Room",
+            "sender_id": "sender-1",
+            "sender_display_name": "Sender",
+            "text": "seed chat",
+            "import_batch_id": "seed-batch-1",
+            "occurred_at": "2026-06-06T12:00:00Z",
+            "delivery_state": "received"
+        }),
+    )
+    .await;
+
+    let response = app
+        .clone()
+        .oneshot(get(
+            "/api/v1/communications/telegram/chats?account_id=acct-1&limit=10",
+        ))
+        .await
+        .expect("chat list response");
+    let body = json_body(response).await;
+    let telegram_chat_id = body["items"][0]["telegram_chat_id"]
+        .as_str()
+        .expect("telegram chat id")
+        .to_owned();
+
+    query(
+        r#"
+        INSERT INTO telegram_chat_participants (
+            participant_id, telegram_chat_id, account_id, provider_chat_id, provider_member_id,
+            display_name, username, role, status, is_admin, is_owner, permissions, raw_payload,
+            source, observed_at, created_at, updated_at
+        )
+        VALUES
+            ('participant-1', $1, 'acct-1', 'provider-chat-1', 'user:1', 'User One', NULL, 'member', 'member', false, false, '{}'::jsonb, '{}'::jsonb, 'tdlib', NOW(), NOW(), NOW()),
+            ('participant-2', $1, 'acct-1', 'provider-chat-1', 'user:2', 'User Two', NULL, 'member', 'member', false, false, '{}'::jsonb, '{}'::jsonb, 'tdlib', NOW(), NOW(), NOW())
+        "#,
+    )
+    .bind(&telegram_chat_id)
+    .execute(&pool)
+    .await
+    .expect("insert participants");
+
+    let members_before = app
+        .clone()
+        .oneshot(get(&format!(
+            "/api/v1/communications/telegram/chats/{telegram_chat_id}/members?limit=10"
+        )))
+        .await
+        .expect("members before response");
+    let before_body = json_body(members_before).await;
+    assert_eq!(before_body["items"].as_array().expect("items").len(), 2);
+
+    mark_absent_members_from_exhaustive_roster(
+        &pool,
+        &telegram_chat_id,
+        &[String::from("user:1")],
+        "tdlib.getSupergroupMembers.exhaustive_absence",
+    )
+    .await
+    .expect("mark absent members");
+
+    let members_after = app
+        .clone()
+        .oneshot(get(&format!(
+            "/api/v1/communications/telegram/chats/{telegram_chat_id}/members?limit=10"
+        )))
+        .await
+        .expect("members after response");
+    let after_body = json_body(members_after).await;
+    let items = after_body["items"].as_array().expect("items");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["provider_member_id"], "user:1");
+}
+
+fn get(uri: &str) -> Request<Body> {
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header("X-Hermes-Secret", LOCAL_API_TOKEN)
+        .body(Body::empty())
+        .expect("request")
+}
+
+async fn post_ok<S>(app: S, uri: &str, body: Value) -> Value
+where
+    S: tower::Service<Request<Body>, Response = axum::response::Response> + Clone,
+    S::Error: std::fmt::Debug,
+    S::Future: Send + 'static,
+{
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header(header::CONTENT_TYPE, "application/json")
+                .header("X-Hermes-Secret", LOCAL_API_TOKEN)
+                .body(Body::from(body.to_string()))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    json_body(response).await
+}
+
+async fn json_body(response: axum::response::Response) -> Value {
+    let body = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("body bytes");
+    serde_json::from_slice(&body).expect("json body")
+}

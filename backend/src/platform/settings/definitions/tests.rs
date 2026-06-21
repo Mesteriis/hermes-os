@@ -1,0 +1,75 @@
+use serde_json::json;
+
+use super::super::models::SettingValueKind;
+use super::*;
+use crate::platform::settings::SettingsError;
+
+#[test]
+fn frontend_locale_setting_is_declared_as_editable_string() {
+    let setting = declared_setting("frontend.locale").expect("frontend locale setting");
+
+    assert_eq!(setting.category, "frontend");
+    assert_eq!(setting.value_kind, SettingValueKind::String);
+    assert!(setting.is_editable);
+    assert_eq!(setting.default_value, json!("en"));
+    assert_eq!(setting.metadata["ui_control"], json!("language"));
+    assert_eq!(setting.metadata["allowed_values"], json!(["en", "ru"]));
+    assert_eq!(setting.metadata["stores_private_content"], json!(false));
+}
+
+#[test]
+fn frontend_ui_state_setting_is_declared_as_hidden_json() {
+    let setting = declared_setting("frontend.ui_state").expect("frontend ui state setting");
+
+    assert_eq!(setting.category, "frontend");
+    assert_eq!(setting.value_kind, SettingValueKind::Json);
+    assert!(setting.is_editable);
+    assert_eq!(setting.metadata["ui_control"], json!("hidden"));
+    assert_eq!(setting.metadata["schema_version"], json!(1));
+    assert_eq!(setting.metadata["stores_private_content"], json!(false));
+    assert_eq!(setting.default_value["schemaVersion"], json!(1));
+}
+
+#[test]
+fn frontend_ui_state_rejects_private_content_keys() {
+    let setting = declared_setting("frontend.ui_state").expect("frontend ui state setting");
+    let value = json!({
+        "schemaVersion": 1,
+        "savedAt": "2026-06-11T12:00:00Z",
+        "expiresAt": "2026-06-18T12:00:00Z",
+        "communications": {
+            "selectedMessageId": "msg-1",
+            "compose": {
+                "draftId": "draft-1",
+                "body": "private draft body"
+            }
+        }
+    });
+
+    let error = setting
+        .value_kind
+        .validate_value(&value, &setting.metadata)
+        .expect_err("private body key rejected");
+
+    assert!(matches!(error, SettingsError::InvalidValue(_)));
+}
+
+#[test]
+fn frontend_ui_state_rejects_oversized_snapshots() {
+    let setting = declared_setting("frontend.ui_state").expect("frontend ui state setting");
+    let value = json!({
+        "schemaVersion": 1,
+        "savedAt": "2026-06-11T12:00:00Z",
+        "expiresAt": "2026-06-18T12:00:00Z",
+        "shell": {
+            "expandedSidebarGroupIds": vec!["communications"; 10_000]
+        }
+    });
+
+    let error = setting
+        .value_kind
+        .validate_value(&value, &setting.metadata)
+        .expect_err("oversized snapshot rejected");
+
+    assert!(matches!(error, SettingsError::InvalidValue(_)));
+}

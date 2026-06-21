@@ -1,0 +1,48 @@
+use crate::integrations::telegram::client::TelegramError;
+use crate::integrations::telegram::tdjson::{self, TdJsonClient, TelegramTdlibMessageSnapshot};
+
+use super::super::TDJSON_COMMAND_TIMEOUT;
+use super::responses::{receive_tdlib_extra, tdlib_provider_chat_id};
+
+pub(super) fn actor_search_messages(
+    client: &TdJsonClient,
+    query: &str,
+    limit: i32,
+) -> Result<Vec<TelegramTdlibMessageSnapshot>, TelegramError> {
+    let extra = format!("hermes-search-{}", uuid_extra(query));
+    client.send_json(&tdjson::tdlib_search_messages_request(query, limit, &extra))?;
+    let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
+    if let Some(message) = tdjson::tdlib_error_message(&response) {
+        return Err(TelegramError::TdlibRuntime(message));
+    }
+    tdjson::parse_tdlib_message_list(&response)
+}
+
+pub(super) fn actor_search_chat_messages(
+    client: &TdJsonClient,
+    provider_chat_id: &str,
+    query: &str,
+    limit: i32,
+) -> Result<Vec<TelegramTdlibMessageSnapshot>, TelegramError> {
+    let chat_id = tdlib_provider_chat_id(provider_chat_id)?;
+    let extra = format!("hermes-search-chat-{chat_id}-{}", uuid_extra(query));
+    client.send_json(&tdjson::tdlib_search_chat_messages_request(
+        chat_id, query, limit, &extra,
+    ))?;
+    let response = receive_tdlib_extra(client, &extra, TDJSON_COMMAND_TIMEOUT)?;
+    if let Some(message) = tdjson::tdlib_error_message(&response) {
+        return Err(TelegramError::TdlibRuntime(message));
+    }
+    tdjson::parse_tdlib_message_list(&response)
+}
+
+fn uuid_extra(query: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(query.as_bytes());
+    let hash = hasher.finalize();
+    format!(
+        "{:016x}",
+        u64::from_be_bytes(hash[..8].try_into().unwrap_or([0u8; 8]))
+    )
+}

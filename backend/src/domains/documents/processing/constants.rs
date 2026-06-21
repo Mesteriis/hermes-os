@@ -1,0 +1,11 @@
+pub(super) const DEFAULT_LIST_LIMIT: i64 = 50;
+pub(super) const MAX_LIST_LIMIT: i64 = 100;
+pub(super) const MIN_LIST_LIMIT: i64 = 1;
+pub(super) const ARTIFACT_METADATA_KIND: &str = "document_processing";
+pub(super) const DEFAULT_MAX_ATTEMPTS: i32 = 3;
+pub(super) const JOB_ID_PREFIX: &str = "document_processing_job:v1:";
+pub(super) const ARTIFACT_ID_PREFIX: &str = "document_artifact:v1:";
+pub(super) const RETRY_EVENT_TYPE: &str = "document_processing.retry_requested";
+pub(super) const RETRY_EVENT_ID_PREFIX: &str = "document_processing_retry:";
+pub(super) const RETRY_SOURCE_KIND: &str = "document_processing_retry";
+pub(super) const RETRY_SOURCE_PROVIDER: &str = "local_api";

@@ -8,7 +8,7 @@ export function useTelegramRawMessageEvidenceQuery(
   enabled: MaybeRefOrGetter<boolean> = true
 ) {
   return useQuery<TelegramRawMessageResponse>({
-    queryKey: computed(() => ['integrations', 'telegram', 'raw-message-evidence', toValue(messageId)]),
+    queryKey: computed(() => ['communications', 'messages', toValue(messageId), 'raw-evidence']),
     queryFn: () => fetchTelegramRawMessageEvidence(toValue(messageId) as string),
     enabled: computed(() => Boolean(toValue(messageId)) && Boolean(toValue(enabled))),
   })

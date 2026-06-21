@@ -57,18 +57,18 @@ const REALTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
 ]
 
 const MAIL_RUNTIME_QUERY_KEYS: readonly (readonly unknown[])[] = [
-	['integrations', 'mail', 'sync-statuses'],
-	['integrations', 'mail', 'mailbox-health']
+	['communications', 'mail', 'sync-statuses'],
+	['communications', 'mail', 'mailbox-health']
 ]
 
 const TELEGRAM_QUERY_KEYS: readonly (readonly unknown[])[] = [
 	['integrations', 'telegram', 'capabilities'],
 	['integrations', 'telegram', 'accounts'],
-	['integrations', 'telegram', 'chats'],
-	['integrations', 'telegram', 'folders'],
-	['integrations', 'telegram', 'messages'],
+	['communications', 'telegram', 'chats'],
+	['communications', 'telegram', 'folders'],
+	['communications', 'telegram', 'messages'],
 	['integrations', 'telegram', 'runtime'],
-	['integrations', 'telegram', 'calls']
+	['communications', 'telegram', 'calls']
 ]
 
 export function initializeRealtime(
@@ -266,7 +266,7 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 		return [['communications-outbox'], ['communications-mail-list']]
 	}
 	if (eventType.startsWith('mail.sync.')) {
-		return [['integrations', 'mail', 'sync-statuses']]
+		return [['communications', 'mail', 'sync-statuses']]
 	}
 	if (eventType.startsWith('mail.message.')) {
 		return [
@@ -296,34 +296,34 @@ function queryKeysForRealtimeEvent(event: SseMessageEvent): readonly (readonly u
 		return [['communications-folders'], ['communications-folder-messages']]
 	}
 	if (eventType.startsWith('telegram.sync.')) {
-		return [['integrations', 'telegram', 'chats'], ['integrations', 'telegram', 'messages'], ['integrations', 'telegram', 'runtime']]
+		return [['communications', 'telegram', 'chats'], ['communications', 'telegram', 'messages'], ['integrations', 'telegram', 'runtime']]
 	}
 	if (eventType.startsWith('telegram.message.')) {
-		return [['integrations', 'telegram', 'messages'], ['integrations', 'telegram', 'chats']]
+		return [['communications', 'telegram', 'messages'], ['communications', 'telegram', 'chats']]
 	}
 	if (eventType.startsWith('telegram.typing.')) {
-		return [['integrations', 'telegram', 'chats'], ['integrations', 'telegram', 'runtime']]
+		return [['communications', 'telegram', 'chats'], ['integrations', 'telegram', 'runtime']]
 	}
 	if (eventType.startsWith('telegram.topic.')) {
-		return [['integrations', 'telegram', 'topics'], ['integrations', 'telegram', 'topic-search'], ['integrations', 'telegram', 'topic-messages']]
+		return [['communications', 'telegram', 'topics'], ['communications', 'telegram', 'topic-search'], ['communications', 'telegram', 'topic-messages']]
 	}
 	if (eventType.startsWith('telegram.participant.')) {
-		return [['integrations', 'telegram', 'chat-members'], ['integrations', 'telegram', 'chats']]
+		return [['communications', 'telegram', 'chat-members'], ['communications', 'telegram', 'chats']]
 	}
 	if (eventType.startsWith('telegram.folders.')) {
-		return [['integrations', 'telegram', 'folders'], ['integrations', 'telegram', 'chats']]
+		return [['communications', 'telegram', 'folders'], ['communications', 'telegram', 'chats']]
 	}
 	if (eventType.startsWith('telegram.media.upload.')) {
 		return [['integrations', 'telegram', 'commands'], ['integrations', 'telegram', 'runtime']]
 	}
 	if (eventType.startsWith('telegram.media.download.')) {
-		return [['integrations', 'telegram', 'messages'], ['integrations', 'telegram', 'search', 'media']]
+		return [['communications', 'telegram', 'messages'], ['communications', 'telegram', 'search', 'media']]
 	}
 	if (eventType.startsWith('telegram.reaction.')) {
-		return [['integrations', 'telegram', 'messages']]
+		return [['communications', 'telegram', 'messages']]
 	}
 	if (eventType.startsWith('telegram.command.')) {
-		return [['integrations', 'telegram', 'messages'], ['integrations', 'telegram', 'runtime'], ['integrations', 'telegram', 'commands']]
+		return [['communications', 'telegram', 'messages'], ['integrations', 'telegram', 'runtime'], ['integrations', 'telegram', 'commands']]
 	}
 	if (eventType.startsWith('telegram.')) {
 		return TELEGRAM_QUERY_KEYS

@@ -3,8 +3,8 @@ import { handleRealtimeEvent } from './realtime'
 
 describe('telegram realtime cache patch handling', () => {
   it('patches cached telegram chats for typing changed events', () => {
-    const chatsKey = ['integrations', 'telegram', 'chats', 'account-1', 50]
-    const chatDetailKey = ['integrations', 'telegram', 'chat-detail', 'tgchat-1']
+    const chatsKey = ['communications', 'telegram', 'chats', 'account-1', 50]
+    const chatDetailKey = ['communications', 'telegram', 'chat-detail', 'tgchat-1']
     const chat = {
       telegram_chat_id: 'tgchat-1',
       account_id: 'account-1',
@@ -28,8 +28,8 @@ describe('telegram realtime cache patch handling', () => {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
         const key = JSON.stringify(queryKey)
-        if (key === JSON.stringify(['integrations', 'telegram', 'chats'])) return [[chatsKey, [chat]]]
-        if (key === JSON.stringify(['integrations', 'telegram', 'chat-detail'])) return [[chatDetailKey, chat]]
+        if (key === JSON.stringify(['communications', 'telegram', 'chats'])) return [[chatsKey, [chat]]]
+        if (key === JSON.stringify(['communications', 'telegram', 'chat-detail'])) return [[chatDetailKey, chat]]
         return []
       }),
       setQueryData
@@ -66,8 +66,8 @@ describe('telegram realtime cache patch handling', () => {
   })
 
   it('patches cached telegram chat detail and list snapshots for provider unread progress updates', () => {
-    const chatsKey = ['integrations', 'telegram', 'chats', 'account-1', 50]
-    const chatDetailKey = ['integrations', 'telegram', 'chat-detail', 'tgchat-1']
+    const chatsKey = ['communications', 'telegram', 'chats', 'account-1', 50]
+    const chatDetailKey = ['communications', 'telegram', 'chat-detail', 'tgchat-1']
     const chat = {
       telegram_chat_id: 'tgchat-1',
       account_id: 'account-1',
@@ -100,8 +100,8 @@ describe('telegram realtime cache patch handling', () => {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
         const key = JSON.stringify(queryKey)
-        if (key === JSON.stringify(['integrations', 'telegram', 'chats'])) return [[chatsKey, [chat]]]
-        if (key === JSON.stringify(['integrations', 'telegram', 'chat-detail'])) return [[chatDetailKey, chat]]
+        if (key === JSON.stringify(['communications', 'telegram', 'chats'])) return [[chatsKey, [chat]]]
+        if (key === JSON.stringify(['communications', 'telegram', 'chat-detail'])) return [[chatDetailKey, chat]]
         return []
       }),
       setQueryData
@@ -131,7 +131,7 @@ describe('telegram realtime cache patch handling', () => {
   })
 
   it('patches cached telegram folder filters for provider folder update events', () => {
-    const foldersKey = ['integrations', 'telegram', 'folders', 'account-1']
+    const foldersKey = ['communications', 'telegram', 'folders', 'account-1']
     const folders = [
       { id: 'local:all', label: 'All', source: 'local', count: 2, icon: 'tabler:message' },
       { id: 'folder:Work', label: 'Work', source: 'telegram', count: 2, icon: 'tabler:folder', provider_folder_id: 7 },
@@ -143,7 +143,7 @@ describe('telegram realtime cache patch handling', () => {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
         const key = JSON.stringify(queryKey)
-        if (key === JSON.stringify(['integrations', 'telegram', 'folders'])) return [[foldersKey, folders]]
+        if (key === JSON.stringify(['communications', 'telegram', 'folders'])) return [[foldersKey, folders]]
         return []
       }),
       setQueryData
@@ -181,7 +181,7 @@ describe('telegram realtime cache patch handling', () => {
 
 
   it('patches cached telegram message reaction summary for telegram reaction events', () => {
-    const messageKey = ['integrations', 'telegram', 'messages', 'account-1', 'chat-1', 50]
+    const messageKey = ['communications', 'telegram', 'messages', 'account-1', 'chat-1', 50]
     const messages = [
       {
         message_id: 'tg-msg-1',
@@ -235,8 +235,8 @@ describe('telegram realtime cache patch handling', () => {
   })
 
   it('patches cached telegram lifecycle metadata for telegram message updated events', () => {
-    const messageKey = ['integrations', 'telegram', 'messages', 'account-1', 'chat-1', 50]
-    const pinnedKey = ['integrations', 'telegram', 'chats', 'tgchat-1', 'pinned-messages', 100]
+    const messageKey = ['communications', 'telegram', 'messages', 'account-1', 'chat-1', 50]
+    const pinnedKey = ['communications', 'telegram', 'chats', 'tgchat-1', 'pinned-messages', 100]
     const messages = [
       {
         message_id: 'tg-msg-2',
@@ -256,7 +256,7 @@ describe('telegram realtime cache patch handling', () => {
       }
     ]
     const pinnedResponse = { items: [] }
-    const searchKey = ['integrations', 'telegram', 'search', 'messages', 'hello', 'account-1', 'chat-1', 50]
+    const searchKey = ['communications', 'telegram', 'search', 'messages', 'hello', 'account-1', 'chat-1', 50]
     const searchResponse = { query: 'hello', items: [], total: 0 }
     const setQueryData = vi.fn((queryKey, updater) => {
       if (typeof updater !== 'function') return updater
@@ -274,13 +274,13 @@ describe('telegram realtime cache patch handling', () => {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
         const key = JSON.stringify(queryKey)
-        if (key === JSON.stringify(['integrations', 'telegram', 'messages'])) {
+        if (key === JSON.stringify(['communications', 'telegram', 'messages'])) {
           return [[messageKey, messages]]
         }
-        if (key === JSON.stringify(['integrations', 'telegram', 'chats'])) {
+        if (key === JSON.stringify(['communications', 'telegram', 'chats'])) {
           return [[pinnedKey, pinnedResponse]]
         }
-        if (key === JSON.stringify(['integrations', 'telegram', 'search', 'messages'])) {
+        if (key === JSON.stringify(['communications', 'telegram', 'search', 'messages'])) {
           return [[searchKey, searchResponse]]
         }
         return []
@@ -321,7 +321,7 @@ describe('telegram realtime cache patch handling', () => {
   })
 
   it('upserts telegram message snapshots for telegram created events', () => {
-    const messageKey = ['integrations', 'telegram', 'messages', 'account-1', 'chat-1', 50]
+    const messageKey = ['communications', 'telegram', 'messages', 'account-1', 'chat-1', 50]
     const messages = [
       {
         message_id: 'tg-msg-1',
@@ -362,7 +362,7 @@ describe('telegram realtime cache patch handling', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'messages'])) {
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'messages'])) {
           return [[messageKey, messages]]
         }
         return []
@@ -394,8 +394,8 @@ describe('telegram realtime cache patch handling', () => {
   })
 
   it('patches cached telegram chats for telegram created events with chat snapshots', () => {
-    const chatsKey = ['integrations', 'telegram', 'chats', 'account-1', 50]
-    const chatDetailKey = ['integrations', 'telegram', 'chat-detail', 'telegram_chat:v4:abc']
+    const chatsKey = ['communications', 'telegram', 'chats', 'account-1', 50]
+    const chatDetailKey = ['communications', 'telegram', 'chat-detail', 'telegram_chat:v4:abc']
     const chatList = [
       {
         telegram_chat_id: 'telegram_chat:v4:older',
@@ -435,11 +435,11 @@ describe('telegram realtime cache patch handling', () => {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
         const key = JSON.stringify(queryKey)
-        if (key === JSON.stringify(['integrations', 'telegram', 'messages'])) return []
+        if (key === JSON.stringify(['communications', 'telegram', 'messages'])) return []
         if (key === JSON.stringify(['integrations', 'telegram', 'runtime'])) return []
-        if (key === JSON.stringify(['integrations', 'telegram', 'search', 'messages'])) return []
-        if (key === JSON.stringify(['integrations', 'telegram', 'chats'])) return [[chatsKey, chatList]]
-        if (key === JSON.stringify(['integrations', 'telegram', 'chat-detail'])) return [[chatDetailKey, chatDetail]]
+        if (key === JSON.stringify(['communications', 'telegram', 'search', 'messages'])) return []
+        if (key === JSON.stringify(['communications', 'telegram', 'chats'])) return [[chatsKey, chatList]]
+        if (key === JSON.stringify(['communications', 'telegram', 'chat-detail'])) return [[chatDetailKey, chatDetail]]
         return []
       }),
       setQueryData
@@ -505,7 +505,7 @@ describe('telegram realtime cache patch handling', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'messages'])) {
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'messages'])) {
           return []
         }
         return [[runtimeKey, runtimeStatus]]
@@ -564,7 +564,7 @@ describe('telegram realtime cache patch handling', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'messages'])) return []
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'messages'])) return []
         return [[runtimeKey, runtimeStatus]]
       }),
       setQueryData
@@ -603,8 +603,8 @@ describe('telegram realtime cache patch handling', () => {
   })
 
   it('patches cached telegram chat list and detail for dialog command status events', () => {
-    const chatsKey = ['integrations', 'telegram', 'chats', 'account-1', 50]
-    const chatDetailKey = ['integrations', 'telegram', 'chat-detail', 'telegram_chat:v4:abc']
+    const chatsKey = ['communications', 'telegram', 'chats', 'account-1', 50]
+    const chatDetailKey = ['communications', 'telegram', 'chat-detail', 'telegram_chat:v4:abc']
     const chatList = [
       {
         telegram_chat_id: 'telegram_chat:v4:abc',
@@ -628,12 +628,12 @@ describe('telegram realtime cache patch handling', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'messages'])) return []
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'messages'])) return []
         if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'runtime'])) return []
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'chats'])) {
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'chats'])) {
           return [[chatsKey, chatList]]
         }
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram', 'chat-detail'])) {
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram', 'chat-detail'])) {
           return [[chatDetailKey, chatDetail]]
         }
         return []

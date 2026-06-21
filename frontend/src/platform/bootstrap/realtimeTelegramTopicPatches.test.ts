@@ -3,8 +3,8 @@ import { handleRealtimeEvent } from './realtime'
 
 describe('telegram realtime topic cache patch handling', () => {
   it('patches cached telegram topic lists for topic update events', () => {
-    const topicsKey = ['integrations', 'telegram', 'topics', 'telegram-chat-1', 100]
-    const topicSearchKey = ['integrations', 'telegram', 'topic-search', 'telegram-chat-1', 'release', 50]
+    const topicsKey = ['communications', 'telegram', 'topics', 'telegram-chat-1', 100]
+    const topicSearchKey = ['communications', 'telegram', 'topic-search', 'telegram-chat-1', 'release', 50]
     const existingTopic = {
       topic_id: 'telegram-topic-old',
       telegram_chat_id: 'telegram-chat-1',
@@ -48,7 +48,7 @@ describe('telegram realtime topic cache patch handling', () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       getQueriesData: vi.fn().mockImplementation(({ queryKey }) => {
-        if (JSON.stringify(queryKey) === JSON.stringify(['integrations', 'telegram'])) {
+        if (JSON.stringify(queryKey) === JSON.stringify(['communications', 'telegram'])) {
           return [[topicsKey, topicsResponse], [topicSearchKey, searchResponse]]
         }
         return []
@@ -87,7 +87,7 @@ describe('telegram realtime topic cache patch handling', () => {
 
     const patchedSearch = setQueryData.mock.results[1]?.value
     expect(patchedSearch.items[0].topic_id).toBe('telegram-topic-42')
-    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['integrations', 'telegram', 'topics'] })
-    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['integrations', 'telegram', 'topic-search'] })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['communications', 'telegram', 'topics'] })
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({ queryKey: ['communications', 'telegram', 'topic-search'] })
   })
 })

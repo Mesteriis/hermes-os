@@ -1,0 +1,173 @@
+use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
+use hermes_hub_backend::engines::consistency::{
+    ContradictionObservationStore, ContradictionSeverity, ContradictionSourceKind,
+};
+use serde_json::json;
+
+use super::support::{
+    live_consistency_pool, seed_telegram_message, seed_whatsapp_message, unique_suffix,
+};
+
+#[tokio::test]
+async fn contradiction_refresh_detects_telegram_message_claim_against_active_person_fact_without_overwriting_memory()
+ {
+    let Some(pool) = live_consistency_pool("contradiction telegram message refresh").await else {
+        return;
+    };
+    let store = ContradictionObservationStore::new(pool.clone());
+    let suffix = unique_suffix();
+    let email_address = format!("polygraph-telegram-{suffix}@example.com");
+    let sender_id = format!("telegram-sender-{suffix}");
+    let person = PersonProjectionStore::new(pool.clone())
+        .upsert_email_person(&email_address)
+        .await
+        .expect("person");
+    sqlx::query(
+        r#"
+        INSERT INTO person_identities (person_id, identity_type, identity_value, source, confidence, status)
+        VALUES ($1, 'telegram', $2, 'test', 1.0, 'active')
+        "#,
+    )
+    .bind(&person.person_id)
+    .bind(&sender_id)
+    .execute(&pool)
+    .await
+    .expect("telegram identity");
+    let fact_id: String = sqlx::query_scalar(
+        r#"
+        INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
+        VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
+        RETURNING id::text
+        "#,
+    )
+    .bind(&person.person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("person fact");
+    let message_id = seed_telegram_message(&pool, suffix, &sender_id, "Location: Madrid").await;
+
+    let refreshed = store
+        .refresh_deterministic_observations(100)
+        .await
+        .expect("refresh contradictions");
+    assert!(refreshed >= 1);
+
+    let open = store.list_open(100).await.expect("open contradictions");
+    let observation = open
+        .iter()
+        .find(|item| item.old_source_id == fact_id && item.new_source_id == message_id)
+        .expect("telegram message claim should contradict active remembered person fact");
+
+    assert_eq!(observation.old_source_kind, ContradictionSourceKind::Memory);
+    assert_eq!(
+        observation.new_source_kind,
+        ContradictionSourceKind::Communication
+    );
+    assert_eq!(observation.conflict_type, "direct_contradiction");
+    assert_eq!(observation.old_claim, "location=Berlin");
+    assert_eq!(observation.new_claim, "location=Madrid");
+    assert_eq!(observation.confidence, 0.8);
+    assert_eq!(observation.severity, ContradictionSeverity::Medium);
+    assert_eq!(
+        observation.affected_entities,
+        json!([{"entity_kind": "subject", "entity_id": person.person_id}])
+    );
+    assert_eq!(
+        observation.metadata,
+        json!({
+            "detector": "structured_evidence_claim",
+            "claim_type": "location",
+            "source_kind": "communication"
+        })
+    );
+
+    let remembered_value: String =
+        sqlx::query_scalar("SELECT value FROM person_facts WHERE id::text = $1")
+            .bind(&fact_id)
+            .fetch_one(&pool)
+            .await
+            .expect("remembered value");
+    assert_eq!(remembered_value, "Berlin");
+}
+
+#[tokio::test]
+async fn contradiction_refresh_detects_whatsapp_message_claim_against_active_person_fact_without_overwriting_memory()
+ {
+    let Some(pool) = live_consistency_pool("contradiction WhatsApp message refresh").await else {
+        return;
+    };
+    let store = ContradictionObservationStore::new(pool.clone());
+    let suffix = unique_suffix();
+    let email_address = format!("polygraph-whatsapp-{suffix}@example.com");
+    let sender_id = format!("whatsapp-sender-{suffix}");
+    let person = PersonProjectionStore::new(pool.clone())
+        .upsert_email_person(&email_address)
+        .await
+        .expect("person");
+    sqlx::query(
+        r#"
+        INSERT INTO person_identities (person_id, identity_type, identity_value, source, confidence, status)
+        VALUES ($1, 'whatsapp', $2, 'test', 1.0, 'active')
+        "#,
+    )
+    .bind(&person.person_id)
+    .bind(&sender_id)
+    .execute(&pool)
+    .await
+    .expect("whatsapp identity");
+    let fact_id: String = sqlx::query_scalar(
+        r#"
+        INSERT INTO person_facts (person_id, fact_type, value, source, confidence)
+        VALUES ($1, 'location', 'Berlin', 'manual', 0.93)
+        RETURNING id::text
+        "#,
+    )
+    .bind(&person.person_id)
+    .fetch_one(&pool)
+    .await
+    .expect("person fact");
+    let message_id = seed_whatsapp_message(&pool, suffix, &sender_id, "Location: Madrid").await;
+
+    let refreshed = store
+        .refresh_deterministic_observations(100)
+        .await
+        .expect("refresh contradictions");
+    assert!(refreshed >= 1);
+
+    let open = store.list_open(100).await.expect("open contradictions");
+    let observation = open
+        .iter()
+        .find(|item| item.old_source_id == fact_id && item.new_source_id == message_id)
+        .expect("WhatsApp message claim should contradict active remembered person fact");
+
+    assert_eq!(observation.old_source_kind, ContradictionSourceKind::Memory);
+    assert_eq!(
+        observation.new_source_kind,
+        ContradictionSourceKind::Communication
+    );
+    assert_eq!(observation.conflict_type, "direct_contradiction");
+    assert_eq!(observation.old_claim, "location=Berlin");
+    assert_eq!(observation.new_claim, "location=Madrid");
+    assert_eq!(observation.confidence, 0.8);
+    assert_eq!(observation.severity, ContradictionSeverity::Medium);
+    assert_eq!(
+        observation.affected_entities,
+        json!([{"entity_kind": "subject", "entity_id": person.person_id}])
+    );
+    assert_eq!(
+        observation.metadata,
+        json!({
+            "detector": "structured_evidence_claim",
+            "claim_type": "location",
+            "source_kind": "communication"
+        })
+    );
+
+    let remembered_value: String =
+        sqlx::query_scalar("SELECT value FROM person_facts WHERE id::text = $1")
+            .bind(&fact_id)
+            .fetch_one(&pool)
+            .await
+            .expect("remembered value");
+    assert_eq!(remembered_value, "Berlin");
+}

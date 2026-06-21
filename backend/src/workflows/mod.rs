@@ -1,0 +1,13 @@
+pub mod consistency_review;
+pub mod email_fixture_pipeline;
+pub mod email_intelligence;
+pub mod email_sync_pipeline;
+pub mod graph_projection;
+pub mod mail_background_sync;
+pub mod provider_communication_projection;
+pub mod review_inbox;
+pub mod review_mirror;
+pub mod review_promotion;
+pub mod task_creation;
+pub mod telegram_media_storage;
+pub mod workflow_action_person_projection;
