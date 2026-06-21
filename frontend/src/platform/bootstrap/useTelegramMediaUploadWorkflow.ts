@@ -1,9 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/vue-query'
 import { z } from 'zod'
-import { importCommunicationAttachment, uploadTelegramMedia, type TelegramMediaUploadKind } from '../api/telegramMediaUpload'
-import { telegramQueryKeys } from './useTelegramQuery'
-import { patchTelegramCommandList } from './realtimeTelegramCommandPatches'
-import type { TelegramProviderWriteCommand } from '../types/telegram'
+import { importCommunicationAttachment } from '../../domains/communications/api/attachmentImportApi'
+import {
+  uploadTelegramMedia,
+  type TelegramMediaUploadKind,
+} from '../../integrations/telegram/api/telegramMediaUpload'
+import { patchTelegramCommandList } from '../../integrations/telegram/queries/realtimeTelegramCommandPatches'
+import { telegramQueryKeys } from '../../integrations/telegram/queries/useTelegramQuery'
+import type { TelegramProviderWriteCommand } from '../../integrations/telegram/types/telegram'
 
 export type TelegramMediaUploadInput = {
   accountId: string
@@ -24,7 +28,7 @@ const uploadInputSchema = z.object({
       (value as File).size > 0,
     'file is required'
   ),
-  caption: z.string().trim().min(1).optional()
+  caption: z.string().trim().min(1).optional(),
 })
 
 export function useTelegramMediaUploadMutation() {
@@ -36,7 +40,7 @@ export function useTelegramMediaUploadMutation() {
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
       queryClient.invalidateQueries({ queryKey: ['integrations', 'telegram', 'commands', result.account_id] })
       queryClient.invalidateQueries({ queryKey: ['integrations', 'telegram', 'commands'] })
-    }
+    },
   })
 }
 
@@ -52,7 +56,7 @@ export function primeTelegramUploadCommandQueues(
   caption?: string
 ): void {
   for (const [queryKey, data] of queryClient.getQueriesData<TelegramProviderWriteCommand[]>({
-    queryKey: ['integrations', 'telegram', 'commands']
+    queryKey: ['integrations', 'telegram', 'commands'],
   })) {
     const updated = patchTelegramCommandList(
       queryKey,
@@ -103,8 +107,8 @@ export async function uploadTelegramMediaFile(input: TelegramMediaUploadInput) {
     source_kind: 'telegram_composer',
     metadata: {
       composer: 'telegram',
-      last_modified: parsed.file.lastModified || undefined
-    }
+      last_modified: parsed.file.lastModified || undefined,
+    },
   })
 
   return uploadTelegramMedia({
@@ -114,7 +118,7 @@ export async function uploadTelegramMediaFile(input: TelegramMediaUploadInput) {
     blob_id: imported.blob_id,
     media_type: telegramMediaTypeForFile(parsed.file),
     caption: parsed.caption?.trim(),
-    filename: parsed.file.name || undefined
+    filename: parsed.file.name || undefined,
   })
 }
 

@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde::Serialize;
 use serde_json::json;
 use thiserror::Error;
@@ -11,8 +12,10 @@ use crate::application::provider_communication_projection::{
 use crate::application::telegram_runtime::{self, TelegramRuntimeUseCaseContext};
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::{
-    TelegramForwardRequest, TelegramManualSendRequest, TelegramManualSendResponse,
-    TelegramReplyRequest,
+    TelegramDeleteRequest, TelegramEditRequest, TelegramForwardRequest, TelegramLifecycleResponse,
+    TelegramManualSendRequest, TelegramManualSendResponse, TelegramPinRequest,
+    TelegramReactionRequest, TelegramReactionResponse, TelegramReplyRequest,
+    TelegramRestoreVisibilityRequest,
 };
 use crate::integrations::telegram::client::{TelegramError, TelegramStore};
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, NewApiAuditRecord};
@@ -150,6 +153,400 @@ impl TelegramMessageWriteApplicationService {
         self.send_forward_message(context, &command).await
     }
 
+    pub(crate) async fn pin_message(
+        &self,
+        message_id: &str,
+        request: &TelegramPinRequest,
+    ) -> Result<TelegramLifecycleResponse, TelegramMessageWriteError> {
+        request.validate()?;
+        let response =
+            lifecycle::record_pin_state(&self.store, request, message_id, AUDIT_ACTOR_ID).await?;
+
+        self.audit_log
+            .record(&NewApiAuditRecord::telegram_message_pin(
+                AUDIT_ACTOR_ID,
+                message_id,
+                &request.account_id,
+                &request.provider_chat_id,
+                request.is_pinned,
+            ))
+            .await?;
+
+        let event = build_event(
+            telegram_event_types::MESSAGE_UPDATED,
+            &request.account_id,
+            message_id,
+            telegram_message_snapshot_payload(
+                &self.store,
+                message_id,
+                json!({
+                    "provider_chat_id": &request.provider_chat_id,
+                    "provider_message_id": &request.provider_message_id,
+                    "is_pinned": request.is_pinned,
+                    "status": &response.status,
+                }),
+            )
+            .await?,
+        );
+        self.publish_event(event).await;
+
+        let command_event = build_command_event(CommandEventInput {
+            account_id: &request.account_id,
+            command_id: &request.command_id,
+            command_kind: "pin",
+            provider_chat_id: &request.provider_chat_id,
+            message_id: Some(message_id),
+            provider_message_id: Some(&request.provider_message_id),
+            status: "queued",
+            extra_payload: json!({
+                "telegram_message_id": message_id,
+                "is_pinned": request.is_pinned,
+            }),
+        });
+        self.publish_event(command_event).await;
+
+        Ok(response)
+    }
+
+    pub(crate) async fn edit_message(
+        &self,
+        message_id: &str,
+        request: &TelegramEditRequest,
+    ) -> Result<TelegramLifecycleResponse, TelegramMessageWriteError> {
+        request.validate()?;
+        let response =
+            lifecycle::record_edit(&self.store, request, message_id, AUDIT_ACTOR_ID).await?;
+
+        self.audit_log
+            .record(&NewApiAuditRecord::telegram_message_edit(
+                AUDIT_ACTOR_ID,
+                message_id,
+                &request.account_id,
+                &request.provider_chat_id,
+            ))
+            .await?;
+
+        let event = build_event(
+            telegram_event_types::MESSAGE_UPDATED,
+            &request.account_id,
+            message_id,
+            telegram_message_snapshot_payload(
+                &self.store,
+                message_id,
+                json!({
+                    "provider_chat_id": &request.provider_chat_id,
+                    "provider_message_id": &request.provider_message_id,
+                    "version_number": response.version_number,
+                }),
+            )
+            .await?,
+        );
+        self.publish_event(event).await;
+
+        let command_event = build_command_event(CommandEventInput {
+            account_id: &request.account_id,
+            command_id: &request.command_id,
+            command_kind: "edit",
+            provider_chat_id: &request.provider_chat_id,
+            message_id: Some(message_id),
+            provider_message_id: Some(&request.provider_message_id),
+            status: "queued",
+            extra_payload: json!({
+                "telegram_message_id": message_id,
+                "new_text": &request.new_text,
+            }),
+        });
+        self.publish_event(command_event).await;
+
+        Ok(response)
+    }
+
+    pub(crate) async fn delete_message(
+        &self,
+        message_id: &str,
+        request: &TelegramDeleteRequest,
+    ) -> Result<TelegramLifecycleResponse, TelegramMessageWriteError> {
+        request.validate()?;
+        let response =
+            lifecycle::record_delete(self.store.pool(), request, message_id, AUDIT_ACTOR_ID)
+                .await?;
+
+        self.audit_log
+            .record(&NewApiAuditRecord::telegram_message_delete(
+                AUDIT_ACTOR_ID,
+                message_id,
+                &request.account_id,
+                &request.provider_chat_id,
+            ))
+            .await?;
+
+        let event = build_event(
+            telegram_event_types::MESSAGE_DELETED,
+            &request.account_id,
+            message_id,
+            telegram_message_snapshot_payload(
+                &self.store,
+                message_id,
+                json!({
+                    "provider_chat_id": &request.provider_chat_id,
+                    "provider_message_id": &request.provider_message_id,
+                    "reason_class": &request.reason_class,
+                    "tombstone_id": &response.tombstone_id,
+                }),
+            )
+            .await?,
+        );
+        self.publish_event(event).await;
+
+        let command_event = build_command_event(CommandEventInput {
+            account_id: &request.account_id,
+            command_id: &request.command_id,
+            command_kind: "delete",
+            provider_chat_id: &request.provider_chat_id,
+            message_id: Some(message_id),
+            provider_message_id: Some(&request.provider_message_id),
+            status: "queued",
+            extra_payload: json!({
+                "telegram_message_id": message_id,
+                "reason_class": &request.reason_class,
+                "actor_class": &request.actor_class,
+                "is_provider_delete": request.is_provider_delete,
+                "tombstone_id": &response.tombstone_id,
+            }),
+        });
+        self.publish_event(command_event).await;
+
+        Ok(response)
+    }
+
+    pub(crate) async fn restore_message_visibility(
+        &self,
+        message_id: &str,
+        request: &TelegramRestoreVisibilityRequest,
+    ) -> Result<TelegramLifecycleResponse, TelegramMessageWriteError> {
+        request.validate()?;
+        let response = lifecycle::record_restore_visibility(
+            self.store.pool(),
+            request,
+            message_id,
+            AUDIT_ACTOR_ID,
+        )
+        .await?;
+
+        self.audit_log
+            .record(&NewApiAuditRecord::telegram_message_restore_visibility(
+                AUDIT_ACTOR_ID,
+                message_id,
+                &request.account_id,
+                &request.provider_chat_id,
+            ))
+            .await?;
+
+        let event = build_event(
+            telegram_event_types::MESSAGE_VISIBILITY_RESTORED,
+            &request.account_id,
+            message_id,
+            telegram_message_snapshot_payload(
+                &self.store,
+                message_id,
+                json!({
+                    "provider_chat_id": &request.provider_chat_id,
+                    "provider_message_id": &request.provider_message_id,
+                    "tombstone_id": &response.tombstone_id,
+                }),
+            )
+            .await?,
+        );
+        self.publish_event(event).await;
+
+        let command_event = build_command_event(CommandEventInput {
+            account_id: &request.account_id,
+            command_id: &request.command_id,
+            command_kind: "restore_visibility",
+            provider_chat_id: &request.provider_chat_id,
+            message_id: Some(message_id),
+            provider_message_id: Some(&request.provider_message_id),
+            status: "queued",
+            extra_payload: json!({
+                "telegram_message_id": message_id,
+                "reason": &request.reason,
+                "tombstone_id": &response.tombstone_id,
+            }),
+        });
+        self.publish_event(command_event).await;
+
+        Ok(response)
+    }
+
+    pub(crate) async fn add_reaction(
+        &self,
+        message_id: &str,
+        mut request: TelegramReactionRequest,
+    ) -> Result<TelegramReactionResponse, TelegramMessageWriteError> {
+        request.validate()?;
+        let command_id = request
+            .command_id
+            .clone()
+            .unwrap_or_else(lifecycle::new_command_id);
+        request.command_id = Some(command_id.clone());
+        let response = lifecycle::add_reaction(self.store.pool(), &request, message_id).await?;
+        self.finish_reaction(message_id, &request, &command_id, true, "react")
+            .await?;
+        Ok(response)
+    }
+
+    pub(crate) async fn remove_reaction(
+        &self,
+        message_id: &str,
+        mut request: TelegramReactionRequest,
+    ) -> Result<TelegramReactionResponse, TelegramMessageWriteError> {
+        request.validate()?;
+        let command_id = request
+            .command_id
+            .clone()
+            .unwrap_or_else(lifecycle::new_command_id);
+        request.command_id = Some(command_id.clone());
+        let response = lifecycle::remove_reaction(self.store.pool(), &request, message_id).await?;
+        self.finish_reaction(message_id, &request, &command_id, false, "unreact")
+            .await?;
+        Ok(response)
+    }
+
+    pub(crate) async fn mark_message_read(
+        &self,
+        message_id: &str,
+        request: &TelegramMessageMarkReadRequest,
+    ) -> Result<TelegramMessageMarkReadResponse, TelegramMessageWriteError> {
+        let message = self.telegram_message(message_id).await?;
+        let provider_chat_id = required_provider_chat_id(&message)?;
+        if message.account_id != request.account_id {
+            return Err(TelegramError::InvalidRequest(
+                "message account_id does not match mark-read request".to_owned(),
+            )
+            .into());
+        }
+        if provider_chat_id != request.provider_chat_id {
+            return Err(TelegramError::InvalidRequest(
+                "message provider_chat_id does not match mark-read request".to_owned(),
+            )
+            .into());
+        }
+
+        let chat = self
+            .store
+            .telegram_chat(&message.account_id, &provider_chat_id)
+            .await?
+            .ok_or_else(|| {
+                TelegramError::InvalidRequest(format!(
+                    "Telegram chat projection for message `{message_id}` was not found"
+                ))
+            })?;
+
+        self.store
+            .set_chat_last_read_at(&chat.telegram_chat_id, Some(Utc::now()))
+            .await?;
+        self.store
+            .apply_provider_unread_counts(
+                &chat.telegram_chat_id,
+                None,
+                None,
+                Some(&message.provider_message_id),
+                "api.telegram.message.mark_read",
+            )
+            .await?;
+        let metadata = self
+            .store
+            .recompute_chat_unread_count(&chat.telegram_chat_id)
+            .await?;
+
+        let command_id = lifecycle::new_command_id();
+        lifecycle::insert_command(
+            self.store.pool(),
+            &command_id,
+            &request.account_id,
+            "mark_read",
+            &format!(
+                "mark_read:{}:{}",
+                message.message_id,
+                Utc::now().timestamp_millis()
+            ),
+            &provider_chat_id,
+            Some(&message.provider_message_id),
+            "available",
+            "provider_write",
+            "confirmed",
+            AUDIT_ACTOR_ID,
+            json!({
+                "source": "telegram_message_mark_read",
+                "message_id": &message.message_id,
+                "last_read_inbox_provider_message_id": &message.provider_message_id,
+            }),
+            json!({
+                "message_id": &message.message_id,
+                "telegram_chat_id": &chat.telegram_chat_id,
+                "provider_chat_id": &provider_chat_id,
+                "provider_message_id": &message.provider_message_id,
+            }),
+            json!({
+                "source": "telegram_message_mark_read",
+                "message_id": &message.message_id,
+                "last_read_inbox_provider_message_id": &message.provider_message_id,
+            }),
+        )
+        .await?;
+
+        self.audit_log
+            .record(&NewApiAuditRecord::telegram_message_mark_read(
+                AUDIT_ACTOR_ID,
+                &message.message_id,
+                &request.account_id,
+                &provider_chat_id,
+                &message.provider_message_id,
+            ))
+            .await?;
+
+        let command_event = build_event(
+            telegram_event_types::COMMAND_STATUS_CHANGED,
+            &request.account_id,
+            &command_id,
+            json!({
+                "command_id": &command_id,
+                "command_kind": "mark_read",
+                "action": "mark_read",
+                "provider_chat_id": &provider_chat_id,
+                "telegram_chat_id": &chat.telegram_chat_id,
+                "message_id": &message.provider_message_id,
+                "status": "queued",
+                "chat": &chat,
+            }),
+        );
+        self.publish_event(command_event).await;
+
+        let refreshed_chat = self
+            .store
+            .telegram_chat_by_id(&chat.telegram_chat_id)
+            .await?;
+        let chat_updated_event = build_event(
+            telegram_event_types::CHAT_UPDATED,
+            &request.account_id,
+            &chat.telegram_chat_id,
+            json!({
+                "provider_chat_id": &provider_chat_id,
+                "telegram_chat_id": &chat.telegram_chat_id,
+                "action": "mark_read",
+                "chat": refreshed_chat,
+            }),
+        );
+        self.publish_event(chat_updated_event).await;
+
+        Ok(TelegramMessageMarkReadResponse {
+            telegram_chat_id: chat.telegram_chat_id,
+            action: "mark_read".to_owned(),
+            status: "read".to_owned(),
+            metadata,
+        })
+    }
+
     async fn finish_created_message(
         &self,
         response: &mut TelegramManualSendResponse,
@@ -209,6 +606,57 @@ impl TelegramMessageWriteApplicationService {
         Ok(())
     }
 
+    async fn finish_reaction(
+        &self,
+        message_id: &str,
+        request: &TelegramReactionRequest,
+        command_id: &str,
+        is_active: bool,
+        command_kind: &str,
+    ) -> Result<(), TelegramMessageWriteError> {
+        self.audit_log
+            .record(&NewApiAuditRecord::telegram_message_reaction(
+                AUDIT_ACTOR_ID,
+                message_id,
+                &request.account_id,
+                &request.provider_chat_id,
+                &request.reaction_emoji,
+                is_active,
+            ))
+            .await?;
+
+        let event = build_event(
+            telegram_event_types::REACTION_CHANGED,
+            &request.account_id,
+            message_id,
+            json!({
+                "provider_chat_id": &request.provider_chat_id,
+                "reaction_emoji": &request.reaction_emoji,
+                "is_active": is_active,
+            }),
+        );
+        self.publish_event(event).await;
+
+        let command_event = build_command_event(CommandEventInput {
+            account_id: &request.account_id,
+            command_id,
+            command_kind,
+            provider_chat_id: &request.provider_chat_id,
+            message_id: Some(message_id),
+            provider_message_id: Some(&request.provider_message_id),
+            status: "queued",
+            extra_payload: json!({
+                "telegram_message_id": message_id,
+                "reaction_emoji": &request.reaction_emoji,
+                "sender_id": &request.sender_id,
+                "sender_display_name": &request.sender_display_name,
+                "is_active": is_active,
+            }),
+        });
+        self.publish_event(command_event).await;
+        Ok(())
+    }
+
     async fn project_manual_send_response(
         &self,
         response: &mut TelegramManualSendResponse,
@@ -262,6 +710,20 @@ pub(crate) struct CommunicationReplyRequest {
 pub(crate) struct CommunicationForwardRequest {
     pub(crate) conversation_id: String,
     pub(crate) command_id: Option<String>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+pub(crate) struct TelegramMessageMarkReadRequest {
+    pub(crate) account_id: String,
+    pub(crate) provider_chat_id: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct TelegramMessageMarkReadResponse {
+    pub(crate) telegram_chat_id: String,
+    pub(crate) action: String,
+    pub(crate) status: String,
+    pub(crate) metadata: serde_json::Value,
 }
 
 #[derive(Clone, Debug, Serialize)]

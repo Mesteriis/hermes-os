@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
-import { primeTelegramUploadCommandQueues, telegramMediaTypeForFile } from './useTelegramMediaUploadQuery'
+import {
+  primeTelegramUploadCommandQueues,
+  telegramMediaTypeForFile,
+} from './useTelegramMediaUploadWorkflow'
 
 describe('telegramMediaTypeForFile', () => {
   it('maps common desktop files to supported Telegram upload kinds', () => {
@@ -16,7 +19,7 @@ describe('telegramMediaTypeForFile', () => {
     const setQueryData = vi.fn()
     const queryClient = {
       getQueriesData: vi.fn().mockReturnValue([[commandsKey, commands]]),
-      setQueryData
+      setQueryData,
     }
 
     primeTelegramUploadCommandQueues(
@@ -29,7 +32,7 @@ describe('telegramMediaTypeForFile', () => {
         blob_id: 'blob-1',
         media_type: 'document',
         status: 'queued',
-        reconciliation_status: 'not_observed'
+        reconciliation_status: 'not_observed',
       },
       'upload-note.txt',
       'hello'
@@ -43,13 +46,13 @@ describe('telegramMediaTypeForFile', () => {
       command_kind: 'send_media',
       provider_chat_id: 'chat-1',
       status: 'queued',
-      reconciliation_status: 'not_observed'
+      reconciliation_status: 'not_observed',
     })
     expect(setQueryData.mock.calls[0][1][0].payload).toMatchObject({
       attachment_id: 'att-1',
       blob_id: 'blob-1',
       filename: 'upload-note.txt',
-      caption: 'hello'
+      caption: 'hello',
     })
   })
 })

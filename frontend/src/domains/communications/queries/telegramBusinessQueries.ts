@@ -54,6 +54,7 @@ import type {
 } from '../../../shared/communications/types/telegram'
 import type { TelegramRawMessageResponse } from '../../../shared/communications/types/telegramRawEvidence'
 import type { AttachmentPreviewResponse } from '../types/attachments'
+import type { MessagePinToggleResponse } from '../types/communications'
 
 export const telegramBusinessQueryKeys = {
   chats: ['communications', 'telegram', 'chats'] as const,
@@ -485,7 +486,7 @@ export function useRestoreTelegramMessageMutation() {
 
 export function usePinTelegramMessageMutation() {
   const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<TelegramLifecycleResponse, Error, Parameters<typeof pinTelegramBusinessMessage>[0]>({
+  return useMutation<MessagePinToggleResponse, Error, { message_id: string }>({
     mutationFn: pinTelegramBusinessMessage,
     onSuccess: invalidate,
   })

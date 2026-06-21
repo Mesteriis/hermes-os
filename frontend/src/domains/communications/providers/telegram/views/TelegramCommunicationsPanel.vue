@@ -169,18 +169,11 @@ async function deleteMessage(message: TelegramMessage) {
 
 async function togglePin(message: TelegramMessage) {
   if (isBusy.value) return
-  const providerChatId = requireProviderChatId(message)
-  if (!providerChatId) return
-  const isPinned = !(message.metadata?.is_pinned === true || message.metadata?.pinned === true)
   try {
-    await pinMutation.mutateAsync({
+    const result = await pinMutation.mutateAsync({
       message_id: message.message_id,
-      account_id: message.account_id,
-      provider_chat_id: providerChatId,
-      provider_message_id: message.provider_message_id,
-      is_pinned: isPinned,
     })
-    actionMessage.value = isPinned ? t('Message pinned') : t('Message unpinned')
+    actionMessage.value = result.pinned ? t('Message pinned') : t('Message unpinned')
   } catch (error) {
     actionError.value = error instanceof Error ? error.message : String(error)
   }

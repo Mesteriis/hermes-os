@@ -20,6 +20,8 @@ import type {
   TelegramReactionRequest,
   TelegramReactionResponse,
   TelegramReplyChainResponse,
+  TelegramMessage,
+  TelegramProviderKind,
 } from '../../../shared/communications/types/telegram'
 import type { TelegramRawMessageResponse } from '../../../shared/communications/types/telegramRawEvidence'
 import type {
@@ -27,6 +29,11 @@ import type {
   TelegramTopicLifecycleResponse,
 } from '../../../shared/communications/types/telegramTopics'
 import type { AttachmentPreviewResponse } from '../types/attachments'
+import type {
+  CommunicationMessageSummary,
+  CommunicationMessagesResponse,
+  MessagePinToggleResponse,
+} from '../types/communications'
 
 export async function fetchTelegramBusinessChats(accountId?: string, limit = 50): Promise<TelegramChatListResponse> {
   const params = new URLSearchParams({ limit: String(Math.trunc(limit)) })
@@ -69,10 +76,11 @@ export async function fetchTelegramBusinessMessages(
   const params = new URLSearchParams({ limit: String(Math.trunc(limit)), channel_kind: 'telegram' })
   if (accountId?.trim()) params.set('account_id', accountId.trim())
   if (providerChatId?.trim()) params.set('conversation_id', providerChatId.trim())
-  return ApiClient.instance.get<TelegramMessageListResponse>(
+  const response = await ApiClient.instance.get<CommunicationMessagesResponse>(
     `/api/v1/communications/messages?${params.toString()}`,
     'Communication messages request failed'
   )
+  return { items: response.items.map(communicationMessageToTelegramMessage) }
 }
 
 export async function searchTelegramBusinessChats(params: {
@@ -219,15 +227,10 @@ export async function restoreTelegramBusinessMessageVisibility(params: {
 
 export async function pinTelegramBusinessMessage(params: {
   message_id: string
-  command_id?: string
-  account_id: string
-  provider_chat_id: string
-  provider_message_id: string
-  is_pinned: boolean
-}): Promise<TelegramLifecycleResponse> {
-  return ApiClient.instance.post<TelegramLifecycleResponse>(
+}): Promise<MessagePinToggleResponse> {
+  return ApiClient.instance.post<MessagePinToggleResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(params.message_id)}/pin`,
-    params,
+    {},
     'Communication message pin failed'
   )
 }
@@ -356,4 +359,27 @@ export async function createTelegramBusinessTopic(
     request,
     'Communication topic create failed'
   )
+}
+
+function communicationMessageToTelegramMessage(message: CommunicationMessageSummary): TelegramMessage {
+  return {
+    message_id: message.message_id,
+    raw_record_id: message.raw_record_id,
+    account_id: message.account_id,
+    provider_message_id: message.provider_record_id,
+    provider_chat_id: message.conversation_id,
+    chat_title: message.subject,
+    sender: message.sender,
+    sender_display_name: message.sender_display_name,
+    text: message.body_text_preview,
+    occurred_at: message.occurred_at,
+    projected_at: message.projected_at,
+    channel_kind: telegramChannelKind(message.channel_kind),
+    delivery_state: message.delivery_state,
+    metadata: message.message_metadata,
+  }
+}
+
+function telegramChannelKind(channelKind: string): TelegramProviderKind {
+  return channelKind.trim() === 'telegram_bot' ? 'telegram_bot' : 'telegram_user'
 }

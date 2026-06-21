@@ -147,13 +147,13 @@
       }
     },
     "business_route_model": {
-      "allowed_business_root": "/api/v1/communications",
+      "business_root": "/api/v1/communications",
       "forbidden_provider_business_roots": [
         "/api/v1/communications/mail",
         "/api/v1/communications/telegram",
         "/api/v1/communications/whatsapp"
       ],
-      "allowed_runtime_root": "/api/v1/integrations/{provider}"
+      "runtime_root": "/api/v1/integrations/{provider}"
     },
     "provider_business_cache_roots": {
       "forbidden": [
@@ -161,8 +161,8 @@
         "whatsapp",
         "mail"
       ],
-      "allowed_business_root": "communications",
-      "allowed_runtime_root": [
+      "business_query_key_root": "communications",
+      "runtime_query_key_root": [
         "integrations",
         "<provider>",
         "runtime"

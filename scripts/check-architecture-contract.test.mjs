@@ -47,7 +47,7 @@ assert.ok(contract.frontend.layers.domains.deny.includes('integrations'));
 assert.ok(contract.frontend.layers.integrations.deny.includes('domains'));
 assert.ok(contract.frontend.provider_business_cache_roots.forbidden.includes('telegram'));
 assert.ok(contract.frontend.provider_business_cache_roots.forbidden.includes('whatsapp'));
-assert.ok(contract.frontend.provider_business_cache_roots.allowed_business_root === 'communications');
+assert.ok(contract.frontend.provider_business_cache_roots.business_query_key_root === 'communications');
 assert.deepEqual(
 	contract.frontend.business_route_model.forbidden_provider_business_roots,
 	[

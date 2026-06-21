@@ -956,7 +956,7 @@ function legacyContextPackTableFailures(fileContents) {
 		if (!file.startsWith('backend/src/')) continue;
 		if (legacyContextPackPattern.test(content)) {
 			errors.push(
-				`${file}: legacy event_context_packs/task_context_packs access is forbidden; use backend/src/engines/context_packs through domain compatibility stores`
+				`${file}: legacy event_context_packs/task_context_packs access is forbidden; use backend/src/engines/context_packs through domain owner stores`
 			);
 		}
 	}
@@ -1776,7 +1776,7 @@ async function checkArchitectureContract() {
 	if (!contract.backend?.layers?.integrations?.deny?.includes('domains')) {
 		failures.push('scripts/architecture-contract.json: backend integrations must deny domains');
 	}
-	if (contract.frontend?.provider_business_cache_roots?.allowed_business_root !== 'communications') {
+	if (contract.frontend?.provider_business_cache_roots?.business_query_key_root !== 'communications') {
 		failures.push(
 			'scripts/architecture-contract.json: frontend provider business cache root must be communications'
 		);
@@ -2171,7 +2171,7 @@ function runSelfTests() {
 		).length === 1
 	);
 	assertSelfTest(
-		'integration raw communication SQL fails without table allowlists',
+		'integration raw communication SQL fails on business table family',
 		integrationCommunicationBusinessSqlFailuresForSource(
 			'backend/src/integrations/telegram/client/messages/raw_records.rs',
 			'INSERT INTO communication_raw_records (raw_record_id) VALUES ($1)'
@@ -2535,7 +2535,7 @@ function runSelfTests() {
 		])).length === 0
 	);
 	assertSelfTest(
-		'provider CRUD compatibility facade usage outside owner files fails',
+		'provider CRUD facade usage outside communications owner layer fails',
 		communicationProviderCrudFacadeFailures(new Map([
 			['backend/src/domains/communications/outbox/provider_sender.rs', 'store.upsert_provider_account(&account);']
 		])).length === 1
@@ -2559,13 +2559,13 @@ function runSelfTests() {
 		])).length === 0
 	);
 	assertSelfTest(
-		'provider CRUD compatibility facade owner files pass',
+		'provider CRUD facade usage in communications owner layer passes',
 		communicationProviderCrudFacadeFailures(new Map([
 			['backend/src/domains/communications/core/accounts.rs', 'store.upsert_provider_account(&account);']
 		])).length === 0
 	);
 	assertSelfTest(
-		'telegram provider ownership guard rejects compatibility store in runtime',
+		'telegram provider ownership guard rejects communication store in runtime',
 		telegramProviderOwnershipFailures(new Map([
 			[
 				'backend/src/integrations/telegram/runtime/manager.rs',
@@ -2574,7 +2574,7 @@ function runSelfTests() {
 		])).length === 1
 	);
 	assertSelfTest(
-		'telegram provider ownership guard rejects raw API compatibility store',
+		'telegram provider ownership guard rejects communication store in raw API',
 		telegramProviderOwnershipFailures(new Map([
 			[
 				'backend/src/integrations/telegram/api/raw.rs',
