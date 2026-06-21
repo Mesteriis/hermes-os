@@ -22,23 +22,24 @@ Shared Communication attachment and business read-model APIs live under:
 |---|---|---|
 | POST | `/api/v1/integrations/telegram/provider-media/download` | Download TDLib media and persist local attachment/blob state |
 | POST | `/api/v1/integrations/telegram/provider-media/upload` | Queue provider-side media send from a local attachment or blob |
-| GET | `/api/v1/integrations/telegram/provider-search/media` | Provider-assisted media search/filter |
 | GET | `/api/v1/communications/attachments/{attachment_id}/preview` | Shared safe preview endpoint |
 | POST | `/api/v1/communications/attachments/import` | Shared local attachment import |
 | GET | `/api/v1/communications/attachments/search` | Shared attachment search |
+| GET | `/api/v1/communications/search/media` | Hermes projected media search/filter |
 
 ## Search Routes
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v1/integrations/telegram/provider-search/messages` | Provider-assisted message search |
-| POST | `/api/v1/integrations/telegram/provider-search/provider` | Explicit provider search trigger |
-| GET | `/api/v1/communications/conversations/search` | Provider-assisted chat search |
-| GET | `/api/v1/communications/search` | Hermes business search over the projected read-model |
+| POST | `/api/v1/integrations/telegram/provider-search` | Provider raw search/refresh trigger; returns status metadata only |
+| GET | `/api/v1/communications/conversations/search` | Hermes projected conversation search |
+| GET | `/api/v1/communications/search/messages` | Hermes projected message search |
+| GET | `/api/v1/communications/search/media` | Hermes projected media search |
+| GET | `/api/v1/communications/search` | Hermes email/full-text business search over the projected read-model |
 | GET | `/api/v1/communications/saved-searches` | Shared saved-search surface |
 
 ## Notes
 
 - Provider media upload does not accept raw file bytes; it works from already imported local attachments/blobs.
 - Shared Communication attachment APIs remain the canonical safe access path for local preview and import.
-- Normal user-facing Communication search should use `/api/v1/communications/search`; provider search routes are runtime/debug/sync-assist surfaces.
+- Normal user-facing Communication search uses `/api/v1/communications/search/*`; provider search is runtime/debug/sync-assist only and must not return projected message or media items.

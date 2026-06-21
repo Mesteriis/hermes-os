@@ -17,7 +17,7 @@ to separate future work.
 | Reply/forward parity | CLOSED | Reply refs are idempotent, reply graph traversal is bounded with cycle guard, forward attribution is idempotent, and forward chains traverse projected local evidence without raw TDLib UI dependency. |
 | Topic parity | CLOSED | Topic unread state, realtime topic patching and topic command reconciliation are implemented through `telegram_topics`, runtime topic events and command reconciliation. |
 | Dialog parity | CLOSED | Pinned, archived, mute, unread and folder state use provider evidence when TDLib state is available; local projection remains the read model, not a success substitute. |
-| Search parity | CLOSED | Message/provider/media/topic/member search routes return projection-backed results; provider search refreshes projection before UI-visible results. |
+| Search parity | CLOSED | Message, media, topic and member search use projection-backed Communications routes; provider search is runtime/control sync-assist only and does not return UI-visible business items. |
 | Media parity | CLOSED | Gallery, album metadata, preview, attachment lifecycle, upload lifecycle and download lifecycle use the command/query model and shared Communication attachment boundary. |
 | Frontend state | CLOSED | Telegram production components use TanStack Query composables and shared realtime bootstrap; no component-level `fetch(` remains in Telegram production UI. |
 | Architecture guardrails | CLOSED | Telegram remains a Communication Channel; Memory, Knowledge, Persona, Organization, Project, Obligation and Decision lifecycle stay outside Telegram. |

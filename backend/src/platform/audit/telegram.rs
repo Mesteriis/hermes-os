@@ -384,7 +384,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.topic.create",
             "POST",
-            "/api/v1/communications/conversations/{telegram_chat_id}/topics",
+            "/api/v1/communications/conversations/{conversation_id}/topics",
             "telegram_chat",
             Some(telegram_chat_id.into()),
             metadata,

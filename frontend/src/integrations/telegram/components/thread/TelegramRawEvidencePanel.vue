@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
-import { useTelegramRawMessageEvidenceQuery } from '../../queries/useTelegramRawEvidenceQuery'
+import { useTelegramRawMessageEvidenceQuery } from '../../../../shared/communications/telegramBusinessQueries'
 
 const { t } = useI18n()
 

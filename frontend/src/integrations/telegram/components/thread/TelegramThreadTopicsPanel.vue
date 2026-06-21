@@ -3,11 +3,11 @@ import { computed, ref } from 'vue'
 import { useI18n } from '../../../../platform/i18n'
 import Icon from '../../../../shared/ui/Icon.vue'
 import { telegramTopicProviderLabel, telegramTopicStateLabel } from '../../stores/telegramTopicProjection'
+import { useTelegramAccountCapabilitiesQuery } from '../../queries/useTelegramQuery'
 import {
-  useTelegramAccountCapabilitiesQuery,
   useTelegramTopicsQuery,
   useTelegramTopicSearchQuery,
-} from '../../queries/useTelegramQuery'
+} from '../../../../shared/communications/telegramBusinessQueries'
 import {
   useCreateTelegramTopicMutation,
   useToggleTelegramTopicClosedMutation,

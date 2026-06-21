@@ -2,50 +2,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query'
 import { computed, toValue, type MaybeRefOrGetter } from 'vue'
 import {
   fetchTelegramCommands,
-  fetchTelegramMessageTombstones,
-  fetchTelegramMessageVersions,
-  fetchTelegramReactions,
   retryTelegramCommand,
 } from '../api/telegramLifecycle'
 import type {
-  TelegramMessageTombstoneListResponse,
-  TelegramMessageVersionListResponse,
   TelegramProviderWriteCommand,
-  TelegramReactionListResponse,
 } from '../types/telegram'
-
-export function useTelegramMessageVersionsQuery(
-  messageId: MaybeRefOrGetter<string | null | undefined>,
-  enabled: MaybeRefOrGetter<boolean> = true
-) {
-  return useQuery<TelegramMessageVersionListResponse>({
-    queryKey: computed(() => ['communications', 'messages', toValue(messageId), 'versions']),
-    queryFn: () => fetchTelegramMessageVersions(toValue(messageId) as string),
-    enabled: computed(() => Boolean(toValue(messageId)) && Boolean(toValue(enabled))),
-  })
-}
-
-export function useTelegramMessageTombstonesQuery(
-  messageId: MaybeRefOrGetter<string | null | undefined>,
-  enabled: MaybeRefOrGetter<boolean> = true
-) {
-  return useQuery<TelegramMessageTombstoneListResponse>({
-    queryKey: computed(() => ['communications', 'messages', toValue(messageId), 'tombstones']),
-    queryFn: () => fetchTelegramMessageTombstones(toValue(messageId) as string),
-    enabled: computed(() => Boolean(toValue(messageId)) && Boolean(toValue(enabled))),
-  })
-}
-
-export function useTelegramMessageReactionsQuery(
-  messageId: MaybeRefOrGetter<string | null | undefined>,
-  enabled: MaybeRefOrGetter<boolean> = true
-) {
-  return useQuery<TelegramReactionListResponse>({
-    queryKey: computed(() => ['communications', 'telegram', 'message-reactions', toValue(messageId)]),
-    queryFn: () => fetchTelegramReactions(toValue(messageId) as string),
-    enabled: computed(() => Boolean(toValue(messageId)) && Boolean(toValue(enabled))),
-  })
-}
 
 export function useTelegramCommandsQuery(
   accountId: MaybeRefOrGetter<string | null | undefined>,

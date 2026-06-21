@@ -202,7 +202,7 @@ async fn telegram_media_search_filters_by_free_text_query() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/provider-search/media?q=invoice&account_id={account_id}&provider_chat_id={chat_id}&limit=20"
+                "/api/v1/communications/search/media?q=invoice&account_id={account_id}&provider_chat_id={chat_id}&limit=20"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -212,8 +212,8 @@ async fn telegram_media_search_filters_by_free_text_query() {
     let body = json_body(response).await;
     let items = body["items"].as_array().expect("media search items");
     assert_eq!(body["query"], json!("invoice"));
-    assert_eq!(body["source"], json!("provider_refresh"));
-    assert_eq!(body["provider_search_attempted"], json!(true));
+    assert_eq!(body["source"], json!("projection"));
+    assert_eq!(body["provider_search_attempted"], json!(false));
     assert_eq!(body["provider_search_error"], json!(null));
     assert_eq!(items.len(), 1);
     assert_eq!(items[0]["file_name"], json!("invoice-2026.pdf"));

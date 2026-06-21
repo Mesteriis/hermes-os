@@ -21,11 +21,11 @@ Communications business state remains provider-neutral and lives under:
 | Method | Path | Description |
 |---|---|---|
 | GET | `/api/v1/communications/conversations?account_id=&limit=` | Projected Telegram chat list |
-| GET | `/api/v1/communications/conversations/{telegram_chat_id}` | Projected chat detail |
-| GET | `/api/v1/communications/conversations/{telegram_chat_id}/members` | Projected member list |
+| GET | `/api/v1/communications/conversations/{conversation_id}` | Projected conversation detail |
+| GET | `/api/v1/communications/conversations/{conversation_id}/members` | Projected member list |
 | POST | `/api/v1/integrations/telegram/provider-sync/conversations/{telegram_chat_id}/members` | Provider-backed member sync |
-| GET | `/api/v1/communications/conversations/{telegram_chat_id}/pinned-messages` | Projected pinned messages |
-| GET | `/api/v1/communications/conversations/search` | Provider-scoped chat search assist |
+| GET | `/api/v1/communications/conversations/{conversation_id}/pinned-messages` | Projected pinned messages |
+| GET | `/api/v1/communications/conversations/search` | Projected conversation search |
 | GET | `/api/v1/integrations/telegram/conversation-folders` | Provider folder projection |
 | POST | `/api/v1/integrations/telegram/provider-commands/conversations/join` | Join command |
 | POST | `/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/leave` | Leave command |
@@ -47,8 +47,8 @@ Communications business state remains provider-neutral and lives under:
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v1/communications/conversations/{telegram_chat_id}/topics` | Topic list |
-| POST | `/api/v1/communications/conversations/{telegram_chat_id}/topics` | Create topic command |
+| GET | `/api/v1/communications/conversations/{conversation_id}/topics` | Topic list |
+| POST | `/api/v1/communications/conversations/{conversation_id}/topics` | Create topic command |
 | GET | `/api/v1/communications/topics/{topic_id}` | Topic detail |
 | POST | `/api/v1/integrations/telegram/provider-commands/topics/{topic_id}/close` | Close or reopen topic |
 | GET | `/api/v1/communications/topics/{topic_id}/messages` | Topic-scoped message list |
@@ -60,14 +60,14 @@ Communications business state remains provider-neutral and lives under:
 |---|---|---|
 | GET | `/api/v1/communications/messages?account_id=&provider_chat_id=&limit=` | Projected Telegram message list |
 | POST | `/api/v1/integrations/telegram/fixtures/messages` | Fixture ingest |
-| POST | `/api/v1/integrations/telegram/provider-commands/messages/send` | Manual runtime send |
-| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/reply` | Runtime reply |
-| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/forward` | Runtime forward |
-| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/edit` | Edit command |
-| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/delete` | Delete command |
-| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/restore-visibility` | Restore visibility command |
-| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/pin` | Pin command |
-| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/mark-read` | Message-level read command |
+| POST | `/api/v1/communications/conversations/{conversation_id}/messages` | User-facing send |
+| POST | `/api/v1/communications/messages/{message_id}/reply` | User-facing reply |
+| POST | `/api/v1/communications/messages/{message_id}/forward` | User-facing forward |
+| PATCH | `/api/v1/communications/messages/{message_id}` | User-facing edit |
+| DELETE | `/api/v1/communications/messages/{message_id}` | User-facing delete |
+| POST | `/api/v1/communications/messages/{message_id}/restore-visibility` | Restore visibility command |
+| POST | `/api/v1/communications/messages/{message_id}/pin` | Pin command |
+| POST | `/api/v1/communications/messages/{message_id}/mark-read` | Message-level read command |
 | GET | `/api/v1/communications/messages/{message_id}/versions` | Version list |
 | GET | `/api/v1/communications/messages/{message_id}/tombstones` | Tombstone list |
 | GET | `/api/v1/communications/messages/{message_id}/raw-evidence` | Sanitized raw evidence |
@@ -78,5 +78,6 @@ Communications business state remains provider-neutral and lives under:
 ## Notes
 
 - Provider search and provider sync remain integration-scoped runtime surfaces.
+- Provider-command message routes under `/api/v1/integrations/telegram/provider-commands/messages/*` are debug/control/recovery surfaces, not normal Communication UI APIs.
 - Communication business UI should consume `/api/v1/communications/*` routes and not call these provider runtime routes directly.
 - Provider observations are projected on the application side; integrations do not own communication business mutations.

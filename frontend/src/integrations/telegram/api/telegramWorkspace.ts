@@ -11,16 +11,18 @@ import {
   downloadTelegramMedia,
   fetchTelegramAccounts,
   fetchTelegramCapabilities,
-  fetchTelegramChats,
-  fetchTelegramMessages,
   fetchTelegramRuntimeStatus,
   restartTelegramRuntime,
-  sendTelegramMessage,
   startTelegramRuntime,
   stopTelegramRuntime,
   syncTelegramChats,
   syncTelegramHistory,
 } from './telegram'
+import {
+  fetchTelegramBusinessChats,
+  fetchTelegramBusinessMessages,
+  sendTelegramBusinessMessage,
+} from '../../../shared/communications/telegramBusinessApi'
 
 /**
  * Extract the oldest TDLib message ID from a list of messages.
@@ -55,8 +57,8 @@ export async function loadTelegramWorkspace(
     const [capabilityResponse, accountResponse, chatResponse, messageResponse] = await Promise.all([
       fetchTelegramCapabilities(),
       fetchTelegramAccounts(),
-      fetchTelegramChats(undefined, 500),
-      fetchTelegramMessages()
+      fetchTelegramBusinessChats(undefined, 500),
+      fetchTelegramBusinessMessages()
     ])
 
     const chats = chatResponse.items
@@ -66,7 +68,7 @@ export async function loadTelegramWorkspace(
     }
 
     const messages = nextChatId
-      ? (await fetchTelegramMessages(
+      ? (await fetchTelegramBusinessMessages(
           chats.find((chat) => chat.provider_chat_id === nextChatId)?.account_id,
           nextChatId,
           100
@@ -183,7 +185,7 @@ export async function sendTelegramManualMessage(params: {
   nextText: string
 }> {
   try {
-    const result = await sendTelegramMessage({
+    const result = await sendTelegramBusinessMessage({
       account_id: params.account_id,
       provider_chat_id: params.provider_chat_id,
       text: params.text

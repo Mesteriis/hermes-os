@@ -3,17 +3,13 @@ import type {
   TelegramCapabilitiesResponse,
   TelegramCallTranscriptResponse,
   TelegramCallListResponse,
-  TelegramChatDetailResponse,
   TelegramChatGroupFilterListResponse,
-  TelegramChatMemberListResponse,
   TelegramChatMembersSyncResponse,
-  TelegramChatListResponse,
   TelegramChatActionRequest,
   TelegramChatActionResponse,
   TelegramChatLifecycleCommandResponse,
   TelegramChatFolderReassignRequest,
   TelegramChatFolderReassignResponse,
-  TelegramMessageListResponse,
   TelegramRuntimeStatus,
   TelegramAccountListResponse,
   TelegramAccountLifecycleResponse,
@@ -25,7 +21,6 @@ import type {
   TelegramQrLoginStartRequest,
   TelegramQrLoginPasswordRequest,
   TelegramAccountSetupResponse,
-  TelegramManualSendResponse,
   TelegramSendDryRunResponse,
   TelegramMessageIngestResponse,
   TelegramMediaDownloadRequest,
@@ -33,16 +28,7 @@ import type {
   TelegramRuntimeRestartRequest,
   TelegramRuntimeStartRequest,
   TelegramRuntimeStopRequest,
-  TelegramTopicListResponse
 } from '../types/telegram'
-
-function communicationBusinessApiMoved<T>(operation: string): Promise<T> {
-  return Promise.reject(
-    new Error(
-      `${operation} moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only`
-    )
-  )
-}
 
 // --- Capabilities ---
 export async function fetchTelegramCapabilities(): Promise<TelegramCapabilitiesResponse> {
@@ -105,18 +91,6 @@ export async function logoutTelegramAccount(accountId: string): Promise<Telegram
   )
 }
 
-// --- Chats ---
-export async function fetchTelegramChats(accountId?: string, limit = 50): Promise<TelegramChatListResponse> {
-  void accountId
-  void limit
-  return communicationBusinessApiMoved('Telegram chat list')
-}
-
-export async function fetchTelegramChatDetail(telegramChatId: string): Promise<TelegramChatDetailResponse> {
-  void telegramChatId
-  return communicationBusinessApiMoved('Telegram chat detail')
-}
-
 export async function fetchTelegramFolders(accountId?: string): Promise<TelegramChatGroupFilterListResponse> {
   const params = new URLSearchParams()
   if (accountId?.trim()) {
@@ -127,21 +101,6 @@ export async function fetchTelegramFolders(accountId?: string): Promise<Telegram
     `/api/v1/integrations/telegram/conversation-folders${suffix}`,
     'Telegram folders request failed'
   )
-}
-
-export async function fetchTelegramChatMembers(
-  telegramChatId: string,
-  limit = 50,
-  query?: string,
-  role?: string,
-  cursor?: string
-): Promise<TelegramChatMemberListResponse> {
-  void telegramChatId
-  void limit
-  void query
-  void role
-  void cursor
-  return communicationBusinessApiMoved('Telegram chat members')
 }
 
 export async function syncTelegramChatMembers(telegramChatId: string): Promise<TelegramChatMembersSyncResponse> {
@@ -304,18 +263,6 @@ export async function leaveTelegramChat(
   )
 }
 
-// --- Messages ---
-export async function fetchTelegramMessages(
-  accountId?: string,
-  providerChatId?: string,
-  limit = 50
-): Promise<TelegramMessageListResponse> {
-  void accountId
-  void providerChatId
-  void limit
-  return communicationBusinessApiMoved('Telegram messages')
-}
-
 export async function syncTelegramHistory(request: TelegramHistorySyncRequest): Promise<TelegramHistorySyncResponse> {
   return ApiClient.instance.post<TelegramHistorySyncResponse>(
     '/api/v1/integrations/telegram/provider-sync/history',
@@ -365,19 +312,6 @@ export async function downloadTelegramMedia(
     '/api/v1/integrations/telegram/provider-media/download',
     request,
     'Telegram media download failed'
-  )
-}
-
-// --- Send ---
-export async function sendTelegramMessage(request: {
-  account_id: string
-  provider_chat_id: string
-  text: string
-}): Promise<TelegramManualSendResponse> {
-  return ApiClient.instance.post<TelegramManualSendResponse>(
-    '/api/v1/integrations/telegram/provider-commands/messages/send',
-    request,
-    'Telegram send failed'
   )
 }
 
@@ -466,23 +400,6 @@ export async function fetchTelegramCallTranscript(callId: string): Promise<Teleg
     `/api/v1/calls/${encodeURIComponent(callId)}/transcript`,
     'Telegram call transcript request failed'
   )
-}
-
-export async function fetchTelegramTopics(
-  telegramChatId: string,
-  limit = 100
-): Promise<TelegramTopicListResponse> {
-  void telegramChatId
-  void limit
-  return communicationBusinessApiMoved('Telegram topics')
-}
-export async function fetchTelegramTopicMessages(
-  topicId: string,
-  limit = 50
-): Promise<TelegramMessageListResponse> {
-  void topicId
-  void limit
-  return communicationBusinessApiMoved('Telegram topic messages')
 }
 
 export { fetchTelegramTopicSearch } from './telegramTopics'

@@ -66,19 +66,23 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             get(search_telegram_chats),
         )
         .route(
-            "/api/v1/communications/conversations/{telegram_chat_id}",
+            "/api/v1/communications/conversations/{conversation_id}",
             get(get_telegram_chat_detail),
         )
         .route(
-            "/api/v1/communications/conversations/{telegram_chat_id}/members",
+            "/api/v1/communications/conversations/{conversation_id}/members",
             get(get_telegram_chat_members),
+        )
+        .route(
+            "/api/v1/communications/conversations/{conversation_id}/messages",
+            post(post_communication_conversation_message),
         )
         .route(
             "/api/v1/integrations/telegram/provider-sync/conversations/{telegram_chat_id}/members",
             post(post_telegram_chat_members_sync),
         )
         .route(
-            "/api/v1/communications/conversations/{telegram_chat_id}/pinned-messages",
+            "/api/v1/communications/conversations/{conversation_id}/pinned-messages",
             get(get_telegram_pinned_messages),
         )
         .route(
@@ -86,18 +90,14 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_sync_chats),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-search/messages",
-            get(search_telegram_messages),
-        )
-        .route(
             "/api/v1/communications/search/messages",
             get(search_telegram_messages),
         )
         .route(
-            "/api/v1/integrations/telegram/provider-search/provider",
-            post(search_telegram_messages_provider),
+            "/api/v1/integrations/telegram/provider-search",
+            post(post_telegram_provider_search),
         )
-        .route("/api/v1/integrations/telegram/provider-search/media", get(search_telegram_media))
+        .route("/api/v1/communications/search/media", get(search_telegram_media))
         .route(
             "/api/v1/integrations/telegram/provider-commands/conversations/{telegram_chat_id}/pin",
             post(post_telegram_chat_pin),
@@ -242,7 +242,7 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
             post(post_telegram_command_retry),
         )
         .route(
-            "/api/v1/communications/conversations/{telegram_chat_id}/topics",
+            "/api/v1/communications/conversations/{conversation_id}/topics",
             get(get_telegram_topics).post(post_telegram_topic_create),
         )
         .route(

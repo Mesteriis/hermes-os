@@ -9,13 +9,14 @@ use super::helpers::{
 };
 use crate::app::api_support::{
     TelegramListQuery, TelegramMessageListResponse, WhatsappWebMessageListResponse, api_audit_log,
-    ensure_fixture_routes_enabled, telegram_runtime_use_case_context, telegram_store,
+    ensure_fixture_routes_enabled, event_store, telegram_runtime_use_case_context, telegram_store,
     whatsapp_web_store,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::provider_communication_projection::record_and_project_telegram_message;
-use crate::application::review_inbox::{
-    refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
+use crate::application::communication_fixture_ingest::TelegramFixtureIngestApplicationService;
+use crate::application::communication_provider_writes::{
+    CommunicationConversationMessageRequest, CommunicationProviderMessageCommandResponse,
+    TelegramMessageWriteApplicationService,
 };
 use crate::application::telegram_runtime;
 use crate::integrations::telegram::client::NewTelegramMessage;
@@ -97,22 +98,15 @@ fn build_command_event(
     )
 }
 
-async fn project_manual_send_response(
+fn telegram_message_write_service(
     state: &AppState,
-    response: &mut TelegramManualSendResponse,
-) -> Result<(), ApiError> {
-    let Some(pool) = state.database.pool().cloned() else {
-        return Err(ApiError::DatabaseNotConfigured);
-    };
-    let Some(raw) = response.raw.take() else {
-        return Err(ApiError::Telegram(TelegramError::InvalidRequest(
-            "Telegram send response is missing raw provider observation".to_owned(),
-        )));
-    };
-    let projected = record_and_project_telegram_message(pool, raw).await?;
-    response.raw_record_id = projected.raw_record_id;
-    response.message_id = projected.message_id;
-    Ok(())
+) -> Result<TelegramMessageWriteApplicationService, ApiError> {
+    Ok(TelegramMessageWriteApplicationService::new(
+        telegram_store(state)?,
+        api_audit_log(state)?,
+        event_store(state)?,
+        state.event_bus.clone(),
+    ))
 }
 
 pub(crate) async fn post_telegram_fixture_message(
@@ -120,41 +114,17 @@ pub(crate) async fn post_telegram_fixture_message(
     Json(request): Json<NewTelegramMessage>,
 ) -> Result<Json<TelegramMessageIngestResult>, ApiError> {
     ensure_fixture_routes_enabled(&state)?;
-    let store = telegram_store(&state)?;
-    let observed = store.ingest_fixture_message(&request).await?;
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let projected = record_and_project_telegram_message(pool.clone(), observed.raw).await?;
-    let response = TelegramMessageIngestResult {
-        raw_record_id: projected.raw_record_id,
-        message_id: projected.message_id,
-    };
-    store
-        .recompute_chat_unread_count(&observed.telegram_chat_id)
-        .await?;
-    let message_ids = vec![response.message_id.clone()];
-    refresh_message_decisions_into_review(&pool, &message_ids).await?;
-    refresh_message_task_candidates_into_review(&pool, &message_ids).await?;
-
-    let event = build_event(
-        telegram_event_types::MESSAGE_CREATED,
-        &request.account_id,
-        &response.message_id,
-        telegram_message_snapshot_payload(
-            &store,
-            &response.message_id,
-            json!({
-            "provider_chat_id": &request.provider_chat_id,
-            "provider_message_id": &request.provider_message_id,
-            "delivery_state": request.delivery_state.as_str(),
-            "runtime_kind": "fixture",
-            }),
-        )
-        .await?,
-    );
-    publish_telegram_event(&state, event).await?;
-
+    let response = TelegramFixtureIngestApplicationService::new(
+        pool,
+        telegram_store(&state)?,
+        event_store(&state)?,
+        state.event_bus.clone(),
+    )
+    .ingest_message(&request)
+    .await?;
     Ok(Json(response))
 }
 
@@ -165,53 +135,31 @@ pub(crate) async fn post_telegram_manual_send(
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.send_text")
         .await?;
     let runtime_context = telegram_runtime_use_case_context(&state)?;
-    let mut response = telegram_runtime::send_manual_message(&runtime_context, &request).await?;
-    project_manual_send_response(&state, &mut response).await?;
-    api_audit_log(&state)?
-        .record(&NewApiAuditRecord::telegram_message_send(
-            AUDIT_ACTOR_ID,
-            &response.message_id,
-            &response.account_id,
-            &response.provider_chat_id,
-            &response.rendered_preview_hash,
-        ))
+    let response = telegram_message_write_service(&state)?
+        .send_manual_message(&runtime_context, &request)
         .await?;
-    let store = telegram_store(&state)?;
-
-    let event = build_event(
-        telegram_event_types::MESSAGE_CREATED,
-        &response.account_id,
-        &response.message_id,
-        telegram_message_snapshot_payload(
-            &store,
-            &response.message_id,
-            json!({
-            "provider_chat_id": &response.provider_chat_id,
-            "delivery_state": &response.delivery_state,
-            "runtime_kind": &response.runtime_kind,
-            "status": &response.status,
-            }),
-        )
-        .await?,
-    );
-    publish_telegram_event(&state, event).await?;
-
-    let command_event = build_command_event(
-        &response.account_id,
-        &request.command_id,
-        "send_text",
-        &response.provider_chat_id,
-        Some(&response.message_id),
-        None,
-        &response.status,
-        json!({
-            "telegram_message_id": &response.message_id,
-            "runtime_kind": &response.runtime_kind,
-        }),
-    );
-    publish_telegram_event(&state, command_event).await?;
-
     Ok(Json(response))
+}
+
+pub(crate) async fn post_communication_conversation_message(
+    State(state): State<AppState>,
+    Path(conversation_id): Path<String>,
+    Json(mut request): Json<CommunicationConversationMessageRequest>,
+) -> Result<Json<CommunicationProviderMessageCommandResponse>, ApiError> {
+    ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.send_text")
+        .await?;
+    let command_id = request
+        .command_id
+        .clone()
+        .unwrap_or_else(lifecycle::new_command_id);
+    request.command_id = Some(command_id.clone());
+    let runtime_context = telegram_runtime_use_case_context(&state)?;
+    let response = telegram_message_write_service(&state)?
+        .send_conversation_message(&runtime_context, &conversation_id, request)
+        .await?;
+    Ok(Json(CommunicationProviderMessageCommandResponse::telegram(
+        command_id, &response,
+    )))
 }
 
 pub(crate) async fn post_telegram_message_reply(
@@ -222,54 +170,9 @@ pub(crate) async fn post_telegram_message_reply(
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.reply")
         .await?;
     let runtime_context = telegram_runtime_use_case_context(&state)?;
-    let mut response = telegram_runtime::send_reply_message(&runtime_context, &request).await?;
-    project_manual_send_response(&state, &mut response).await?;
-
-    api_audit_log(&state)?
-        .record(&NewApiAuditRecord::telegram_message_send(
-            AUDIT_ACTOR_ID,
-            &response.message_id,
-            &response.account_id,
-            &response.provider_chat_id,
-            &response.rendered_preview_hash,
-        ))
+    let response = telegram_message_write_service(&state)?
+        .send_reply_message(&runtime_context, &request)
         .await?;
-
-    let store = telegram_store(&state)?;
-    let event = build_event(
-        telegram_event_types::MESSAGE_CREATED,
-        &response.account_id,
-        &response.message_id,
-        telegram_message_snapshot_payload(
-            &store,
-            &response.message_id,
-            json!({
-                "provider_chat_id": &response.provider_chat_id,
-                "delivery_state": &response.delivery_state,
-                "runtime_kind": &response.runtime_kind,
-                "status": &response.status,
-            }),
-        )
-        .await?,
-    );
-    publish_telegram_event(&state, event).await?;
-
-    let command_event = build_command_event(
-        &response.account_id,
-        &request.command_id,
-        "reply",
-        &response.provider_chat_id,
-        Some(&response.message_id),
-        None,
-        &response.status,
-        json!({
-            "telegram_message_id": &response.message_id,
-            "runtime_kind": &response.runtime_kind,
-            "reply_to_provider_message_id": &request.reply_to_provider_message_id,
-        }),
-    );
-    publish_telegram_event(&state, command_event).await?;
-
     Ok(Json(response))
 }
 
@@ -281,57 +184,9 @@ pub(crate) async fn post_telegram_message_forward(
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.forward")
         .await?;
     let runtime_context = telegram_runtime_use_case_context(&state)?;
-    let mut response = telegram_runtime::send_forward_message(&runtime_context, &request).await?;
-    project_manual_send_response(&state, &mut response).await?;
-
-    api_audit_log(&state)?
-        .record(&NewApiAuditRecord::telegram_message_send(
-            AUDIT_ACTOR_ID,
-            &response.message_id,
-            &response.account_id,
-            &response.provider_chat_id,
-            &response.rendered_preview_hash,
-        ))
+    let response = telegram_message_write_service(&state)?
+        .send_forward_message(&runtime_context, &request)
         .await?;
-
-    let store = telegram_store(&state)?;
-    let event = build_event(
-        telegram_event_types::MESSAGE_CREATED,
-        &response.account_id,
-        &response.message_id,
-        telegram_message_snapshot_payload(
-            &store,
-            &response.message_id,
-            json!({
-                "provider_chat_id": &response.provider_chat_id,
-                "delivery_state": &response.delivery_state,
-                "runtime_kind": &response.runtime_kind,
-                "status": &response.status,
-                "from_provider_chat_id": &request.from_provider_chat_id,
-                "from_provider_message_id": &request.from_provider_message_id,
-            }),
-        )
-        .await?,
-    );
-    publish_telegram_event(&state, event).await?;
-
-    let command_event = build_command_event(
-        &response.account_id,
-        &request.command_id,
-        "forward",
-        &response.provider_chat_id,
-        Some(&response.message_id),
-        None,
-        &response.status,
-        json!({
-            "telegram_message_id": &response.message_id,
-            "runtime_kind": &response.runtime_kind,
-            "from_provider_chat_id": &request.from_provider_chat_id,
-            "from_provider_message_id": &request.from_provider_message_id,
-        }),
-    );
-    publish_telegram_event(&state, command_event).await?;
-
     Ok(Json(response))
 }
 

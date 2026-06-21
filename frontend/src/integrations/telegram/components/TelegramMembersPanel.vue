@@ -5,7 +5,8 @@ import Icon from '../../../shared/ui/Icon.vue'
 import Button from '../../../shared/ui/Button.vue'
 import { useTelegramCommandRetryMutation, useTelegramCommandsQuery } from '../queries/useTelegramLifecycleQuery'
 import { useJoinTelegramChatMutation, useLeaveTelegramChatMutation } from '../queries/useTelegramParticipantLifecycleQuery'
-import { useSyncTelegramChatMembersMutation, useTelegramChatMembersQuery } from '../queries/useTelegramMembersQuery'
+import { useSyncTelegramChatMembersMutation } from '../queries/useTelegramMembersQuery'
+import { useTelegramChatMembersQuery } from '../../../shared/communications/telegramBusinessQueries'
 import { telegramCommandAuditState } from '../stores/telegramCommandAudit'
 import {
   telegramParticipantLifecycleCommands,

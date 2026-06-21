@@ -38,9 +38,10 @@ pub(crate) use media::{post_telegram_media_download, post_telegram_media_upload}
 pub(crate) use messages::{
     delete_telegram_reaction, get_telegram_forward_chain, get_telegram_message_tombstones,
     get_telegram_message_versions, get_telegram_messages, get_telegram_reactions,
-    get_telegram_reply_chain, post_telegram_fixture_message, post_telegram_manual_send,
-    post_telegram_message_delete, post_telegram_message_edit, post_telegram_message_forward,
-    post_telegram_message_mark_read, post_telegram_message_pin, post_telegram_message_reply,
+    get_telegram_reply_chain, post_communication_conversation_message,
+    post_telegram_fixture_message, post_telegram_manual_send, post_telegram_message_delete,
+    post_telegram_message_edit, post_telegram_message_forward, post_telegram_message_mark_read,
+    post_telegram_message_pin, post_telegram_message_reply,
     post_telegram_message_restore_visibility, post_telegram_reaction,
 };
 pub(crate) use outbox::post_telegram_command_retry;
@@ -54,8 +55,8 @@ pub(crate) use runtime::{
     post_telegram_runtime_stop,
 };
 pub(crate) use search::{
-    get_telegram_pinned_messages, search_telegram_chats, search_telegram_media,
-    search_telegram_messages, search_telegram_messages_provider,
+    get_telegram_pinned_messages, post_telegram_provider_search, search_telegram_chats,
+    search_telegram_media, search_telegram_messages,
 };
 pub(crate) use topics::{
     get_telegram_topic_detail, get_telegram_topic_messages, get_telegram_topics,

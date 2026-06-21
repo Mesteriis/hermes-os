@@ -56,11 +56,8 @@ use crate::domains::persons::identity::{
     PersonIdentityReviewCommand, PersonIdentityReviewState, PersonIdentityStore,
 };
 
+use crate::application::communication_fixture_ingest::WhatsappFixtureIngestApplicationService;
 use crate::application::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
-use crate::application::provider_communication_projection::record_and_project_whatsapp_web_message;
-use crate::application::review_inbox::{
-    refresh_message_decisions_into_review, refresh_message_task_candidates_into_review,
-};
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -179,20 +176,14 @@ pub(crate) async fn post_whatsapp_fixture_message(
     Json(request): Json<NewWhatsappWebMessage>,
 ) -> Result<Json<WhatsappWebMessageIngestResult>, ApiError> {
     ensure_fixture_routes_enabled(&state)?;
-    let observed = whatsapp_web_store(&state)?
-        .ingest_fixture_message(&request)
-        .await?;
     let Some(pool) = state.database.pool().cloned() else {
         return Err(ApiError::DatabaseNotConfigured);
     };
-    let projected = record_and_project_whatsapp_web_message(pool.clone(), observed.raw).await?;
-    let message_ids = vec![projected.message_id.clone()];
-    refresh_message_decisions_into_review(&pool, &message_ids).await?;
-    refresh_message_task_candidates_into_review(&pool, &message_ids).await?;
-    Ok(Json(WhatsappWebMessageIngestResult {
-        raw_record_id: projected.raw_record_id,
-        message_id: projected.message_id,
-    }))
+    Ok(Json(
+        WhatsappFixtureIngestApplicationService::new(pool, whatsapp_web_store(&state)?)
+            .ingest_message(&request)
+            .await?,
+    ))
 }
 
 pub(crate) async fn get_whatsapp_messages(

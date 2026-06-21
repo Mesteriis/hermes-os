@@ -1,5 +1,8 @@
 import { ref } from 'vue'
-import { useReplyTelegramMessageMutation, useSendTelegramMessageMutation } from './useTelegramQuery'
+import {
+  useReplyTelegramMessageMutation,
+  useSendTelegramMessageMutation,
+} from '../../../shared/communications/telegramBusinessQueries'
 import { useTelegramMediaUploadMutation } from './useTelegramMediaUploadQuery'
 import type { TelegramChat, TelegramMessage } from '../types/telegram'
 

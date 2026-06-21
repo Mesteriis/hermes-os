@@ -52,6 +52,16 @@ pub(crate) struct TelegramSearchResponse {
 }
 
 #[derive(Serialize)]
+pub(crate) struct TelegramProviderSearchResponse {
+    pub(crate) account_id: String,
+    pub(crate) provider_chat_id: Option<String>,
+    pub(crate) query: String,
+    pub(crate) limit: i32,
+    pub(crate) status: String,
+    pub(crate) error: Option<String>,
+}
+
+#[derive(Serialize)]
 pub(crate) struct TelegramChatSearchResponse {
     pub(crate) query: String,
     pub(crate) items: Vec<TelegramChat>,
@@ -83,7 +93,7 @@ pub(crate) struct TelegramMediaSearchResponse {
     pub(crate) items: Vec<TelegramMediaItem>,
 }
 
-/// GET /api/v1/integrations/telegram/provider-search/messages?q=&account_id=&provider_chat_id=&limit=
+/// GET /api/v1/communications/search/messages?q=&account_id=&provider_chat_id=&limit=
 pub(crate) async fn search_telegram_messages(
     State(state): State<AppState>,
     Query(query): Query<TelegramMessageSearchQuery>,
@@ -98,26 +108,6 @@ pub(crate) async fn search_telegram_messages(
                 "search query `q` is required".to_owned(),
             ),
         ));
-    }
-
-    if let Some(account_id) = &query.account_id
-        && let Err(error) = {
-            let runtime_context = telegram_runtime_use_case_context(&state)?;
-            telegram_runtime::refresh_provider_search(
-                &runtime_context,
-                account_id.clone(),
-                query.provider_chat_id.clone(),
-                search_q.clone(),
-                limit as i32,
-            )
-            .await
-        }
-    {
-        tracing::debug!(
-            error = %error,
-            account_id = %account_id,
-            "search_telegram_messages: TDLib provider search failed, serving DB projection"
-        );
     }
 
     let items = store
@@ -136,12 +126,11 @@ pub(crate) async fn search_telegram_messages(
     }))
 }
 
-/// POST /api/v1/integrations/telegram/provider-search/provider
-pub(crate) async fn search_telegram_messages_provider(
+/// POST /api/v1/integrations/telegram/provider-search
+pub(crate) async fn post_telegram_provider_search(
     State(state): State<AppState>,
     Json(payload): Json<TelegramProviderSearchCommand>,
-) -> Result<Json<TelegramSearchResponse>, ApiError> {
-    let store = telegram_store(&state)?;
+) -> Result<Json<TelegramProviderSearchResponse>, ApiError> {
     let limit = payload.limit.unwrap_or(50).clamp(1, 200);
     let search_q = payload.q.trim().to_owned();
     let account_id = payload.account_id.trim();
@@ -163,35 +152,34 @@ pub(crate) async fn search_telegram_messages_provider(
     }
 
     let runtime_context = telegram_runtime_use_case_context(&state)?;
-    if let Err(error) = telegram_runtime::refresh_provider_search(
+    let result = telegram_runtime::refresh_provider_search(
         &runtime_context,
         account_id.to_owned(),
         payload.provider_chat_id.clone(),
         search_q.clone(),
         limit as i32,
     )
-    .await
-    {
-        tracing::debug!(
-            error = %error,
-            account_id = %account_id,
-            "search_telegram_messages_provider: TDLib provider search failed, serving DB projection"
-        );
-    }
+    .await;
 
-    let items = store
-        .search_messages(
-            Some(account_id),
-            payload.provider_chat_id.as_deref(),
-            &search_q,
-            limit,
-        )
-        .await?;
+    let (status, error) = match result {
+        Ok(()) => ("queued".to_owned(), None),
+        Err(error) => {
+            tracing::debug!(
+                error = %error,
+                account_id = %account_id,
+                "post_telegram_provider_search: TDLib provider search failed"
+            );
+            ("failed".to_owned(), Some(error.to_string()))
+        }
+    };
 
-    Ok(Json(TelegramSearchResponse {
+    Ok(Json(TelegramProviderSearchResponse {
+        account_id: account_id.to_owned(),
+        provider_chat_id: payload.provider_chat_id,
         query: search_q,
-        total: items.len(),
-        items,
+        limit: limit as i32,
+        status,
+        error,
     }))
 }
 
@@ -223,15 +211,15 @@ pub(crate) async fn search_telegram_chats(
     }))
 }
 
-/// GET /api/v1/communications/conversations/{telegram_chat_id}/pinned-messages?limit=
+/// GET /api/v1/communications/conversations/{conversation_id}/pinned-messages?limit=
 pub(crate) async fn get_telegram_pinned_messages(
     State(state): State<AppState>,
-    Path(telegram_chat_id): Path<String>,
+    Path(conversation_id): Path<String>,
     Query(query): Query<TelegramPinnedMessagesQuery>,
 ) -> Result<Json<crate::app::api_support::TelegramMessageListResponse>, ApiError> {
     let store = telegram_store(&state)?;
     let items = store
-        .pinned_messages(&telegram_chat_id, query.limit.unwrap_or(100).clamp(1, 200))
+        .pinned_messages(&conversation_id, query.limit.unwrap_or(100).clamp(1, 200))
         .await?;
 
     Ok(Json(crate::app::api_support::TelegramMessageListResponse {
@@ -239,7 +227,7 @@ pub(crate) async fn get_telegram_pinned_messages(
     }))
 }
 
-/// GET /api/v1/integrations/telegram/provider-search/media?account_id=&provider_chat_id=&kind=&limit=
+/// GET /api/v1/communications/search/media?account_id=&provider_chat_id=&kind=&limit=
 pub(crate) async fn search_telegram_media(
     State(state): State<AppState>,
     Query(query): Query<TelegramMediaSearchQuery>,
@@ -253,32 +241,6 @@ pub(crate) async fn search_telegram_media(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty());
-    let mut source = "projection".to_owned();
-    let mut provider_search_attempted = false;
-    let mut provider_search_error = None;
-
-    if let (Some(account_id), Some(search_q)) = (query.account_id.as_deref(), search_q) {
-        provider_search_attempted = true;
-        source = "provider_refresh".to_owned();
-        let runtime_context = telegram_runtime_use_case_context(&state)?;
-        if let Err(error) = telegram_runtime::refresh_provider_search(
-            &runtime_context,
-            account_id.to_owned(),
-            query.provider_chat_id.clone(),
-            search_q.to_owned(),
-            limit as i32,
-        )
-        .await
-        {
-            provider_search_error = Some(error.to_string());
-            tracing::debug!(
-                error = %error,
-                account_id = %account_id,
-                "search_telegram_media: TDLib provider search failed, serving DB projection"
-            );
-        }
-    }
-
     let messages = store
         .recent_messages(
             query.account_id.as_deref(),
@@ -369,9 +331,9 @@ pub(crate) async fn search_telegram_media(
 
     Ok(Json(TelegramMediaSearchResponse {
         query: search_q.map(ToOwned::to_owned),
-        source,
-        provider_search_attempted,
-        provider_search_error,
+        source: "projection".to_owned(),
+        provider_search_attempted: false,
+        provider_search_error: None,
         items,
     }))
 }

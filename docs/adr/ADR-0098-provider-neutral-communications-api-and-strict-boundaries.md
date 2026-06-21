@@ -56,6 +56,13 @@ Provider runtime/setup routes use:
 /api/v1/integrations/whatsapp/*
 ```
 
+Provider search under `/api/v1/integrations/{provider}/provider-search` is a
+runtime/control trigger only. It returns command/status metadata and must not
+return projected Communication message, media, conversation or topic items.
+Normal user search uses provider-neutral Communications routes such as
+`/api/v1/communications/search/messages` and
+`/api/v1/communications/search/media`.
+
 The old provider-scoped business route families are removed and are not kept as
 compatibility aliases:
 
@@ -112,4 +119,5 @@ The repository must enforce:
 - no app handler store/runtime/workflow orchestration;
 - no frontend `domains <-> integrations` imports;
 - no provider-scoped Communications business routes;
+- no provider-search business read routes under `/api/v1/integrations/*`;
 - no guard baseline or hardcoded per-file allowlist for these rules.

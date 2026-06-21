@@ -13,12 +13,23 @@ describe('telegram topics API', () => {
     ApiClient.resetForTests()
   })
 
-  it('rejects projected topic search from integration clients', async () => {
-    const fetchMock = vi.fn()
+  it('delegates projected topic search to the shared Communication API wrapper', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ items: [] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(fetchTelegramTopicSearch('chat-42 ', '  architecture docs ', 25)).rejects.toThrow('moved')
+    await fetchTelegramTopicSearch('chat-42 ', '  architecture docs ', 25)
 
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledOnce()
+    const [url] = fetchMock.mock.calls[0]
+    const requestUrl = new URL(String(url))
+    expect(requestUrl.searchParams.get('q')).toBe('architecture docs')
+    expect(requestUrl.searchParams.get('telegram_chat_id')).toBe('chat-42')
+    expect(requestUrl.searchParams.get('limit')).toBe('25')
+    expect(requestUrl.pathname).not.toContain('/integrations/telegram')
   })
 })

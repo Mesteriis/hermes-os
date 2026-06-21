@@ -6,9 +6,7 @@ import {
   fetchTelegramCalls,
   fetchTelegramCallTranscript,
   fetchTelegramAccountCapabilities,
-  fetchTelegramChatDetail,
   fetchTelegramFolders,
-  fetchTelegramChatMembers,
   joinTelegramChat,
   leaveTelegramChat,
   logoutTelegramAccount,
@@ -71,16 +69,6 @@ describe('telegram dialog action API', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
     ApiClient.resetForTests()
-  })
-
-  it('rejects projected chat detail and members from integration clients', async () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-
-    await expect(fetchTelegramChatDetail('tgchat-1')).rejects.toThrow('moved')
-    await expect(fetchTelegramChatMembers('tgchat-1', 25, 'owner', 'admin', '50')).rejects.toThrow('moved')
-
-    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it('posts member sync through provider-sync route', async () => {

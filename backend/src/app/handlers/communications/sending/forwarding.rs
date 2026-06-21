@@ -1,16 +1,44 @@
 use super::super::*;
+use crate::application::communication_provider_writes::{
+    CommunicationForwardRequest, CommunicationProviderMessageCommandResponse,
+    CommunicationReplyRequest, TelegramMessageWriteApplicationService,
+};
 use crate::domains::communications::service::CommunicationCommandService;
 
 pub(crate) async fn post_v1_reply(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
-    Json(req): Json<SendRequest>,
-) -> Result<Json<SendResponse>, ApiError> {
+    Json(req): Json<Value>,
+) -> Result<Json<Value>, ApiError> {
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    if msg.channel_kind.starts_with("telegram") {
+        let mut request: CommunicationReplyRequest = serde_json::from_value(req)
+            .map_err(|_| ApiError::InvalidCommunicationQuery("invalid Telegram reply payload"))?;
+        let command_id = request
+            .command_id
+            .clone()
+            .unwrap_or_else(crate::integrations::telegram::client::lifecycle::new_command_id);
+        request.command_id = Some(command_id.clone());
+        let runtime_context = telegram_runtime_use_case_context(&state)?;
+        let response = TelegramMessageWriteApplicationService::new(
+            telegram_store(&state)?,
+            api_audit_log(&state)?,
+            event_store(&state)?,
+            state.event_bus.clone(),
+        )
+        .reply_to_message(&runtime_context, &message_id, request)
+        .await?;
+        return Ok(Json(json!(
+            CommunicationProviderMessageCommandResponse::telegram(command_id, &response)
+        )));
+    }
+
+    let req: SendRequest = serde_json::from_value(req)
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid reply payload"))?;
     let quoted = msg
         .body_text
         .lines()
@@ -24,7 +52,7 @@ pub(crate) async fn post_v1_reply(
         msg.sender,
         quoted
     );
-    Ok(Json(SendResponse {
+    Ok(Json(json!(SendResponse {
         message_id: format!(
             "reply-{}",
             Utc::now().timestamp_nanos_opt().unwrap_or_default()
@@ -37,7 +65,7 @@ pub(crate) async fn post_v1_reply(
         scheduled_send_at: None,
         undo_deadline_at: None,
         failure_reason: None,
-    }))
+    })))
 }
 
 #[derive(Deserialize)]
@@ -50,13 +78,37 @@ pub(crate) struct ForwardRequest {
 pub(crate) async fn post_v1_forward(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
-    Json(req): Json<ForwardRequest>,
+    Json(req): Json<Value>,
 ) -> Result<Json<Value>, ApiError> {
     let store = message_store(&state)?;
     let msg = store
         .message(&message_id)
         .await?
         .ok_or(ApiError::CommunicationMessageNotFound)?;
+    if msg.channel_kind.starts_with("telegram") {
+        let mut request: CommunicationForwardRequest = serde_json::from_value(req)
+            .map_err(|_| ApiError::InvalidCommunicationQuery("invalid Telegram forward payload"))?;
+        let command_id = request
+            .command_id
+            .clone()
+            .unwrap_or_else(crate::integrations::telegram::client::lifecycle::new_command_id);
+        request.command_id = Some(command_id.clone());
+        let runtime_context = telegram_runtime_use_case_context(&state)?;
+        let response = TelegramMessageWriteApplicationService::new(
+            telegram_store(&state)?,
+            api_audit_log(&state)?,
+            event_store(&state)?,
+            state.event_bus.clone(),
+        )
+        .forward_message(&runtime_context, &message_id, request)
+        .await?;
+        return Ok(Json(json!(
+            CommunicationProviderMessageCommandResponse::telegram(command_id, &response)
+        )));
+    }
+
+    let req: ForwardRequest = serde_json::from_value(req)
+        .map_err(|_| ApiError::InvalidCommunicationQuery("invalid forward payload"))?;
     let cc = req.cc.unwrap_or_default();
     let note = req.note.as_deref().unwrap_or("");
     let fwd_body = format!(

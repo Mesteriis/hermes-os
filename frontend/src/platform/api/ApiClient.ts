@@ -69,6 +69,10 @@ export class ApiClient {
 		return this.request<T>('DELETE', path, undefined, fallbackMessage)
 	}
 
+	async deleteWithBody<T>(path: string, body: unknown, fallbackMessage = 'DELETE request failed'): Promise<T> {
+		return this.request<T>('DELETE', path, body, fallbackMessage)
+	}
+
 	private static _instance: ApiClient | null = null
 
 	static get instance(): ApiClient {

@@ -1,13 +1,10 @@
-import { ApiClient } from '../../../platform/api/ApiClient'
 import type { AttachmentPreviewResponse } from '../../../shared/communications/types/attachments'
+import { previewTelegramBusinessAttachment } from '../../../shared/communications/telegramBusinessApi'
 
 export type TelegramAttachmentPreviewResponse = AttachmentPreviewResponse
 
 export async function previewTelegramAttachment(
   attachmentId: string
 ): Promise<TelegramAttachmentPreviewResponse> {
-  return ApiClient.instance.get<TelegramAttachmentPreviewResponse>(
-    `/api/v1/communications/attachments/${encodeURIComponent(attachmentId)}/preview`,
-    'Telegram attachment preview failed'
-  )
+  return previewTelegramBusinessAttachment(attachmentId)
 }

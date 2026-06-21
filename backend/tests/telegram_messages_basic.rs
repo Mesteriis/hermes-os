@@ -162,6 +162,37 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
     assert!(audit_metadata.get("text").is_none());
     assert!(audit_metadata.get("message_text").is_none());
     assert!(audit_metadata.get("rendered_text").is_none());
+
+    let neutral_response = app
+        .clone()
+        .oneshot(json_post_request_with_actor(
+            &format!("/api/v1/communications/conversations/{chat_id}/messages"),
+            json!({
+                "account_id": account_id,
+                "text": "Provider-neutral Telegram send from Hermes."
+            }),
+            LOCAL_API_TOKEN,
+        ))
+        .await
+        .expect("provider-neutral send response");
+    assert_eq!(neutral_response.status(), StatusCode::OK);
+    let neutral_body = json_body(neutral_response).await;
+    assert!(
+        neutral_body["message_id"]
+            .as_str()
+            .expect("neutral message id")
+            .starts_with("message:v4:telegram:")
+    );
+    assert!(
+        !neutral_body["raw_record_id"]
+            .as_str()
+            .expect("neutral raw record id")
+            .is_empty()
+    );
+    assert_eq!(neutral_body["conversation_id"], json!(chat_id));
+    assert_eq!(neutral_body["channel_kind"], json!("telegram"));
+    assert_eq!(neutral_body["provider"], json!("telegram"));
+    assert_eq!(neutral_body["status"], json!("sent"));
 }
 
 #[tokio::test]

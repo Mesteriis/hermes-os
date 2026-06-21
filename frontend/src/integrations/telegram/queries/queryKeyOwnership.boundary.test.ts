@@ -11,22 +11,17 @@ function forbiddenIntegrationKey(provider: string, segment: string): string {
 
 describe('provider query key ownership boundary', () => {
 	it('keeps Telegram business read-model keys under communications', () => {
-		const lifecycle = source('./useTelegramLifecycleQuery.ts')
-		const references = source('./useTelegramReferenceQuery.ts')
-		const attachments = source('./useTelegramAttachmentPreviewQuery.ts')
-		const rawEvidence = source('./useTelegramRawEvidenceQuery.ts')
+		const businessQueries = source('../../../shared/communications/telegramBusinessQueries.ts')
 
-		expect(lifecycle).toContain("['communications', 'messages', toValue(messageId), 'versions']")
-		expect(lifecycle).toContain("['communications', 'messages', toValue(messageId), 'tombstones']")
-		expect(references).toContain("['communications', 'messages', toValue(messageId), 'reply-chain']")
-		expect(references).toContain("['communications', 'messages', toValue(messageId), 'forward-chain']")
-		expect(attachments).toContain("['communications', 'messages', toValue(attachmentId) ?? 'none', 'attachment-preview']")
-		expect(rawEvidence).toContain("['communications', 'messages', toValue(messageId), 'raw-evidence']")
+		expect(businessQueries).toContain("['communications', 'messages', toValue(messageId), 'versions']")
+		expect(businessQueries).toContain("['communications', 'messages', toValue(messageId), 'tombstones']")
+		expect(businessQueries).toContain("['communications', 'messages', toValue(messageId), 'reply-chain']")
+		expect(businessQueries).toContain("['communications', 'messages', toValue(messageId), 'forward-chain']")
+		expect(businessQueries).toContain("'attachment-preview'")
+		expect(businessQueries).toContain("['communications', 'messages', toValue(messageId), 'raw-evidence']")
 
-		for (const fileSource of [lifecycle, references, attachments, rawEvidence]) {
-			expect(fileSource).not.toContain(forbiddenIntegrationKey('telegram', 'messages'))
-			expect(fileSource).not.toContain(forbiddenIntegrationKey('telegram', 'chats'))
-		}
+		expect(businessQueries).not.toContain(forbiddenIntegrationKey('telegram', 'messages'))
+		expect(businessQueries).not.toContain(forbiddenIntegrationKey('telegram', 'chats'))
 	})
 
 	it('keeps WhatsApp session and message read-model keys under communications', () => {

@@ -1,4 +1,6 @@
 pub(crate) mod bootstrap;
+pub(crate) mod communication_fixture_ingest;
+pub(crate) mod communication_provider_writes;
 pub(crate) mod communication_send;
 pub(crate) mod consistency_review;
 pub(crate) mod email_intelligence;
@@ -11,6 +13,8 @@ pub(crate) mod telegram_runtime;
 pub(crate) mod workflow_action_person_projection;
 
 pub(crate) use bootstrap::*;
+pub(crate) use communication_fixture_ingest::*;
+pub(crate) use communication_provider_writes::*;
 pub(crate) use communication_send::*;
 pub(crate) use consistency_review::*;
 pub(crate) use email_intelligence::*;

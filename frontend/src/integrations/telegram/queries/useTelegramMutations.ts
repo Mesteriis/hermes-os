@@ -3,7 +3,6 @@ import {
   addTelegramChatToFolder,
   archiveTelegramChat,
   downloadTelegramMedia,
-  forwardTelegramMessage,
   ingestTelegramFixtureMessage,
   logoutTelegramAccount,
   markTelegramChatRead,
@@ -13,8 +12,6 @@ import {
   reassignTelegramChatFolders,
   removeTelegramAccount,
   removeTelegramChatFromFolder,
-  replyToTelegramMessage,
-  sendTelegramMessage,
   setupTelegramAccount,
   syncTelegramChats,
   syncTelegramHistory,
@@ -22,20 +19,10 @@ import {
   unmuteTelegramChat,
   unpinTelegramChat,
 } from '../api/telegram'
-import {
-  addTelegramReaction,
-  deleteTelegramMessage,
-  editTelegramMessage,
-  markTelegramMessageRead,
-  pinTelegramMessage,
-  removeTelegramReaction,
-  restoreTelegramMessageVisibility,
-} from '../api/telegramLifecycle'
 import type {
   TelegramChatSyncRequest,
   TelegramHistorySyncRequest,
   TelegramMediaDownloadRequest,
-  TelegramReactionRequest,
 } from '../types/telegram'
 import { telegramQueryKeys } from './telegramQueryKeys'
 
@@ -100,19 +87,6 @@ export function useSyncTelegramHistoryMutation() {
   })
 }
 
-export function useSendTelegramMessageMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: (request: { account_id: string; provider_chat_id: string; text: string }) =>
-      sendTelegramMessage(request),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
-    },
-  })
-}
-
 export function useIngestTelegramFixtureMutation() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -121,106 +95,6 @@ export function useIngestTelegramFixtureMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
       queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-    },
-  })
-}
-
-export function useEditTelegramMessageMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: editTelegramMessage,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-    },
-  })
-}
-
-export function useReplyTelegramMessageMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: replyToTelegramMessage,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-    },
-  })
-}
-
-export function useForwardTelegramMessageMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: forwardTelegramMessage,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.runtime })
-    },
-  })
-}
-
-export function useDeleteTelegramMessageMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: deleteTelegramMessage,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-    },
-  })
-}
-
-export function useRestoreTelegramMessageMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: restoreTelegramMessageVisibility,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-    },
-  })
-}
-
-export function usePinTelegramMessageMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: pinTelegramMessage,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-    },
-  })
-}
-
-export function useMarkReadTelegramMessageMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: markTelegramMessageRead,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chats })
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.chatDetail })
-    },
-  })
-}
-
-export function useAddTelegramReactionMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ messageId, request }: { messageId: string; request: TelegramReactionRequest }) =>
-      addTelegramReaction(messageId, request),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
-    },
-  })
-}
-
-export function useRemoveTelegramReactionMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: ({ messageId, request }: { messageId: string; request: TelegramReactionRequest }) =>
-      removeTelegramReaction(messageId, request),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: telegramQueryKeys.messages })
     },
   })
 }

@@ -21,11 +21,14 @@ import {
 } from './telegramReferenceMetadataEvidence'
 import {
   useTelegramCommandsQuery,
+} from '../../queries/useTelegramLifecycleQuery'
+import {
+  useTelegramForwardChainQuery,
   useTelegramMessageReactionsQuery,
   useTelegramMessageTombstonesQuery,
   useTelegramMessageVersionsQuery,
-} from '../../queries/useTelegramLifecycleQuery'
-import { useTelegramForwardChainQuery, useTelegramReplyChainQuery } from '../../queries/useTelegramReferenceQuery'
+  useTelegramReplyChainQuery,
+} from '../../../../shared/communications/telegramBusinessQueries'
 
 const { t } = useI18n()
 

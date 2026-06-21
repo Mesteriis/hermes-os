@@ -27,7 +27,7 @@ import TelegramSearchResultsPanel from './TelegramSearchResultsPanel.vue'
 import TelegramSyncPanel from './thread/TelegramSyncPanel.vue'
 import TelegramThreadSideSections from './thread/TelegramThreadSideSections.vue'
 import TelegramThreadHeader from './thread/TelegramThreadHeader.vue'
-import { useTelegramPinnedMessagesQuery } from '../queries/useTelegramSearchQuery'
+import { useTelegramPinnedMessagesQuery } from '../../../shared/communications/telegramBusinessQueries'
 
 const { t } = useI18n()
 

@@ -5,33 +5,24 @@ import type {
   TelegramTopicLifecycleResponse,
   TelegramTopicListResponse,
 } from '../types/telegramTopics'
-
-function communicationBusinessApiMoved<T>(operation: string): Promise<T> {
-  return Promise.reject(
-    new Error(
-      `${operation} moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only`
-    )
-  )
-}
+import {
+  createTelegramBusinessTopic,
+  searchTelegramBusinessTopics,
+} from '../../../shared/communications/telegramBusinessApi'
 
 export async function fetchTelegramTopicSearch(
   telegramChatId: string,
   q: string,
   limit = 50
 ): Promise<TelegramTopicListResponse> {
-  void telegramChatId
-  void q
-  void limit
-  return communicationBusinessApiMoved('Telegram topic search')
+  return searchTelegramBusinessTopics(telegramChatId, q, limit)
 }
 
 export async function createTelegramTopic(
   telegramChatId: string,
   request: TelegramTopicCreateRequest
 ): Promise<TelegramTopicLifecycleResponse> {
-  void telegramChatId
-  void request
-  return communicationBusinessApiMoved('Telegram topic create')
+  return createTelegramBusinessTopic(telegramChatId, request)
 }
 
 export async function toggleTelegramTopicClosed(

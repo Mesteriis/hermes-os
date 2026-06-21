@@ -3,9 +3,10 @@
 Status: Canonical architecture baseline for the 2026-06-18 documentation
 consolidation.
 
-Scope: Communications target model and channel ownership. ADR-0097 is the
-controlling decision for channel/domain boundaries, route changes and canonical
-communication tables.
+Scope: Communications target model and channel ownership. ADR-0097 defines the
+channel/domain split, and ADR-0098 is the controlling decision for
+provider-neutral business routes, integration runtime routes and strict
+frontend/backend boundary guards.
 
 ## Purpose
 

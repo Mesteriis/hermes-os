@@ -1,4 +1,6 @@
 use super::super::types::ApiError;
+use crate::application::communication_fixture_ingest::CommunicationFixtureIngestError;
+use crate::application::communication_provider_writes::TelegramMessageWriteError;
 use crate::application::provider_communication_projection::ProviderCommunicationProjectionError;
 use crate::application::review_inbox::ReviewInboxWorkflowError;
 use crate::engines::automation::AutomationError;
@@ -27,6 +29,20 @@ impl From<AutomationError> for ApiError {
 impl From<CallError> for ApiError {
     fn from(error: CallError) -> Self {
         Self::Call(error)
+    }
+}
+
+impl From<CommunicationFixtureIngestError> for ApiError {
+    fn from(error: CommunicationFixtureIngestError) -> Self {
+        tracing::error!(error = %error, "communication fixture ingest failed");
+        Self::InvalidCommunicationQuery("communication fixture ingest failed")
+    }
+}
+
+impl From<TelegramMessageWriteError> for ApiError {
+    fn from(error: TelegramMessageWriteError) -> Self {
+        tracing::error!(error = %error, "telegram message write failed");
+        Self::InvalidCommunicationQuery("telegram message write failed")
     }
 }
 

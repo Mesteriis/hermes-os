@@ -81,7 +81,7 @@ fn build_command_event(
     .expect("event envelope must be valid")
 }
 
-/// GET /api/v1/communications/conversations/{telegram_chat_id}/topics
+/// GET /api/v1/communications/conversations/{conversation_id}/topics
 ///
 /// Attempts a live TDLib fetch to refresh the topic projection before serving DB rows.
 /// Falls back to the DB projection if TDLib is unavailable or the account is in fixture mode.
@@ -128,7 +128,7 @@ pub(crate) async fn get_telegram_topics(
     }))
 }
 
-/// POST /api/v1/communications/conversations/{telegram_chat_id}/topics
+/// POST /api/v1/communications/conversations/{conversation_id}/topics
 pub(crate) async fn post_telegram_topic_create(
     State(state): State<AppState>,
     Path(telegram_chat_id): Path<String>,

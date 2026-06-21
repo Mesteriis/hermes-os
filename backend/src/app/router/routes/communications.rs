@@ -12,7 +12,9 @@ pub(super) fn add_routes(router: Router<AppState>) -> Router<AppState> {
         )
         .route(
             "/api/v1/communications/messages/{message_id}",
-            get(get_v1_communication_message),
+            get(get_v1_communication_message)
+                .patch(post_telegram_message_edit)
+                .delete(post_telegram_message_delete),
         )
         .route(
             "/api/v1/communications/messages/{message_id}/workflow-state",

@@ -620,6 +620,30 @@ function integrationBusinessCommunicationRouteFailuresForSource(relativePath, so
 	return errors;
 }
 
+function providerSearchBusinessReadRouteFailuresForSource(relativePath, source) {
+	if (!/\.(?:rs|ts|vue|md)$/.test(relativePath)) return [];
+	const errors = [];
+	const forbiddenRoutePattern =
+		/\/api\/v1\/integrations\/(telegram|whatsapp|mail)\/provider-search\/(messages|media|provider)(?=\/|\?|['"`\s])/g;
+	for (const match of source.matchAll(forbiddenRoutePattern)) {
+		errors.push(
+			`${relativePath}: provider-search route "/api/v1/integrations/${match[1]}/provider-search/${match[2]}" is forbidden for business reads; provider search may only be the status/trigger route /api/v1/integrations/${match[1]}/provider-search and must not return projected Communication items`
+		);
+	}
+	return errors;
+}
+
+function frontendTemporaryBusinessMovedStubFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('frontend/src/')) return [];
+	const errors = [];
+	if (/\bcommunicationBusinessApiMoved\b|moved to frontend\/src\/domains\/communications/.test(source)) {
+		errors.push(
+			`${relativePath}: temporary Communication business API moved stubs are forbidden; move the client/hook to Communications/shared and call the provider-neutral implementation`
+		);
+	}
+	return errors;
+}
+
 function frontendDomainProviderControlRouteFailuresForSource(relativePath, source) {
 	if (!relativePath.startsWith('frontend/src/domains/')) return [];
 	const errors = [];
@@ -1874,6 +1898,10 @@ async function checkLayerBoundaries() {
 	for (const file of frontendFiles) {
 		const source = await readFile(path.join(repoRoot, file), 'utf8');
 		frontendViolations.push(...frontendBoundaryViolations(file, source));
+		frontendViolations.push(...frontendTemporaryBusinessMovedStubFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
 		frontendViolations.push(...frontendDomainProviderControlRouteFailuresForSource(file, source).map((message) => ({
 			file,
 			message
@@ -1933,6 +1961,7 @@ async function routeOwnershipFailures() {
 		const source = await readFile(path.join(repoRoot, file), 'utf8');
 		errors.push(...providerScopedCommunicationRouteFailuresForSource(file, source));
 		errors.push(...integrationBusinessCommunicationRouteFailuresForSource(file, source));
+		errors.push(...providerSearchBusinessReadRouteFailuresForSource(file, source));
 	}
 	return errors;
 }
@@ -2194,6 +2223,34 @@ function runSelfTests() {
 		integrationBusinessCommunicationRouteFailuresForSource(
 			'backend/src/app/router/routes/messaging.rs',
 			'"/api/v1/integrations/telegram/provider-messages/{message_id}/raw-evidence"'
+		).length === 1
+	);
+	assertSelfTest(
+		'provider-search message read route fails',
+		providerSearchBusinessReadRouteFailuresForSource(
+			'backend/src/app/router/routes/messaging.rs',
+			'"/api/v1/integrations/telegram/provider-search/messages"'
+		).length === 1
+	);
+	assertSelfTest(
+		'provider-search media read route fails',
+		providerSearchBusinessReadRouteFailuresForSource(
+			'frontend/src/integrations/telegram/api/telegramSearch.ts',
+			"api.get('/api/v1/integrations/telegram/provider-search/media?q=alpha')"
+		).length === 1
+	);
+	assertSelfTest(
+		'provider-search trigger route passes',
+		providerSearchBusinessReadRouteFailuresForSource(
+			'frontend/src/integrations/telegram/api/telegramSearch.ts',
+			"api.post('/api/v1/integrations/telegram/provider-search')"
+		).length === 0
+	);
+	assertSelfTest(
+		'temporary Communication business moved stub fails',
+		frontendTemporaryBusinessMovedStubFailuresForSource(
+			'frontend/src/integrations/telegram/api/telegramSearch.ts',
+			'function communicationBusinessApiMoved() { throw new Error("moved to frontend/src/domains/communications") }'
 		).length === 1
 	);
 	assertSelfTest(

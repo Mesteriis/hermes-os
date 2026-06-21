@@ -10,6 +10,7 @@ import type {
   WhatsappWebSession,
   WhatsappWebMessage
 } from '../types/whatsapp'
+import { fetchWhatsappWebBusinessMessages } from '../../../shared/communications/whatsappBusinessApi'
 
 // --- Capabilities ---
 export async function fetchWhatsappCapabilities(): Promise<WhatsappCapabilitiesResponse> {
@@ -40,14 +41,7 @@ export async function fetchWhatsappWebMessages(
   providerChatId?: string,
   limit = 50
 ): Promise<WhatsappWebMessageListResponse> {
-  void accountId
-  void providerChatId
-  void limit
-  return Promise.reject(
-    new Error(
-      'WhatsApp Web messages moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only'
-    )
-  )
+  return fetchWhatsappWebBusinessMessages(accountId, providerChatId, limit)
 }
 
 // --- Account setup ---

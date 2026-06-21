@@ -10,45 +10,48 @@ import TelegramFolderMembershipBar from '../components/TelegramFolderMembershipB
 import TelegramMessageThread from '../components/TelegramMessageThread.vue'
 import TelegramRail from '../components/TelegramRail.vue'
 import TelegramStatusMessages from '../components/TelegramStatusMessages.vue'
-import { filterTelegramChats, filterTelegramChatsByGroup, telegramChatFilterCounts, telegramFilterTabs, telegramMessageTime, telegramMessagesChronological } from '../stores/telegram'
-import { useTelegramStore } from '../stores/telegram'
+import { filterTelegramChats, filterTelegramChatsByGroup, telegramChatFilterCounts, telegramFilterTabs, telegramMessageTime, telegramMessagesChronological, useTelegramStore } from '../stores/telegram'
 import { telegramMediaSearchSourceLabel } from '../stores/telegramMediaSearch'
 import { formatTelegramDateTime, hasProjectedTelegramMessagesForChat, isTelegramChatArchived, isTelegramChatMuted, isTelegramChatPinned, openTelegramSearchChatInThread, openTelegramSearchMediaInThread, openTelegramSearchMessageInThread, runTelegramAddChatToFolderAction, runTelegramChatReadToggleAction, runTelegramForwardMessageAction, runTelegramMessageReadAction, runTelegramReassignChatFoldersAction, runTelegramChatToggleAction, telegramCapabilityEnabled, telegramCapabilityReason, telegramChatHasFolder, telegramChatNeedsFolderReassign } from './dialogActionHelpers'
 import type { TelegramAttachmentHint, TelegramChat, TelegramMediaItem, TelegramMessage } from '../types/telegram'
 import {
   telegramQueryKeys,
-  useAddTelegramReactionMutation,
   useAddTelegramChatToFolderMutation,
   useArchiveTelegramChatMutation,
-  useDeleteTelegramMessageMutation,
   useDownloadTelegramMediaMutation,
-  useEditTelegramMessageMutation,
-  useForwardTelegramMessageMutation,
-  useMarkReadTelegramMessageMutation,
   useMarkReadTelegramChatMutation,
   useMarkUnreadTelegramChatMutation,
   useMuteTelegramChatMutation,
   usePinTelegramChatMutation,
-  usePinTelegramMessageMutation,
   useReassignTelegramChatFoldersMutation,
-  useRemoveTelegramReactionMutation,
-  useRestoreTelegramMessageMutation,
   useSyncTelegramChatsMutation,
   useSyncTelegramHistoryMutation,
   useTelegramAccountsQuery,
   useTelegramAccountCapabilitiesQuery,
   useTelegramCapabilitiesQuery,
-  useTelegramChatDetailQuery,
-  useTelegramChatsQuery,
-  useTelegramMessagesQuery,
   useRemoveTelegramChatFromFolderMutation,
   useUnarchiveTelegramChatMutation,
   useUnmuteTelegramChatMutation,
   useUnpinTelegramChatMutation
 } from '../queries/useTelegramQuery'
+import {
+  useAddTelegramReactionMutation,
+  useDeleteTelegramMessageMutation,
+  useEditTelegramMessageMutation,
+  useForwardTelegramMessageMutation,
+  useMarkReadTelegramMessageMutation,
+  usePinTelegramMessageMutation,
+  useRemoveTelegramReactionMutation,
+  useRestoreTelegramMessageMutation,
+  useTelegramChatDetailQuery,
+  useTelegramChatsQuery,
+  useTelegramDialogSearchQuery,
+  useTelegramMediaSearchQuery,
+  useTelegramMessageSearchQuery,
+  useTelegramMessagesQuery,
+} from '../../../shared/communications/telegramBusinessQueries'
 import { useRestartTelegramRuntimeMutation, useStartTelegramRuntimeMutation, useStopTelegramRuntimeMutation, useTelegramRuntimeStatusQuery } from '../queries/useTelegramRuntimeQuery'
 import { useTelegramFolderFilters } from '../queries/useTelegramFolderFilters'
-import { useTelegramDialogSearchQuery, useTelegramMediaSearchQuery, useTelegramMessageSearchQuery } from '../queries/useTelegramSearchQuery'
 import { telegramOldestTdlibMessageId } from '../api/telegramWorkspace'
 import { useRealtimeStatusStore } from '../../../shared/stores/realtimeStatus'
 const { t } = useI18n()
@@ -187,7 +190,6 @@ async function autoSyncTelegramHistory(chat: TelegramChat | null) {
   const syncKey = `${chat.account_id}:${chat.provider_chat_id}`
   if (telegramAutoHistorySyncKeys.has(syncKey)) return
   if (chat.chat_kind !== 'private' && hasProjectedTelegramMessagesForChat(selectedTelegramMessages.value, chat)) return
-
   telegramAutoHistorySyncKeys.add(syncKey)
   store.setTelegramHistorySyncing(true)
   store.setTelegramError('')
@@ -678,7 +680,6 @@ function openTelegramAccountSetup() { store.closeTelegramMenus(); store.openTele
     </div>
   </section>
 </template>
-
 <style scoped>
 .telegram-runtime-panel {
   display: flex;

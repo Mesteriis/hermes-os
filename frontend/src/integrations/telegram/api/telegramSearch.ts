@@ -5,13 +5,20 @@ import type {
   TelegramMessageListResponse,
   TelegramMessageSearchResponse,
 } from '../types/telegram'
+import {
+  fetchTelegramBusinessPinnedMessages,
+  searchTelegramBusinessChats,
+  searchTelegramBusinessMedia,
+  searchTelegramBusinessMessages,
+} from '../../../shared/communications/telegramBusinessApi'
 
-function communicationBusinessApiMoved<T>(operation: string): Promise<T> {
-  return Promise.reject(
-    new Error(
-      `${operation} moved to frontend/src/domains/communications/api/providerChannels; integration clients own runtime/control only`
-    )
-  )
+export type TelegramProviderSearchCommandResponse = {
+  account_id: string
+  provider_chat_id?: string | null
+  query: string
+  limit: number
+  status: string
+  error?: string | null
 }
 
 export async function searchTelegramChats(params: {
@@ -19,8 +26,7 @@ export async function searchTelegramChats(params: {
   account_id?: string
   limit?: number
 }): Promise<TelegramChatSearchResponse> {
-  void params
-  return communicationBusinessApiMoved('Telegram dialog search')
+  return searchTelegramBusinessChats(params)
 }
 
 export async function searchTelegramMessages(params: {
@@ -29,8 +35,7 @@ export async function searchTelegramMessages(params: {
   provider_chat_id?: string
   limit?: number
 }): Promise<TelegramMessageSearchResponse> {
-  void params
-  return communicationBusinessApiMoved('Telegram message search')
+  return searchTelegramBusinessMessages(params)
 }
 
 export async function searchTelegramProviderMessages(params: {
@@ -38,17 +43,17 @@ export async function searchTelegramProviderMessages(params: {
   account_id: string
   provider_chat_id?: string
   limit?: number
-}): Promise<TelegramMessageSearchResponse> {
+}): Promise<TelegramProviderSearchCommandResponse> {
   const body = {
     q: params.q.trim(),
     account_id: params.account_id.trim(),
     provider_chat_id: params.provider_chat_id?.trim(),
     limit: params.limit,
   }
-  return ApiClient.instance.post<TelegramMessageSearchResponse>(
-    '/api/v1/integrations/telegram/provider-search/provider',
+  return ApiClient.instance.post<TelegramProviderSearchCommandResponse>(
+    '/api/v1/integrations/telegram/provider-search',
     body,
-    'Telegram provider message search failed'
+    'Telegram provider search trigger failed'
   )
 }
 
@@ -59,32 +64,12 @@ export async function searchTelegramMedia(params: {
   kind?: string
   limit?: number
 }): Promise<TelegramMediaSearchResponse> {
-  const query = new URLSearchParams()
-  if (params.q?.trim()) {
-    query.set('q', params.q.trim())
-  }
-  if (params.account_id?.trim()) {
-    query.set('account_id', params.account_id.trim())
-  }
-  if (params.provider_chat_id?.trim()) {
-    query.set('provider_chat_id', params.provider_chat_id.trim())
-  }
-  if (params.kind?.trim()) {
-    query.set('kind', params.kind.trim())
-  }
-  if (params.limit != null) {
-    query.set('limit', String(Math.trunc(params.limit)))
-  }
-  return ApiClient.instance.get<TelegramMediaSearchResponse>(
-    `/api/v1/integrations/telegram/provider-search/media?${query.toString()}`,
-    'Telegram media search failed'
-  )
+  return searchTelegramBusinessMedia(params)
 }
 
 export async function fetchTelegramPinnedMessages(params: {
   telegram_chat_id: string
   limit?: number
 }): Promise<TelegramMessageListResponse> {
-  void params
-  return communicationBusinessApiMoved('Telegram pinned messages')
+  return fetchTelegramBusinessPinnedMessages(params)
 }
