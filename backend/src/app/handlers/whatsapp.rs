@@ -155,6 +155,7 @@ pub(crate) async fn post_whatsapp_fixture_account(
     State(state): State<AppState>,
     Json(request): Json<WhatsappWebAccountSetupRequest>,
 ) -> Result<Json<WhatsappWebAccountSetupResponse>, ApiError> {
+    ensure_fixture_routes_enabled(&state)?;
     Ok(Json(
         whatsapp_web_store(&state)?
             .setup_fixture_account(&request)
@@ -177,6 +178,7 @@ pub(crate) async fn post_whatsapp_fixture_message(
     State(state): State<AppState>,
     Json(request): Json<NewWhatsappWebMessage>,
 ) -> Result<Json<WhatsappWebMessageIngestResult>, ApiError> {
+    ensure_fixture_routes_enabled(&state)?;
     let observed = whatsapp_web_store(&state)?
         .ingest_fixture_message(&request)
         .await?;

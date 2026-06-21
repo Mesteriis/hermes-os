@@ -35,6 +35,7 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -43,7 +44,7 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
 
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -65,7 +66,7 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
     {
         post_ok(
             app.clone(),
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,
@@ -87,7 +88,7 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
     let fallback_response = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/conversations/{telegram_chat_id}/members?limit=10"
+            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("fallback members response");
@@ -110,7 +111,7 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
     let provider_response = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/conversations/{telegram_chat_id}/members?query=owner&role=owner&limit=10"
+            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members?query=owner&role=owner&limit=10"
         )))
         .await
         .expect("provider members response");
@@ -144,6 +145,7 @@ async fn telegram_join_leave_routes_enqueue_provider_write_commands() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -159,7 +161,7 @@ async fn telegram_join_leave_routes_enqueue_provider_write_commands() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -235,6 +237,7 @@ async fn telegram_roster_sync_reconciles_join_only_after_self_member_is_observed
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -250,7 +253,7 @@ async fn telegram_roster_sync_reconciles_join_only_after_self_member_is_observed
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -361,6 +364,7 @@ async fn telegram_roster_sync_reconciles_leave_when_self_member_is_inactive() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -376,7 +380,7 @@ async fn telegram_roster_sync_reconciles_leave_when_self_member_is_inactive() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -525,7 +529,7 @@ where
 {
     let response = app
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
+            "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
         )))
         .await
         .expect("chat list response");

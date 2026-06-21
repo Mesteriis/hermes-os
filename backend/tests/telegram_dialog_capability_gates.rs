@@ -27,6 +27,7 @@ async fn fixture_account_blocks_dialog_actions_before_side_effects() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -35,7 +36,7 @@ async fn fixture_account_blocks_dialog_actions_before_side_effects() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -48,7 +49,7 @@ async fn fixture_account_blocks_dialog_actions_before_side_effects() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -69,7 +70,7 @@ async fn fixture_account_blocks_dialog_actions_before_side_effects() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
+                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -283,7 +284,7 @@ where
 {
     let response = app
         .oneshot(get_request_with_token(
-            &format!("/api/v1/integrations/telegram/conversations/{telegram_chat_id}"),
+            &format!("/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}"),
             LOCAL_API_TOKEN,
         ))
         .await

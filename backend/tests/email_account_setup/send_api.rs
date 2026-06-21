@@ -18,7 +18,7 @@ use super::support::{
 };
 
 #[tokio::test]
-async fn imap_send_api_sends_via_configured_smtp_against_postgres() {
+async fn imap_send_api_queues_outbox_without_direct_smtp_against_postgres() {
     let ctx = TestContext::new().await;
     let vault_dir = tempdir().expect("vault tempdir");
     let database_url = ctx.connection_string();
@@ -93,56 +93,66 @@ async fn imap_send_api_sends_via_configured_smtp_against_postgres() {
         .expect("send response");
     assert_eq!(send_response.status(), StatusCode::OK);
     let send_body = json_body(send_response).await;
-    assert_eq!(send_body["transport"], "smtp");
-    assert_eq!(send_body["status"], "sent");
+    assert_eq!(send_body["transport"], "outbox");
+    assert_eq!(send_body["status"], "queued");
     assert_eq!(
         send_body["accepted_recipients"],
         json!(["recipient@example.com", "copy@example.com"])
     );
-    let provider_message_id = send_body["message_id"]
-        .as_str()
-        .expect("provider message id");
+    let outbox_id = send_body["outbox_id"].as_str().expect("outbox id");
+    assert_eq!(send_body["message_id"], json!(outbox_id));
     let pool = ctx.pool().clone();
+    let outbox = sqlx::query(
+        "SELECT status, to_participants, cc_participants, bcc_participants, subject
+         FROM communication_outbox
+         WHERE outbox_id = $1",
+    )
+    .bind(outbox_id)
+    .fetch_one(&pool)
+    .await
+    .expect("outbox item");
+    let to_participants: serde_json::Value =
+        outbox.try_get("to_participants").expect("to participants");
+    let cc_participants: serde_json::Value =
+        outbox.try_get("cc_participants").expect("cc participants");
+    let bcc_participants: serde_json::Value = outbox
+        .try_get("bcc_participants")
+        .expect("bcc participants");
+    let outbox_status: String = outbox.try_get("status").expect("outbox status");
+    let outbox_subject: String = outbox.try_get("subject").expect("outbox subject");
+    assert_eq!(outbox_status, "queued");
+    assert_eq!(outbox_subject, "SMTP send test");
+    assert_eq!(to_participants, json!(["recipient@example.com"]));
+    assert_eq!(cc_participants, json!(["copy@example.com"]));
+    assert_eq!(bcc_participants, json!([]));
+
     let link = sqlx::query(
         "SELECT observation_id, metadata
          FROM observation_links
          WHERE domain = 'communications'
-           AND entity_kind = 'provider_send'
+           AND entity_kind = 'outbox_item'
            AND entity_id = $1
-           AND relationship_kind = 'provider_send'
+           AND relationship_kind = 'outbox_status_transition'
          ORDER BY created_at DESC
          LIMIT 1",
     )
-    .bind(provider_message_id)
+    .bind(outbox_id)
     .fetch_one(&pool)
     .await
-    .expect("smtp provider send observation link");
+    .expect("outbox observation link");
     let link_metadata: serde_json::Value = link.try_get("metadata").expect("link metadata");
-    assert_eq!(link_metadata["transport"], "smtp");
-    assert_eq!(link_metadata["status"], "sent");
+    assert_eq!(link_metadata["operation"], "outbox_enqueue");
+    assert_eq!(link_metadata["status"], "queued");
 
     let commands = smtp_server.commands();
-    assert!(commands.iter().any(|line| line == "AUTH LOGIN"));
-    assert!(
-        commands
-            .iter()
-            .any(|line| line == "MAIL FROM:<sender@example.com>")
-    );
-    assert!(
-        commands
-            .iter()
-            .any(|line| line == "RCPT TO:<recipient@example.com>")
-    );
-    assert!(
-        commands
-            .iter()
-            .any(|line| line == "RCPT TO:<copy@example.com>")
-    );
-    assert!(commands.iter().any(|line| line == "DATA"));
+    assert!(commands.iter().all(|line| line != "AUTH LOGIN"));
+    assert!(commands.iter().all(|line| !line.starts_with("MAIL FROM")));
+    assert!(commands.iter().all(|line| !line.starts_with("RCPT TO")));
+    assert!(commands.iter().all(|line| line != "DATA"));
 }
 
 #[tokio::test]
-async fn gmail_send_api_is_explicitly_unsupported_against_postgres() {
+async fn gmail_send_api_queues_outbox_without_direct_gmail_client_against_postgres() {
     let ctx = TestContext::new().await;
     let vault_dir = tempdir().expect("vault tempdir");
     let database_url = ctx.connection_string();
@@ -201,17 +211,15 @@ async fn gmail_send_api_is_explicitly_unsupported_against_postgres() {
         ))
         .await
         .expect("send response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["error"], "invalid_communication_query");
-    assert_eq!(
-        body["message"],
-        "Gmail send is unavailable until OAuth send scopes are configured"
-    );
+    assert_eq!(body["transport"], "outbox");
+    assert_eq!(body["status"], "queued");
+    assert!(body["outbox_id"].as_str().is_some());
 }
 
 #[tokio::test]
-async fn imap_send_api_requires_smtp_password_binding_against_postgres() {
+async fn imap_send_api_queues_without_smtp_password_binding_against_postgres() {
     let ctx = TestContext::new().await;
     let vault_dir = tempdir().expect("vault tempdir");
     let database_url = ctx.connection_string();
@@ -292,9 +300,11 @@ async fn imap_send_api_requires_smtp_password_binding_against_postgres() {
         ))
         .await
         .expect("send response");
-    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["error"], "invalid_communication_query");
+    assert_eq!(body["transport"], "outbox");
+    assert_eq!(body["status"], "queued");
+    assert!(body["outbox_id"].as_str().is_some());
     assert!(
         smtp_server
             .commands()

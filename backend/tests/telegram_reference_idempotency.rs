@@ -27,6 +27,7 @@ async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -35,7 +36,7 @@ async fn telegram_reference_inserts_return_existing_rows_on_conflict() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -150,7 +151,7 @@ async fn create_reference_message(
 ) -> String {
     let response = app
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,

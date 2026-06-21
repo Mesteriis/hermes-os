@@ -189,6 +189,15 @@ pub enum ProviderCommunicationMessagePortError {
 
     #[error(transparent)]
     Sqlx(#[from] sqlx::Error),
+
+    #[error(transparent)]
+    EventStore(#[from] crate::platform::events::EventStoreError),
+
+    #[error(transparent)]
+    EventEnvelope(#[from] crate::platform::events::EventEnvelopeError),
+
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -996,6 +1005,41 @@ pub trait ProviderChannelMessageLookupPort: Send + Sync {
         channel_kinds: &'a [&'a str],
         last_read_at: Option<DateTime<Utc>>,
     ) -> ProviderChannelMessagePortFuture<'a, (i64, i64)>;
+}
+
+pub trait ProviderMessageObservationProjectionPort: Send + Sync {
+    fn record_telegram_message_metadata_observation<'a>(
+        &'a self,
+        message_id: &'a str,
+        metadata: &'a Value,
+    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
+
+    fn record_telegram_message_delivery_observation<'a>(
+        &'a self,
+        message_id: &'a str,
+        delivery_state: &'a str,
+        observed_at: DateTime<Utc>,
+    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
+
+    fn record_telegram_message_content_observation<'a>(
+        &'a self,
+        message_id: &'a str,
+        body_text: &'a str,
+        metadata: &'a Value,
+        observed_at: DateTime<Utc>,
+    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
+
+    fn record_telegram_message_pin_observation<'a>(
+        &'a self,
+        message_id: &'a str,
+        is_pinned: bool,
+        observed_at: DateTime<Utc>,
+    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
+
+    fn record_telegram_attachment_download_observation<'a>(
+        &'a self,
+        update: ProviderAttachmentDownloadStateUpdate<'a>,
+    ) -> ProviderChannelMessagePortFuture<'a, Option<ProviderChannelMessage>>;
 }
 
 pub trait ProviderChannelMessageCommandPort: ProviderChannelMessageLookupPort {

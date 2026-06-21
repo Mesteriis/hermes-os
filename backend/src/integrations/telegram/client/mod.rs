@@ -59,7 +59,7 @@ pub use self::participants::mark_absent_members_from_exhaustive_roster;
 pub(in crate::integrations::telegram) use self::reactions::{
     TelegramReactionMessageRef, sync_provider_reactions,
 };
-pub use self::reactions::{add_reaction, reconcile_reaction_commands_from_provider_message_state};
+pub use self::reactions::{add_reaction, reconcile_reaction_commands_from_provider_reactions};
 pub use self::store::TelegramStore;
 pub use self::vault::TelegramSecretVault;
 pub type ProviderCommunicationMessage = TelegramMessage;

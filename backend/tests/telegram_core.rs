@@ -36,6 +36,7 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -45,7 +46,7 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/accounts/fixture",
+            "/api/v1/integrations/telegram/fixtures/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -63,7 +64,7 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -163,6 +164,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -235,7 +237,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/accounts/fixture",
+            "/api/v1/integrations/telegram/fixtures/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -256,7 +258,7 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -286,7 +288,9 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let chats_response = app
         .clone()
         .oneshot(get_request_with_token(
-            &format!("/api/v1/integrations/telegram/conversations?account_id={account_id}"),
+            &format!(
+                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}"
+            ),
             LOCAL_API_TOKEN,
         ))
         .await

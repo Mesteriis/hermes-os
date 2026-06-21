@@ -4,6 +4,7 @@ mod models;
 mod payload;
 mod projection;
 mod provider_channel_store;
+mod provider_observation_projection;
 mod query_parser;
 mod rows;
 mod search;
@@ -26,6 +27,11 @@ pub use projection::{
     project_raw_email_message_from_blob,
 };
 pub use provider_channel_store::ProviderChannelMessageStore;
+pub use provider_observation_projection::{
+    record_telegram_attachment_download_observation, record_telegram_message_content_observation,
+    record_telegram_message_delivery_observation, record_telegram_message_metadata_observation,
+    record_telegram_message_pin_observation,
+};
 pub(crate) use query_parser::parse_communication_message_search_query;
 pub use search::{
     MessageSearchBoolean, MessageSearchExpression, MessageSearchField, MessageSearchPredicate,

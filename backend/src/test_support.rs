@@ -28,6 +28,7 @@ pub(crate) fn telegram_store(pool: &PgPool) -> TelegramStore {
         Arc::new(communication_provider_account_store(pool)),
         Arc::new(communication_provider_secret_binding_store(pool)),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
+        Arc::new(ProviderChannelMessageStore::new(pool.clone())),
     )
 }
 

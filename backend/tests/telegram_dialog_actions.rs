@@ -29,6 +29,7 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -37,7 +38,7 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -51,7 +52,7 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -79,7 +80,7 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
     let restore_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/integrations/telegram/messages/{message_id}/restore-visibility"),
+            &format!("/api/v1/integrations/telegram/provider-commands/messages/{message_id}/restore-visibility"),
             json!({
                 "command_id": format!("restore-{suffix}"),
                 "account_id": account_id,
@@ -96,7 +97,7 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
     let add_reaction_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/integrations/telegram/messages/{message_id}/reactions"),
+            &format!("/api/v1/integrations/telegram/provider-messages/{message_id}/reactions"),
             json!({
                 "command_id": format!("react-{suffix}"),
                 "account_id": account_id,
@@ -116,7 +117,7 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
         .clone()
         .oneshot(delete_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/messages/{message_id}/reactions?account_id={account_id}&provider_chat_id={chat_id}&provider_message_id={provider_message_id}&reaction_emoji=%F0%9F%91%8D&sender_id=owner&sender_display_name=Owner&command_id=unreact-{suffix}"
+                "/api/v1/integrations/telegram/provider-messages/{message_id}/reactions?account_id={account_id}&provider_chat_id={chat_id}&provider_message_id={provider_message_id}&reaction_emoji=%F0%9F%91%8D&sender_id=owner&sender_display_name=Owner&command_id=unreact-{suffix}"
             ),
             LOCAL_API_TOKEN,
         ))

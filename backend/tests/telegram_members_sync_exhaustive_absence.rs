@@ -22,6 +22,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -31,7 +32,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
 
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",
@@ -44,7 +45,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": "acct-1",
             "provider_chat_id": "provider-chat-1",
@@ -64,7 +65,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
     let response = app
         .clone()
         .oneshot(get(
-            "/api/v1/integrations/telegram/conversations?account_id=acct-1&limit=10",
+            "/api/v1/integrations/telegram/provider-conversations?account_id=acct-1&limit=10",
         ))
         .await
         .expect("chat list response");
@@ -94,7 +95,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
     let members_before = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/conversations/{telegram_chat_id}/members?limit=10"
+            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("members before response");
@@ -113,7 +114,7 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
     let members_after = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/conversations/{telegram_chat_id}/members?limit=10"
+            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("members after response");

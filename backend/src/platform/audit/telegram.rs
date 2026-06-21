@@ -120,7 +120,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.message.send",
             "POST",
-            "/api/v1/integrations/telegram/messages/send",
+            "/api/v1/integrations/telegram/provider-commands/messages/send",
             "telegram_message",
             Some(message_id.into()),
             metadata,
@@ -326,7 +326,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.message.edit",
             "POST",
-            "/api/v1/integrations/telegram/messages/{message_id}/edit",
+            "/api/v1/communications/messages/{message_id}/edit",
             "telegram_message",
             Some(message_id.into()),
             metadata,
@@ -355,7 +355,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.message.delete",
             "POST",
-            "/api/v1/integrations/telegram/messages/{message_id}/delete",
+            "/api/v1/communications/messages/{message_id}/delete",
             "telegram_message",
             Some(message_id.into()),
             metadata,
@@ -384,7 +384,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.topic.create",
             "POST",
-            "/api/v1/integrations/telegram/conversations/{telegram_chat_id}/topics",
+            "/api/v1/communications/conversations/{telegram_chat_id}/topics",
             "telegram_chat",
             Some(telegram_chat_id.into()),
             metadata,
@@ -420,7 +420,7 @@ impl NewApiAuditRecord {
             actor_id,
             capability,
             "POST",
-            "/api/v1/integrations/telegram/topics/{topic_id}/close",
+            "/api/v1/communications/topics/{topic_id}/close",
             "telegram_topic",
             Some(topic_id.into()),
             metadata,
@@ -449,7 +449,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.message.restore_visibility",
             "POST",
-            "/api/v1/integrations/telegram/messages/{message_id}/restore-visibility",
+            "/api/v1/communications/messages/{message_id}/restore-visibility",
             "telegram_message",
             Some(message_id.into()),
             metadata,
@@ -488,7 +488,7 @@ impl NewApiAuditRecord {
                 "telegram.message.unpin"
             },
             "POST",
-            "/api/v1/integrations/telegram/messages/{message_id}/pin",
+            "/api/v1/communications/messages/{message_id}/pin",
             "telegram_message",
             Some(message_id.into()),
             metadata,
@@ -523,7 +523,7 @@ impl NewApiAuditRecord {
             actor_id,
             "telegram.message.mark_read",
             "POST",
-            "/api/v1/integrations/telegram/messages/{message_id}/mark-read",
+            "/api/v1/communications/messages/{message_id}/mark-read",
             "telegram_message",
             Some(message_id.into()),
             metadata,
@@ -543,7 +543,7 @@ impl NewApiAuditRecord {
         } else {
             "telegram.message.unreact"
         };
-        let path_template = "/api/v1/integrations/telegram/messages/{message_id}/reactions";
+        let path_template = "/api/v1/communications/messages/{message_id}/reactions";
         let mut metadata = CapabilityDecision::explicit_user_allowed(
             CapabilityActionClass::LocalWrite,
             capability,

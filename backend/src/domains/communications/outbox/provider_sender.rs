@@ -20,14 +20,14 @@ use super::{
 };
 
 #[derive(Clone)]
-pub struct ProviderOutboxEmailSender<R, T, G> {
+pub struct CommunicationOutboxEmailSender<R, T, G> {
     provider_account_store: CommunicationProviderAccountStore,
     provider_secret_binding_store: CommunicationProviderSecretBindingStore,
     smtp_sender: SmtpOutboxEmailSender<R, T>,
     gmail_transport: G,
 }
 
-impl<R, T, G> ProviderOutboxEmailSender<R, T, G>
+impl<R, T, G> CommunicationOutboxEmailSender<R, T, G>
 where
     R: SecretResolver,
     T: SmtpTransport,
@@ -45,7 +45,7 @@ where
     }
 }
 
-impl<R, T, G> OutboxEmailSender for ProviderOutboxEmailSender<R, T, G>
+impl<R, T, G> OutboxEmailSender for CommunicationOutboxEmailSender<R, T, G>
 where
     R: SecretResolver + Send + Sync,
     T: SmtpTransport,
@@ -77,7 +77,7 @@ where
     }
 }
 
-impl<R, T, G> ProviderOutboxEmailSender<R, T, G>
+impl<R, T, G> CommunicationOutboxEmailSender<R, T, G>
 where
     R: SecretResolver,
     T: SmtpTransport,

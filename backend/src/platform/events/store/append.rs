@@ -13,6 +13,17 @@ impl EventStore {
         Ok(position)
     }
 
+    pub async fn append_idempotent(
+        &self,
+        event: &NewEventEnvelope,
+    ) -> Result<Option<i64>, EventStoreError> {
+        match self.append(event).await {
+            Ok(position) => Ok(Some(position)),
+            Err(error) if error.is_unique_violation() => Ok(None),
+            Err(error) => Err(error),
+        }
+    }
+
     pub async fn append_in_transaction(
         transaction: &mut Transaction<'_, Postgres>,
         event: &NewEventEnvelope,

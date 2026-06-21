@@ -20,11 +20,11 @@ Communications business state remains provider-neutral and lives under:
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v1/integrations/telegram/conversations?account_id=&limit=` | Projected Telegram chat list |
-| GET | `/api/v1/integrations/telegram/conversations/{telegram_chat_id}` | Projected chat detail |
-| GET | `/api/v1/integrations/telegram/conversations/{telegram_chat_id}/members` | Projected member list |
+| GET | `/api/v1/integrations/telegram/provider-conversations?account_id=&limit=` | Projected Telegram chat list |
+| GET | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}` | Projected chat detail |
+| GET | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members` | Projected member list |
 | POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members/sync` | Provider-backed member sync |
-| GET | `/api/v1/integrations/telegram/conversations/{telegram_chat_id}/pinned-messages` | Projected pinned messages |
+| GET | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/pinned-messages` | Projected pinned messages |
 | GET | `/api/v1/integrations/telegram/provider-conversations/search` | Provider-scoped chat search assist |
 | GET | `/api/v1/integrations/telegram/conversation-folders` | Provider folder projection |
 | POST | `/api/v1/integrations/telegram/provider-conversations/join` | Join command |
@@ -47,33 +47,33 @@ Communications business state remains provider-neutral and lives under:
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v1/integrations/telegram/conversations/{telegram_chat_id}/topics` | Topic list |
-| POST | `/api/v1/integrations/telegram/conversations/{telegram_chat_id}/topics` | Create topic command |
-| GET | `/api/v1/integrations/telegram/topics/{topic_id}` | Topic detail |
-| POST | `/api/v1/integrations/telegram/topics/{topic_id}/close` | Close or reopen topic |
-| GET | `/api/v1/integrations/telegram/topics/{topic_id}/messages` | Topic-scoped message list |
-| GET | `/api/v1/integrations/telegram/topics/search` | Topic search |
+| GET | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/topics` | Topic list |
+| POST | `/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/topics` | Create topic command |
+| GET | `/api/v1/integrations/telegram/provider-topics/{topic_id}` | Topic detail |
+| POST | `/api/v1/integrations/telegram/provider-commands/topics/{topic_id}/close` | Close or reopen topic |
+| GET | `/api/v1/integrations/telegram/provider-topics/{topic_id}/messages` | Topic-scoped message list |
+| GET | `/api/v1/integrations/telegram/provider-topics/search` | Topic search |
 
 ## Message Runtime Routes
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/v1/integrations/telegram/messages?account_id=&provider_chat_id=&limit=` | Projected Telegram message list |
-| POST | `/api/v1/integrations/telegram/messages` | Fixture ingest |
-| POST | `/api/v1/integrations/telegram/messages/send` | Manual runtime send |
-| POST | `/api/v1/integrations/telegram/messages/{message_id}/reply` | Runtime reply |
-| POST | `/api/v1/integrations/telegram/messages/{message_id}/forward` | Runtime forward |
-| POST | `/api/v1/integrations/telegram/messages/{message_id}/edit` | Edit command |
-| POST | `/api/v1/integrations/telegram/messages/{message_id}/delete` | Delete command |
-| POST | `/api/v1/integrations/telegram/messages/{message_id}/restore-visibility` | Restore visibility command |
-| POST | `/api/v1/integrations/telegram/messages/{message_id}/pin` | Pin command |
-| POST | `/api/v1/integrations/telegram/messages/{message_id}/mark-read` | Message-level read command |
-| GET | `/api/v1/integrations/telegram/messages/{message_id}/versions` | Version list |
-| GET | `/api/v1/integrations/telegram/messages/{message_id}/tombstones` | Tombstone list |
-| GET | `/api/v1/integrations/telegram/messages/{message_id}/raw` | Sanitized raw evidence |
-| GET | `/api/v1/integrations/telegram/messages/{message_id}/reply-chain` | Reply chain |
-| GET | `/api/v1/integrations/telegram/messages/{message_id}/forward-chain` | Forward chain |
-| GET/POST/DELETE | `/api/v1/integrations/telegram/messages/{message_id}/reactions` | Reaction projection and commands |
+| GET | `/api/v1/integrations/telegram/provider-messages?account_id=&provider_chat_id=&limit=` | Projected Telegram message list |
+| POST | `/api/v1/integrations/telegram/provider-messages` | Fixture ingest |
+| POST | `/api/v1/integrations/telegram/provider-commands/messages/send` | Manual runtime send |
+| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/reply` | Runtime reply |
+| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/forward` | Runtime forward |
+| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/edit` | Edit command |
+| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/delete` | Delete command |
+| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/restore-visibility` | Restore visibility command |
+| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/pin` | Pin command |
+| POST | `/api/v1/integrations/telegram/provider-commands/messages/{message_id}/mark-read` | Message-level read command |
+| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/versions` | Version list |
+| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/tombstones` | Tombstone list |
+| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/raw-evidence` | Sanitized raw evidence |
+| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/reply-chain` | Reply chain |
+| GET | `/api/v1/integrations/telegram/provider-messages/{message_id}/forward-chain` | Forward chain |
+| GET/POST/DELETE | `/api/v1/integrations/telegram/provider-messages/{message_id}/reactions` | Reaction projection and commands |
 
 ## Notes
 

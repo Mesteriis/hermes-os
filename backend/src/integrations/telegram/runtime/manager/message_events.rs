@@ -1,7 +1,6 @@
 use chrono::Utc;
 use serde_json::json;
 
-use crate::application::provider_message_state::observe_telegram_message_pin_state;
 use crate::integrations::telegram::client::lifecycle::{
     reconcile_delete_commands_from_provider_state, reconcile_edit_commands_from_provider_state,
     reconcile_message_pin_commands_from_provider_state, record_provider_delete_observation,
@@ -11,7 +10,7 @@ use crate::integrations::telegram::client::rows::provider_channel_message_to_tel
 use crate::integrations::telegram::client::{
     TelegramReactionMessageRef, TelegramStore, derive_tdlib_chosen_reaction_emojis,
     derive_tdlib_provider_reactions, derive_tdlib_reaction_summary_metadata,
-    reconcile_reaction_commands_from_provider_message_state, sync_provider_reactions,
+    reconcile_reaction_commands_from_provider_reactions, sync_provider_reactions,
 };
 use crate::integrations::telegram::tdjson::{
     TelegramTdlibMessageContentSnapshot, TelegramTdlibMessageDeleteSnapshot,
@@ -336,13 +335,14 @@ pub(super) async fn publish_message_pinned_event(
     };
 
     let observed_at = Utc::now();
-    let updated_message = match observe_telegram_message_pin_state(
-        store.pool().clone(),
-        &message.message_id,
-        snapshot.is_pinned,
-        observed_at,
-    )
-    .await
+    let updated_message = match store
+        .provider_observation_projection()
+        .record_telegram_message_pin_observation(
+            &message.message_id,
+            snapshot.is_pinned,
+            observed_at,
+        )
+        .await
     {
         Ok(Some(message)) => provider_channel_message_to_telegram_message(message),
         Ok(None) => return,
@@ -447,7 +447,7 @@ pub(super) async fn publish_reaction_changed_event(
         }
     };
 
-    let reconciled = match reconcile_reaction_commands_from_provider_message_state(
+    let reconciled = match reconcile_reaction_commands_from_provider_reactions(
         pool,
         account_id,
         &snapshot.provider_chat_id,

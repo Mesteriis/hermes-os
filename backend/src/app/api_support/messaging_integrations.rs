@@ -89,6 +89,7 @@ impl WhatsappCapabilityStatus {
 pub(crate) struct TelegramListQuery {
     pub(crate) account_id: Option<String>,
     pub(crate) provider_chat_id: Option<String>,
+    pub(crate) provider: Option<String>,
     pub(crate) limit: Option<i64>,
 }
 

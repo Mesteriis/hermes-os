@@ -27,6 +27,7 @@ async fn telegram_private_members_sync_uses_tdlib_chat_metadata_and_records_audi
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -48,7 +49,7 @@ async fn telegram_private_members_sync_uses_tdlib_chat_metadata_and_records_audi
 
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -112,7 +113,7 @@ async fn telegram_private_members_sync_uses_tdlib_chat_metadata_and_records_audi
     let members_response = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/conversations/{telegram_chat_id}/members?limit=10"
+            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/members?limit=10"
         )))
         .await
         .expect("members response");
@@ -230,7 +231,7 @@ where
 {
     let response = app
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
+            "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
         )))
         .await
         .expect("chat list response");

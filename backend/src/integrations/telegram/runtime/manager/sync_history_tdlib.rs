@@ -3,7 +3,7 @@ use crate::integrations::telegram::client::participants::{
 };
 use crate::integrations::telegram::client::{
     TelegramError, TelegramStore, derive_tdlib_chosen_reaction_emojis,
-    reconcile_reaction_commands_from_provider_message_state,
+    reconcile_reaction_commands_from_provider_reactions,
 };
 use crate::platform::communications::{
     ProviderAccount, ProviderAccountLookupPort, ProviderSecretBindingLookupPort,
@@ -110,7 +110,7 @@ impl TelegramRuntimeManager {
                 }
             }
             let chosen_reactions = derive_tdlib_chosen_reaction_emojis(&snapshot.raw);
-            let commands = reconcile_reaction_commands_from_provider_message_state(
+            let commands = reconcile_reaction_commands_from_provider_reactions(
                 context.telegram_store.pool(),
                 &context.account.account_id,
                 &snapshot.provider_chat_id,

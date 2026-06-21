@@ -43,7 +43,7 @@ impl From<StoredRawCommunicationRecord> for TelegramRawMessageRecord {
     }
 }
 
-/// GET /api/v1/integrations/telegram/messages/{message_id}/raw
+/// GET /api/v1/communications/messages/{message_id}/raw-evidence
 pub(crate) async fn get_telegram_message_raw(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
@@ -85,17 +85,32 @@ fn redact_secret_material(value: Value) -> Value {
 }
 
 fn is_secret_key(key: &str) -> bool {
+    let normalized = key.to_ascii_lowercase();
     matches!(
-        key.to_ascii_lowercase().as_str(),
+        normalized.as_str(),
         "access_token"
             | "api_hash"
+            | "authorization"
+            | "auth"
             | "bot_token"
             | "client_secret"
+            | "cookie"
+            | "cookies"
+            | "credential"
+            | "credentials"
             | "password"
+            | "private_key"
             | "proxy_password"
+            | "refresh_token"
             | "secret"
+            | "session"
+            | "session_blob"
+            | "session_cookie"
             | "session_encryption_key"
             | "session_key"
             | "token"
-    )
+    ) || normalized.ends_with("_token")
+        || normalized.ends_with("_cookie")
+        || normalized.ends_with("_credentials")
+        || normalized.ends_with("_private_key")
 }

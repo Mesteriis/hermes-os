@@ -5,11 +5,11 @@ use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
 };
 use hermes_hub_backend::integrations::telegram::client::lifecycle;
-use hermes_hub_backend::integrations::telegram::client::reconcile_reaction_commands_from_provider_message_state;
+use hermes_hub_backend::integrations::telegram::client::reconcile_reaction_commands_from_provider_reactions;
 use testkit::context::TestContext;
 
 #[tokio::test]
-async fn telegram_provider_message_state_reconciles_react_and_unreact_commands() {
+async fn telegram_provider_reactions_reconcile_react_and_unreact_commands() {
     let ctx = TestContext::new().await;
     let pool = ctx.pool().clone();
     let account_id = create_telegram_account(&pool, "reaction-reconcile", "telegram:123").await;
@@ -47,7 +47,7 @@ async fn telegram_provider_message_state_reconciles_react_and_unreact_commands()
     )
     .await;
 
-    let reconciled = reconcile_reaction_commands_from_provider_message_state(
+    let reconciled = reconcile_reaction_commands_from_provider_reactions(
         &pool,
         &account_id,
         provider_chat_id,

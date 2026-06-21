@@ -110,6 +110,7 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -118,7 +119,7 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -131,7 +132,7 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": chat_id,

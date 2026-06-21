@@ -4,7 +4,9 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::app::api_support::{TelegramMessageListResponse, api_audit_log, telegram_store};
+use crate::app::api_support::{
+    TelegramMessageListResponse, api_audit_log, telegram_runtime_use_case_context, telegram_store,
+};
 use crate::app::{ApiError, AppState};
 use crate::application::telegram_runtime;
 use crate::integrations::telegram::client::lifecycle;
@@ -79,7 +81,7 @@ fn build_command_event(
     .expect("event envelope must be valid")
 }
 
-/// GET /api/v1/integrations/telegram/conversations/{telegram_chat_id}/topics
+/// GET /api/v1/communications/conversations/{telegram_chat_id}/topics
 ///
 /// Attempts a live TDLib fetch to refresh the topic projection before serving DB rows.
 /// Falls back to the DB projection if TDLib is unavailable or the account is in fixture mode.
@@ -102,10 +104,10 @@ pub(crate) async fn get_telegram_topics(
         })?;
     ensure_telegram_account_operation_allowed(&state, &chat.account_id, "topics.list").await?;
 
-    if let Err(error) = telegram_runtime::refresh_forum_topics(&state, &telegram_chat_id).await {
-        let ApiError::Telegram(error) = error else {
-            return Err(error);
-        };
+    let runtime_context = telegram_runtime_use_case_context(&state)?;
+    if let Err(error) =
+        telegram_runtime::refresh_forum_topics(&runtime_context, &telegram_chat_id).await
+    {
         tracing::debug!(
             error = %error,
             telegram_chat_id = %telegram_chat_id,
@@ -126,7 +128,7 @@ pub(crate) async fn get_telegram_topics(
     }))
 }
 
-/// POST /api/v1/integrations/telegram/conversations/{telegram_chat_id}/topics
+/// POST /api/v1/communications/conversations/{telegram_chat_id}/topics
 pub(crate) async fn post_telegram_topic_create(
     State(state): State<AppState>,
     Path(telegram_chat_id): Path<String>,
@@ -206,7 +208,7 @@ pub(crate) async fn post_telegram_topic_create(
     }))
 }
 
-/// GET /api/v1/integrations/telegram/topics/{topic_id}
+/// GET /api/v1/communications/topics/{topic_id}
 pub(crate) async fn get_telegram_topic_detail(
     State(state): State<AppState>,
     Path(topic_id): Path<String>,
@@ -219,7 +221,7 @@ pub(crate) async fn get_telegram_topic_detail(
     Ok(Json(topic))
 }
 
-/// POST /api/v1/integrations/telegram/topics/{topic_id}/close
+/// POST /api/v1/communications/topics/{topic_id}/close
 pub(crate) async fn post_telegram_topic_close(
     State(state): State<AppState>,
     Path(topic_id): Path<String>,
@@ -308,7 +310,7 @@ pub(crate) async fn post_telegram_topic_close(
     }))
 }
 
-/// GET /api/v1/integrations/telegram/topics/{topic_id}/messages
+/// GET /api/v1/communications/topics/{topic_id}/messages
 /// Returns messages whose metadata.forum_topic_id matches topic_id.
 pub(crate) async fn get_telegram_topic_messages(
     State(state): State<AppState>,
@@ -332,7 +334,7 @@ pub(crate) async fn get_telegram_topic_messages(
     Ok(Json(TelegramMessageListResponse { items }))
 }
 
-/// GET /api/v1/integrations/telegram/topics/search?q=&telegram_chat_id=&limit=
+/// GET /api/v1/communications/topics/search?q=&telegram_chat_id=&limit=
 pub(crate) async fn search_telegram_topics(
     State(state): State<AppState>,
     Query(query): Query<TelegramTopicSearchQuery>,

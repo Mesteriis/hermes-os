@@ -29,7 +29,7 @@ pub use delivery_status::{
     NewOutboxDeliveryStatus, OutboxDeliveryStatus, OutboxDeliveryStatusRecord,
 };
 pub use provider_send_store::{ProviderSendStore, ProviderSendStoreError};
-pub use provider_sender::ProviderOutboxEmailSender;
+pub use provider_sender::CommunicationOutboxEmailSender;
 pub use smtp_sender::{
     SmtpOutboxEmailSender, outgoing_email_from_outbox_item, smtp_config_for_provider_account,
 };

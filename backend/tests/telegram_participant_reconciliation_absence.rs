@@ -23,6 +23,7 @@ async fn telegram_exhaustive_roster_absence_reconciles_self_leave_command() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -33,7 +34,7 @@ async fn telegram_exhaustive_roster_absence_reconciles_self_leave_command() {
 
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",

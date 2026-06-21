@@ -29,6 +29,7 @@ async fn telegram_basic_group_roster_reconciliation_records_observed_source() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -37,7 +38,7 @@ async fn telegram_basic_group_roster_reconciliation_records_observed_source() {
 
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -50,7 +51,7 @@ async fn telegram_basic_group_roster_reconciliation_records_observed_source() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,

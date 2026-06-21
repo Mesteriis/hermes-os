@@ -33,6 +33,7 @@ async fn mark_read_reconciliation_completes_targeted_read_commands_from_chat_rea
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -41,7 +42,7 @@ async fn mark_read_reconciliation_completes_targeted_read_commands_from_chat_rea
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -54,7 +55,7 @@ async fn mark_read_reconciliation_completes_targeted_read_commands_from_chat_rea
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": account_id,
             "provider_chat_id": provider_chat_id,
@@ -75,7 +76,7 @@ async fn mark_read_reconciliation_completes_targeted_read_commands_from_chat_rea
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
+                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -154,6 +155,7 @@ async fn dialog_pin_reconciliation_marks_mismatched_unpin_command_failed() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -162,7 +164,7 @@ async fn dialog_pin_reconciliation_marks_mismatched_unpin_command_failed() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -244,6 +246,7 @@ async fn dialog_archive_reconciliation_marks_mismatched_unarchive_command_failed
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -252,7 +255,7 @@ async fn dialog_archive_reconciliation_marks_mismatched_unarchive_command_failed
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -333,6 +336,7 @@ async fn dialog_mute_reconciliation_marks_mismatched_unmute_command_failed() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -341,7 +345,7 @@ async fn dialog_mute_reconciliation_marks_mismatched_unmute_command_failed() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -424,6 +428,7 @@ async fn dialog_mark_unread_reconciliation_completes_matching_command() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -432,7 +437,7 @@ async fn dialog_mark_unread_reconciliation_completes_matching_command() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -501,6 +506,7 @@ async fn dialog_mark_unread_reconciliation_marks_provider_read_state_as_mismatch
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -509,7 +515,7 @@ async fn dialog_mark_unread_reconciliation_marks_provider_read_state_as_mismatch
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",

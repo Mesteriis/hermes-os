@@ -29,6 +29,7 @@ async fn fixture_account_blocks_reply_and_forward_before_side_effects() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -37,7 +38,7 @@ async fn fixture_account_blocks_reply_and_forward_before_side_effects() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -72,7 +73,9 @@ async fn fixture_account_blocks_reply_and_forward_before_side_effects() {
     let reply_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/integrations/telegram/messages/{root_message_id}/reply"),
+            &format!(
+                "/api/v1/integrations/telegram/provider-commands/messages/{root_message_id}/reply"
+            ),
             json!({
                 "command_id": format!("reply-{suffix}"),
                 "account_id": account_id,
@@ -89,7 +92,9 @@ async fn fixture_account_blocks_reply_and_forward_before_side_effects() {
     let forward_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/integrations/telegram/messages/{root_message_id}/forward"),
+            &format!(
+                "/api/v1/integrations/telegram/provider-commands/messages/{root_message_id}/forward"
+            ),
             json!({
                 "command_id": format!("forward-{suffix}"),
                 "account_id": account_id,
@@ -146,7 +151,7 @@ where
     let response = app
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/messages?account_id={account_id}&provider_chat_id={provider_chat_id}"
+                "/api/v1/integrations/telegram/provider-messages?account_id={account_id}&provider_chat_id={provider_chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))

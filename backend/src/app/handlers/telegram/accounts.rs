@@ -3,7 +3,7 @@ use axum::extract::{Path, Query, State};
 use serde::Deserialize;
 
 use super::helpers::{AUDIT_ACTOR_ID, telegram_api_hash_from_config, telegram_secret_store};
-use crate::app::api_support::{api_audit_log, telegram_store};
+use crate::app::api_support::{api_audit_log, ensure_fixture_routes_enabled, telegram_store};
 use crate::app::{ApiError, AppState};
 use crate::integrations::telegram::client::{
     TelegramAccountLifecycleResponse, TelegramAccountListResponse, TelegramAccountSetupRequest,
@@ -15,6 +15,7 @@ pub(crate) async fn post_telegram_fixture_account(
     State(state): State<AppState>,
     Json(request): Json<TelegramAccountSetupRequest>,
 ) -> Result<Json<TelegramAccountSetupResponse>, ApiError> {
+    ensure_fixture_routes_enabled(&state)?;
     Ok(Json(
         telegram_store(&state)?
             .setup_fixture_account(&request)

@@ -600,6 +600,139 @@ function providerScopedCommunicationRouteFailuresForSource(relativePath, source)
 	return errors;
 }
 
+function integrationBusinessCommunicationRouteFailuresForSource(relativePath, source) {
+	if (!/^backend\/src\/|^frontend\/src\//.test(relativePath)) return [];
+	if (!/\.(?:rs|ts|vue)$/.test(relativePath)) return [];
+	const errors = [];
+	const forbiddenRoutePattern =
+		/\/api\/v1\/integrations\/(telegram|whatsapp)\/(conversations|messages|topics|search|sync)(?=\/|\?|['"`\s])/g;
+	for (const match of source.matchAll(forbiddenRoutePattern)) {
+		errors.push(
+			`${relativePath}: business Communication route "/api/v1/integrations/${match[1]}/${match[2]}" is forbidden; use provider-neutral /api/v1/communications/* or explicit provider-control /api/v1/integrations/${match[1]}/provider-*`
+		);
+	}
+	return errors;
+}
+
+function frontendDomainProviderControlRouteFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('frontend/src/domains/')) return [];
+	const errors = [];
+	const forbiddenRoutePattern =
+		/\/api\/v1\/integrations\/(?:mail|telegram|whatsapp)\/provider-(?:commands|search|media|sync)\b/g;
+	for (const match of source.matchAll(forbiddenRoutePattern)) {
+		errors.push(
+			`${relativePath}: frontend domain code must not call provider-control route "${match[0]}"; normal business UI must use /api/v1/communications/*`
+		);
+	}
+	return errors;
+}
+
+function frontendIntegrationCommunicationBusinessRouteFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('frontend/src/integrations/')) return [];
+	const errors = [];
+	const forbiddenRoutePattern =
+		/\/api\/v1\/communications\/(?:conversations|messages|search|topics)(?=\/|\?|['"`\s])/g;
+	for (const match of source.matchAll(forbiddenRoutePattern)) {
+		errors.push(
+			`${relativePath}: frontend integration code must not read Communication business route "${match[0]}"; pass business data through app/shared composition`
+		);
+	}
+	return errors;
+}
+
+function applicationAppImportFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('backend/src/application/')) return [];
+	const errors = [];
+	if (/\buse\s+crate::app::|\bcrate::app::/.test(source)) {
+		errors.push(
+			`${relativePath}: application services must not import crate::app; pass explicit dependencies and map application errors in app handlers`
+		);
+	}
+	return errors;
+}
+
+function providerClientLeakFailuresForSource(relativePath, source) {
+	if (
+		!relativePath.startsWith('backend/src/app/') &&
+		!relativePath.startsWith('backend/src/application/') &&
+		!relativePath.startsWith('backend/src/domains/')
+	) {
+		return [];
+	}
+	const errors = [];
+	const forbiddenProviderRuntimePattern =
+		/\b(?:SmtpClient|GmailApiClient|TdJson|TelegramRuntimeOperationContext|WhatsApp[A-Za-z0-9_]*Runtime|LiveSmtpTransport|LiveGmailOutboxTransport|ProviderOutboxEmailSender)\b/g;
+	for (const match of source.matchAll(forbiddenProviderRuntimePattern)) {
+		errors.push(
+			`${relativePath}: app/application/domain code must not construct or depend on provider runtime/client symbol "${match[0]}"; use application ports, provider commands, or integration workers`
+		);
+	}
+	return errors;
+}
+
+function integrationBusinessMutationBridgeFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('backend/src/integrations/')) return [];
+	const errors = [];
+	const forbiddenMutationBridgePattern =
+		/\b(?:provider_message_state|ProviderChannelMessageCommandPort|apply_metadata|set_delivery_state|apply_content_update|apply_pinned_state|update_attachment_download_state)\b/g;
+	for (const match of source.matchAll(forbiddenMutationBridgePattern)) {
+		errors.push(
+			`${relativePath}: integrations must publish immutable provider observations, not call Communication business mutation bridge "${match[0]}"`
+		);
+	}
+	return errors;
+}
+
+function applicationProviderMessageStateFailuresForSource(relativePath, source) {
+	if (!relativePath.startsWith('backend/src/application/')) return [];
+	const errors = [];
+	const forbiddenProviderStatePattern =
+		/\b(?:provider_message_state|ProviderChannelMessageCommandPort|apply_metadata|set_delivery_state|apply_content_update|apply_pinned_state|update_attachment_download_state)\b/g;
+	for (const match of source.matchAll(forbiddenProviderStatePattern)) {
+		errors.push(
+			`${relativePath}: provider message state mutation bridge "${match[0]}" is forbidden; project provider observation events from application/workflow side`
+		);
+	}
+	return errors;
+}
+
+function appRouterBootstrapLeakFailuresForSource(relativePath, source) {
+	if (relativePath !== 'backend/src/app/router.rs') return [];
+	const errors = [];
+	const forbiddenBootstrapPattern =
+		/\b(?:spawn_mail_background_sync_scheduler|spawn_mail_outbox_delivery_scheduler|spawn_telegram_command_executor|ProviderOutboxEmailSender|LiveSmtpTransport|LiveGmailOutboxTransport|execute_queued_commands)\b/g;
+	for (const match of source.matchAll(forbiddenBootstrapPattern)) {
+		errors.push(
+			`${relativePath}: app router must not own provider/background orchestration symbol "${match[0]}"; move construction to application bootstrap`
+		);
+	}
+	return errors;
+}
+
+function fixtureRouteFailuresForSource(relativePath, source) {
+	if (!/^backend\/src\/app\/(?:router\/routes\/messaging\.rs|handlers\/(?:telegram\/(?:accounts|messages)\.rs|whatsapp\.rs))$/.test(relativePath)) {
+		return [];
+	}
+	const errors = [];
+	const legacyFixtureRoutePattern =
+		/\/api\/v1\/integrations\/(telegram|whatsapp)\/(?:accounts\/fixture|messages)(?=\/|\?|['"`\s])/g;
+	for (const match of source.matchAll(legacyFixtureRoutePattern)) {
+		errors.push(
+			`${relativePath}: fixture routes for ${match[1]} must live under /api/v1/integrations/${match[1]}/fixtures/* and be gated to dev/test/local mode`
+		);
+	}
+	if (
+		relativePath.startsWith('backend/src/app/handlers/') &&
+		/\bpost_(?:telegram|whatsapp)_fixture_/.test(source) &&
+		!/\bensure_fixture_routes_enabled\s*\(/.test(source)
+	) {
+		errors.push(
+			`${relativePath}: fixture handlers must call ensure_fixture_routes_enabled before writing fixture provider state`
+		);
+	}
+	return errors;
+}
+
 function canonicalEvidenceBoundaryFailures(trackedFiles, existingDirs = new Set()) {
 	const errors = [];
 	const rejectedFiles = new Set();
@@ -1706,11 +1839,51 @@ async function checkLayerBoundaries() {
 				message
 			}))
 		);
+		backendViolations.push(...integrationBusinessCommunicationRouteFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		backendViolations.push(...applicationAppImportFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		backendViolations.push(...providerClientLeakFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		backendViolations.push(...integrationBusinessMutationBridgeFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		backendViolations.push(...applicationProviderMessageStateFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		backendViolations.push(...appRouterBootstrapLeakFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		backendViolations.push(...fixtureRouteFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
 	}
 
 	for (const file of frontendFiles) {
 		const source = await readFile(path.join(repoRoot, file), 'utf8');
 		frontendViolations.push(...frontendBoundaryViolations(file, source));
+		frontendViolations.push(...integrationBusinessCommunicationRouteFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		frontendViolations.push(...frontendDomainProviderControlRouteFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
+		frontendViolations.push(...frontendIntegrationCommunicationBusinessRouteFailuresForSource(file, source).map((message) => ({
+			file,
+			message
+		})));
 	}
 
 	failures.push(...backendViolations.map((violation) => violation.message));
@@ -1994,6 +2167,97 @@ function runSelfTests() {
 		providerScopedCommunicationRouteFailuresForSource(
 			'backend/src/app/router/routes/messaging.rs',
 			'"/api/v1/integrations/telegram/runtime/status"'
+		).length === 0
+	);
+	assertSelfTest(
+		'integration business conversations route fails',
+		integrationBusinessCommunicationRouteFailuresForSource(
+			'backend/src/app/router/routes/messaging.rs',
+			'"/api/v1/integrations/telegram/conversations/{telegram_chat_id}"'
+		).length === 1
+	);
+	assertSelfTest(
+		'integration provider-control route passes',
+		integrationBusinessCommunicationRouteFailuresForSource(
+			'backend/src/app/router/routes/messaging.rs',
+			'"/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/pin"'
+		).length === 0
+	);
+	assertSelfTest(
+		'frontend domain provider-control route fails',
+		frontendDomainProviderControlRouteFailuresForSource(
+			'frontend/src/domains/communications/api/providerCommands.ts',
+			"apiFetch('/api/v1/integrations/telegram/provider-commands/send')"
+		).length === 1
+	);
+	assertSelfTest(
+		'frontend integration business route fails',
+		frontendIntegrationCommunicationBusinessRouteFailuresForSource(
+			'frontend/src/integrations/telegram/api/messages.ts',
+			"apiFetch('/api/v1/communications/messages/msg-1/versions')"
+		).length === 1
+	);
+	assertSelfTest(
+		'application importing app fails',
+		applicationAppImportFailuresForSource(
+			'backend/src/application/telegram_runtime.rs',
+			'use crate::app::{ApiError, AppState};'
+		).length === 1
+	);
+	assertSelfTest(
+		'provider client leaks fail in app/application/domain',
+		providerClientLeakFailuresForSource(
+			'backend/src/application/communication_send.rs',
+			'let client = SmtpClient::new();'
+		).length === 1
+	);
+	assertSelfTest(
+		'provider client symbols pass inside integrations',
+		providerClientLeakFailuresForSource(
+			'backend/src/integrations/mail/send.rs',
+			'let client = SmtpClient::new();'
+		).length === 0
+	);
+	assertSelfTest(
+		'integration provider message state bridge fails',
+		integrationBusinessMutationBridgeFailuresForSource(
+			'backend/src/integrations/telegram/runtime/manager/message_events.rs',
+			'use crate::application::provider_message_state::observe_telegram_message_pin_state;'
+		).length === 1
+	);
+	assertSelfTest(
+		'application provider message state bridge fails',
+		applicationProviderMessageStateFailuresForSource(
+			'backend/src/application/provider_message_state.rs',
+			'ProviderChannelMessageStore::new(pool).apply_metadata(message_id, metadata, context).await'
+		).length === 1
+	);
+	assertSelfTest(
+		'app router bootstrap orchestration fails',
+		appRouterBootstrapLeakFailuresForSource(
+			'backend/src/app/router.rs',
+			'spawn_mail_outbox_delivery_scheduler(&state);'
+		).length === 1
+	);
+	assertSelfTest(
+		'legacy fixture route fails',
+		fixtureRouteFailuresForSource(
+			'backend/src/app/router/routes/messaging.rs',
+			'"/api/v1/integrations/telegram/accounts/fixture"'
+		).length === 1
+	);
+	assertSelfTest(
+		'ungated fixture handler fails',
+		fixtureRouteFailuresForSource(
+			'backend/src/app/handlers/telegram/messages.rs',
+			'pub(crate) async fn post_telegram_fixture_message() { store.ingest_fixture_message(&request).await?; }'
+		).length === 1
+	);
+	assertSelfTest(
+		'gated fixture handler passes',
+		fixtureRouteFailuresForSource(
+			'backend/src/app/handlers/telegram/messages.rs',
+			'pub(crate) async fn post_telegram_fixture_message() { ensure_fixture_routes_enabled(&state)?; store.ingest_fixture_message(&request).await?; }'
 		).length === 0
 	);
 	assertSelfTest(

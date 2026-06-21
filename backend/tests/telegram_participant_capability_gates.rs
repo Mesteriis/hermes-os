@@ -21,6 +21,7 @@ async fn fixture_account_blocks_members_sync_before_audit_or_events() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -29,7 +30,7 @@ async fn fixture_account_blocks_members_sync_before_audit_or_events() {
 
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",
@@ -42,7 +43,7 @@ async fn fixture_account_blocks_members_sync_before_audit_or_events() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": "acct-1",
             "provider_chat_id": "provider-chat-1",
@@ -103,6 +104,7 @@ async fn fixture_account_blocks_join_and_leave_before_command_enqueue() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -111,7 +113,7 @@ async fn fixture_account_blocks_join_and_leave_before_command_enqueue() {
 
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",
@@ -124,7 +126,7 @@ async fn fixture_account_blocks_join_and_leave_before_command_enqueue() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": "acct-1",
             "provider_chat_id": "provider-chat-1",
@@ -187,7 +189,7 @@ where
 {
     let response = app
         .oneshot(get(
-            "/api/v1/integrations/telegram/conversations?account_id=acct-1&limit=10",
+            "/api/v1/integrations/telegram/provider-conversations?account_id=acct-1&limit=10",
         ))
         .await
         .expect("chat list response");

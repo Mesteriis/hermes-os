@@ -39,7 +39,7 @@ export async function editTelegramMessage(params: {
     new_text: params.new_text,
   }
   return ApiClient.instance.post<TelegramLifecycleResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(params.message_id)}/edit`,
+    `/api/v1/integrations/telegram/provider-commands/messages/${encodeURIComponent(params.message_id)}/edit`,
     request,
     'Telegram message edit failed'
   )
@@ -63,7 +63,7 @@ export async function deleteTelegramMessage(params: {
     is_provider_delete: params.is_provider_delete ?? false,
   }
   return ApiClient.instance.post<TelegramLifecycleResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(params.message_id)}/delete`,
+    `/api/v1/integrations/telegram/provider-commands/messages/${encodeURIComponent(params.message_id)}/delete`,
     request,
     'Telegram message delete failed'
   )
@@ -84,7 +84,7 @@ export async function restoreTelegramMessageVisibility(params: {
     reason: params.reason ?? 'manual_restore',
   }
   return ApiClient.instance.post<TelegramLifecycleResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(params.message_id)}/restore-visibility`,
+    `/api/v1/integrations/telegram/provider-commands/messages/${encodeURIComponent(params.message_id)}/restore-visibility`,
     request,
     'Telegram message restore failed'
   )
@@ -105,7 +105,7 @@ export async function pinTelegramMessage(params: {
     is_pinned: params.is_pinned,
   }
   return ApiClient.instance.post<TelegramLifecycleResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(params.message_id)}/pin`,
+    `/api/v1/integrations/telegram/provider-commands/messages/${encodeURIComponent(params.message_id)}/pin`,
     request,
     'Telegram message pin failed'
   )
@@ -117,7 +117,7 @@ export async function markTelegramMessageRead(params: {
   provider_chat_id: string
 }): Promise<TelegramChatActionResponse> {
   return ApiClient.instance.post<TelegramChatActionResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(params.message_id)}/mark-read`,
+    `/api/v1/integrations/telegram/provider-commands/messages/${encodeURIComponent(params.message_id)}/mark-read`,
     {
       account_id: params.account_id,
       provider_chat_id: params.provider_chat_id,
@@ -130,7 +130,7 @@ export async function fetchTelegramMessageVersions(
   messageId: string
 ): Promise<TelegramMessageVersionListResponse> {
   return ApiClient.instance.get<TelegramMessageVersionListResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(messageId)}/versions`,
+    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/versions`,
     'Telegram message versions request failed'
   )
 }
@@ -139,7 +139,7 @@ export async function fetchTelegramMessageTombstones(
   messageId: string
 ): Promise<TelegramMessageTombstoneListResponse> {
   return ApiClient.instance.get<TelegramMessageTombstoneListResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(messageId)}/tombstones`,
+    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/tombstones`,
     'Telegram message tombstones request failed'
   )
 }
@@ -186,7 +186,7 @@ export async function fetchTelegramReplyChain(
   messageId: string
 ): Promise<TelegramReplyChainResponse> {
   return ApiClient.instance.get<TelegramReplyChainResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(messageId)}/reply-chain`,
+    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/reply-chain`,
     'Telegram reply chain request failed'
   )
 }
@@ -195,7 +195,7 @@ export async function fetchTelegramForwardChain(
   messageId: string
 ): Promise<TelegramForwardChainResponse> {
   return ApiClient.instance.get<TelegramForwardChainResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(messageId)}/forward-chain`,
+    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/forward-chain`,
     'Telegram forward chain request failed'
   )
 }
@@ -209,7 +209,7 @@ export async function addTelegramReaction(
     command_id: request.command_id ?? newCommandId()
   }
   return ApiClient.instance.post<TelegramReactionResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(messageId)}/reactions`,
+    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/reactions`,
     payload,
     'Telegram reaction add failed'
   )
@@ -232,7 +232,7 @@ export async function removeTelegramReaction(
     params.set('sender_display_name', request.sender_display_name)
   }
   return ApiClient.instance.delete<TelegramReactionResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(messageId)}/reactions?${params.toString()}`,
+    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/reactions?${params.toString()}`,
     'Telegram reaction remove failed'
   )
 }
@@ -241,7 +241,7 @@ export async function fetchTelegramReactions(
   messageId: string
 ): Promise<TelegramReactionListResponse> {
   return ApiClient.instance.get<TelegramReactionListResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(messageId)}/reactions`,
+    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/reactions`,
     'Telegram reactions request failed'
   )
 }
@@ -261,7 +261,7 @@ export async function replyToTelegramMessage(params: {
     text: params.text,
   }
   return ApiClient.instance.post<TelegramManualSendResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(params.message_id)}/reply`,
+    `/api/v1/integrations/telegram/provider-commands/messages/${encodeURIComponent(params.message_id)}/reply`,
     request,
     'Telegram message reply failed'
   )
@@ -282,7 +282,7 @@ export async function forwardTelegramMessage(params: {
     from_provider_message_id: params.from_provider_message_id,
   }
   return ApiClient.instance.post<TelegramManualSendResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(params.message_id)}/forward`,
+    `/api/v1/integrations/telegram/provider-commands/messages/${encodeURIComponent(params.message_id)}/forward`,
     request,
     'Telegram message forward failed'
   )

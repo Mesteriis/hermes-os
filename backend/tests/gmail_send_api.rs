@@ -5,8 +5,6 @@ use std::thread;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
-use base64::Engine as _;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::{Value, json};
 use sqlx::Row;
 use tempfile::tempdir;
@@ -28,7 +26,7 @@ use testkit::context::TestContext;
 const LOCAL_API_TOKEN: &str = "gmail-send-api-test-token";
 
 #[tokio::test]
-async fn gmail_send_api_uses_gmail_api_when_send_scope_enabled_against_postgres() {
+async fn gmail_send_api_queues_outbox_when_send_scope_enabled_against_postgres() {
     let ctx = TestContext::new().await;
     let vault_dir = tempdir().expect("vault tempdir");
     let database_url = ctx.connection_string();
@@ -139,54 +137,52 @@ async fn gmail_send_api_uses_gmail_api_when_send_scope_enabled_against_postgres(
         .expect("send response");
     assert_eq!(response.status(), StatusCode::OK);
     let body = json_body(response).await;
-    assert_eq!(body["transport"], "gmail");
-    assert_eq!(body["status"], "sent");
-    assert_eq!(body["message_id"], "gmail-api-message-id");
+    assert_eq!(body["transport"], "outbox");
+    assert_eq!(body["status"], "queued");
     assert_eq!(
         body["accepted_recipients"],
         json!(["recipient@example.com", "copy@example.com"])
     );
-    let provider_message_id = body["message_id"].as_str().expect("provider message id");
+    let outbox_id = body["outbox_id"].as_str().expect("outbox id");
+    assert_eq!(body["message_id"], json!(outbox_id));
+    let outbox = sqlx::query(
+        "SELECT status, to_participants, cc_participants, subject
+         FROM communication_outbox
+         WHERE outbox_id = $1",
+    )
+    .bind(outbox_id)
+    .fetch_one(&pool)
+    .await
+    .expect("gmail outbox item");
+    let status: String = outbox.try_get("status").expect("outbox status");
+    let subject: String = outbox.try_get("subject").expect("outbox subject");
+    let to_participants: Value = outbox.try_get("to_participants").expect("to participants");
+    let cc_participants: Value = outbox.try_get("cc_participants").expect("cc participants");
+    assert_eq!(status, "queued");
+    assert_eq!(subject, "Gmail API send");
+    assert_eq!(to_participants, json!(["recipient@example.com"]));
+    assert_eq!(cc_participants, json!(["copy@example.com"]));
+
     let link = sqlx::query(
         "SELECT observation_id, metadata
          FROM observation_links
          WHERE domain = 'communications'
-           AND entity_kind = 'provider_send'
+           AND entity_kind = 'outbox_item'
            AND entity_id = $1
-           AND relationship_kind = 'provider_send'
+           AND relationship_kind = 'outbox_status_transition'
          ORDER BY created_at DESC
          LIMIT 1",
     )
-    .bind(provider_message_id)
+    .bind(outbox_id)
     .fetch_one(&pool)
     .await
-    .expect("gmail provider send observation link");
+    .expect("gmail outbox observation link");
     let link_metadata: Value = link.try_get("metadata").expect("link metadata");
-    assert_eq!(link_metadata["transport"], "gmail");
-    assert_eq!(link_metadata["status"], "sent");
+    assert_eq!(link_metadata["operation"], "outbox_enqueue");
+    assert_eq!(link_metadata["status"], "queued");
 
     let requests = gmail_api.requests();
-    assert_eq!(requests.len(), 1);
-    assert!(
-        requests[0]
-            .request_line
-            .starts_with("POST /gmail/v1/users/me/messages/send ")
-    );
-    assert_eq!(
-        requests[0].header("authorization").as_deref(),
-        Some("Bearer gmail-access-token")
-    );
-    let request_body: Value =
-        serde_json::from_str(&requests[0].body).expect("gmail API request json");
-    let raw = request_body["raw"].as_str().expect("raw rfc2822 payload");
-    let decoded = URL_SAFE_NO_PAD
-        .decode(raw.as_bytes())
-        .expect("decode raw rfc2822");
-    let decoded = String::from_utf8(decoded).expect("utf8 rfc2822");
-    assert!(decoded.contains("To: recipient@example.com"));
-    assert!(decoded.contains("Cc: copy@example.com"));
-    assert!(decoded.contains("Subject: Gmail API send"));
-    assert!(decoded.contains("Message body through Gmail API."));
+    assert!(requests.is_empty());
 }
 
 fn post(uri: &str, body: Value) -> Request<Body> {
@@ -250,18 +246,7 @@ async fn json_body(response: axum::response::Response) -> Value {
 
 #[derive(Clone, Debug)]
 struct HttpRequest {
-    request_line: String,
-    headers: Vec<(String, String)>,
     body: String,
-}
-
-impl HttpRequest {
-    fn header(&self, name: &str) -> Option<String> {
-        self.headers
-            .iter()
-            .find(|(header_name, _)| header_name.eq_ignore_ascii_case(name))
-            .map(|(_, value)| value.clone())
-    }
 }
 
 struct MockGmailApiServer {
@@ -337,8 +322,6 @@ fn read_http_request(stream: &mut TcpStream) -> HttpRequest {
     reader
         .read_line(&mut request_line)
         .expect("read request line");
-    let request_line = request_line.trim_end().to_owned();
-    let mut headers = Vec::new();
 
     loop {
         let mut line = String::new();
@@ -353,7 +336,6 @@ fn read_http_request(stream: &mut TcpStream) -> HttpRequest {
             if name.eq_ignore_ascii_case("content-length") {
                 content_length = value.parse().expect("content length");
             }
-            headers.push((name, value));
         }
     }
 
@@ -362,8 +344,6 @@ fn read_http_request(stream: &mut TcpStream) -> HttpRequest {
     reader.read_exact(&mut body).expect("read request body");
 
     HttpRequest {
-        request_line,
-        headers,
         body: String::from_utf8(body).expect("utf8 body"),
     }
 }

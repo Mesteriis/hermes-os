@@ -23,6 +23,10 @@ impl SmtpTransport for LiveSmtpTransport {
     }
 }
 
+pub(crate) fn smtp_outbox_transport() -> impl SmtpTransport {
+    LiveSmtpTransport
+}
+
 pub struct SmtpClient;
 
 impl Default for SmtpClient {

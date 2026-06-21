@@ -28,6 +28,7 @@ async fn fixture_account_blocks_message_mark_read_before_side_effects() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -36,7 +37,7 @@ async fn fixture_account_blocks_message_mark_read_before_side_effects() {
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -50,7 +51,7 @@ async fn fixture_account_blocks_message_mark_read_before_side_effects() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,
@@ -79,7 +80,7 @@ async fn fixture_account_blocks_message_mark_read_before_side_effects() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
+                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -97,7 +98,9 @@ async fn fixture_account_blocks_message_mark_read_before_side_effects() {
     let response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            &format!("/api/v1/integrations/telegram/messages/{message_id}/mark-read"),
+            &format!(
+                "/api/v1/integrations/telegram/provider-commands/messages/{message_id}/mark-read"
+            ),
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,

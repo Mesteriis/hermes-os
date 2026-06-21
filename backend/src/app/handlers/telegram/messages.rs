@@ -8,7 +8,9 @@ use super::helpers::{
     telegram_message_snapshot_payload,
 };
 use crate::app::api_support::{
-    TelegramListQuery, TelegramMessageListResponse, api_audit_log, telegram_store,
+    TelegramListQuery, TelegramMessageListResponse, WhatsappWebMessageListResponse, api_audit_log,
+    ensure_fixture_routes_enabled, telegram_runtime_use_case_context, telegram_store,
+    whatsapp_web_store,
 };
 use crate::app::{ApiError, AppState};
 use crate::application::provider_communication_projection::record_and_project_telegram_message;
@@ -117,6 +119,7 @@ pub(crate) async fn post_telegram_fixture_message(
     State(state): State<AppState>,
     Json(request): Json<NewTelegramMessage>,
 ) -> Result<Json<TelegramMessageIngestResult>, ApiError> {
+    ensure_fixture_routes_enabled(&state)?;
     let store = telegram_store(&state)?;
     let observed = store.ingest_fixture_message(&request).await?;
     let Some(pool) = state.database.pool().cloned() else {
@@ -161,7 +164,8 @@ pub(crate) async fn post_telegram_manual_send(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.send_text")
         .await?;
-    let mut response = telegram_runtime::send_manual_message(&state, &request).await?;
+    let runtime_context = telegram_runtime_use_case_context(&state)?;
+    let mut response = telegram_runtime::send_manual_message(&runtime_context, &request).await?;
     project_manual_send_response(&state, &mut response).await?;
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_message_send(
@@ -217,7 +221,8 @@ pub(crate) async fn post_telegram_message_reply(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.reply")
         .await?;
-    let mut response = telegram_runtime::send_reply_message(&state, &request).await?;
+    let runtime_context = telegram_runtime_use_case_context(&state)?;
+    let mut response = telegram_runtime::send_reply_message(&runtime_context, &request).await?;
     project_manual_send_response(&state, &mut response).await?;
 
     api_audit_log(&state)?
@@ -275,7 +280,8 @@ pub(crate) async fn post_telegram_message_forward(
 ) -> Result<Json<TelegramManualSendResponse>, ApiError> {
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "messages.forward")
         .await?;
-    let mut response = telegram_runtime::send_forward_message(&state, &request).await?;
+    let runtime_context = telegram_runtime_use_case_context(&state)?;
+    let mut response = telegram_runtime::send_forward_message(&runtime_context, &request).await?;
     project_manual_send_response(&state, &mut response).await?;
 
     api_audit_log(&state)?
@@ -332,7 +338,31 @@ pub(crate) async fn post_telegram_message_forward(
 pub(crate) async fn get_telegram_messages(
     State(state): State<AppState>,
     Query(query): Query<TelegramListQuery>,
-) -> Result<Json<TelegramMessageListResponse>, ApiError> {
+) -> Result<Json<serde_json::Value>, ApiError> {
+    if matches!(
+        query.provider.as_deref().map(str::trim),
+        Some("whatsapp") | Some("whatsapp_web")
+    ) {
+        let items = whatsapp_web_store(&state)?
+            .recent_messages(
+                query.account_id.as_deref(),
+                query.provider_chat_id.as_deref(),
+                query.limit.unwrap_or(50),
+            )
+            .await?;
+        return Ok(Json(json!(WhatsappWebMessageListResponse { items })));
+    }
+    if let Some(provider) = query.provider.as_deref().map(str::trim)
+        && !provider.is_empty()
+        && provider != "telegram"
+        && provider != "telegram_user"
+        && provider != "telegram_bot"
+    {
+        return Err(ApiError::InvalidCommunicationQuery(
+            "unsupported communications message provider",
+        ));
+    }
+
     let store = telegram_store(&state)?;
     let mut items = store
         .recent_messages(
@@ -362,7 +392,7 @@ pub(crate) async fn get_telegram_messages(
         }
     }
 
-    Ok(Json(TelegramMessageListResponse { items }))
+    Ok(Json(json!(TelegramMessageListResponse { items })))
 }
 
 // ---------------------------------------------------------------------------
@@ -633,7 +663,7 @@ use crate::integrations::telegram::client::models::messages::{
     TelegramForwardChainResponse, TelegramReplyChainResponse,
 };
 
-/// GET /api/v1/integrations/telegram/messages/{message_id}/reply-chain
+/// GET /api/v1/communications/messages/{message_id}/reply-chain
 pub(crate) async fn get_telegram_reply_chain(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
@@ -643,7 +673,7 @@ pub(crate) async fn get_telegram_reply_chain(
     Ok(Json(chain))
 }
 
-/// GET /api/v1/integrations/telegram/messages/{message_id}/forward-chain
+/// GET /api/v1/communications/messages/{message_id}/forward-chain
 pub(crate) async fn get_telegram_forward_chain(
     State(state): State<AppState>,
     Path(message_id): Path<String>,

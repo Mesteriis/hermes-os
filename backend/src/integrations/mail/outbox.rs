@@ -52,3 +52,7 @@ impl GmailOutboxTransport for LiveGmailOutboxTransport {
         })
     }
 }
+
+pub(crate) fn gmail_outbox_transport(pool: PgPool, vault: HostVault) -> impl GmailOutboxTransport {
+    LiveGmailOutboxTransport::new(pool, vault)
+}

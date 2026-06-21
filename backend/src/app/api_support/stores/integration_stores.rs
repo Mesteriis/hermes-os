@@ -16,8 +16,41 @@ pub(crate) fn telegram_store(state: &AppState) -> Result<TelegramStore, ApiError
                 pool.clone(),
             ),
         ),
+        Arc::new(
+            crate::domains::communications::messages::ProviderChannelMessageStore::new(
+                pool.clone(),
+            ),
+        ),
         Arc::new(crate::domains::communications::messages::ProviderChannelMessageStore::new(pool)),
     ))
+}
+
+pub(crate) fn telegram_runtime_use_case_context(
+    state: &AppState,
+) -> Result<crate::application::telegram_runtime::TelegramRuntimeUseCaseContext<'_>, ApiError> {
+    let pool = database_pool(state)?;
+    Ok(
+        crate::application::telegram_runtime::TelegramRuntimeUseCaseContext::new(
+            crate::application::telegram_runtime::TelegramRuntimeUseCaseStores {
+                provider_account_store:
+                    crate::domains::communications::core::CommunicationProviderAccountStore::new(
+                        pool.clone(),
+                    ),
+                provider_secret_binding_store:
+                    crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
+                        pool.clone(),
+                    ),
+                telegram_store: telegram_store(state)?,
+                secret_store: SecretReferenceStore::new(pool),
+            },
+            crate::application::telegram_runtime::TelegramRuntimeUseCaseRuntime {
+                secret_resolver: &state.vault,
+                config: &state.config,
+                event_bus: &state.event_bus,
+                runtime: &state.telegram_runtime,
+            },
+        ),
+    )
 }
 
 pub(crate) fn whatsapp_web_store(state: &AppState) -> Result<WhatsappWebStore, ApiError> {

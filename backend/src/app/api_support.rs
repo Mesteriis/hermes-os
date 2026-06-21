@@ -176,3 +176,10 @@ use crate::platform::storage::{
 use crate::vault::VaultStatus;
 
 use crate::app::{ApiError, AppState};
+
+pub(crate) fn ensure_fixture_routes_enabled(state: &AppState) -> Result<(), ApiError> {
+    if state.config.dev_mode() || cfg!(test) {
+        return Ok(());
+    }
+    Err(ApiError::NotFound)
+}

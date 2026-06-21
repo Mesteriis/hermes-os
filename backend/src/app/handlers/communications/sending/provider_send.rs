@@ -1,5 +1,7 @@
 use super::super::*;
-use crate::application::communication_send::{CommunicationSendRequest, send_email};
+use crate::application::communication_send::{
+    CommunicationSendDependencies, CommunicationSendError, CommunicationSendRequest, send_email,
+};
 
 pub(crate) async fn post_v1_send(
     State(state): State<AppState>,
@@ -9,8 +11,14 @@ pub(crate) async fn post_v1_send(
         return Err(ApiError::ProviderWriteConfirmationRequired);
     }
 
+    let pool = state
+        .database
+        .pool()
+        .ok_or(ApiError::DatabaseNotConfigured)?
+        .clone();
+    let deps = CommunicationSendDependencies::new(pool, api_audit_log(&state)?);
     let result = send_email(
-        &state,
+        &deps,
         CommunicationSendRequest {
             account_id: req.account_id,
             to: req.to,
@@ -26,7 +34,8 @@ pub(crate) async fn post_v1_send(
             undo_send_seconds: req.undo_send_seconds,
         },
     )
-    .await?;
+    .await
+    .map_err(communication_send_api_error)?;
 
     Ok(Json(SendResponse {
         message_id: result.message_id,
@@ -39,4 +48,18 @@ pub(crate) async fn post_v1_send(
         undo_deadline_at: result.undo_deadline_at,
         failure_reason: result.failure_reason,
     }))
+}
+
+fn communication_send_api_error(error: CommunicationSendError) -> ApiError {
+    match error {
+        CommunicationSendError::InvalidRequest(message) => {
+            ApiError::InvalidCommunicationQuery(message)
+        }
+        CommunicationSendError::ProviderAccountNotFound => {
+            ApiError::InvalidCommunicationQuery("provider account was not found")
+        }
+        CommunicationSendError::CommunicationIngestion(inner) => ApiError::from(inner),
+        CommunicationSendError::Command(inner) => ApiError::from(inner),
+        CommunicationSendError::Audit(inner) => ApiError::from(inner),
+    }
 }

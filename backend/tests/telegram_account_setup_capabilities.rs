@@ -347,6 +347,7 @@ async fn telegram_capabilities_report_qr_login_readiness_inputs() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             (
                 "HERMES_TDJSON_PATH",
                 "/tmp/hermes-hub-test-missing-libtdjson.dylib",
@@ -387,6 +388,7 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -395,7 +397,7 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": user_account_id,
             "provider_kind": "telegram_user",
@@ -408,7 +410,7 @@ async fn telegram_account_capabilities_report_account_scope_and_bot_overrides() 
     .await;
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": bot_account_id,
             "provider_kind": "telegram_bot",

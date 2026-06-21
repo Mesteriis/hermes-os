@@ -79,7 +79,7 @@ alongside the existing capability-gated controls.
 
 | Method | Path | Описание |
 |---|---|---|
-| POST | `/api/v1/integrations/telegram/accounts/fixture` | Создать fixture `telegram_user` или `telegram_bot` account metadata |
+| POST | `/api/v1/integrations/telegram/fixtures/accounts` | Создать fixture `telegram_user` или `telegram_bot` account metadata |
 | GET | `/api/v1/integrations/telegram/accounts?include_removed=` | Список Telegram provider accounts |
 | POST | `/api/v1/integrations/telegram/accounts` | Создать live/live-blocked/QR-authorized Telegram account metadata и secret bindings |
 | DELETE | `/api/v1/integrations/telegram/accounts/{account_id}` | Mark account `removed`, stop runtime actor, preserve local evidence |

@@ -68,6 +68,7 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -77,7 +78,7 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/whatsapp/accounts/fixture",
+            "/api/v1/integrations/whatsapp/fixtures/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "whatsapp_web",
@@ -95,7 +96,7 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/whatsapp/messages",
+            "/api/v1/integrations/whatsapp/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -285,6 +286,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -337,7 +339,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/whatsapp/accounts/fixture",
+            "/api/v1/integrations/whatsapp/fixtures/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "whatsapp_web",
@@ -363,7 +365,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/whatsapp/messages",
+            "/api/v1/integrations/whatsapp/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,
@@ -442,7 +444,7 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
         .clone()
         .oneshot(get_request_with_token(
             &format!(
-                "/api/v1/integrations/whatsapp/messages?account_id={account_id}&provider_chat_id={chat_id}"
+                "/api/v1/integrations/whatsapp/provider-messages?account_id={account_id}&provider_chat_id={chat_id}"
             ),
             LOCAL_API_TOKEN,
         ))

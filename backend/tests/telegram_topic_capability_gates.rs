@@ -22,6 +22,7 @@ async fn fixture_account_allows_topic_list_but_blocks_topic_writes() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -30,7 +31,7 @@ async fn fixture_account_allows_topic_list_but_blocks_topic_writes() {
 
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": "acct-1",
             "provider_kind": "telegram_user",
@@ -43,7 +44,7 @@ async fn fixture_account_allows_topic_list_but_blocks_topic_writes() {
     .await;
     post_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": "acct-1",
             "provider_chat_id": "provider-chat-1",
@@ -81,7 +82,7 @@ async fn fixture_account_allows_topic_list_but_blocks_topic_writes() {
     let list_response = app
         .clone()
         .oneshot(get(&format!(
-            "/api/v1/integrations/telegram/conversations/{telegram_chat_id}/topics?limit=10"
+            "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/topics?limit=10"
         )))
         .await
         .expect("topics list response");
@@ -93,7 +94,9 @@ async fn fixture_account_allows_topic_list_but_blocks_topic_writes() {
     let create_response = app
         .clone()
         .oneshot(json_post(
-            &format!("/api/v1/integrations/telegram/conversations/{telegram_chat_id}/topics"),
+            &format!(
+                "/api/v1/integrations/telegram/provider-conversations/{telegram_chat_id}/topics"
+            ),
             json!({
                 "account_id": "acct-1",
                 "provider_chat_id": "provider-chat-1",
@@ -108,7 +111,7 @@ async fn fixture_account_allows_topic_list_but_blocks_topic_writes() {
     let close_response = app
         .clone()
         .oneshot(json_post(
-            "/api/v1/integrations/telegram/topics/topic-1/close",
+            "/api/v1/integrations/telegram/provider-commands/topics/topic-1/close",
             json!({
                 "account_id": "acct-1",
                 "provider_chat_id": "provider-chat-1",
@@ -137,7 +140,7 @@ where
 {
     let response = app
         .oneshot(get(
-            "/api/v1/integrations/telegram/conversations?account_id=acct-1&limit=10",
+            "/api/v1/integrations/telegram/provider-conversations?account_id=acct-1&limit=10",
         ))
         .await
         .expect("chat list response");

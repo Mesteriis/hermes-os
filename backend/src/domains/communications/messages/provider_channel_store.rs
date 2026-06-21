@@ -25,6 +25,10 @@ impl ProviderChannelMessageStore {
         Self { pool }
     }
 
+    pub(super) fn clone_pool(&self) -> PgPool {
+        self.pool.clone()
+    }
+
     pub async fn message_by_id(
         &self,
         message_id: &str,

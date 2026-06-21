@@ -526,6 +526,7 @@ fn telegram_store(pool: &sqlx::PgPool) -> TelegramStore {
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
+        Arc::new(ProviderChannelMessageStore::new(pool.clone())),
     )
 }
 

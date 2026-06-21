@@ -5,7 +5,7 @@ export async function fetchTelegramRawMessageEvidence(
   messageId: string
 ): Promise<TelegramRawMessageResponse> {
   return ApiClient.instance.get<TelegramRawMessageResponse>(
-    `/api/v1/integrations/telegram/messages/${encodeURIComponent(messageId)}/raw`,
+    `/api/v1/integrations/telegram/provider-messages/${encodeURIComponent(messageId)}/raw-evidence`,
     'Telegram raw message evidence request failed'
   )
 }

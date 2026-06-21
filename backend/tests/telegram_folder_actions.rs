@@ -26,6 +26,7 @@ async fn telegram_folder_add_action_records_provider_write_command() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -56,7 +57,7 @@ async fn telegram_folder_add_action_records_provider_write_command() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,
@@ -80,7 +81,7 @@ async fn telegram_folder_add_action_records_provider_write_command() {
         .clone()
         .oneshot(telegram_support::get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
+                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -151,6 +152,7 @@ async fn telegram_folder_remove_action_records_provider_write_command() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -181,7 +183,7 @@ async fn telegram_folder_remove_action_records_provider_write_command() {
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,
@@ -205,7 +207,7 @@ async fn telegram_folder_remove_action_records_provider_write_command() {
         .clone()
         .oneshot(telegram_support::get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
+                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
             ),
             LOCAL_API_TOKEN,
         ))
@@ -277,6 +279,7 @@ async fn telegram_folder_reassign_action_queues_add_and_remove_commands_from_cur
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -307,7 +310,7 @@ async fn telegram_folder_reassign_action_queues_add_and_remove_commands_from_cur
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": provider_chat_id,
@@ -331,7 +334,7 @@ async fn telegram_folder_reassign_action_queues_add_and_remove_commands_from_cur
         .clone()
         .oneshot(telegram_support::get_request_with_token(
             &format!(
-                "/api/v1/integrations/telegram/conversations?account_id={account_id}&limit=10"
+                "/api/v1/integrations/telegram/provider-conversations?account_id={account_id}&limit=10"
             ),
             LOCAL_API_TOKEN,
         ))

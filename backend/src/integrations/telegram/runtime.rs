@@ -18,7 +18,7 @@ pub use self::manager::TelegramRuntimeManager;
 pub(crate) use self::manager::command_executor::execute_queued_commands;
 pub(crate) use self::manager::{
     TelegramMediaDownloadContext, TelegramMemberSyncContext, TelegramRuntimeEventBridgeContext,
-    TelegramRuntimeOperationContext, TelegramRuntimeStartContext,
+    TelegramRuntimeOperationContext, TelegramRuntimeOperationDeps, TelegramRuntimeStartContext,
 };
 pub use self::models::{
     TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncMode,

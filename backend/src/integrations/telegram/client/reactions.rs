@@ -301,7 +301,7 @@ async fn sync_self_provider_reactions(
     Ok(())
 }
 
-pub async fn reconcile_reaction_commands_from_provider_message_state(
+pub async fn reconcile_reaction_commands_from_provider_reactions(
     pool: &PgPool,
     account_id: &str,
     provider_chat_id: &str,

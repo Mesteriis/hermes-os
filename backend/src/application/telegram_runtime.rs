@@ -1,271 +1,223 @@
-use crate::app::api_support::{
-    communication_provider_account_store, communication_provider_secret_binding_store,
-    telegram_store,
+use crate::domains::communications::core::{
+    CommunicationProviderAccountStore, CommunicationProviderSecretBindingStore,
 };
-use crate::app::{ApiError, AppState};
 use crate::integrations::telegram::client::models::messages::{
     TelegramForwardRequest, TelegramManualSendRequest, TelegramManualSendResponse,
     TelegramReplyRequest,
 };
-use crate::integrations::telegram::client::{TelegramChatMember, TelegramError};
+use crate::integrations::telegram::client::{TelegramChatMember, TelegramError, TelegramStore};
 use crate::integrations::telegram::runtime::{
     TelegramChatSyncRequest, TelegramChatSyncResponse, TelegramHistorySyncRequest,
     TelegramHistorySyncResponse, TelegramMediaDownloadContext, TelegramMediaDownloadRequest,
     TelegramMediaDownloadResponse, TelegramMemberSyncContext, TelegramProviderSearchRequest,
-    TelegramRuntimeEventBridgeContext, TelegramRuntimeOperationContext,
+    TelegramRuntimeEventBridgeContext, TelegramRuntimeManager, TelegramRuntimeOperationDeps,
     TelegramRuntimeRestartRequest, TelegramRuntimeStartContext, TelegramRuntimeStartRequest,
     TelegramRuntimeStatus, TelegramRuntimeStopRequest,
 };
+use crate::platform::config::AppConfig;
+use crate::platform::events::EventBus;
 use crate::platform::secrets::SecretReferenceStore;
+use crate::vault::HostVault;
 
-fn telegram_secret_store(state: &AppState) -> Result<SecretReferenceStore, ApiError> {
-    let Some(pool) = state.database.pool() else {
-        return Err(ApiError::DatabaseNotConfigured);
-    };
-    Ok(SecretReferenceStore::new(pool.clone()))
+pub(crate) struct TelegramRuntimeUseCaseContext<'a> {
+    pub(crate) provider_account_store: CommunicationProviderAccountStore,
+    pub(crate) provider_secret_binding_store: CommunicationProviderSecretBindingStore,
+    pub(crate) telegram_store: TelegramStore,
+    pub(crate) secret_store: SecretReferenceStore,
+    pub(crate) secret_resolver: &'a HostVault,
+    pub(crate) config: &'a AppConfig,
+    pub(crate) event_bus: &'a EventBus,
+    pub(crate) runtime: &'a TelegramRuntimeManager,
 }
 
-fn event_bridge_context(state: &AppState) -> TelegramRuntimeEventBridgeContext {
-    TelegramRuntimeEventBridgeContext::new(telegram_store(state).ok(), state.event_bus.clone())
+pub(crate) struct TelegramRuntimeUseCaseStores {
+    pub(crate) provider_account_store: CommunicationProviderAccountStore,
+    pub(crate) provider_secret_binding_store: CommunicationProviderSecretBindingStore,
+    pub(crate) telegram_store: TelegramStore,
+    pub(crate) secret_store: SecretReferenceStore,
+}
+
+pub(crate) struct TelegramRuntimeUseCaseRuntime<'a> {
+    pub(crate) secret_resolver: &'a HostVault,
+    pub(crate) config: &'a AppConfig,
+    pub(crate) event_bus: &'a EventBus,
+    pub(crate) runtime: &'a TelegramRuntimeManager,
+}
+
+impl<'a> TelegramRuntimeUseCaseContext<'a> {
+    pub(crate) fn new(
+        stores: TelegramRuntimeUseCaseStores,
+        runtime: TelegramRuntimeUseCaseRuntime<'a>,
+    ) -> Self {
+        Self {
+            provider_account_store: stores.provider_account_store,
+            provider_secret_binding_store: stores.provider_secret_binding_store,
+            telegram_store: stores.telegram_store,
+            secret_store: stores.secret_store,
+            secret_resolver: runtime.secret_resolver,
+            config: runtime.config,
+            event_bus: runtime.event_bus,
+            runtime: runtime.runtime,
+        }
+    }
+
+    fn event_bridge_context(&self) -> TelegramRuntimeEventBridgeContext {
+        TelegramRuntimeEventBridgeContext::new(
+            Some(self.telegram_store.clone()),
+            self.event_bus.clone(),
+        )
+    }
+
+    fn operation_deps(&self) -> TelegramRuntimeOperationDeps<'_, HostVault> {
+        TelegramRuntimeOperationDeps {
+            provider_account_store: &self.provider_account_store,
+            provider_secret_binding_store: &self.provider_secret_binding_store,
+            telegram_store: &self.telegram_store,
+            secret_store: &self.secret_store,
+            secret_resolver: self.secret_resolver,
+            config: self.config,
+            event_bridge: Some(self.event_bridge_context()),
+        }
+    }
 }
 
 pub(crate) async fn runtime_status(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     account_id: &str,
-) -> Result<TelegramRuntimeStatus, ApiError> {
-    Ok(state
-        .telegram_runtime
-        .status_for_account(
-            &communication_provider_account_store(state)?,
-            &state.config,
-            account_id,
-        )
-        .await?)
+) -> Result<TelegramRuntimeStatus, TelegramError> {
+    context
+        .runtime
+        .status_for_account(&context.provider_account_store, context.config, account_id)
+        .await
 }
 
 pub(crate) async fn start_runtime(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     request: &TelegramRuntimeStartRequest,
-) -> Result<TelegramRuntimeStatus, ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    let context = TelegramRuntimeStartContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bus: &state.event_bus,
+) -> Result<TelegramRuntimeStatus, TelegramError> {
+    let start_context = TelegramRuntimeStartContext {
+        provider_account_store: &context.provider_account_store,
+        provider_secret_binding_store: &context.provider_secret_binding_store,
+        telegram_store: &context.telegram_store,
+        secret_store: &context.secret_store,
+        secret_resolver: context.secret_resolver,
+        config: context.config,
+        event_bus: context.event_bus,
     };
-
-    Ok(state
-        .telegram_runtime
-        .start_account(&context, request)
-        .await?)
+    context.runtime.start_account(&start_context, request).await
 }
 
 pub(crate) async fn stop_runtime(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     request: &TelegramRuntimeStopRequest,
-) -> Result<TelegramRuntimeStatus, ApiError> {
-    Ok(state
-        .telegram_runtime
-        .stop_account_runtime(
-            &communication_provider_account_store(state)?,
-            &state.config,
-            request,
-        )
-        .await?)
+) -> Result<TelegramRuntimeStatus, TelegramError> {
+    context
+        .runtime
+        .stop_account_runtime(&context.provider_account_store, context.config, request)
+        .await
 }
 
 pub(crate) async fn restart_runtime(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     request: &TelegramRuntimeRestartRequest,
-) -> Result<TelegramRuntimeStatus, ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    let context = TelegramRuntimeStartContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bus: &state.event_bus,
+) -> Result<TelegramRuntimeStatus, TelegramError> {
+    let start_context = TelegramRuntimeStartContext {
+        provider_account_store: &context.provider_account_store,
+        provider_secret_binding_store: &context.provider_secret_binding_store,
+        telegram_store: &context.telegram_store,
+        secret_store: &context.secret_store,
+        secret_resolver: context.secret_resolver,
+        config: context.config,
+        event_bus: context.event_bus,
     };
-
-    Ok(state
-        .telegram_runtime
-        .restart_account_runtime(&context, request)
-        .await?)
+    context
+        .runtime
+        .restart_account_runtime(&start_context, request)
+        .await
 }
 
 pub(crate) async fn sync_chat_members(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     telegram_chat_id: &str,
-) -> Result<Vec<TelegramChatMember>, ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    Ok(state
-        .telegram_runtime
+) -> Result<Vec<TelegramChatMember>, TelegramError> {
+    context
+        .runtime
         .sync_chat_members(
             TelegramMemberSyncContext {
-                provider_account_store: &provider_account_store,
-                provider_secret_binding_store: &provider_secret_binding_store,
-                telegram_store: &store,
-                secret_store: &secret_store,
-                secret_resolver: &state.vault,
-                config: &state.config,
-                event_bridge: Some(event_bridge_context(state)),
+                provider_account_store: &context.provider_account_store,
+                provider_secret_binding_store: &context.provider_secret_binding_store,
+                telegram_store: &context.telegram_store,
+                secret_store: &context.secret_store,
+                secret_resolver: context.secret_resolver,
+                config: context.config,
+                event_bridge: Some(context.event_bridge_context()),
             },
             telegram_chat_id,
         )
-        .await?)
+        .await
 }
 
 pub(crate) async fn sync_chats(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     request: &TelegramChatSyncRequest,
-) -> Result<TelegramChatSyncResponse, ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(event_bridge_context(state)),
-    };
-    Ok(state.telegram_runtime.sync_chats(&context, request).await?)
+) -> Result<TelegramChatSyncResponse, TelegramError> {
+    context
+        .runtime
+        .sync_chats_with_deps(context.operation_deps(), request)
+        .await
 }
 
 pub(crate) async fn sync_history(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     request: &TelegramHistorySyncRequest,
-) -> Result<TelegramHistorySyncResponse, ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(event_bridge_context(state)),
-    };
-    Ok(state
-        .telegram_runtime
-        .sync_history(&context, request)
-        .await?)
+) -> Result<TelegramHistorySyncResponse, TelegramError> {
+    context
+        .runtime
+        .sync_history_with_deps(context.operation_deps(), request)
+        .await
 }
 
 pub(crate) async fn send_manual_message(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     request: &TelegramManualSendRequest,
-) -> Result<TelegramManualSendResponse, ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(event_bridge_context(state)),
-    };
-    Ok(state
-        .telegram_runtime
-        .send_manual_message(&context, request)
-        .await?)
+) -> Result<TelegramManualSendResponse, TelegramError> {
+    context
+        .runtime
+        .send_manual_message_with_deps(context.operation_deps(), request)
+        .await
 }
 
 pub(crate) async fn send_reply_message(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     request: &TelegramReplyRequest,
-) -> Result<TelegramManualSendResponse, ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(event_bridge_context(state)),
-    };
-    Ok(state
-        .telegram_runtime
-        .send_reply_message(&context, request)
-        .await?)
+) -> Result<TelegramManualSendResponse, TelegramError> {
+    context
+        .runtime
+        .send_reply_message_with_deps(context.operation_deps(), request)
+        .await
 }
 
 pub(crate) async fn send_forward_message(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     request: &TelegramForwardRequest,
-) -> Result<TelegramManualSendResponse, ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(event_bridge_context(state)),
-    };
-    Ok(state
-        .telegram_runtime
-        .send_forward_message(&context, request)
-        .await?)
+) -> Result<TelegramManualSendResponse, TelegramError> {
+    context
+        .runtime
+        .send_forward_message_with_deps(context.operation_deps(), request)
+        .await
 }
 
 pub(crate) async fn refresh_provider_search(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     account_id: String,
     provider_chat_id: Option<String>,
     query: String,
     limit: i32,
-) -> Result<(), ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(event_bridge_context(state)),
-    };
-    state
-        .telegram_runtime
-        .search_provider_messages(
-            &context,
+) -> Result<(), TelegramError> {
+    context
+        .runtime
+        .search_provider_messages_with_deps(
+            context.operation_deps(),
             &TelegramProviderSearchRequest {
                 account_id,
                 provider_chat_id,
@@ -275,73 +227,36 @@ pub(crate) async fn refresh_provider_search(
         )
         .await
         .map(|_| ())
-        .map_err(ApiError::Telegram)
 }
 
 pub(crate) async fn refresh_forum_topics(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     telegram_chat_id: &str,
-) -> Result<(), ApiError> {
-    let provider_account_store = communication_provider_account_store(state)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)?;
-    let store = telegram_store(state)?;
-    let secret_store = telegram_secret_store(state)?;
-    let context = TelegramRuntimeOperationContext {
-        provider_account_store: &provider_account_store,
-        provider_secret_binding_store: &provider_secret_binding_store,
-        telegram_store: &store,
-        secret_store: &secret_store,
-        secret_resolver: &state.vault,
-        config: &state.config,
-        event_bridge: Some(event_bridge_context(state)),
-    };
-    state
-        .telegram_runtime
-        .sync_forum_topics(&context, telegram_chat_id)
+) -> Result<(), TelegramError> {
+    context
+        .runtime
+        .sync_forum_topics_with_deps(context.operation_deps(), telegram_chat_id)
         .await
         .map(|_| ())
-        .map_err(ApiError::Telegram)
 }
 
 pub(crate) async fn download_media(
-    state: &AppState,
+    context: &TelegramRuntimeUseCaseContext<'_>,
     request: &TelegramMediaDownloadRequest,
-) -> Result<TelegramMediaDownloadResponse, TelegramMediaDownloadApplicationError> {
-    let provider_account_store = communication_provider_account_store(state)
-        .map_err(TelegramMediaDownloadApplicationError::Setup)?;
-    let provider_secret_binding_store = communication_provider_secret_binding_store(state)
-        .map_err(TelegramMediaDownloadApplicationError::Setup)?;
-    let store = telegram_store(state).map_err(TelegramMediaDownloadApplicationError::Setup)?;
-    let secret_store =
-        telegram_secret_store(state).map_err(TelegramMediaDownloadApplicationError::Setup)?;
-    state
-        .telegram_runtime
+) -> Result<TelegramMediaDownloadResponse, TelegramError> {
+    context
+        .runtime
         .download_media(
             TelegramMediaDownloadContext {
-                provider_account_store: &provider_account_store,
-                provider_secret_binding_store: &provider_secret_binding_store,
-                telegram_store: &store,
-                secret_store: &secret_store,
-                secret_resolver: &state.vault,
-                config: &state.config,
-                event_bridge: Some(event_bridge_context(state)),
+                provider_account_store: &context.provider_account_store,
+                provider_secret_binding_store: &context.provider_secret_binding_store,
+                telegram_store: &context.telegram_store,
+                secret_store: &context.secret_store,
+                secret_resolver: context.secret_resolver,
+                config: context.config,
+                event_bridge: Some(context.event_bridge_context()),
             },
             request,
         )
         .await
-        .map_err(TelegramMediaDownloadApplicationError::Runtime)
-}
-
-pub(crate) enum TelegramMediaDownloadApplicationError {
-    Setup(ApiError),
-    Runtime(TelegramError),
-}
-
-impl From<TelegramMediaDownloadApplicationError> for ApiError {
-    fn from(error: TelegramMediaDownloadApplicationError) -> Self {
-        match error {
-            TelegramMediaDownloadApplicationError::Setup(error) => error,
-            TelegramMediaDownloadApplicationError::Runtime(error) => ApiError::Telegram(error),
-        }
-    }
 }

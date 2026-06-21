@@ -7,7 +7,8 @@ use super::helpers::{
     AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
 };
 use crate::app::api_support::{
-    TelegramChatListResponse, TelegramListQuery, api_audit_log, telegram_store,
+    TelegramChatListResponse, TelegramListQuery, api_audit_log, telegram_runtime_use_case_context,
+    telegram_store,
 };
 use crate::app::{ApiError, AppState};
 use crate::application::telegram_runtime;
@@ -163,7 +164,9 @@ pub(crate) async fn post_telegram_chat_members_sync(
     );
     publish_telegram_event(&state, started).await?;
 
-    let items = match telegram_runtime::sync_chat_members(&state, &telegram_chat_id).await {
+    let runtime_context = telegram_runtime_use_case_context(&state)?;
+    let items = match telegram_runtime::sync_chat_members(&runtime_context, &telegram_chat_id).await
+    {
         Ok(items) => items,
         Err(error) => {
             let failed = build_event(
@@ -177,7 +180,7 @@ pub(crate) async fn post_telegram_chat_members_sync(
                 }),
             );
             publish_telegram_event(&state, failed).await?;
-            return Err(error);
+            return Err(error.into());
         }
     };
 
@@ -238,7 +241,8 @@ pub(crate) async fn post_telegram_sync_chats(
     );
     publish_telegram_event(&state, started).await?;
 
-    let response = match telegram_runtime::sync_chats(&state, &request).await {
+    let runtime_context = telegram_runtime_use_case_context(&state)?;
+    let response = match telegram_runtime::sync_chats(&runtime_context, &request).await {
         Ok(response) => response,
         Err(error) => {
             let failed = build_event(
@@ -251,7 +255,7 @@ pub(crate) async fn post_telegram_sync_chats(
                 }),
             );
             publish_telegram_event(&state, failed).await?;
-            return Err(error);
+            return Err(error.into());
         }
     };
 
@@ -298,7 +302,8 @@ pub(crate) async fn post_telegram_sync_history(
     );
     publish_telegram_event(&state, started).await?;
 
-    let response = match telegram_runtime::sync_history(&state, &request).await {
+    let runtime_context = telegram_runtime_use_case_context(&state)?;
+    let response = match telegram_runtime::sync_history(&runtime_context, &request).await {
         Ok(response) => response,
         Err(error) => {
             let failed = build_event(
@@ -313,7 +318,7 @@ pub(crate) async fn post_telegram_sync_history(
                 }),
             );
             publish_telegram_event(&state, failed).await?;
-            return Err(error);
+            return Err(error.into());
         }
     };
 

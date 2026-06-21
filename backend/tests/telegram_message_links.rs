@@ -35,6 +35,7 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -43,7 +44,7 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
 
     assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/accounts/fixture",
+        "/api/v1/integrations/telegram/fixtures/accounts",
         json!({
             "account_id": account_id,
             "provider_kind": "telegram_user",
@@ -72,7 +73,7 @@ async fn telegram_message_ingestion_projects_public_message_link_without_erasing
 
     let result = assert_ok(
         app.clone(),
-        "/api/v1/integrations/telegram/messages",
+        "/api/v1/integrations/telegram/fixtures/messages",
         json!({
             "account_id": account_id.clone(),
             "provider_chat_id": chat_id.clone(),
@@ -180,6 +181,7 @@ fn telegram_store(pool: &sqlx::PgPool) -> TelegramStore {
         pool.clone(),
         Arc::new(CommunicationProviderAccountStore::new(pool.clone())),
         Arc::new(CommunicationProviderSecretBindingStore::new(pool.clone())),
+        Arc::new(ProviderChannelMessageStore::new(pool.clone())),
         Arc::new(ProviderChannelMessageStore::new(pool.clone())),
     )
 }

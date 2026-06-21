@@ -25,6 +25,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -34,7 +35,7 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let account_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/accounts/fixture",
+            "/api/v1/integrations/telegram/fixtures/accounts",
             json!({
                 "account_id": account_id,
                 "provider_kind": "telegram_user",
@@ -201,6 +202,7 @@ async fn telegram_runtime_status_reports_tdlib_diagnostics_for_qr_authorized_use
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
             (
                 "HERMES_TDJSON_PATH",
@@ -281,6 +283,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let app = build_router_with_database(
         AppConfig::from_pairs([
             ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
+            ("HERMES_DEV_MODE", "true"),
             ("DATABASE_URL", database_url.as_str()),
         ])
         .expect("config"),
@@ -294,7 +297,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
         let response = app
             .clone()
             .oneshot(json_post_request_with_actor(
-                "/api/v1/integrations/telegram/accounts/fixture",
+                "/api/v1/integrations/telegram/fixtures/accounts",
                 json!({
                     "account_id": id,
                     "provider_kind": "telegram_user",
@@ -324,7 +327,7 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let message_response = app
         .clone()
         .oneshot(json_post_request_with_actor(
-            "/api/v1/integrations/telegram/messages",
+            "/api/v1/integrations/telegram/fixtures/messages",
             json!({
                 "account_id": account_id,
                 "provider_chat_id": chat_id,

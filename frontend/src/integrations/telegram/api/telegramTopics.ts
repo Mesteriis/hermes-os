@@ -17,7 +17,7 @@ export async function fetchTelegramTopicSearch(
     limit: String(limit),
   })
   return ApiClient.instance.get<TelegramTopicListResponse>(
-    `/api/v1/integrations/telegram/topics/search?${params}`,
+    `/api/v1/integrations/telegram/provider-topics/search?${params}`,
     'Telegram topic search failed'
   )
 }
@@ -27,7 +27,7 @@ export async function createTelegramTopic(
   request: TelegramTopicCreateRequest
 ): Promise<TelegramTopicLifecycleResponse> {
   return ApiClient.instance.post<TelegramTopicLifecycleResponse>(
-    `/api/v1/integrations/telegram/conversations/${encodeURIComponent(telegramChatId)}/topics`,
+    `/api/v1/integrations/telegram/provider-conversations/${encodeURIComponent(telegramChatId)}/topics`,
     request,
     'Telegram topic create failed'
   )
@@ -38,7 +38,7 @@ export async function toggleTelegramTopicClosed(
   request: TelegramTopicCloseRequest
 ): Promise<TelegramTopicLifecycleResponse> {
   return ApiClient.instance.post<TelegramTopicLifecycleResponse>(
-    `/api/v1/integrations/telegram/topics/${encodeURIComponent(topicId)}/close`,
+    `/api/v1/integrations/telegram/provider-commands/topics/${encodeURIComponent(topicId)}/close`,
     request,
     'Telegram topic close failed'
   )
