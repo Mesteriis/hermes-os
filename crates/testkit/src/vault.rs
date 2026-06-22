@@ -51,6 +51,12 @@ impl TestVault {
     }
 }
 
+impl Default for TestVault {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub fn new_test_vault() -> TestVault {
     TestVault::new()
 }

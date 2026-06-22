@@ -1,4 +1,5 @@
 use chrono::{Duration, Utc};
+use hermes_hub_backend::application::CalendarMeetingOutcomeApplicationService;
 use hermes_hub_backend::domains::calendar::events::{
     CalendarAccountStore, CalendarEventStore, NewCalendarEvent,
 };
@@ -82,7 +83,7 @@ async fn meeting_outcome_decision_creates_suggested_decision_against_postgres() 
     };
     let acct_store = CalendarAccountStore::new(pool.clone());
     let event_store = CalendarEventStore::new(pool.clone());
-    let outcome_store = MeetingOutcomeStore::new(pool.clone());
+    let outcome_service = CalendarMeetingOutcomeApplicationService::new(pool.clone());
     let decision_store = DecisionStore::new(pool.clone());
     let suffix = unique_suffix();
 
@@ -102,15 +103,14 @@ async fn meeting_outcome_decision_creates_suggested_decision_against_postgres() 
         .await
         .expect("create event");
 
-    let outcome = outcome_store
-        .add(
+    let outcome = outcome_service
+        .add_manual(
             &event.event_id,
             "decision",
             &format!("Adopt meeting outcome adapter {suffix}"),
             Some("We decided to persist meeting decisions as reviewable domain Decisions."),
             None,
             None,
-            Some("manual"),
         )
         .await
         .expect("add decision outcome");
@@ -183,7 +183,7 @@ async fn meeting_outcome_promise_creates_suggested_obligation_and_review_item_wi
     };
     let acct_store = CalendarAccountStore::new(pool.clone());
     let event_store = CalendarEventStore::new(pool.clone());
-    let outcome_store = MeetingOutcomeStore::new(pool.clone());
+    let outcome_service = CalendarMeetingOutcomeApplicationService::new(pool.clone());
     let obligation_store = ObligationStore::new(pool.clone());
     let suffix = unique_suffix();
     let owner_person_id = format!("person:v1:email:meeting-promise-{suffix}@example.com");
@@ -205,15 +205,14 @@ async fn meeting_outcome_promise_creates_suggested_obligation_and_review_item_wi
         .await
         .expect("create event");
 
-    let outcome = outcome_store
-        .add(
+    let outcome = outcome_service
+        .add_manual(
             &event.event_id,
             "promise",
             &format!("Send meeting follow-up package {suffix}"),
             Some("Alex promised to send the follow-up package after the meeting."),
             Some(&owner_person_id),
             Some(due_at),
-            Some("manual"),
         )
         .await
         .expect("add promise outcome");

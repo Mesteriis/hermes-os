@@ -6,9 +6,6 @@ use thiserror::Error;
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
 };
-use crate::workflows::review_mirror::{
-    ReviewMirrorError, sync_decision_review_state_with_observation,
-};
 
 use super::{Decision, DecisionReviewState, DecisionStore, DecisionStoreError};
 
@@ -60,13 +57,6 @@ impl DecisionCommandService {
             )
             .await?;
 
-        sync_decision_review_state_with_observation(
-            &self.pool,
-            &decision,
-            &observation.observation_id,
-        )
-        .await?;
-
         Ok(decision)
     }
 }
@@ -77,6 +67,4 @@ pub enum DecisionCommandServiceError {
     Observation(#[from] ObservationStoreError),
     #[error(transparent)]
     Decision(#[from] DecisionStoreError),
-    #[error(transparent)]
-    ReviewMirror(#[from] ReviewMirrorError),
 }

@@ -37,6 +37,12 @@ impl GraphProjectionService {
         for project in self.projects.graph_projection_projects().await? {
             self.project_project(&project, &mut report).await?;
         }
+        for decision in self.list_decisions().await? {
+            self.project_decision(&decision, &mut report).await?;
+        }
+        for obligation in self.list_obligations().await? {
+            self.project_obligation(&obligation, &mut report).await?;
+        }
 
         Ok(report)
     }

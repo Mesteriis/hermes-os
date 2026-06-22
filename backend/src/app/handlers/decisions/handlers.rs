@@ -4,9 +4,8 @@ use serde_json::json;
 
 use super::models::{DecisionListQuery, DecisionListResponse, DecisionReviewApiRequest};
 use crate::app::{ApiError, AppState};
-use crate::domains::decisions::{
-    Decision, DecisionCommandService, DecisionEntityKind, DecisionReviewState, DecisionStore,
-};
+use crate::application::DecisionReviewApplicationService;
+use crate::domains::decisions::{Decision, DecisionEntityKind, DecisionReviewState, DecisionStore};
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 
 const DECISION_API_ACTOR_ID: &str = "hermes-frontend";
@@ -70,7 +69,7 @@ pub(crate) async fn put_v1_decision_review(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let decision = DecisionCommandService::new(pool)
+    let decision = DecisionReviewApplicationService::new(pool)
         .review_manual(&decision_id, review_state)
         .await?;
 

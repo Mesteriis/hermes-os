@@ -4,9 +4,9 @@ use serde_json::json;
 
 use super::models::{ObligationListQuery, ObligationListResponse, ObligationReviewApiRequest};
 use crate::app::{ApiError, AppState};
+use crate::application::ObligationReviewApplicationService;
 use crate::domains::obligations::{
-    Obligation, ObligationCommandService, ObligationEntityKind, ObligationReviewState,
-    ObligationStore,
+    Obligation, ObligationEntityKind, ObligationReviewState, ObligationStore,
 };
 use crate::platform::audit::{ApiAuditLog, NewApiAuditRecord};
 
@@ -71,7 +71,7 @@ pub(crate) async fn put_v1_obligation_review(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let obligation = ObligationCommandService::new(pool)
+    let obligation = ObligationReviewApplicationService::new(pool)
         .review_manual(&obligation_id, review_state)
         .await?;
 

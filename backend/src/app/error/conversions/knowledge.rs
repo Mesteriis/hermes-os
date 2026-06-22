@@ -1,6 +1,7 @@
 use super::super::types::ApiError;
 use crate::application::consistency_review::ContradictionReviewServiceError;
 use crate::application::review_promotion::ReviewPromotionError;
+use crate::application::{DecisionReviewApplicationError, ObligationReviewApplicationError};
 use crate::domains::decisions::{DecisionCommandServiceError, DecisionStoreError};
 use crate::domains::obligations::{ObligationCommandServiceError, ObligationStoreError};
 use crate::domains::projects::core::ProjectStoreError;
@@ -159,7 +160,19 @@ impl From<DecisionCommandServiceError> for ApiError {
                 tracing::error!(error = %error, "decision review observation capture failed");
                 Self::InvalidDecisionReview("decision review observation capture failed")
             }
-            DecisionCommandServiceError::ReviewMirror(error) => {
+        }
+    }
+}
+
+impl From<DecisionReviewApplicationError> for ApiError {
+    fn from(error: DecisionReviewApplicationError) -> Self {
+        match error {
+            DecisionReviewApplicationError::Decision(error) => Self::from(error),
+            DecisionReviewApplicationError::Observation(error) => {
+                tracing::error!(error = %error, "decision review observation capture failed");
+                Self::InvalidDecisionReview("decision review observation capture failed")
+            }
+            DecisionReviewApplicationError::ReviewMirror(error) => {
                 tracing::error!(error = %error, "decision review inbox sync failed");
                 Self::InvalidDecisionReview("decision review inbox sync failed")
             }
@@ -175,7 +188,19 @@ impl From<ObligationCommandServiceError> for ApiError {
                 tracing::error!(error = %error, "obligation review observation capture failed");
                 Self::InvalidObligationReview("obligation review observation capture failed")
             }
-            ObligationCommandServiceError::ReviewMirror(error) => {
+        }
+    }
+}
+
+impl From<ObligationReviewApplicationError> for ApiError {
+    fn from(error: ObligationReviewApplicationError) -> Self {
+        match error {
+            ObligationReviewApplicationError::Obligation(error) => Self::from(error),
+            ObligationReviewApplicationError::Observation(error) => {
+                tracing::error!(error = %error, "obligation review observation capture failed");
+                Self::InvalidObligationReview("obligation review observation capture failed")
+            }
+            ObligationReviewApplicationError::ReviewMirror(error) => {
                 tracing::error!(error = %error, "obligation review inbox sync failed");
                 Self::InvalidObligationReview("obligation review inbox sync failed")
             }

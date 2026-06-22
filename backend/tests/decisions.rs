@@ -14,6 +14,7 @@ use hermes_hub_backend::domains::decisions::{
 };
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::graph_projection::GraphProjectionService;
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -153,6 +154,11 @@ async fn decision_store_upserts_evidence_backed_decision_without_creating_work_a
             .iter()
             .any(|item| item.decision_id == first.decision_id)
     );
+
+    GraphProjectionService::new(pool.clone())
+        .project_from_v1()
+        .await
+        .expect("project decision graph");
 
     let decision_node_id: String = sqlx::query_scalar(
         "SELECT node_id FROM graph_nodes WHERE node_kind = 'decision' AND stable_key = $1",

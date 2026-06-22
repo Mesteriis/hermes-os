@@ -95,8 +95,8 @@ pub(crate) async fn post_meeting_outcome(
         .pool()
         .ok_or(ApiError::DatabaseNotConfigured)?
         .clone();
-    let outcome = CalendarCommandService::new(pool)
-        .add_meeting_outcome_manual(
+    let outcome = CalendarMeetingOutcomeApplicationService::new(pool)
+        .add_manual(
             &event_id,
             &req.outcome_type,
             &req.title,

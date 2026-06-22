@@ -11,6 +11,7 @@ use hermes_hub_backend::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore,
 };
 use hermes_hub_backend::platform::storage::Database;
+use hermes_hub_backend::workflows::graph_projection::GraphProjectionService;
 use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::{PgPool, PgPoolOptions};
@@ -124,6 +125,11 @@ async fn obligation_store_upserts_evidence_backed_obligation_without_creating_ta
             .iter()
             .any(|item| item.obligation_id == first.obligation_id)
     );
+
+    GraphProjectionService::new(pool.clone())
+        .project_from_v1()
+        .await
+        .expect("project obligation graph");
 
     let obligation_node_id: String = sqlx::query_scalar(
         "SELECT node_id FROM graph_nodes WHERE node_kind = 'obligation' AND stable_key = $1",

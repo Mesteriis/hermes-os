@@ -2,9 +2,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use testkit::context::TestContext;
 
 use chrono::Utc;
+use hermes_hub_backend::application::OrganizationContactLinkApplicationService;
 use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
 use hermes_hub_backend::domains::organizations::api::OrganizationStore;
-use hermes_hub_backend::domains::organizations::core::OrgContactLinkStore;
 use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
 use hermes_hub_backend::domains::relationships::{
     NewRelationship, NewRelationshipEvidence, RelationshipEntityKind,
@@ -415,7 +415,7 @@ async fn relationship_store_projects_organization_task_relationship_into_graph_a
 
 #[tokio::test]
 async fn organization_contact_link_materializes_member_of_relationship_against_postgres() {
-    let Some((pool, person_store, relationship_store, organization_store, contact_link_store)) =
+    let Some((pool, person_store, relationship_store, organization_store, contact_link_service)) =
         live_organization_contact_relationship_context("organization contact relationship").await
     else {
         return;
@@ -433,12 +433,13 @@ async fn organization_contact_link_materializes_member_of_relationship_against_p
         .await
         .expect("organization");
 
-    let link = contact_link_store
-        .link(
+    let link = contact_link_service
+        .link_contact_manual(
             &organization.organization_id,
             &person.person_id,
             Some("advisor"),
             Some("strategy"),
+            "manual",
         )
         .await
         .expect("organization contact link");
@@ -488,9 +489,9 @@ async fn organization_contact_link_materializes_member_of_relationship_against_p
 
     assert_eq!(
         source_kind,
-        RelationshipEvidenceSourceKind::Communication.as_str()
+        RelationshipEvidenceSourceKind::Observation.as_str()
     );
-    assert!(!source_id.is_empty());
+    assert!(source_id.starts_with("observation:v1:"));
     assert_eq!(
         excerpt.as_deref(),
         Some("Persona is linked to organization through compatibility organization contact data.")
@@ -703,7 +704,7 @@ async fn live_organization_contact_relationship_context(
     PersonProjectionStore,
     RelationshipStore,
     OrganizationStore,
-    OrgContactLinkStore,
+    OrganizationContactLinkApplicationService,
 )> {
     let test_context = TestContext::new().await;
     let database_url = test_context.connection_string();
@@ -717,7 +718,7 @@ async fn live_organization_contact_relationship_context(
         PersonProjectionStore::new(pool.clone()),
         RelationshipStore::new(pool.clone()),
         OrganizationStore::new(pool.clone()),
-        OrgContactLinkStore::new(pool),
+        OrganizationContactLinkApplicationService::new(pool),
     ))
 }
 

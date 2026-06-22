@@ -16,4 +16,10 @@ pub enum GraphProjectionError {
 
     #[error("message recipients must be a JSON array of strings")]
     InvalidRecipients,
+
+    #[error("{domain} graph projection has invalid entity kind: {value}")]
+    InvalidEntityKind { domain: &'static str, value: String },
+
+    #[error("{domain} graph projection has invalid review state: {value}")]
+    InvalidReviewState { domain: &'static str, value: String },
 }

@@ -6,9 +6,6 @@ use thiserror::Error;
 use crate::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore, ObservationStoreError,
 };
-use crate::workflows::review_mirror::{
-    ReviewMirrorError, sync_obligation_review_state_with_observation,
-};
 
 use super::{Obligation, ObligationReviewState, ObligationStore, ObligationStoreError};
 
@@ -57,13 +54,6 @@ impl ObligationCommandService {
             )
             .await?;
 
-        sync_obligation_review_state_with_observation(
-            &self.pool,
-            &obligation,
-            &observation.observation_id,
-        )
-        .await?;
-
         Ok(obligation)
     }
 }
@@ -74,6 +64,4 @@ pub enum ObligationCommandServiceError {
     Observation(#[from] ObservationStoreError),
     #[error(transparent)]
     Obligation(#[from] ObligationStoreError),
-    #[error(transparent)]
-    ReviewMirror(#[from] ReviewMirrorError),
 }

@@ -10,6 +10,7 @@ use crate::domains::organizations::api::OrganizationError;
 use crate::domains::organizations::core::OrgCoreError;
 use crate::domains::persons::api::PersonProjectionError;
 use crate::domains::persons::memory::PersonMemoryError;
+use crate::domains::relationships::RelationshipReviewPortError;
 use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::workflows::review_inbox::ReviewInboxWorkflowError;
 
@@ -69,6 +70,9 @@ pub enum EmailSyncPipelineError {
 
     #[error(transparent)]
     OrganizationCore(#[from] OrgCoreError),
+
+    #[error(transparent)]
+    Relationship(#[from] RelationshipReviewPortError),
 
     #[error(transparent)]
     TaskCandidate(#[from] TaskCandidateError),

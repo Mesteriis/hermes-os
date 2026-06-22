@@ -4,11 +4,6 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
-use crate::domains::graph::core::{
-    GraphEvidenceSourceKind, GraphNodeKind, GraphProjectionPort, GraphReviewState, NewGraphEdge,
-    NewGraphEvidence, NewGraphNode, RelationshipType,
-};
-
 use super::errors::ObligationStoreError;
 use super::evidence::{
     link_obligation_review_transition_in_transaction, link_obligation_support_in_transaction,
@@ -179,8 +174,6 @@ impl ObligationStore {
             }
         }
 
-        upsert_obligation_graph_projection_in_transaction(transaction, &stored, evidence).await?;
-
         Ok(stored)
     }
 
@@ -322,157 +315,6 @@ impl ObligationStore {
         .await?;
         transaction.commit().await?;
         Ok(obligation)
-    }
-}
-
-async fn upsert_obligation_graph_projection_in_transaction(
-    transaction: &mut Transaction<'_, Postgres>,
-    obligation: &Obligation,
-    evidence: &[NewObligationEvidence],
-) -> Result<(), ObligationStoreError> {
-    let obligation_node = GraphProjectionPort::upsert_node_in_transaction(
-        transaction,
-        &NewGraphNode::new(
-            GraphNodeKind::Obligation,
-            obligation.obligation_id.clone(),
-            obligation.statement.clone(),
-        )
-        .properties(json!({
-            "domain": "obligation",
-            "obligation_id": obligation.obligation_id,
-            "status": obligation.status.as_str(),
-            "review_state": obligation.review_state.as_str(),
-        })),
-    )
-    .await?;
-
-    let graph_review_state = obligation_review_state(obligation.review_state);
-    let graph_evidence = graph_obligation_evidence(obligation, evidence);
-
-    upsert_obligation_entity_graph_edge_in_transaction(
-        transaction,
-        &obligation_node.node_id,
-        obligation.obligated_entity_kind,
-        &obligation.obligated_entity_id,
-        "obligated_entity",
-        obligation.confidence,
-        graph_review_state,
-        &graph_evidence,
-    )
-    .await?;
-
-    if let (Some(beneficiary_entity_kind), Some(beneficiary_entity_id)) = (
-        obligation.beneficiary_entity_kind,
-        obligation.beneficiary_entity_id.as_deref(),
-    ) {
-        upsert_obligation_entity_graph_edge_in_transaction(
-            transaction,
-            &obligation_node.node_id,
-            beneficiary_entity_kind,
-            beneficiary_entity_id,
-            "beneficiary_entity",
-            obligation.confidence,
-            graph_review_state,
-            &graph_evidence,
-        )
-        .await?;
-    }
-
-    Ok(())
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn upsert_obligation_entity_graph_edge_in_transaction(
-    transaction: &mut Transaction<'_, Postgres>,
-    obligation_node_id: &str,
-    entity_kind: ObligationEntityKind,
-    entity_id: &str,
-    link_role: &str,
-    confidence: f64,
-    review_state: GraphReviewState,
-    graph_evidence: &NewGraphEvidence,
-) -> Result<(), ObligationStoreError> {
-    let target_node = GraphProjectionPort::upsert_node_in_transaction(
-        transaction,
-        &NewGraphNode::new(
-            obligation_entity_graph_node_kind(entity_kind),
-            entity_id,
-            entity_id,
-        )
-        .properties(json!({
-            "domain": "obligation",
-            "entity_kind": entity_kind.as_str(),
-            "entity_id": entity_id,
-        })),
-    )
-    .await?;
-    let edge = NewGraphEdge::new(
-        obligation_node_id.to_owned(),
-        target_node.node_id,
-        RelationshipType::EntityRelationship,
-        confidence,
-        review_state,
-    )
-    .properties(json!({
-        "domain": "obligation",
-        "link_role": link_role,
-    }));
-    let _ = GraphProjectionPort::upsert_edge_with_evidence_in_transaction(
-        transaction,
-        &edge,
-        std::slice::from_ref(graph_evidence),
-    )
-    .await?;
-    Ok(())
-}
-
-fn graph_obligation_evidence(
-    obligation: &Obligation,
-    evidence: &[NewObligationEvidence],
-) -> NewGraphEvidence {
-    let mut graph_evidence = NewGraphEvidence::new(
-        GraphEvidenceSourceKind::Obligation,
-        obligation.obligation_id.clone(),
-    )
-    .metadata(json!({ "domain": "obligation" }));
-
-    if let Some(item) = evidence.first() {
-        graph_evidence = graph_evidence.metadata(json!({
-            "domain": "obligation",
-            "source_kind": item.source_kind.as_str(),
-            "source_id": item.source_id,
-        }));
-        if let Some(quote) = &item.quote {
-            graph_evidence = graph_evidence.excerpt(quote.clone());
-        }
-        if let Some(observation_id) = &item.observation_id {
-            graph_evidence = graph_evidence.observation_id(observation_id.clone());
-        }
-    }
-
-    graph_evidence
-}
-
-fn obligation_review_state(review_state: ObligationReviewState) -> GraphReviewState {
-    match review_state {
-        ObligationReviewState::Suggested => GraphReviewState::Suggested,
-        ObligationReviewState::UserConfirmed => GraphReviewState::UserConfirmed,
-        ObligationReviewState::UserRejected => GraphReviewState::UserRejected,
-    }
-}
-
-fn obligation_entity_graph_node_kind(entity_kind: ObligationEntityKind) -> GraphNodeKind {
-    match entity_kind {
-        ObligationEntityKind::Persona => GraphNodeKind::Person,
-        ObligationEntityKind::Organization => GraphNodeKind::Organization,
-        ObligationEntityKind::Project => GraphNodeKind::Project,
-        ObligationEntityKind::Communication => GraphNodeKind::Message,
-        ObligationEntityKind::Document => GraphNodeKind::Document,
-        ObligationEntityKind::Task => GraphNodeKind::Task,
-        ObligationEntityKind::Event => GraphNodeKind::Event,
-        ObligationEntityKind::Decision => GraphNodeKind::Decision,
-        ObligationEntityKind::Obligation => GraphNodeKind::Obligation,
-        ObligationEntityKind::Knowledge => GraphNodeKind::Knowledge,
     }
 }
 

@@ -1,4 +1,5 @@
 use super::super::types::ApiError;
+use crate::application::CalendarMeetingOutcomeApplicationError;
 use crate::domains::calendar::brain::CalendarBrainError;
 use crate::domains::calendar::core::CalendarCoreError;
 use crate::domains::calendar::events::CalendarError;
@@ -108,6 +109,28 @@ impl From<CalendarCommandServiceError> for ApiError {
             CalendarCommandServiceError::Reminder(source) => ApiError::from(source),
             CalendarCommandServiceError::CalendarRule(source) => ApiError::from(source),
             CalendarCommandServiceError::Scheduling(source) => ApiError::from(source),
+        }
+    }
+}
+
+impl From<CalendarMeetingOutcomeApplicationError> for ApiError {
+    fn from(error: CalendarMeetingOutcomeApplicationError) -> Self {
+        match error {
+            CalendarMeetingOutcomeApplicationError::Meetings(source) => ApiError::from(source),
+            CalendarMeetingOutcomeApplicationError::Decision(source) => ApiError::from(source),
+            CalendarMeetingOutcomeApplicationError::Obligation(source) => ApiError::from(source),
+            CalendarMeetingOutcomeApplicationError::Observation(source) => {
+                tracing::error!(error = %source, "calendar meeting outcome observation failed");
+                ApiError::InvalidCommunicationQuery("calendar meeting outcome observation failed")
+            }
+            CalendarMeetingOutcomeApplicationError::ReviewMirror(source) => {
+                tracing::error!(error = %source, "calendar meeting outcome review mirror failed");
+                ApiError::InvalidCommunicationQuery("calendar meeting outcome review mirror failed")
+            }
+            CalendarMeetingOutcomeApplicationError::Sqlx(source) => {
+                tracing::error!(error = %source, "calendar meeting outcome operation failed");
+                ApiError::InvalidCommunicationQuery("calendar meeting outcome operation failed")
+            }
         }
     }
 }

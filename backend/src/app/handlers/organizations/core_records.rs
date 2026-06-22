@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::{ApiError, AppState};
+use crate::application::OrganizationContactLinkApplicationService;
 use crate::domains::organizations::core::{
     OrgAliasStore, OrgContactLink, OrgContactLinkStore, OrgDepartment, OrgDepartmentStore,
     OrgDomainStore, OrgIdentityStore, OrganizationAlias, OrganizationDomain, OrganizationIdentity,
@@ -185,7 +186,7 @@ pub(crate) async fn post_org_contact_link(
 ) -> Result<Json<OrgContactLink>, ApiError> {
     let requested_source = req.source.as_deref().unwrap_or("manual");
     let pool = database_pool(&state)?;
-    let link = OrganizationCommandService::new(pool)
+    let link = OrganizationContactLinkApplicationService::new(pool)
         .link_contact_manual(
             &org_id,
             &req.person_id,
