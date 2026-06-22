@@ -98,3 +98,6 @@ ADR status vocabulary:
 - [ADR-0094 Telegram Base Domain Completion Boundary](ADR-0094-telegram-base-domain-completion-boundary.md)
 - [ADR-0095 Event-Driven Domain Communication and DLQ](ADR-0095-event-driven-domain-communication-and-dlq.md)
 - [ADR-0096 Canonical Evidence, Review Inbox and Context Packs](ADR-0096-canonical-evidence-review-and-context-packs.md)
+- [ADR-0097 Communications Channel Domains To Integrations](ADR-0097-communications-channel-domains-to-integrations.md)
+- [ADR-0098 Provider-Neutral Communications API And Strict Boundaries](ADR-0098-provider-neutral-communications-api-and-strict-boundaries.md)
+- [ADR-0099 Signal Hub Event Platform](ADR-0099-signal-hub-event-platform.md)

@@ -22,6 +22,7 @@ needs a projection.
 
 | Domain | Canonical document | Status |
 |---|---|---|
+| Signal Hub | [Signal Hub](signal-hub.md), [Signal Hub Folder](../signal-hub/README.md) | target system domain for source registry, signal control, fixtures, NATS-backed event delivery and ConnectRPC APIs |
 | Communications | [Communications](communications.md) | implemented as the single communication domain; Mail, Telegram and WhatsApp are channel integrations |
 | Personas | [Personas](persons.md), [Persona Intelligence](../persons/README.md) | partially implemented through `persons` and compatibility migrations |
 | Relationships | [Relationships](relationships.md) | partially implemented through first-class persistence, graph projection for all current Relationship entity kinds, guarded global suggested review, organization contact link adapters, person role adapters, task relation adapters, project link review adapters and Personas workspace review; remaining cross-domain inbox work incomplete |
@@ -44,6 +45,8 @@ provider into a standalone Hermes domain.
 | Channel | Spec | Status |
 |---|---|---|
 | Telegram | [Telegram Channel Capability Spec](../telegram/README.md) | target production capability matrix with current implementation baseline |
+| Mail | [Email Channel Capability Spec](../mail/README.md) | implemented email channel framing and current API/status docs |
+| Signal Hub | [Signal Hub](../signal-hub/README.md) | system source-control plane, not a provider channel |
 
 ## Engine Documents
 

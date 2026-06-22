@@ -7,6 +7,10 @@ This document summarizes active domain ownership. The canonical version is
 
 ```mermaid
 flowchart LR
+    SignalHub["Signal Hub"] --> Events
+    SignalHub --> Communications
+    SignalHub --> Calendar
+    SignalHub --> Documents
     Communications --> Events
     Documents --> Events
     Calendar["Calendar/Events"] --> Events
@@ -31,6 +35,7 @@ flowchart LR
 
 | Domain | Owns | Does not own |
 |---|---|---|
+| Signal Hub | signal sources, connections, capabilities, runtime state, health, profiles, mute/pause/replay policies, fixture recovery | provider protocol internals, message state, task/persona/document truth |
 | Communications | messages, conversations, participants, channels, delivery metadata | Persona identity truth, task lifecycle |
 | Personas | Personas, identity traces, Persona relationships, Persona memory anchors | raw provider messages, organization lifecycle |
 | Organizations | organizations, identities, domains, portals, procedures, organization relationships | Persona identity, project ownership |
@@ -58,6 +63,7 @@ flowchart LR
 
 ## Cross-Domain Rules
 
+- Signal Hub controls source publication; it does not mutate downstream domain state.
 - Domains communicate through events and application services.
 - Provider-specific fields stay at the integration boundary unless promoted into
   canonical fields.

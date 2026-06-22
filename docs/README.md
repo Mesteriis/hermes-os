@@ -70,6 +70,7 @@ versioned implementation milestones and may use compatibility terminology.
 
 Canonical domain specs live under [Domain Catalog](domains/README.md).
 
+- [Signal Hub](domains/signal-hub.md), [Signal Hub Folder](signal-hub/README.md)
 - [Communications](domains/communications.md)
 - [Telegram Channel Capability Spec](telegram/README.md)
 - [Personas / Persona Intelligence](persons/README.md)
@@ -138,6 +139,8 @@ Important current examples:
 - ADR-0084 - Persona Intelligence System.
 - ADR-0085 - Communication spine and Consistency / Contradiction Engine.
 - ADR-0091 - Telegram production client capability model.
+- ADR-0095 - event-driven domain communication and DLQ.
+- ADR-0099 - Signal Hub event platform.
 
 ## Implementation Status Documents
 

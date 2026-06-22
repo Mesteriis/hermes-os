@@ -7,6 +7,7 @@ use older names.
 
 | Domain | Owns | Does not own |
 |---|---|---|
+| Signal Hub | signal sources, connections, capabilities, runtime state, health, profiles, mute/pause/replay policies and fixture recovery | provider protocol code, messages, tasks, personas, documents, graph truth |
 | Personas | Personas, identity traces, Persona relationships, Persona memory anchors | provider messages, organization lifecycle, project lifecycle |
 | Organizations | Organizations, organization identities, organization relationships, portals, procedures | Persona identity, project ownership |
 | Communications | canonical messages, conversations, participants, channel metadata, delivery state | Persona truth, task lifecycle, document versions |
@@ -40,8 +41,9 @@ Domains call engines. Engines do not own domain entities.
 
 ## Cross-Domain Rules
 
-- Provider-specific source data enters through Communications, Calendar or other
-  provider boundaries and becomes canonical observations when used as evidence.
+- Provider-specific source data first passes through Signal Hub control policy,
+  then enters Communications, Calendar, Documents or other owning domains as
+  canonical observations/events when used as evidence.
 - Canonical events and observations preserve what happened.
 - Domains create or update their own source-of-truth entities.
 - Review owns inbox, approval, dismissal and promotion state for candidates.
@@ -62,7 +64,9 @@ separate generic wiki silo.
 
 ```mermaid
 flowchart LR
-    Sources["Provider and local sources"] --> Observations["Observation Platform"]
+    Sources["Provider and local sources"] --> SignalHub["Signal Hub"]
+    SignalHub --> Observations["Observation Platform"]
+    SignalHub --> Events["Canonical Events"]
     Observations --> Communications
     Observations --> Documents
     Observations --> Calendar["Calendar/Events"]

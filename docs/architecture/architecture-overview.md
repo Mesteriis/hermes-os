@@ -7,9 +7,9 @@ combines append-only observations, canonical events, domain entities,
 relationships, document artifacts and rebuildable indexes. AI uses these stores
 as context and never becomes the durable memory layer itself.
 
-Target flow from ADR-0096 is:
+Target flow from ADR-0096 plus ADR-0099 is:
 
-`External Systems -> Integrations -> Vault -> Observation Platform -> Ingestion -> Domains -> Knowledge -> Review -> Actions`
+`External Systems -> Signal Hub -> Event Backbone -> Owning Domains -> Knowledge -> Review -> Actions`
 
 The append-only event log remains the system spine from ADR-0001. It does not
 replace the Observation Platform boundary; it carries canonical domain and
@@ -26,7 +26,9 @@ Canonical architecture language lives in:
 
 ```mermaid
 flowchart TB
-    Sources["External and local sources"] --> Adapters["Provider and import adapters"]
+    Sources["External and local sources"] --> SignalHub["Signal Hub"]
+    SignalHub --> Adapters["Provider and import adapters"]
+    SignalHub --> EventLog["Canonical event log"]
     Adapters --> Observations["Observation Platform"]
     Observations --> EventLog["Canonical event log"]
     EventLog --> Projectors["Projectors"]
@@ -70,6 +72,7 @@ flowchart TB
 
 Domains own source-of-truth entities and invariants:
 
+- Signal Hub.
 - Personas.
 - Organizations.
 - Communications.
@@ -104,6 +107,8 @@ not own domain entities.
 ### Infrastructure Layer
 
 - PostgreSQL.
+- NATS JetStream event delivery.
+- ConnectRPC / Protobuf API contracts.
 - Tantivy.
 - Vector index provider.
 - Document object storage.
