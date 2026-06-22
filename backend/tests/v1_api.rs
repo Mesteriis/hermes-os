@@ -245,21 +245,33 @@ async fn v1_status_accepts_local_frontend_cors_preflight_before_auth() {
         "http://tauri.localhost",
         "tauri://localhost",
     ] {
-        assert_local_cors_preflight(&app, origin).await;
+        assert_local_cors_preflight(&app, origin, "GET", "/api/v1/status").await;
+        assert_local_cors_preflight(
+            &app,
+            origin,
+            "PATCH",
+            "/api/v1/communications/messages/message-1",
+        )
+        .await;
     }
 }
 
-async fn assert_local_cors_preflight(app: &axum::Router, origin: &'static str) {
+async fn assert_local_cors_preflight(
+    app: &axum::Router,
+    origin: &'static str,
+    request_method: &'static str,
+    uri: &'static str,
+) {
     let response = app
         .clone()
         .oneshot(
             Request::builder()
                 .method(Method::OPTIONS)
-                .uri("/api/v1/status")
+                .uri(uri)
                 .header(header::ORIGIN, HeaderValue::from_static(origin))
                 .header(
                     header::ACCESS_CONTROL_REQUEST_METHOD,
-                    HeaderValue::from_static("GET"),
+                    HeaderValue::from_static(request_method),
                 )
                 .header(
                     header::ACCESS_CONTROL_REQUEST_HEADERS,
