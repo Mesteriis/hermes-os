@@ -213,6 +213,9 @@ fn app_messaging_handlers_are_thin() {
     let telegram_handler_facade = read(root.join("backend/src/app/handlers/telegram.rs"));
     let whatsapp_handler = read(root.join("backend/src/app/handlers/whatsapp.rs"));
     let all_handler_sources = read_all_sources(root.join("backend/src/app/handlers"));
+    let app_sources = read_all_sources(root.join("backend/src/app"));
+    let provider_runtime_handler_sources =
+        read_all_sources(root.join("backend/src/app/provider_runtime_handlers"));
 
     let telegram_handler_sources = read_all_sources(telegram_handler_root);
     assert!(
@@ -234,11 +237,39 @@ fn app_messaging_handlers_are_thin() {
             "app handlers must not call provider runtime/store helper directly: {forbidden}"
         );
     }
+    for forbidden in [
+        "telegram_store(",
+        "whatsapp_store(",
+        "crate::integrations::telegram::client",
+        "crate::integrations::whatsapp::client",
+        "TelegramStore",
+        "WhatsappWebStore",
+    ] {
+        assert!(
+            !app_sources.contains(forbidden),
+            "backend/src/app must not own concrete provider client/store code: {forbidden}"
+        );
+    }
     let telegram_facade_sources = telegram_handler_facade + &whatsapp_handler;
     assert!(
         !telegram_facade_sources.contains("crate::integrations::"),
         "Telegram/WhatsApp handler facades must not import integrations directly"
     );
+    for forbidden in [
+        "telegram_runtime_store(",
+        "whatsapp_runtime_store(",
+        "crate::integrations::telegram::client",
+        "crate::integrations::telegram::runtime",
+        "crate::integrations::telegram::tdjson",
+        "crate::integrations::whatsapp::client",
+        "TelegramStore",
+        "WhatsappWebStore",
+    ] {
+        assert!(
+            !provider_runtime_handler_sources.contains(forbidden),
+            "provider runtime handlers must call application services/contracts instead of provider implementations: {forbidden}"
+        );
+    }
 }
 
 #[test]

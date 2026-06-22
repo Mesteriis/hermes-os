@@ -78,16 +78,6 @@ const automationTemplatePolicyMutationOwners = new Set([
 const automationOutboundMessageMutationOwners = new Set([
 	'backend/src/engines/automation/dry_run.rs'
 ]);
-const telegramMessageVersionMutationOwners = new Set([
-	'backend/src/integrations/telegram/client/lifecycle/message_versions.rs'
-]);
-const telegramMessageTombstoneMutationOwners = new Set([
-	'backend/src/integrations/telegram/client/lifecycle/tombstones.rs'
-]);
-const telegramCommunicationMessageUpdateOwners = new Set([
-	'backend/src/integrations/telegram/client/messages/provider_state.rs',
-	'backend/src/integrations/telegram/client/messages/attachments.rs'
-]);
 const reviewManualOrchestrationOwner = 'backend/src/domains/review/service.rs';
 const taskCommandServiceOwner = 'backend/src/domains/tasks/service.rs';
 const calendarCommandServiceOwner = 'backend/src/domains/calendar/service.rs';
@@ -1250,7 +1240,7 @@ function telegramMessageVersionMutationFailures(fileContents) {
 	const directMutationPattern = /\bINSERT\s+INTO\s+telegram_message_versions\b/gi;
 	for (const [file, content] of fileContents.entries()) {
 		if (!file.startsWith('backend/src/integrations/telegram/')) continue;
-		if (telegramMessageVersionMutationOwners.has(file)) continue;
+		if (isTelegramLifecycleMutationOwner(file, 'message_versions')) continue;
 		if (directMutationPattern.test(content)) {
 			errors.push(
 				`${file}: telegram_message_versions mutations must stay in backend/src/integrations/telegram/client/lifecycle/message_versions.rs so edit-version writes always emit canonical observation trail`
@@ -1265,7 +1255,7 @@ function telegramMessageTombstoneMutationFailures(fileContents) {
 	const directMutationPattern = /\bINSERT\s+INTO\s+telegram_message_tombstones\b/gi;
 	for (const [file, content] of fileContents.entries()) {
 		if (!file.startsWith('backend/src/integrations/telegram/')) continue;
-		if (telegramMessageTombstoneMutationOwners.has(file)) continue;
+		if (isTelegramLifecycleMutationOwner(file, 'tombstones')) continue;
 		if (directMutationPattern.test(content)) {
 			errors.push(
 				`${file}: telegram_message_tombstones mutations must stay in backend/src/integrations/telegram/client/lifecycle/tombstones.rs so tombstone writes always emit canonical observation trail`
@@ -1275,19 +1265,8 @@ function telegramMessageTombstoneMutationFailures(fileContents) {
 	return errors;
 }
 
-function telegramCommunicationMessageUpdateFailures(fileContents) {
-	const errors = [];
-	const directMutationPattern = /\bUPDATE\s+communication_messages\b/gi;
-	for (const [file, content] of fileContents.entries()) {
-		if (!file.startsWith('backend/src/integrations/telegram/')) continue;
-		if (telegramCommunicationMessageUpdateOwners.has(file)) continue;
-		if (directMutationPattern.test(content)) {
-			errors.push(
-				`${file}: telegram communication_messages projection updates must stay in backend/src/integrations/telegram/client/messages/{provider_state,attachments}.rs so shared message projection writes always emit canonical observation trail`
-			);
-		}
-	}
-	return errors;
+function isTelegramLifecycleMutationOwner(file, ownerModule) {
+	return file === `backend/src/integrations/telegram/client/lifecycle/${ownerModule}.rs`;
 }
 
 function reviewApiManualOrchestrationFailures(fileContents) {
@@ -1868,7 +1847,6 @@ async function checkCanonicalEvidenceBoundaries() {
 	failures.push(...telegramReactionMutationFailures(fileContents));
 	failures.push(...telegramMessageVersionMutationFailures(fileContents));
 	failures.push(...telegramMessageTombstoneMutationFailures(fileContents));
-	failures.push(...telegramCommunicationMessageUpdateFailures(fileContents));
 	failures.push(...providerAccountOwnerMutationFailures(fileContents));
 	failures.push(...reviewApiManualOrchestrationFailures(fileContents));
 	failures.push(...tasksHandlerManualOrchestrationFailures(fileContents));
@@ -2166,7 +2144,7 @@ function runSelfTests() {
 	assertSelfTest(
 		'integration communication business SQL fails',
 		integrationCommunicationBusinessSqlFailuresForSource(
-			'backend/src/integrations/telegram/client/messages/provider_state.rs',
+			'backend/src/integrations/telegram/client/messages/state_updates.rs',
 			'UPDATE communication_messages SET delivery_state = $1 WHERE message_id = $2'
 		).length === 1
 	);

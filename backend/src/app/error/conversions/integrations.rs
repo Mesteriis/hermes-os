@@ -2,10 +2,9 @@ use super::super::types::ApiError;
 use crate::application::communication_fixture_ingest::CommunicationFixtureIngestError;
 use crate::application::communication_provider_writes::TelegramMessageWriteError;
 use crate::application::provider_communication_projection::ProviderCommunicationProjectionError;
+use crate::application::provider_runtime_contracts::{TelegramError, WhatsappWebError};
 use crate::application::review_inbox::ReviewInboxWorkflowError;
 use crate::engines::automation::AutomationError;
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::whatsapp::client::WhatsappWebError;
 use crate::platform::calls::CallError;
 
 impl From<TelegramError> for ApiError {

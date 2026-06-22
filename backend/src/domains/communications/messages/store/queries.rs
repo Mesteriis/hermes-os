@@ -17,6 +17,10 @@ use crate::domains::communications::messages::rows::{
 use crate::domains::communications::messages::states::{LocalMessageState, WorkflowState};
 use crate::domains::communications::messages::validation::{validate_limit, validate_non_empty};
 
+const TELEGRAM_CHANNEL_KIND_ALIAS: &[&str] = &["telegram_user", "telegram_bot"];
+const WHATSAPP_CHANNEL_KIND_ALIAS: &[&str] = &["whatsapp_web"];
+const MAIL_CHANNEL_KIND_ALIAS: &[&str] = &["email"];
+
 impl MessageProjectionStore {
     pub async fn recent_messages(
         &self,
@@ -217,8 +221,7 @@ impl MessageProjectionStore {
             builder.push_bind(workflow_state);
         }
         if let Some(channel_kind) = request.channel_kind {
-            builder.push(" AND m.channel_kind = ");
-            builder.push_bind(channel_kind);
+            append_channel_kind_filter(&mut builder, channel_kind);
         }
         if let Some(conversation_id) = request.conversation_id {
             builder.push(" AND m.conversation_id = ");
@@ -316,6 +319,27 @@ impl MessageProjectionStore {
             });
         }
         Ok(counts)
+    }
+}
+
+fn append_channel_kind_filter<'a>(builder: &mut QueryBuilder<'a, Postgres>, channel_kind: &'a str) {
+    if let Some(channel_kinds) = channel_kind_alias_values(channel_kind) {
+        builder.push(" AND m.channel_kind = ANY(");
+        builder.push_bind(channel_kinds);
+        builder.push(")");
+        return;
+    }
+
+    builder.push(" AND m.channel_kind = ");
+    builder.push_bind(channel_kind);
+}
+
+fn channel_kind_alias_values(channel_kind: &str) -> Option<&'static [&'static str]> {
+    match channel_kind.trim() {
+        "telegram" => Some(TELEGRAM_CHANNEL_KIND_ALIAS),
+        "whatsapp" => Some(WHATSAPP_CHANNEL_KIND_ALIAS),
+        "mail" => Some(MAIL_CHANNEL_KIND_ALIAS),
+        _ => None,
     }
 }
 

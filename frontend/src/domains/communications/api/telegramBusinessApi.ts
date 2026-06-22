@@ -13,7 +13,6 @@ import type {
 import type {
   TelegramForwardChainResponse,
   TelegramLifecycleResponse,
-  TelegramManualSendResponse,
   TelegramMessageTombstoneListResponse,
   TelegramMessageVersionListResponse,
   TelegramReactionListResponse,
@@ -30,6 +29,7 @@ import type {
 } from '../../../shared/communications/types/telegramTopics'
 import type { AttachmentPreviewResponse } from '../types/attachments'
 import type {
+  CommunicationProviderMessageCommandResponse,
   CommunicationMessageSummary,
   CommunicationMessagesResponse,
   MessagePinToggleResponse,
@@ -148,8 +148,8 @@ export async function sendTelegramBusinessMessage(request: {
   account_id: string
   provider_chat_id: string
   text: string
-}): Promise<TelegramManualSendResponse> {
-  return ApiClient.instance.post<TelegramManualSendResponse>(
+}): Promise<CommunicationProviderMessageCommandResponse> {
+  return ApiClient.instance.post<CommunicationProviderMessageCommandResponse>(
     `/api/v1/communications/conversations/${encodeURIComponent(request.provider_chat_id)}/messages`,
     { account_id: request.account_id, text: request.text },
     'Communication message send failed'
@@ -159,8 +159,8 @@ export async function sendTelegramBusinessMessage(request: {
 export async function replyToTelegramBusinessMessage(params: {
   message_id: string
   text: string
-}): Promise<TelegramManualSendResponse> {
-  return ApiClient.instance.post<TelegramManualSendResponse>(
+}): Promise<CommunicationProviderMessageCommandResponse> {
+  return ApiClient.instance.post<CommunicationProviderMessageCommandResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(params.message_id)}/reply`,
     { text: params.text },
     'Communication reply failed'
@@ -170,8 +170,8 @@ export async function replyToTelegramBusinessMessage(params: {
 export async function forwardTelegramBusinessMessage(params: {
   message_id: string
   provider_chat_id: string
-}): Promise<TelegramManualSendResponse> {
-  return ApiClient.instance.post<TelegramManualSendResponse>(
+}): Promise<CommunicationProviderMessageCommandResponse> {
+  return ApiClient.instance.post<CommunicationProviderMessageCommandResponse>(
     `/api/v1/communications/messages/${encodeURIComponent(params.message_id)}/forward`,
     { conversation_id: params.provider_chat_id },
     'Communication forward failed'

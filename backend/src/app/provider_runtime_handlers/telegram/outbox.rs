@@ -4,10 +4,9 @@ use chrono::Utc;
 use serde_json::json;
 
 use super::helpers::publish_telegram_event;
-use crate::app::api_support::telegram_store;
+use crate::app::api_support::telegram_provider_runtime_service;
 use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::lifecycle;
-use crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand;
+use crate::application::provider_runtime_contracts::TelegramProviderWriteCommand;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
 
@@ -15,9 +14,9 @@ pub(crate) async fn post_telegram_command_retry(
     State(state): State<AppState>,
     Path(command_id): Path<String>,
 ) -> Result<Json<TelegramProviderWriteCommand>, ApiError> {
-    let store = telegram_store(&state)?;
     let now = Utc::now();
-    let command = lifecycle::manual_retry_command(store.pool(), &command_id, now)
+    let command = telegram_provider_runtime_service(&state)?
+        .manual_retry_command(&command_id, now)
         .await?
         .ok_or(ApiError::NotFound)?;
 

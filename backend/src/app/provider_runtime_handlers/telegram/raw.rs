@@ -3,7 +3,7 @@ use axum::extract::{Path, State};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::app::api_support::{communication_ingestion_store, telegram_store};
+use crate::app::api_support::{communication_ingestion_store, telegram_provider_runtime_service};
 use crate::app::{ApiError, AppState};
 use crate::domains::communications::core::StoredRawCommunicationRecord;
 
@@ -48,7 +48,10 @@ pub(crate) async fn get_telegram_message_raw(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
 ) -> Result<Json<TelegramRawMessageResponse>, ApiError> {
-    let Some(message) = telegram_store(&state)?.message_by_id(&message_id).await? else {
+    let Some(message) = telegram_provider_runtime_service(&state)?
+        .message_by_id(&message_id)
+        .await?
+    else {
         return Err(ApiError::CommunicationMessageNotFound);
     };
     let Some(raw_record) = communication_ingestion_store(&state)?

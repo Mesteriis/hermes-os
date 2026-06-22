@@ -102,6 +102,141 @@ async fn message_projection_list_messages_filters_by_account_state_channel_and_q
 }
 
 #[tokio::test]
+async fn message_projection_channel_kind_telegram_alias_matches_user_and_bot_messages_against_postgres()
+ {
+    let Some((_, communication_store, message_store)) =
+        live_projection_context("message telegram channel alias").await
+    else {
+        return;
+    };
+    let suffix = unique_suffix();
+    let account_id = format!("acct_message_telegram_alias_{suffix}");
+
+    store_provider_account(
+        &communication_store,
+        &account_id,
+        "Telegram Alias",
+        format!("telegram-alias-{suffix}@example.com"),
+    )
+    .await;
+
+    let user_raw = record_raw_email_message(
+        &communication_store,
+        &account_id,
+        &format!("raw_telegram_alias_user_{suffix}"),
+        &format!("provider-telegram-alias-user-{suffix}"),
+        "Telegram User",
+        "User channel body",
+    )
+    .await;
+    let bot_raw = record_raw_email_message(
+        &communication_store,
+        &account_id,
+        &format!("raw_telegram_alias_bot_{suffix}"),
+        &format!("provider-telegram-alias-bot-{suffix}"),
+        "Telegram Bot",
+        "Bot channel body",
+    )
+    .await;
+    let whatsapp_raw = record_raw_email_message(
+        &communication_store,
+        &account_id,
+        &format!("raw_telegram_alias_whatsapp_{suffix}"),
+        &format!("provider-telegram-alias-whatsapp-{suffix}"),
+        "WhatsApp",
+        "WhatsApp channel body",
+    )
+    .await;
+
+    let user_message = NewProjectedMessage {
+        message_id: format!("msg:telegram-alias:user:{suffix}"),
+        raw_record_id: user_raw.raw_record_id.clone(),
+        account_id: account_id.clone(),
+        provider_record_id: user_raw.provider_record_id.clone(),
+        subject: "Telegram User".to_owned(),
+        sender: "telegram:user:42".to_owned(),
+        recipients: vec![],
+        body_text: "User channel body".to_owned(),
+        occurred_at: user_raw.occurred_at,
+        channel_kind: "telegram_user".to_owned(),
+        conversation_id: Some(format!("conversation:telegram-alias:{suffix}")),
+        sender_display_name: Some("Ada".to_owned()),
+        delivery_state: "received".to_owned(),
+        message_metadata: json!({}),
+    };
+    let bot_message = NewProjectedMessage {
+        message_id: format!("msg:telegram-alias:bot:{suffix}"),
+        raw_record_id: bot_raw.raw_record_id.clone(),
+        account_id: account_id.clone(),
+        provider_record_id: bot_raw.provider_record_id.clone(),
+        subject: "Telegram Bot".to_owned(),
+        sender: "telegram:bot:7".to_owned(),
+        recipients: vec![],
+        body_text: "Bot channel body".to_owned(),
+        occurred_at: bot_raw.occurred_at,
+        channel_kind: "telegram_bot".to_owned(),
+        conversation_id: Some(format!("conversation:telegram-alias:{suffix}")),
+        sender_display_name: Some("Build Bot".to_owned()),
+        delivery_state: "received".to_owned(),
+        message_metadata: json!({}),
+    };
+    let whatsapp_message = NewProjectedMessage {
+        message_id: format!("msg:telegram-alias:whatsapp:{suffix}"),
+        raw_record_id: whatsapp_raw.raw_record_id.clone(),
+        account_id: account_id.clone(),
+        provider_record_id: whatsapp_raw.provider_record_id.clone(),
+        subject: "WhatsApp".to_owned(),
+        sender: "whatsapp:user:9".to_owned(),
+        recipients: vec![],
+        body_text: "WhatsApp channel body".to_owned(),
+        occurred_at: whatsapp_raw.occurred_at,
+        channel_kind: "whatsapp_web".to_owned(),
+        conversation_id: Some(format!("conversation:whatsapp-alias:{suffix}")),
+        sender_display_name: Some("Grace".to_owned()),
+        delivery_state: "received".to_owned(),
+        message_metadata: json!({}),
+    };
+
+    let user = message_store
+        .upsert_message(&user_message)
+        .await
+        .expect("upsert telegram user message");
+    let bot = message_store
+        .upsert_message(&bot_message)
+        .await
+        .expect("upsert telegram bot message");
+    message_store
+        .upsert_message(&whatsapp_message)
+        .await
+        .expect("upsert whatsapp control message");
+
+    let page = message_store
+        .list_messages_page(ProjectedMessagePageQuery {
+            account_id: Some(&account_id),
+            workflow_state: None,
+            channel_kind: Some("telegram"),
+            conversation_id: None,
+            query: None,
+            match_mode: MessageSearchMatchMode::All,
+            search: MessageSearchQuery::default(),
+            local_state: LocalMessageState::Active,
+            cursor: None,
+            limit: 10,
+        })
+        .await
+        .expect("list telegram channel alias messages");
+
+    let ids = page
+        .items
+        .iter()
+        .map(|summary| summary.message.message_id.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(ids.len(), 2);
+    assert!(ids.contains(&user.message_id.as_str()));
+    assert!(ids.contains(&bot.message_id.as_str()));
+}
+
+#[tokio::test]
 async fn message_local_trash_hides_from_default_lists_and_survives_reprojection_against_postgres() {
     let Some((_, communication_store, message_store)) =
         live_projection_context("message local trash").await

@@ -23,14 +23,14 @@ pub(crate) async fn get_telegram_account_capabilities(
         .await?
         .ok_or_else(|| {
             crate::app::ApiError::Telegram(
-                crate::integrations::telegram::client::TelegramError::InvalidRequest(format!(
-                    "Telegram account `{account_id}` is not configured"
-                )),
+                crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
+                    format!("Telegram account `{account_id}` is not configured"),
+                ),
             )
         })?;
     if !account.provider_kind.is_telegram() {
         return Err(crate::app::ApiError::Telegram(
-            crate::integrations::telegram::client::TelegramError::InvalidRequest(format!(
+            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(format!(
                 "account `{}` is not a Telegram provider account",
                 account.account_id
             )),

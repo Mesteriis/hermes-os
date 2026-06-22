@@ -1,10 +1,9 @@
 use axum::Json;
 use axum::extract::{Path, Query, State};
 
-use crate::app::api_support::{TelegramReactionDeleteQuery, telegram_store};
+use crate::app::api_support::TelegramReactionDeleteQuery;
 use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::lifecycle;
-use crate::integrations::telegram::client::models::messages::{
+use crate::application::provider_runtime_contracts::{
     TelegramReactionListResponse, TelegramReactionRequest, TelegramReactionResponse,
 };
 
@@ -52,12 +51,8 @@ pub(crate) async fn get_telegram_reactions(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
 ) -> Result<Json<TelegramReactionListResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let reactions = lifecycle::list_reactions(store.pool(), &message_id).await?;
-    let summary = lifecycle::reaction_summary(store.pool(), &message_id).await?;
-    Ok(Json(TelegramReactionListResponse {
-        message_id,
-        reactions,
-        summary,
-    }))
+    let response = telegram_message_write_service(&state)?
+        .reactions(&message_id)
+        .await?;
+    Ok(Json(response))
 }

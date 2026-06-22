@@ -2,11 +2,10 @@ use axum::Json;
 use axum::extract::{Query, State};
 use serde::Deserialize;
 
-use crate::app::api_support::telegram_store;
+use crate::app::api_support::telegram_provider_runtime_service;
 use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::client::commands::list_commands_filtered;
-use crate::integrations::telegram::client::models::messages::TelegramCommandListResponse;
+use crate::application::provider_runtime_contracts::TelegramCommandListResponse;
+use crate::application::provider_runtime_contracts::TelegramError;
 
 #[derive(Deserialize)]
 pub(crate) struct TelegramCommandListQuery {
@@ -38,15 +37,14 @@ pub(crate) async fn get_telegram_commands(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let store = telegram_store(&state)?;
-    let items = list_commands_filtered(
-        store.pool(),
-        &account_id,
-        query.provider_chat_id.as_deref(),
-        query.provider_message_id.as_deref(),
-        &command_kinds,
-        query.limit.unwrap_or(50),
-    )
-    .await?;
-    Ok(Json(TelegramCommandListResponse { items }))
+    let response = telegram_provider_runtime_service(&state)?
+        .list_commands(
+            &account_id,
+            query.provider_chat_id.as_deref(),
+            query.provider_message_id.as_deref(),
+            &command_kinds,
+            query.limit.unwrap_or(50),
+        )
+        .await?;
+    Ok(Json(response))
 }

@@ -3,9 +3,8 @@ mod call;
 mod telegram;
 mod whatsapp;
 
+use crate::application::provider_runtime_contracts::{TelegramError, WhatsappWebError};
 use crate::engines::automation::AutomationError;
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::whatsapp::client::WhatsappWebError;
 use crate::platform::calls::CallError;
 
 use super::ErrorParts;

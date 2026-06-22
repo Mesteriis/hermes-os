@@ -7,18 +7,16 @@ use super::helpers::{
     AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed, publish_telegram_event,
 };
 use crate::app::api_support::{
-    TelegramChatListResponse, TelegramListQuery, api_audit_log, telegram_runtime_use_case_context,
-    telegram_store,
+    TelegramChatListResponse, TelegramListQuery, api_audit_log, telegram_provider_runtime_service,
+    telegram_runtime_use_case_context,
 };
 use crate::app::{ApiError, AppState};
+use crate::application::provider_runtime_contracts::{
+    TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramChatSyncRequest,
+    TelegramChatSyncResponse, TelegramError, TelegramHistorySyncRequest,
+    TelegramHistorySyncResponse,
+};
 use crate::application::telegram_runtime;
-use crate::integrations::telegram::client::{
-    TelegramChat, TelegramChatGroupFilterListResponse, TelegramChatMember, TelegramError,
-};
-use crate::integrations::telegram::runtime::{TelegramChatSyncRequest, TelegramChatSyncResponse};
-use crate::integrations::telegram::runtime::{
-    TelegramHistorySyncRequest, TelegramHistorySyncResponse,
-};
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
@@ -46,7 +44,7 @@ pub(crate) async fn get_telegram_chats(
     State(state): State<AppState>,
     Query(query): Query<TelegramListQuery>,
 ) -> Result<Json<TelegramChatListResponse>, ApiError> {
-    let items = telegram_store(&state)?
+    let items = telegram_provider_runtime_service(&state)?
         .list_chats(query.account_id.as_deref(), query.limit.unwrap_or(50))
         .await?;
 
@@ -57,7 +55,7 @@ pub(crate) async fn get_telegram_folders(
     State(state): State<AppState>,
     Query(query): Query<TelegramListQuery>,
 ) -> Result<Json<TelegramChatGroupFilterListResponse>, ApiError> {
-    let items = telegram_store(&state)?
+    let items = telegram_provider_runtime_service(&state)?
         .list_chat_group_filters(query.account_id.as_deref())
         .await?;
 
@@ -94,7 +92,7 @@ pub(crate) async fn get_telegram_chat_detail(
     State(state): State<AppState>,
     Path(telegram_chat_id): Path<String>,
 ) -> Result<Json<TelegramChatDetailResponse>, ApiError> {
-    let item = telegram_store(&state)?
+    let item = telegram_provider_runtime_service(&state)?
         .telegram_chat_by_id(&telegram_chat_id)
         .await?
         .ok_or_else(|| {
@@ -112,7 +110,7 @@ pub(crate) async fn get_telegram_chat_members(
     Query(query): Query<TelegramChatMembersQuery>,
 ) -> Result<Json<TelegramChatMemberListResponse>, ApiError> {
     let limit = query.limit.unwrap_or(50);
-    let items = telegram_store(&state)?
+    let items = telegram_provider_runtime_service(&state)?
         .list_chat_members(
             &telegram_chat_id,
             query.query.as_deref(),
@@ -142,8 +140,8 @@ pub(crate) async fn post_telegram_chat_members_sync(
     State(state): State<AppState>,
     Path(telegram_chat_id): Path<String>,
 ) -> Result<Json<TelegramChatMembersSyncResponse>, ApiError> {
-    let telegram_store = telegram_store(&state)?;
-    let chat = telegram_store
+    let telegram_provider_runtime_service = telegram_provider_runtime_service(&state)?;
+    let chat = telegram_provider_runtime_service
         .telegram_chat_by_id(&telegram_chat_id)
         .await?
         .ok_or_else(|| {

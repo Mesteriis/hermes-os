@@ -1,8 +1,10 @@
 use crate::app::api_support::{TelegramCapabilitiesResponse, event_store};
 use crate::app::{ApiError, AppState};
+use crate::application::provider_runtime_contracts::TelegramError;
+use crate::application::provider_runtime_contracts::{
+    TelegramProviderRuntimeStore, telegram_chat_id,
+};
 use crate::domains::communications::core::CommunicationProviderAccountStore;
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::telegram::client::{TelegramStore, telegram_chat_id};
 use crate::platform::config::AppConfig;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::secrets::SecretReferenceStore;
@@ -81,7 +83,7 @@ pub(super) async fn ensure_telegram_account_operation_allowed(
 }
 
 pub(super) async fn telegram_message_snapshot_payload(
-    store: &TelegramStore,
+    store: &TelegramProviderRuntimeStore,
     message_id: &str,
     base_payload: serde_json::Value,
 ) -> Result<serde_json::Value, ApiError> {

@@ -3,24 +3,21 @@ use axum::extract::{Path, State};
 
 use super::helpers::ensure_telegram_account_operation_allowed;
 use crate::app::api_support::{
-    api_audit_log, ensure_fixture_routes_enabled, event_store, telegram_runtime_use_case_context,
-    telegram_store,
+    ensure_fixture_routes_enabled, telegram_fixture_ingest_service, telegram_message_write_service,
+    telegram_runtime_use_case_context,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::communication_fixture_ingest::TelegramFixtureIngestApplicationService;
 use crate::application::communication_provider_writes::{
     CommunicationConversationMessageRequest, CommunicationProviderMessageCommandResponse,
-    TelegramMessageWriteApplicationService,
 };
-use crate::application::telegram_runtime;
-use crate::integrations::telegram::client::NewTelegramMessage;
-use crate::integrations::telegram::client::lifecycle;
-use crate::integrations::telegram::client::models::messages::{
+use crate::application::provider_runtime_contracts::NewTelegramMessage;
+use crate::application::provider_runtime_contracts::{
     TelegramDeleteRequest, TelegramEditRequest, TelegramForwardRequest, TelegramLifecycleResponse,
     TelegramManualSendRequest, TelegramManualSendResponse, TelegramMessageIngestResult,
     TelegramMessageTombstoneListResponse, TelegramMessageVersionListResponse, TelegramPinRequest,
     TelegramReplyRequest, TelegramRestoreVisibilityRequest,
 };
+use crate::application::telegram_runtime;
 
 mod mark_read;
 mod reactions;
@@ -30,33 +27,14 @@ pub(crate) use reactions::{
     delete_telegram_reaction, get_telegram_reactions, post_telegram_reaction,
 };
 
-fn telegram_message_write_service(
-    state: &AppState,
-) -> Result<TelegramMessageWriteApplicationService, ApiError> {
-    Ok(TelegramMessageWriteApplicationService::new(
-        telegram_store(state)?,
-        api_audit_log(state)?,
-        event_store(state)?,
-        state.event_bus.clone(),
-    ))
-}
-
 pub(crate) async fn post_telegram_fixture_message(
     State(state): State<AppState>,
     Json(request): Json<NewTelegramMessage>,
 ) -> Result<Json<TelegramMessageIngestResult>, ApiError> {
     ensure_fixture_routes_enabled(&state)?;
-    let Some(pool) = state.database.pool().cloned() else {
-        return Err(ApiError::DatabaseNotConfigured);
-    };
-    let response = TelegramFixtureIngestApplicationService::new(
-        pool,
-        telegram_store(&state)?,
-        event_store(&state)?,
-        state.event_bus.clone(),
-    )
-    .ingest_message(&request)
-    .await?;
+    let response = telegram_fixture_ingest_service(&state)?
+        .ingest_message(&request)
+        .await?;
     Ok(Json(response))
 }
 
@@ -83,7 +61,7 @@ pub(crate) async fn post_communication_conversation_message(
     let command_id = request
         .command_id
         .clone()
-        .unwrap_or_else(lifecycle::new_command_id);
+        .unwrap_or_else(crate::application::communication_provider_writes::new_telegram_command_id);
     request.command_id = Some(command_id.clone());
     let runtime_context = telegram_runtime_use_case_context(&state)?;
     let response = telegram_message_write_service(&state)?
@@ -184,27 +162,23 @@ pub(crate) async fn get_telegram_message_versions(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
 ) -> Result<Json<TelegramMessageVersionListResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let versions = lifecycle::list_message_versions(store.pool(), &message_id).await?;
-    Ok(Json(TelegramMessageVersionListResponse {
-        message_id,
-        versions,
-    }))
+    let response = telegram_message_write_service(&state)?
+        .message_versions(&message_id)
+        .await?;
+    Ok(Json(response))
 }
 
 pub(crate) async fn get_telegram_message_tombstones(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
 ) -> Result<Json<TelegramMessageTombstoneListResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let tombstones = lifecycle::list_tombstones(store.pool(), &message_id).await?;
-    Ok(Json(TelegramMessageTombstoneListResponse {
-        message_id,
-        tombstones,
-    }))
+    let response = telegram_message_write_service(&state)?
+        .message_tombstones(&message_id)
+        .await?;
+    Ok(Json(response))
 }
 
-use crate::integrations::telegram::client::models::messages::{
+use crate::application::provider_runtime_contracts::{
     TelegramForwardChainResponse, TelegramReplyChainResponse,
 };
 
@@ -213,9 +187,10 @@ pub(crate) async fn get_telegram_reply_chain(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
 ) -> Result<Json<TelegramReplyChainResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let chain = lifecycle::reply_chain(&store, &message_id).await?;
-    Ok(Json(chain))
+    let response = telegram_message_write_service(&state)?
+        .reply_chain(&message_id)
+        .await?;
+    Ok(Json(response))
 }
 
 /// GET /api/v1/communications/messages/{message_id}/forward-chain
@@ -223,7 +198,8 @@ pub(crate) async fn get_telegram_forward_chain(
     State(state): State<AppState>,
     Path(message_id): Path<String>,
 ) -> Result<Json<TelegramForwardChainResponse>, ApiError> {
-    let store = telegram_store(&state)?;
-    let chain = lifecycle::forward_chain(&store, &message_id).await?;
-    Ok(Json(chain))
+    let response = telegram_message_write_service(&state)?
+        .forward_chain(&message_id)
+        .await?;
+    Ok(Json(response))
 }

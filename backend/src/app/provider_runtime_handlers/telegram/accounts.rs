@@ -3,9 +3,11 @@ use axum::extract::{Path, Query, State};
 use serde::Deserialize;
 
 use super::helpers::{AUDIT_ACTOR_ID, telegram_api_hash_from_config, telegram_secret_store};
-use crate::app::api_support::{api_audit_log, ensure_fixture_routes_enabled, telegram_store};
+use crate::app::api_support::{
+    api_audit_log, ensure_fixture_routes_enabled, telegram_provider_runtime_service,
+};
 use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::{
+use crate::application::provider_runtime_contracts::{
     TelegramAccountLifecycleResponse, TelegramAccountListResponse, TelegramAccountSetupRequest,
     TelegramAccountSetupResponse, TelegramLiveAccountSetupRequest, TelegramSecretVault,
 };
@@ -17,7 +19,7 @@ pub(crate) async fn post_telegram_fixture_account(
 ) -> Result<Json<TelegramAccountSetupResponse>, ApiError> {
     ensure_fixture_routes_enabled(&state)?;
     Ok(Json(
-        telegram_store(&state)?
+        telegram_provider_runtime_service(&state)?
             .setup_fixture_account(&request)
             .await?,
     ))
@@ -35,7 +37,7 @@ pub(crate) async fn post_telegram_account(
         );
 
     Ok(Json(
-        telegram_store(&state)?
+        telegram_provider_runtime_service(&state)?
             .setup_live_blocked_account(
                 &telegram_secret_store(&state)?,
                 &TelegramSecretVault::host(state.vault.clone()),
@@ -55,7 +57,7 @@ pub(crate) async fn get_telegram_accounts(
     State(state): State<AppState>,
     Query(query): Query<TelegramAccountsQuery>,
 ) -> Result<Json<TelegramAccountListResponse>, ApiError> {
-    let items = telegram_store(&state)?
+    let items = telegram_provider_runtime_service(&state)?
         .list_accounts(query.include_removed)
         .await?;
 
@@ -66,7 +68,9 @@ pub(crate) async fn post_telegram_account_logout(
     State(state): State<AppState>,
     Path(account_id): Path<String>,
 ) -> Result<Json<TelegramAccountLifecycleResponse>, ApiError> {
-    let account = telegram_store(&state)?.logout_account(&account_id).await?;
+    let account = telegram_provider_runtime_service(&state)?
+        .logout_account(&account_id)
+        .await?;
     let stopped_runtime_actor = state.telegram_runtime.stop_account(&account.account_id)?;
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_account_logout(
@@ -87,7 +91,9 @@ pub(crate) async fn delete_telegram_account(
     State(state): State<AppState>,
     Path(account_id): Path<String>,
 ) -> Result<Json<TelegramAccountLifecycleResponse>, ApiError> {
-    let account = telegram_store(&state)?.remove_account(&account_id).await?;
+    let account = telegram_provider_runtime_service(&state)?
+        .remove_account(&account_id)
+        .await?;
     let stopped_runtime_actor = state.telegram_runtime.stop_account(&account.account_id)?;
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_account_remove(

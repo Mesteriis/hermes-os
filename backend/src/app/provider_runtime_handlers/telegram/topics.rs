@@ -5,15 +5,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use crate::app::api_support::{
-    TelegramMessageListResponse, api_audit_log, telegram_runtime_use_case_context, telegram_store,
+    TelegramMessageListResponse, api_audit_log, telegram_provider_runtime_service,
+    telegram_runtime_use_case_context,
 };
 use crate::app::{ApiError, AppState};
-use crate::application::telegram_runtime;
-use crate::integrations::telegram::client::lifecycle;
-use crate::integrations::telegram::client::{
+use crate::application::provider_runtime_contracts::{
     TelegramTopic, TelegramTopicCloseRequest, TelegramTopicCreateRequest,
     TelegramTopicLifecycleResponse, TelegramTopicListResponse,
 };
+use crate::application::telegram_runtime;
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
@@ -90,16 +90,16 @@ pub(crate) async fn get_telegram_topics(
     Path(telegram_chat_id): Path<String>,
     Query(query): Query<TelegramTopicsQuery>,
 ) -> Result<Json<TelegramTopicListApiResponse>, ApiError> {
-    let store = telegram_store(&state)?;
+    let store = telegram_provider_runtime_service(&state)?;
     let limit = query.limit.unwrap_or(100).clamp(1, 200);
     let chat = store
         .telegram_chat_by_id(&telegram_chat_id)
         .await?
         .ok_or_else(|| {
             ApiError::Telegram(
-                crate::integrations::telegram::client::TelegramError::InvalidRequest(format!(
-                    "telegram chat `{telegram_chat_id}` was not found"
-                )),
+                crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
+                    format!("telegram chat `{telegram_chat_id}` was not found"),
+                ),
             )
         })?;
     ensure_telegram_account_operation_allowed(&state, &chat.account_id, "topics.list").await?;
@@ -115,12 +115,7 @@ pub(crate) async fn get_telegram_topics(
         );
     }
 
-    let items = crate::integrations::telegram::client::topics::list_topics(
-        store.pool(),
-        &telegram_chat_id,
-        limit,
-    )
-    .await?;
+    let items = store.list_topics(&telegram_chat_id, limit).await?.items;
 
     Ok(Json(TelegramTopicListApiResponse {
         telegram_chat_id,
@@ -136,40 +131,40 @@ pub(crate) async fn post_telegram_topic_create(
 ) -> Result<Json<TelegramTopicLifecycleResponse>, ApiError> {
     request.validate()?;
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "topics.create").await?;
-    let store = telegram_store(&state)?;
+    let store = telegram_provider_runtime_service(&state)?;
     let chat = store
         .telegram_chat_by_id(&telegram_chat_id)
         .await?
         .ok_or_else(|| {
             ApiError::Telegram(
-                crate::integrations::telegram::client::TelegramError::InvalidRequest(format!(
-                    "telegram chat `{telegram_chat_id}` was not found"
-                )),
+                crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
+                    format!("telegram chat `{telegram_chat_id}` was not found"),
+                ),
             )
         })?;
     let command_id = request.command_id.clone();
 
-    lifecycle::insert_command(
-        store.pool(),
-        &command_id,
-        &request.account_id,
-        "topic_create",
-        &format!(
+    store
+        .insert_command(
+            &command_id,
+            &request.account_id,
+            "topic_create",
+            &format!(
             "topic_create:{}:{}",
             request.provider_chat_id,
             Utc::now().timestamp_millis()
-        ),
-        &request.provider_chat_id,
-        None,
-        "available",
-        "provider_write",
-        "confirmed",
-        AUDIT_ACTOR_ID,
-        json!({"title": request.title.trim()}),
-        json!({"telegram_chat_id": telegram_chat_id, "provider_chat_id": request.provider_chat_id}),
-        json!({"source": "telegram_topic_create"}),
-    )
-    .await?;
+            ),
+            &request.provider_chat_id,
+            None,
+            "available",
+            "provider_write",
+            "confirmed",
+            AUDIT_ACTOR_ID,
+            json!({"title": request.title.trim()}),
+            json!({"telegram_chat_id": telegram_chat_id, "provider_chat_id": request.provider_chat_id}),
+            json!({"source": "telegram_topic_create"}),
+        )
+        .await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_topic_create(
@@ -213,8 +208,9 @@ pub(crate) async fn get_telegram_topic_detail(
     State(state): State<AppState>,
     Path(topic_id): Path<String>,
 ) -> Result<Json<TelegramTopic>, ApiError> {
-    let store = telegram_store(&state)?;
-    let topic = crate::integrations::telegram::client::topics::get_topic(store.pool(), &topic_id)
+    let store = telegram_provider_runtime_service(&state)?;
+    let topic = store
+        .get_topic(&topic_id)
         .await?
         .ok_or(ApiError::NotFound)?;
 
@@ -229,8 +225,9 @@ pub(crate) async fn post_telegram_topic_close(
 ) -> Result<Json<TelegramTopicLifecycleResponse>, ApiError> {
     request.validate()?;
     ensure_telegram_account_operation_allowed(&state, &request.account_id, "topics.close").await?;
-    let store = telegram_store(&state)?;
-    let topic = crate::integrations::telegram::client::topics::get_topic(store.pool(), &topic_id)
+    let store = telegram_provider_runtime_service(&state)?;
+    let topic = store
+        .get_topic(&topic_id)
         .await?
         .ok_or(ApiError::NotFound)?;
     let command_kind = if request.is_closed {
@@ -240,35 +237,35 @@ pub(crate) async fn post_telegram_topic_close(
     };
     let command_id = request.command_id.clone();
 
-    lifecycle::insert_command(
-        store.pool(),
-        &command_id,
-        &request.account_id,
-        command_kind,
-        &format!(
-            "{command_kind}:{}:{}",
-            topic.provider_topic_id,
-            Utc::now().timestamp_millis()
-        ),
-        &request.provider_chat_id,
-        None,
-        "available",
-        "provider_write",
-        "confirmed",
-        AUDIT_ACTOR_ID,
-        json!({
+    store
+        .insert_command(
+            &command_id,
+            &request.account_id,
+            command_kind,
+            &format!(
+                "{command_kind}:{}:{}",
+                topic.provider_topic_id,
+                Utc::now().timestamp_millis()
+            ),
+            &request.provider_chat_id,
+            None,
+            "available",
+            "provider_write",
+            "confirmed",
+            AUDIT_ACTOR_ID,
+            json!({
             "provider_topic_id": topic.provider_topic_id,
             "is_closed": request.is_closed,
-        }),
-        json!({
+            }),
+            json!({
             "topic_id": topic.topic_id,
             "telegram_chat_id": topic.telegram_chat_id,
             "provider_chat_id": topic.provider_chat_id,
             "provider_topic_id": topic.provider_topic_id,
-        }),
-        json!({"source": "telegram_topic_close"}),
-    )
-    .await?;
+            }),
+            json!({"source": "telegram_topic_close"}),
+        )
+        .await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_topic_close(
@@ -317,13 +314,10 @@ pub(crate) async fn get_telegram_topic_messages(
     Path(topic_id): Path<String>,
     Query(query): Query<TelegramTopicMessagesQuery>,
 ) -> Result<Json<TelegramMessageListResponse>, ApiError> {
-    let store = telegram_store(&state)?;
+    let store = telegram_provider_runtime_service(&state)?;
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
 
-    let message_ids = crate::integrations::telegram::client::topics::list_topic_message_ids(
-        &store, &topic_id, limit,
-    )
-    .await?;
+    let message_ids = store.list_topic_message_ids(&topic_id, limit).await?;
 
     if message_ids.is_empty() {
         return Ok(Json(TelegramMessageListResponse { items: vec![] }));
@@ -339,14 +333,14 @@ pub(crate) async fn search_telegram_topics(
     State(state): State<AppState>,
     Query(query): Query<TelegramTopicSearchQuery>,
 ) -> Result<Json<TelegramTopicListApiResponse>, ApiError> {
-    let store = telegram_store(&state)?;
+    let store = telegram_provider_runtime_service(&state)?;
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let search_q = query.q.trim().to_owned();
     let telegram_chat_id = query.telegram_chat_id.trim().to_owned();
 
     if search_q.is_empty() {
         return Err(ApiError::Telegram(
-            crate::integrations::telegram::client::TelegramError::InvalidRequest(
+            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
                 "search query `q` is required".to_owned(),
             ),
         ));
@@ -354,19 +348,15 @@ pub(crate) async fn search_telegram_topics(
 
     if telegram_chat_id.is_empty() {
         return Err(ApiError::Telegram(
-            crate::integrations::telegram::client::TelegramError::InvalidRequest(
+            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
                 "search query `telegram_chat_id` is required".to_owned(),
             ),
         ));
     }
 
-    let items = crate::integrations::telegram::client::topics::search_topics(
-        store.pool(),
-        &telegram_chat_id,
-        &search_q,
-        limit,
-    )
-    .await?;
+    let items = store
+        .search_topics(&telegram_chat_id, &search_q, limit)
+        .await?;
 
     Ok(Json(TelegramTopicListApiResponse {
         telegram_chat_id,

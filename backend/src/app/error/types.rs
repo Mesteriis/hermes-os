@@ -2,6 +2,7 @@ use std::io;
 
 use crate::ai::control_center::AiControlCenterError;
 use crate::ai::core::AiError;
+use crate::application::provider_runtime_contracts::{TelegramError, WhatsappWebError};
 use crate::application::review_promotion::ReviewPromotionError;
 use crate::domains::calendar::events::CalendarError;
 use crate::domains::communications::core::CommunicationIngestionError;
@@ -21,8 +22,6 @@ use crate::domains::tasks::candidates::TaskCandidateError;
 use crate::engines::automation::AutomationError;
 use crate::engines::consistency::ConsistencyError;
 use crate::integrations::mail::accounts::EmailAccountSetupError;
-use crate::integrations::telegram::client::TelegramError;
-use crate::integrations::whatsapp::client::WhatsappWebError;
 use crate::platform::audit::ApiAuditError;
 use crate::platform::calls::CallError;
 use crate::platform::events::{EventEnvelopeError, EventStoreError};

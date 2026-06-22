@@ -4,11 +4,10 @@ use serde_json::{Value, json};
 
 use super::helpers::telegram_api_hash_from_config;
 use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::{
+use crate::application::provider_runtime_contracts::{
     TelegramError, TelegramQrLoginPasswordRequest, TelegramQrLoginStartRequest,
-    TelegramQrLoginStatusResponse,
+    TelegramQrLoginStatusResponse, qr_login,
 };
-use crate::integrations::telegram::tdjson;
 
 pub(crate) async fn post_telegram_qr_login_start(
     State(state): State<AppState>,
@@ -20,7 +19,7 @@ pub(crate) async fn post_telegram_qr_login_start(
     );
 
     Ok(Json(
-        tdjson::start_qr_login(
+        qr_login::start_qr_login(
             state.config.clone(),
             state.account_setup.pending_telegram_qr_login.clone(),
             request,
@@ -51,7 +50,7 @@ pub(crate) async fn delete_telegram_qr_login(
     Path(setup_id): Path<String>,
 ) -> Result<Json<Value>, ApiError> {
     let setup_id = setup_id.trim().to_owned();
-    tdjson::cancel_qr_login(
+    qr_login::cancel_qr_login(
         state.account_setup.pending_telegram_qr_login.clone(),
         &setup_id,
     )?;
@@ -67,7 +66,7 @@ pub(crate) async fn post_telegram_qr_login_password(
     Path(setup_id): Path<String>,
     Json(request): Json<TelegramQrLoginPasswordRequest>,
 ) -> Result<Json<TelegramQrLoginStatusResponse>, ApiError> {
-    Ok(Json(tdjson::submit_qr_login_password(
+    Ok(Json(qr_login::submit_qr_login_password(
         state.account_setup.pending_telegram_qr_login.clone(),
         &setup_id,
         request,

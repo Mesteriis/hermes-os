@@ -87,6 +87,12 @@ use crate::domains::persons::identity::{
 };
 
 use crate::application::email_intelligence::{EmailIntelligenceError, EmailIntelligenceService};
+use crate::application::provider_runtime_contracts::{
+    NewTelegramMessage, NewWhatsappWebMessage, ProviderCommunicationMessage,
+    TelegramAccountSetupRequest, TelegramAccountSetupResponse, TelegramChat, TelegramError,
+    TelegramMessageIngestResult, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
+    WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
+};
 use crate::domains::calendar::brain::{CalendarBrainError, CalendarBrainService};
 use crate::domains::calendar::core::{
     CalendarCoreError, ContextPackInput, EventAgendaStore, EventChecklistStore,
@@ -151,17 +157,7 @@ use crate::integrations::ollama::client::{OllamaClient, OllamaClientConfig};
 use crate::integrations::omniroute::client::{
     OmniRouteClient, OmniRouteClientConfig, OmniRouteError,
 };
-use crate::integrations::telegram::client::{
-    NewTelegramMessage, ProviderCommunicationMessage, TelegramAccountSetupRequest,
-    TelegramAccountSetupResponse, TelegramChat, TelegramError, TelegramMessageIngestResult,
-    TelegramStore,
-};
 use crate::integrations::telegram::tdjson;
-use crate::integrations::whatsapp::client::{
-    NewWhatsappWebMessage, WhatsappWebAccountSetupRequest, WhatsappWebAccountSetupResponse,
-    WhatsappWebError, WhatsappWebMessage, WhatsappWebMessageIngestResult, WhatsappWebSession,
-    WhatsappWebStore,
-};
 use crate::platform::events::{
     EventEnvelope, EventEnvelopeError, EventStore, EventStoreError, NewEventEnvelope,
 };

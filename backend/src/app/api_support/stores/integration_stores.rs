@@ -2,30 +2,19 @@ use super::super::*;
 use super::database::database_pool;
 use std::sync::Arc;
 
-pub(crate) fn telegram_store(state: &AppState) -> Result<TelegramStore, ApiError> {
-    let pool = database_pool(state)?;
-    Ok(TelegramStore::new(
-        pool.clone(),
-        Arc::new(
-            crate::domains::communications::core::CommunicationProviderAccountStore::new(
-                pool.clone(),
-            ),
-        ),
-        Arc::new(
-            crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
-                pool.clone(),
-            ),
-        ),
-        Arc::new(
-            crate::domains::communications::messages::ProviderChannelMessageStore::new(
-                pool.clone(),
-            ),
-        ),
-        Arc::new(
-            crate::platform::communications::EventStoreProviderMessageObservationEventPort::new(
-                pool,
-            ),
-        ),
+fn build_telegram_provider_store(
+    state: &AppState,
+) -> Result<crate::application::TelegramProviderRuntimeStore, ApiError> {
+    Ok(crate::application::telegram_provider_runtime_store(
+        database_pool(state)?,
+    ))
+}
+
+pub(crate) fn telegram_provider_runtime_service(
+    state: &AppState,
+) -> Result<crate::application::TelegramProviderRuntimeApplicationService, ApiError> {
+    Ok(crate::application::telegram_provider_runtime_service(
+        database_pool(state)?,
     ))
 }
 
@@ -44,7 +33,7 @@ pub(crate) fn telegram_runtime_use_case_context(
                     crate::domains::communications::core::CommunicationProviderSecretBindingStore::new(
                         pool.clone(),
                     ),
-                telegram_store: telegram_store(state)?,
+                telegram_store: build_telegram_provider_store(state)?,
                 secret_store: SecretReferenceStore::new(pool),
             },
             crate::application::telegram_runtime::TelegramRuntimeUseCaseRuntime {
@@ -65,7 +54,7 @@ pub(crate) fn telegram_message_write_service(
 > {
     Ok(
         crate::application::communication_provider_writes::TelegramMessageWriteApplicationService::new(
-            telegram_store(state)?,
+            build_telegram_provider_store(state)?,
             api_audit_log(state)?,
             event_store(state)?,
             state.event_bus.clone(),
@@ -73,17 +62,50 @@ pub(crate) fn telegram_message_write_service(
     )
 }
 
-pub(crate) fn whatsapp_web_store(state: &AppState) -> Result<WhatsappWebStore, ApiError> {
-    let pool = database_pool(state)?;
-    Ok(WhatsappWebStore::new(
-        pool.clone(),
-        Arc::new(
-            crate::domains::communications::core::CommunicationProviderAccountStore::new(
-                pool.clone(),
-            ),
+pub(crate) fn telegram_fixture_ingest_service(
+    state: &AppState,
+) -> Result<
+    crate::application::communication_fixture_ingest::TelegramFixtureIngestApplicationService,
+    ApiError,
+> {
+    Ok(
+        crate::application::communication_fixture_ingest::TelegramFixtureIngestApplicationService::new(
+            database_pool(state)?,
+            build_telegram_provider_store(state)?,
+            event_store(state)?,
+            state.event_bus.clone(),
         ),
-        Arc::new(crate::domains::communications::messages::ProviderChannelMessageStore::new(pool)),
+    )
+}
+
+fn build_whatsapp_provider_store(
+    state: &AppState,
+) -> Result<crate::application::WhatsappProviderRuntimeStore, ApiError> {
+    Ok(crate::application::whatsapp_provider_runtime_store(
+        database_pool(state)?,
     ))
+}
+
+pub(crate) fn whatsapp_provider_runtime_service(
+    state: &AppState,
+) -> Result<crate::application::WhatsappProviderRuntimeApplicationService, ApiError> {
+    Ok(crate::application::whatsapp_provider_runtime_service(
+        database_pool(state)?,
+    ))
+}
+
+pub(crate) fn whatsapp_fixture_ingest_service(
+    state: &AppState,
+) -> Result<
+    crate::application::communication_fixture_ingest::WhatsappFixtureIngestApplicationService,
+    ApiError,
+> {
+    Ok(
+        crate::application::communication_fixture_ingest::WhatsappFixtureIngestApplicationService::new(
+            database_pool(state)?,
+            build_whatsapp_provider_store(state)?,
+        ),
+    )
 }
 
 pub(crate) fn automation_store(state: &AppState) -> Result<AutomationStore, ApiError> {

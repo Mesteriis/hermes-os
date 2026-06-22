@@ -12,10 +12,12 @@ use crate::application::provider_communication_projection::{
 use crate::application::telegram_runtime::{self, TelegramRuntimeUseCaseContext};
 use crate::integrations::telegram::client::lifecycle;
 use crate::integrations::telegram::client::models::messages::{
-    TelegramDeleteRequest, TelegramEditRequest, TelegramForwardRequest, TelegramLifecycleResponse,
-    TelegramManualSendRequest, TelegramManualSendResponse, TelegramPinRequest,
-    TelegramReactionRequest, TelegramReactionResponse, TelegramReplyRequest,
-    TelegramRestoreVisibilityRequest,
+    TelegramDeleteRequest, TelegramEditRequest, TelegramForwardChainResponse,
+    TelegramForwardRequest, TelegramLifecycleResponse, TelegramManualSendRequest,
+    TelegramManualSendResponse, TelegramMessageTombstoneListResponse,
+    TelegramMessageVersionListResponse, TelegramPinRequest, TelegramReactionListResponse,
+    TelegramReactionRequest, TelegramReactionResponse, TelegramReplyChainResponse,
+    TelegramReplyRequest, TelegramRestoreVisibilityRequest,
 };
 use crate::integrations::telegram::client::{TelegramError, TelegramStore};
 use crate::platform::audit::{ApiAuditError, ApiAuditLog, NewApiAuditRecord};
@@ -544,6 +546,55 @@ impl TelegramMessageWriteApplicationService {
             action: "mark_read".to_owned(),
             status: "read".to_owned(),
             metadata,
+        })
+    }
+
+    pub(crate) async fn message_versions(
+        &self,
+        message_id: &str,
+    ) -> Result<TelegramMessageVersionListResponse, TelegramMessageWriteError> {
+        let versions = lifecycle::list_message_versions(self.store.pool(), message_id).await?;
+        Ok(TelegramMessageVersionListResponse {
+            message_id: message_id.to_owned(),
+            versions,
+        })
+    }
+
+    pub(crate) async fn message_tombstones(
+        &self,
+        message_id: &str,
+    ) -> Result<TelegramMessageTombstoneListResponse, TelegramMessageWriteError> {
+        let tombstones = lifecycle::list_tombstones(self.store.pool(), message_id).await?;
+        Ok(TelegramMessageTombstoneListResponse {
+            message_id: message_id.to_owned(),
+            tombstones,
+        })
+    }
+
+    pub(crate) async fn reply_chain(
+        &self,
+        message_id: &str,
+    ) -> Result<TelegramReplyChainResponse, TelegramMessageWriteError> {
+        Ok(lifecycle::reply_chain(&self.store, message_id).await?)
+    }
+
+    pub(crate) async fn forward_chain(
+        &self,
+        message_id: &str,
+    ) -> Result<TelegramForwardChainResponse, TelegramMessageWriteError> {
+        Ok(lifecycle::forward_chain(&self.store, message_id).await?)
+    }
+
+    pub(crate) async fn reactions(
+        &self,
+        message_id: &str,
+    ) -> Result<TelegramReactionListResponse, TelegramMessageWriteError> {
+        let reactions = lifecycle::list_reactions(self.store.pool(), message_id).await?;
+        let summary = lifecycle::reaction_summary(self.store.pool(), message_id).await?;
+        Ok(TelegramReactionListResponse {
+            message_id: message_id.to_owned(),
+            reactions,
+            summary,
         })
     }
 

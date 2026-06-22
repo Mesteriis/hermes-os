@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::integrations::whatsapp::client::WhatsappWebError;
+use crate::application::provider_runtime_contracts::WhatsappWebError;
 
 use super::super::ErrorParts;
 

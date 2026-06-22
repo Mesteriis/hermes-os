@@ -7,9 +7,9 @@ use super::chat_actions::{
     record_chat_lifecycle_command_with_payload,
 };
 use super::helpers::{AUDIT_ACTOR_ID, ensure_telegram_account_operation_allowed};
-use crate::app::api_support::{api_audit_log, telegram_store};
+use crate::app::api_support::{api_audit_log, telegram_provider_runtime_service};
 use crate::app::{ApiError, AppState};
-use crate::integrations::telegram::client::TelegramError;
+use crate::application::provider_runtime_contracts::TelegramError;
 use crate::platform::audit::NewApiAuditRecord;
 
 #[derive(serde::Deserialize)]
@@ -166,7 +166,7 @@ pub(crate) async fn post_telegram_chat_reassign_folders(
         )));
     }
 
-    let chat = telegram_store(&state)?
+    let chat = telegram_provider_runtime_service(&state)?
         .telegram_chat_by_id(&telegram_chat_id)
         .await?
         .ok_or_else(|| {

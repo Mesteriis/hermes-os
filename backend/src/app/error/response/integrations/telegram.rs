@@ -1,6 +1,6 @@
 use axum::http::StatusCode;
 
-use crate::integrations::telegram::client::TelegramError;
+use crate::application::provider_runtime_contracts::TelegramError;
 
 use super::super::ErrorParts;
 

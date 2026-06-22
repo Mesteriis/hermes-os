@@ -5,11 +5,11 @@ use serde::Deserialize;
 use super::helpers::AUDIT_ACTOR_ID;
 use crate::app::api_support::{api_audit_log, telegram_runtime_use_case_context};
 use crate::app::{ApiError, AppState};
-use crate::application::telegram_runtime;
-use crate::integrations::telegram::runtime::{
+use crate::application::provider_runtime_contracts::{
     TelegramRuntimeRestartRequest, TelegramRuntimeStartRequest, TelegramRuntimeStatus,
     TelegramRuntimeStopRequest,
 };
+use crate::application::telegram_runtime;
 use crate::platform::audit::NewApiAuditRecord;
 
 #[derive(Deserialize)]

@@ -347,6 +347,18 @@ export type MessagePinToggleResponse = {
   pinned: boolean
 }
 
+export type CommunicationProviderMessageCommandResponse = {
+  message_id: string
+  raw_record_id: string
+  conversation_id: string
+  provider_chat_id: string
+  provider_message_id: string | null
+  channel_kind: string
+  status: string
+  command_id: string
+  provider: string
+}
+
 export type MessageImportantToggleResponse = {
   message_id: string
   important: boolean

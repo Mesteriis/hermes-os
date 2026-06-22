@@ -5,23 +5,20 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-use super::helpers::{AUDIT_ACTOR_ID, publish_telegram_event, telegram_message_snapshot_payload};
+use super::helpers::{AUDIT_ACTOR_ID, publish_telegram_event};
 use crate::app::api_support::{
     api_audit_log, communication_provider_account_store, communication_storage_store,
-    telegram_runtime_use_case_context, telegram_store,
+    telegram_provider_runtime_service, telegram_runtime_use_case_context,
 };
 use crate::app::{ApiError, AppState};
+use crate::application::provider_runtime_contracts::{
+    TelegramAttachmentDownloadStateUpdate, TelegramCommandKind, TelegramError,
+    TelegramMediaDownloadRequest, TelegramMediaDownloadResponse, TelegramMediaSendType,
+    ensure_telegram_account_active, lifecycle,
+};
 use crate::application::telegram_runtime;
 use crate::domains::communications::core::CommunicationProviderAccountStore;
 use crate::domains::communications::storage::AttachmentSafetyScanStatus;
-use crate::integrations::telegram::client::lifecycle;
-use crate::integrations::telegram::client::models::messages::TelegramCommandKind;
-use crate::integrations::telegram::client::{
-    TelegramAttachmentDownloadStateUpdate, TelegramError, ensure_telegram_account_active,
-};
-use crate::integrations::telegram::runtime::{
-    TelegramMediaDownloadRequest, TelegramMediaDownloadResponse, TelegramMediaSendType,
-};
 use crate::platform::audit::NewApiAuditRecord;
 use crate::platform::events::NewEventEnvelope;
 use crate::platform::events::bus::telegram_event_types;
@@ -130,11 +127,6 @@ pub(crate) async fn post_telegram_media_upload(
     Json(request): Json<TelegramMediaUploadRequest>,
 ) -> Result<Json<TelegramMediaUploadResponse>, ApiError> {
     let request = validate_media_upload_request(request)?;
-    let pool = state
-        .database
-        .pool()
-        .cloned()
-        .ok_or(ApiError::DatabaseNotConfigured)?;
     let provider_account_store = communication_provider_account_store(&state)?;
     let account = provider_account_store
         .get(&request.account_id)
@@ -183,24 +175,26 @@ pub(crate) async fn post_telegram_media_upload(
         "scan_status": &attachment.scan_status,
     });
     let idempotency_key = media_upload_idempotency_key(&request, &attachment.blob_id);
-    if let Some(existing) =
-        lifecycle::find_command_by_idempotency(&pool, &request.account_id, &idempotency_key).await?
+    let provider_runtime = telegram_provider_runtime_service(&state)?;
+    if let Some(existing) = provider_runtime
+        .find_command_by_idempotency(&request.account_id, &idempotency_key)
+        .await?
     {
         return Ok(Json(media_upload_response(&existing)));
     }
-    let command = lifecycle::insert_command(
-        &pool,
-        &request.command_id,
-        &request.account_id,
-        TelegramCommandKind::SendMedia.as_str(),
-        &idempotency_key,
-        &request.provider_chat_id,
-        None,
-        "available",
-        "provider_write",
-        "confirmed",
-        AUDIT_ACTOR_ID,
-        json!({
+    let command = provider_runtime
+        .insert_command(
+            &request.command_id,
+            &request.account_id,
+            TelegramCommandKind::SendMedia.as_str(),
+            &idempotency_key,
+            &request.provider_chat_id,
+            None,
+            "available",
+            "provider_write",
+            "confirmed",
+            AUDIT_ACTOR_ID,
+            json!({
             "attachment_id": attachment.attachment_id.clone(),
             "blob_id": attachment.blob_id.clone(),
             "media_type": request.media_type.as_str(),
@@ -209,15 +203,15 @@ pub(crate) async fn post_telegram_media_upload(
             "content_type": attachment.content_type.clone(),
             "size_bytes": attachment.size_bytes,
             "sha256": attachment.sha256.clone(),
-        }),
-        json!({
+            }),
+            json!({
             "provider_chat_id": request.provider_chat_id,
             "attachment_id": request.attachment_id,
             "blob_id": request.blob_id,
-        }),
-        audit_metadata.clone(),
-    )
-    .await?;
+            }),
+            audit_metadata.clone(),
+        )
+        .await?;
 
     api_audit_log(&state)?
         .record(&NewApiAuditRecord::telegram_media_upload(
@@ -297,7 +291,7 @@ pub(crate) async fn post_telegram_media_upload(
 }
 
 fn media_upload_response(
-    command: &crate::integrations::telegram::client::models::messages::TelegramProviderWriteCommand,
+    command: &crate::application::provider_runtime_contracts::TelegramProviderWriteCommand,
 ) -> TelegramMediaUploadResponse {
     TelegramMediaUploadResponse {
         command_id: command.command_id.clone(),
@@ -343,7 +337,7 @@ pub(crate) async fn post_telegram_media_download(
     );
     publish_telegram_event(&state, started).await?;
 
-    let telegram_store = telegram_store(&state)?;
+    let provider_runtime = telegram_provider_runtime_service(&state)?;
     let runtime_context = telegram_runtime_use_case_context(&state)?;
     let response = match telegram_runtime::download_media(&runtime_context, &request).await {
         Ok(response) => response,
@@ -367,7 +361,7 @@ pub(crate) async fn post_telegram_media_download(
     };
 
     if response.is_downloading_completed {
-        let attachment_anchor = telegram_store
+        let attachment_anchor = provider_runtime
             .attachment_anchor_for_message(
                 &request.account_id,
                 &request.provider_chat_id,
@@ -377,7 +371,7 @@ pub(crate) async fn post_telegram_media_download(
         let provider_attachment_id = request.provider_attachment_id();
         let content_type = request.content_type();
         let filename = request.filename();
-        telegram_store
+        provider_runtime
             .update_message_attachment_download_state(TelegramAttachmentDownloadStateUpdate {
                 message_id: &attachment_anchor.message_id,
                 provider_attachment_id: &provider_attachment_id,
@@ -393,10 +387,10 @@ pub(crate) async fn post_telegram_media_download(
             telegram_event_types::MEDIA_DOWNLOADED,
             &request.account_id,
             &attachment_anchor.message_id,
-            telegram_message_snapshot_payload(
-                &telegram_store,
-                &attachment_anchor.message_id,
-                json!({
+            provider_runtime
+                .telegram_message_snapshot_payload(
+                    &attachment_anchor.message_id,
+                    json!({
                     "provider_chat_id": &request.provider_chat_id,
                     "provider_message_id": &request.provider_message_id,
                     "tdlib_file_id": response.tdlib_file_id,
@@ -405,9 +399,9 @@ pub(crate) async fn post_telegram_media_download(
                     "attachment_id": response.attachment_id.clone(),
                     "blob_id": response.blob_id.clone(),
                     "scan_status": response.scan_status.clone(),
-                }),
-            )
-            .await?,
+                    }),
+                )
+                .await?,
         );
         publish_telegram_event(&state, event).await?;
     } else {

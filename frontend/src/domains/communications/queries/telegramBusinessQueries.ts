@@ -39,7 +39,6 @@ import type {
   TelegramChatSearchResponse,
   TelegramForwardChainResponse,
   TelegramLifecycleResponse,
-  TelegramManualSendResponse,
   TelegramMediaSearchResponse,
   TelegramMessage,
   TelegramMessageListResponse,
@@ -54,7 +53,10 @@ import type {
 } from '../../../shared/communications/types/telegram'
 import type { TelegramRawMessageResponse } from '../../../shared/communications/types/telegramRawEvidence'
 import type { AttachmentPreviewResponse } from '../types/attachments'
-import type { MessagePinToggleResponse } from '../types/communications'
+import type {
+  CommunicationProviderMessageCommandResponse,
+  MessagePinToggleResponse,
+} from '../types/communications'
 
 export const telegramBusinessQueryKeys = {
   chats: ['communications', 'telegram', 'chats'] as const,
@@ -421,7 +423,7 @@ function useInvalidateTelegramBusinessState() {
 
 export function useSendTelegramMessageMutation() {
   const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<TelegramManualSendResponse, Error, { account_id: string; provider_chat_id: string; text: string }>({
+  return useMutation<CommunicationProviderMessageCommandResponse, Error, { account_id: string; provider_chat_id: string; text: string }>({
     mutationFn: (request: { account_id: string; provider_chat_id: string; text: string }) =>
       sendTelegramBusinessMessage(request),
     onSuccess: invalidate,
@@ -430,7 +432,7 @@ export function useSendTelegramMessageMutation() {
 
 export function useReplyTelegramMessageMutation() {
   const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<TelegramManualSendResponse, Error, {
+  return useMutation<CommunicationProviderMessageCommandResponse, Error, {
     message_id: string
     account_id?: string
     provider_chat_id?: string
@@ -444,7 +446,7 @@ export function useReplyTelegramMessageMutation() {
 
 export function useForwardTelegramMessageMutation() {
   const invalidate = useInvalidateTelegramBusinessState()
-  return useMutation<TelegramManualSendResponse, Error, {
+  return useMutation<CommunicationProviderMessageCommandResponse, Error, {
       message_id: string
       account_id?: string
       provider_chat_id: string

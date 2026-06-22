@@ -2,10 +2,12 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use serde::{Deserialize, Serialize};
 
-use crate::app::api_support::{telegram_runtime_use_case_context, telegram_store};
+use crate::app::api_support::{
+    telegram_provider_runtime_service, telegram_runtime_use_case_context,
+};
 use crate::app::{ApiError, AppState};
+use crate::application::provider_runtime_contracts::models::TelegramChat;
 use crate::application::telegram_runtime;
-use crate::integrations::telegram::client::models::TelegramChat;
 
 #[derive(Deserialize)]
 pub(crate) struct TelegramMessageSearchQuery {
@@ -47,7 +49,7 @@ pub(crate) struct TelegramPinnedMessagesQuery {
 #[derive(Serialize)]
 pub(crate) struct TelegramSearchResponse {
     pub(crate) query: String,
-    pub(crate) items: Vec<crate::integrations::telegram::client::models::messages::TelegramMessage>,
+    pub(crate) items: Vec<crate::application::provider_runtime_contracts::TelegramMessage>,
     pub(crate) total: usize,
 }
 
@@ -98,13 +100,13 @@ pub(crate) async fn search_telegram_messages(
     State(state): State<AppState>,
     Query(query): Query<TelegramMessageSearchQuery>,
 ) -> Result<Json<TelegramSearchResponse>, ApiError> {
-    let store = telegram_store(&state)?;
+    let store = telegram_provider_runtime_service(&state)?;
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let search_q = query.q.trim().to_owned();
 
     if search_q.is_empty() {
         return Err(ApiError::Telegram(
-            crate::integrations::telegram::client::TelegramError::InvalidRequest(
+            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
                 "search query `q` is required".to_owned(),
             ),
         ));
@@ -137,7 +139,7 @@ pub(crate) async fn post_telegram_provider_search(
 
     if account_id.is_empty() {
         return Err(ApiError::Telegram(
-            crate::integrations::telegram::client::TelegramError::InvalidRequest(
+            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
                 "search payload account_id is required".to_owned(),
             ),
         ));
@@ -145,7 +147,7 @@ pub(crate) async fn post_telegram_provider_search(
 
     if search_q.is_empty() {
         return Err(ApiError::Telegram(
-            crate::integrations::telegram::client::TelegramError::InvalidRequest(
+            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
                 "search query `q` is required".to_owned(),
             ),
         ));
@@ -188,13 +190,13 @@ pub(crate) async fn search_telegram_chats(
     State(state): State<AppState>,
     Query(query): Query<TelegramChatSearchQuery>,
 ) -> Result<Json<TelegramChatSearchResponse>, ApiError> {
-    let store = telegram_store(&state)?;
+    let store = telegram_provider_runtime_service(&state)?;
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let search_q = query.q.trim().to_owned();
 
     if search_q.is_empty() {
         return Err(ApiError::Telegram(
-            crate::integrations::telegram::client::TelegramError::InvalidRequest(
+            crate::application::provider_runtime_contracts::TelegramError::InvalidRequest(
                 "search query `q` is required".to_owned(),
             ),
         ));
@@ -217,7 +219,7 @@ pub(crate) async fn get_telegram_pinned_messages(
     Path(conversation_id): Path<String>,
     Query(query): Query<TelegramPinnedMessagesQuery>,
 ) -> Result<Json<crate::app::api_support::TelegramMessageListResponse>, ApiError> {
-    let store = telegram_store(&state)?;
+    let store = telegram_provider_runtime_service(&state)?;
     let items = store
         .pinned_messages(&conversation_id, query.limit.unwrap_or(100).clamp(1, 200))
         .await?;
@@ -232,9 +234,9 @@ pub(crate) async fn search_telegram_media(
     State(state): State<AppState>,
     Query(query): Query<TelegramMediaSearchQuery>,
 ) -> Result<Json<TelegramMediaSearchResponse>, ApiError> {
-    use crate::integrations::telegram::client::models::messages::TelegramMessage as DomainMsg;
+    use crate::application::provider_runtime_contracts::TelegramMessage as DomainMsg;
 
-    let store = telegram_store(&state)?;
+    let store = telegram_provider_runtime_service(&state)?;
     let limit = query.limit.unwrap_or(50).clamp(1, 200);
     let search_q = query
         .q
