@@ -129,7 +129,6 @@ export const useLayoutEditorStore = defineStore('layoutEditor', () => {
   const isLayoutEditing = ref(false)
   const isWidgetDrawerOpen = ref(false)
   const selectedLayoutWidgetId = ref<string | null>(null)
-  const pendingNotificationTarget = ref<string | null>(null)
 
   const effectiveLayoutSettings = computed<LayoutSettings>(() => {
     return layoutDraft.value ?? layoutSettings.value

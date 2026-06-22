@@ -1,17 +1,10 @@
 import { useQuery } from '@tanstack/vue-query'
-import { computed, type Ref } from 'vue'
 import {
   fetchApplicationSettings,
   fetchProviderAccounts,
   fetchCalendarAccounts
 } from '../api/settings'
-import {
-  FRONTEND_LAYOUT_SETTING_KEY,
-  FRONTEND_SIDEBAR_SETTING_KEY,
-  FRONTEND_LOCALE_SETTING_KEY,
-  FRONTEND_THEME_SETTING_KEY,
-  type ApplicationSetting
-} from '../types/settings'
+import type { ApplicationSetting } from '../types/settings'
 
 export const settingsKeys = {
   all: ['settings'] as const,

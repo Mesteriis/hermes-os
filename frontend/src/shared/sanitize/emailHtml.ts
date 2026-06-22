@@ -262,7 +262,7 @@ function isRemoteImageUrl(value: string): boolean {
 }
 
 function isSafeUrl(tagName: string, attributeName: string, rawValue: string): boolean {
-	const value = decodeHtmlEntities(rawValue).trim().replace(/[\u0000-\u001F\u007F\s]+/g, '')
+	const value = stripUnsafeUrlCharacters(decodeHtmlEntities(rawValue).trim())
 	const lowerValue = value.toLowerCase()
 
 	if (!lowerValue) {
@@ -278,6 +278,15 @@ function isSafeUrl(tagName: string, attributeName: string, rawValue: string): bo
 	}
 
 	return lowerValue.startsWith('https://') || lowerValue.startsWith('http://') || lowerValue.startsWith('mailto:')
+}
+
+function stripUnsafeUrlCharacters(value: string): string {
+	return Array.from(value)
+		.filter((char) => {
+			const code = char.charCodeAt(0)
+			return code > 31 && code !== 127 && !/\s/.test(char)
+		})
+		.join('')
 }
 
 function isSafeIntegerAttribute(value: string): boolean {

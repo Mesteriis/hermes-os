@@ -6,21 +6,23 @@
 	"packageManager": "pnpm@11.5.1",
 	"scripts": {
 		"dev": "vite",
-		"build": "vue-tsc --noEmit && vite build",
-		"lint:ts": "vue-tsc --noEmit",
+		"build": "pnpm typecheck && vite build",
+		"typecheck": "vue-tsc --noEmit",
+		"lint:ox": "oxlint --vue-plugin .",
 		"lint:styles": "node scripts/check-no-inline-styles.mjs",
 		"lint:srp": "node scripts/check-component-lines.mjs",
-		"lint": "pnpm lint:ts && pnpm lint:styles && pnpm lint:srp",
+		"lint": "pnpm lint:ox && pnpm lint:styles && pnpm lint:srp",
 		"preview": "vite preview",
 		"test": "pnpm test:unit",
 		"test:unit": "vitest run",
-		"validate": "pnpm lint:ts && pnpm lint:styles && pnpm lint:srp && pnpm test:unit && pnpm build"
+		"validate": "pnpm lint && pnpm typecheck && pnpm test:unit && pnpm build"
 	},
 	"devDependencies": {
 		"@tauri-apps/cli": "^2.11.2",
 		"@types/node": "^25.9.1",
 		"@vitejs/plugin-vue": "^6.0.7",
 		"autoprefixer": "^10.4.20",
+		"oxlint": "^1.70.0",
 		"postcss": "^8.5.3",
 		"tailwindcss": "^3.4.17",
 		"typescript": "^6.0.2",

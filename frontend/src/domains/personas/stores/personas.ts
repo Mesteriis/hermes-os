@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { PersonItem, PersonDossier, PersonIdentityCandidate, PersonIdentity, Relationship } from '../types/persona'
+import type { PersonDossier, PersonIdentityCandidate, PersonIdentity, Relationship } from '../types/persona'
 import { reviewIdentityCandidate, assignIdentityTrace, reviewRelationship } from '../api/personas'
 
 export function formatIdentityTraceKind(kind: string): string {

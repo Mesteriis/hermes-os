@@ -5,7 +5,6 @@ import type {
 	GraphNode,
 	GraphNeighborhood,
 	GraphEdge,
-	GraphEvidenceSummary,
 	ContradictionObservation,
 	ContradictionSeverity,
 	GraphNodeKind

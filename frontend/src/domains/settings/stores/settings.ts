@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ApplicationSetting } from '../types/settings'
 import { saveApplicationSetting } from '../api/settings'
-import { useI18n } from '../../../platform/i18n'
 
 export type SettingsSection =
   | 'appearance'
@@ -13,8 +12,6 @@ export type SettingsSection =
   | 'ai'
 
 export const useSettingsStore = defineStore('settings-ui', () => {
-  const { t } = useI18n()
-
   // --- UI state ---
   const selectedSection = ref<SettingsSection>('appearance')
   const actionMessage = ref('')

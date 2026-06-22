@@ -3,7 +3,6 @@ import type {
   ProviderAccountListResponse,
   CalendarAccount
 } from '../types/settings'
-import type { ProviderAccount } from '../types/settings'
 
 export {
   fetchApplicationSettings,

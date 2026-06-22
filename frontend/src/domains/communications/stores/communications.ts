@@ -10,8 +10,6 @@ import type {
   MailboxHealth,
   CommunicationDraft,
   ComposeFormModel,
-  ComposeMode,
-  CommunicationAccountOption,
   NavigatorMode,
   InspectorMode,
   MessageContextTab,

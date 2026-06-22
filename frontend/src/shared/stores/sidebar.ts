@@ -146,10 +146,6 @@ function defaultSidebarSettings(): SidebarSettings {
     separatorBeforeItemIds: []
   }
 
-  const sidebarPrimaryItemIds = primaryWorkspaceNav
-    .map((item) => item.id)
-    .filter((id): id is SidebarPrimaryItemId => id !== 'communications')
-
   const communicationGroupPrimaryItemIds: SidebarPrimaryItemId[] = ['timeline']
 
   const defaultRootItemIds: SidebarRootItemId[] = primaryWorkspaceNav.flatMap((item) =>

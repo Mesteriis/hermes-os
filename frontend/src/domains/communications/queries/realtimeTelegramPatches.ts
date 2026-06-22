@@ -1,7 +1,6 @@
 import type {
   TelegramChat,
   TelegramChatGroupFilter,
-  TelegramMediaItem,
   TelegramMediaSearchResponse,
   TelegramMessage,
   TelegramMessageListResponse,
