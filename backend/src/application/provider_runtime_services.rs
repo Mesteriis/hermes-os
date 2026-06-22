@@ -13,6 +13,7 @@ use crate::application::provider_runtime_contracts::{
     list_telegram_commands_filtered, list_telegram_topic_message_ids, list_telegram_topics,
     search_telegram_topics_projection,
 };
+use crate::platform::communications::ProviderAccount;
 use crate::platform::secrets::SecretReferenceStore;
 
 #[derive(Clone)]
@@ -48,6 +49,13 @@ impl TelegramProviderRuntimeApplicationService {
         include_removed: bool,
     ) -> Result<Vec<TelegramAccount>, TelegramError> {
         self.store.list_accounts(include_removed).await
+    }
+
+    pub(crate) async fn telegram_account_record(
+        &self,
+        account_id: &str,
+    ) -> Result<ProviderAccount, TelegramError> {
+        self.store.telegram_account_record(account_id).await
     }
 
     pub(crate) async fn logout_account(

@@ -4,6 +4,13 @@ use super::super::errors::TelegramError;
 use super::super::store::TelegramStore;
 
 impl TelegramStore {
+    pub async fn telegram_account_record(
+        &self,
+        account_id: &str,
+    ) -> Result<ProviderAccount, TelegramError> {
+        self.telegram_provider_account(account_id).await
+    }
+
     pub(in crate::integrations::telegram::client) async fn telegram_provider_account(
         &self,
         account_id: &str,

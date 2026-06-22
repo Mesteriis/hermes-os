@@ -18,6 +18,12 @@ pub(crate) fn telegram_provider_runtime_service(
     ))
 }
 
+pub(crate) fn telegram_secret_reference_store(
+    state: &AppState,
+) -> Result<SecretReferenceStore, ApiError> {
+    Ok(SecretReferenceStore::new(database_pool(state)?))
+}
+
 pub(crate) fn telegram_runtime_use_case_context(
     state: &AppState,
 ) -> Result<crate::application::telegram_runtime::TelegramRuntimeUseCaseContext<'_>, ApiError> {
