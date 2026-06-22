@@ -1,4 +1,3 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
@@ -14,7 +13,6 @@ use hermes_hub_backend::domains::communications::core::{
 use hermes_hub_backend::domains::communications::messages::{
     MessageProjectionStore, project_raw_email_message,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -59,11 +57,7 @@ async fn router(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", T),
-            ("DATABASE_URL", database_url),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(T, database_url),
         database,
     )
 }
@@ -72,10 +66,8 @@ macro_rules! v1_msg_post_test {
     ($name:ident, $path_suffix:expr, $body:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-                eprintln!("skip");
-                return;
-            };
+            let test_context = TestContext::new().await;
+            let db = test_context.connection_string();
             let r = router(&db).await;
             let response = r
                 .oneshot(post(
@@ -580,10 +572,8 @@ async fn v1_local_state_endpoints_capture_observation_trail_against_postgres() {
 
 #[tokio::test]
 async fn v1_delete_draft() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let draft_id = format!("draft:fake-{}", uid());
     let r = router(&db).await;
     let response = r
@@ -599,10 +589,8 @@ async fn v1_delete_draft() {
 
 #[tokio::test]
 async fn v1_delete_message_label() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let response = r
         .oneshot(delete("/api/v1/communications/messages/msg:fake/labels"))
@@ -617,10 +605,8 @@ async fn v1_delete_message_label() {
 
 #[tokio::test]
 async fn v1_imap_delete_alias_moves_message_to_local_trash_against_postgres() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip imap delete local trash: no DB");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let database = Database::connect(Some(&db)).await.expect("database");
     let pool = database.pool().expect("configured pool").clone();
     let suffix = uid();

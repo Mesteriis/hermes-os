@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -7,7 +7,6 @@ use chrono::Utc;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::documents::core::{DocumentImportStore, NewDocumentImport};
 use hermes_hub_backend::domains::documents::processing::DocumentProcessingStore;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::events::{EventStore, NewEventEnvelope};
 use hermes_hub_backend::platform::storage::Database;
 use serde_json::Value;
@@ -18,9 +17,8 @@ const LOCAL_API_TOKEN: &str = "document-processing-api-test-token";
 
 #[tokio::test]
 async fn get_document_processing_jobs_rejects_missing_local_api_secret() {
-    let app = hermes_hub_backend::app::build_router(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
-    );
+    let app =
+        hermes_hub_backend::app::build_router(testkit::app::config_with_secret(LOCAL_API_TOKEN));
 
     let response = app
         .oneshot(get_request("/api/v1/document-processing/jobs"))
@@ -40,22 +38,14 @@ async fn get_document_processing_jobs_rejects_missing_local_api_secret() {
 
 #[tokio::test]
 async fn get_document_processing_for_missing_document_returns_404() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing API missing-document test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
     let missing_document_id = format!("doc_processing_api_missing_{:x}", unique_suffix());
@@ -81,12 +71,8 @@ async fn get_document_processing_for_missing_document_returns_404() {
 
 #[tokio::test]
 async fn document_processing_api_returns_expected_payloads() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing API payload test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -111,11 +97,7 @@ async fn document_processing_api_returns_expected_payloads() {
         .expect("enqueue jobs");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -165,12 +147,8 @@ async fn document_processing_api_returns_expected_payloads() {
 
 #[tokio::test]
 async fn post_document_processing_job_retry_requeues_failed_job() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing API retry test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -219,11 +197,7 @@ async fn post_document_processing_job_retry_requeues_failed_job() {
     .expect("mark extract job failed");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
     let command_id = format!("document-processing-retry-{suffix:x}");
@@ -313,12 +287,8 @@ async fn post_document_processing_job_retry_requeues_failed_job() {
 
 #[tokio::test]
 async fn post_document_processing_job_retry_rejects_non_failed_job_with_stable_body() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing API non-failed retry test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -350,11 +320,7 @@ async fn post_document_processing_job_retry_rejects_non_failed_job_with_stable_b
         .expect("extract text job");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
     let retry_path = format!(
@@ -387,12 +353,8 @@ async fn post_document_processing_job_retry_rejects_non_failed_job_with_stable_b
 
 #[tokio::test]
 async fn post_document_processing_job_retry_command_collision_returns_stable_conflict() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing API retry collision test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -421,11 +383,7 @@ async fn post_document_processing_job_retry_command_collision_returns_stable_con
     append_retry_event_for_job(&pool, &command_id, &existing_job_id).await;
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
     let retry_path = format!("/api/v1/document-processing/jobs/{target_job_id}/retry");

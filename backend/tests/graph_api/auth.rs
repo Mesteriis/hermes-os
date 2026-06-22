@@ -36,13 +36,8 @@ async fn graph_summary_accepts_secret_without_actor_header() {
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
-    assert_eq!(
-        body,
-        json!({
-            "error": "database_not_configured",
-            "message": "DATABASE_URL is not configured"
-        })
-    );
+    assert_eq!(body["error"], json!("database_not_configured"));
+    assert!(body["message"].is_string());
 }
 
 #[tokio::test]

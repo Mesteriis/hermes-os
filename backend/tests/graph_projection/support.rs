@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::Utc;
 use hermes_hub_backend::domains::communications::core::{
@@ -55,11 +55,9 @@ pub(crate) struct ExpectedProjectEdge<'a> {
     pub(crate) confidence: f64,
 }
 
-pub(crate) async fn live_projection_context(test_name: &str) -> Option<LiveProjectionContext> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+pub(crate) async fn live_projection_context(_test_name: &str) -> Option<LiveProjectionContext> {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

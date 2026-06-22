@@ -1,6 +1,6 @@
-use std::env;
 use std::fs;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::Utc;
 use tempfile::tempdir;
@@ -68,12 +68,8 @@ async fn encrypted_vault_rejects_wrong_master_key() {
 
 #[tokio::test]
 async fn database_encrypted_vault_persists_ciphertext_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live database encrypted vault test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -122,12 +118,8 @@ async fn database_encrypted_vault_persists_ciphertext_against_postgres() {
 
 #[tokio::test]
 async fn database_encrypted_vault_rejects_wrong_master_key_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live database encrypted vault wrong key test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

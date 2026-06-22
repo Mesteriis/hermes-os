@@ -7,7 +7,6 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::integrations::telegram::client::lifecycle;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, get_request_with_token, json_body, json_post_request_with_actor,
@@ -25,12 +24,8 @@ async fn telegram_reference_routes_return_enriched_message_summaries() {
     let account_id = format!("telegram-reference-{suffix}");
     let chat_id = format!("reference-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -384,12 +379,8 @@ async fn telegram_chat_detail_and_members_routes_return_projected_data() {
     let account_id = format!("telegram-chat-detail-{suffix}");
     let chat_id = format!("chat-detail-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -490,12 +481,8 @@ async fn telegram_folders_route_returns_projection_backed_filters() {
     let suffix = unique_suffix();
     let account_id = format!("telegram-folders-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 

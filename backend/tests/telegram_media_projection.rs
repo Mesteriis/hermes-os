@@ -11,7 +11,6 @@ use hermes_hub_backend::domains::communications::core::{
     NewRawCommunicationRecord,
 };
 use hermes_hub_backend::domains::communications::messages::MessageProjectionStore;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::provider_communication_projection::project_raw_telegram_message;
 use telegram_support::{
@@ -108,12 +107,8 @@ async fn telegram_fixture_media_download_fails_closed_without_live_runtime() {
     let chat_id = format!("media-chat-{suffix}");
     let provider_message_id = format!("media-message-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 

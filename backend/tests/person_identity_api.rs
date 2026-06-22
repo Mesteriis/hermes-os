@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -39,10 +39,8 @@ async fn identity_candidates_reject_missing_local_api_secret() {
 
 #[tokio::test]
 async fn identity_candidates_returns_safe_candidate_payload() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live person identity API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -79,11 +77,7 @@ async fn identity_candidates_returns_safe_candidate_payload() {
         .expect("promote candidate");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -155,10 +149,8 @@ async fn identity_candidates_returns_safe_candidate_payload() {
 
 #[tokio::test]
 async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live person identity API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -189,11 +181,7 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
     let command_id = format!("identity-api-split-confirm-{suffix}");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -245,12 +233,8 @@ async fn identity_candidates_returns_split_candidate_for_confirmed_merge() {
 
 #[tokio::test]
 async fn put_identity_candidate_review_confirms_candidate() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live person identity review API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -282,11 +266,7 @@ async fn put_identity_candidate_review_confirms_candidate() {
     let command_id = format!("identity-api-confirm-{suffix}");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -315,7 +295,7 @@ async fn put_identity_candidate_review_confirms_candidate() {
 
     let review_item: (String, String, String) = sqlx::query_as(
         r#"
-        SELECT status, target_entity_kind, entity_id
+        SELECT status, target_entity_kind, target_entity_id
         FROM review_items
         WHERE metadata->>'identity_candidate_id' = $1
         ORDER BY updated_at DESC
@@ -333,12 +313,8 @@ async fn put_identity_candidate_review_confirms_candidate() {
 
 #[tokio::test]
 async fn person_identity_returns_confirmed_links_for_person() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live person identity detail API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -369,11 +345,7 @@ async fn person_identity_returns_confirmed_links_for_person() {
         identity_candidate_id_from_persons(&left.person_id, &right.person_id);
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -412,12 +384,8 @@ async fn person_identity_returns_confirmed_links_for_person() {
 
 #[tokio::test]
 async fn person_identity_manual_create_paths_capture_observations_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live person identity API write test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -432,11 +400,7 @@ async fn person_identity_manual_create_paths_capture_observations_against_postgr
     let encoded_person_id = urlencoding_percent_encode(&person.person_id);
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -534,8 +498,7 @@ struct PersonIdentityApiContext {
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
-        .expect("valid local API secret")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn get_request(uri: &str) -> Request<Body> {

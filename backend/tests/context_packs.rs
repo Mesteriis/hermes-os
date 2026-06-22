@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::{TimeZone, Utc};
 use hermes_hub_backend::engines::context_packs::{
@@ -109,12 +109,10 @@ async fn context_pack_store_rejects_pack_without_sources_before_database_write()
 }
 
 async fn live_context_pack_context(
-    test_name: &str,
+    _test_name: &str,
 ) -> Option<(PgPool, ObservationStore, ContextPackStore)> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

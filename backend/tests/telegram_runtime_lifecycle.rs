@@ -6,7 +6,6 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, account_item, delete_request_with_token, get_request_with_token, json_body,
@@ -23,12 +22,8 @@ async fn telegram_fixture_runtime_status_can_start_account_actor() {
     let suffix = unique_suffix();
     let account_id = format!("telegram-runtime-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -200,18 +195,17 @@ async fn telegram_runtime_status_reports_tdlib_diagnostics_for_qr_authorized_use
     let suffix = unique_suffix();
     let account_id = format!("telegram-runtime-health-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-            (
-                "HERMES_TDJSON_PATH",
-                "/tmp/hermes-hub-test-missing-libtdjson-runtime-health.dylib",
-            ),
-            ("HERMES_TELEGRAM_API_ID", "12345"),
-            ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_TDJSON_PATH",
+                    "/tmp/hermes-hub-test-missing-libtdjson-runtime-health.dylib",
+                ),
+                ("HERMES_TELEGRAM_API_ID", "12345"),
+                ("HERMES_TELEGRAM_API_HASH", "telegram-api-hash"),
+            ])
+            .expect("config"),
         database,
     );
 
@@ -281,12 +275,8 @@ async fn telegram_account_lifecycle_lists_logs_out_and_removes_without_deleting_
     let second_account_id = format!("telegram-lifecycle-second-{suffix}");
     let chat_id = format!("lifecycle-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 

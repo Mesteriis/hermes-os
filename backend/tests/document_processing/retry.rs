@@ -1,14 +1,10 @@
 use crate::support::*;
-use std::env;
+use testkit::context::TestContext;
 
 #[tokio::test]
 async fn document_processing_retry_failed_job_requeues_job_against_postgres() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing retry test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((pool, document_store, processing_store)) =
         live_context("retry failed processing job").await
     else {
@@ -108,12 +104,8 @@ async fn document_processing_retry_failed_job_requeues_job_against_postgres() {
 
 #[tokio::test]
 async fn run_queued_jobs_requires_retry_command_for_failed_jobs() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing failed runner retry test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((pool, document_store, processing_store)) =
         live_context("failed job requires retry command").await
     else {
@@ -166,12 +158,8 @@ async fn run_queued_jobs_requires_retry_command_for_failed_jobs() {
 
 #[tokio::test]
 async fn document_processing_retry_duplicate_same_command_is_idempotent() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing duplicate retry test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((pool, document_store, processing_store)) =
         live_context("duplicate retry command").await
     else {
@@ -209,12 +197,8 @@ async fn document_processing_retry_duplicate_same_command_is_idempotent() {
 
 #[tokio::test]
 async fn document_processing_retry_duplicate_command_for_different_job_is_rejected() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing retry collision test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((pool, document_store, processing_store)) =
         live_context("duplicate retry command collision").await
     else {
@@ -264,12 +248,8 @@ async fn document_processing_retry_duplicate_command_for_different_job_is_reject
 
 #[tokio::test]
 async fn document_processing_retry_non_failed_job_requires_failed_status() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing non-failed retry test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((pool, document_store, processing_store)) =
         live_context("non-failed retry command").await
     else {
@@ -313,12 +293,8 @@ async fn document_processing_retry_non_failed_job_requires_failed_status() {
 
 #[tokio::test]
 async fn document_processing_retry_missing_job_returns_job_not_found() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing missing retry test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((_pool, _document_store, processing_store)) =
         live_context("missing retry command").await
     else {

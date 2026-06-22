@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::{Duration, Utc};
 use hermes_hub_backend::domains::decisions::{
@@ -42,10 +42,8 @@ fn unique_suffix() -> u128 {
 }
 
 async fn live_pool() -> Option<PgPool> {
-    let Some(url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip: no DB");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let url = test_context.connection_string();
     let db = Database::connect(Some(&url)).await.expect("connect");
     Some(db.pool().expect("pool").clone())
 }

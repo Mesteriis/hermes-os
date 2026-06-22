@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use hermes_hub_backend::domains::documents::core::{
     DocumentImportError, DocumentImportStore, NewDocumentImport,
@@ -8,10 +8,8 @@ use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn document_import_stores_markdown_text_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live document import test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -53,10 +51,8 @@ async fn document_import_stores_markdown_text_against_postgres() {
 
 #[tokio::test]
 async fn document_import_stores_pdf_metadata_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live PDF metadata import test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -329,12 +325,10 @@ async fn document_import_rejects_existing_document_kind_change_against_postgres(
 }
 
 async fn live_document_context(
-    test_name: &str,
+    _test_name: &str,
 ) -> Option<(sqlx::postgres::PgPool, DocumentImportStore)> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

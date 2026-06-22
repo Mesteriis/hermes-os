@@ -66,6 +66,35 @@ pub async fn sync_decision_review_state_in_transaction(
     )
     .await?;
 
+    sync_decision_review_item_status_in_transaction(transaction, decision, &review_item).await
+}
+
+pub(crate) async fn sync_decision_review_state_with_observation(
+    pool: &sqlx::postgres::PgPool,
+    decision: &Decision,
+    observation_id: &str,
+) -> Result<(), ReviewMirrorError> {
+    let mut transaction = pool.begin().await?;
+    let review_item = ensure_decision_review_item_in_transaction(
+        &mut transaction,
+        &decision.decision_id,
+        &decision.title,
+        &decision.rationale,
+        decision.confidence,
+        observation_id,
+    )
+    .await?;
+    sync_decision_review_item_status_in_transaction(&mut transaction, decision, &review_item)
+        .await?;
+    transaction.commit().await?;
+    Ok(())
+}
+
+async fn sync_decision_review_item_status_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    decision: &Decision,
+    review_item: &ReviewItem,
+) -> Result<(), ReviewMirrorError> {
     match decision.review_state {
         DecisionReviewState::Suggested => {
             let _ = ReviewInboxPort::transition_status_in_transaction(
@@ -128,6 +157,35 @@ pub async fn sync_obligation_review_state_in_transaction(
     )
     .await?;
 
+    sync_obligation_review_item_status_in_transaction(transaction, obligation, &review_item).await
+}
+
+pub(crate) async fn sync_obligation_review_state_with_observation(
+    pool: &sqlx::postgres::PgPool,
+    obligation: &Obligation,
+    observation_id: &str,
+) -> Result<(), ReviewMirrorError> {
+    let mut transaction = pool.begin().await?;
+    let review_item = ensure_obligation_review_item_in_transaction(
+        &mut transaction,
+        &obligation.obligation_id,
+        &obligation.statement,
+        None,
+        obligation.confidence,
+        observation_id,
+    )
+    .await?;
+    sync_obligation_review_item_status_in_transaction(&mut transaction, obligation, &review_item)
+        .await?;
+    transaction.commit().await?;
+    Ok(())
+}
+
+async fn sync_obligation_review_item_status_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    obligation: &Obligation,
+    review_item: &ReviewItem,
+) -> Result<(), ReviewMirrorError> {
     match obligation.review_state {
         ObligationReviewState::Suggested => {
             let _ = ReviewInboxPort::transition_status_in_transaction(

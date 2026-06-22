@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use serde_json::json;
 
@@ -111,10 +111,8 @@ fn resolved_secret_rejects_empty_values() {
 
 #[tokio::test]
 async fn secret_references_store_only_metadata_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live secret reference test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

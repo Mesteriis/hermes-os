@@ -28,7 +28,11 @@ impl AppConfig {
     }
 }
 
-fn apply_config_pair(config: &mut AppConfig, key: &str, value: &str) -> Result<(), ConfigError> {
+pub(super) fn apply_config_pair(
+    config: &mut AppConfig,
+    key: &str,
+    value: &str,
+) -> Result<(), ConfigError> {
     if apply_core_env(config, key, value)?
         || apply_provider_env(config, key, value)?
         || apply_ai_env(config, key, value)?

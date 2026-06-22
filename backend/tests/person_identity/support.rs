@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::Utc;
 use hermes_hub_backend::domains::persons::api::PersonProjectionStore;
@@ -22,10 +22,8 @@ pub(crate) struct PersonIdentityTestContext {
 }
 
 pub(crate) async fn live_person_identity_context() -> Option<PersonIdentityTestContext> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live person identity test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     person_identity_context(&database_url).await
 }
 

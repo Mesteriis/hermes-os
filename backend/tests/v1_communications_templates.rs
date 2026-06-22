@@ -6,7 +6,6 @@ use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -15,7 +14,7 @@ const T: &str = "v1comms-template-test-token";
 async fn router(db: &str) -> axum::Router {
     let database = Database::connect(Some(db)).await.expect("db");
     build_router_with_database(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", T), ("DATABASE_URL", db)]).expect("cfg"),
+        testkit::app::config_with_secret_and_database_url(T, db),
         database,
     )
 }

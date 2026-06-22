@@ -6,7 +6,6 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, delete_request_with_token, get_request_with_token, json_body,
@@ -27,12 +26,8 @@ async fn telegram_restore_and_reaction_actions_record_durable_command_rows() {
     let chat_id = format!("lifecycle-chat-{suffix}");
     let provider_message_id = format!("lifecycle-message-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 

@@ -7,7 +7,7 @@ use sqlx::Row;
 
 #[tokio::test]
 async fn tasks_crud_against_postgres() {
-    let Some(database_url) = test_database_url("tasks CRUD test") else {
+    let Some(database_url) = test_database_url("tasks CRUD test").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -91,7 +91,7 @@ async fn tasks_crud_against_postgres() {
 
 #[tokio::test]
 async fn tasks_list_returns_items() {
-    let Some(database_url) = test_database_url("tasks list test") else {
+    let Some(database_url) = test_database_url("tasks list test").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -109,7 +109,7 @@ async fn tasks_list_returns_items() {
 
 #[tokio::test]
 async fn task_status_transition() {
-    let Some(database_url) = test_database_url("task status test") else {
+    let Some(database_url) = test_database_url("task status test").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -152,7 +152,7 @@ async fn task_status_transition() {
 
 #[tokio::test]
 async fn task_analyze_runtime_path_captures_observation_against_postgres() {
-    let Some(database_url) = test_database_url("task analyze observation api") else {
+    let Some(database_url) = test_database_url("task analyze observation api").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -195,7 +195,7 @@ async fn task_analyze_runtime_path_captures_observation_against_postgres() {
 
 #[tokio::test]
 async fn task_creation_rejects_unknown_review_item_reference_in_api() {
-    let Some(database_url) = test_database_url("task create invalid provenance api") else {
+    let Some(database_url) = test_database_url("task create invalid provenance api").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -225,7 +225,7 @@ async fn task_creation_rejects_unknown_review_item_reference_in_api() {
 
 #[tokio::test]
 async fn task_creation_rejects_decision_without_observation_evidence_in_api() {
-    let Some(database_url) = test_database_url("task create decision provenance api") else {
+    let Some(database_url) = test_database_url("task create decision provenance api").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -276,7 +276,7 @@ async fn task_creation_rejects_decision_without_observation_evidence_in_api() {
 
 #[tokio::test]
 async fn task_checklist_manual_create_path_captures_observation_against_postgres() {
-    let Some(database_url) = test_database_url("task checklist observation api") else {
+    let Some(database_url) = test_database_url("task checklist observation api").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -359,7 +359,7 @@ async fn task_checklist_manual_create_path_captures_observation_against_postgres
 
 #[tokio::test]
 async fn task_evidence_manual_create_path_captures_observation_against_postgres() {
-    let Some(database_url) = test_database_url("task evidence observation api") else {
+    let Some(database_url) = test_database_url("task evidence observation api").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -457,7 +457,7 @@ async fn task_evidence_manual_create_path_captures_observation_against_postgres(
 
 #[tokio::test]
 async fn task_relation_manual_create_path_captures_observation_against_postgres() {
-    let Some(database_url) = test_database_url("task relation observation api") else {
+    let Some(database_url) = test_database_url("task relation observation api").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -541,7 +541,7 @@ async fn task_relation_manual_create_path_captures_observation_against_postgres(
 
 #[tokio::test]
 async fn task_archive_manual_path_captures_observation_against_postgres() {
-    let Some(database_url) = test_database_url("task archive observation api") else {
+    let Some(database_url) = test_database_url("task archive observation api").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -585,7 +585,7 @@ async fn task_archive_manual_path_captures_observation_against_postgres() {
 
 #[tokio::test]
 async fn task_subtask_manual_create_path_captures_observation_against_postgres() {
-    let Some(database_url) = test_database_url("task subtask observation api") else {
+    let Some(database_url) = test_database_url("task subtask observation api").await else {
         return;
     };
     let suffix = unique_suffix();

@@ -1,4 +1,4 @@
-use std::env;
+use testkit::context::TestContext;
 
 use serde_json::{Value, json};
 use sqlx::Row;
@@ -11,12 +11,8 @@ use super::support::{
 use hermes_hub_backend::platform::storage::Database;
 
 async fn event_get_endpoint_returns_non_server_error(path_suffix: &str) -> Option<Value> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live calendar event {path_suffix} test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let app = build_cal_app(&database_url).await;
     let Some((_, event_id)) = create_cal_event(&app, suffix).await else {
@@ -125,10 +121,8 @@ macro_rules! cal_post_test {
     ($name:ident, $path_suffix:expr, $body:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-                eprintln!("skip");
-                return;
-            };
+            let test_context = TestContext::new().await;
+            let database_url = test_context.connection_string();
             let suffix = unique_suffix();
             let app = build_cal_app(&database_url).await;
             let Some((_, event_id)) = create_cal_event(&app, suffix).await else {
@@ -215,10 +209,8 @@ async fn cal_event_follow_up_status() {
 
 #[tokio::test]
 async fn cal_event_reminder_toggle() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let app = build_cal_app(&database_url).await;
     let Some((_, event_id)) = create_cal_event(&app, suffix).await else {
@@ -307,10 +299,8 @@ async fn cal_event_reminder_toggle() {
 
 #[tokio::test]
 async fn calendar_manual_event_materials_capture_observations_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let app = build_cal_app(&database_url).await;
     let Some((_, event_id)) = create_cal_event(&app, suffix).await else {
@@ -543,10 +533,8 @@ async fn calendar_manual_event_materials_capture_observations_against_postgres()
 
 #[tokio::test]
 async fn calendar_event_relation_manual_create_path_captures_observation_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let app = build_cal_app(&database_url).await;
     let Some((_, event_id)) = create_cal_event(&app, suffix).await else {
@@ -617,10 +605,8 @@ async fn calendar_event_relation_manual_create_path_captures_observation_against
 
 #[tokio::test]
 async fn calendar_event_follow_up_manual_status_change_captures_observation_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let app = build_cal_app(&database_url).await;
     let Some((_, event_id)) = create_cal_event(&app, suffix).await else {

@@ -10,7 +10,6 @@ use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, NewRawCommunicationRecord,
 };
 use hermes_hub_backend::domains::communications::messages::MessageProjectionStore;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::provider_communication_projection::project_raw_telegram_message;
 use telegram_support::{
@@ -32,12 +31,8 @@ async fn telegram_manual_send_records_sent_message_and_redacted_provider_write_a
     let command_id = format!("manual-send-{suffix}");
     let message_text = "Manual Telegram reply from Hermes.";
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -208,12 +203,8 @@ async fn telegram_raw_message_endpoint_returns_sanitized_source_evidence() {
     let chat_id = format!("raw-chat-{suffix}");
     let provider_message_id = format!("raw-message-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -326,12 +317,8 @@ async fn telegram_fixture_sync_chats_returns_account_chat_metadata() {
     let account_id = format!("telegram-sync-chats-{suffix}");
     let chat_id = format!("sync-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -402,12 +389,8 @@ async fn telegram_fixture_sync_selected_history_returns_projected_messages() {
     let selected_chat_id = format!("selected-chat-{suffix}");
     let other_chat_id = format!("other-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 

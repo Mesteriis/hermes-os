@@ -6,7 +6,6 @@ use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::integrations::telegram::client::mark_absent_members_from_exhaustive_roster;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -20,12 +19,8 @@ async fn members_route_hides_absent_exhaustive_participants_after_roster_reconci
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database.clone(),
     );
     let pool = database.pool().expect("configured pool").clone();

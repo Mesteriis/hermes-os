@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 pub(crate) use axum::Router;
 pub(crate) use axum::body::{Body, to_bytes};
@@ -13,15 +13,13 @@ pub(crate) use tower::ServiceExt;
 pub(crate) const LOCAL_API_TOKEN: &str = "tasks-api-test-token";
 
 pub(crate) fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
-        .expect("valid local API secret")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
-pub(crate) fn test_database_url(test_name: &str) -> Option<String> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name}: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+pub(crate) async fn test_database_url(test_name: &str) -> Option<String> {
+    let _ = test_name;
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     Some(database_url)
 }
 
@@ -92,11 +90,7 @@ pub(crate) async fn build_tasks_app(database_url: &str) -> Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url),
         database,
     )
 }

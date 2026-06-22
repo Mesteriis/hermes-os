@@ -1,11 +1,11 @@
 #![allow(dead_code)]
 
-use std::env;
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -249,17 +249,15 @@ fn write_http_response(stream: &mut TcpStream, body: &str) {
 }
 
 pub async fn live_setup_context(
-    test_name: &str,
+    _test_name: &str,
 ) -> Option<(
     Database,
     CommunicationIngestionStore,
     SecretReferenceStore,
     u128,
 )> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

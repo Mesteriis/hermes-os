@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::Utc;
 use hermes_hub_backend::domains::communications::core::{
@@ -26,10 +26,8 @@ pub(crate) struct TaskCandidateTestContext {
 }
 
 pub(crate) async fn live_task_candidate_context() -> Option<TaskCandidateTestContext> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live task candidate test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     task_candidate_context(&database_url).await
 }
 

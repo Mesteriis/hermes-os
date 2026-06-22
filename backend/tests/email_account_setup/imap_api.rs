@@ -1,4 +1,3 @@
-use std::env;
 use std::sync::Arc;
 
 use axum::http::StatusCode;
@@ -16,7 +15,6 @@ use hermes_hub_backend::domains::communications::core::{
 use hermes_hub_backend::integrations::mail::accounts::{
     EmailAccountSetupService, ImapAccountSetupRequest,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::{
     DatabaseEncryptedSecretVault, ResolvedSecret, SecretKind, SecretReferenceStore, SecretResolver,
     SecretStoreKind,
@@ -123,20 +121,19 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            (
-                "HERMES_VAULT_HOME",
-                vault_home.to_str().expect("vault path"),
-            ),
-            (
-                "HERMES_DEV_KEY_PATH",
-                dev_key_path.to_str().expect("dev key path"),
-            ),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_VAULT_HOME",
+                    vault_home.to_str().expect("vault path"),
+                ),
+                (
+                    "HERMES_DEV_KEY_PATH",
+                    dev_key_path.to_str().expect("dev key path"),
+                ),
+            ])
+            .expect("config"),
         database.clone(),
     );
     unlock_test_vault(app.clone()).await;
@@ -370,7 +367,7 @@ async fn icloud_account_setup_api_creates_calendar_account_against_postgres() {
 #[tokio::test]
 async fn imap_account_setup_api_requires_configured_database() {
     let app = build_router_with_database(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config"),
+        testkit::app::config_with_secret(LOCAL_API_TOKEN),
         Database::disabled(),
     );
 
@@ -402,12 +399,8 @@ async fn imap_account_setup_api_requires_configured_database() {
 
 #[tokio::test]
 async fn imap_account_setup_api_requires_initialized_host_vault_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live account setup missing host vault test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let vault_dir = tempdir().expect("vault tempdir");
     let vault_home = vault_dir.path().join("vault");
     let dev_key_path = vault_dir.path().join("dev").join("master.key");
@@ -416,19 +409,19 @@ async fn imap_account_setup_api_requires_initialized_host_vault_against_postgres
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            (
-                "HERMES_VAULT_HOME",
-                vault_home.to_str().expect("vault path"),
-            ),
-            (
-                "HERMES_DEV_KEY_PATH",
-                dev_key_path.to_str().expect("dev key path"),
-            ),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret(LOCAL_API_TOKEN)
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_VAULT_HOME",
+                    vault_home.to_str().expect("vault path"),
+                ),
+                (
+                    "HERMES_DEV_KEY_PATH",
+                    dev_key_path.to_str().expect("dev key path"),
+                ),
+            ])
+            .expect("config"),
         database.clone(),
     );
 

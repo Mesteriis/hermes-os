@@ -1,4 +1,5 @@
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, header};
@@ -18,14 +19,10 @@ pub fn app_config_with_pairs(mut extra_pairs: Vec<(&'static str, String)>) -> Ap
     let suffix = unique_suffix();
     let vault_home = format!("/tmp/hermes-persons-api-vault-{suffix}");
     let dev_key_path = format!("{vault_home}/dev.key");
-    let mut pairs = vec![
-        ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN.to_owned()),
-        ("HERMES_DEV_MODE", "true".to_owned()),
-        ("HERMES_VAULT_HOME", vault_home),
-        ("HERMES_DEV_KEY_PATH", dev_key_path),
-    ];
-    pairs.append(&mut extra_pairs);
-    AppConfig::from_pairs(pairs).expect("valid local API config")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
+        .with_test_dev_vault_paths(vault_home, dev_key_path)
+        .with_test_pairs(extra_pairs.drain(..))
+        .expect("valid local API config")
 }
 
 pub fn get_request(uri: &str) -> Request<Body> {
@@ -99,7 +96,7 @@ pub async fn build_persons_app(database_url: &str) -> axum::Router {
 
 pub fn build_persons_app_with_database(database_url: &str, database: Database) -> axum::Router {
     build_router_with_database(
-        app_config_with_pairs(vec![("DATABASE_URL", database_url.to_owned())]),
+        app_config_with_pairs(Vec::new()).with_test_database_url(database_url),
         database,
     )
 }
@@ -109,9 +106,8 @@ pub fn build_persons_app_without_database() -> axum::Router {
 }
 
 pub async fn live_database_url(test_name: &str) -> Option<String> {
-    let Some(database_url) = std::env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let _ = test_name;
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     Some(database_url)
 }

@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -44,10 +44,8 @@ async fn projects_rejects_missing_local_api_secret() {
 
 #[tokio::test]
 async fn project_detail_returns_live_project_payload() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live projects API detail test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -70,11 +68,7 @@ async fn project_detail_returns_live_project_payload() {
         .expect("upsert API project");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -128,12 +122,8 @@ async fn project_link_candidates_rejects_missing_local_api_secret() {
 
 #[tokio::test]
 async fn project_link_candidates_return_safe_message_and_document_candidates() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live project link candidates API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -176,11 +166,7 @@ async fn project_link_candidates_return_safe_message_and_document_candidates() {
     .await;
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -258,12 +244,8 @@ async fn project_link_candidates_return_safe_message_and_document_candidates() {
 
 #[tokio::test]
 async fn put_project_link_review_updates_review_state() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live project link review API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -297,11 +279,7 @@ async fn put_project_link_review_updates_review_state() {
     .await;
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -362,7 +340,7 @@ async fn put_project_link_review_updates_review_state() {
 
     let review_item: (String, String, String) = sqlx::query_as(
         r#"
-        SELECT status, target_entity_kind, entity_id
+        SELECT status, target_entity_kind, target_entity_id
         FROM review_items
         WHERE metadata->>'project_id' = $1
           AND metadata->>'target_kind' = 'message'
@@ -383,12 +361,8 @@ async fn put_project_link_review_updates_review_state() {
 
 #[tokio::test]
 async fn put_project_link_review_rejects_missing_target() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live project link review missing target API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -411,11 +385,7 @@ async fn put_project_link_review_rejects_missing_target() {
         .expect("upsert missing-target project");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -463,8 +433,7 @@ fn live_projects_api_context(pool: &PgPool) -> ProjectsApiContext {
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
-        .expect("valid local API secret")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn get_request(uri: &str) -> Request<Body> {

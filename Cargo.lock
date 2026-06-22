@@ -3524,15 +3524,18 @@ dependencies = [
 name = "testkit"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "chrono",
  "hermes-hub-backend",
  "serde",
  "serde_json",
  "sha2",
  "sqlx",
+ "tempfile",
  "testcontainers",
  "testcontainers-modules",
  "tokio",
+ "tower",
  "uuid",
 ]
 

@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::Utc;
 use hermes_hub_backend::domains::obligations::{
@@ -402,11 +402,9 @@ async fn obligation_store_materializes_support_link_for_observation_evidence_aga
     assert_eq!(support_link_count, 1);
 }
 
-async fn live_obligation_context(test_name: &str) -> Option<(PgPool, ObligationStore)> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+async fn live_obligation_context(_test_name: &str) -> Option<(PgPool, ObligationStore)> {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use serde_json::json;
 
@@ -11,10 +11,8 @@ use hermes_hub_backend::workflows::email_fixture_pipeline::{
 
 #[tokio::test]
 async fn fixture_email_pipeline_imports_projects_persons_and_graph_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live fixture email pipeline test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

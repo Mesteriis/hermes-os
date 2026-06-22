@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use hermes_hub_backend::platform::storage::Database;
 use sqlx::PgPool;
@@ -13,10 +13,8 @@ pub fn unique_suffix() -> u128 {
 }
 
 pub async fn live_pool() -> Option<PgPool> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live calendar test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");

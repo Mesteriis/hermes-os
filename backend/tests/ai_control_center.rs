@@ -19,7 +19,7 @@ use testkit::context::TestContext;
 const LOCAL_API_TOKEN: &str = "ai-control-center-test-token";
 
 fn cfg() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn json_request(method: Method, uri: &str, body: Value) -> Request<Body> {
@@ -368,12 +368,10 @@ async fn api_provider_create_with_locked_host_vault_does_not_leave_provider_row(
         .await
         .expect("database");
     let vault_home = vault_home.path().to_string_lossy().to_string();
-    let config = AppConfig::from_pairs([
-        ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-        ("DATABASE_URL", database_url.as_str()),
-        ("HERMES_VAULT_HOME", vault_home.as_str()),
-    ])
-    .expect("config");
+    let config =
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([("HERMES_VAULT_HOME", vault_home.as_str())])
+            .expect("config");
     let app = build_router_with_database(config, database);
     let provider_id = "provider:api:locked-vault-create";
 

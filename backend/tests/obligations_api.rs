@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -13,17 +13,14 @@ use hermes_hub_backend::domains::obligations::{
     NewObligation, NewObligationEvidence, Obligation, ObligationEntityKind,
     ObligationEvidenceSourceKind, ObligationReviewState, ObligationStore,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "obligations-api-test-token";
 
 #[tokio::test]
 async fn obligations_list_returns_entity_scoped_obligations() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live obligations API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let (app, pool) = app_and_pool(&database_url).await;
     let suffix = unique_suffix();
     let obligated_persona_id = format!("person:v1:email:obligation-api-{suffix}@example.com");
@@ -55,12 +52,8 @@ async fn obligations_list_returns_entity_scoped_obligations() {
 
 #[tokio::test]
 async fn obligations_list_returns_global_suggested_review_items() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live obligations global review API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let (app, pool) = app_and_pool(&database_url).await;
     let suffix = unique_suffix();
     let suggested_persona_id =
@@ -112,10 +105,8 @@ async fn obligations_list_returns_global_suggested_review_items() {
 
 #[tokio::test]
 async fn put_obligation_review_updates_review_state_with_observation_trail() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live obligation review API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let (app, pool) = app_and_pool(&database_url).await;
     let suffix = unique_suffix();
     let obligated_persona_id = format!("person:v1:email:obligation-review-{suffix}@example.com");
@@ -185,7 +176,7 @@ async fn put_obligation_review_updates_review_state_with_observation_trail() {
 
     let review_item: (String, String, String) = sqlx::query_as(
         r#"
-        SELECT status, target_entity_kind, entity_id
+        SELECT status, target_entity_kind, target_entity_id
         FROM review_items
         WHERE metadata->>'obligation_id' = $1
         ORDER BY updated_at DESC
@@ -207,11 +198,7 @@ async fn app_and_pool(database_url: &str) -> (axum::Router, PgPool) {
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url),
         database,
     );
 

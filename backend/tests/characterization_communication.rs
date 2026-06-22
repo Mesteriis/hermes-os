@@ -3,10 +3,10 @@
 //! Captures CURRENT behavior before alignment refactoring (Phase 3+).
 //! Do NOT change existing behavior — only add tests.
 //!
-//! These live tests run only when HERMES_TEST_DATABASE_URL points to a running
-//! pgvector instance with migrations applied.
+//! These live tests use the shared testcontainers pgvector fixture with
+//! per-test migrated databases.
 
-use std::env;
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -20,7 +20,7 @@ use hermes_hub_backend::platform::storage::Database;
 const TOKEN: &str = "char-comm-test-token";
 
 fn cfg(db: &str) -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", TOKEN), ("DATABASE_URL", db)]).expect("cfg")
+    testkit::app::config_with_secret_and_database_url(TOKEN, db)
 }
 
 fn get(uri: &str) -> Request<Body> {
@@ -55,11 +55,9 @@ async fn build_app(database_url: &str) -> axum::Router {
     build_router_with_database(cfg(database_url), database)
 }
 
-async fn live_app(test_name: &str) -> Option<axum::Router> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+async fn live_app(_test_name: &str) -> Option<axum::Router> {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     Some(build_app(&database_url).await)
 }

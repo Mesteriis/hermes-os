@@ -30,7 +30,7 @@ impl OrgDomainStore {
     }
 
     pub async fn list(&self, org_id: &str) -> Result<Vec<OrganizationDomain>, OrgCoreError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, domain, domain_type, source, confidence, last_verified_at, created_at FROM organization_domains WHERE organization_id=$1 ORDER BY domain_type, domain")
+        let rows = sqlx::query("SELECT id::text, organization_id, domain, domain_type, source, confidence::float8 AS confidence, last_verified_at, created_at FROM organization_domains WHERE organization_id=$1 ORDER BY domain_type, domain")
             .bind(org_id)
             .fetch_all(&self.pool)
             .await?;
@@ -58,7 +58,7 @@ impl OrgDomainStore {
         domain_type: &str,
         source: &str,
     ) -> Result<OrganizationDomain, OrgCoreError> {
-        let row = sqlx::query("INSERT INTO organization_domains (organization_id, domain, domain_type, source) VALUES ($1,$2,$3,$4) RETURNING id::text, organization_id, domain, domain_type, source, confidence, last_verified_at, created_at")
+        let row = sqlx::query("INSERT INTO organization_domains (organization_id, domain, domain_type, source) VALUES ($1,$2,$3,$4) RETURNING id::text, organization_id, domain, domain_type, source, confidence::float8 AS confidence, last_verified_at, created_at")
             .bind(org_id)
             .bind(domain)
             .bind(domain_type)
@@ -115,7 +115,7 @@ impl OrgDomainStore {
         let inserted = result.rows_affected() > 0;
         let row = sqlx::query(
             r#"
-            SELECT id::text, organization_id, domain, domain_type, source, confidence, last_verified_at, created_at
+            SELECT id::text, organization_id, domain, domain_type, source, confidence::float8 AS confidence, last_verified_at, created_at
             FROM organization_domains
             WHERE organization_id = $1
               AND domain = $2

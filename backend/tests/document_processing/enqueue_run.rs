@@ -1,14 +1,10 @@
 use crate::support::*;
-use std::env;
+use testkit::context::TestContext;
 
 #[tokio::test]
 async fn enqueue_for_document_creates_extract_text_and_ocr_jobs() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live document processing enqueue test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((pool, document_store, processing_store)) =
         live_context("enqueue both processing jobs").await
     else {
@@ -50,10 +46,8 @@ async fn enqueue_for_document_creates_extract_text_and_ocr_jobs() {
 
 #[tokio::test]
 async fn enqueue_for_document_does_not_reset_terminal_jobs() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live terminal job reset test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((pool, document_store, processing_store)) =
         live_context("terminal job reset protection").await
     else {
@@ -94,12 +88,8 @@ async fn enqueue_for_document_does_not_reset_terminal_jobs() {
 
 #[tokio::test]
 async fn run_queued_jobs_for_markdown_populates_extracted_text_artifact() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live markdown processing run test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((pool, document_store, processing_store)) =
         live_context("markdown run generates artifact").await
     else {
@@ -174,10 +164,8 @@ async fn run_queued_jobs_for_markdown_populates_extracted_text_artifact() {
 
 #[tokio::test]
 async fn run_queued_jobs_skips_non_markdown_text_extraction_with_summary() {
-    let Some(_database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live non-markdown skip test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let _database_url = test_context.connection_string();
     let Some((pool, document_store, processing_store)) =
         live_context("non-markdown extract skip").await
     else {

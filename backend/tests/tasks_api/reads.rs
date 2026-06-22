@@ -12,7 +12,7 @@ macro_rules! task_get_requires_task {
     ($name:ident, $path_suffix:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(database_url) = test_database_url(stringify!($name)) else {
+            let Some(database_url) = test_database_url(stringify!($name)).await else {
                 return;
             };
             let suffix = unique_suffix();
@@ -41,7 +41,7 @@ macro_rules! task_get_simple {
     ($name:ident, $path:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(database_url) = test_database_url(stringify!($name)) else {
+            let Some(database_url) = test_database_url(stringify!($name)).await else {
                 return;
             };
             let app = build_tasks_app(&database_url).await;

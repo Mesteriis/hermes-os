@@ -1,9 +1,9 @@
-use std::env;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
@@ -577,12 +577,10 @@ impl Drop for MockImapServer {
 }
 
 async fn live_sync_context(
-    test_name: &str,
+    _test_name: &str,
 ) -> Option<(Database, CommunicationIngestionStore, u128)> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

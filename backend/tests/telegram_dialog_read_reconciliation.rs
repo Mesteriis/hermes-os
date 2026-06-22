@@ -12,7 +12,6 @@ use hermes_hub_backend::integrations::telegram::client::lifecycle::{
 use hermes_hub_backend::integrations::telegram::client::{
     reconcile_mark_read_commands_from_provider_state, reconcile_pin_commands_from_provider_state,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_ok, get_request_with_token, json_body, unique_suffix,
@@ -31,12 +30,8 @@ async fn mark_read_reconciliation_completes_targeted_read_commands_from_chat_rea
     let account_id = format!("telegram-dialog-reconcile-{suffix}");
     let provider_chat_id = format!("dialog-reconcile-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -151,12 +146,8 @@ async fn dialog_pin_reconciliation_marks_mismatched_unpin_command_failed() {
     let account_id = format!("telegram-dialog-pin-reconcile-{suffix}");
     let provider_chat_id = format!("dialog-pin-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -242,12 +233,8 @@ async fn dialog_archive_reconciliation_marks_mismatched_unarchive_command_failed
     let account_id = format!("telegram-dialog-archive-reconcile-{suffix}");
     let provider_chat_id = format!("dialog-archive-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -332,12 +319,8 @@ async fn dialog_mute_reconciliation_marks_mismatched_unmute_command_failed() {
     let account_id = format!("telegram-dialog-mute-reconcile-{suffix}");
     let provider_chat_id = format!("dialog-mute-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -424,12 +407,8 @@ async fn dialog_mark_unread_reconciliation_completes_matching_command() {
     let account_id = format!("telegram-dialog-unread-reconcile-{suffix}");
     let provider_chat_id = format!("dialog-unread-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -502,12 +481,8 @@ async fn dialog_mark_unread_reconciliation_marks_provider_read_state_as_mismatch
     let account_id = format!("telegram-dialog-unread-mismatch-{suffix}");
     let provider_chat_id = format!("dialog-unread-mismatch-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 

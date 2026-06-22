@@ -10,7 +10,6 @@ use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -287,11 +286,7 @@ async fn create_tdlib_account(pool: &sqlx::PgPool, account_id: &str, suffix: &st
 
 fn router(database: Database, database_url: &str) -> axum::Router {
     build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url),
         database,
     )
 }

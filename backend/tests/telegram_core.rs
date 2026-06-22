@@ -1,6 +1,6 @@
 mod telegram_support;
 
-use std::env;
+use testkit::context::TestContext;
 
 use axum::http::StatusCode;
 use serde_json::{Value, json};
@@ -8,7 +8,6 @@ use sqlx::Row;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::build_router_with_database;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use telegram_support::{
     LOCAL_API_TOKEN, assert_capability_status, assert_ok, get_request_with_token, json_body,
@@ -17,12 +16,8 @@ use telegram_support::{
 #[tokio::test]
 async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_candidates_against_postgres()
  {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live Telegram candidate refresh test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -34,12 +29,8 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let decision_rationale = "channel context must feed the same domain model";
     let obligation_statement = format!("send the Telegram alignment note {suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -147,10 +138,8 @@ async fn telegram_fixture_message_ingestion_refreshes_decision_and_obligation_ca
 
 #[tokio::test]
 async fn telegram_api_exercises_policy_and_call_foundation() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live Telegram API smoke test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -162,12 +151,8 @@ async fn telegram_api_exercises_policy_and_call_foundation() {
     let template_id = format!("template-telegram-{suffix}");
     let call_id = format!("call-telegram-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 

@@ -8,7 +8,6 @@ use hermes_hub_backend::domains::calendar::events::CalendarAccountStore;
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, ProviderAccountSecretPurpose,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::{SecretKind, SecretReferenceStore, SecretResolver};
 use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::vault::{HostVault, HostVaultConfig, SecretEntryContext};
@@ -30,20 +29,20 @@ async fn startup_reconciles_icloud_account_from_host_vault_manifest_after_postgr
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
-    let config = AppConfig::from_pairs([
-        ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-        ("HERMES_DEV_MODE", "true"),
-        (
-            "HERMES_VAULT_HOME",
-            vault_home.to_str().expect("vault path"),
-        ),
-        (
-            "HERMES_DEV_KEY_PATH",
-            dev_key_path.to_str().expect("dev key path"),
-        ),
-        ("DATABASE_URL", database_url.as_str()),
-    ])
-    .expect("config");
+    let config =
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_VAULT_HOME",
+                    vault_home.to_str().expect("vault path"),
+                ),
+                (
+                    "HERMES_DEV_KEY_PATH",
+                    dev_key_path.to_str().expect("dev key path"),
+                ),
+            ])
+            .expect("config");
     let app = build_router_with_database(config.clone(), database.clone());
     unlock_test_vault(app.clone()).await;
 

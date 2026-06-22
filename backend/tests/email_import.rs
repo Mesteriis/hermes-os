@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::{TimeZone, Utc};
 use serde_json::json;
@@ -49,10 +49,8 @@ fn fixture_email_source_parses_account_scoped_messages() {
 
 #[tokio::test]
 async fn fixture_email_import_records_raw_messages_idempotently_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live fixture email import test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -108,12 +106,8 @@ async fn fixture_email_import_records_raw_messages_idempotently_against_postgres
 
 #[tokio::test]
 async fn fixture_email_import_records_delimiter_bearing_identities_distinctly_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live fixture email import identity test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -238,12 +232,8 @@ async fn fixture_email_import_records_delimiter_bearing_identities_distinctly_ag
 
 #[tokio::test]
 async fn fixture_email_import_preserves_missing_sent_at_as_null_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live fixture email import missing sent_at test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -296,12 +286,8 @@ async fn fixture_email_import_preserves_missing_sent_at_as_null_against_postgres
 
 #[tokio::test]
 async fn fixture_email_import_returns_raw_records_for_projection_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live fixture email import records test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

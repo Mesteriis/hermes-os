@@ -3,9 +3,7 @@ use sqlx::Row;
 
 #[tokio::test]
 async fn communication_ingestion_records_raw_sources_idempotently_against_postgres() {
-    let Some(database) =
-        connect_database("communication raw source test: HERMES_TEST_DATABASE_URL is not set")
-            .await
+    let Some(database) = connect_database("communication raw source test fixture database").await
     else {
         return;
     };

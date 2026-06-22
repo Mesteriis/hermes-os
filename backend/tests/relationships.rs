@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::Utc;
 use hermes_hub_backend::domains::graph::core::{GraphNodeKind, node_id};
@@ -680,12 +680,10 @@ async fn relationship_store_materializes_support_link_for_observation_evidence_a
 }
 
 async fn live_relationship_context(
-    test_name: &str,
+    _test_name: &str,
 ) -> Option<(PgPool, PersonProjectionStore, RelationshipStore)> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -699,7 +697,7 @@ async fn live_relationship_context(
 }
 
 async fn live_organization_contact_relationship_context(
-    test_name: &str,
+    _test_name: &str,
 ) -> Option<(
     PgPool,
     PersonProjectionStore,
@@ -707,10 +705,8 @@ async fn live_organization_contact_relationship_context(
     OrganizationStore,
     OrgContactLinkStore,
 )> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

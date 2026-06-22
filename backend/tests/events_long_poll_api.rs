@@ -92,8 +92,7 @@ async fn app_and_pool_with_database(database_url: &str) -> (axum::Router, sqlx::
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
-        .expect("valid local API secret")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn json_request_with_token(uri: &str, value: Value, token: &str) -> Request<Body> {

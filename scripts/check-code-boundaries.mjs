@@ -64,6 +64,12 @@ const blanketSuppressions = [
 		message: 'eslint-' + 'disable is forbidden in source; fix or narrow the lint rule centrally'
 	}
 ];
+const forbiddenBackendTestEnvKeys = [
+	'HERMES_TEST_DATABASE_URL',
+	'HERMES_LOCAL_API_SECRET',
+	'DATABASE_URL'
+];
+const backendTestEnvKeyAllowlist = new Set(['backend/tests/config.rs']);
 
 function normalizePath(filePath) {
 	return filePath.split(path.sep).join('/');
@@ -152,6 +158,19 @@ async function checkSourceFiles() {
 
 			if (!isDocFile(file) && !isTestFile(file) && secretPattern.test(line)) {
 				failures.push(`${location}: possible hardcoded secret-like value`);
+			}
+
+			if (
+				(file.startsWith('backend/tests/') || file.startsWith('crates/testkit/src/')) &&
+				!backendTestEnvKeyAllowlist.has(file)
+			) {
+				for (const forbiddenKey of forbiddenBackendTestEnvKeys) {
+					if (line.includes(forbiddenKey)) {
+						failures.push(
+							`${location}: backend tests must use typed test fixtures, not ${forbiddenKey}`
+						);
+					}
+				}
 			}
 
 			for (const { pattern, message } of blanketSuppressions) {

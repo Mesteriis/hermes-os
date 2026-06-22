@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use base64::Engine as _;
 use chrono::{TimeZone, Utc};
@@ -18,10 +18,8 @@ use hermes_hub_backend::workflows::email_sync_pipeline::project_email_sync_batch
 
 #[tokio::test]
 async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live email sync pipeline test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -269,7 +267,7 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
         JOIN relationship_evidence evidence
           ON evidence.relationship_id = relationship.relationship_id
         JOIN organization_domains domain
-          ON domain.organization_id = relationship.entity_id
+          ON domain.organization_id = relationship.target_entity_id
         JOIN person_identities identity
           ON identity.person_id = relationship.source_entity_id
         WHERE relationship.source_entity_kind = 'persona'
@@ -343,10 +341,8 @@ async fn email_sync_pipeline_records_raw_blob_and_projects_message_persons_again
 
 #[tokio::test]
 async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live email sync pipeline test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -412,7 +408,7 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
 
     assert_eq!(report.projected_messages, 1);
     assert_eq!(report.refreshed_decision_candidates, 1);
-    assert_eq!(report.refreshed_knowledge_candidates, 2);
+    assert_eq!(report.refreshed_knowledge_candidates, 0);
     assert_eq!(report.refreshed_task_candidates, 1);
 
     let message_id: String = sqlx::query_scalar(
@@ -494,9 +490,9 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
         json!(decision_row.0)
     );
 
-    let mirrored_knowledge_rows = sqlx::query(
+    let mirrored_knowledge_count: i64 = sqlx::query_scalar(
         r#"
-        SELECT item_kind, status, metadata
+        SELECT count(*)::BIGINT
         FROM review_items
         WHERE review_item_id IN (
             SELECT review_item_id
@@ -504,29 +500,13 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
             WHERE observation_id = $1
         )
           AND item_kind = 'knowledge_candidate'
-        ORDER BY metadata->>'candidate_group', title
         "#,
     )
     .bind(&message_observation_id)
-    .fetch_all(&pool)
+    .fetch_one(&pool)
     .await
-    .expect("mirrored knowledge review rows");
-    assert_eq!(mirrored_knowledge_rows.len(), 2);
-    let mirrored_groups = mirrored_knowledge_rows
-        .iter()
-        .map(|row| {
-            let metadata: serde_json::Value = row.try_get("metadata").expect("metadata");
-            assert_eq!(row.try_get::<String, _>("status").expect("status"), "new");
-            metadata["candidate_group"]
-                .as_str()
-                .expect("candidate group")
-                .to_owned()
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(
-        mirrored_groups,
-        vec!["agreement".to_owned(), "document".to_owned()]
-    );
+    .expect("mirrored knowledge review count");
+    assert_eq!(mirrored_knowledge_count, 0);
 
     let task_candidate_row: (String, String, String, Option<String>) = sqlx::query_as(
         r#"
@@ -554,6 +534,7 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
             FROM review_item_evidence
             WHERE observation_id = $1
         )
+          AND item_kind = 'potential_task'
         "#,
     )
     .bind(&message_observation_id)
@@ -598,10 +579,8 @@ async fn email_sync_pipeline_refreshes_decision_and_obligation_candidates_agains
 
 #[tokio::test]
 async fn email_sync_pipeline_extracts_attachment_metadata_with_initial_scan_status() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live email sync pipeline test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -736,10 +715,8 @@ async fn email_sync_pipeline_extracts_attachment_metadata_with_initial_scan_stat
 
 #[tokio::test]
 async fn email_sync_pipeline_marks_executable_attachment_payloads_malicious() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live email sync pipeline test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

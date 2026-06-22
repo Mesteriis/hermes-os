@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -17,7 +17,6 @@ use hermes_hub_backend::domains::review::{
     ReviewPromotionTarget,
 };
 use hermes_hub_backend::domains::tasks::api::TaskStore;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::observations::{
     NewObservation, ObservationOriginKind, ObservationStore,
 };
@@ -579,12 +578,8 @@ async fn review_can_materialize_promotions_for_core_target_domains_against_postg
 
 #[tokio::test]
 async fn review_item_promotion_rejects_missing_evidence_with_bad_request() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live review promotion validation test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let app = build_review_api_app(&database_url).await;
     let (pool, observation_store, review_store) =
         live_review_context("review promotion rejects orphaned evidence")
@@ -676,12 +671,8 @@ async fn review_item_promotion_rejects_missing_evidence_with_bad_request() {
 
 #[tokio::test]
 async fn review_item_creation_rejects_unknown_observation_with_bad_request() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live review creation validation test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let app = build_review_api_app(&database_url).await;
     let suffix = unique_suffix();
 
@@ -722,10 +713,8 @@ async fn review_item_creation_rejects_unknown_observation_with_bad_request() {
 
 #[tokio::test]
 async fn review_item_api_lifecycle_captures_observation_trail_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live review lifecycle api test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -2125,12 +2114,10 @@ async fn assert_observation_evidence(
 }
 
 async fn live_review_context(
-    test_name: &str,
+    _test_name: &str,
 ) -> Option<(PgPool, ObservationStore, ReviewInboxStore)> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -2169,11 +2156,7 @@ async fn build_review_api_app(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", REVIEW_API_TOKEN),
-            ("DATABASE_URL", database_url),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(REVIEW_API_TOKEN, database_url),
         database,
     )
 }

@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -20,7 +20,7 @@ use hermes_hub_backend::platform::storage::Database;
 const T: &str = "v1-workflow-action-test-token";
 
 fn cfg() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", T)]).expect("config")
+    testkit::app::config_with_secret(T)
 }
 
 fn post_with_actor(uri: &str, body: Value) -> Request<Body> {
@@ -56,11 +56,7 @@ async fn router(database_url: &str) -> axum::Router {
         .await
         .expect("database connection");
     build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", T),
-            ("DATABASE_URL", database_url),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(T, database_url),
         database,
     )
 }
@@ -94,10 +90,8 @@ async fn workflow_action_endpoint_exists_without_database() {
 
 #[tokio::test]
 async fn v1_put_workflow_state_captures_observation_trail() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let database = Database::connect(Some(&db)).await.expect("database");
     let pool = database.pool().expect("configured pool").clone();
     let suffix = uid();
@@ -161,10 +155,8 @@ async fn v1_put_workflow_state_captures_observation_trail() {
 
 #[tokio::test]
 async fn workflow_action_create_task_is_idempotent_and_records_safe_event() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action task: no DB");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let database = Database::connect(Some(&db)).await.expect("database");
     let pool = database.pool().expect("configured pool").clone();
     let suffix = uid();
@@ -278,10 +270,8 @@ async fn workflow_action_create_task_is_idempotent_and_records_safe_event() {
 
 #[tokio::test]
 async fn workflow_action_create_contact_reuses_message_observation_for_person_projection() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action contact: no DB");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let database = Database::connect(Some(&db)).await.expect("database");
     let pool = database.pool().expect("configured pool").clone();
     let suffix = uid();
@@ -356,10 +346,8 @@ async fn workflow_action_create_contact_reuses_message_observation_for_person_pr
 
 #[tokio::test]
 async fn workflow_action_create_note_creates_markdown_document() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action note: no DB");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let database = Database::connect(Some(&db)).await.expect("database");
     let pool = database.pool().expect("configured pool").clone();
     let suffix = uid();
@@ -425,10 +413,8 @@ async fn workflow_action_create_note_creates_markdown_document() {
 
 #[tokio::test]
 async fn workflow_action_link_document_reuses_message_observation_for_document_projection() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action link_document: no DB");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let database = Database::connect(Some(&db)).await.expect("database");
     let pool = database.pool().expect("configured pool").clone();
     let suffix = uid();
@@ -503,10 +489,8 @@ async fn workflow_action_link_document_reuses_message_observation_for_document_p
 
 #[tokio::test]
 async fn workflow_action_create_event_requires_start_and_end() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action event validation: no DB");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let response = r
         .oneshot(post_with_actor(
@@ -525,10 +509,8 @@ async fn workflow_action_create_event_requires_start_and_end() {
 
 #[tokio::test]
 async fn workflow_action_create_event_reuses_message_observation_for_calendar_projection() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action event projection: no DB");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let database = Database::connect(Some(&db)).await.expect("database");
     let pool = database.pool().expect("configured pool").clone();
     let suffix = uid();
@@ -592,10 +574,8 @@ async fn workflow_action_create_event_reuses_message_observation_for_calendar_pr
 
 #[tokio::test]
 async fn workflow_action_archive_transitions_message_locally() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip workflow action archive: no DB");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let database = Database::connect(Some(&db)).await.expect("database");
     let pool = database.pool().expect("configured pool").clone();
     let suffix = uid();

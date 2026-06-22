@@ -1,12 +1,10 @@
 use crate::support::*;
-use std::env;
+use testkit::context::TestContext;
 
 #[tokio::test]
 async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live AI answer API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let _guard = AI_RUNTIME_TEST_LOCK.lock().await;
     let ollama_base_url = spawn_fake_ollama().await;
     let database = Database::connect(Some(&database_url))
@@ -37,14 +35,13 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
     .await;
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-            ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
-            ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),
-            ("HERMES_OLLAMA_EMBED_MODEL", "qwen3-embedding:4b"),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
+                ("HERMES_OLLAMA_CHAT_MODEL", "qwen3:4b"),
+                ("HERMES_OLLAMA_EMBED_MODEL", "qwen3-embedding:4b"),
+            ])
+            .expect("config"),
         database,
     );
 
@@ -146,10 +143,8 @@ async fn ai_answer_api_returns_source_backed_answer_and_persists_run() {
 
 #[tokio::test]
 async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live AI task refresh API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let _guard = AI_RUNTIME_TEST_LOCK.lock().await;
     let ollama_base_url = spawn_fake_ollama().await;
     let database = Database::connect(Some(&database_url))
@@ -170,12 +165,9 @@ async fn ai_task_refresh_creates_suggested_candidates_without_active_tasks() {
     .await;
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-            ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str())])
+            .expect("config"),
         database,
     );
 

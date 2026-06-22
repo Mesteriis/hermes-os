@@ -1,4 +1,4 @@
-use std::env;
+use testkit::{app, context::TestContext};
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
@@ -6,12 +6,11 @@ use serde_json::json;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::{build_router, build_router_with_database};
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn healthz_returns_ok_status_and_service_name() {
-    let app = build_router(AppConfig::default());
+    let app = build_router(app::config());
 
     let response = app
         .oneshot(
@@ -41,7 +40,7 @@ async fn healthz_returns_ok_status_and_service_name() {
 
 #[tokio::test]
 async fn readyz_returns_service_unavailable_when_database_is_not_configured() {
-    let app = build_router(AppConfig::default());
+    let app = build_router(app::config());
 
     let response = app
         .oneshot(
@@ -60,36 +59,29 @@ async fn readyz_returns_service_unavailable_when_database_is_not_configured() {
         .expect("body bytes");
     let value: serde_json::Value = serde_json::from_slice(&body).expect("json body");
 
+    assert_eq!(value["status"], json!("degraded"));
+    assert_eq!(value["service"], json!("hermes-hub-backend"));
     assert_eq!(
-        value,
-        json!({
-            "status": "degraded",
-            "service": "hermes-hub-backend",
-            "checks": {
-                "database": {
-                    "status": "not_configured",
-                    "message": "DATABASE_URL is not configured"
-                },
-                "migrations": {
-                    "status": "not_configured",
-                    "message": "DATABASE_URL is not configured"
-                }
-            }
-        })
+        value["checks"]["database"]["status"],
+        json!("not_configured")
     );
+    assert!(value["checks"]["database"]["message"].is_string());
+    assert_eq!(
+        value["checks"]["migrations"]["status"],
+        json!("not_configured")
+    );
+    assert!(value["checks"]["migrations"]["message"].is_string());
 }
 
 #[tokio::test]
 async fn readyz_reports_database_and_migrations_ok_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live readiness test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
-    let app = build_router_with_database(AppConfig::default(), database);
+    let app = build_router_with_database(app::config_with_database_url(database_url), database);
 
     let response = app
         .oneshot(

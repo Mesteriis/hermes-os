@@ -43,7 +43,8 @@ impl OrgTimelineStore {
         let rows = sqlx::query(
             r#"
             SELECT id::text, organization_id, event_type, title, description, occurred_at,
-                   source, related_entity_id, related_entity_kind, confidence, metadata, created_at
+                   source, related_entity_id, related_entity_kind,
+                   confidence::float8 AS confidence, metadata, created_at
             FROM organization_timeline_events
             WHERE organization_id=$1
             ORDER BY occurred_at DESC
@@ -80,7 +81,8 @@ impl OrgTimelineStore {
             INSERT INTO organization_timeline_events (organization_id, event_type, title, occurred_at, source)
             VALUES ($1,$2,$3,$4,$5)
             RETURNING id::text, organization_id, event_type, title, description, occurred_at,
-                      source, related_entity_id, related_entity_kind, confidence, metadata, created_at
+                      source, related_entity_id, related_entity_kind,
+                      confidence::float8 AS confidence, metadata, created_at
             "#,
         )
         .bind(org_id)

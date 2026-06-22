@@ -33,7 +33,8 @@ impl OrgProcedureStore {
     pub async fn list(&self, org_id: &str) -> Result<Vec<OrgProcedure>, OrgWorkflowError> {
         let rows = sqlx::query(
             r#"
-            SELECT id::text, organization_id, name, description, steps, source, confidence,
+            SELECT id::text, organization_id, name, description, steps, source,
+                   confidence::float8 AS confidence,
                    last_used_at, created_at, updated_at
             FROM organization_procedures
             WHERE organization_id=$1

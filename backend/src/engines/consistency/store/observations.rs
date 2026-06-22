@@ -7,6 +7,7 @@ use super::super::evidence::link_consistency_entity_in_transaction;
 use super::super::helpers::contradiction_observation_id;
 use super::super::models::{ContradictionObservation, NewContradictionObservation};
 use super::super::rows::row_to_observation;
+use crate::platform::observations::{NewObservation, ObservationOriginKind, ObservationPort};
 
 pub(super) async fn upsert(
     pool: &PgPool,
@@ -141,9 +142,11 @@ pub(crate) async fn link_contradiction_observation_in_transaction(
     transaction: &mut Transaction<'_, Postgres>,
     contradiction: &ContradictionObservation,
 ) -> Result<(), ConsistencyError> {
+    let evidence_observation =
+        capture_contradiction_observation_in_transaction(transaction, contradiction).await?;
     link_consistency_entity_in_transaction(
         transaction,
-        &contradiction.observation_id,
+        &evidence_observation.observation_id,
         "contradiction_observation",
         contradiction.observation_id.clone(),
         "upsert",
@@ -159,4 +162,35 @@ pub(crate) async fn link_contradiction_observation_in_transaction(
     )
     .await?;
     Ok(())
+}
+
+async fn capture_contradiction_observation_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    contradiction: &ContradictionObservation,
+) -> Result<crate::platform::observations::Observation, ConsistencyError> {
+    let observation = ObservationPort::capture_in_transaction(
+        transaction,
+        &NewObservation::new(
+            "CONTRADICTION_OBSERVATION",
+            ObservationOriginKind::LocalRuntime,
+            contradiction.created_at,
+            json!({
+                "contradiction_observation_id": contradiction.observation_id,
+                "conflict_type": contradiction.conflict_type,
+                "old_claim": contradiction.old_claim,
+                "new_claim": contradiction.new_claim,
+                "severity": contradiction.severity.as_str(),
+                "review_state": contradiction.review_state.as_str(),
+                "affected_entities": contradiction.affected_entities,
+            }),
+            format!("contradiction://{}", contradiction.observation_id),
+        )
+        .confidence(contradiction.confidence)
+        .provenance(json!({
+            "engine": "consistency",
+            "pipeline": "contradiction_observations",
+        })),
+    )
+    .await?;
+    Ok(observation)
 }

@@ -1,4 +1,4 @@
-use std::env;
+use testkit::context::TestContext;
 
 use serde_json::json;
 use sqlx::Row;
@@ -12,10 +12,8 @@ use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn calendar_accounts_crud_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live calendar accounts CRUD test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let database = Database::connect(Some(&database_url))
         .await
@@ -173,10 +171,8 @@ async fn calendar_accounts_crud_against_postgres() {
 
 #[tokio::test]
 async fn calendar_accounts_list_returns_items() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live calendar accounts list test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let app = build_cal_app(&database_url).await;
 

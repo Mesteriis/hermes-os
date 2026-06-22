@@ -10,19 +10,17 @@ use crate::integrations::telegram::client::TelegramStore;
 use crate::integrations::whatsapp::client::WhatsappWebStore;
 use crate::platform::communications::{EmailProviderKind, NewProviderAccount, ProviderAccount};
 
-pub(crate) fn communication_provider_account_store(
-    pool: &PgPool,
-) -> CommunicationProviderAccountStore {
+pub fn communication_provider_account_store(pool: &PgPool) -> CommunicationProviderAccountStore {
     CommunicationProviderAccountStore::new(pool.clone())
 }
 
-pub(crate) fn communication_provider_secret_binding_store(
+pub fn communication_provider_secret_binding_store(
     pool: &PgPool,
 ) -> CommunicationProviderSecretBindingStore {
     CommunicationProviderSecretBindingStore::new(pool.clone())
 }
 
-pub(crate) fn telegram_store(pool: &PgPool) -> TelegramStore {
+pub fn telegram_store(pool: &PgPool) -> TelegramStore {
     TelegramStore::new(
         pool.clone(),
         Arc::new(communication_provider_account_store(pool)),
@@ -36,7 +34,7 @@ pub(crate) fn telegram_store(pool: &PgPool) -> TelegramStore {
     )
 }
 
-pub(crate) fn whatsapp_web_store(pool: &PgPool) -> WhatsappWebStore {
+pub fn whatsapp_web_store(pool: &PgPool) -> WhatsappWebStore {
     WhatsappWebStore::new(
         pool.clone(),
         Arc::new(communication_provider_account_store(pool)),
@@ -44,7 +42,7 @@ pub(crate) fn whatsapp_web_store(pool: &PgPool) -> WhatsappWebStore {
     )
 }
 
-pub(crate) async fn upsert_telegram_runtime_account(
+pub async fn upsert_telegram_runtime_account(
     pool: &PgPool,
     account_id: &str,
     display_name: &str,

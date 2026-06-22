@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -10,7 +10,6 @@ use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::settings::{ApplicationSettingsStore, SettingValueKind};
 use hermes_hub_backend::platform::storage::Database;
 
@@ -21,12 +20,8 @@ static SETTINGS_DB_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const
 #[tokio::test]
 async fn application_settings_store_lists_seeded_settings_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live application settings store test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -84,12 +79,8 @@ async fn application_settings_store_lists_seeded_settings_against_postgres() {
 #[tokio::test]
 async fn application_settings_include_frontend_layout_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live frontend layout settings test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -117,12 +108,8 @@ async fn application_settings_include_frontend_layout_against_postgres() {
 #[tokio::test]
 async fn application_settings_include_frontend_sidebar_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live frontend sidebar settings test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -166,12 +153,8 @@ async fn application_settings_include_frontend_sidebar_against_postgres() {
 #[tokio::test]
 async fn application_settings_include_frontend_theme_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live frontend theme settings test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -207,12 +190,8 @@ async fn application_settings_include_frontend_theme_against_postgres() {
 #[tokio::test]
 async fn application_settings_include_frontend_ui_state_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live frontend ui state settings test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -245,12 +224,8 @@ async fn application_settings_include_frontend_ui_state_against_postgres() {
 #[tokio::test]
 async fn application_settings_update_repairs_missing_declared_setting_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live application settings update repair test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -317,12 +292,8 @@ async fn application_settings_update_repairs_missing_declared_setting_against_po
 #[tokio::test]
 async fn database_startup_repairs_declared_application_settings_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live application settings repair test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -414,22 +385,14 @@ async fn database_startup_repairs_declared_application_settings_against_postgres
 #[tokio::test]
 async fn application_settings_api_updates_existing_setting_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live application settings API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
     let response = app
@@ -474,22 +437,14 @@ async fn application_settings_api_updates_existing_setting_against_postgres() {
 #[tokio::test]
 async fn application_settings_api_rejects_secret_like_setting_keys_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live application settings validation test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -510,22 +465,14 @@ async fn application_settings_api_rejects_secret_like_setting_keys_against_postg
 #[tokio::test]
 async fn application_settings_api_rejects_private_ui_state_payload_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live application settings ui state validation test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -558,10 +505,8 @@ async fn application_settings_api_rejects_private_ui_state_payload_against_postg
 #[tokio::test]
 async fn settings_accounts_api_lists_provider_accounts_against_postgres() {
     let _guard = SETTINGS_DB_TEST_LOCK.lock().await;
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live settings accounts API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -580,11 +525,7 @@ async fn settings_accounts_api_lists_provider_accounts_against_postgres() {
         .expect("seed provider account");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 

@@ -198,15 +198,15 @@ async fn message_projection_channel_kind_telegram_alias_matches_user_and_bot_mes
     };
 
     let user = message_store
-        .upsert_message(&user_message)
+        .upsert_channel_message(&user_message)
         .await
         .expect("upsert telegram user message");
     let bot = message_store
-        .upsert_message(&bot_message)
+        .upsert_channel_message(&bot_message)
         .await
         .expect("upsert telegram bot message");
     message_store
-        .upsert_message(&whatsapp_message)
+        .upsert_channel_message(&whatsapp_message)
         .await
         .expect("upsert whatsapp control message");
 

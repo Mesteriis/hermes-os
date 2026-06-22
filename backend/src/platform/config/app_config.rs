@@ -4,6 +4,8 @@ mod core_env;
 mod defaults;
 mod env;
 mod provider_env;
+#[cfg(any(test, feature = "test-support"))]
+mod test_support;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;

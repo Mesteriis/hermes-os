@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 pub(crate) use axum::Router;
 pub(crate) use axum::body::{Body, to_bytes};
@@ -63,11 +63,9 @@ impl LiveGraphApiContext {
     }
 }
 
-pub(crate) async fn live_graph_api_context(test_name: &str) -> Option<LiveGraphApiContext> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live graph API {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+pub(crate) async fn live_graph_api_context(_test_name: &str) -> Option<LiveGraphApiContext> {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let admin_database_url = database_url_with_database(&database_url, "postgres");
     let admin_pool = PgPoolOptions::new()
@@ -92,11 +90,10 @@ pub(crate) async fn live_graph_api_context(test_name: &str) -> Option<LiveGraphA
     let pool = database.pool().expect("configured pool").clone();
     let store = GraphStore::new(pool.clone());
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", test_database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(
+            LOCAL_API_TOKEN,
+            test_database_url.as_str(),
+        ),
         database,
     );
 
@@ -110,8 +107,7 @@ pub(crate) async fn live_graph_api_context(test_name: &str) -> Option<LiveGraphA
 }
 
 pub(crate) fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
-        .expect("valid local API secret")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 pub(crate) fn get_request(uri: &str) -> Request<Body> {

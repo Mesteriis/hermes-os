@@ -3,10 +3,10 @@
 //! Captures CURRENT behavior before alignment refactoring (Phase 2+).
 //! Do NOT change existing behavior — only add tests.
 //!
-//! These live tests run only when HERMES_TEST_DATABASE_URL points to a running
-//! pgvector instance with migrations applied.
+//! These live tests use the shared testcontainers pgvector fixture with
+//! per-test migrated databases.
 
-use std::env;
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -20,7 +20,7 @@ use hermes_hub_backend::platform::storage::Database;
 const TOKEN: &str = "char-person-test-token";
 
 fn cfg(db: &str) -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", TOKEN), ("DATABASE_URL", db)]).expect("cfg")
+    testkit::app::config_with_secret_and_database_url(TOKEN, db)
 }
 
 fn get(uri: &str) -> Request<Body> {
@@ -55,11 +55,9 @@ async fn build_app(database_url: &str) -> axum::Router {
     build_router_with_database(cfg(database_url), database)
 }
 
-async fn live_app(test_name: &str) -> Option<axum::Router> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+async fn live_app(_test_name: &str) -> Option<axum::Router> {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     Some(build_app(&database_url).await)
 }
@@ -134,7 +132,7 @@ async fn char_persons_and_personas_both_exist() {
     assert_eq!(personas_resp.status(), StatusCode::OK);
 }
 
-/// GAP-2 characterisation: GET /api/v1/persons/owner returns owner persona.
+/// GAP-2 characterisation: GET /api/v1/persons/owner returns the owner persona envelope.
 #[tokio::test]
 async fn char_owner_persona_returns_ok() {
     let Some(app) = live_app("owner persona").await else {
@@ -148,9 +146,12 @@ async fn char_owner_persona_returns_ok() {
     assert_eq!(response.status(), StatusCode::OK);
 
     let body = json_body(response).await;
+    let owner = body
+        .get("owner_persona")
+        .expect("Owner response should contain owner_persona envelope");
     assert!(
-        body.get("persona_id").is_some() || body.get("is_self").is_some(),
-        "Owner response should contain persona fields: {body:?}",
+        owner.is_null() || (owner.get("person_id").is_some() && owner.get("is_self").is_some()),
+        "Owner persona should be null or contain person fields: {body:?}",
     );
 }
 

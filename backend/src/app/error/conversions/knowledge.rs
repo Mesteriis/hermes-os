@@ -159,6 +159,10 @@ impl From<DecisionCommandServiceError> for ApiError {
                 tracing::error!(error = %error, "decision review observation capture failed");
                 Self::InvalidDecisionReview("decision review observation capture failed")
             }
+            DecisionCommandServiceError::ReviewMirror(error) => {
+                tracing::error!(error = %error, "decision review inbox sync failed");
+                Self::InvalidDecisionReview("decision review inbox sync failed")
+            }
         }
     }
 }
@@ -170,6 +174,10 @@ impl From<ObligationCommandServiceError> for ApiError {
             ObligationCommandServiceError::Observation(error) => {
                 tracing::error!(error = %error, "obligation review observation capture failed");
                 Self::InvalidObligationReview("obligation review observation capture failed")
+            }
+            ObligationCommandServiceError::ReviewMirror(error) => {
+                tracing::error!(error = %error, "obligation review inbox sync failed");
+                Self::InvalidObligationReview("obligation review inbox sync failed")
             }
         }
     }

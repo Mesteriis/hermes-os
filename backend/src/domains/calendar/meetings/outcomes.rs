@@ -1,9 +1,21 @@
 use chrono::{DateTime, Utc};
-use serde_json::Value;
+use serde_json::{Value, json};
 use sqlx::Row;
 use sqlx::postgres::PgPool;
+use sqlx::{Postgres, Transaction};
 
 use crate::domains::calendar::evidence::link_calendar_entity_in_transaction;
+use crate::domains::decisions::{
+    DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState, DecisionStore,
+    NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
+};
+use crate::domains::obligations::{
+    NewObligation, NewObligationEvidence, ObligationEntityKind, ObligationEvidenceSourceKind,
+    ObligationReviewState, ObligationStore,
+};
+use crate::workflows::review_mirror::{
+    sync_decision_review_state_in_transaction, sync_obligation_review_state_in_transaction,
+};
 
 use super::rows::{MEETING_OUTCOME_COLUMNS, row_to_meeting_outcome};
 use super::{MeetingOutcome, MeetingsError};
@@ -79,7 +91,21 @@ impl MeetingOutcomeStore {
             .bind(source.unwrap_or("manual"))
             .fetch_one(&mut *transaction)
             .await?;
-        let outcome = row_to_meeting_outcome(row)?;
+        let mut outcome = row_to_meeting_outcome(row)?;
+
+        if let Some(linked_entity_id) =
+            linked_entity_for_outcome(&mut transaction, &outcome, observation_id).await?
+        {
+            let query = format!(
+                "UPDATE meeting_outcomes SET linked_entity_id=$2, updated_at=now() WHERE id=$1::uuid RETURNING {MEETING_OUTCOME_COLUMNS}"
+            );
+            let row = sqlx::query(&query)
+                .bind(&outcome.id)
+                .bind(&linked_entity_id)
+                .fetch_one(&mut *transaction)
+                .await?;
+            outcome = row_to_meeting_outcome(row)?;
+        }
 
         if let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) {
             link_calendar_entity_in_transaction(
@@ -116,4 +142,126 @@ impl MeetingOutcomeStore {
         }
         Ok(Value::Object(status))
     }
+}
+
+async fn linked_entity_for_outcome(
+    transaction: &mut Transaction<'_, Postgres>,
+    outcome: &MeetingOutcome,
+    observation_id: Option<&str>,
+) -> Result<Option<String>, MeetingsError> {
+    let evidence_observation_id = match observation_id.filter(|value| !value.trim().is_empty()) {
+        Some(observation_id) => observation_id.to_owned(),
+        None => calendar_event_observation_id(transaction, &outcome.event_id).await?,
+    };
+
+    match outcome.outcome_type.as_str() {
+        "decision" => {
+            let decision = NewDecision::new(
+                outcome.title.clone(),
+                outcome
+                    .description
+                    .clone()
+                    .unwrap_or_else(|| outcome.title.clone()),
+                outcome.confidence,
+                DecisionReviewState::Suggested,
+            )
+            .metadata(json!({
+                "source_domain": "calendar",
+                "source_entity_kind": "meeting_outcome",
+                "meeting_outcome_id": outcome.id,
+                "event_id": outcome.event_id,
+            }));
+            let evidence = NewDecisionEvidence::new(
+                DecisionEvidenceSourceKind::Event,
+                outcome.event_id.clone(),
+            )
+            .with_observation_id(Some(evidence_observation_id.clone()))
+            .quote(
+                outcome
+                    .description
+                    .clone()
+                    .unwrap_or_else(|| outcome.title.clone()),
+            )
+            .metadata(json!({
+                "source_domain": "calendar",
+                "meeting_outcome_id": outcome.id,
+            }));
+            let impacted_entity =
+                NewDecisionImpactedEntity::new(DecisionEntityKind::Event, outcome.event_id.clone())
+                    .impact_type("meeting_outcome")
+                    .metadata(json!({ "meeting_outcome_id": outcome.id }));
+            let stored = DecisionStore::upsert_with_evidence_in_transaction(
+                transaction,
+                &decision,
+                &[evidence],
+                &[impacted_entity],
+            )
+            .await?;
+            sync_decision_review_state_in_transaction(transaction, &stored).await?;
+            Ok(Some(stored.decision_id))
+        }
+        "promise" => {
+            let Some(owner_person_id) = outcome
+                .owner_person_id
+                .as_deref()
+                .filter(|value| !value.trim().is_empty())
+            else {
+                return Ok(None);
+            };
+            let mut obligation = NewObligation::new(
+                ObligationEntityKind::Persona,
+                owner_person_id.to_owned(),
+                outcome.title.clone(),
+                outcome.confidence,
+                ObligationReviewState::Suggested,
+            )
+            .metadata(json!({
+                "source_domain": "calendar",
+                "source_entity_kind": "meeting_outcome",
+                "meeting_outcome_id": outcome.id,
+                "event_id": outcome.event_id,
+            }));
+            if let Some(due_date) = outcome.due_date {
+                obligation = obligation.due_at(due_date);
+            }
+            let evidence = NewObligationEvidence::new(
+                ObligationEvidenceSourceKind::Event,
+                outcome.event_id.clone(),
+            )
+            .with_observation_id(Some(evidence_observation_id.clone()))
+            .quote(
+                outcome
+                    .description
+                    .clone()
+                    .unwrap_or_else(|| outcome.title.clone()),
+            )
+            .metadata(json!({
+                "source_domain": "calendar",
+                "meeting_outcome_id": outcome.id,
+            }));
+            let stored = ObligationStore::upsert_with_evidence_in_transaction(
+                transaction,
+                &obligation,
+                &[evidence],
+            )
+            .await?;
+            sync_obligation_review_state_in_transaction(transaction, &stored).await?;
+            Ok(Some(stored.obligation_id))
+        }
+        _ => Ok(None),
+    }
+}
+
+async fn calendar_event_observation_id(
+    transaction: &mut Transaction<'_, Postgres>,
+    event_id: &str,
+) -> Result<String, MeetingsError> {
+    let observation_id = sqlx::query_scalar::<_, String>(
+        "SELECT observation_id FROM calendar_events WHERE event_id = $1",
+    )
+    .bind(event_id)
+    .fetch_optional(&mut **transaction)
+    .await?
+    .ok_or(MeetingsError::NotFound)?;
+    Ok(observation_id)
 }

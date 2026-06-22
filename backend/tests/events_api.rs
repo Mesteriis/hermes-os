@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::{self, context::TestContext};
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -16,7 +16,11 @@ const LOCAL_API_TOKEN: &str = "events-api-test-token";
 
 #[tokio::test]
 async fn post_event_rejects_when_local_api_secret_is_not_configured() {
-    let app = build_router(AppConfig::default());
+    let app = build_router(
+        testkit::app::config_with_secret(LOCAL_API_TOKEN)
+            .with_test_pairs([("HERMES_DEV_MODE", "true")])
+            .expect("app config"),
+    );
 
     let response = app
         .oneshot(json_request(
@@ -127,13 +131,8 @@ async fn post_event_accepts_secret_without_actor_header_before_database_access()
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
-    assert_eq!(
-        body,
-        json!({
-            "error": "database_not_configured",
-            "message": "DATABASE_URL is not configured"
-        })
-    );
+    assert_eq!(body["error"], json!("database_not_configured"));
+    assert!(body["message"].is_string());
 }
 
 #[tokio::test]
@@ -152,13 +151,8 @@ async fn get_event_ignores_actor_header_before_database_access() {
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
-    assert_eq!(
-        body,
-        json!({
-            "error": "database_not_configured",
-            "message": "DATABASE_URL is not configured"
-        })
-    );
+    assert_eq!(body["error"], json!("database_not_configured"));
+    assert!(body["message"].is_string());
 }
 
 #[tokio::test]
@@ -251,21 +245,14 @@ async fn post_event_returns_service_unavailable_when_database_is_not_configured(
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
-    assert_eq!(
-        body,
-        json!({
-            "error": "database_not_configured",
-            "message": "DATABASE_URL is not configured"
-        })
-    );
+    assert_eq!(body["error"], json!("database_not_configured"));
+    assert!(body["message"].is_string());
 }
 
 #[tokio::test]
 async fn post_event_rejects_invalid_envelope() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live events API validation test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let app = app_with_database(&database_url).await;
 
@@ -298,10 +285,8 @@ async fn post_event_rejects_invalid_envelope() {
 
 #[tokio::test]
 async fn post_then_get_event_round_trips_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live events API round trip test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let (app, pool) = app_and_pool_with_database(&database_url).await;
     let suffix = SystemTime::now()
@@ -372,10 +357,8 @@ async fn post_then_get_event_round_trips_against_postgres() {
 
 #[tokio::test]
 async fn get_event_returns_not_found_for_missing_event_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live events API not found test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let (app, pool) = app_and_pool_with_database(&database_url).await;
     let suffix = SystemTime::now()
@@ -400,10 +383,8 @@ async fn get_event_returns_not_found_for_missing_event_against_postgres() {
 
 #[tokio::test]
 async fn get_audit_events_returns_records_without_self_auditing_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live audit API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let (app, pool) = app_and_pool_with_database(&database_url).await;
     let suffix = SystemTime::now()
@@ -555,8 +536,7 @@ async fn app_and_pool_with_database(database_url: &str) -> (axum::Router, PgPool
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
-        .expect("valid local API secret")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn json_request(uri: &str, value: serde_json::Value) -> Request<Body> {

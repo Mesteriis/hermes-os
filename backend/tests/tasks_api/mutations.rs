@@ -2,7 +2,7 @@ use crate::support::*;
 
 #[tokio::test]
 async fn task_rule_create_and_delete() {
-    let Some(database_url) = test_database_url("task rule create/delete test") else {
+    let Some(database_url) = test_database_url("task rule create/delete test").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -54,7 +54,7 @@ macro_rules! task_post_test {
     ($name:ident, $path_suffix:expr, $body:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(database_url) = test_database_url(stringify!($name)) else {
+            let Some(database_url) = test_database_url(stringify!($name)).await else {
                 return;
             };
             let suffix = unique_suffix();
@@ -113,7 +113,7 @@ task_post_test!(
 
 #[tokio::test]
 async fn task_post_provider() {
-    let Some(database_url) = test_database_url("task provider post test") else {
+    let Some(database_url) = test_database_url("task provider post test").await else {
         return;
     };
     let suffix = unique_suffix();
@@ -135,7 +135,7 @@ async fn task_post_provider() {
 
 #[tokio::test]
 async fn task_candidate_review() {
-    let Some(database_url) = test_database_url("task candidate review test") else {
+    let Some(database_url) = test_database_url("task candidate review test").await else {
         return;
     };
     let suffix = unique_suffix();

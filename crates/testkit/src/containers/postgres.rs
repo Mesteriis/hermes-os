@@ -6,14 +6,27 @@ use tokio::time::{Duration, Instant, sleep};
 
 const POSTGRES_CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 const POSTGRES_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(250);
+pub const SESSION_POSTGRES_HOST_PORT_ENV: &str = "HERMES_TEST_POSTGRES_HOST_PORT";
+pub const SESSION_ID_ENV: &str = "HERMES_TEST_SESSION_ID";
 
 pub struct PostgresContainer {
-    _container: ContainerAsync<GenericImage>,
+    _container: Option<ContainerAsync<GenericImage>>,
     host_port: u16,
 }
 
 impl PostgresContainer {
     pub async fn start() -> Self {
+        if let Some(host_port) = session_host_port() {
+            return Self {
+                _container: None,
+                host_port,
+            };
+        }
+
+        Self::start_owned().await
+    }
+
+    pub async fn start_owned() -> Self {
         // GenericImage methods (return Self) must come BEFORE ImageExt methods (return ContainerRequest)
         let container = GenericImage::new("pgvector/pgvector", "0.8.2-pg16")
             .with_wait_for(WaitFor::message_on_stdout(
@@ -34,7 +47,7 @@ impl PostgresContainer {
             .expect("failed to resolve pgvector container port");
 
         Self {
-            _container: container,
+            _container: Some(container),
             host_port,
         }
     }
@@ -72,6 +85,10 @@ impl PostgresContainer {
         hermes_hub_backend::platform::events::run_migrations(&pool)
             .await
             .expect("failed to run migrations");
+        hermes_hub_backend::platform::settings::ApplicationSettingsStore::new(pool.clone())
+            .repair_declared_settings()
+            .await
+            .expect("failed to repair application settings");
 
         pool
     }
@@ -79,6 +96,18 @@ impl PostgresContainer {
     pub fn host_port(&self) -> u16 {
         self.host_port
     }
+}
+
+fn session_host_port() -> Option<u16> {
+    let value = std::env::var(SESSION_POSTGRES_HOST_PORT_ENV).ok()?;
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    Some(trimmed.parse::<u16>().unwrap_or_else(|error| {
+        panic!("invalid {SESSION_POSTGRES_HOST_PORT_ENV} value '{trimmed}': {error}")
+    }))
 }
 
 async fn connect_with_retry(database_url: &str, label: &str) -> PgPool {

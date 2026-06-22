@@ -60,8 +60,7 @@ async fn telegram_and_whatsapp_capabilities_are_split_under_v1() {
 }
 
 fn config_with_api_secret() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_SECRET)])
-        .expect("valid local API secret")
+    testkit::app::config_with_secret(LOCAL_API_SECRET)
 }
 
 fn get_request_with_secret(path: &str) -> Request<Body> {

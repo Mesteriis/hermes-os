@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::Utc;
 use hermes_hub_backend::domains::communications::core::{
@@ -18,11 +18,9 @@ use hermes_hub_backend::workflows::provider_communication_projection::{
 use serde_json::json;
 use sqlx::postgres::PgPool;
 
-pub async fn live_consistency_pool(test_name: &str) -> Option<PgPool> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+pub async fn live_consistency_pool(_test_name: &str) -> Option<PgPool> {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

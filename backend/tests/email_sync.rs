@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use serde_json::json;
 
@@ -285,11 +285,9 @@ fn email_sync_plan_uses_delimiter_safe_imap_stream_id() {
     );
 }
 
-async fn live_sync_context(test_name: &str) -> Option<(CommunicationIngestionStore, u128)> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+async fn live_sync_context(_test_name: &str) -> Option<(CommunicationIngestionStore, u128)> {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

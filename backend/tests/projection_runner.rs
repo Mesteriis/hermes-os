@@ -1,6 +1,6 @@
-use std::env;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::Utc;
 use serde_json::json;
@@ -13,10 +13,8 @@ use hermes_hub_backend::platform::storage::Database;
 
 #[tokio::test]
 async fn projection_runner_processes_batch_and_advances_cursor_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live projection runner test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -72,12 +70,8 @@ async fn projection_runner_processes_batch_and_advances_cursor_against_postgres(
 #[tokio::test]
 async fn projection_runner_stops_on_handler_error_without_advancing_failed_event_against_postgres()
 {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live projection runner failure test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

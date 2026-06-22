@@ -3,8 +3,7 @@ use crate::support::*;
 #[tokio::test]
 async fn communication_ingestion_binds_provider_accounts_to_secret_refs_against_postgres() {
     let Some(database) =
-        connect_database("communication secret binding test: HERMES_TEST_DATABASE_URL is not set")
-            .await
+        connect_database("communication secret binding test fixture database").await
     else {
         return;
     };
@@ -116,8 +115,7 @@ async fn communication_ingestion_binds_provider_accounts_to_secret_refs_against_
 #[tokio::test]
 async fn communication_ingestion_scopes_secret_refs_by_provider_account_against_postgres() {
     let Some(database) =
-        connect_database("multi-account secret binding test: HERMES_TEST_DATABASE_URL is not set")
-            .await
+        connect_database("multi-account secret binding test fixture database").await
     else {
         return;
     };

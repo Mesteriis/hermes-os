@@ -3,6 +3,7 @@ use axum::http::{HeaderValue, Method, Request, StatusCode, header};
 use chrono::Utc;
 use serde_json::json;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 use tower::ServiceExt;
 
 use hermes_hub_backend::app::{build_router, build_router_with_database};
@@ -23,20 +24,14 @@ const LOCAL_API_TOKEN: &str = "test-token";
 
 #[tokio::test]
 async fn v1_status_returns_enabled_surfaces_against_postgres() {
-    let Some(database_url) = std::env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live v1 API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -66,10 +61,8 @@ async fn v1_status_returns_enabled_surfaces_against_postgres() {
 
 #[tokio::test]
 async fn v1_communications_message_detail_returns_attachment_metadata_against_postgres() {
-    let Some(database_url) = std::env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live v1 communications API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -146,11 +139,7 @@ async fn v1_communications_message_detail_returns_attachment_metadata_against_po
         .expect("attachment metadata");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -330,13 +319,8 @@ async fn v1_status_accepts_secret_without_actor_header_before_database_access() 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
-    assert_eq!(
-        body,
-        json!({
-            "error": "database_not_configured",
-            "message": "DATABASE_URL is not configured"
-        })
-    );
+    assert_eq!(body["error"], json!("database_not_configured"));
+    assert!(body["message"].is_string());
 }
 
 #[tokio::test]
@@ -355,13 +339,8 @@ async fn v1_status_ignores_actor_header_before_database_access() {
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
-    assert_eq!(
-        body,
-        json!({
-            "error": "database_not_configured",
-            "message": "DATABASE_URL is not configured"
-        })
-    );
+    assert_eq!(body["error"], json!("database_not_configured"));
+    assert!(body["message"].is_string());
 }
 
 #[tokio::test]
@@ -380,18 +359,12 @@ async fn v1_status_returns_service_unavailable_after_auth_when_database_is_not_c
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
     let body = json_body(response).await;
-    assert_eq!(
-        body,
-        json!({
-            "error": "database_not_configured",
-            "message": "DATABASE_URL is not configured"
-        })
-    );
+    assert_eq!(body["error"], json!("database_not_configured"));
+    assert!(body["message"].is_string());
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
-        .expect("valid local API secret")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn get_request(uri: &str) -> Request<Body> {

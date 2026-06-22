@@ -31,7 +31,7 @@ impl OrgFactStore {
         Self { pool }
     }
     pub async fn list(&self, org_id: &str) -> Result<Vec<OrgFact>, OrgMemoryError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, fact_type, value, source, confidence, last_verified_at, valid_from, valid_to, is_active, created_at, updated_at FROM organization_facts WHERE organization_id=$1 ORDER BY created_at DESC")
+        let rows = sqlx::query("SELECT id::text, organization_id, fact_type, value, source, confidence::float8 AS confidence, last_verified_at, valid_from, valid_to, is_active, created_at, updated_at FROM organization_facts WHERE organization_id=$1 ORDER BY created_at DESC")
             .bind(org_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
@@ -60,7 +60,7 @@ impl OrgFactStore {
         source: &str,
         confidence: f64,
     ) -> Result<OrgFact, OrgMemoryError> {
-        let row = sqlx::query("INSERT INTO organization_facts (organization_id, fact_type, value, source, confidence) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id::text, organization_id, fact_type, value, source, confidence, last_verified_at, valid_from, valid_to, is_active, created_at, updated_at")
+        let row = sqlx::query("INSERT INTO organization_facts (organization_id, fact_type, value, source, confidence) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id::text, organization_id, fact_type, value, source, confidence::float8 AS confidence, last_verified_at, valid_from, valid_to, is_active, created_at, updated_at")
             .bind(org_id).bind(fact_type).bind(value).bind(source).bind(confidence).fetch_one(&self.pool).await?;
         Ok(OrgFact {
             id: row.try_get("id")?,
@@ -108,7 +108,7 @@ impl OrgMemoryCardStore {
         Self { pool }
     }
     pub async fn list(&self, org_id: &str) -> Result<Vec<OrgMemoryCard>, OrgMemoryError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, title, description, source, confidence, importance, created_at, last_verified_at FROM organization_memory_cards WHERE organization_id=$1 ORDER BY importance DESC, created_at DESC")
+        let rows = sqlx::query("SELECT id::text, organization_id, title, description, source, confidence::float8 AS confidence, importance, created_at, last_verified_at FROM organization_memory_cards WHERE organization_id=$1 ORDER BY importance DESC, created_at DESC")
             .bind(org_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
@@ -134,7 +134,7 @@ impl OrgMemoryCardStore {
         source: &str,
         importance: i16,
     ) -> Result<OrgMemoryCard, OrgMemoryError> {
-        let row = sqlx::query("INSERT INTO organization_memory_cards (organization_id, title, description, source, importance) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id::text, organization_id, title, description, source, confidence, importance, created_at, last_verified_at")
+        let row = sqlx::query("INSERT INTO organization_memory_cards (organization_id, title, description, source, importance) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id::text, organization_id, title, description, source, confidence::float8 AS confidence, importance, created_at, last_verified_at")
             .bind(org_id).bind(title).bind(description).bind(source).bind(importance).fetch_one(&self.pool).await?;
         Ok(OrgMemoryCard {
             id: row.try_get("id")?,
@@ -174,7 +174,7 @@ impl OrgPreferenceStore {
         Self { pool }
     }
     pub async fn list(&self, org_id: &str) -> Result<Vec<OrgPreference>, OrgMemoryError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, preference_type, value, source, confidence, last_verified_at, created_at, updated_at FROM organization_preferences WHERE organization_id=$1 ORDER BY preference_type")
+        let rows = sqlx::query("SELECT id::text, organization_id, preference_type, value, source, confidence::float8 AS confidence, last_verified_at, created_at, updated_at FROM organization_preferences WHERE organization_id=$1 ORDER BY preference_type")
             .bind(org_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
@@ -199,7 +199,7 @@ impl OrgPreferenceStore {
         value: &str,
         source: &str,
     ) -> Result<OrgPreference, OrgMemoryError> {
-        let row = sqlx::query("INSERT INTO organization_preferences (organization_id, preference_type, value, source) VALUES ($1,$2,$3,$4) ON CONFLICT (organization_id, preference_type) DO UPDATE SET value=$3, source=$4, updated_at=now() RETURNING id::text, organization_id, preference_type, value, source, confidence, last_verified_at, created_at, updated_at")
+        let row = sqlx::query("INSERT INTO organization_preferences (organization_id, preference_type, value, source) VALUES ($1,$2,$3,$4) ON CONFLICT (organization_id, preference_type) DO UPDATE SET value=$3, source=$4, updated_at=now() RETURNING id::text, organization_id, preference_type, value, source, confidence::float8 AS confidence, last_verified_at, created_at, updated_at")
             .bind(org_id).bind(ptype).bind(value).bind(source).fetch_one(&self.pool).await?;
         Ok(OrgPreference {
             id: row.try_get("id")?,
@@ -237,7 +237,7 @@ impl OrgRequiredDocStore {
         Self { pool }
     }
     pub async fn list(&self, org_id: &str) -> Result<Vec<OrgRequiredDocument>, OrgMemoryError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, document_type, description, source, confidence, created_at FROM organization_required_documents WHERE organization_id=$1 ORDER BY document_type")
+        let rows = sqlx::query("SELECT id::text, organization_id, document_type, description, source, confidence::float8 AS confidence, created_at FROM organization_required_documents WHERE organization_id=$1 ORDER BY document_type")
             .bind(org_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {

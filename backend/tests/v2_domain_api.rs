@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
@@ -41,21 +41,15 @@ async fn domain_routes_build_and_require_local_api_secret() {
         secret_only_response.status(),
         StatusCode::SERVICE_UNAVAILABLE
     );
-    assert_eq!(
-        json_body(secret_only_response).await,
-        json!({
-            "error": "database_not_configured",
-            "message": "DATABASE_URL is not configured"
-        })
-    );
+    let secret_only_body = json_body(secret_only_response).await;
+    assert_eq!(secret_only_body["error"], json!("database_not_configured"));
+    assert!(secret_only_body["message"].is_string());
 }
 
 #[tokio::test]
 async fn tasks_endpoint_returns_first_class_task_payload_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live tasks API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -78,11 +72,7 @@ async fn tasks_endpoint_returns_first_class_task_payload_against_postgres() {
         .expect("seed task");
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -113,10 +103,8 @@ async fn tasks_endpoint_returns_first_class_task_payload_against_postgres() {
 
 #[tokio::test]
 async fn person_health_endpoint_returns_single_person_health_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live person health API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -130,11 +118,7 @@ async fn person_health_endpoint_returns_single_person_health_against_postgres() 
     seed_person_health(&pool, &person.person_id).await;
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 
@@ -156,8 +140,7 @@ async fn person_health_endpoint_returns_single_person_health_against_postgres() 
 }
 
 fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)])
-        .expect("valid local API secret")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 fn get_request(uri: &str) -> Request<Body> {

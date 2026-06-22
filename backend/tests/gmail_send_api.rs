@@ -15,7 +15,6 @@ use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
@@ -36,20 +35,20 @@ async fn gmail_send_api_queues_outbox_when_send_scope_enabled_against_postgres()
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
-    let config = AppConfig::from_pairs([
-        ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-        ("HERMES_DEV_MODE", "true"),
-        (
-            "HERMES_VAULT_HOME",
-            vault_home.to_str().expect("vault path"),
-        ),
-        (
-            "HERMES_DEV_KEY_PATH",
-            dev_key_path.to_str().expect("dev key path"),
-        ),
-        ("DATABASE_URL", database_url.as_str()),
-    ])
-    .expect("config");
+    let config =
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([
+                ("HERMES_DEV_MODE", "true"),
+                (
+                    "HERMES_VAULT_HOME",
+                    vault_home.to_str().expect("vault path"),
+                ),
+                (
+                    "HERMES_DEV_KEY_PATH",
+                    dev_key_path.to_str().expect("dev key path"),
+                ),
+            ])
+            .expect("config");
     let app = build_router_with_database(config, database);
     unlock_test_vault(app.clone()).await;
 

@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 pub(crate) use chrono::Utc;
 pub(crate) use hermes_hub_backend::domains::documents::core::{
@@ -16,12 +16,10 @@ pub(crate) use sqlx::postgres::PgPool;
 pub(crate) use sqlx::query_scalar;
 
 pub(crate) async fn live_context(
-    test_name: &str,
+    _test_name: &str,
 ) -> Option<(PgPool, DocumentImportStore, DocumentProcessingStore)> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name} test: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");

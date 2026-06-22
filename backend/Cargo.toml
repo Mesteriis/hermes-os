@@ -6,6 +6,10 @@ edition = "2024"
 rust-version = "1.88"
 default-run = "hermes-hub-backend"
 
+[features]
+default = []
+test-support = []
+
 [lib]
 name = "hermes_hub_backend"
 path = "src/lib.rs"

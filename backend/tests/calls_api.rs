@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -13,7 +13,7 @@ use hermes_hub_backend::platform::storage::Database;
 const TOKEN: &str = "calls-test-token";
 
 fn cfg() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", TOKEN)]).expect("cfg")
+    testkit::app::config_with_secret(TOKEN)
 }
 
 fn get(uri: &str, token: &str) -> Request<Body> {
@@ -51,8 +51,7 @@ fn uid() -> u128 {
 async fn app(db: &str) -> axum::Router {
     let database = Database::connect(Some(db)).await.expect("db");
     build_router_with_database(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", TOKEN), ("DATABASE_URL", db)])
-            .expect("cfg"),
+        testkit::app::config_with_secret_and_database_url(TOKEN, db),
         database,
     )
 }
@@ -66,10 +65,8 @@ async fn calls_reject_no_secret() {
 
 #[tokio::test]
 async fn calls_list_ok() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let a = app(&db).await;
     let resp = a.oneshot(get("/api/v1/calls", TOKEN)).await.expect("r");
     assert!(!resp.status().is_server_error(), "status={}", resp.status());
@@ -78,10 +75,8 @@ async fn calls_list_ok() {
 
 #[tokio::test]
 async fn call_create_ok() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let s = uid();
     let a = app(&db).await;
     let resp = a.oneshot(post("/api/v1/calls", json!({
@@ -93,10 +88,8 @@ async fn call_create_ok() {
 
 #[tokio::test]
 async fn call_transcript_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let s = uid();
     let a = app(&db).await;
     let resp = a

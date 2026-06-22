@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -13,7 +13,6 @@ use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, CommunicationProviderKind, NewProviderAccount,
     NewProviderAccountSecretBinding, ProviderAccountSecretPurpose,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::SecretKind;
 use hermes_hub_backend::platform::storage::Database;
 
@@ -49,12 +48,8 @@ fn whatsapp_provider_and_secret_kinds_are_account_scoped() {
 #[tokio::test]
 async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_candidates_against_postgres()
  {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live WhatsApp candidate refresh test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -66,12 +61,8 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
     let decision_rationale = "chat context must feed the same domain model";
     let obligation_statement = format!("send the WhatsApp alignment note {suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -178,10 +169,8 @@ async fn whatsapp_fixture_message_ingestion_refreshes_decision_and_obligation_ca
 
 #[tokio::test]
 async fn whatsapp_web_session_metadata_is_account_scoped_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live WhatsApp Web smoke test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await
@@ -272,10 +261,8 @@ async fn whatsapp_web_session_metadata_is_account_scoped_against_postgres() {
 
 #[tokio::test]
 async fn whatsapp_api_exercises_web_fixture_foundation() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live WhatsApp API smoke test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -284,12 +271,8 @@ async fn whatsapp_api_exercises_web_fixture_foundation() {
     let account_id = format!("whatsapp-web-api-{suffix}");
     let chat_id = format!("wa-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 

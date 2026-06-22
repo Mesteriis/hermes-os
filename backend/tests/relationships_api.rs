@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -15,17 +15,14 @@ use hermes_hub_backend::domains::relationships::{
     NewRelationship, NewRelationshipEvidence, Relationship, RelationshipEvidenceSourceKind,
     RelationshipReviewState, RelationshipStore,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "relationships-api-test-token";
 
 #[tokio::test]
 async fn relationships_list_returns_entity_scoped_relationships() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live relationships API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let (app, pool) = app_and_pool(&database_url).await;
     let suffix = unique_suffix();
     let stored = seed_persona_relationship(&pool, suffix).await;
@@ -59,12 +56,8 @@ async fn relationships_list_returns_entity_scoped_relationships() {
 
 #[tokio::test]
 async fn relationships_list_returns_global_suggested_review_items() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live relationships global review API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let (app, pool) = app_and_pool(&database_url).await;
     let suffix = unique_suffix();
     let suggested = seed_persona_relationship_with_state(
@@ -112,12 +105,8 @@ async fn relationships_list_returns_global_suggested_review_items() {
 
 #[tokio::test]
 async fn put_relationship_review_updates_relationship_and_graph_projection() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live relationship review API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let (app, pool) = app_and_pool(&database_url).await;
     let suffix = unique_suffix();
     let stored = seed_persona_relationship(&pool, suffix).await;
@@ -203,7 +192,7 @@ async fn put_relationship_review_updates_relationship_and_graph_projection() {
 
     let review_item: (String, String, String) = sqlx::query_as(
         r#"
-        SELECT status, target_entity_kind, entity_id
+        SELECT status, target_entity_kind, target_entity_id
         FROM review_items
         WHERE metadata->>'relationship_id' = $1
         ORDER BY updated_at DESC
@@ -225,11 +214,7 @@ async fn app_and_pool(database_url: &str) -> (axum::Router, PgPool) {
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url),
         database,
     );
 

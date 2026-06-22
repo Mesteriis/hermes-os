@@ -4,6 +4,11 @@ use serde_json::{Value, json};
 use sqlx::postgres::PgPool;
 use sqlx::{Postgres, Row, Transaction};
 
+use crate::domains::graph::core::{
+    GraphEvidenceSourceKind, GraphNodeKind, GraphProjectionPort, GraphReviewState, NewGraphEdge,
+    NewGraphEvidence, NewGraphNode, RelationshipType, node_id,
+};
+
 use super::errors::DecisionStoreError;
 use super::evidence::{
     link_decision_review_transition_in_transaction, link_decision_support_in_transaction,
@@ -202,6 +207,14 @@ impl DecisionStore {
             .await?;
         }
 
+        upsert_decision_graph_projection_in_transaction(
+            transaction,
+            &stored,
+            evidence,
+            impacted_entities,
+        )
+        .await?;
+
         Ok(stored)
     }
 
@@ -339,6 +352,120 @@ impl DecisionStore {
         .await?;
         transaction.commit().await?;
         Ok(decision)
+    }
+}
+
+async fn upsert_decision_graph_projection_in_transaction(
+    transaction: &mut Transaction<'_, Postgres>,
+    decision: &Decision,
+    evidence: &[NewDecisionEvidence],
+    impacted_entities: &[NewDecisionImpactedEntity],
+) -> Result<(), DecisionStoreError> {
+    let decision_node = GraphProjectionPort::upsert_node_in_transaction(
+        transaction,
+        &NewGraphNode::new(
+            GraphNodeKind::Decision,
+            decision.decision_id.clone(),
+            decision.title.clone(),
+        )
+        .properties(json!({
+            "domain": "decision",
+            "decision_id": decision.decision_id,
+            "status": decision.status.as_str(),
+            "review_state": decision.review_state.as_str(),
+        })),
+    )
+    .await?;
+
+    let graph_review_state = decision_review_state(decision.review_state);
+    let graph_evidence = graph_decision_evidence(decision, evidence);
+
+    for impacted in impacted_entities {
+        let target_node_kind = decision_entity_graph_node_kind(impacted.entity_kind);
+        let target_node = GraphProjectionPort::upsert_node_in_transaction(
+            transaction,
+            &NewGraphNode::new(
+                target_node_kind,
+                impacted.entity_id.clone(),
+                &impacted.entity_id,
+            )
+            .properties(json!({
+                "domain": "decision",
+                "entity_kind": impacted.entity_kind.as_str(),
+                "entity_id": impacted.entity_id,
+            })),
+        )
+        .await?;
+        let edge = NewGraphEdge::new(
+            decision_node.node_id.clone(),
+            target_node.node_id,
+            RelationshipType::EntityRelationship,
+            decision.confidence,
+            graph_review_state,
+        )
+        .properties(json!({
+            "domain": "decision",
+            "decision_id": decision.decision_id,
+            "impact_type": impacted.impact_type,
+        }));
+        let _ = GraphProjectionPort::upsert_edge_with_evidence_in_transaction(
+            transaction,
+            &edge,
+            std::slice::from_ref(&graph_evidence),
+        )
+        .await?;
+    }
+
+    Ok(())
+}
+
+fn graph_decision_evidence(
+    decision: &Decision,
+    evidence: &[NewDecisionEvidence],
+) -> NewGraphEvidence {
+    let mut graph_evidence = NewGraphEvidence::new(
+        GraphEvidenceSourceKind::Decision,
+        decision.decision_id.clone(),
+    )
+    .metadata(json!({ "domain": "decision" }));
+
+    if let Some(item) = evidence.first() {
+        graph_evidence = graph_evidence.metadata(json!({
+            "domain": "decision",
+            "source_kind": item.source_kind.as_str(),
+            "source_id": item.source_id,
+        }));
+        if let Some(quote) = &item.quote {
+            graph_evidence = graph_evidence.excerpt(quote.clone());
+        }
+        if let Some(observation_id) = &item.observation_id {
+            graph_evidence = graph_evidence.observation_id(observation_id.clone());
+        }
+    }
+
+    graph_evidence
+}
+
+fn decision_review_state(review_state: DecisionReviewState) -> GraphReviewState {
+    match review_state {
+        DecisionReviewState::Suggested => GraphReviewState::Suggested,
+        DecisionReviewState::UserConfirmed => GraphReviewState::UserConfirmed,
+        DecisionReviewState::UserRejected => GraphReviewState::UserRejected,
+    }
+}
+
+fn decision_entity_graph_node_kind(entity_kind: DecisionEntityKind) -> GraphNodeKind {
+    match entity_kind {
+        DecisionEntityKind::Persona => GraphNodeKind::Person,
+        DecisionEntityKind::Organization => GraphNodeKind::Organization,
+        DecisionEntityKind::Project => GraphNodeKind::Project,
+        DecisionEntityKind::Communication => GraphNodeKind::Message,
+        DecisionEntityKind::Document => GraphNodeKind::Document,
+        DecisionEntityKind::Task => GraphNodeKind::Task,
+        DecisionEntityKind::Event => GraphNodeKind::Event,
+        DecisionEntityKind::Decision => GraphNodeKind::Decision,
+        DecisionEntityKind::Obligation => GraphNodeKind::Obligation,
+        DecisionEntityKind::Knowledge => GraphNodeKind::Knowledge,
     }
 }
 

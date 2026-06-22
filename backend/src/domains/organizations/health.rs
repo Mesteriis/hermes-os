@@ -163,7 +163,7 @@ impl OrgRiskStore {
         Self { pool }
     }
     pub async fn list(&self, org_id: &str) -> Result<Vec<OrgRisk>, OrgHealthError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, risk_type, description, severity, source, confidence, created_at, resolved_at, resolution FROM organization_risks WHERE organization_id=$1 ORDER BY created_at DESC")
+        let rows = sqlx::query("SELECT id::text, organization_id, risk_type, description, severity, source, confidence::float8 AS confidence, created_at, resolved_at, resolution FROM organization_risks WHERE organization_id=$1 ORDER BY created_at DESC")
             .bind(org_id).fetch_all(&self.pool).await?;
         rows.into_iter()
             .map(|r| {
@@ -190,7 +190,7 @@ impl OrgRiskStore {
         severity: &str,
         source: &str,
     ) -> Result<OrgRisk, OrgHealthError> {
-        let row = sqlx::query("INSERT INTO organization_risks (organization_id, risk_type, description, severity, source) VALUES ($1,$2,$3,$4,$5) RETURNING id::text, organization_id, risk_type, description, severity, source, confidence, created_at, resolved_at, resolution")
+        let row = sqlx::query("INSERT INTO organization_risks (organization_id, risk_type, description, severity, source) VALUES ($1,$2,$3,$4,$5) RETURNING id::text, organization_id, risk_type, description, severity, source, confidence::float8 AS confidence, created_at, resolved_at, resolution")
             .bind(org_id).bind(risk_type).bind(desc).bind(severity).bind(source).fetch_one(&self.pool).await?;
         Ok(OrgRisk {
             id: row.try_get("id")?,

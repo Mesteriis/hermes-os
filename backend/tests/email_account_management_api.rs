@@ -8,7 +8,6 @@ use hermes_hub_backend::domains::communications::core::{
     CommunicationIngestionStore, EmailProviderKind, NewProviderAccount,
     NewProviderAccountSecretBinding, NewRawCommunicationRecord, ProviderAccountSecretPurpose,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::secrets::{
     NewSecretReference, SecretKind, SecretReferenceStore, SecretStoreKind,
 };
@@ -23,11 +22,7 @@ async fn app(ctx: &TestContext) -> axum::Router {
         .await
         .expect("database");
     build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", TOKEN),
-            ("DATABASE_URL", ctx.connection_string().as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(TOKEN, ctx.connection_string().as_str()),
         database,
     )
 }

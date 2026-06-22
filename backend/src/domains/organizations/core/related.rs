@@ -27,7 +27,7 @@ impl RelatedOrgStore {
     }
 
     pub async fn list(&self, org_id: &str) -> Result<Vec<RelatedOrganization>, OrgCoreError> {
-        let rows = sqlx::query("SELECT id::text, organization_id, related_organization_id, relation_type, source, confidence, created_at FROM related_organizations WHERE organization_id=$1")
+        let rows = sqlx::query("SELECT id::text, organization_id, related_organization_id, relation_type, source, confidence::float8 AS confidence, created_at FROM related_organizations WHERE organization_id=$1")
             .bind(org_id)
             .fetch_all(&self.pool)
             .await?;
@@ -53,7 +53,7 @@ impl RelatedOrgStore {
         related_id: &str,
         rel_type: &str,
     ) -> Result<RelatedOrganization, OrgCoreError> {
-        let row = sqlx::query("INSERT INTO related_organizations (organization_id, related_organization_id, relation_type) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id::text, organization_id, related_organization_id, relation_type, source, confidence, created_at")
+        let row = sqlx::query("INSERT INTO related_organizations (organization_id, related_organization_id, relation_type) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING RETURNING id::text, organization_id, related_organization_id, relation_type, source, confidence::float8 AS confidence, created_at")
             .bind(org_id)
             .bind(related_id)
             .bind(rel_type)

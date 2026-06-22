@@ -191,7 +191,7 @@ pub(crate) async fn seed_document(
 }
 
 pub(crate) fn config_with_api_token() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN)]).expect("config")
+    testkit::app::config_with_secret(LOCAL_API_TOKEN)
 }
 
 pub(crate) fn get_request(path: &str) -> Request<Body> {

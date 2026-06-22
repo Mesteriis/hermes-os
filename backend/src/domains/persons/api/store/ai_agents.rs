@@ -5,6 +5,7 @@ use crate::domains::persons::api::rows::row_to_person;
 use crate::domains::persons::api::validation::{
     ai_agent_email_address, ai_agent_person_id, normalize_ai_agent_id, validate_display_name,
 };
+use crate::platform::graph::{GraphNodeKind, node_id};
 
 impl PersonProjectionStore {
     pub async fn upsert_ai_agent_persona(
@@ -52,6 +53,41 @@ impl PersonProjectionStore {
         .await?;
 
         let person = row_to_person(row)?;
+        let graph_node_id = node_id(GraphNodeKind::Person, &person.person_id);
+        sqlx::query(
+            r#"
+            INSERT INTO graph_nodes (
+                node_id,
+                node_kind,
+                stable_key,
+                label,
+                properties
+            )
+            VALUES (
+                $1,
+                'person',
+                $2,
+                $3,
+                jsonb_build_object(
+                    'email_address', $3,
+                    'persona_type', 'ai_agent',
+                    'agent_id', $4
+                )
+            )
+            ON CONFLICT (node_kind, stable_key)
+            DO UPDATE SET
+                label = EXCLUDED.label,
+                properties = graph_nodes.properties || EXCLUDED.properties,
+                updated_at = now()
+            "#,
+        )
+        .bind(&graph_node_id)
+        .bind(&person.person_id)
+        .bind(&email_address)
+        .bind(&normalized_agent_id)
+        .execute(&mut *transaction)
+        .await?;
+
         sqlx::query(
             r#"
             INSERT INTO person_identities (

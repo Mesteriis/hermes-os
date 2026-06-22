@@ -91,6 +91,7 @@ async fn upsert_organization_contact_link(
         .link_email_participant_with_observation(
             organization_id,
             person_id,
+            &message.message_id,
             &message.observation_id,
         )
         .await?;

@@ -1,12 +1,10 @@
 use crate::support::*;
-use std::env;
+use testkit::context::TestContext;
 
 #[tokio::test]
 async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live AI meeting prep API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let _guard = AI_RUNTIME_TEST_LOCK.lock().await;
     let ollama_base_url = spawn_fake_ollama().await;
     let database = Database::connect(Some(&database_url))
@@ -39,12 +37,9 @@ async fn ai_meeting_prep_returns_briefing_without_calendar_dependency() {
     .await;
 
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-            ("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_pairs([("HERMES_OLLAMA_BASE_URL", ollama_base_url.as_str())])
+            .expect("config"),
         database,
     );
 
@@ -104,20 +99,14 @@ async fn ai_status_and_agents_are_protected() {
 
 #[tokio::test]
 async fn ai_agents_api_materializes_agent_personas_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live AI agent Persona test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str()),
         database,
     );
 

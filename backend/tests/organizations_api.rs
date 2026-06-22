@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Method, Request, StatusCode, header};
@@ -16,7 +16,7 @@ use hermes_hub_backend::platform::storage::Database;
 const T: &str = "orgs-test-token";
 
 fn cfg() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", T)]).expect("cfg")
+    testkit::app::config_with_secret(T)
 }
 
 fn get(uri: &str) -> Request<Body> {
@@ -64,7 +64,7 @@ fn enc(v: &str) -> String {
 async fn router(db: &str) -> axum::Router {
     let database = Database::connect(Some(db)).await.expect("db");
     build_router_with_database(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", T), ("DATABASE_URL", db)]).expect("cfg"),
+        testkit::app::config_with_secret_and_database_url(T, db),
         database,
     )
 }
@@ -108,10 +108,8 @@ async fn orgs_auth_reject() {
 // ── CRUD ───────────────────────────────────────────────────────────────────
 #[tokio::test]
 async fn orgs_crud() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let s = uid();
     let a = router(&db).await;
 
@@ -159,10 +157,8 @@ async fn orgs_crud() {
 
 #[tokio::test]
 async fn orgs_list() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let s = uid();
     let a = router(&db).await;
     mkorg(&a, s).await;
@@ -172,10 +168,8 @@ async fn orgs_list() {
 
 #[tokio::test]
 async fn orgs_search() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let a = router(&db).await;
     let r = a
         .oneshot(get("/api/v1/organizations/search?q=test"))
@@ -186,10 +180,8 @@ async fn orgs_search() {
 
 #[tokio::test]
 async fn orgs_not_found_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let s = uid();
     let a = router(&db).await;
     let r = a
@@ -204,10 +196,8 @@ macro_rules! org_test {
     ($name:ident, $path:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-                eprintln!("skip");
-                return;
-            };
+            let test_context = TestContext::new().await;
+            let db = test_context.connection_string();
             let s = uid();
             let a = router(&db).await;
             let oid = mkorg(&a, s).await;
@@ -247,10 +237,8 @@ org_test!(orgs_context_pack, "/api/v1/organizations/{}/context-pack");
 
 #[tokio::test]
 async fn orgs_enrichment_apply_captures_observation_against_postgres() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let s = uid();
     let a = router(&db).await;
     let oid = mkorg(&a, s).await;
@@ -304,10 +292,8 @@ macro_rules! org_post_test {
     ($name:ident, $path:expr, $body:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-                eprintln!("skip");
-                return;
-            };
+            let test_context = TestContext::new().await;
+            let db = test_context.connection_string();
             let s = uid();
             let a = router(&db).await;
             let oid = mkorg(&a, s).await;
@@ -344,10 +330,8 @@ org_post_test!(
 // ── Watchlist toggle ───────────────────────────────────────────────────────
 #[tokio::test]
 async fn orgs_watchlist_toggle() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let s = uid();
     let a = router(&db).await;
     let oid = mkorg(&a, s).await;
@@ -363,10 +347,8 @@ async fn orgs_watchlist_toggle() {
 
 #[tokio::test]
 async fn organization_manual_entrypoints_capture_observations_against_postgres() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let app = router(&db).await;
     let suffix = uid();
     let oid = mkorg(&app, suffix).await;

@@ -1,4 +1,3 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::body::{Body, to_bytes};
@@ -18,7 +17,7 @@ use testkit::context::TestContext;
 const T: &str = "v1comms-test-token";
 
 fn cfg() -> AppConfig {
-    AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", T)]).expect("cfg")
+    testkit::app::config_with_secret(T)
 }
 
 fn get(uri: &str) -> Request<Body> {
@@ -70,7 +69,7 @@ fn uid() -> u128 {
 async fn router(db: &str) -> axum::Router {
     let database = Database::connect(Some(db)).await.expect("db");
     build_router_with_database(
-        AppConfig::from_pairs([("HERMES_LOCAL_API_SECRET", T), ("DATABASE_URL", db)]).expect("cfg"),
+        testkit::app::config_with_secret_and_database_url(T, db),
         database,
     )
 }
@@ -79,10 +78,8 @@ macro_rules! v1_read_test {
     ($name:ident, $path:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-                eprintln!("skip {}: no DB", stringify!($name));
-                return;
-            };
+            let test_context = TestContext::new().await;
+            let db = test_context.connection_string();
             let r = router(&db).await;
             let resp = r.oneshot(get($path)).await.expect("r");
             assert!(
@@ -138,10 +135,8 @@ macro_rules! v1_post_test {
     ($name:ident, $path:expr, $body:expr) => {
         #[tokio::test]
         async fn $name() {
-            let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-                eprintln!("skip {}: no DB", stringify!($name));
-                return;
-            };
+            let test_context = TestContext::new().await;
+            let db = test_context.connection_string();
             let r = router(&db).await;
             let resp = r.oneshot(pget($path, $body)).await.expect("r");
             assert!(
@@ -409,10 +404,8 @@ async fn v1_communications_reject_no_secret() {
 
 #[tokio::test]
 async fn v1_message_explain_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(get(
@@ -425,10 +418,8 @@ async fn v1_message_explain_404() {
 
 #[tokio::test]
 async fn v1_message_smart_cc_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(get(
@@ -441,10 +432,8 @@ async fn v1_message_smart_cc_404() {
 
 #[tokio::test]
 async fn v1_message_export_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(get(
@@ -457,10 +446,8 @@ async fn v1_message_export_404() {
 
 #[tokio::test]
 async fn v1_spf_dkim_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(get(
@@ -473,10 +460,8 @@ async fn v1_spf_dkim_404() {
 
 #[tokio::test]
 async fn v1_detect_lang_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(get(
@@ -489,10 +474,8 @@ async fn v1_detect_lang_404() {
 
 #[tokio::test]
 async fn v1_signature_check_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(get(
@@ -508,10 +491,8 @@ async fn v1_signature_check_404() {
 // Persona POST
 #[tokio::test]
 async fn v1_post_persona() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(pget(
@@ -530,10 +511,8 @@ async fn v1_post_persona() {
 // Draft POST
 #[tokio::test]
 async fn v1_post_draft() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(pget(
@@ -552,10 +531,8 @@ async fn v1_post_draft() {
 // Invoice POST
 #[tokio::test]
 async fn v1_post_invoice() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(pget(
@@ -574,10 +551,8 @@ async fn v1_post_invoice() {
 // Legal POST
 #[tokio::test]
 async fn v1_post_legal() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(pget(
@@ -596,10 +571,8 @@ async fn v1_post_legal() {
 // Cert POST
 #[tokio::test]
 async fn v1_post_cert() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(pget(
@@ -618,10 +591,8 @@ async fn v1_post_cert() {
 // Rich template POST
 #[tokio::test]
 async fn v1_post_rich_template() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(pget(
@@ -641,10 +612,8 @@ async fn v1_post_rich_template() {
 
 #[tokio::test]
 async fn v1_message_detail_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let r = router(&db).await;
     let resp = r
         .oneshot(get("/api/v1/communications/messages/msg:fake"))
@@ -659,10 +628,8 @@ async fn v1_message_detail_404() {
 
 #[tokio::test]
 async fn v1_draft_detail_404() {
-    let Some(db) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let db = test_context.connection_string();
     let s = uid();
     let r = router(&db).await;
     let resp = r

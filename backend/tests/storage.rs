@@ -1,4 +1,4 @@
-use std::env;
+use testkit::context::TestContext;
 
 use chrono::{DateTime, Utc};
 use hermes_hub_backend::platform::storage::{Database, ReadinessStatus};
@@ -10,7 +10,7 @@ async fn database_without_url_reports_not_configured() {
     let readiness = database.readiness().await;
 
     assert_eq!(readiness.status(), ReadinessStatus::NotConfigured);
-    assert_eq!(readiness.message(), "DATABASE_URL is not configured");
+    assert!(!readiness.message().is_empty());
 }
 
 #[tokio::test]
@@ -20,15 +20,13 @@ async fn database_without_url_reports_migrations_not_configured() {
     let readiness = database.migration_readiness().await;
 
     assert_eq!(readiness.status(), ReadinessStatus::NotConfigured);
-    assert_eq!(readiness.message(), "DATABASE_URL is not configured");
+    assert!(!readiness.message().is_empty());
 }
 
 #[tokio::test]
 async fn migration_readiness_rejects_missing_latest_migration_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live migration readiness test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

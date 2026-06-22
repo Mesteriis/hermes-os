@@ -48,6 +48,14 @@ impl Database {
         }
     }
 
+    #[cfg(any(test, feature = "test-support"))]
+    pub fn from_test_pool(pool: PgPool, database_url: impl Into<String>) -> Self {
+        Self {
+            pool: Some(pool),
+            database_url: Some(database_url.into()),
+        }
+    }
+
     pub fn pool(&self) -> Option<&PgPool> {
         self.pool.as_ref()
     }

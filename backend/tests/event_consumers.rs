@@ -1,4 +1,3 @@
-use std::env;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -28,11 +27,9 @@ use hermes_hub_backend::platform::storage::Database;
 use hermes_hub_backend::workflows::provider_communication_projection::record_and_project_telegram_message;
 use testkit::context::TestContext;
 
-async fn live_context(test_name: &str) -> Option<(Database, EventStore)> {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live {test_name}: HERMES_TEST_DATABASE_URL is not set");
-        return None;
-    };
+async fn live_context(_test_name: &str) -> Option<(Database, EventStore)> {
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");

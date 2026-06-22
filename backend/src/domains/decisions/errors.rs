@@ -1,6 +1,7 @@
 use thiserror::Error;
 
 use crate::domains::decisions::DecisionEngineError;
+use crate::domains::graph::core::GraphStoreError;
 use crate::platform::observations::ObservationStoreError;
 
 #[derive(Debug, Error)]
@@ -10,6 +11,9 @@ pub enum DecisionStoreError {
 
     #[error(transparent)]
     Observation(#[from] ObservationStoreError),
+
+    #[error(transparent)]
+    Graph(#[from] GraphStoreError),
 
     #[error("{0} must not be empty")]
     EmptyField(&'static str),

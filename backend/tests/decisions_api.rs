@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode, header};
@@ -14,17 +14,14 @@ use hermes_hub_backend::domains::decisions::{
     Decision, DecisionEntityKind, DecisionEvidenceSourceKind, DecisionReviewState, DecisionStore,
     NewDecision, NewDecisionEvidence, NewDecisionImpactedEntity,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 
 const LOCAL_API_TOKEN: &str = "decisions-api-test-token";
 
 #[tokio::test]
 async fn decisions_list_returns_entity_scoped_decisions() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live decisions API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let (app, pool) = app_and_pool(&database_url).await;
     let suffix = unique_suffix();
     let project_id = format!("project:v1:decision-api-{suffix}");
@@ -54,12 +51,8 @@ async fn decisions_list_returns_entity_scoped_decisions() {
 
 #[tokio::test]
 async fn decisions_list_returns_global_suggested_review_items() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!(
-            "skipping live decisions global review API test: HERMES_TEST_DATABASE_URL is not set"
-        );
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let (app, pool) = app_and_pool(&database_url).await;
     let suffix = unique_suffix();
     let suggested_project_id = format!("project:v1:decision-global-suggested-{suffix}");
@@ -109,10 +102,8 @@ async fn decisions_list_returns_global_suggested_review_items() {
 
 #[tokio::test]
 async fn put_decision_review_updates_review_state_with_observation_trail() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live decision review API test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let (app, pool) = app_and_pool(&database_url).await;
     let suffix = unique_suffix();
     let project_id = format!("project:v1:decision-review-{suffix}");
@@ -189,7 +180,7 @@ async fn put_decision_review_updates_review_state_with_observation_trail() {
 
     let review_item: (String, String, String) = sqlx::query_as(
         r#"
-        SELECT status, target_entity_kind, entity_id
+        SELECT status, target_entity_kind, target_entity_id
         FROM review_items
         WHERE metadata->>'decision_id' = $1
         ORDER BY updated_at DESC
@@ -211,11 +202,7 @@ async fn app_and_pool(database_url: &str) -> (axum::Router, PgPool) {
         .expect("database connection");
     let pool = database.pool().expect("configured pool").clone();
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("DATABASE_URL", database_url),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url),
         database,
     );
 

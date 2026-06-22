@@ -1,4 +1,4 @@
-use std::env;
+use testkit::context::TestContext;
 
 use chrono::{Duration, Utc};
 use serde_json::{Value, json};
@@ -12,10 +12,8 @@ use super::support::{
 use hermes_hub_backend::platform::storage::Database;
 
 async fn get_calendar_endpoint_returns_non_server_error(path: &str) {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live calendar {path} test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let app = build_cal_app(&database_url).await;
     let response = app
         .oneshot(get_request_with_token(path, LOCAL_API_TOKEN))
@@ -70,10 +68,8 @@ async fn calendar_analytics_distribution_returns_ok() {
 
 #[tokio::test]
 async fn calendar_sources_list() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let database = Database::connect(Some(&database_url))
         .await
@@ -159,10 +155,8 @@ async fn calendar_sources_list() {
 
 #[tokio::test]
 async fn cal_post_deadline() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -208,10 +202,8 @@ async fn cal_post_deadline() {
 
 #[tokio::test]
 async fn cal_post_focus_block() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -264,10 +256,8 @@ async fn cal_post_focus_block() {
 
 #[tokio::test]
 async fn cal_post_smart_schedule() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let app = build_cal_app(&database_url).await;
     let response = app.oneshot(post_request_with_token(
         "/api/v1/calendar/smart-schedule",
@@ -299,10 +289,8 @@ async fn cal_back_to_back() {
 
 #[tokio::test]
 async fn cal_rules_crud() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let database = Database::connect(Some(&database_url))
         .await
@@ -444,10 +432,8 @@ async fn cal_rules_crud() {
 
 #[tokio::test]
 async fn cal_import() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let database = Database::connect(Some(&database_url))
         .await
         .expect("database connection");
@@ -517,10 +503,8 @@ async fn cal_import() {
 
 #[tokio::test]
 async fn cal_sync() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skip");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
     let suffix = unique_suffix();
     let database = Database::connect(Some(&database_url))
         .await

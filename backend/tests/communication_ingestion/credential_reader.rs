@@ -2,9 +2,7 @@ use crate::support::*;
 
 #[tokio::test]
 async fn provider_credential_reader_resolves_bound_account_secret_against_postgres() {
-    let Some(database) =
-        connect_database("provider credential reader test: HERMES_TEST_DATABASE_URL is not set")
-            .await
+    let Some(database) = connect_database("provider credential reader test fixture database").await
     else {
         return;
     };
@@ -73,10 +71,8 @@ async fn provider_credential_reader_resolves_bound_account_secret_against_postgr
 
 #[tokio::test]
 async fn provider_credential_reader_reports_missing_binding_against_postgres() {
-    let Some(database) = connect_database(
-        "missing provider credential binding test: HERMES_TEST_DATABASE_URL is not set",
-    )
-    .await
+    let Some(database) =
+        connect_database("missing provider credential binding test fixture database").await
     else {
         return;
     };
@@ -122,10 +118,8 @@ async fn provider_credential_reader_reports_missing_binding_against_postgres() {
 
 #[tokio::test]
 async fn provider_credential_reader_propagates_resolver_failures_against_postgres() {
-    let Some(database) = connect_database(
-        "provider credential resolver failure test: HERMES_TEST_DATABASE_URL is not set",
-    )
-    .await
+    let Some(database) =
+        connect_database("provider credential resolver failure test fixture database").await
     else {
         return;
     };
@@ -188,10 +182,8 @@ async fn provider_credential_reader_propagates_resolver_failures_against_postgre
 
 #[tokio::test]
 async fn provider_credential_reader_rejects_incompatible_secret_kind_against_postgres() {
-    let Some(database) = connect_database(
-        "incompatible provider credential kind test: HERMES_TEST_DATABASE_URL is not set",
-    )
-    .await
+    let Some(database) =
+        connect_database("incompatible provider credential kind test fixture database").await
     else {
         return;
     };

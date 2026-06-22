@@ -1,5 +1,5 @@
-use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
+use testkit::context::TestContext;
 
 use chrono::{TimeZone, Utc};
 use hermes_hub_backend::engines::timeline::{TimelineEngine, TimelineEventDraft};
@@ -449,10 +449,8 @@ fn timeline_engine_replays_canonical_event_log_batch_into_cross_domain_timeline(
 
 #[tokio::test]
 async fn timeline_engine_projection_reads_event_log_and_advances_cursor_against_postgres() {
-    let Some(database_url) = env::var("HERMES_TEST_DATABASE_URL").ok() else {
-        eprintln!("skipping live timeline projection test: HERMES_TEST_DATABASE_URL is not set");
-        return;
-    };
+    let test_context = TestContext::new().await;
+    let database_url = test_context.connection_string();
 
     let database = Database::connect(Some(&database_url))
         .await

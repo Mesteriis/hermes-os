@@ -8,6 +8,7 @@ CARGO_VALIDATE_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/validate
 CARGO_VALIDATE_CLIPPY_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/validate-clippy
 CARGO_VALIDATE_TEST_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/validate-test
 CARGO_BUILD_TARGET_DIR ?= $(CARGO_TARGET_ROOT)/build
+HERMES_NEXTEST_JOBS ?= 4
 
 .PHONY: help dev logs build migrate validate lint-architecture lint-rust lint-frontend architecture-check code-boundaries-check backend-fmt-check backend-clippy backend-test backend-validate frontend-lint frontend-test frontend-build frontend-validate vault-backup vault-restore clean clean-dev clean-validate clean-build clean-data clean-vault
 
@@ -62,7 +63,11 @@ backend-clippy:
 	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_CLIPPY_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo clippy --manifest-path backend/Cargo.toml --all-targets --all-features -- -D warnings
 
 backend-test:
-	@CARGO_TARGET_DIR="$(CARGO_VALIDATE_TEST_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo test --manifest-path backend/Cargo.toml
+	@if cargo nextest --version >/dev/null 2>&1; then \
+		CARGO_TARGET_DIR="$(CARGO_VALIDATE_TEST_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo run --manifest-path crates/testkit/Cargo.toml --bin hermes_test_session -- cargo nextest run --manifest-path backend/Cargo.toml --test-threads $(HERMES_NEXTEST_JOBS) --no-fail-fast; \
+	else \
+		CARGO_TARGET_DIR="$(CARGO_VALIDATE_TEST_TARGET_DIR)" CARGO_INCREMENTAL=0 cargo run --manifest-path crates/testkit/Cargo.toml --bin hermes_test_session -- cargo test --manifest-path backend/Cargo.toml -- --test-threads $(HERMES_NEXTEST_JOBS); \
+	fi
 
 backend-validate: backend-fmt-check backend-clippy backend-test
 

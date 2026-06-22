@@ -36,6 +36,8 @@ impl DocumentProcessingStore {
             .retry_result_for_existing_event(&event_id, &job_id)
             .await?
         {
+            self.link_retry_observation_if_present(observation_id, &job_id, &event_id)
+                .await?;
             return Ok(result);
         }
 
@@ -46,6 +48,8 @@ impl DocumentProcessingStore {
                 .retry_result_for_existing_event(&event_id, &job_id)
                 .await?
             {
+                self.link_retry_observation_if_present(observation_id, &job_id, &event_id)
+                    .await?;
                 return Ok(result);
             }
             return Err(DocumentProcessingError::RetryRequiresFailedJob);
@@ -92,6 +96,33 @@ impl DocumentProcessingStore {
             status: retried_job.status,
             event_id,
         })
+    }
+
+    async fn link_retry_observation_if_present(
+        &self,
+        observation_id: Option<&str>,
+        job_id: &str,
+        event_id: &str,
+    ) -> Result<(), DocumentProcessingError> {
+        let Some(observation_id) = observation_id.filter(|value| !value.is_empty()) else {
+            return Ok(());
+        };
+
+        let mut transaction = self.pool.begin().await?;
+        link_document_processing_entity_in_transaction(
+            &mut transaction,
+            observation_id,
+            "document_processing_job",
+            job_id.to_owned(),
+            "retry_command",
+            json!({
+                "event_id": event_id,
+            }),
+        )
+        .await?;
+        transaction.commit().await?;
+
+        Ok(())
     }
 
     async fn retry_result_for_existing_event(

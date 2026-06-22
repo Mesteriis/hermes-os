@@ -9,7 +9,6 @@ use tower::ServiceExt;
 use hermes_hub_backend::app::build_router_with_database;
 use hermes_hub_backend::integrations::telegram::client::commands::insert_command;
 use hermes_hub_backend::integrations::telegram::client::participants::reconcile_join_commands_from_provider_roster_with_source;
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -27,12 +26,8 @@ async fn telegram_basic_group_roster_reconciliation_records_observed_source() {
     let account_id = format!("telegram-basic-group-reconcile-{suffix}");
     let provider_chat_id = format!("basic-group-reconcile-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 

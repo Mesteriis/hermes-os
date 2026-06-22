@@ -42,8 +42,7 @@ fn provider_account_secret_purpose_accepts_expected_secret_kinds() {
 
 #[tokio::test]
 async fn communication_ingestion_registers_email_provider_accounts_against_postgres() {
-    let Some(database) =
-        connect_database("communication ingestion test: HERMES_TEST_DATABASE_URL is not set").await
+    let Some(database) = connect_database("communication ingestion test fixture database").await
     else {
         return;
     };
@@ -90,9 +89,7 @@ async fn communication_ingestion_registers_email_provider_accounts_against_postg
 
 #[tokio::test]
 async fn communication_ingestion_tracks_checkpoints_against_postgres() {
-    let Some(database) =
-        connect_database("communication checkpoint test: HERMES_TEST_DATABASE_URL is not set")
-            .await
+    let Some(database) = connect_database("communication checkpoint test fixture database").await
     else {
         return;
     };

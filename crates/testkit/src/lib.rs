@@ -21,6 +21,8 @@
 //! }
 //! ```
 
+pub mod app;
 pub mod containers;
 pub mod context;
 pub mod factories;
+pub mod vault;

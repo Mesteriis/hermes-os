@@ -15,7 +15,6 @@ use hermes_hub_backend::integrations::telegram::client::participants::{
     reconcile_join_commands_from_provider_roster, reconcile_leave_commands_from_provider_roster,
     telegram_self_provider_member_id,
 };
-use hermes_hub_backend::platform::config::AppConfig;
 use hermes_hub_backend::platform::storage::Database;
 use testkit::context::TestContext;
 
@@ -33,12 +32,8 @@ async fn telegram_members_route_prefers_provider_roster_over_message_heuristic()
     let account_id = format!("telegram-participants-{suffix}");
     let provider_chat_id = format!("participants-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -143,12 +138,8 @@ async fn telegram_join_leave_routes_enqueue_provider_write_commands() {
     let account_id = format!("telegram-join-leave-{suffix}");
     let provider_chat_id = format!("join-leave-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -237,12 +228,8 @@ async fn telegram_roster_sync_reconciles_join_only_after_self_member_is_observed
     let account_id = format!("telegram-join-reconcile-{suffix}");
     let provider_chat_id = format!("join-reconcile-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
@@ -364,12 +351,8 @@ async fn telegram_roster_sync_reconciles_leave_when_self_member_is_inactive() {
     let account_id = format!("telegram-leave-reconcile-{suffix}");
     let provider_chat_id = format!("leave-reconcile-chat-{suffix}");
     let app = build_router_with_database(
-        AppConfig::from_pairs([
-            ("HERMES_LOCAL_API_SECRET", LOCAL_API_TOKEN),
-            ("HERMES_DEV_MODE", "true"),
-            ("DATABASE_URL", database_url.as_str()),
-        ])
-        .expect("config"),
+        testkit::app::config_with_secret_and_database_url(LOCAL_API_TOKEN, database_url.as_str())
+            .with_test_dev_mode(),
         database,
     );
 
