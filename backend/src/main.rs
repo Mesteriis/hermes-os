@@ -3,6 +3,7 @@ use tracing::Instrument;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    color_eyre::install()?;
     hermes_hub_backend::app::init_tracing();
     let flow_id = std::env::var("HERMES_FLOW_ID").unwrap_or_else(|_| "unknown".to_owned());
     let runtime_span = tracing::info_span!("hermes_runtime", flow_id = %flow_id);

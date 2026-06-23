@@ -51,6 +51,7 @@ async-native-tls = { version = "0.6.0", default-features = false, features = ["r
 axum = { version = "0.8", features = ["ws"] }
 base64 = "0.22"
 buffa = "0.7"
+color-eyre = "0.6"
 chacha20poly1305 = "0.10"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 connectrpc = { version = "0.7", features = ["axum"] }

@@ -1,0 +1,20 @@
+---
+source: backend/tests/snapshot_smoke.rs
+expression: "serde_json::to_string_pretty(&payload).expect(\"snapshot payload must serialize\")"
+---
+{
+  "event_type": "signal.accepted.telegram.message",
+  "metadata": {
+    "channel": "telegram",
+    "priority": "normal"
+  },
+  "source": {
+    "kind": "integration",
+    "provider": "telegram",
+    "source_id": "msg-42"
+  },
+  "subject": {
+    "entity_id": "thread-7",
+    "kind": "communication"
+  }
+}

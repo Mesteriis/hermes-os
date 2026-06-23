@@ -16,14 +16,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Disk usage before validation
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install Rust toolchain
         run: |
-          df -h
-          du -h -d 2 . | sort -h | tail -50
-          du -sh ~/.cargo ~/.rustup target frontend/node_modules 2>/dev/null || true
+          rustup toolchain install 1.88 --profile minimal
+          rustup default 1.88
+
+      - name: Install cargo nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
 
       - name: Validate architecture boundaries
-        run: make lint-architecture
+        run: make test-architecture
 
   backend-fmt:
     name: Backend fmt
@@ -36,21 +45,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
-          docker system prune -af || true
-          df -h
-
-      - name: Disk usage before validation
-        run: |
-          df -h
-          du -h -d 2 . | sort -h | tail -50
-          du -sh ~/.cargo ~/.rustup target frontend/node_modules 2>/dev/null || true
-
       - name: Install Rust toolchain
         run: |
           rustup toolchain install 1.88 --profile minimal --component rustfmt
@@ -58,14 +52,6 @@ jobs:
 
       - name: Validate backend formatting
         run: make backend-fmt-check
-
-      - name: Clean Rust artifacts
-        if: always()
-        run: |
-          rm -rf /tmp/hermes-cargo-target-*
-          cargo clean --manifest-path backend/Cargo.toml || true
-          docker system prune -af || true
-          df -h
 
   backend-clippy:
     name: Backend clippy
@@ -77,21 +63,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
-          docker system prune -af || true
-          df -h
-
-      - name: Disk usage before validation
-        run: |
-          df -h
-          du -h -d 2 . | sort -h | tail -50
-          du -sh ~/.cargo ~/.rustup target frontend/node_modules 2>/dev/null || true
 
       - name: Install Rust toolchain
         run: |
@@ -109,18 +80,10 @@ jobs:
       - name: Validate backend clippy
         run: make backend-clippy
 
-      - name: Clean Rust artifacts
-        if: always()
-        run: |
-          rm -rf /tmp/hermes-cargo-target-*
-          cargo clean --manifest-path backend/Cargo.toml || true
-          docker system prune -af || true
-          df -h
-
-  backend-test:
-    name: Backend test
+  backend-unit:
+    name: Backend unit
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       CARGO_TARGET_ROOT: /tmp/hermes-cargo-target-${{ github.job }}
 
@@ -128,28 +91,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
-          docker system prune -af || true
-          df -h
-
-      - name: Disk usage before validation
-        run: |
-          df -h
-          du -h -d 2 . | sort -h | tail -50
-          du -sh ~/.cargo ~/.rustup target frontend/node_modules 2>/dev/null || true
-
       - name: Install Rust toolchain
         run: |
           rustup toolchain install 1.88 --profile minimal
           rustup default 1.88
 
-      - name: Check Docker Compose
-        run: docker compose version
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
 
       - name: Install cargo nextest
         uses: taiki-e/install-action@v2
@@ -164,16 +114,145 @@ jobs:
             ~/.cargo/git
           key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Validate backend tests
-        run: make backend-test
+      - name: Run backend unit tests
+        run: make test-unit
 
-      - name: Clean Rust and Docker artifacts
+      - name: Upload backend unit reports
         if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-unit-reports
+          path: |
+            reports/test-performance/unit.json
+            reports/test-performance/unit.md
+            target/nextest/default/junit.xml
+
+  backend-snapshot:
+    name: Backend snapshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CARGO_TARGET_ROOT: /tmp/hermes-cargo-target-${{ github.job }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
         run: |
-          rm -rf /tmp/hermes-cargo-target-*
-          cargo clean --manifest-path backend/Cargo.toml || true
-          docker system prune -af || true
-          df -h
+          rustup toolchain install 1.88 --profile minimal
+          rustup default 1.88
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install cargo nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run snapshot tests
+        run: make test-snapshot
+
+  backend-integration:
+    name: Backend integration
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_TARGET_ROOT: /tmp/hermes-cargo-target-${{ github.job }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.88 --profile minimal
+          rustup default 1.88
+
+      - name: Check Docker Compose
+        run: docker compose version
+
+      - name: Install cargo nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run backend integration tests
+        run: make test-integration
+
+      - name: Upload backend integration reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-integration-reports
+          path: |
+            reports/test-performance/integration.json
+            reports/test-performance/integration.md
+            target/nextest/integration/junit.xml
+
+  coverage:
+    name: Coverage
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_TARGET_ROOT: /tmp/hermes-cargo-target-${{ github.job }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.88 --profile minimal --component llvm-tools-preview
+          rustup default 1.88
+
+      - name: Check Docker Compose
+        run: docker compose version
+
+      - name: Install coverage toolchain
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest,cargo-llvm-cov
+
+      - name: Generate LCOV coverage
+        run: make coverage-ci
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage
+          path: |
+            target/coverage/lcov.info
+            target/nextest/ci/junit.xml
+
+  security:
+    name: Security
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        run: |
+          rustup toolchain install 1.88 --profile minimal
+          rustup default 1.88
+
+      - name: Install security tools
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,cargo-deny
+
+      - name: Run security checks
+        run: make security
 
   frontend-lint:
     name: Frontend lint
@@ -183,21 +262,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
-          docker system prune -af || true
-          df -h
-
-      - name: Disk usage before validation
-        run: |
-          df -h
-          du -h -d 2 . | sort -h | tail -50
-          du -sh ~/.cargo ~/.rustup target frontend/node_modules 2>/dev/null || true
 
       - name: Install Node
         uses: actions/setup-node@v4
@@ -216,13 +280,6 @@ jobs:
       - name: Validate frontend lint
         run: make frontend-lint
 
-      - name: Clean frontend artifacts
-        if: always()
-        run: |
-          rm -rf frontend/node_modules
-          rm -rf frontend/dist frontend/.vite frontend/node_modules/.vite frontend/node_modules/.vite-temp
-          df -h
-
   frontend-test:
     name: Frontend test
     runs-on: ubuntu-latest
@@ -231,21 +288,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
-          docker system prune -af || true
-          df -h
-
-      - name: Disk usage before validation
-        run: |
-          df -h
-          du -h -d 2 . | sort -h | tail -50
-          du -sh ~/.cargo ~/.rustup target frontend/node_modules 2>/dev/null || true
 
       - name: Install Node
         uses: actions/setup-node@v4
@@ -264,13 +306,6 @@ jobs:
       - name: Validate frontend tests
         run: make frontend-test
 
-      - name: Clean frontend artifacts
-        if: always()
-        run: |
-          rm -rf frontend/node_modules
-          rm -rf frontend/dist frontend/.vite frontend/node_modules/.vite frontend/node_modules/.vite-temp
-          df -h
-
   frontend-build:
     name: Frontend build
     runs-on: ubuntu-latest
@@ -279,21 +314,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}"
-          docker system prune -af || true
-          df -h
-
-      - name: Disk usage before validation
-        run: |
-          df -h
-          du -h -d 2 . | sort -h | tail -50
-          du -sh ~/.cargo ~/.rustup target frontend/node_modules 2>/dev/null || true
 
       - name: Install Node
         uses: actions/setup-node@v4
@@ -311,10 +331,3 @@ jobs:
 
       - name: Validate frontend build
         run: make frontend-build
-
-      - name: Clean frontend artifacts
-        if: always()
-        run: |
-          rm -rf frontend/node_modules
-          rm -rf frontend/dist frontend/.vite frontend/node_modules/.vite frontend/node_modules/.vite-temp
-          df -h
